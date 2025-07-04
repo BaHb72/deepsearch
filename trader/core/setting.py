@@ -1,3 +1,4 @@
+# deepsearch/trader/core/setting.py
 """
 应用程序配置管理模块 (Application configuration management module)
 
