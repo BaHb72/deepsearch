@@ -1,7 +1,10 @@
 # deepsearch/trader/core/gateway/base.py
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import logging
+import threading
 import time
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -18,7 +21,6 @@ from trader.core.logger import get_logger
 
 
 class GatewayStatus(Enum):
-    """网关连接状态。"""
     DISCONNECTED = 0
     CONNECTING = 1
     CONNECTED = 2
@@ -27,16 +29,15 @@ class GatewayStatus(Enum):
 
 class BaseGateway(ABC):
     """
-    抽象网关基类：
-    - 行情/委托/成交事件 → CoreBus （低延迟）
-    - 心跳、日志、风控等后台任务 → AuxBus
+    抽象网关基类
+
+    - 行情/委托/成交 → CoreBus    (低延迟)
+    - 心跳、日志、风控等 → AuxBus  (后台线程池)
     """
 
-    HEARTBEAT_RECONNECT_DELAY = 1.0  # 心跳失败后重连等待秒数
+    HEARTBEAT_RECONNECT_DELAY = 1.0  # 心跳失败后 N 秒再重连
 
-    # ------------------------------------------------------------------
-    # 初始化
-    # ------------------------------------------------------------------
+    # ------------------------ 初始化 ------------------------
     def __init__(
             self,
             core_bus: CoreBus,
@@ -50,107 +51,159 @@ class BaseGateway(ABC):
         self.status: GatewayStatus = GatewayStatus.DISCONNECTED
         self.logger = get_logger(service=gateway_name)
 
-        # 心跳控制
-        self._heartbeat_enabled: bool = False
+        # 心跳状态
+        self._heartbeat_enabled = False
         self._heartbeat_interval: float | None = None
+        self._heartbeat_task_id: int | None = None
+        self._heartbeat_lock = threading.Lock()
 
-        self.logger.info(f"网关 [{gateway_name}] 初始化完成")
+        # 重连互斥
+        self._reconnecting = False
+        self._reconnect_lock = threading.Lock()
 
-    # ------------------------------------------------------------------
-    # 事件推送（走 CoreBus）
-    # ------------------------------------------------------------------
-    def _publish(self, event_type: str, data=None) -> None:
-        self.core_bus.put(Event(event_type, data))
+        # 专用后台线程池（避免调用 AuxBus 私有接口）
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix=f"{gateway_name}-bg"
+        )
 
-    def on_tick(self, tick) -> None:
+        self.logger.info("网关 [%s] 初始化完成", gateway_name)
+
+    # -------------------- 事件推送 --------------------
+    def _publish(self, etype: str, data=None) -> None:
+        self.core_bus.put(Event(etype, data))
+
+    def on_tick(self, tick):
         self._publish(EVENT_TICK, tick)
 
-    def on_order(self, order) -> None:
+    def on_order(self, order):
         self._publish(EVENT_ORDER, order)
 
-    def on_trade(self, trade) -> None:
+    def on_trade(self, trade):
         self._publish(EVENT_TRADE, trade)
 
-    def on_error(self, err) -> None:
-        self.logger.error(err)
-        self._publish(EVENT_ERROR, err)
+    def on_error(self, err):
+        self.logger.error(err); self._publish(EVENT_ERROR, err)
 
     def write_log(self, msg: str, level: int = logging.INFO) -> None:
         self.logger.log(level, msg)
 
-    # ------------------------------------------------------------------
-    # 心跳调度（走 AuxBus）
-    # ------------------------------------------------------------------
+    # -------------------- 心跳接口 --------------------
     def start_heartbeat(self, interval: float = 5.0) -> None:
-        """启用心跳；已有则忽略重复调用。"""
-        if self._heartbeat_enabled:
-            return
+        """
+        开启或修改心跳。重复调用即为调整周期。
+        若 AuxBus 抛异常，则恢复上一状态并向上层抛出。
+        """
+        interval = max(0.1, interval)
 
-        self._heartbeat_interval = max(0.1, interval)
-        self._heartbeat_enabled = True
+        try:
+            if self._heartbeat_task_id is None:
+                self._heartbeat_task_id = self.aux_bus.add_periodic(
+                    interval=interval,
+                    handler=self._heartbeat_task,
+                    event_type=f"HEARTBEAT@{self.gateway_name}",
+                    async_handler=False,  # 已在 AuxBus 线程
+                    priority=-1,
+                )
+                self.write_log(f"心跳已启动，间隔={interval}s")
+            else:
+                self.aux_bus.update_periodic(self._heartbeat_task_id, new_interval=interval)
+                self.write_log(f"心跳周期已调整为 {interval}s")
 
-        # 注册定时任务（异步线程池执行）
-        self.aux_bus.add_periodic(
-            interval=self._heartbeat_interval,
-            handler=self._heartbeat_task,
-            event_type=f"HEARTBEAT@{self.gateway_name}",
-            async_handler=True,
-            priority=-1,  # 优先级最低
-        )
-        self.write_log(f"心跳已启动，间隔={self._heartbeat_interval}s")
+            self._heartbeat_enabled = True
+            self._heartbeat_interval = interval
+
+        except Exception as exc:  # noqa: BLE001
+            # 回滚状态
+            self._heartbeat_enabled = False
+            self._heartbeat_task_id = None
+            self.write_log(f"启动/调整心跳失败: {exc}", level=logging.ERROR)
+            raise
+
+    def update_heartbeat_interval(self, new_interval: float) -> None:
+        """向后兼容老 UI"""
+        self.start_heartbeat(new_interval)
 
     def stop_heartbeat(self) -> None:
-        """关闭心跳；实际由 _heartbeat_task 内部判断退出。"""
-        self._heartbeat_enabled = False
+        with self._heartbeat_lock:
+            if self._heartbeat_task_id is not None:
+                self.aux_bus.cancel_periodic(self._heartbeat_task_id)
+                self._heartbeat_task_id = None
+            self._heartbeat_enabled = False
         self.write_log("心跳已停止")
 
     # ---------------- 内部心跳任务 ----------------
     def _heartbeat_task(self, _evt: Event) -> None:
-        if not self._heartbeat_enabled:
+        if not self._heartbeat_enabled or not self._heartbeat_lock.acquire(blocking=False):
             return
 
         try:
-            self.heartbeat()  # 由子类实现；若异常则触发重连
+            self.heartbeat()  # 子类实现，抛异常即视为断线
         except Exception as exc:  # noqa: BLE001
-            self.write_log(f"心跳异常: {exc}; 准备重连", level=logging.ERROR)
-            self.status = GatewayStatus.RECONNECTING
+            self.write_log(f"心跳异常: {exc}; 尝试重连", level=logging.ERROR)
+            self._schedule_reconnect()
+        finally:
+            self._heartbeat_lock.release()
 
+    # ---------------- 重连逻辑 ----------------
+    def _schedule_reconnect(self) -> None:
+        if self._reconnecting:
+            return
+        with self._reconnect_lock:
+            if self._reconnecting:
+                return
+            self._reconnecting = True
+
+        self.status = GatewayStatus.RECONNECTING
+
+        try:
+            self.close()
+        except Exception as exc:  # noqa: BLE001
+            self.write_log(f"关闭连接失败: {exc}", level=logging.ERROR)
+
+        # 在线程池里 sleep+connect，避免阻塞 AuxBus 线程
+        def _do_reconnect() -> None:
             try:
-                self.close()
-            except Exception as close_err:  # noqa: BLE001
-                self.write_log(f"关闭连接异常: {close_err}", level=logging.WARNING)
-
-            time.sleep(self.HEARTBEAT_RECONNECT_DELAY)
-
-            try:
+                time.sleep(self.HEARTBEAT_RECONNECT_DELAY)
                 self.connect()
-            except Exception as conn_err:  # noqa: BLE001
-                self.write_log(f"重连失败: {conn_err}", level=logging.ERROR)
+                self.status = GatewayStatus.CONNECTED
+                self.write_log("重连成功")
+            except Exception as exc:  # noqa: BLE001
+                self.write_log(f"重连失败: {exc}", level=logging.ERROR)
+            finally:
+                self._reconnecting = False
 
-    # ------------------------------------------------------------------
-    # 抽象接口（子类实现）
-    # ------------------------------------------------------------------
+        self._executor.submit(_do_reconnect)
+
+    # ---------------- 异步 connect ----------------
+    async def connect_async(self) -> None:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self.connect)
+
+    # ---------------- 抽象接口 ----------------
     @abstractmethod
     def connect(self) -> None:
         ...
-
     @abstractmethod
     def close(self) -> None:
         ...
-
     @abstractmethod
     def subscribe(self, symbol: str) -> None:
         ...
-
     @abstractmethod
     def send_order(self, order_req) -> str:
         ...
-
     @abstractmethod
     def cancel_order(self, order_id: str) -> None:
         ...
 
-    # 可选：子类若无需心跳，可不覆写
     def heartbeat(self) -> None:
-        """心跳检测（子类可覆盖）。"""
-        pass
+        pass  # 子类可覆写
+
+    # ---------------- 资源清理 ----------------
+    def cleanup(self) -> None:
+        self.stop_heartbeat()
+        try:
+            self.close()
+        except Exception as exc:  # noqa: BLE001
+            self.write_log(f"关闭网关异常: {exc}", level=logging.ERROR)
+        self._executor.shutdown(wait=True)
