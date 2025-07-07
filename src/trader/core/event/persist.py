@@ -12,7 +12,7 @@ import asyncio
 import logging
 from typing import Any, List, Optional
 
-LOGGER = logging.getLogger("deepsearch.persist")
+LOGGER = logging.getLogger("PersistBus")
 
 
 class PersistBus:

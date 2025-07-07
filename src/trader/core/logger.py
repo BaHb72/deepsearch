@@ -13,7 +13,7 @@ from typing import Any, Callable, Literal
 from loguru import logger
 from platformdirs import user_log_path
 
-from trader.core.setting import settings
+from src.trader.core.setting import settings
 
 
 # ─────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from trader.core.event.engine import EventEngine
+from src.trader.core.event.engine import EventEngine
 
 
 class CoreBus(EventEngine):

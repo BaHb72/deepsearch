@@ -2,7 +2,7 @@
 import argparse
 import sys
 
-from trader.core.logger import configure_logger, get_logger
+from src.trader.core.logger import configure_logger, get_logger
 
 # 模块级日志记录器占位符 (module-level logger placeholder)
 log = None
