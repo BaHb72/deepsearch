@@ -12,10 +12,25 @@ import asyncio
 import logging
 from typing import Any, List, Optional
 
-LOGGER = logging.getLogger("PersistBus")
+LOGGER = logging.getLogger(__name__)
 
 
 class PersistBus:
+    """
+    一个支持异步写入和批量刷新的持久化总线。
+
+    该类的设计用于实现异步写入操作，支持将数据放入队列，通过定时或累积一定数量后进行批量刷新到持久化存储。
+    可以通过继承并重写 `_flush_impl` 方法自定义实际的持久化逻辑。
+
+    这是一个上下文管理器类，可通过 `async with` 使用，以保证资源的优雅释放。
+
+    :ivar flush_size: 批量刷新时，单次处理的最大数据条数。由构造函数的 `flush_size` 参数确定。
+    :type flush_size: int
+    :ivar flush_ms: 批量刷新多久检查一次队列（单位：秒）。由构造函数的 `flush_ms` 参数确定。
+    :type flush_ms: float
+    :ivar active: 表示总线当前是否处于活跃状态，为 `True` 时总线可接受新数据。
+    :type active: bool
+    """
     def __init__(self, flush_size: int = 1000, flush_ms: int = 50) -> None:
         self._queue: asyncio.Queue[Any] = asyncio.Queue()
         self._flush_size = int(flush_size)

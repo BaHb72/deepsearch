@@ -1,5 +1,5 @@
 """
-redesigned_event_engine.py
+event_engine.py
 ====================================================================
 A **clean-room rewrite** of the event system, focusing on:
 
@@ -60,6 +60,15 @@ LOGGER = logging.getLogger(__name__)
 # Utility
 # ---------------------------------------------------------------------
 def _now() -> float:
+    """
+    返回当前的高精度时间计数值。
+
+    该函数基于 `time.perf_counter`，适用于对时间精度要求较高的场景。
+    支持高分辨率的计时功能，能够在尽量减少系统干扰的情况下提供可靠的时间值。
+
+    :return: 返回当前的高精度时间计数值
+    :rtype: float
+    """
     return time.perf_counter()
 
 
@@ -68,7 +77,19 @@ def _now() -> float:
 # ---------------------------------------------------------------------
 @dataclass(slots=True, frozen=True)
 class Event:
-    """Lightweight immutable event object."""
+    """
+    表示事件的类。
+
+    该类表示一个事件的抽象，包括事件类型、事件数据及其时间戳属性。
+    该类通过冻结的插槽数据类实现，确保实例在创建后是不可变的。
+
+    :ivar type: 事件的类型，用于标识事件的种类。
+    :type type: str
+    :ivar data: 与事件相关的数据，可为空。
+    :type data: object | None
+    :ivar ts: 事件时间戳，表示事件发生的时间。
+    :type ts: float
+    """
     type: str
     data: object | None = None
     ts: float = _now()
@@ -79,6 +100,24 @@ class Event:
 
 @dataclass(order=True, slots=True)
 class _ScheduledTask:
+    """
+    表示一个计划任务的类。
+
+    用于表示一个调度系统中待执行的任务，通过任务的时间、顺序、间隔等参数进行管理和排序。
+
+    :ivar next_ts: 下次任务调度的时间戳。
+    :type next_ts: float
+    :ivar seq: 任务的顺序号，用于区分相同时间戳的任务。
+    :type seq: int
+    :ivar interval: 任务的调度间隔，单位为秒。
+    :type interval: float
+    :ivar priority: 任务的优先级，数值越小优先级越高。
+    :type priority: int
+    :ivar event_type: 与任务关联的事件类型。
+    :type event_type: str
+    :ivar async_flag: 表示该任务是否为异步任务。
+    :type async_flag: bool
+    """
     next_ts: float
     seq: int
     interval: float
@@ -95,14 +134,16 @@ Handler = Callable[[Event], None]
 # ---------------------------------------------------------------------
 class EventEngine:
     """
-    Thread‑safe event bus with optional periodic scheduling.
+    事件引擎类。
 
-    Parameters
-    ----------
-    queue_size : int
-        Max size of the internal PriorityQueue (`event.priority` high first).
-    max_workers : int
-        Size of ThreadPoolExecutor when `async_flag=True` handlers are used.
+    该类用于处理事件注册、调度和分发。支持事件优先级控制以及异步任务的处理。
+    同时包含周期性任务的调度功能。可以通过启动和停止方法管理引擎的生命周期。
+
+    类的主要作用是为多种事件处理需求提供统一的框架，在高效、可靠的基础上，支持并发和
+    异步处理。
+
+    :ivar _max_workers: 最大线程池工作线程数。
+    :type _max_workers: int
     """
 
     def __init__(self, *, queue_size: int = 10000, max_workers: int = 32) -> None:
@@ -199,12 +240,17 @@ class EventEngine:
     def add_periodic(self, *, event_type: str, interval: float, priority: int = 0,
                      async_flag: bool = False) -> int:
         """
-        Schedule a periodic event.
+        为调度器添加一个周期性任务。
 
-        Returns
-        -------
-        int
-            Unique task id for later cancellation.
+        该方法会在调度器中添加一个任务，该任务按照指定的时间间隔被周期性调度。
+        任务的优先级和异步执行属性可供选择性设置。
+
+        :param event_type: 一个标识任务类型的字符串。
+        :param interval: 调度任务的时间间隔，必须为大于 0 的浮点数。
+        :param priority: 任务的优先级，默认为 0。数值越小优先级越高。
+        :param async_flag: 布尔值，默认为 False，表示是否以异步方式执行任务。
+        :return: 返回调度任务的唯一标识符。
+        :rtype: int
         """
         if interval <= 0:
             raise ValueError("interval must be > 0")
@@ -227,6 +273,29 @@ class EventEngine:
                 ]
             heapq.heapify(self._scheduler_heap)
             self._cond.notify()
+
+    def update_periodic(
+            self, task_id: int, *,
+            new_interval: float | None = None,
+            new_priority: int | None = None,
+    ) -> None:
+        with self._cond:
+            for idx, task in enumerate(self._scheduler_heap):
+                if task.seq == task_id:
+                    interval = new_interval if new_interval is not None else task.interval
+                    priority = new_priority if new_priority is not None else task.priority
+                    self._scheduler_heap[idx] = _ScheduledTask(
+                        next_ts=_now() + interval,
+                        seq=task.seq,
+                        interval=interval,
+                        priority=priority,
+                        event_type=task.event_type,
+                        async_flag=task.async_flag,
+                    )
+                    heapq.heapify(self._scheduler_heap)
+                    self._cond.notify()
+                    return
+            raise ValueError(f"No periodic task with id={task_id}")
 
     # ------------- internals -------------
     def _dispatcher(self) -> None:

@@ -12,11 +12,19 @@ from src.trader.core.event.engine import EventEngine
 
 
 class CoreBus(EventEngine):
-    """行情 → 策略 → 下单极速通道（禁止异步处理器）"""
+    """
+    CoreBus 类的功能概述。
 
-    def __init__(self) -> None:
-        # timer_interval = 0 代表取消默认 1 s TIMER
-        super().__init__(timer_interval=0, max_workers=0)
+    CoreBus 是一个基于事件引擎的核心事件总线类。
+    它继承自 EventEngine，用于处理事件分发功能并禁止异步事件处理器。
+    此类主要用于需要同步事件分发的场景。
+
+    :ivar queue_size: 队列的大小，用于限制事件队列容量。
+    :type queue_size: int
+    """
+
+    def __init__(self, queue_size: int = 10_000) -> None:
+        super().__init__(queue_size=queue_size, max_workers=0)  # 0 = 关闭线程池
 
     # 硬禁止异步处理器
     def _get_executor(self):
@@ -26,7 +34,7 @@ class CoreBus(EventEngine):
 class AuxBus(EventEngine):
     """后台业务总线（心跳 / 风控 / Persist 等）"""
 
-    def __init__(self, timer_interval: float = 1.0, max_workers: int | None = None) -> None:
+    def __init__(self, queue_size: int = 10_000, max_workers: int | None = None) -> None:
         if max_workers is None:
             max_workers = min(32, (os.cpu_count() or 1) * 2)
-        super().__init__(timer_interval=timer_interval, max_workers=max_workers)
+        super().__init__(queue_size=queue_size, max_workers=max_workers)

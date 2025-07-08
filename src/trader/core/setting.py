@@ -56,9 +56,20 @@ YAML_FILE_PATH = CONFIG_DIR / YAML_FILE_NAME
 # ─────────────────────────────────────────────────────────────
 class LogConfig(BaseModel):
     """
-    日志相关配置 (logging section in YAML/env).
+    表示日志配置的类。
 
-    retention_days: PositiveInt 保证 ≥1，避免 "0 days" 等非法值。
+    此类用于定义系统日志的配置选项，例如是否启用日志记录、日志级别、日志轮转时间等。
+
+    :ivar active: 指定是否启用日志记录功能。
+    :type active: bool
+    :ivar level: 指定日志的记录级别。
+    :type level: LogLevel
+    :ivar rotation: 定义日志轮转的时间周期。
+    :type rotation: str
+    :ivar retention_days: 指定日志保留的天数。
+    :type retention_days: PositiveInt
+    :ivar enable_json: 是否启用 JSON 格式的日志输出。
+    :type enable_json: bool
     """
     active: bool = True
     level: LogLevel = "INFO"
@@ -68,10 +79,31 @@ class LogConfig(BaseModel):
 
 
 class DatabaseConfig(BaseModel):
+    """
+    表示数据库配置的类。
+
+    该类用于存储和管理数据库相关的配置，适用于需要数据库连接的程序。
+
+    :ivar url: 数据库的连接URL。
+    :type url: DatabaseUrl
+    """
     url: DatabaseUrl = None
 
 
 class AppConfig(BaseModel):
+    """
+    表示应用程序配置的类。
+
+    该类用于定义应用程序的基本配置参数，例如名称、作者和环境等。这些配置将用于初始化和
+    管理应用程序的行为和运行环境。
+
+    :ivar name: 应用程序的名称。
+    :type name: str
+    :ivar author: 应用程序的作者。
+    :type author: str
+    :ivar env: 应用程序运行的环境（如“prod”或“dev”）。
+    :type env: AppEnvironment
+    """
     name: str = APP_NAME
     author: str = APP_AUTHOR
     env: AppEnvironment = "prod"
@@ -79,7 +111,16 @@ class AppConfig(BaseModel):
 
 class Settings(BaseSettings):
     """
-    顶层配置对象，可通过 `from trader.core.setting import settings` 全局单例访问。
+    Settings类的概要描述。
+
+    提供应用程序、日志和数据库的配置信息，同时支持从多个数据源定制加载设置，例如环境变量、YAML文件等。
+
+    :ivar app: 应用程序配置。
+    :type app: AppConfig
+    :ivar log: 日志配置。
+    :type log: LogConfig
+    :ivar database: 数据库配置。
+    :type database: DatabaseConfig
     """
     app: AppConfig = Field(default_factory=AppConfig)
     log: LogConfig = Field(default_factory=LogConfig)
@@ -131,7 +172,17 @@ _SAMPLE_YAML: dict[str, Any] = {
 
 
 def _ensure_yaml() -> dict[str, Any]:
-    """确保 YAML 存在且可读取；写入/解析失败时给出提示并退出或返回 {}。"""
+    """
+    确保 YAML 文件存在且内容可用的辅助函数。
+
+    功能概述：
+    此函数用于检查 YAML 配置文件是否存在。如果文件不存在，则创建一个包含默认配置的 YAML 文件。
+    如果文件存在，则尝试加载其内容并返回。如果加载失败，返回空字典。
+
+    :raises SystemExit: 若文件创建操作中出现异常则终止程序。
+    :return: 返回解析后的 YAML 文件内容，若解析失败则返回空字典。
+    :rtype: dict[str, Any]
+    """
     if not YAML_FILE_PATH.exists():
         try:
             with YAML_FILE_PATH.open("w", encoding=YAML_ENCODING) as f:

@@ -205,7 +205,5 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
-!/src/example/test.py
-!/src/example/test.py
 /tests/
-/tests/
+!/tests/test_engine.py

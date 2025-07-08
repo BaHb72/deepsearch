@@ -56,6 +56,19 @@ class LoggerConfig:
 # ─────────────────────────────────────────────────────────────
 class _Intercept(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
+        """
+        将记录发送到指定的日志记录目标。
+
+        该方法从给定的日志记录中提取日志级别，并根据记录的内容将日志详细信息发送到
+        设置的日志记录系统。如果级别无效，则回退到默认的日志等级数值，并包括深度和
+        异常信息。
+
+        :param record: 一个 ``logging.LogRecord`` 对象，其包含日志的相关信息。
+        :type record: logging.LogRecord
+
+        :return: 无返回值。
+        :rtype: None
+        """
         try:
             level = logger.level(record.levelname).name
         except ValueError:

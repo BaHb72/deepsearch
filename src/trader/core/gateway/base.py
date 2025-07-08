@@ -23,6 +23,22 @@ LOGGER = logging.getLogger(__name__)
 
 
 class GatewayStatus(Enum):
+    """
+    表示网关状态的枚举类。
+
+    此类定义了网关连接的各种可能状态，用于表示连接的生命周期及其状态。
+
+    :ivar DISCONNECTED: 表示网关未连接状态。
+    :type DISCONNECTED: int
+    :ivar CONNECTING: 表示网关正在尝试连接中的状态。
+    :type CONNECTING: int
+    :ivar CONNECTED: 表示网关已成功连接的状态。
+    :type CONNECTED: int
+    :ivar RECONNECTING: 表示网关尝试重新连接的状态。
+    :type RECONNECTING: int
+    :ivar CLOSED: 表示网关已关闭的状态。
+    :type CLOSED: int
+    """
     DISCONNECTED = 0
     CONNECTING = 1
     CONNECTED = 2
@@ -32,10 +48,21 @@ class GatewayStatus(Enum):
 
 class BaseGateway(ABC):
     """
-    抽象网关基类
+    BaseGateway 是一个负责处理网关初始化、心跳管理、事件推送和连接生命周期的抽象基类。
 
-    - 行情/委托/成交 → CoreBus    (低延迟)
-    - 心跳、日志、风控等 → AuxBus  (后台线程池)
+    此类旨在为网关通信提供一个通用的框架，包括事件处理、异步任务管理、可靠的心跳机制以及
+    支持重连逻辑的默认实现。此外，此框架允许子类覆写关键抽象方法以实现自定义行为。
+
+    :ivar core_bus: 核心总线实例，负责事件的传递和处理。
+    :type core_bus: CoreBus
+    :ivar aux_bus: 辅助总线实例，提供事件和扩展功能的支持。
+    :type aux_bus: AuxBus
+    :ivar gateway_name: 网关实例的标识名称。
+    :type gateway_name: str
+    :ivar status: 当前网关的状态（初始为 DISCONNECTED）。
+    :type status: GatewayStatus
+    :ivar logger: 用于记录网关相关日志的日志记录器实例。
+    :type logger: logging.Logger
     """
 
     HEARTBEAT_RECONNECT_DELAY = 1.0  # 心跳失败后 N 秒再重连
@@ -48,6 +75,18 @@ class BaseGateway(ABC):
             aux_bus: AuxBus,
             gateway_name: str,
     ) -> None:
+        """
+        表示网关初始化的构造函数。
+
+        此构造函数通过核心总线和辅助总线初始化网关，同时设置网关名称和初始状态。
+
+        :param core_bus: 核心总线的实例，用于通信及事件处理
+        :type core_bus: CoreBus
+        :param aux_bus: 辅助总线的实例，提供扩展支持及事件处理
+        :type aux_bus: AuxBus
+        :param gateway_name: 网关的名称，用于标识实例
+        :type gateway_name: str
+        """
         self.core_bus: CoreBus = core_bus
         self.aux_bus: AuxBus = aux_bus
         self.gateway_name: str = gateway_name
@@ -67,7 +106,7 @@ class BaseGateway(ABC):
         self.logger.info("网关 [%s] 初始化完成", gateway_name)
 
         # 注册心跳处理器（只需一次）
-        self.aux_bus.add_handler(
+        self.aux_bus.register(
             event_type=self._HB_EVENT_TYPE,
             handler=self._heartbeat_task,
             async_flag=False,
