@@ -61,12 +61,11 @@ LOGGER = logging.getLogger(__name__)
 # ---------------------------------------------------------------------
 def _now() -> float:
     """
-    返回当前的高精度时间计数值。
+    获取当前高精度时间戳。
 
-    该函数基于 `time.perf_counter`，适用于对时间精度要求较高的场景。
-    支持高分辨率的计时功能，能够在尽量减少系统干扰的情况下提供可靠的时间值。
+    本函数返回当前的高精度时间戳，使用的单位为秒，可用于计算时间间隔或性能分析。
 
-    :return: 返回当前的高精度时间计数值
+    :return: 当前高精度时间戳，单位为秒
     :rtype: float
     """
     return time.perf_counter()
@@ -78,16 +77,16 @@ def _now() -> float:
 @dataclass(slots=True, frozen=True)
 class Event:
     """
-    表示事件的类。
+    表示一个事件的数据结构。
 
-    该类表示一个事件的抽象，包括事件类型、事件数据及其时间戳属性。
-    该类通过冻结的插槽数据类实现，确保实例在创建后是不可变的。
+    提供了用来描述事件的类型、相关数据与时间戳的信息。
+    该类不可变且支持插槽以优化内存使用。
 
-    :ivar type: 事件的类型，用于标识事件的种类。
+    :ivar type: 事件的类型。
     :type type: str
-    :ivar data: 与事件相关的数据，可为空。
+    :ivar data: 与事件相关的数据，允许为空值。
     :type data: object | None
-    :ivar ts: 事件时间戳，表示事件发生的时间。
+    :ivar ts: 事件的时间戳。
     :type ts: float
     """
     type: str
@@ -103,19 +102,20 @@ class _ScheduledTask:
     """
     表示一个计划任务的类。
 
-    用于表示一个调度系统中待执行的任务，通过任务的时间、顺序、间隔等参数进行管理和排序。
+    此类定义了一个计划任务的所有必要信息，包括执行时间戳、任务序号、间隔时间、优先级等信息。
+    可以用于需要调度任务的场景。
 
-    :ivar next_ts: 下次任务调度的时间戳。
+    :ivar next_ts: 下次执行的时间戳。
     :type next_ts: float
-    :ivar seq: 任务的顺序号，用于区分相同时间戳的任务。
+    :ivar seq: 任务的唯一序号。
     :type seq: int
-    :ivar interval: 任务的调度间隔，单位为秒。
+    :ivar interval: 任务执行的时间间隔。
     :type interval: float
-    :ivar priority: 任务的优先级，数值越小优先级越高。
+    :ivar priority: 任务的优先级。
     :type priority: int
-    :ivar event_type: 与任务关联的事件类型。
+    :ivar event_type: 任务的事件类型。
     :type event_type: str
-    :ivar async_flag: 表示该任务是否为异步任务。
+    :ivar async_flag: 表示任务是否异步执行的标志。
     :type async_flag: bool
     """
     next_ts: float
@@ -134,16 +134,25 @@ Handler = Callable[[Event], None]
 # ---------------------------------------------------------------------
 class EventEngine:
     """
-    事件引擎类。
+    事件引擎类的摘要描述。
 
-    该类用于处理事件注册、调度和分发。支持事件优先级控制以及异步任务的处理。
-    同时包含周期性任务的调度功能。可以通过启动和停止方法管理引擎的生命周期。
+    此类设计用于处理事件的注册、调度、分发等功能，支持同步和异步处理。它结合了一个优先级队列和调度器，
+    能够高效地管理事件队列和周期性任务，适合于对事件处理有较高实时性要求的场景。
 
-    类的主要作用是为多种事件处理需求提供统一的框架，在高效、可靠的基础上，支持并发和
-    异步处理。
-
-    :ivar _max_workers: 最大线程池工作线程数。
-    :type _max_workers: int
+    :ivar queue: 内部使用的优先级队列，负责事件管理。
+    :type queue: PriorityQueue[tuple[int, int, Event]]
+    :ivar seq_ctr: 事件的序列生成器，用于确保事件的顺序。
+    :type seq_ctr: Iterator[int]
+    :ivar handlers: 事件类型与对应处理器的映射关系字典。
+    :type handlers: Dict[str, List[Tuple[int, Handler, bool]]]
+    :ivar general_handlers: 通用事件处理器的列表，适用于处理所有事件类型。
+    :type general_handlers: List[Tuple[int, Handler, bool]]
+    :ivar scheduler_heap: 调度器任务的最小堆，管理周期性任务。
+    :type scheduler_heap: List[_ScheduledTask]
+    :ivar cancelled_tasks: 被取消的调度任务的集合。
+    :type cancelled_tasks: set[int]
+    :ivar max_workers: 用于控制线程池的最大工作线程数量。
+    :type max_workers: int
     """
 
     def __init__(self, *, queue_size: int = 10000, max_workers: int = 32) -> None:
