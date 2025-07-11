@@ -53,7 +53,7 @@ from itertools import count
 from queue import Empty, Full, PriorityQueue
 from typing import Callable, Dict, List, Tuple, Optional
 
-from event.const import EVENT_SYSTEM_EXIT
+from deepsearch.event.const import EVENT_SYSTEM_EXIT
 
 logger = logging.getLogger(__name__)
 
@@ -191,8 +191,13 @@ class EventEngine:
             self._cond.notify_all()  # wake scheduler
 
         # Put sentinel event to unblock dispatcher
-        self.put(Event(EVENT_SYSTEM_EXIT), priority=-999999, block=False)
-
+        sentinel = Event(EVENT_SYSTEM_EXIT)
+        if not self.put(sentinel, priority=-999999, block=False):
+            # queue full – temporarily enlarge the queue to ensure insertion
+            old_size = self._queue.maxsize
+            self._queue.maxsize = old_size + 1
+            self.put(sentinel, priority=-999999, block=True)
+            self._queue.maxsize = old_size
         self._dispatcher_th.join(timeout=timeout)
         self._scheduler_th.join(timeout=timeout)
         if self._executor:

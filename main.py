@@ -2,7 +2,7 @@ import argparse
 import sys
 from typing import Optional
 
-from observability.logger import configure_logger, get_logger
+from deepsearch.observability.logger import configure_logger, get_logger
 
 
 class Application:
