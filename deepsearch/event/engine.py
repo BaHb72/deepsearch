@@ -48,12 +48,14 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, field
 from itertools import count
 from queue import Empty, Full, PriorityQueue
 from typing import Callable, Dict, List, Tuple, Optional
 
-LOGGER = logging.getLogger(__name__)
+from event.const import EVENT_SYSTEM_EXIT
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------
@@ -61,11 +63,12 @@ LOGGER = logging.getLogger(__name__)
 # ---------------------------------------------------------------------
 def _now() -> float:
     """
-    获取当前高精度时间戳。
+    获取当前的高精度时间。
 
-    本函数返回当前的高精度时间戳，使用的单位为秒，可用于计算时间间隔或性能分析。
+    本函数使用 `time.perf_counter` 提供精确到微秒级的时间测量，
+    适合用来计算运行时间或其他需要高精度计时的场景。
 
-    :return: 当前高精度时间戳，单位为秒
+    :return: 当前的高精度时间（以秒为单位）
     :rtype: float
     """
     return time.perf_counter()
@@ -77,21 +80,21 @@ def _now() -> float:
 @dataclass(slots=True, frozen=True)
 class Event:
     """
-    表示一个事件的数据结构。
+    表示事件的类。
 
-    提供了用来描述事件的类型、相关数据与时间戳的信息。
-    该类不可变且支持插槽以优化内存使用。
+    该类用于定义事件的数据结构，包括事件类型、数据和时间戳等属性。
+    其设计为不可变（frozen=True），并使用slots以节省内存占用。
 
-    :ivar type: 事件的类型。
+    :ivar type: 指定事件的类型。
     :type type: str
-    :ivar data: 与事件相关的数据，允许为空值。
+    :ivar data: 事件相关的附加数据，可以为空。
     :type data: object | None
-    :ivar ts: 事件的时间戳。
+    :ivar ts: 事件发生的时间戳，表示为浮点型。
     :type ts: float
     """
     type: str
-    data: object | None = None
-    ts: float = _now()
+    data: object | None = field(default_factory=dict)
+    ts: float = field(default_factory=time.perf_counter)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Event {self.type} @ {self.ts:.6f}>"
@@ -100,22 +103,23 @@ class Event:
 @dataclass(order=True, slots=True)
 class _ScheduledTask:
     """
-    表示一个计划任务的类。
+    表示一个调度任务的类。
 
-    此类定义了一个计划任务的所有必要信息，包括执行时间戳、任务序号、间隔时间、优先级等信息。
-    可以用于需要调度任务的场景。
+    该类用于定义一个调度任务的相关信息，包括下次执行时间、任务的顺序值、
+    间隔时间、优先级等。此类既可以用作存储调度任务的数据结构，也可以作为
+    调度系统的关键对象。
 
-    :ivar next_ts: 下次执行的时间戳。
+    :ivar next_ts: 任务的下次执行时间戳。
     :type next_ts: float
-    :ivar seq: 任务的唯一序号。
+    :ivar seq: 任务顺序标识符，用于区分任务执行的先后顺序。
     :type seq: int
     :ivar interval: 任务执行的时间间隔。
     :type interval: float
-    :ivar priority: 任务的优先级。
+    :ivar priority: 任务的优先级值，数值越小优先级越高。
     :type priority: int
-    :ivar event_type: 任务的事件类型。
+    :ivar event_type: 任务的事件类型，用于标识任务的分类。
     :type event_type: str
-    :ivar async_flag: 表示任务是否异步执行的标志。
+    :ivar async_flag: 标识任务是否为异步任务。
     :type async_flag: bool
     """
     next_ts: float
@@ -134,30 +138,22 @@ Handler = Callable[[Event], None]
 # ---------------------------------------------------------------------
 class EventEngine:
     """
-    事件引擎类的摘要描述。
+    事件引擎类，用于管理事件的分发、注册以及定时任务的调度。
 
-    此类设计用于处理事件的注册、调度、分发等功能，支持同步和异步处理。它结合了一个优先级队列和调度器，
-    能够高效地管理事件队列和周期性任务，适合于对事件处理有较高实时性要求的场景。
+    EventEngine 是一个支持优先级队列的事件分发系统，具有注册事件处理器、周期性调度任务等功能。
+    它提供了一种安全、高效的方式来管理异步任务并发调度的需求。
 
-    :ivar queue: 内部使用的优先级队列，负责事件管理。
-    :type queue: PriorityQueue[tuple[int, int, Event]]
-    :ivar seq_ctr: 事件的序列生成器，用于确保事件的顺序。
-    :type seq_ctr: Iterator[int]
-    :ivar handlers: 事件类型与对应处理器的映射关系字典。
-    :type handlers: Dict[str, List[Tuple[int, Handler, bool]]]
-    :ivar general_handlers: 通用事件处理器的列表，适用于处理所有事件类型。
-    :type general_handlers: List[Tuple[int, Handler, bool]]
-    :ivar scheduler_heap: 调度器任务的最小堆，管理周期性任务。
-    :type scheduler_heap: List[_ScheduledTask]
-    :ivar cancelled_tasks: 被取消的调度任务的集合。
-    :type cancelled_tasks: set[int]
-    :ivar max_workers: 用于控制线程池的最大工作线程数量。
+    :ivar max_workers: 最大线程池工作线程数，用于处理异步任务的执行。
     :type max_workers: int
     """
 
     def __init__(self, *, queue_size: int = 10000, max_workers: int = 32) -> None:
         if queue_size <= 0:
+            logger.error("队列大小必须为正数")
             raise ValueError("queue_size must be positive")
+        if max_workers <= 0:
+            logger.error("事件引擎最大线程数 max_workers 必须大于0")
+            raise ValueError("max_workers must be positive")
         self._queue: PriorityQueue[tuple[int, int, Event]] = PriorityQueue(maxsize=queue_size)
         self._seq_ctr = count()
         self._handlers: Dict[str, List[Tuple[int, Handler, bool]]] = {}
@@ -184,28 +180,31 @@ class EventEngine:
         self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
         self._dispatcher_th.start()
         self._scheduler_th.start()
-        LOGGER.info("EventEngine started.")
+        logger.info("事件引擎已启动")
 
     def stop(self, *, timeout: float = 5.0) -> None:
         if not self._running:
             return
-        LOGGER.info("Stopping EventEngine …")
+        logger.info("正在关闭事件引擎 …")
         self._running = False
         with self._cond:
             self._cond.notify_all()  # wake scheduler
 
         # Put sentinel event to unblock dispatcher
-        self.put(Event("_SYSTEM_EXIT_"), priority=-999999, block=False)
+        self.put(Event(EVENT_SYSTEM_EXIT), priority=-999999, block=False)
 
         self._dispatcher_th.join(timeout=timeout)
         self._scheduler_th.join(timeout=timeout)
         if self._executor:
             self._executor.shutdown(wait=True)
             self._executor = None
-        LOGGER.info("EventEngine stopped.")
+        logger.info("事件引擎已关闭")
 
     # ------------- registration -------------
     def register(self, *, event_type: str, handler: Handler, priority: int = 0, async_flag: bool = False) -> None:
+        """
+        注册事件处理器的方法，用于指定事件类型、处理器、优先级以及是否异步执行。注册的处理器会按优先级从高到低的顺序排列。
+        """
         key = (handler, async_flag)
         with self._lock:
             lst = self._handlers.setdefault(event_type, [])
@@ -242,7 +241,7 @@ class EventEngine:
             self._queue.put(item, block=block, timeout=timeout)
             return True
         except Full:
-            LOGGER.warning("Queue full, dropping %s", event)
+            logger.warning("事件队列已满，%s 已被丢弃", event)
             return False
 
     # ------------- periodic -------------
@@ -364,7 +363,7 @@ class EventEngine:
         try:
             func(ev)
         except Exception as exc:
-            LOGGER.exception("Handler error: %s", exc)
+            logger.exception("Handler error: %s", exc)
 
     # debugging helper
     def snapshot(self) -> dict:

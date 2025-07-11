@@ -9,15 +9,15 @@ import time
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from src.trader.core.constant import (
+from event import (
     EVENT_TICK,
     EVENT_ORDER,
     EVENT_TRADE,
     EVENT_ERROR,
     EVENT_LOG,
 )
-from src.trader.core.event.bus import CoreBus, AuxBus
-from src.trader.core.event.engine import Event
+from event.bus import CoreBus, AuxBus
+from event.engine import Event
 
 LOGGER = logging.getLogger(__name__)
 
