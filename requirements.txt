@@ -1,0 +1,15 @@
+# ==== 运行时依赖 ====
+anyio>=4.9.0
+loguru>=0.7.3
+matplotlib>=3.10.3
+platformdirs>=4.3.8
+pydantic>=2.11.7
+pydantic-settings>=2.10.1
+pyyaml>=6.0.2
+twisted>=25.5.0
+
+# ==== 可选依赖：测试 ====
+pytest>=8.4.1
+pytest-tornasync>=0.6.0.post2
+pytest-trio>=0.8.0
+pytest-twisted>=1.14.3
