@@ -13,7 +13,7 @@ from typing import Any, Callable, Literal
 from loguru import logger
 from platformdirs import user_log_path
 
-from config.setting import settings
+from deepsearch.config.setting import settings
 
 
 # ─────────────────────────────────────────────────────────────

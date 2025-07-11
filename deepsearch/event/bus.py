@@ -11,7 +11,7 @@ import logging
 import os
 from typing import Any, List, Optional
 
-from event.engine import EventEngine
+from deepsearch.event.engine import EventEngine
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,6 @@ class AuxBus(EventEngine):
         super().__init__(queue_size=queue_size, max_workers=max_workers)
 
 
-
 class PersistBus:
     """
     持久化总线类
@@ -70,7 +69,12 @@ class PersistBus:
         self._active = True
         self._task: Optional[asyncio.Task[None]] = asyncio.create_task(self._flusher())
         self._task.add_done_callback(self._on_task_done)
-        self._workers = [asyncio.create_task(self._flusher()) for _ in range(flusher_worker)]
+        # self._workers = [asyncio.create_task(self._flusher()) for _ in range(flusher_worker)]
+        self._workers: list[asyncio.Task[None]] = [
+            asyncio.create_task(self._flusher()) for _ in range(flusher_worker)
+        ]
+        for w in self._workers:
+            w.add_done_callback(self._on_task_done)
 
     # ---------------- 公共接口 ----------------
     async def put(self, obj: Any, block=True) -> None:
@@ -81,7 +85,6 @@ class PersistBus:
         except asyncio.QueueFull:
             logger.warning("queue full, drop=1")
             raise
-        await self._queue.put(obj)
 
     async def stop(self) -> None:
         """优雅停止：等待队列清空 & 任务结束（5 s 超时）"""
@@ -99,6 +102,18 @@ class PersistBus:
                     await self._task
                 except asyncio.CancelledError:
                     pass
+        for worker in self._workers:
+            if not worker.done():
+                try:
+                    await asyncio.wait_for(worker, timeout=5)
+                except asyncio.TimeoutError:
+                    logger.warning("Flusher 停止超时，强制取消")
+                    worker.cancel()
+                    try:
+                        await worker
+                    except asyncio.CancelledError:
+                        pass
+        self._workers.clear()
 
     # --------- 上下文管理 (async with) ----------
     async def __aenter__(self):  # noqa: D401
@@ -126,7 +141,7 @@ class PersistBus:
                     batch.append(item)
                     if len(batch) >= self._flush_size:
                         await self._flush_impl(batch.copy())
-                        logger.debug("flush %d, batch=%d", self._flush_size, batch)
+                        logger.debug("flush %d, batch=%d", self._flush_size, len(batch))
                         batch.clear()
                 except asyncio.TimeoutError:
                     if batch:

@@ -53,7 +53,7 @@ from itertools import count
 from queue import Empty, Full, PriorityQueue
 from typing import Callable, Dict, List, Tuple, Optional
 
-from event.const import EVENT_SYSTEM_EXIT
+from deepsearch.event.const import EVENT_SYSTEM_EXIT
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +143,8 @@ class EventEngine:
     EventEngine 是一个支持优先级队列的事件分发系统，具有注册事件处理器、周期性调度任务等功能。
     它提供了一种安全、高效的方式来管理异步任务并发调度的需求。
 
-    :ivar max_workers: 最大线程池工作线程数，用于处理异步任务的执行。
+    :ivar max_workers: 最大线程池工作线程数，用于处理异步任务的执行；
+        设为 ``0`` 表示不启用线程池。
     :type max_workers: int
     """
 
@@ -151,9 +152,9 @@ class EventEngine:
         if queue_size <= 0:
             logger.error("队列大小必须为正数")
             raise ValueError("queue_size must be positive")
-        if max_workers <= 0:
-            logger.error("事件引擎最大线程数 max_workers 必须大于0")
-            raise ValueError("max_workers must be positive")
+        if max_workers < 0:
+            logger.error("事件引擎最大线程数 max_workers 不能为负数")
+            raise ValueError("max_workers cannot be negative")
         self._queue: PriorityQueue[tuple[int, int, Event]] = PriorityQueue(maxsize=queue_size)
         self._seq_ctr = count()
         self._handlers: Dict[str, List[Tuple[int, Handler, bool]]] = {}
@@ -177,7 +178,10 @@ class EventEngine:
         if self._running:
             return
         self._running = True
-        self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
+        if self._max_workers > 0:
+            self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
+        else:
+            self._executor = None
         self._dispatcher_th.start()
         self._scheduler_th.start()
         logger.info("事件引擎已启动")
@@ -191,8 +195,13 @@ class EventEngine:
             self._cond.notify_all()  # wake scheduler
 
         # Put sentinel event to unblock dispatcher
-        self.put(Event(EVENT_SYSTEM_EXIT), priority=-999999, block=False)
-
+        sentinel = Event(EVENT_SYSTEM_EXIT)
+        if not self.put(sentinel, priority=-999999, block=False):
+            # queue full – temporarily enlarge the queue to ensure insertion
+            old_size = self._queue.maxsize
+            self._queue.maxsize = old_size + 1
+            self.put(sentinel, priority=-999999, block=True)
+            self._queue.maxsize = old_size
         self._dispatcher_th.join(timeout=timeout)
         self._scheduler_th.join(timeout=timeout)
         if self._executor:

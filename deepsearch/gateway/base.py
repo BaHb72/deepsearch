@@ -9,15 +9,15 @@ import time
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from event import (
+from deepsearch.event import (
     EVENT_TICK,
     EVENT_ORDER,
     EVENT_TRADE,
     EVENT_ERROR,
     EVENT_LOG,
 )
-from event.bus import CoreBus, AuxBus
-from event.engine import Event
+from deepsearch.event.bus import CoreBus, AuxBus
+from deepsearch.event.engine import Event
 
 LOGGER = logging.getLogger(__name__)
 
@@ -229,7 +229,18 @@ class BaseGateway(ABC):
         ...
 
     def connect(self) -> None:
-        asyncio.run(self.connect_async())
+        """在同步或异步环境中执行 ``connect_async``。
+
+                当检测到当前线程没有运行中的事件循环时，使用 ``asyncio.run``
+                直接运行 :meth:`connect_async`。
+                若已处于事件循环内，则通过 ``asyncio.create_task`` 调度执行。
+                """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(self.connect_async())
+        else:
+            loop.create_task(self.connect_async())
 
     @abstractmethod
     def close(self) -> None:
