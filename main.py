@@ -56,6 +56,7 @@ class Application:
             pass
         except KeyboardInterrupt:
             self.logger.warning("收到 Ctrl+C，服务退出")
+            sys.exit(1)
         except Exception:
             self.logger.exception("应用程序运行期间发生未捕获异常")
             sys.exit(1)

@@ -13,3 +13,6 @@ pytest>=8.4.1
 pytest-tornasync>=0.6.0.post2
 pytest-trio>=0.8.0
 pytest-twisted>=1.14.3
+
+deepsearch~=0.1.0
+pyzmq~=27.0.0

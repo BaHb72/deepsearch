@@ -1,4 +1,3 @@
-# src/trader/core/gateway/base.py
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +15,7 @@ from deepsearch.event import (
     EVENT_ERROR,
     EVENT_LOG,
 )
-from deepsearch.event.bus import CoreBus, AuxBus
+from deepsearch.event.bus.bus import CompositeMessageBus
 from deepsearch.event.engine import Event
 
 LOGGER = logging.getLogger(__name__)
@@ -26,17 +25,17 @@ class GatewayStatus(Enum):
     """
     表示网关状态的枚举类。
 
-    此类定义了网关连接的各种可能状态，用于表示连接的生命周期及其状态。
+    该枚举类用于定义不同的网关连接状态，以便在代码中清晰地描述和控制网关的状态。
 
-    :ivar DISCONNECTED: 表示网关未连接状态。
+    :ivar DISCONNECTED: 网关当前未连接的状态。
     :type DISCONNECTED: int
-    :ivar CONNECTING: 表示网关正在尝试连接中的状态。
+    :ivar CONNECTING: 网关正在尝试建立连接的状态。
     :type CONNECTING: int
-    :ivar CONNECTED: 表示网关已成功连接的状态。
+    :ivar CONNECTED: 网关成功建立连接的状态。
     :type CONNECTED: int
-    :ivar RECONNECTING: 表示网关尝试重新连接的状态。
+    :ivar RECONNECTING: 网关尝试重新连接的状态。
     :type RECONNECTING: int
-    :ivar CLOSED: 表示网关已关闭的状态。
+    :ivar CLOSED: 网关连接已关闭的状态。
     :type CLOSED: int
     """
     DISCONNECTED = 0
@@ -48,20 +47,18 @@ class GatewayStatus(Enum):
 
 class BaseGateway(ABC):
     """
-    BaseGateway 是一个负责处理网关初始化、心跳管理、事件推送和连接生命周期的抽象基类。
+    BaseGateway 基类用于定义交易网关接口及部分基础行为。
 
-    此类旨在为网关通信提供一个通用的框架，包括事件处理、异步任务管理、可靠的心跳机制以及
-    支持重连逻辑的默认实现。此外，此框架允许子类覆写关键抽象方法以实现自定义行为。
+    该类主要负责交易网关的心跳机制、生命周期管理以及事件推送等功能。
+    通过继承该类可以实现具体的网关逻辑，如连接交易所、推送交易相关事件、管理订单等。
 
-    :ivar core_bus: 核心总线实例，负责事件的传递和处理。
-    :type core_bus: CoreBus
-    :ivar aux_bus: 辅助总线实例，提供事件和扩展功能的支持。
-    :type aux_bus: AuxBus
-    :ivar gateway_name: 网关实例的标识名称。
+    :ivar message_bus: 消息总线，用于通信及事件处理。
+    :type message_bus: CompositeMessageBus
+    :ivar gateway_name: 网关名称，用于标识实例。
     :type gateway_name: str
-    :ivar status: 当前网关的状态（初始为 DISCONNECTED）。
+    :ivar status: 网关当前状态，枚举类型 GatewayStatus，初始状态为 DISCONNECTED。
     :type status: GatewayStatus
-    :ivar logger: 用于记录网关相关日志的日志记录器实例。
+    :ivar logger: 日志记录器，用于记录网关运行过程中重要的信息。
     :type logger: logging.Logger
     """
 
@@ -71,24 +68,20 @@ class BaseGateway(ABC):
     # ------------------------ 初始化 ------------------------
     def __init__(
             self,
-            core_bus: CoreBus,
-            aux_bus: AuxBus,
+            message_bus: CompositeMessageBus,
             gateway_name: str,
     ) -> None:
         """
         表示网关初始化的构造函数。
 
-        此构造函数通过核心总线和辅助总线初始化网关，同时设置网关名称和初始状态。
+        此构造函数通过消息总线初始化网关，同时设置网关名称和初始状态。
 
-        :param core_bus: 核心总线的实例，用于通信及事件处理
-        :type core_bus: CoreBus
-        :param aux_bus: 辅助总线的实例，提供扩展支持及事件处理
-        :type aux_bus: AuxBus
+        :param message_bus: 消息总线实例，用于通信及事件处理
+        :type message_bus: CompositeMessageBus
         :param gateway_name: 网关的名称，用于标识实例
         :type gateway_name: str
         """
-        self.core_bus: CoreBus = core_bus
-        self.aux_bus: AuxBus = aux_bus
+        self.message_bus: CompositeMessageBus = message_bus
         self.gateway_name: str = gateway_name
 
         self.status: GatewayStatus = GatewayStatus.DISCONNECTED
@@ -105,16 +98,16 @@ class BaseGateway(ABC):
         self.logger = logging.getLogger(f"gateway.{gateway_name}")
         self.logger.info("网关 [%s] 初始化完成", gateway_name)
 
-        # 注册心跳处理器（只需一次）
-        self.aux_bus.register(
-            event_type=self._HB_EVENT_TYPE,
+        # 注册心跳处理器
+        self.message_bus.subscribe(
+            topic=self._HB_EVENT_TYPE,
             handler=self._heartbeat_task,
-            async_flag=False,
         )
 
     # -------------------- 事件推送 --------------------
     def _publish(self, etype: str, data=None) -> None:
-        self.core_bus.put(Event(etype, data))
+        event = Event(etype, data)
+        self.message_bus.publish(etype, event)
 
     def on_tick(self, tick):
         self._publish(EVENT_TICK, tick)
@@ -137,26 +130,17 @@ class BaseGateway(ABC):
     def start_heartbeat(self, interval: float = 5.0) -> None:
         """
         开启或修改心跳。重复调用即为调整周期。
-        若 AuxBus 抛异常，则恢复上一状态并向上层抛出。
         """
         interval = max(0.1, interval)
 
         try:
             if not self._heartbeat_enabled:
-                # 首次启动
-                self._heartbeat_task_id = self.aux_bus.add_periodic(
-                    event_type=self._HB_EVENT_TYPE,
-                    interval=interval,
-                    priority=0,
-                    async_flag=False,
-                )
+                # 首次启动心跳
+                self._schedule_heartbeat(interval)
                 self.write_log(f"心跳已启动，间隔={interval}s")
             else:
-                # 仅调整周期
-                assert self._heartbeat_task_id is not None
-                self.aux_bus.update_periodic(
-                    self._heartbeat_task_id, new_interval=interval
-                )
+                # 调整心跳周期
+                self._schedule_heartbeat(interval)
                 self.write_log(f"心跳周期已调整为 {interval}s")
 
             self._heartbeat_enabled = True
@@ -169,6 +153,22 @@ class BaseGateway(ABC):
             self.write_log(f"启动/调整心跳失败: {exc}", level=logging.ERROR)
             raise
 
+    def _schedule_heartbeat(self, interval: float) -> None:
+        """调度心跳任务"""
+
+        def heartbeat_loop():
+            while self._heartbeat_enabled:
+                try:
+                    time.sleep(interval)
+                    if self._heartbeat_enabled:
+                        self.message_bus.publish(self._HB_EVENT_TYPE, None)
+                except Exception as exc:
+                    self.write_log(f"心跳调度失败: {exc}", level=logging.ERROR)
+                    break
+
+        # 提交心跳任务到线程池
+        self._executor.submit(heartbeat_loop)
+
     def update_heartbeat_interval(self, new_interval: float) -> None:
         if not self._heartbeat_enabled:
             raise RuntimeError("心跳未启动，无法调整周期")
@@ -178,8 +178,7 @@ class BaseGateway(ABC):
         if not self._heartbeat_enabled:
             return
         try:
-            assert self._heartbeat_task_id is not None
-            self.aux_bus.cancel_periodic(self._heartbeat_task_id)
+            self._heartbeat_enabled = False
             self.write_log("心跳已停止")
         finally:
             self._heartbeat_enabled = False
@@ -187,8 +186,8 @@ class BaseGateway(ABC):
             self._heartbeat_interval = None
 
     # ---------------- 心跳任务 ----------------
-    def _heartbeat_task(self, _evt: Event) -> None:  # noqa: D401
-        """收到 _HEARTBEAT 事件时触发"""
+    def _heartbeat_task(self, _evt) -> None:  # noqa: D401
+        """收到心跳事件时触发"""
         try:
             self.heartbeat()
         except Exception as exc:  # noqa: BLE001
