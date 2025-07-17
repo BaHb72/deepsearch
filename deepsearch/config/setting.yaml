@@ -1,0 +1,76 @@
+# ─────────────────────────────
+# DeepSearch 默认配置模板
+# ─────────────────────────────
+app:
+  name: DeepSearch
+  author: BaHb
+  env: prod            # dev / test / prod
+
+log:
+  active: true
+  level: INFO          # DEBUG / INFO / WARNING / ERROR / CRITICAL
+  rotation: "00:00"    # 每日 00:00 轮转
+  retention_days: 7
+  json: false          # 是否输出 JSON 日志
+
+database:
+  url: null            # 例如: "postgresql+psycopg://user:pwd@localhost/db"
+
+message_bus:
+  buses:
+    # --- ZeroMQ（统一缩写 zmq）---
+    zmq:
+      type: zmq
+      enabled: true
+      config:
+        host: 127.0.0.1
+        pub_port: 5556     # 发布端口
+        sub_port: 5557     # 订阅端口（修改：使用不同端口）
+        send_hwm: 1000
+        recv_hwm: 1000
+        verbose: true
+    # --- 内存总线 ---
+    inmem:
+      type: inmem
+      enabled: false
+      config: { }
+    # --- Redis 总线（示例，默认禁用）---
+    redis:
+      type: redis
+      enabled: false
+      config:
+        host: localhost
+        port: 6379
+
+  # ---------- 路由规则 ----------
+  routes:
+    - match: "data.*"      # 把 data.* 主题同时写入 zmq 与内存
+      buses: [ zmq ]
+    - match: "event.*"     # event.* 只写入内存
+      buses: [ zmq ]
+    - match: "*"           # 兜底：全部写入 zmq
+      buses: [ zmq ]
+
+# ═══════════════════════════════════════════════════════════════
+# 配置说明 (Configuration Notes)
+# ═══════════════════════════════════════════════════════════════
+# 
+# 1. 环境变量覆盖配置：
+#    - 使用双下划线分隔嵌套配置，例如：
+#      LOG__LEVEL=DEBUG
+#      MESSAGE_BUS__BUSES__ZMQ__CONFIG__HOST=10.0.0.5
+#      MESSAGE_BUS__ROUTES__0__BUSES='["zmq"]'
+# 
+# 2. 消息总线类型说明：
+#    - inmem: 内存消息总线，适用于单进程内通信
+#    - redis: Redis 消息总线，适用于分布式系统
+#    - zmq: ZeroMQ 消息总线，适用于高性能进程间通信
+# 
+# 3. 路由匹配规则：
+#    - 使用 fnmatch 模式匹配
+#    - "*" 匹配任意字符
+#    - "?" 匹配单个字符
+#    - "[seq]" 匹配序列中的任意字符
+#    - 示例：
+#      - "data.*" 匹配 "data.stock", "data.news" 等
+#      - "event.user.*" 匹配 "event.user.login", "event.user.logout" 等

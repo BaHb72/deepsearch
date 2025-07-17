@@ -63,12 +63,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------
 def _now() -> float:
     """
-    获取当前的高精度时间。
+    获取当前的高精度时间戳。
 
-    本函数使用 `time.perf_counter` 提供精确到微秒级的时间测量，
-    适合用来计算运行时间或其他需要高精度计时的场景。
+    该函数返回当前的高精度时间戳，单位为秒。该时间戳通常用于测量程序运行的时间间隔或性能计算。
 
-    :return: 当前的高精度时间（以秒为单位）
+    :return: 当前高精度时间戳
     :rtype: float
     """
     return time.perf_counter()
@@ -80,16 +79,16 @@ def _now() -> float:
 @dataclass(slots=True, frozen=True)
 class Event:
     """
-    表示事件的类。
+    表示一个事件类的抽象。
 
-    该类用于定义事件的数据结构，包括事件类型、数据和时间戳等属性。
-    其设计为不可变（frozen=True），并使用slots以节省内存占用。
+    该类用于描述一个事件的类型、数据及其相关的时间戳。对象是一种不可变数据类，
+    以确保其属性在创建后无法修改，从而增强数据完整性和线程安全性。
 
-    :ivar type: 指定事件的类型。
+    :ivar type: 事件的类型。
     :type type: str
-    :ivar data: 事件相关的附加数据，可以为空。
+    :ivar data: 与该事件关联的数据，可以为任意对象类型。
     :type data: object | None
-    :ivar ts: 事件发生的时间戳，表示为浮点型。
+    :ivar ts: 事件创建的时间戳。
     :type ts: float
     """
     type: str
@@ -103,21 +102,20 @@ class Event:
 @dataclass(order=True, slots=True)
 class _ScheduledTask:
     """
-    表示一个调度任务的类。
+    代表调度任务的类。
 
-    该类用于定义一个调度任务的相关信息，包括下次执行时间、任务的顺序值、
-    间隔时间、优先级等。此类既可以用作存储调度任务的数据结构，也可以作为
-    调度系统的关键对象。
+    该类用于存储和管理调度任务的相关信息，包括下一次调度时间戳、任务顺序、间隔时间、优先级、
+    事件类型以及是否为异步任务等。
 
-    :ivar next_ts: 任务的下次执行时间戳。
+    :ivar next_ts: 下一次调度任务的时间戳。
     :type next_ts: float
-    :ivar seq: 任务顺序标识符，用于区分任务执行的先后顺序。
+    :ivar seq: 任务的顺序号，通常用于任务排序。
     :type seq: int
-    :ivar interval: 任务执行的时间间隔。
+    :ivar interval: 任务的执行间隔时间。
     :type interval: float
-    :ivar priority: 任务的优先级值，数值越小优先级越高。
+    :ivar priority: 任务优先级，数值越低表示优先级越高。
     :type priority: int
-    :ivar event_type: 任务的事件类型，用于标识任务的分类。
+    :ivar event_type: 任务的事件类型，用以标识任务的作用或类别。
     :type event_type: str
     :ivar async_flag: 标识任务是否为异步任务。
     :type async_flag: bool
@@ -138,13 +136,14 @@ Handler = Callable[[Event], None]
 # ---------------------------------------------------------------------
 class EventEngine:
     """
-    事件引擎类，用于管理事件的分发、注册以及定时任务的调度。
+    EventEngine 用于管理事件队列、调度事件处理器和周期性任务的引擎。
 
-    EventEngine 是一个支持优先级队列的事件分发系统，具有注册事件处理器、周期性调度任务等功能。
-    它提供了一种安全、高效的方式来管理异步任务并发调度的需求。
+    该类实现了事件队列机制，支持事件的优先级处理，以及注册特定类型或通用类型的事件处理器。
+    此外，还支持基于调度器的周期性任务添加、更新和取消功能。
 
-    :ivar max_workers: 最大线程池工作线程数，用于处理异步任务的执行；
-        设为 ``0`` 表示不启用线程池。
+    :ivar queue_size: 队列的最大大小，用于限制事件队列的容量。
+    :type queue_size: int
+    :ivar max_workers: 最大线程数，决定可以并发的异步任务数量。
     :type max_workers: int
     """
 
@@ -237,7 +236,6 @@ class EventEngine:
         with self._lock:
             self._general_handlers[:] = [item for item in self._general_handlers if item[1] is not handler]
 
-    # ------------- put event -------------
     def put(self, event: Event, *, priority: int = 0, block: bool = True, timeout: Optional[float] = None) -> bool:
         """
         Add an event to the queue.
@@ -253,7 +251,6 @@ class EventEngine:
             logger.warning("事件队列已满，%s 已被丢弃", event)
             return False
 
-    # ------------- periodic -------------
     def add_periodic(self, *, event_type: str, interval: float, priority: int = 0,
                      async_flag: bool = False) -> int:
         """
@@ -314,14 +311,13 @@ class EventEngine:
                     return
             raise ValueError(f"No periodic task with id={task_id}")
 
-    # ------------- internals -------------
     def _dispatcher(self) -> None:
         while self._running:
             try:
                 _, _, ev = self._queue.get(timeout=0.5)
             except Empty:
                 continue
-            if ev.type == "_SYSTEM_EXIT_":
+            if ev.type == EVENT_SYSTEM_EXIT:
                 break
 
             with self._lock:
@@ -340,7 +336,6 @@ class EventEngine:
     def _scheduler(self) -> None:
         while self._running:
             with self._cond:
-                # clear cancelled
                 while self._scheduler_heap and self._scheduler_heap[0].seq in self._cancelled_tasks:
                     heapq.heappop(self._scheduler_heap)
                 if not self._scheduler_heap:
@@ -357,7 +352,6 @@ class EventEngine:
             evt = Event(task.event_type)
             self.put(evt, priority=task.priority)
 
-            # reschedule unless cancelled meanwhile
             with self._cond:
                 if task.seq not in self._cancelled_tasks:
                     resched = replace(task, next_ts=_now() + task.interval)
