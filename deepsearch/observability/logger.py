@@ -25,25 +25,20 @@ class LoggerConfig:
     app_author: str = settings.app.author
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = settings.log.level
     active: bool = settings.log.active
-
     # 输出端
     console: bool = True
     file_plain: bool = True
     file_json: bool = settings.log.enable_json
-
     # 轮转与保留策略
     rotation_plain: str = settings.log.rotation
     rotation_error: str = settings.log.rotation
     rotation_json: str = settings.log.rotation
-
     # 始终使用经过 Pydantic 校验后的正整数
     retention_plain: str = f"{settings.log.retention_days} days"
     retention_error: str = f"{settings.log.retention_days * 2} days"
     retention_json: str = f"{settings.log.retention_days} days"
-
     diagnose: bool | None = None
     compress: str = "zip"
-
     log_dir: Path = field(init=False)
 
     def __post_init__(self) -> None:
@@ -58,14 +53,11 @@ class _Intercept(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         """
         将记录发送到指定的日志记录目标。
-
         该方法从给定的日志记录中提取日志级别，并根据记录的内容将日志详细信息发送到
         设置的日志记录系统。如果级别无效，则回退到默认的日志等级数值，并包括深度和
         异常信息。
-
         :param record: 一个 ``logging.LogRecord`` 对象，其包含日志的相关信息。
         :type record: logging.LogRecord
-
         :return: 无返回值。
         :rtype: None
         """
@@ -105,90 +97,140 @@ def _spring_formatter(color: bool = True) -> Callable[[dict], str]:
 
 
 # ─────────────────────────────────────────────────────────────
-# 日志核心配置函数
+# Sink 工厂类
 # ─────────────────────────────────────────────────────────────
-_INITIAL_PID = os.getpid()
-_CONFIGURED = False
+class SinkFactory:
+    """负责创建各种类型的日志输出目标"""
 
+    def __init__(self, config: LoggerConfig, log_file_prefix: str):
+        self.config = config
+        self.log_file_prefix = log_file_prefix
 
-def configure_logger(cfg: LoggerConfig | None = None) -> Path | None:
-    global _CONFIGURED
-    if _CONFIGURED:
-        return cfg.log_dir if cfg else settings.log_dir
-
-    cfg = cfg or LoggerConfig()
-
-    if not cfg.active:
-        logger.remove()
-        _CONFIGURED = True
-        return None
-
-    if os.getpid() != _INITIAL_PID:
-        logger.remove()
-
-    date_str = datetime.now().strftime("%Y%m%d")
-    prefix = f"{cfg.app_name.lower()}_{date_str}"
-    sinks: list[dict[str, Any]] = []
-
-    # console
-    if cfg.console:
-        sinks.append({
+    def create_console_sink(self) -> dict[str, Any]:
+        """创建控制台输出配置"""
+        return {
             "sink": sys.stdout,
-            "level": cfg.level,
+            "level": self.config.level,
             "format": _spring_formatter(color=True),
             "enqueue": True,
-            "backtrace": cfg.level == "DEBUG",
-            "diagnose": cfg.diagnose if cfg.diagnose is not None else (cfg.level == "DEBUG"),
-        })
+            "backtrace": self.config.level == "DEBUG",
+            "diagnose": self.config.diagnose if self.config.diagnose is not None else (self.config.level == "DEBUG"),
+        }
 
-    # text file
-    if cfg.file_plain:
-        sinks.append({
-            "sink": cfg.log_dir / f"{prefix}.log",
-            "level": cfg.level,
+    def create_plain_file_sink(self) -> dict[str, Any]:
+        """创建普通文本文件输出配置"""
+        return {
+            "sink": self.config.log_dir / f"{self.log_file_prefix}.log",
+            "level": self.config.level,
             "format": _spring_formatter(color=False),
-            "rotation": cfg.rotation_plain,
-            "retention": cfg.retention_plain,
-            "compression": cfg.compress,
+            "rotation": self.config.rotation_plain,
+            "retention": self.config.retention_plain,
+            "compression": self.config.compress,
             "enqueue": True,
-        })
-        sinks.append({  # error file
-            "sink": cfg.log_dir / f"{prefix}_err.log",
+        }
+
+    def create_error_file_sink(self) -> dict[str, Any]:
+        """创建错误文件输出配置"""
+        return {
+            "sink": self.config.log_dir / f"{self.log_file_prefix}_err.log",
             "level": 0,
             "filter": lambda r: r["level"].no >= logger.level("ERROR").no,
             "format": _spring_formatter(color=False),
-            "rotation": cfg.rotation_error,
-            "retention": cfg.retention_error,
-            "compression": cfg.compress,
+            "rotation": self.config.rotation_error,
+            "retention": self.config.retention_error,
+            "compression": self.config.compress,
             "enqueue": True,
-        })
+        }
 
-    # JSON file
-    if cfg.file_json:
-        sinks.append({
-            "sink": cfg.log_dir / f"{prefix}.json",
-            "level": cfg.level,
+    def create_json_file_sink(self) -> dict[str, Any]:
+        """创建JSON文件输出配置"""
+        return {
+            "sink": self.config.log_dir / f"{self.log_file_prefix}.json",
+            "level": self.config.level,
             "serialize": True,
-            "rotation": cfg.rotation_json,
-            "retention": cfg.retention_json,
-            "compression": cfg.compress,
+            "rotation": self.config.rotation_json,
+            "retention": self.config.retention_json,
+            "compression": self.config.compress,
             "enqueue": True,
-        })
+        }
 
-    logger.remove()
-    for s in sinks:
-        logger.add(**s)
 
-    _patch_std(cfg.level)
-    _CONFIGURED = True
-    logger.debug("Logger configured → {} (pid={})", cfg.log_dir, os.getpid())
-    return cfg.log_dir
+# ─────────────────────────────────────────────────────────────
+# 日志配置器类
+# ─────────────────────────────────────────────────────────────
+class LoggerConfigurator:
+    """负责日志系统的配置和初始化"""
+
+    def __init__(self):
+        self._initial_pid = os.getpid()
+        self._configured = False
+
+    def configure(self, config: LoggerConfig | None = None) -> Path | None:
+        """配置日志系统"""
+        if self._configured:
+            return config.log_dir if config else settings.log_dir
+
+        config = config or LoggerConfig()
+
+        if not config.active:
+            logger.remove()
+            self._configured = True
+            return None
+
+        if os.getpid() != self._initial_pid:
+            logger.remove()
+
+        self._setup_logger(config)
+        _patch_std(config.level)
+
+        self._configured = True
+        logger.debug("Logger configured → {} (pid={})", config.log_dir, os.getpid())
+        return config.log_dir
+
+    def _setup_logger(self, config: LoggerConfig) -> None:
+        """设置日志记录器"""
+        date_str = datetime.now().strftime("%Y%m%d")
+        log_file_prefix = f"{config.app_name.lower()}_{date_str}"
+
+        sink_factory = SinkFactory(config, log_file_prefix)
+        sinks = self._create_sinks(config, sink_factory)
+
+        logger.remove()
+        for sink in sinks:
+            logger.add(**sink)
+
+    def _create_sinks(self, config: LoggerConfig, sink_factory: SinkFactory) -> list[dict[str, Any]]:
+        """创建所有需要的日志输出目标"""
+        sinks = []
+
+        if config.console:
+            sinks.append(sink_factory.create_console_sink())
+
+        if config.file_plain:
+            sinks.append(sink_factory.create_plain_file_sink())
+            sinks.append(sink_factory.create_error_file_sink())
+
+        if config.file_json:
+            sinks.append(sink_factory.create_json_file_sink())
+
+        return sinks
+
+
+# ─────────────────────────────────────────────────────────────
+# 全局配置器实例
+# ─────────────────────────────────────────────────────────────
+_logger_configurator = LoggerConfigurator()
+
+
+def configure_logger(cfg: LoggerConfig | None = None) -> Path | None:
+    """配置日志系统的便捷函数"""
+    return _logger_configurator.configure(cfg)
 
 
 # ─────────────────────────────────────────────────────────────
 # 快捷获取 logger
 # ─────────────────────────────────────────────────────────────
 def get_logger(**extra):
-    if not _CONFIGURED:
+    if not _logger_configurator._configured:
         configure_logger()
     return logger.bind(**extra)

@@ -2,12 +2,10 @@
 event_engine.py
 ====================================================================
 A **clean-room rewrite** of the event system, focusing on:
-
 1. Clarity – fewer flags & edge‑cases, no hidden behaviour.
 2. Extensibility – true async dispatch optional via `run_async=True`.
 3. Correctness – deterministic state handling, explicit cancellation cleanup.
 4. Testability – minimal global state, pure‑Python, standard lib only.
-
 Key differences from the legacy version
 ---------------------------------------
 * Uses two worker threads only: **Dispatcher** & **Scheduler**.
@@ -15,7 +13,6 @@ Key differences from the legacy version
 * Registration API is fully keyword‑only to avoid argument mis‑ordering.
 * System exit handled via `stop()` method; queue special‑casing removed.
 * Strict separation of concerns (see ASCII architecture diagram below).
-
 ASCII architecture
 ------------------
   Producer threads               Worker threads
@@ -34,12 +31,10 @@ ASCII architecture
                     ┌────────────▼─┐ ┌▼─────────────┐
                     │   Handler    │ │Handler (async)│
                     └──────────────┘ └───────────────┘
-
   Scheduler thread
   ─────────────────
   Uses `heapq` for next‑fire calculation; puts scheduled events
   back into the queue at runtime or reschedules / cancels them.
-
 """
 from __future__ import annotations
 
@@ -64,9 +59,7 @@ logger = logging.getLogger(__name__)
 def _now() -> float:
     """
     获取当前的高精度时间戳。
-
     该函数返回当前的高精度时间戳，单位为秒。该时间戳通常用于测量程序运行的时间间隔或性能计算。
-
     :return: 当前高精度时间戳
     :rtype: float
     """
@@ -80,10 +73,8 @@ def _now() -> float:
 class Event:
     """
     表示一个事件类的抽象。
-
     该类用于描述一个事件的类型、数据及其相关的时间戳。对象是一种不可变数据类，
     以确保其属性在创建后无法修改，从而增强数据完整性和线程安全性。
-
     :ivar type: 事件的类型。
     :type type: str
     :ivar data: 与该事件关联的数据，可以为任意对象类型。
@@ -103,10 +94,8 @@ class Event:
 class _ScheduledTask:
     """
     代表调度任务的类。
-
     该类用于存储和管理调度任务的相关信息，包括下一次调度时间戳、任务顺序、间隔时间、优先级、
     事件类型以及是否为异步任务等。
-
     :ivar next_ts: 下一次调度任务的时间戳。
     :type next_ts: float
     :ivar seq: 任务的顺序号，通常用于任务排序。
@@ -132,15 +121,88 @@ Handler = Callable[[Event], None]
 
 
 # ---------------------------------------------------------------------
+# Handler Management
+# ---------------------------------------------------------------------
+class HandlerManager:
+    """
+    专门负责事件处理器的注册、注销和获取逻辑的管理类。
+    该类将处理器管理逻辑从 EventEngine 中分离出来，提高代码的可维护性和可测试性。
+    """
+
+    def __init__(self) -> None:
+        self._handlers: Dict[str, List[Tuple[int, Handler, bool]]] = {}
+        self._general_handlers: List[Tuple[int, Handler, bool]] = []
+        self._lock = threading.RLock()
+
+    def register(self, *, event_type: str, handler: Handler, priority: int = 0, async_flag: bool = False) -> None:
+        """
+        注册特定类型的事件处理器。
+        """
+        key = (handler, async_flag)
+        with self._lock:
+            lst = self._handlers.setdefault(event_type, [])
+            if all((h, a) != key for _, h, a in lst):
+                lst.append((priority, handler, async_flag))
+                lst.sort(key=lambda x: x[0], reverse=True)
+
+    def unregister(self, *, event_type: str, handler: Handler) -> None:
+        """
+        注销特定类型的事件处理器。
+        """
+        with self._lock:
+            lst = self._handlers.get(event_type, [])
+            lst[:] = [item for item in lst if item[1] is not handler]
+
+    def register_general(self, *, handler: Handler, priority: int = 0, async_flag: bool = False) -> None:
+        """
+        注册通用事件处理器。
+        """
+        key = (handler, async_flag)
+        with self._lock:
+            if all((h, a) != key for _, h, a in self._general_handlers):
+                self._general_handlers.append((priority, handler, async_flag))
+                self._general_handlers.sort(key=lambda x: x[0], reverse=True)
+
+    def unregister_general(self, *, handler: Handler) -> None:
+        """
+        注销通用事件处理器。
+        """
+        with self._lock:
+            self._general_handlers[:] = [item for item in self._general_handlers if item[1] is not handler]
+
+    def get_handlers(self, event_type: str) -> Tuple[List[Tuple[int, Handler, bool]], List[Tuple[int, Handler, bool]]]:
+        """
+        获取指定事件类型的处理器列表。
+        
+        :param event_type: 事件类型
+        :return: 元组，包含特定类型处理器列表和通用处理器列表
+        """
+        with self._lock:
+            specific = list(self._handlers.get(event_type, []))
+            general = list(self._general_handlers)
+            return specific, general
+
+    def get_statistics(self) -> Dict[str, int]:
+        """
+        获取处理器统计信息。
+        
+        :return: 包含处理器统计信息的字典
+        """
+        with self._lock:
+            return {
+                "specific_handlers": {k: len(v) for k, v in self._handlers.items()},
+                "general_handlers": len(self._general_handlers),
+            }
+
+
+# ---------------------------------------------------------------------
 # EventEngine
 # ---------------------------------------------------------------------
 class EventEngine:
     """
     EventEngine 用于管理事件队列、调度事件处理器和周期性任务的引擎。
-
     该类实现了事件队列机制，支持事件的优先级处理，以及注册特定类型或通用类型的事件处理器。
     此外，还支持基于调度器的周期性任务添加、更新和取消功能。
-
     :ivar queue_size: 队列的最大大小，用于限制事件队列的容量。
     :type queue_size: int
     :ivar max_workers: 最大线程数，决定可以并发的异步任务数量。
@@ -156,20 +218,15 @@ class EventEngine:
             raise ValueError("max_workers cannot be negative")
         self._queue: PriorityQueue[tuple[int, int, Event]] = PriorityQueue(maxsize=queue_size)
         self._seq_ctr = count()
-        self._handlers: Dict[str, List[Tuple[int, Handler, bool]]] = {}
-        self._general_handlers: List[Tuple[int, Handler, bool]] = []
-
+        self._handler_manager = HandlerManager()
         self._scheduler_heap: List[_ScheduledTask] = []
         self._cancelled_tasks: set[int] = set()
-
         self._lock = threading.RLock()
         self._cond = threading.Condition(self._lock)
-
         self._dispatcher_th = threading.Thread(target=self._dispatcher, name="Dispatcher", daemon=True)
         self._scheduler_th = threading.Thread(target=self._scheduler, name="Scheduler", daemon=True)
         self._executor: Optional[ThreadPoolExecutor] = None
         self._max_workers = max_workers
-
         self._running = False
 
     # ------------- lifecycle -------------
@@ -192,7 +249,6 @@ class EventEngine:
         self._running = False
         with self._cond:
             self._cond.notify_all()  # wake scheduler
-
         # Put sentinel event to unblock dispatcher
         sentinel = Event(EVENT_SYSTEM_EXIT)
         if not self.put(sentinel, priority=-999999, block=False):
@@ -213,33 +269,20 @@ class EventEngine:
         """
         注册事件处理器的方法，用于指定事件类型、处理器、优先级以及是否异步执行。注册的处理器会按优先级从高到低的顺序排列。
         """
-        key = (handler, async_flag)
-        with self._lock:
-            lst = self._handlers.setdefault(event_type, [])
-            if all((h, a) != key for _, h, a in lst):
-                lst.append((priority, handler, async_flag))
-                lst.sort(key=lambda x: x[0], reverse=True)
+        self._handler_manager.register(event_type=event_type, handler=handler, priority=priority, async_flag=async_flag)
 
     def unregister(self, *, event_type: str, handler: Handler) -> None:
-        with self._lock:
-            lst = self._handlers.get(event_type, [])
-            lst[:] = [item for item in lst if item[1] is not handler]
+        self._handler_manager.unregister(event_type=event_type, handler=handler)
 
     def register_general(self, *, handler: Handler, priority: int = 0, async_flag: bool = False) -> None:
-        key = (handler, async_flag)
-        with self._lock:
-            if all((h, a) != key for _, h, a in self._general_handlers):
-                self._general_handlers.append((priority, handler, async_flag))
-                self._general_handlers.sort(key=lambda x: x[0], reverse=True)
+        self._handler_manager.register_general(handler=handler, priority=priority, async_flag=async_flag)
 
     def unregister_general(self, *, handler: Handler) -> None:
-        with self._lock:
-            self._general_handlers[:] = [item for item in self._general_handlers if item[1] is not handler]
+        self._handler_manager.unregister_general(handler=handler)
 
     def put(self, event: Event, *, priority: int = 0, block: bool = True, timeout: Optional[float] = None) -> bool:
         """
         Add an event to the queue.
-
         Returns ``True`` if enqueued, ``False`` if queue full (and ``block``=False).
         """
         seq = next(self._seq_ctr)
@@ -255,10 +298,8 @@ class EventEngine:
                      async_flag: bool = False) -> int:
         """
         为调度器添加一个周期性任务。
-
         该方法会在调度器中添加一个任务，该任务按照指定的时间间隔被周期性调度。
         任务的优先级和异步执行属性可供选择性设置。
-
         :param event_type: 一个标识任务类型的字符串。
         :param interval: 调度任务的时间间隔，必须为大于 0 的浮点数。
         :param priority: 任务的优先级，默认为 0。数值越小优先级越高。
@@ -319,18 +360,13 @@ class EventEngine:
                 continue
             if ev.type == EVENT_SYSTEM_EXIT:
                 break
-
-            with self._lock:
-                execu = self._executor
-                specific = list(self._handlers.get(ev.type, []))
-                general = list(self._general_handlers)
-
+            executor = self._executor
+            specific, general = self._handler_manager.get_handlers(ev.type)
             for _, handler, asyn in specific + general:
-                if asyn and execu:
-                    execu.submit(self._safe_call, handler, ev)
+                if asyn and executor:
+                    executor.submit(self._safe_call, handler, ev)
                 else:
                     self._safe_call(handler, ev)
-
             self._queue.task_done()
 
     def _scheduler(self) -> None:
@@ -347,11 +383,9 @@ class EventEngine:
                     self._cond.wait(timeout=wait)
                     continue
                 heapq.heappop(self._scheduler_heap)
-
             # dispatch
             evt = Event(task.event_type)
             self.put(evt, priority=task.priority)
-
             with self._cond:
                 if task.seq not in self._cancelled_tasks:
                     resched = replace(task, next_ts=_now() + task.interval)
@@ -370,10 +404,11 @@ class EventEngine:
 
     # debugging helper
     def snapshot(self) -> dict:
+        handler_stats = self._handler_manager.get_statistics()
         with self._lock:
             return {
                 "queue": self._queue.qsize(),
-                "handlers": {k: len(v) for k, v in self._handlers.items()},
-                "general": len(self._general_handlers),
+                "handlers": handler_stats["specific_handlers"],
+                "general": handler_stats["general_handlers"],
                 "scheduled": len(self._scheduler_heap),
             }

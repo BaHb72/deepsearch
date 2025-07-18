@@ -1,11 +1,9 @@
 """
 应用程序配置管理模块 (Application configuration management module)
-
 提供分层配置系统，优先级如下（后面的来源会覆盖前面的）：
 1. 默认值 (Default values defined in code)
 2. 配置文件 (Configuration file at <CONFIG_DIR>/settings.yaml)
 3. 环境变量 (Environment variables, supports nested format like LOG__LEVEL=DEBUG)
-
 技术说明 (Technical details):
 - 基于 pydantic‑settings v2 实现 (Based on pydantic‑settings v2)
 - 支持类型检查和自动转换 (Supports type checking and automatic conversion)
@@ -13,146 +11,106 @@
 """
 from __future__ import annotations
 
-from deepsearch.event.bus.type import BusName
-
-"""
-应用程序配置管理模块 (Application configuration management module)
-"""
-
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Literal, List
-import shutil
 
 import yaml
 from platformdirs import user_config_path, user_log_path
 from pydantic import BaseModel, Field, PositiveInt, PostgresDsn, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from deepsearch.event.bus.type import BusName
+
 # ─────────────────────────────────────────────────────────────
-# 全局常量 (Globals)
+# 类型定义 (Type definitions)
 # ─────────────────────────────────────────────────────────────
-APP_NAME = "DeepSearch"
-APP_AUTHOR = "BaHb"
-
-DEFAULT_LOG_RETENTION_DAYS = 7
-DEFAULT_LOG_ROTATION_TIME = "00:00"
-
-YAML_FILE_NAME = "settings.yaml"
-YAML_ENCODING = "utf-8"
-
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 AppEnvironment = Literal["dev", "test", "prod"]
 DatabaseUrl = str | PostgresDsn | None
 
-CONFIG_DIR: Path = user_config_path(APP_NAME, appauthor=APP_AUTHOR)
-LOG_DIR: Path = user_log_path(APP_NAME, appauthor=APP_AUTHOR)
-CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-YAML_FILE_PATH = CONFIG_DIR / YAML_FILE_NAME
+# ─────────────────────────────────────────────────────────────
+# 应用常量 (Application constants)
+# ─────────────────────────────────────────────────────────────
+class AppConstants:
+    """应用程序相关常量"""
+    APP_NAME = "DeepSearch"
+    APP_AUTHOR = "BaHb"
+    YAML_FILE_NAME = "settings.yaml"
+    YAML_ENCODING = "utf-8"
 
-# 配置模板文件路径
-CONFIG_TEMPLATE_PATH = Path(__file__).parent / "setting.yaml"
+    # 日志相关常量
+    DEFAULT_LOG_RETENTION_DAYS = 7
+    DEFAULT_LOG_ROTATION_TIME = "00:00"
+
+    # 目录路径
+    CONFIG_DIR: Path = user_config_path(APP_NAME, appauthor=APP_AUTHOR)
+    LOG_DIR: Path = user_log_path(APP_NAME, appauthor=APP_AUTHOR)
+
+    @classmethod
+    def ensure_directories(cls) -> None:
+        """确保必要的目录存在"""
+        cls.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        cls.LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    def get_yaml_file_path(cls) -> Path:
+        """获取YAML配置文件路径"""
+        return cls.CONFIG_DIR / cls.YAML_FILE_NAME
+
+    @classmethod
+    def get_config_template_path(cls) -> Path:
+        """获取配置模板文件路径"""
+        return Path(__file__).parent / cls.YAML_FILE_NAME
+
+
+# 初始化目录
+AppConstants.ensure_directories()
 
 
 # ─────────────────────────────────────────────────────────────
 # 配置模型 (Config models)
 # ─────────────────────────────────────────────────────────────
 class LogConfig(BaseModel):
-    """
-    表示日志配置的类。
-
-    此类用于定义系统日志的配置选项，例如是否启用日志记录、日志级别、日志轮转时间等。
-
-    :ivar active: 指定是否启用日志记录功能。
-    :type active: bool
-    :ivar level: 指定日志的记录级别。
-    :type level: LogLevel
-    :ivar rotation: 定义日志轮转的时间周期。
-    :type rotation: str
-    :ivar retention_days: 指定日志保留的天数。
-    :type retention_days: PositiveInt
-    :ivar enable_json: 是否启用 JSON 格式的日志输出。
-    :type enable_json: bool
-    """
+    """日志配置"""
     active: bool = True
     level: LogLevel = "INFO"
-    rotation: str = DEFAULT_LOG_ROTATION_TIME
-    retention_days: PositiveInt = DEFAULT_LOG_RETENTION_DAYS
+    rotation: str = AppConstants.DEFAULT_LOG_ROTATION_TIME
+    retention_days: PositiveInt = AppConstants.DEFAULT_LOG_RETENTION_DAYS
     enable_json: bool = Field(False, alias="json")
 
 
 class DatabaseConfig(BaseModel):
-    """
-    表示数据库配置的类。
-
-    该类用于存储和管理数据库相关的配置，适用于需要数据库连接的程序。
-
-    :ivar url: 数据库的连接URL。
-    :type url: DatabaseUrl
-    """
+    """数据库配置"""
     url: DatabaseUrl = None
 
 
 class AppConfig(BaseModel):
-    """
-    表示应用程序配置的类。
-
-    该类用于定义应用程序的基本配置参数，例如名称、作者和环境等。这些配置将用于初始化和
-    管理应用程序的行为和运行环境。
-
-    :ivar name: 应用程序的名称。
-    :type name: str
-    :ivar author: 应用程序的作者。
-    :type author: str
-    :ivar env: 应用程序运行的环境（如"prod"或"dev"）。
-    :type env: AppEnvironment
-    """
-    name: str = APP_NAME
-    author: str = APP_AUTHOR
+    """应用程序配置"""
+    name: str = AppConstants.APP_NAME
+    author: str = AppConstants.APP_AUTHOR
     env: AppEnvironment = "prod"
 
 
 class ZeroMQConfig(BaseModel):
-    """
-    表示ZeroMQ消息总线配置的类。
-
-    该类用于定义ZeroMQ消息总线的连接和行为参数，包括主机地址、端口、高水位标记等。
-
-    :ivar host: ZeroMQ服务器主机地址。
-    :type host: str
-    :ivar pub_port: 发布者端口号。
-    :type pub_port: int
-    :ivar sub_port: 订阅者端口号。
-    :type sub_port: int
-    :ivar send_hwm: 发送高水位标记（缓冲区大小）。
-    :type send_hwm: int
-    :ivar recv_hwm: 接收高水位标记（缓冲区大小）。
-    :type recv_hwm: int
-    :ivar verbose: 是否启用详细日志输出。
-    :type verbose: bool
-    """
+    """ZeroMQ消息总线配置"""
     host: str = "127.0.0.1"
     pub_port: int = 5556
-    sub_port: int = 5557  # 修改：使用不同端口
+    sub_port: int = 5557
     send_hwm: int = 1000
     recv_hwm: int = 1000
     verbose: bool = True
 
 
 class RouteConfig(BaseModel):
-    """
-    routes:
-      - match: "data.*"
-        buses: ["inmem", "redis"]
-    """
+    """路由配置"""
     match: str = Field(..., description="主题通配模式，遵循 fnmatch 规则")
     buses: List[BusName] = Field(..., description="需要写入的子总线列表")
 
     @field_validator("buses", mode="after")
     def _deduplicate(cls, v: List[BusName]) -> List[BusName]:
-        # 保留顺序去重
         return list(dict.fromkeys(v))
 
 
@@ -164,39 +122,20 @@ class BusInstanceConfig(BaseModel):
 
 
 class MessageBusConfig(BaseModel):
-    """
-    消息总线配置类 - 完全统一的配置模式
-    
-    配置示例：
-    message_bus:
-      buses:
-        zmq:
-          type: "zmq"
-          enabled: true
-          config:
-            host: "127.0.0.1"
-            pub_port: 5556
-            sub_port: 5557
-        inmem:
-          type: "inmem" 
-          enabled: true
-        redis:
-          type: "redis"
-          enabled: false
-          config:
-            host: "localhost"
-            port: 6379
-      
-      routes:
-        - match: "data.*"
-          buses: ["zmq", "inmem"]
-        - match: "event.*"
-          buses: ["inmem"]
-        - match: "*"
-          buses: ["zmq"]
-    """
+    """消息总线配置类"""
     buses: dict[str, BusInstanceConfig] = Field(
-        default_factory=lambda: {
+        default_factory=lambda: MessageBusConfig._create_default_buses(),
+        description="总线实例配置"
+    )
+    routes: List[RouteConfig] = Field(
+        default_factory=lambda: [RouteConfig(match="*", buses=["zmq"])],
+        description="消息路由配置"
+    )
+
+    @staticmethod
+    def _create_default_buses() -> dict[str, BusInstanceConfig]:
+        """创建默认总线配置"""
+        return {
             "zmq": BusInstanceConfig(
                 type="zmq",
                 enabled=True,
@@ -209,16 +148,7 @@ class MessageBusConfig(BaseModel):
                     "verbose": True
                 }
             )
-        },
-        description="总线实例配置"
-    )
-
-    routes: List[RouteConfig] = Field(
-        default_factory=lambda: [
-            RouteConfig(match="*", buses=["zmq"])
-        ],
-        description="消息路由配置"
-    )
+        }
 
     @property
     def enabled_buses(self) -> List[str]:
@@ -233,9 +163,8 @@ class MessageBusConfig(BaseModel):
         return bus_config.config
 
     def model_post_init(self, __context) -> None:
-        """在模型初始化后验证路由引用的总线是否存在"""
+        """验证路由引用的总线是否存在"""
         available_buses = set(self.buses.keys())
-
         for route in self.routes:
             for bus_name in route.buses:
                 if bus_name not in available_buses:
@@ -243,39 +172,25 @@ class MessageBusConfig(BaseModel):
 
 
 class Settings(BaseSettings):
-    """
-    Settings类的概要描述。
-
-    提供应用程序、日志、数据库和消息总线的配置信息，同时支持从多个数据源定制加载设置，例如环境变量、YAML文件等。
-
-    :ivar app: 应用程序配置。
-    :type app: AppConfig
-    :ivar log: 日志配置。
-    :type log: LogConfig
-    :ivar database: 数据库配置。
-    :type database: DatabaseConfig
-    :ivar message_bus: 消息总线配置。
-    :type message_bus: MessageBusConfig
-    """
+    """应用程序设置"""
     app: AppConfig = Field(default_factory=AppConfig)
     log: LogConfig = Field(default_factory=LogConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     message_bus: MessageBusConfig = Field(default_factory=MessageBusConfig)
 
-    # 向后兼容的只读视图，消除冗余
     @property
     def zeromq(self) -> ZeroMQConfig:
-        """向后兼容的 ZeroMQ 配置视图，从 message_bus 派生"""
+        """向后兼容的 ZeroMQ 配置视图"""
         zmq_config = self.message_bus.get_bus_config("zmq")
         return ZeroMQConfig.model_validate(zmq_config)
 
     @property
     def log_dir(self) -> Path:
-        return LOG_DIR
+        return AppConstants.LOG_DIR
 
     @property
     def config_dir(self) -> Path:
-        return CONFIG_DIR
+        return AppConstants.CONFIG_DIR
 
     model_config = SettingsConfigDict(
         populate_by_name=True,
@@ -296,81 +211,76 @@ class Settings(BaseSettings):
             return _ensure_yaml()
 
         return (
-            env_settings,  # 1. 环境变量
-            yaml_settings,  # 2. YAML 文件
-            init_settings,  # 3. 代码中的默认/显式传参
+            env_settings,
+            yaml_settings,
+            init_settings,
             dotenv_settings,
             file_secret_settings,
         )
 
 
 # ─────────────────────────────────────────────────────────────
-# YAML 读写保障
+# YAML 文件管理 (YAML file management)
 # ─────────────────────────────────────────────────────────────
-def _ensure_yaml() -> dict[str, Any]:
-    """
-    确保 YAML 文件存在且内容可用的辅助函数。
-
-    功能概述：
-    此函数用于检查 YAML 配置文件是否存在。如果文件不存在，则从模板文件复制一个默认配置。
-    如果文件存在，则尝试加载其内容并返回。如果加载失败，返回空字典。
-
-    :raises SystemExit: 若文件创建操作中出现异常则终止程序。
-    :return: 返回解析后的 YAML 文件内容，若解析失败则返回空字典。
-    :rtype: dict[str, Any]
-    """
-    if not YAML_FILE_PATH.exists():
-        try:
-            # 从模板文件复制配置
-            if CONFIG_TEMPLATE_PATH.exists():
-                shutil.copy2(CONFIG_TEMPLATE_PATH, YAML_FILE_PATH)
-                print(f"[Info] 已从模板创建配置文件: {YAML_FILE_PATH}")
-            else:
-                # 如果模板文件不存在，创建一个基本的配置文件
-                basic_config = {
-                    "app": {"env": "prod", "name": APP_NAME, "author": APP_AUTHOR},
-                    "log": {"level": "INFO", "active": True},
-                    "database": {"url": None},
-                    "message_bus": {
-                        "buses": {
-                            "zmq": {
-                                "type": "zmq",
-                                "enabled": True,
-                                "config": {
-                                    "host": "127.0.0.1",
-                                    "pub_port": 5556,
-                                    "sub_port": 5557,
-                                    "send_hwm": 1000,
-                                    "recv_hwm": 1000,
-                                    "verbose": True
-                                }
-                            }
-                        },
-                        "routes": [
-                            {
-                                "match": "*",
-                                "buses": ["zmq"]
-                            }
-                        ]
+def _create_basic_config() -> dict[str, Any]:
+    """创建基本配置字典"""
+    return {
+        "app": {
+            "env": "prod",
+            "name": AppConstants.APP_NAME,
+            "author": AppConstants.APP_AUTHOR
+        },
+        "log": {"level": "INFO", "active": True},
+        "database": {"url": None},
+        "message_bus": {
+            "buses": {
+                "zmq": {
+                    "type": "zmq",
+                    "enabled": True,
+                    "config": {
+                        "host": "127.0.0.1",
+                        "pub_port": 5556,
+                        "sub_port": 5557,
+                        "send_hwm": 1000,
+                        "recv_hwm": 1000,
+                        "verbose": True
                     }
                 }
-                with YAML_FILE_PATH.open("w", encoding=YAML_ENCODING) as f:
+            },
+            "routes": [{"match": "*", "buses": ["zmq"]}]
+        }
+    }
+
+
+def _ensure_yaml() -> dict[str, Any]:
+    """确保 YAML 文件存在且内容可用"""
+    yaml_file_path = AppConstants.get_yaml_file_path()
+    config_template_path = AppConstants.get_config_template_path()
+
+    if not yaml_file_path.exists():
+        try:
+            if config_template_path.exists():
+                shutil.copy2(config_template_path, yaml_file_path)
+                print(f"[Info] 已从模板创建配置文件: {yaml_file_path}")
+            else:
+                basic_config = _create_basic_config()
+                with yaml_file_path.open("w", encoding=AppConstants.YAML_ENCODING) as f:
                     yaml.safe_dump(basic_config, f, sort_keys=False, allow_unicode=True)
-                print(f"[Warning] 模板文件不存在，已创建基本配置文件: {YAML_FILE_PATH}")
+                print(f"[Warning] 模板文件不存在，已创建基本配置文件: {yaml_file_path}")
         except Exception as exc:
-            print(f"[Error] 无法创建配置文件 {YAML_FILE_PATH}: {exc}", file=sys.stderr)
+            print(f"[Error] 无法创建配置文件 {yaml_file_path}: {exc}", file=sys.stderr)
             raise SystemExit(1)
 
     try:
-        with YAML_FILE_PATH.open("r", encoding=YAML_ENCODING) as f:
+        with yaml_file_path.open("r", encoding=AppConstants.YAML_ENCODING) as f:
             return yaml.safe_load(f) or {}
     except Exception as exc:
-        print(f"[Warning] 解析 {YAML_FILE_PATH} 失败: {exc}", file=sys.stderr)
+        print(f"[Warning] 解析 {yaml_file_path} 失败: {exc}", file=sys.stderr)
         return {}
 
 
 # ─────────────────────────────────────────────────────────────
-# 单例实例化
+# 单例实例化 (Singleton instantiation)
 # ─────────────────────────────────────────────────────────────
 try:
     settings = Settings()
