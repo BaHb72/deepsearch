@@ -10,7 +10,7 @@ import redistimeseries.client as ts
 
 from deepsearch.event.engine import Event
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class RedisTimeSeriesStorage:
@@ -67,7 +67,7 @@ class RedisTimeSeriesStorage:
         # 创建 RedisTimeSeries 客户端
         self.ts_client = ts.Client(self.redis_client)
 
-        LOGGER.info(f"RedisTimeSeries 存储初始化完成: {host}:{port}/{db}")
+        logger.info(f"RedisTimeSeries 存储初始化完成: {host}:{port}/{db}")
 
     def _get_series_key(self, topic: str, event_type: str) -> str:
         """获取时间序列键名"""
@@ -127,9 +127,9 @@ class RedisTimeSeriesStorage:
                     duplicate_policy=self.duplicate_policy,
                     labels=labels or {},
                 )
-                LOGGER.debug(f"创建时间序列: {key}")
+                logger.debug(f"创建时间序列: {key}")
             except Exception as e:
-                LOGGER.error(f"创建时间序列失败 {key}: {e}")
+                logger.error(f"创建时间序列失败 {key}: {e}")
                 raise
 
     def store_event(self, event: Event, topic: str = None, source: str = None) -> bool:
@@ -169,11 +169,11 @@ class RedisTimeSeriesStorage:
             # 设置 Hash 的过期时间
             self.redis_client.expire(hash_key, self.retention_ms // 1000)
 
-            LOGGER.debug(f"事件已存储: {ts_key} @ {timestamp_ms}")
+            logger.debug(f"事件已存储: {ts_key} @ {timestamp_ms}")
             return True
 
         except Exception as e:
-            LOGGER.error(f"存储事件失败: {e}")
+            logger.error(f"存储事件失败: {e}")
             return False
 
     def query_events(
@@ -219,13 +219,13 @@ class RedisTimeSeriesStorage:
                         event_data = json.loads(event_json)
                         events.append(event_data)
                     except json.JSONDecodeError as e:
-                        LOGGER.warning(f"解析事件JSON失败: {e}")
+                        logger.warning(f"解析事件JSON失败: {e}")
 
-            LOGGER.debug(f"查询到 {len(events)} 条事件: {ts_key}")
+            logger.debug(f"查询到 {len(events)} 条事件: {ts_key}")
             return events
 
         except Exception as e:
-            LOGGER.error(f"查询事件失败: {e}")
+            logger.error(f"查询事件失败: {e}")
             return []
 
     def get_topics(self) -> List[str]:
@@ -235,7 +235,7 @@ class RedisTimeSeriesStorage:
             keys = self.redis_client.keys(pattern)
             return self._extract_topics_from_keys(keys)
         except Exception as e:
-            LOGGER.error(f"获取主题列表失败: {e}")
+            logger.error(f"获取主题列表失败: {e}")
             return []
 
     def get_event_types(self, topic: str) -> List[str]:
@@ -245,7 +245,7 @@ class RedisTimeSeriesStorage:
             keys = self.redis_client.keys(pattern)
             return self._extract_event_types_from_keys(keys)
         except Exception as e:
-            LOGGER.error(f"获取事件类型列表失败: {e}")
+            logger.error(f"获取事件类型列表失败: {e}")
             return []
 
     def cleanup_expired_data(self) -> None:
@@ -261,9 +261,9 @@ class RedisTimeSeriesStorage:
                 ttl = self.redis_client.ttl(key)
                 if ttl == self.TTL_KEY_NOT_EXISTS:
                     self.redis_client.delete(key)
-                    LOGGER.debug(f"清理过期数据: {key}")
+                    logger.debug(f"清理过期数据: {key}")
         except Exception as e:
-            LOGGER.error(f"清理过期数据失败: {e}")
+            logger.error(f"清理过期数据失败: {e}")
 
     def get_stats(self) -> Dict[str, Any]:
         """获取存储统计信息"""
@@ -281,13 +281,13 @@ class RedisTimeSeriesStorage:
                 "redis_memory_usage": self.redis_client.info("memory").get("used_memory_human", "N/A"),
             }
         except Exception as e:
-            LOGGER.error(f"获取统计信息失败: {e}")
+            logger.error(f"获取统计信息失败: {e}")
             return {}
 
     def close(self) -> None:
         """关闭连接"""
         try:
             self.redis_client.close()
-            LOGGER.info("RedisTimeSeries 存储连接已关闭")
+            logger.info("RedisTimeSeries 存储连接已关闭")
         except Exception as e:
-            LOGGER.error(f"关闭 RedisTimeSeries 连接失败: {e}")
+            logger.error(f"关闭 RedisTimeSeries 连接失败: {e}")

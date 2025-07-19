@@ -1,17 +1,22 @@
+from __future__ import annotations
+
 import json
 import logging
 import pickle
 import threading
+import time
 from abc import abstractmethod, ABC
 from fnmatch import fnmatch
-from typing import Any, Callable, TypeVar, Protocol, Optional, Dict, List, Union
+from typing import Any, Callable, TypeVar, Protocol, Optional, Dict, List, Union, TYPE_CHECKING
 
 import zmq
 
 from config.setting import RouteConfig
-from deepsearch.event.engine import Event
-from deepsearch.storage.timeseries import RedisTimeSeriesStorage
 from .type import BusName
+
+if TYPE_CHECKING:  # pragma: no cover - 类型检查时导入
+    from deepsearch.event.engine import Event
+    from deepsearch.storage.timeseries import RedisTimeSeriesStorage
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")  # Data / Event / Command payload
@@ -179,7 +184,8 @@ class ZeroMQMessageBus(AbstractMessageBus):
         """配置套接字选项"""
         self._publisher.setsockopt(zmq.SNDHWM, self._config.send_hwm)
         self._subscriber.setsockopt(zmq.RCVHWM, self._config.recv_hwm)
-        if self._config.verbose:
+        if self._config.verbose and self._publisher.socket_type == zmq.XPUB:
+            # 仅在 XPUB 套接字上启用订阅日志
             self._publisher.setsockopt(zmq.XPUB_VERBOSE, 1)
 
     def publish(self, topic: str, payload: Any) -> None:
@@ -250,7 +256,10 @@ class ZeroMQMessageBus(AbstractMessageBus):
                 # 分发到处理器
                 self._dispatch_message_to_handlers(topic, payload)
             except zmq.ZMQError as e:
-                if e.errno != zmq.EAGAIN:
+                if e.errno == zmq.EAGAIN:
+                    # 无消息可接收，避免忙等
+                    time.sleep(0.01)
+                else:
                     logger.error(f"ZMQ error: {e}")
             except Exception as e:
                 logger.error(f"Message loop error: {e}")
