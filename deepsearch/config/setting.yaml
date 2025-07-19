@@ -15,7 +15,49 @@ log:
 
 database:
   url: null            # 例如: "postgresql+psycopg://user:pwd@localhost/db"
+# DeepSearch 系统配置文件
 
+app:
+  name: DeepSearch
+  author: BaHb
+  env: prod
+
+log:
+  level: INFO
+  active: true
+  retention_days: 7
+  json: false
+
+database:
+  url: null
+
+message_bus:
+  buses:
+    zmq:
+      type: zmq
+      enabled: true
+      config:
+        host: 127.0.0.1
+        pub_port: 5556
+        sub_port: 5557
+        send_hwm: 1000
+        recv_hwm: 1000
+        verbose: true
+    timeseries:
+      type: timeseries
+      enabled: false
+      config:
+        url: tcp://127.0.0.1:5555
+        storage_config:
+          host: localhost
+          port: 6379
+          db: 0
+          key_prefix:
+            deepsearch:ts:
+        enable_persistence: true
+  routes:
+    - match: "*"
+      buses: [ "zmq" ]
 message_bus:
   buses:
     # --- ZeroMQ（统一缩写 zmq）---
@@ -41,6 +83,19 @@ message_bus:
       config:
         host: localhost
         port: 6379
+    # --- 时间序列总线（默认禁用）---
+    timeseries:
+      type: timeseries
+      enabled: false
+      config:
+        url: tcp://127.0.0.1:5555
+        storage_config:
+          host: localhost
+          port: 6379
+          db: 0
+          key_prefix:
+            deepsearch:ts:
+        enable_persistence: true
 
   # ---------- 路由规则 ----------
   routes:

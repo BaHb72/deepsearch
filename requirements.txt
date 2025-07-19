@@ -16,3 +16,6 @@ pytest-twisted>=1.14.3
 
 deepsearch~=0.1.0
 pyzmq~=27.0.0
+
+redis
+redistimeseries

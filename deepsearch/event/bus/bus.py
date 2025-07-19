@@ -4,11 +4,13 @@ import pickle
 import threading
 from abc import abstractmethod, ABC
 from fnmatch import fnmatch
-from typing import Any, Callable, TypeVar, Protocol, Optional
+from typing import Any, Callable, TypeVar, Protocol, Optional, Dict, List, Union
 
 import zmq
 
 from config.setting import RouteConfig
+from deepsearch.event.engine import Event
+from deepsearch.storage.timeseries import RedisTimeSeriesStorage
 from .type import BusName
 
 logger = logging.getLogger(__name__)
@@ -295,6 +297,162 @@ class ZeroMQMessageBus(AbstractMessageBus):
         logger.info("ZeroMQ MessageBus stopped")
 
 
+class TimeSeriesZeroMQBus(ZeroMQMessageBus):
+    """
+    支持 RedisTimeSeries 持久化的 ZeroMQ 消息总线
+    扩展标准 ZeroMQ 消息总线，添加消息持久化功能。
+    消息会被发布到 ZeroMQ 通道，同时存储到 RedisTimeSeries。
+    """
+
+    def __init__(
+            self,
+            host: str = "127.0.0.1",
+            pub_port: int = 5556,
+            sub_port: int = 5557,
+            storage_config: Optional[Dict[str, Any]] = None,
+            enable_persistence: bool = True,
+    ) -> None:
+        """
+        初始化支持 RedisTimeSeries 持久化的 ZeroMQ 消息总线
+        :param host: ZeroMQ 主机地址
+        :param pub_port: 发布端口
+        :param sub_port: 订阅端口
+        :param storage_config: RedisTimeSeries 配置参数
+        :param enable_persistence: 是否启用消息持久化
+        """
+        # 创建ZeroMQ配置对象传递给父类
+        from config.setting import ZeroMQConfig
+        zeromq_config = ZeroMQConfig(
+            host=host,
+            pub_port=pub_port,
+            sub_port=sub_port
+        )
+        super().__init__(config=zeromq_config)
+        self.enable_persistence = enable_persistence
+        self.storage: Optional[RedisTimeSeriesStorage] = None
+
+        if enable_persistence:
+            self._initialize_storage(storage_config or {})
+
+    def _initialize_storage(self, storage_config: Dict[str, Any]) -> None:
+        """初始化 RedisTimeSeries 存储"""
+        try:
+            from deepsearch.storage.timeseries import RedisTimeSeriesStorage
+            self.storage = RedisTimeSeriesStorage(**storage_config)
+            logger.info("RedisTimeSeries 持久化已启用")
+        except Exception as e:
+            logger.error(f"初始化 RedisTimeSeries 存储失败: {e}")
+            self.storage = None
+            self.enable_persistence = False
+
+    def _is_persistence_available(self) -> bool:
+        """检查持久化是否可用"""
+        return self.enable_persistence and self.storage is not None
+
+    def _ensure_event_object(self, event: Union[Event, Any], topic: str) -> Event:
+        """确保输入是 Event 对象"""
+        from deepsearch.event.engine import Event
+        if not isinstance(event, Event):
+            # 创建新的事件对象
+            return Event(type=topic, data=event)
+        return event
+
+    def publish(self, topic: str, event: Union[Event, Any]) -> None:
+        """
+        发布事件到消息总线，并持久化到 RedisTimeSeries
+        :param topic: 主题
+        :param event: 事件对象或数据
+        """
+        super().publish(topic, event)
+
+        if self._is_persistence_available():
+            event_obj = self._ensure_event_object(event, topic)
+            try:
+                self.storage.store_event(event_obj, topic=topic, source="zeromq")
+            except Exception as e:
+                logger.error(f"持久化事件失败: {e}")
+
+    def query_historical_events(
+            self,
+            topic: str,
+            event_type: str,
+            start_time: Optional[float] = None,
+            end_time: Optional[float] = None,
+            limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        查询历史事件数据
+        :param topic: 主题
+        :param event_type: 事件类型
+        :param start_time: 开始时间（秒级时间戳）
+        :param end_time: 结束时间（秒级时间戳）
+        :param limit: 限制返回数量
+        :return: 事件列表
+        """
+        if not self._is_persistence_available():
+            logger.warning("持久化未启用，无法查询历史事件")
+            return []
+
+        return self.storage.query_events(
+            topic=topic,
+            event_type=event_type,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit,
+        )
+
+    def get_available_topics(self) -> List[str]:
+        """
+        获取可用的历史事件主题列表
+        :return: 主题列表
+        """
+        if not self._is_persistence_available():
+            logger.warning("持久化未启用，无法获取历史主题列表")
+            return []
+        return self.storage.get_topics()
+
+    def get_available_event_types(self, topic: str) -> List[str]:
+        """
+        获取指定主题下可用的事件类型列表
+        :param topic: 主题
+        :return: 事件类型列表
+        """
+        if not self._is_persistence_available():
+            logger.warning(f"持久化未启用，无法获取主题 '{topic}' 的事件类型")
+            return []
+        return self.storage.get_event_types(topic)
+
+    def get_persistence_stats(self) -> Dict[str, Any]:
+        """
+        获取持久化统计信息
+        :return: 统计信息字典
+        """
+        if not self._is_persistence_available():
+            return {"enabled": False}
+
+        stats = self.storage.get_stats()
+        stats["enabled"] = True
+        return stats
+
+    def _close_storage(self) -> None:
+        """关闭存储资源"""
+        if self.storage:
+            try:
+                self.storage.close()
+                logger.info("RedisTimeSeries 存储已关闭")
+            except Exception as e:
+                logger.error(f"关闭 RedisTimeSeries 存储失败: {e}")
+
+    def cleanup(self) -> None:
+        """清理资源"""
+        try:
+            # 首先关闭存储，确保数据持久化完成
+            self._close_storage()
+        finally:
+            # 然后调用父类方法停止消息总线
+            super().stop()
+
+
 class CompositeMessageBus(AbstractMessageBus):
     """
     复合消息总线的实现类。
@@ -361,20 +519,50 @@ class CompositeMessageBus(AbstractMessageBus):
 
     def _create_bus_instance(self, bus_name: BusName, bus_name_str: str, settings) -> Optional[AbstractMessageBus]:
         """创建特定总线实例"""
-        if bus_name == BusName.ZMQ:
-            return self._create_zeromq_bus(bus_name_str, settings)
-        elif bus_name == BusName.INMEM:
-            return InMemoryMessageBus()
+        bus_config = settings.message_bus.get_bus_config(bus_name_str)
+
+        # 通过映射表创建总线实例，避免硬编码
+        bus_factories = {
+            BusName.ZMQ: self._create_zeromq_bus,
+            BusName.INMEM: lambda _: InMemoryMessageBus(),
+            BusName.TIMESERIES: self._create_timeseries_bus
+        }
+
+        if bus_name in bus_factories:
+            try:
+                return bus_factories[bus_name](bus_config)
+            except Exception as e:
+                logger.error(f"创建总线 '{bus_name_str}' 失败: {e}")
+                return None
         else:
-            logger.warning(f"Unknown bus type: {bus_name_str}")
+            logger.warning(f"未知的总线类型: {bus_name_str}")
             return None
 
-    def _create_zeromq_bus(self, bus_name_str: str, settings) -> ZeroMQMessageBus:
+    def _create_zeromq_bus(self, config: dict) -> ZeroMQMessageBus:
         """创建 ZeroMQ 总线实例"""
-        bus_config = settings.message_bus.get_bus_config(bus_name_str)
         from config.setting import ZeroMQConfig
-        zeromq_config = ZeroMQConfig.model_validate(bus_config)
+
+        # 创建 ZeroMQConfig 对象
+        zeromq_config = ZeroMQConfig(
+            host=config.get("host", "127.0.0.1"),
+            pub_port=config.get("pub_port", 5556),
+            sub_port=config.get("sub_port", 5557),
+            send_hwm=config.get("send_hwm", 1000),
+            recv_hwm=config.get("recv_hwm", 1000),
+            verbose=config.get("verbose", True)
+        )
+        
         return ZeroMQMessageBus(config=zeromq_config)
+
+    def _create_timeseries_bus(self, config: dict) -> TimeSeriesZeroMQBus:
+        """创建 TimeSeriesZeroMQ 总线实例"""
+        return TimeSeriesZeroMQBus(
+            host=config.get("host", "127.0.0.1"),
+            pub_port=config.get("pub_port", 5556),
+            sub_port=config.get("sub_port", 5557),
+            storage_config=config.get("storage_config", {}),
+            enable_persistence=config.get("enable_persistence", True)
+        )
 
     def _find_target_buses(self, topic: str) -> set[str]:
         """根据主题查找目标总线"""

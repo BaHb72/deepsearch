@@ -135,11 +135,11 @@ class MessageBusConfig(BaseModel):
     @staticmethod
     def _create_default_buses() -> dict[str, BusInstanceConfig]:
         """创建默认总线配置"""
-        return {
-            "zmq": BusInstanceConfig(
-                type="zmq",
-                enabled=True,
-                config={
+        default_configs = {
+            "zmq": {
+                "type": "zmq",
+                "enabled": True,
+                "config": {
                     "host": "127.0.0.1",
                     "pub_port": 5556,
                     "sub_port": 5557,
@@ -147,8 +147,31 @@ class MessageBusConfig(BaseModel):
                     "recv_hwm": 1000,
                     "verbose": True
                 }
-            )
+            },
+            "inmem": {
+                "type": "inmem",
+                "enabled": False,
+                "config": {}
+            },
+            "timeseries": {
+                "type": "timeseries",
+                "enabled": False,
+                "config": {
+                    "url": "tcp://127.0.0.1:5555",
+                    "storage_config": {
+                        "host": "localhost",
+                        "port": 6379,
+                        "db": 0,
+                        "key_prefix": "deepsearch:ts:"
+                    },
+                    "enable_persistence": True
+                }
+            }
         }
+
+        # 使用模型进行验证
+        return {name: BusInstanceConfig.model_validate(config)
+                for name, config in default_configs.items()}
 
     @property
     def enabled_buses(self) -> List[str]:
@@ -183,6 +206,18 @@ class Settings(BaseSettings):
         """向后兼容的 ZeroMQ 配置视图"""
         zmq_config = self.message_bus.get_bus_config("zmq")
         return ZeroMQConfig.model_validate(zmq_config)
+
+    def get_timeseries_config(self) -> dict[str, Any]:
+        """获取 TimeSeriesZeroMQ 配置
+
+        与 zeromq 属性类似，但返回字典而非模型实例，以降低耦合
+        """
+        try:
+            return self.message_bus.get_bus_config("timeseries")
+        except ValueError:
+            # 如果未配置，返回默认配置
+            buses = MessageBusConfig._create_default_buses()
+            return buses.get("timeseries", {}).config if "timeseries" in buses else {}
 
     @property
     def log_dir(self) -> Path:
