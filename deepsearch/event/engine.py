@@ -42,6 +42,7 @@ import heapq
 import logging
 import threading
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace, field
 from itertools import count
@@ -67,6 +68,10 @@ SHUTDOWN_SENTINEL_PRIORITY = -999999
 # Default values
 DEFAULT_PRIORITY = 0
 DEFAULT_ASYNC_FLAG = False
+
+# Batch processing
+DEFAULT_BATCH_SIZE = 100
+DEFAULT_BATCH_TIMEOUT = 0.1  # 100ms
 
 # ==============================================================================
 # Logging
@@ -140,6 +145,31 @@ class _ScheduledTask:
 
 
 Handler = Callable[[Event], None]
+
+
+# ==============================================================================
+# Batch Handler Support
+# ==============================================================================
+
+class BatchHandler:
+    """
+    Base class for handlers that support batch processing.
+    
+    Handlers that inherit from this class can process events in batches
+    for improved performance.
+    """
+
+    def __call__(self, event: Event) -> None:
+        """Process a single event (fallback for non-batch mode)"""
+        self.process_batch([event])
+
+    def process_batch(self, events: List[Event]) -> None:
+        """
+        Process a batch of events.
+        
+        :param events: List of events to process
+        """
+        raise NotImplementedError("Subclasses must implement process_batch")
 
 
 # ==============================================================================
@@ -238,6 +268,24 @@ class HandlerManager:
                 "general_handlers": len(self._general_handlers),
             }
 
+    def register_batch_handler(self, *, event_types: List[str], handler: Handler,
+                               priority: int = DEFAULT_PRIORITY, async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
+        """
+        Register a handler for multiple event types at once.
+        
+        :param event_types: List of event types to register for
+        :param handler: Handler function
+        :param priority: Handler priority
+        :param async_flag: Whether to execute asynchronously
+        """
+        if not event_types:
+            raise ValueError("event_types cannot be empty")
+        if not callable(handler):
+            raise TypeError("handler must be callable")
+
+        for event_type in event_types:
+            self.register(event_type=event_type, handler=handler, priority=priority, async_flag=async_flag)
+
 
 # ==============================================================================
 # EventEngine - Main Event Processing Engine
@@ -253,7 +301,9 @@ class EventEngine:
     :type max_workers: int
     """
 
-    def __init__(self, *, queue_size: int = DEFAULT_QUEUE_SIZE, max_workers: int = DEFAULT_MAX_WORKERS) -> None:
+    def __init__(self, *, queue_size: int = DEFAULT_QUEUE_SIZE, max_workers: int = DEFAULT_MAX_WORKERS,
+                 enable_batch_processing: bool = False, batch_size: int = DEFAULT_BATCH_SIZE,
+                 batch_timeout: float = DEFAULT_BATCH_TIMEOUT) -> None:
         # Validate parameters
         if queue_size <= 0:
             logger.error("队列大小必须为正数")
@@ -261,6 +311,10 @@ class EventEngine:
         if max_workers < 0:
             logger.error("事件引擎最大线程数 max_workers 不能为负数")
             raise ValueError("max_workers cannot be negative")
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if batch_timeout <= 0:
+            raise ValueError("batch_timeout must be positive")
 
         # Core components
         self._queue: PriorityQueue[tuple[int, int, Event]] = PriorityQueue(maxsize=queue_size)
@@ -283,6 +337,14 @@ class EventEngine:
         # Configuration
         self._max_workers = max_workers
         self._running = False
+
+        # Batch processing configuration
+        self._enable_batch_processing = enable_batch_processing
+        self._batch_size = batch_size
+        self._batch_timeout = batch_timeout
+        self._event_batches: Dict[str, List[Event]] = defaultdict(list)
+        self._batch_lock = threading.Lock()
+        self._last_batch_flush = time.time()
 
     # ==========================================================================
     # Lifecycle Management
@@ -431,6 +493,37 @@ class EventEngine:
             logger.error(f"Error putting event to queue: {e}")
             return False
 
+    def put_batch(self, events: List[Event], *, priority: int = DEFAULT_PRIORITY,
+                  block: bool = True, timeout: Optional[float] = None) -> List[bool]:
+        """
+        Add multiple events to the queue in batch.
+        Returns list of booleans indicating success for each event.
+        
+        :param events: List of events to enqueue
+        :param priority: Priority for all events in the batch
+        :param block: Whether to block when queue is full
+        :param timeout: Timeout for blocking operations
+        :return: List of success indicators for each event
+        """
+        if not isinstance(events, list):
+            raise TypeError("events must be a list")
+
+        if not self._running:
+            logger.warning("Cannot put events - engine is not running")
+            return [False] * len(events)
+
+        results = []
+        for event in events:
+            if not isinstance(event, Event):
+                logger.error(f"Skipping non-Event object in batch: {type(event)}")
+                results.append(False)
+                continue
+
+            success = self.put(event, priority=priority, block=block, timeout=timeout)
+            results.append(success)
+
+        return results
+
     def add_periodic(self, *, event_type: str, interval: float, priority: int = DEFAULT_PRIORITY,
                      async_flag: bool = DEFAULT_ASYNC_FLAG) -> int:
         """
@@ -513,6 +606,9 @@ class EventEngine:
             try:
                 _, _, ev = self._queue.get(timeout=DISPATCHER_TIMEOUT)
             except Empty:
+                # Check if we need to flush batches on timeout
+                if self._enable_batch_processing:
+                    self._flush_batches_if_needed()
                 continue
             except Exception as e:
                 logger.error(f"Error getting event from queue: {e}")
@@ -521,15 +617,78 @@ class EventEngine:
             # Check for shutdown signal
             if ev.type == EVENT_SYSTEM_EXIT:
                 logger.debug("Dispatcher received shutdown signal")
+                # Flush any remaining batches
+                if self._enable_batch_processing:
+                    self._flush_all_batches()
                 break
 
             try:
-                # Get handlers for this event type
-                executor = self._executor
-                specific, general = self._handler_manager.get_handlers(ev.type)
+                if self._enable_batch_processing:
+                    # Add to batch and process if batch is full
+                    self._add_to_batch(ev)
+                else:
+                    # Process immediately
+                    self._process_single_event(ev)
 
-                # Execute handlers
-                for _, handler, async_flag in specific + general:
+            except Exception as e:
+                logger.error(f"Error processing event {ev}: {e}")
+            finally:
+                self._queue.task_done()
+
+        logger.debug("Dispatcher thread exiting")
+
+    def _process_single_event(self, ev: Event) -> None:
+        """Process a single event immediately"""
+        executor = self._executor
+        specific, general = self._handler_manager.get_handlers(ev.type)
+
+        # Execute handlers
+        for _, handler, async_flag in specific + general:
+            try:
+                if async_flag and executor:
+                    executor.submit(self._safe_call, handler, ev)
+                else:
+                    self._safe_call(handler, ev)
+            except Exception as e:
+                logger.error(f"Error dispatching to handler: {e}")
+
+    def _add_to_batch(self, ev: Event) -> None:
+        """Add event to batch and process if batch is full"""
+        with self._batch_lock:
+            self._event_batches[ev.type].append(ev)
+
+            # Check if batch is full
+            if len(self._event_batches[ev.type]) >= self._batch_size:
+                self._process_batch(ev.type)
+
+    def _process_batch(self, event_type: str) -> None:
+        """Process a batch of events for a specific type"""
+        with self._batch_lock:
+            batch = self._event_batches[event_type]
+            if not batch:
+                return
+
+            # Clear the batch
+            self._event_batches[event_type] = []
+
+        # Process batch outside of lock
+        executor = self._executor
+        specific, general = self._handler_manager.get_handlers(event_type)
+
+        # Check if any handler supports batch processing
+        for _, handler, async_flag in specific + general:
+            # Check if handler has batch processing capability
+            if hasattr(handler, 'process_batch'):
+                try:
+                    if async_flag and executor:
+                        executor.submit(handler.process_batch, batch)
+                    else:
+                        handler.process_batch(batch)
+                except Exception as e:
+                    logger.error(f"Error in batch handler: {e}")
+            else:
+                # Fall back to individual processing
+                for ev in batch:
                     try:
                         if async_flag and executor:
                             executor.submit(self._safe_call, handler, ev)
@@ -538,12 +697,21 @@ class EventEngine:
                     except Exception as e:
                         logger.error(f"Error dispatching to handler: {e}")
 
-            except Exception as e:
-                logger.error(f"Error processing event {ev}: {e}")
-            finally:
-                self._queue.task_done()
+    def _flush_batches_if_needed(self) -> None:
+        """Flush batches if timeout exceeded"""
+        current_time = time.time()
+        if current_time - self._last_batch_flush >= self._batch_timeout:
+            self._flush_all_batches()
+            self._last_batch_flush = current_time
 
-        logger.debug("Dispatcher thread exiting")
+    def _flush_all_batches(self) -> None:
+        """Flush all pending batches"""
+        with self._batch_lock:
+            event_types = list(self._event_batches.keys())
+
+        for event_type in event_types:
+            if self._event_batches[event_type]:
+                self._process_batch(event_type)
 
     def _scheduler(self) -> None:
         """调度器线程主循环"""
@@ -609,17 +777,71 @@ class EventEngine:
             logger.exception("Handler error: %s", exc)
 
     # ==========================================================================
+    # Batch Processing Control
+    # ==========================================================================
+
+    def enable_batch_processing(self, batch_size: int = DEFAULT_BATCH_SIZE,
+                                batch_timeout: float = DEFAULT_BATCH_TIMEOUT) -> None:
+        """Enable batch processing mode"""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if batch_timeout <= 0:
+            raise ValueError("batch_timeout must be positive")
+
+        with self._batch_lock:
+            self._enable_batch_processing = True
+            self._batch_size = batch_size
+            self._batch_timeout = batch_timeout
+            logger.info(f"Batch processing enabled (size={batch_size}, timeout={batch_timeout}s)")
+
+    def disable_batch_processing(self) -> None:
+        """Disable batch processing mode and flush pending batches"""
+        with self._batch_lock:
+            if self._enable_batch_processing:
+                # Flush all pending batches before disabling
+                self._flush_all_batches()
+                self._enable_batch_processing = False
+                logger.info("Batch processing disabled")
+
+    def set_batch_size(self, size: int) -> None:
+        """Update batch size"""
+        if size <= 0:
+            raise ValueError("size must be positive")
+        with self._batch_lock:
+            self._batch_size = size
+
+    def set_batch_timeout(self, timeout: float) -> None:
+        """Update batch timeout"""
+        if timeout <= 0:
+            raise ValueError("timeout must be positive")
+        with self._batch_lock:
+            self._batch_timeout = timeout
+
+    # ==========================================================================
     # Debugging and Monitoring
     # ==========================================================================
     
     def snapshot(self) -> dict:
         handler_stats = self._handler_manager.get_statistics()
         with self._lock:
+            batch_info = {}
+            if self._enable_batch_processing:
+                with self._batch_lock:
+                    batch_info = {
+                        "enabled": True,
+                        "batch_size": self._batch_size,
+                        "batch_timeout": self._batch_timeout,
+                        "pending_batches": {k: len(v) for k, v in self._event_batches.items()}
+                    }
+            else:
+                batch_info = {"enabled": False}
+                
             return {
                 "queue": self._queue.qsize(),
                 "handlers": handler_stats["specific_handlers"],
                 "general": handler_stats["general_handlers"],
                 "scheduled": len(self._scheduler_heap),
+                "batch_processing": batch_info
             }
 
 
@@ -634,6 +856,7 @@ This module provides a clean-room rewrite of the event system with focus on:
    - _ScheduledTask: Represents scheduled tasks with priority and timing info
    - HandlerManager: Manages event handler registration and retrieval
    - EventEngine: Main event processing engine with threading support
+   - BatchHandler: Base class for handlers that support batch processing
 
 2. Key Features:
    - Dual-threaded architecture: Dispatcher + Scheduler threads
@@ -641,8 +864,18 @@ This module provides a clean-room rewrite of the event system with focus on:
    - Async handler execution via ThreadPoolExecutor
    - Heap-based task scheduling with cancellation support
    - Comprehensive error handling and graceful shutdown
+   - Batch processing support for high-throughput scenarios
 
-3. Improvements in this refactored version:
+3. Batch Processing Enhancements:
+   - Optional batch processing mode for improved performance
+   - Configurable batch size and timeout
+   - Automatic batch flushing on timeout
+   - BatchHandler base class for batch-aware handlers
+   - Fallback to individual processing for non-batch handlers
+   - Dynamic enable/disable of batch processing
+   - Batch statistics in snapshot
+
+4. Improvements in this refactored version:
    - Fixed critical threading bugs (threads now created in start(), not __init__)
    - Added constants to replace magic numbers
    - Enhanced lifecycle management with proper resource cleanup
@@ -650,11 +883,37 @@ This module provides a clean-room rewrite of the event system with focus on:
    - Thread-safe operations with proper locking mechanisms
    - Clear section organization for better maintainability
    - Comprehensive input validation throughout
+   - Batch processing capabilities for high-frequency events
 
-4. Architecture:
+5. Architecture:
    - Producer threads put events into priority queue
    - Dispatcher thread processes events and calls handlers
+   - Batch mode: events are grouped by type before processing
    - Scheduler thread manages periodic tasks using heapq
    - Async handlers executed in separate thread pool
    - Clean separation of concerns with dedicated manager classes
+
+Usage Example:
+    # Create engine with batch processing
+    engine = EventEngine(
+        queue_size=10000,
+        max_workers=16,
+        enable_batch_processing=True,
+        batch_size=50,
+        batch_timeout=0.1
+    )
+    
+    # Create a batch-aware handler
+    class TickBatchHandler(BatchHandler):
+        def process_batch(self, events: List[Event]) -> None:
+            # Process multiple ticks at once
+            prices = [e.data['price'] for e in events]
+            avg_price = sum(prices) / len(prices)
+            print(f"Batch of {len(events)} ticks, avg price: {avg_price}")
+    
+    # Register handler
+    engine.register(event_type="TICK", handler=TickBatchHandler())
+    
+    # Start engine
+    engine.start()
 """
