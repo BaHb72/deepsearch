@@ -190,8 +190,8 @@ class MessageBusConfig(BaseModel):
         available_buses = set(self.buses.keys())
         for route in self.routes:
             for bus_name in route.buses:
-                if bus_name not in available_buses:
-                    raise ValueError(f"路由 '{route.match}' 引用了未定义的总线 '{bus_name}'")
+                if bus_name.value not in available_buses:
+                    raise ValueError(f"路由 '{route.match}' 引用了未定义的总线 '{bus_name.value}'")
 
 
 class Settings(BaseSettings):

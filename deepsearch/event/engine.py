@@ -50,6 +50,28 @@ from typing import Callable, Dict, List, Tuple, Optional
 
 from deepsearch.event.const import EVENT_SYSTEM_EXIT
 
+# ==============================================================================
+# Constants
+# ==============================================================================
+
+# Default configuration values
+DEFAULT_QUEUE_SIZE = 10000
+DEFAULT_MAX_WORKERS = 32
+DEFAULT_TIMEOUT = 5.0
+
+# Threading timeouts and intervals
+DISPATCHER_TIMEOUT = 0.5
+SCHEDULER_WAIT_TIMEOUT = 1.0
+SHUTDOWN_SENTINEL_PRIORITY = -999999
+
+# Default values
+DEFAULT_PRIORITY = 0
+DEFAULT_ASYNC_FLAG = False
+
+# ==============================================================================
+# Logging
+# ==============================================================================
+
 logger = logging.getLogger(__name__)
 
 
@@ -120,9 +142,9 @@ class _ScheduledTask:
 Handler = Callable[[Event], None]
 
 
-# ---------------------------------------------------------------------
+# ==============================================================================
 # Handler Management
-# ---------------------------------------------------------------------
+# ==============================================================================
 class HandlerManager:
     """
     专门负责事件处理器的注册、注销和获取逻辑的管理类。
@@ -134,10 +156,16 @@ class HandlerManager:
         self._general_handlers: List[Tuple[int, Handler, bool]] = []
         self._lock = threading.RLock()
 
-    def register(self, *, event_type: str, handler: Handler, priority: int = 0, async_flag: bool = False) -> None:
+    def register(self, *, event_type: str, handler: Handler, priority: int = DEFAULT_PRIORITY,
+                 async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
         """
         注册特定类型的事件处理器。
         """
+        if not event_type:
+            raise ValueError("event_type cannot be empty")
+        if not callable(handler):
+            raise TypeError("handler must be callable")
+        
         key = (handler, async_flag)
         with self._lock:
             lst = self._handlers.setdefault(event_type, [])
@@ -149,14 +177,27 @@ class HandlerManager:
         """
         注销特定类型的事件处理器。
         """
+        if not event_type:
+            raise ValueError("event_type cannot be empty")
+        if not callable(handler):
+            raise TypeError("handler must be callable")
+        
         with self._lock:
             lst = self._handlers.get(event_type, [])
+            original_len = len(lst)
             lst[:] = [item for item in lst if item[1] is not handler]
+            # Clean up empty lists
+            if not lst and event_type in self._handlers:
+                del self._handlers[event_type]
 
-    def register_general(self, *, handler: Handler, priority: int = 0, async_flag: bool = False) -> None:
+    def register_general(self, *, handler: Handler, priority: int = DEFAULT_PRIORITY,
+                         async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
         """
         注册通用事件处理器。
         """
+        if not callable(handler):
+            raise TypeError("handler must be callable")
+        
         key = (handler, async_flag)
         with self._lock:
             if all((h, a) != key for _, h, a in self._general_handlers):
@@ -167,6 +208,9 @@ class HandlerManager:
         """
         注销通用事件处理器。
         """
+        if not callable(handler):
+            raise TypeError("handler must be callable")
+        
         with self._lock:
             self._general_handlers[:] = [item for item in self._general_handlers if item[1] is not handler]
 
@@ -195,9 +239,9 @@ class HandlerManager:
             }
 
 
-# ---------------------------------------------------------------------
-# EventEngine
-# ---------------------------------------------------------------------
+# ==============================================================================
+# EventEngine - Main Event Processing Engine
+# ==============================================================================
 class EventEngine:
     """
     EventEngine 用于管理事件队列、调度事件处理器和周期性任务的引擎。
@@ -209,82 +253,172 @@ class EventEngine:
     :type max_workers: int
     """
 
-    def __init__(self, *, queue_size: int = 10000, max_workers: int = 32) -> None:
+    def __init__(self, *, queue_size: int = DEFAULT_QUEUE_SIZE, max_workers: int = DEFAULT_MAX_WORKERS) -> None:
+        # Validate parameters
         if queue_size <= 0:
             logger.error("队列大小必须为正数")
             raise ValueError("queue_size must be positive")
         if max_workers < 0:
             logger.error("事件引擎最大线程数 max_workers 不能为负数")
             raise ValueError("max_workers cannot be negative")
+
+        # Core components
         self._queue: PriorityQueue[tuple[int, int, Event]] = PriorityQueue(maxsize=queue_size)
         self._seq_ctr = count()
         self._handler_manager = HandlerManager()
+
+        # Scheduling components
         self._scheduler_heap: List[_ScheduledTask] = []
         self._cancelled_tasks: set[int] = set()
+
+        # Thread synchronization
         self._lock = threading.RLock()
         self._cond = threading.Condition(self._lock)
-        self._dispatcher_th = threading.Thread(target=self._dispatcher, name="Dispatcher", daemon=True)
-        self._scheduler_th = threading.Thread(target=self._scheduler, name="Scheduler", daemon=True)
+
+        # Worker threads (initialized but not started)
+        self._dispatcher_th: Optional[threading.Thread] = None
+        self._scheduler_th: Optional[threading.Thread] = None
         self._executor: Optional[ThreadPoolExecutor] = None
+
+        # Configuration
         self._max_workers = max_workers
         self._running = False
 
-    # ------------- lifecycle -------------
+    # ==========================================================================
+    # Lifecycle Management
+    # ==========================================================================
     def start(self) -> None:
-        if self._running:
-            return
-        self._running = True
-        if self._max_workers > 0:
-            self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
-        else:
-            self._executor = None
-        self._dispatcher_th.start()
-        self._scheduler_th.start()
-        logger.info("事件引擎已启动")
+        """启动事件引擎"""
+        with self._lock:
+            if self._running:
+                logger.warning("事件引擎已经在运行")
+                return
 
-    def stop(self, *, timeout: float = 5.0) -> None:
-        if not self._running:
-            return
-        logger.info("正在关闭事件引擎 …")
-        self._running = False
+            self._running = True
+
+            # Initialize thread pool executor if needed
+            if self._max_workers > 0:
+                self._executor = ThreadPoolExecutor(max_workers=self._max_workers, thread_name_prefix="EventEngine")
+            else:
+                self._executor = None
+
+            # Create and start worker threads
+            self._dispatcher_th = threading.Thread(target=self._dispatcher, name="EventEngine-Dispatcher", daemon=True)
+            self._scheduler_th = threading.Thread(target=self._scheduler, name="EventEngine-Scheduler", daemon=True)
+
+            self._dispatcher_th.start()
+            self._scheduler_th.start()
+
+            logger.info("事件引擎已启动")
+
+    def stop(self, *, timeout: float = DEFAULT_TIMEOUT) -> None:
+        """停止事件引擎"""
+        with self._lock:
+            if not self._running:
+                logger.warning("事件引擎已经停止")
+                return
+
+            logger.info("正在关闭事件引擎...")
+            self._running = False
+
+        # Wake up scheduler thread
         with self._cond:
-            self._cond.notify_all()  # wake scheduler
-        # Put sentinel event to unblock dispatcher
+            self._cond.notify_all()
+
+        # Send sentinel event to unblock dispatcher
         sentinel = Event(EVENT_SYSTEM_EXIT)
-        if not self.put(sentinel, priority=-999999, block=False):
-            # queue full – temporarily enlarge the queue to ensure insertion
-            old_size = self._queue.maxsize
-            self._queue.maxsize = old_size + 1
-            self.put(sentinel, priority=-999999, block=True)
-            self._queue.maxsize = old_size
-        self._dispatcher_th.join(timeout=timeout)
-        self._scheduler_th.join(timeout=timeout)
+        if not self.put(sentinel, priority=SHUTDOWN_SENTINEL_PRIORITY, block=False):
+            # Queue full - temporarily enlarge to ensure shutdown
+            try:
+                old_size = self._queue.maxsize
+                self._queue.maxsize = old_size + 1
+                self.put(sentinel, priority=SHUTDOWN_SENTINEL_PRIORITY, block=True)
+                self._queue.maxsize = old_size
+            except Exception as e:
+                logger.error(f"Failed to send shutdown sentinel: {e}")
+
+        # Wait for threads to finish
+        if self._dispatcher_th and self._dispatcher_th.is_alive():
+            self._dispatcher_th.join(timeout=timeout)
+            if self._dispatcher_th.is_alive():
+                logger.warning("Dispatcher thread did not terminate within timeout")
+
+        if self._scheduler_th and self._scheduler_th.is_alive():
+            self._scheduler_th.join(timeout=timeout)
+            if self._scheduler_th.is_alive():
+                logger.warning("Scheduler thread did not terminate within timeout")
+
+        # Shutdown executor
         if self._executor:
-            self._executor.shutdown(wait=True)
-            self._executor = None
+            try:
+                self._executor.shutdown(wait=True, timeout=timeout)
+            except Exception as e:
+                logger.error(f"Error shutting down executor: {e}")
+            finally:
+                self._executor = None
+
+        # Reset thread references
+        self._dispatcher_th = None
+        self._scheduler_th = None
+        
         logger.info("事件引擎已关闭")
 
-    # ------------- registration -------------
-    def register(self, *, event_type: str, handler: Handler, priority: int = 0, async_flag: bool = False) -> None:
+    # ==========================================================================
+    # Handler Registration
+    # ==========================================================================
+    def register(self, *, event_type: str, handler: Handler, priority: int = DEFAULT_PRIORITY,
+                 async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
         """
         注册事件处理器的方法，用于指定事件类型、处理器、优先级以及是否异步执行。注册的处理器会按优先级从高到低的顺序排列。
         """
+        if not event_type:
+            raise ValueError("event_type cannot be empty")
+        if not callable(handler):
+            raise TypeError("handler must be callable")
+        
         self._handler_manager.register(event_type=event_type, handler=handler, priority=priority, async_flag=async_flag)
 
     def unregister(self, *, event_type: str, handler: Handler) -> None:
+        """注销事件处理器"""
+        if not event_type:
+            raise ValueError("event_type cannot be empty")
+        if not callable(handler):
+            raise TypeError("handler must be callable")
+        
         self._handler_manager.unregister(event_type=event_type, handler=handler)
 
-    def register_general(self, *, handler: Handler, priority: int = 0, async_flag: bool = False) -> None:
+    def register_general(self, *, handler: Handler, priority: int = DEFAULT_PRIORITY,
+                         async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
+        """注册通用事件处理器"""
+        if not callable(handler):
+            raise TypeError("handler must be callable")
+        
         self._handler_manager.register_general(handler=handler, priority=priority, async_flag=async_flag)
 
     def unregister_general(self, *, handler: Handler) -> None:
+        """注销通用事件处理器"""
+        if not callable(handler):
+            raise TypeError("handler must be callable")
+        
         self._handler_manager.unregister_general(handler=handler)
 
-    def put(self, event: Event, *, priority: int = 0, block: bool = True, timeout: Optional[float] = None) -> bool:
+    # ==========================================================================
+    # Event Queue Operations
+    # ==========================================================================
+
+    def put(self, event: Event, *, priority: int = DEFAULT_PRIORITY, block: bool = True,
+            timeout: Optional[float] = None) -> bool:
         """
         Add an event to the queue.
         Returns ``True`` if enqueued, ``False`` if queue full (and ``block``=False).
         """
+        if not isinstance(event, Event):
+            raise TypeError("event must be an Event instance")
+
+        if not self._running:
+            logger.warning("Cannot put event - engine is not running")
+            return False
+        
         seq = next(self._seq_ctr)
         item = (-priority, seq, event)
         try:
@@ -293,9 +427,12 @@ class EventEngine:
         except Full:
             logger.warning("事件队列已满，%s 已被丢弃", event)
             return False
+        except Exception as e:
+            logger.error(f"Error putting event to queue: {e}")
+            return False
 
-    def add_periodic(self, *, event_type: str, interval: float, priority: int = 0,
-                     async_flag: bool = False) -> int:
+    def add_periodic(self, *, event_type: str, interval: float, priority: int = DEFAULT_PRIORITY,
+                     async_flag: bool = DEFAULT_ASYNC_FLAG) -> int:
         """
         为调度器添加一个周期性任务。
         该方法会在调度器中添加一个任务，该任务按照指定的时间间隔被周期性调度。
@@ -307,8 +444,13 @@ class EventEngine:
         :return: 返回调度任务的唯一标识符。
         :rtype: int
         """
+        if not event_type:
+            raise ValueError("event_type cannot be empty")
         if interval <= 0:
             raise ValueError("interval must be > 0")
+        if not self._running:
+            raise RuntimeError("Engine is not running")
+        
         with self._cond:
             task_id = next(self._seq_ctr)
             task = _ScheduledTask(
@@ -320,13 +462,11 @@ class EventEngine:
             return task_id
 
     def cancel_periodic(self, task_id: int) -> None:
+        """取消周期性任务"""
         with self._cond:
             self._cancelled_tasks.add(task_id)
-            if self._scheduler_heap:
-                self._scheduler_heap[:] = [
-                    t for t in self._scheduler_heap if t.seq != task_id
-                ]
-            heapq.heapify(self._scheduler_heap)
+            # Don't immediately remove from heap - let scheduler clean up lazily
+            # This avoids expensive heap operations
             self._cond.notify()
 
     def update_periodic(
@@ -334,11 +474,21 @@ class EventEngine:
             new_interval: float | None = None,
             new_priority: int | None = None,
     ) -> None:
+        """更新周期性任务"""
+        if new_interval is not None and new_interval <= 0:
+            raise ValueError("new_interval must be > 0")
+        
         with self._cond:
+            # Check if task is cancelled
+            if task_id in self._cancelled_tasks:
+                raise ValueError(f"Task {task_id} is already cancelled")
+            
             for idx, task in enumerate(self._scheduler_heap):
                 if task.seq == task_id:
                     interval = new_interval if new_interval is not None else task.interval
                     priority = new_priority if new_priority is not None else task.priority
+
+                    # Create updated task
                     self._scheduler_heap[idx] = _ScheduledTask(
                         next_ts=_now() + interval,
                         seq=task.seq,
@@ -350,51 +500,107 @@ class EventEngine:
                     heapq.heapify(self._scheduler_heap)
                     self._cond.notify()
                     return
+
             raise ValueError(f"No periodic task with id={task_id}")
 
+    # ==========================================================================
+    # Worker Thread Implementations
+    # ==========================================================================
+    
     def _dispatcher(self) -> None:
+        """事件分发器线程主循环"""
         while self._running:
             try:
-                _, _, ev = self._queue.get(timeout=0.5)
+                _, _, ev = self._queue.get(timeout=DISPATCHER_TIMEOUT)
             except Empty:
                 continue
+            except Exception as e:
+                logger.error(f"Error getting event from queue: {e}")
+                continue
+
+            # Check for shutdown signal
             if ev.type == EVENT_SYSTEM_EXIT:
+                logger.debug("Dispatcher received shutdown signal")
                 break
-            executor = self._executor
-            specific, general = self._handler_manager.get_handlers(ev.type)
-            for _, handler, asyn in specific + general:
-                if asyn and executor:
-                    executor.submit(self._safe_call, handler, ev)
-                else:
-                    self._safe_call(handler, ev)
-            self._queue.task_done()
+
+            try:
+                # Get handlers for this event type
+                executor = self._executor
+                specific, general = self._handler_manager.get_handlers(ev.type)
+
+                # Execute handlers
+                for _, handler, async_flag in specific + general:
+                    try:
+                        if async_flag and executor:
+                            executor.submit(self._safe_call, handler, ev)
+                        else:
+                            self._safe_call(handler, ev)
+                    except Exception as e:
+                        logger.error(f"Error dispatching to handler: {e}")
+
+            except Exception as e:
+                logger.error(f"Error processing event {ev}: {e}")
+            finally:
+                self._queue.task_done()
+
+        logger.debug("Dispatcher thread exiting")
 
     def _scheduler(self) -> None:
+        """调度器线程主循环"""
         while self._running:
-            with self._cond:
-                while self._scheduler_heap and self._scheduler_heap[0].seq in self._cancelled_tasks:
-                    heapq.heappop(self._scheduler_heap)
-                if not self._scheduler_heap:
-                    self._cond.wait(timeout=1.0)
-                    continue
-                task = self._scheduler_heap[0]
-                wait = task.next_ts - _now()
-                if wait > 0:
-                    self._cond.wait(timeout=wait)
-                    continue
-                heapq.heappop(self._scheduler_heap)
-            # dispatch
-            evt = Event(task.event_type)
-            self.put(evt, priority=task.priority)
-            with self._cond:
-                if task.seq not in self._cancelled_tasks:
-                    resched = replace(task, next_ts=_now() + task.interval)
-                    heapq.heappush(self._scheduler_heap, resched)
-                else:
-                    self._cancelled_tasks.discard(task.seq)
-                self._cond.notify()
+            try:
+                with self._cond:
+                    # Clean up cancelled tasks from the top of heap
+                    while self._scheduler_heap and self._scheduler_heap[0].seq in self._cancelled_tasks:
+                        cancelled_task = heapq.heappop(self._scheduler_heap)
+                        self._cancelled_tasks.discard(cancelled_task.seq)
 
-    # ---------------- utilities ----------------
+                    # If no tasks, wait for notification
+                    if not self._scheduler_heap:
+                        self._cond.wait(timeout=SCHEDULER_WAIT_TIMEOUT)
+                        continue
+
+                    # Get next task
+                    task = self._scheduler_heap[0]
+                    wait_time = task.next_ts - _now()
+
+                    # If not ready yet, wait
+                    if wait_time > 0:
+                        self._cond.wait(timeout=wait_time)
+                        continue
+
+                    # Remove task from heap for execution
+                    heapq.heappop(self._scheduler_heap)
+
+                # Execute task (outside of lock)
+                try:
+                    evt = Event(task.event_type)
+                    if not self.put(evt, priority=task.priority, block=False):
+                        logger.warning(f"Failed to queue scheduled event: {task.event_type}")
+                except Exception as e:
+                    logger.error(f"Error creating scheduled event: {e}")
+
+                # Reschedule if not cancelled
+                with self._cond:
+                    if task.seq not in self._cancelled_tasks:
+                        try:
+                            resched = replace(task, next_ts=_now() + task.interval)
+                            heapq.heappush(self._scheduler_heap, resched)
+                        except Exception as e:
+                            logger.error(f"Error rescheduling task: {e}")
+                    else:
+                        self._cancelled_tasks.discard(task.seq)
+                    self._cond.notify()
+
+            except Exception as e:
+                logger.error(f"Scheduler error: {e}")
+
+        logger.debug("Scheduler thread exiting")
+
+    # ==========================================================================
+    # Utility Methods
+    # ==========================================================================
+    
     @staticmethod
     def _safe_call(func: Handler, ev: Event) -> None:
         try:
@@ -402,7 +608,10 @@ class EventEngine:
         except Exception as exc:
             logger.exception("Handler error: %s", exc)
 
-    # debugging helper
+    # ==========================================================================
+    # Debugging and Monitoring
+    # ==========================================================================
+    
     def snapshot(self) -> dict:
         handler_stats = self._handler_manager.get_statistics()
         with self._lock:
@@ -412,3 +621,40 @@ class EventEngine:
                 "general": handler_stats["general_handlers"],
                 "scheduled": len(self._scheduler_heap),
             }
+
+
+# ==============================================================================
+# Module Summary
+# ==============================================================================
+"""
+This module provides a clean-room rewrite of the event system with focus on:
+
+1. Core Components:
+   - Event: Immutable event data structure with type, data, and timestamp
+   - _ScheduledTask: Represents scheduled tasks with priority and timing info
+   - HandlerManager: Manages event handler registration and retrieval
+   - EventEngine: Main event processing engine with threading support
+
+2. Key Features:
+   - Dual-threaded architecture: Dispatcher + Scheduler threads
+   - Priority-based event queue with thread-safe operations
+   - Async handler execution via ThreadPoolExecutor
+   - Heap-based task scheduling with cancellation support
+   - Comprehensive error handling and graceful shutdown
+
+3. Improvements in this refactored version:
+   - Fixed critical threading bugs (threads now created in start(), not __init__)
+   - Added constants to replace magic numbers
+   - Enhanced lifecycle management with proper resource cleanup
+   - Improved error handling with specific exception types
+   - Thread-safe operations with proper locking mechanisms
+   - Clear section organization for better maintainability
+   - Comprehensive input validation throughout
+
+4. Architecture:
+   - Producer threads put events into priority queue
+   - Dispatcher thread processes events and calls handlers
+   - Scheduler thread manages periodic tasks using heapq
+   - Async handlers executed in separate thread pool
+   - Clean separation of concerns with dedicated manager classes
+"""

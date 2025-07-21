@@ -36,8 +36,11 @@ class Application:
             print(f"[Logger init failed] {exc}", file=sys.stderr)
             sys.exit(1)
         # 成功配置后获取用于启动过程的日志记录器
-        self.logger = get_logger(service="boot")
-        self.logger.info("日志模块已启动")
+        self.logger = get_logger(service=DEFAULT_SERVICE_NAME)
+        if self.logger:
+            self.logger.info("日志模块已启动")
+        else:
+            raise RuntimeError("Failed to initialize logger")
 
     def run(self, sys_args: list[str] | None = None) -> None:
         """
