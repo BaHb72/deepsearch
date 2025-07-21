@@ -258,10 +258,79 @@ class LoggerConfigurator:
 
 
 # ==============================================================================
-# Global Configurator Instance and Public API
+# Logger Manager
+# ==============================================================================
+
+class LoggerManager:
+    """
+    日志管理器，提供统一的日志系统生命周期管理接口
+    
+    该类封装了LoggerConfigurator，提供更简洁的start/stop接口，
+    便于在MainEngine中进行统一管理。
+    """
+
+    def __init__(self):
+        """初始化日志管理器"""
+        self._configurator = LoggerConfigurator()
+        self._configured = False
+        self._log_path: Optional[Path] = None
+
+    def start(self, config: Optional[LoggerConfig] = None) -> None:
+        """
+        启动日志系统
+        
+        :param config: 可选的日志配置，如果不提供则使用默认配置
+        """
+        if self._configured:
+            logger.warning("Logger system already started")
+            return
+
+        try:
+            self._log_path = self._configurator.configure(config)
+            self._configured = True
+            logger.info("Logger system started successfully")
+            if self._log_path:
+                logger.info(f"Log directory: {self._log_path}")
+        except Exception as e:
+            # 日志系统启动失败不应该阻止程序运行，使用标准输出
+            print(f"[ERROR] Failed to start logger system: {e}", file=sys.stderr)
+            self._configured = False
+
+    def stop(self) -> None:
+        """
+        停止日志系统
+        
+        清理日志处理器并确保所有日志都已写入
+        """
+        if not self._configured:
+            return
+
+        try:
+            # 移除所有处理器
+            logger.remove()
+            self._configured = False
+            # 使用print因为logger已经被移除
+            print("[INFO] Logger system stopped")
+        except Exception as e:
+            print(f"[ERROR] Failed to stop logger system: {e}", file=sys.stderr)
+
+    @property
+    def is_running(self) -> bool:
+        """检查日志系统是否正在运行"""
+        return self._configured
+
+    @property
+    def log_path(self) -> Optional[Path]:
+        """获取日志目录路径"""
+        return self._log_path
+
+
+# ==============================================================================
+# Global Instances and Public API
 # ==============================================================================
 
 _logger_configurator = LoggerConfigurator()
+logger_manager = LoggerManager()
 
 
 def configure_logger(cfg: Optional[LoggerConfig] = None) -> Optional[Path]:

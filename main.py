@@ -1,142 +1,99 @@
 #!/usr/bin/env python3
 """
 DeepSearch - 量化交易事件系统主入口
+
+该模块是程序的入口点，负责创建和启动MainEngine，
+所有的初始化和管理逻辑都委托给MainEngine处理。
 """
 import logging
 import sys
-import time
 
-from deepsearch.config.setting import settings
-from deepsearch.event.bus.bus import CompositeMessageBus
+from deepsearch.core import MainEngine
 from deepsearch.event.const import EVENT_SYSTEM_READY, EVENT_TICK, EVENT_ORDER, EVENT_TRADE
-from deepsearch.event.engine import EventEngine, Event
-from deepsearch.event.monitoring import EventSystemMonitor
-from deepsearch.gateway.gateway import Gateway
-from deepsearch.observability.logger import logger_manager
 
 
-def setup_logging():
-    """初始化日志系统"""
-    logger_manager.start()
+def setup_default_handlers(engine: MainEngine) -> None:
+    """
+    设置默认的事件处理器
+    
+    这些是示例处理器，实际使用时应该根据需求替换
+    """
     logger = logging.getLogger(__name__)
-    logger.info("=" * 80)
-    logger.info("DeepSearch - 量化交易事件系统")
-    logger.info("=" * 80)
-    logger.info(f"环境: {settings.app.env}")
-    logger.info(f"日志级别: {settings.log.level}")
-    return logger
-
-
-def setup_event_system():
-    """初始化事件系统组件"""
-    logger = logging.getLogger(__name__)
-
-    # 创建事件引擎
-    logger.info("初始化事件引擎...")
-    engine = EventEngine(
-        queue_size=10000,
-        max_workers=32,
-        enable_batch_processing=True,
-        batch_size=100,
-        batch_timeout=0.1
-    )
-
-    # 创建消息总线
-    logger.info("初始化消息总线...")
-    bus = CompositeMessageBus()
-
-    # 创建监控器
-    logger.info("初始化系统监控...")
-    monitor = EventSystemMonitor(engine, bus)
-
-    # 启动组件
-    engine.start()
-    bus.start()
-    monitor.start()
-
-    logger.info("事件系统初始化成功")
-    return engine, bus, monitor
-
-
-def setup_gateway(engine):
-    """初始化网关"""
-    logger = logging.getLogger(__name__)
-    logger.info("初始化网关...")
-
-    gateway = Gateway(engine)
-    gateway.start()
-
-    logger.info("网关初始化成功")
-    return gateway
-
-
-def register_handlers(engine):
-    """注册事件处理器"""
-    logger = logging.getLogger(__name__)
-    logger.info("注册事件处理器...")
 
     # 示例处理器
     def handle_system_ready(event):
-        logger.info("系统已准备就绪")
-
+        logger.info("System ready event received")
+    
     def handle_tick(event):
-        logger.debug(f"收到行情: {event.data}")
-
+        logger.debug(f"Tick event: {event.data}")
+    
     def handle_order(event):
-        logger.info(f"订单事件: {event.data}")
-
+        logger.info(f"Order event: {event.data}")
+    
     def handle_trade(event):
-        logger.info(f"成交事件: {event.data}")
+        logger.info(f"Trade event: {event.data}")
 
     # 注册处理器
-    engine.register(event_type=EVENT_SYSTEM_READY, handler=handle_system_ready)
-    engine.register(event_type=EVENT_TICK, handler=handle_tick, async_flag=True)
-    engine.register(event_type=EVENT_ORDER, handler=handle_order)
-    engine.register(event_type=EVENT_TRADE, handler=handle_trade)
+    handlers = {
+        EVENT_SYSTEM_READY: handle_system_ready,
+        EVENT_TICK: handle_tick,
+        EVENT_ORDER: handle_order,
+        EVENT_TRADE: handle_trade,
+    }
 
-    logger.info("事件处理器注册完成")
+    engine.register_handlers(handlers)
+
+    # 对于需要异步处理的事件，单独注册
+    engine.register_handler(EVENT_TICK, handle_tick, async_flag=True)
 
 
-def main():
-    """主函数"""
+def main() -> int:
+    """
+    主函数 - 程序入口
+    
+    创建MainEngine实例并运行系统
+    """
+    engine = None
+
     try:
-        # 设置日志
-        logger = setup_logging()
+        # 创建核心引擎
+        engine = MainEngine()
 
-        # 初始化组件
-        engine, bus, monitor = setup_event_system()
-        gateway = setup_gateway(engine)
+        # 初始化系统
+        engine.initialize()
 
-        # 注册处理器
-        register_handlers(engine)
+        # 注册默认处理器（可选，也可以通过配置文件或插件系统加载）
+        setup_default_handlers(engine)
 
-        # 发送系统就绪事件
-        engine.put(Event(EVENT_SYSTEM_READY, {"message": "系统初始化完成"}))
+        # 启动系统
+        engine.start()
 
-        logger.info("DeepSearch 正在运行，按 Ctrl+C 退出")
+        # 运行主循环
+        engine.run()
 
-        # 保持运行
-        try:
-            while True:
-                time.sleep(1)
-                
-        except KeyboardInterrupt:
-            logger.info("收到关闭信号")
+        return 0
 
-        # 清理
-        logger.info("正在关闭组件...")
-        monitor.stop()
-        gateway.stop()
-        engine.stop()
-        bus.stop()
-        logger_manager.stop()
-
-        logger.info("DeepSearch 已关闭")
+    except KeyboardInterrupt:
+        # Ctrl+C 被 MainEngine 的信号处理器捕获
+        if engine and engine._logger:
+            engine._logger.info("Main process interrupted")
         return 0
 
     except Exception as e:
-        logging.error(f"严重错误: {e}", exc_info=True)
+        # 严重错误
+        if engine and engine._logger:
+            engine._logger.error(f"Fatal error: {e}", exc_info=True)
+        else:
+            print(f"Fatal error: {e}", file=sys.stderr)
         return 1
+
+    finally:
+        # 确保引擎被正确关闭
+        if engine:
+            try:
+                engine.stop()
+            except Exception as e:
+                print(f"Error during shutdown: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

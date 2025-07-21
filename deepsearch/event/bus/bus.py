@@ -185,6 +185,13 @@ class InMemoryMessageBus(AbstractMessageBus):
         self._running = False
         logger.info("InMemory MessageBus stopped")
 
+    def get_statistics(self) -> Dict[str, Any]:
+        """获取内存消息总线的统计信息"""
+        return {
+            "handlers": {topic: len(handlers) for topic, handlers in self._handlers.items()},
+            "total_handlers": sum(len(handlers) for handlers in self._handlers.values())
+        }
+
 
 # ==============================================================================
 # ZeroMQ Message Bus Implementation
@@ -378,6 +385,16 @@ class ZeroMQMessageBus(AbstractMessageBus):
             logger.warning(f"Error terminating ZMQ context: {e}")
         
         logger.info("ZeroMQ MessageBus stopped")
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """获取ZeroMQ消息总线的统计信息"""
+        return {
+            "pub_endpoint": f"tcp://{self._config.host}:{self._config.pub_port}",
+            "sub_endpoint": f"tcp://{self._config.host}:{self._config.sub_port}",
+            "handlers": {topic: len(handlers) for topic, handlers in self._handlers.items()},
+            "total_handlers": sum(len(handlers) for handlers in self._handlers.values()),
+            "serializer": self._serializer.__class__.__name__
+        }
 
 
 # ==============================================================================
@@ -873,6 +890,48 @@ class CompositeMessageBus(AbstractMessageBus):
                 bus.stop()
             except Exception as e:
                 logger.error(f"Failed to stop bus '{bus_name.value}': {e}")
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """
+        获取复合消息总线的统计信息
+        
+        :return: 包含所有子总线统计信息的字典
+        """
+        stats = {
+            "total_buses": len(self._buses),
+            "active_buses": [],
+            "routes": [],
+            "buses": {}
+        }
+
+        # 收集各个总线的信息
+        for bus_name, bus in self._buses.items():
+            bus_info = {
+                "type": bus_name.value,
+                "running": getattr(bus, '_running', False)
+            }
+
+            # 如果总线实现了 get_statistics，获取详细统计
+            if hasattr(bus, 'get_statistics'):
+                bus_info.update(bus.get_statistics())
+
+            stats["buses"][bus_name.value] = bus_info
+
+            if bus_info["running"]:
+                stats["active_buses"].append(bus_name.value)
+
+        # 收集路由信息
+        for pattern, bus_names in self._routes:
+            stats["routes"].append({
+                "pattern": pattern,
+                "target_buses": bus_names
+            })
+
+        return stats
+
+    def is_running(self) -> bool:
+        """检查是否有任何总线正在运行"""
+        return any(getattr(bus, '_running', False) for bus in self._buses.values())
 
 
 # ==============================================================================

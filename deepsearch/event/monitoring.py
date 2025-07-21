@@ -16,6 +16,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Deque
 
+from deepsearch.core.interfaces import MonitoringHook
 from deepsearch.event.bus.bus import AbstractMessageBus
 from deepsearch.event.engine import Event, EventEngine
 
@@ -236,6 +237,41 @@ class MetricsCollector:
 
 
 # ==============================================================================
+# Monitoring Hook Implementation
+# ==============================================================================
+
+
+class MetricsCollectorHook(MonitoringHook):
+    """
+    监控钩子实现，用于收集事件处理的性能指标
+    """
+
+    def __init__(self, collector: MetricsCollector):
+        self._collector = collector
+
+    def on_handler_start(self, handler_name: str, event_type: str) -> None:
+        """处理器开始执行时的钩子"""
+        # 可以在这里记录开始时间或其他预处理
+        pass
+
+    def on_handler_complete(self, handler_name: str, event_type: str, duration: float, error: Exception = None) -> None:
+        """处理器执行完成时的钩子"""
+        success = error is None
+
+        # 记录事件处理的指标
+        self._collector.record_event(
+            event_type=event_type,
+            processing_time=duration,
+            success=success,
+            handler_name=handler_name
+        )
+
+        # 如果有错误，记录错误信息
+        if error:
+            logger.error(f"Handler {handler_name} failed for event {event_type}: {error}")
+
+
+# ==============================================================================
 # Performance Monitor
 # ==============================================================================
 
@@ -247,7 +283,7 @@ class PerformanceMonitor:
         self._engine = engine
         self._collector = collector
         self._monitoring = False
-        self._original_handlers: Dict[str, List[Callable]] = {}
+        self._monitoring_hook: Optional[MetricsCollectorHook] = None
 
     def start_monitoring(self) -> None:
         """Start monitoring event handlers"""
@@ -255,7 +291,11 @@ class PerformanceMonitor:
             return
 
         self._monitoring = True
-        self._wrap_handlers()
+
+        # 创建并添加监控钩子
+        self._monitoring_hook = MetricsCollectorHook(self._collector)
+        self._engine.add_monitoring_hook(self._monitoring_hook)
+        
         logger.info("Performance monitoring started")
 
     def stop_monitoring(self) -> None:
@@ -264,51 +304,21 @@ class PerformanceMonitor:
             return
 
         self._monitoring = False
-        self._unwrap_handlers()
+
+        # 移除监控钩子
+        if self._monitoring_hook:
+            self._engine.remove_monitoring_hook(self._monitoring_hook)
+            self._monitoring_hook = None
+            
         logger.info("Performance monitoring stopped")
 
-    def _wrap_handlers(self) -> None:
-        """Wrap event handlers with monitoring"""
-        for event_type, handlers in self._engine._handlers.items():
-            self._original_handlers[event_type] = handlers.copy()
-            wrapped_handlers = []
-
-            for handler in handlers:
-                wrapped = self._create_monitored_handler(event_type, handler)
-                wrapped_handlers.append(wrapped)
-
-            self._engine._handlers[event_type] = wrapped_handlers
-
-    def _unwrap_handlers(self) -> None:
-        """Restore original handlers"""
-        for event_type, handlers in self._original_handlers.items():
-            self._engine._handlers[event_type] = handlers
-        self._original_handlers.clear()
-
-    def _create_monitored_handler(self, event_type: str, handler: Callable) -> Callable:
-        """Create a monitored version of a handler"""
-
-        def monitored_handler(event: Event) -> None:
-            start_time = time.time()
-            success = True
-
-            try:
-                handler(event)
-            except Exception as e:
-                success = False
-                raise
-            finally:
-                processing_time = time.time() - start_time
-                handler_name = getattr(handler, '__name__', str(handler))
-
-                self._collector.record_event(
-                    event_type=event_type,
-                    processing_time=processing_time,
-                    success=success,
-                    handler_name=handler_name
-                )
-
-        return monitored_handler
+    def get_statistics(self) -> Dict[str, Any]:
+        """获取性能监控统计信息"""
+        return {
+            "monitoring": self._monitoring,
+            "collector_stats": self._collector.get_metrics() if self._collector else {},
+            "handler_metrics": self._collector.get_handler_metrics() if self._collector else {}
+        }
 
 
 # ==============================================================================
@@ -492,7 +502,7 @@ class EventSystemMonitor:
 
     def _check_queue_size(self) -> Tuple[bool, Optional[str]]:
         """Check event queue size"""
-        queue_size = self._engine._event_queue.qsize()
+        queue_size = self._engine._queue.qsize()
         if queue_size > 1000:
             return False, f"Queue size too large: {queue_size}"
         return True, None
@@ -594,6 +604,45 @@ class EventSystemMonitor:
     def get_metrics_collector(self) -> MetricsCollector:
         """Get the metrics collector instance"""
         return self._collector
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """
+        获取事件系统监控的统计信息
+        
+        :return: 包含所有监控子系统统计信息的字典
+        """
+        stats = {
+            "monitoring": self._monitoring,
+            "performance": {},
+            "health": {},
+            "metrics": {}
+        }
+
+        # 获取性能监控统计
+        if self._performance_monitor:
+            perf_stats = self._performance_monitor.get_statistics()
+            stats["performance"] = perf_stats
+
+        # 获取健康监控统计
+        if self._health_monitor:
+            health_status, health_details = self._health_monitor.get_status()
+            health_stats = {
+                "monitoring": self._health_monitor._monitoring,
+                "status": health_status.value,
+                "checks": health_details
+            }
+            stats["health"] = health_stats
+
+        # 获取度量收集器统计
+        if self._collector:
+            metrics_summary = {
+                "event_metrics": self._collector.get_metrics(),
+                "handler_metrics": self._collector.get_handler_metrics(),
+                "slow_events_count": len(self._collector.get_slow_events())
+            }
+            stats["metrics"] = metrics_summary
+
+        return stats
 
 
 # ==============================================================================

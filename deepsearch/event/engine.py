@@ -185,6 +185,7 @@ class HandlerManager:
         self._handlers: Dict[str, List[Tuple[int, Handler, bool]]] = {}
         self._general_handlers: List[Tuple[int, Handler, bool]] = []
         self._lock = threading.RLock()
+        self._monitoring_hooks: List['MonitoringHook'] = []
 
     def register(self, *, event_type: str, handler: Handler, priority: int = DEFAULT_PRIORITY,
                  async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
@@ -285,6 +286,71 @@ class HandlerManager:
 
         for event_type in event_types:
             self.register(event_type=event_type, handler=handler, priority=priority, async_flag=async_flag)
+
+    def add_monitoring_hook(self, hook: 'MonitoringHook') -> None:
+        """
+        添加监控钩子
+        
+        :param hook: 监控钩子实例
+        """
+        with self._lock:
+            if hook not in self._monitoring_hooks:
+                self._monitoring_hooks.append(hook)
+
+    def remove_monitoring_hook(self, hook: 'MonitoringHook') -> None:
+        """
+        移除监控钩子
+        
+        :param hook: 监控钩子实例
+        """
+        with self._lock:
+            if hook in self._monitoring_hooks:
+                self._monitoring_hooks.remove(hook)
+
+    def create_monitored_handler(self, handler: Handler, handler_name: str, event_type: str) -> Handler:
+        """
+        创建带监控的处理器包装器
+        
+        :param handler: 原始处理器
+        :param handler_name: 处理器名称
+        :param event_type: 事件类型
+        :return: 包装后的处理器
+        """
+
+        def monitored_wrapper(event: Event) -> None:
+            # 通知所有钩子：处理器开始执行
+            for hook in self._monitoring_hooks:
+                try:
+                    hook.on_handler_start(handler_name, event_type)
+                except Exception as e:
+                    logger.error(f"Error in monitoring hook on_handler_start: {e}")
+
+            start_time = time.perf_counter()
+            error = None
+
+            try:
+                # 执行原始处理器
+                handler(event)
+            except Exception as e:
+                error = e
+                raise
+            finally:
+                # 计算执行时间
+                duration = time.perf_counter() - start_time
+
+                # 通知所有钩子：处理器执行完成
+                for hook in self._monitoring_hooks:
+                    try:
+                        hook.on_handler_complete(handler_name, event_type, duration, error)
+                    except Exception as e:
+                        logger.error(f"Error in monitoring hook on_handler_complete: {e}")
+
+        # 保留原始处理器的属性
+        monitored_wrapper.__name__ = getattr(handler, '__name__', str(handler))
+        monitored_wrapper.__doc__ = getattr(handler, '__doc__', '')
+        monitored_wrapper._original_handler = handler
+
+        return monitored_wrapper
 
 
 # ==============================================================================
@@ -648,10 +714,22 @@ class EventEngine:
         # Execute handlers
         for _, handler, async_flag in specific + general:
             try:
-                if async_flag and executor:
-                    executor.submit(self._safe_call, handler, ev)
+                # 如果有监控钩子，创建监控包装器
+                if self._handler_manager._monitoring_hooks:
+                    handler_name = getattr(handler, '__name__', str(handler))
+                    monitored_handler = self._handler_manager.create_monitored_handler(
+                        handler, handler_name, ev.type
+                    )
+                    if async_flag and executor:
+                        executor.submit(self._safe_call, monitored_handler, ev)
+                    else:
+                        self._safe_call(monitored_handler, ev)
                 else:
-                    self._safe_call(handler, ev)
+                    # 没有监控钩子，直接执行
+                    if async_flag and executor:
+                        executor.submit(self._safe_call, handler, ev)
+                    else:
+                        self._safe_call(handler, ev)
             except Exception as e:
                 logger.error(f"Error dispatching to handler: {e}")
 
@@ -698,10 +776,22 @@ class EventEngine:
                 # Fall back to individual processing
                 for ev in batch:
                     try:
-                        if async_flag and executor:
-                            executor.submit(self._safe_call, handler, ev)
+                        # 如果有监控钩子，创建监控包装器
+                        if self._handler_manager._monitoring_hooks:
+                            handler_name = getattr(handler, '__name__', str(handler))
+                            monitored_handler = self._handler_manager.create_monitored_handler(
+                                handler, handler_name, ev.type
+                            )
+                            if async_flag and executor:
+                                executor.submit(self._safe_call, monitored_handler, ev)
+                            else:
+                                self._safe_call(monitored_handler, ev)
                         else:
-                            self._safe_call(handler, ev)
+                            # 没有监控钩子，直接执行
+                            if async_flag and executor:
+                                executor.submit(self._safe_call, handler, ev)
+                            else:
+                                self._safe_call(handler, ev)
                     except Exception as e:
                         logger.error(f"Error dispatching to handler: {e}")
 
@@ -851,6 +941,36 @@ class EventEngine:
                 "scheduled": len(self._scheduler_heap),
                 "batch_processing": batch_info
             }
+
+    def get_all_handlers(self) -> Dict[str, List[Any]]:
+        """
+        获取所有注册的处理器（用于监控）
+        
+        :return: 事件类型到处理器列表的映射
+        """
+        # 为了保持封装，我们返回处理器的副本而不是内部引用
+        with self._handler_manager._lock:
+            return {
+                event_type: [(priority, handler, async_flag)
+                             for priority, handler, async_flag in handlers]
+                for event_type, handlers in self._handler_manager._handlers.items()
+            }
+
+    def add_monitoring_hook(self, hook: 'MonitoringHook') -> None:
+        """
+        添加监控钩子到事件引擎
+        
+        :param hook: 监控钩子实例
+        """
+        self._handler_manager.add_monitoring_hook(hook)
+
+    def remove_monitoring_hook(self, hook: 'MonitoringHook') -> None:
+        """
+        从事件引擎移除监控钩子
+        
+        :param hook: 监控钩子实例
+        """
+        self._handler_manager.remove_monitoring_hook(hook)
 
 
 # ==============================================================================
