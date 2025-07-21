@@ -1,37 +1,57 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "deepsearch"
 version = "0.1.0"
-description = "专注研究市场行为"
-requires-python = ">=3.13"
-# ==== 运行时依赖（生产环境真正需要）====
+description = "高性能量化交易事件系统"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "BaHb", email = "bahb@example.com" },
+]
+requires-python = ">=3.8"
 dependencies = [
-    "anyio>=4.9.0",
-    "loguru>=0.7.3",
-    "matplotlib>=3.10.3",
-    "platformdirs>=4.3.8",
-    "pydantic>=2.11.7",
-    "pydantic-settings>=2.10.1",
-    "pytest>=8.4.1",
-    "pytest-tornasync>=0.6.0.post2",
-    "pytest-trio>=0.8.0",
-    "pytest-twisted>=1.14.3",
-    "pyyaml>=6.0.2",
-    "pyzmq>=27.0.0",
-    "redis>=3.5.3,<4",
-    "redistimeseries>=1.4.3",
-    "twisted>=25.5.0",
-    "typing-extensions==4.14.1",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "pyzmq>=25.0",
+    "redis>=5.0",
+    "loguru>=0.7",
+    "pyyaml>=6.0",
+    "platformdirs>=4.0",
 ]
 
-# ==== 可选依赖：测试 ====
 [project.optional-dependencies]
-tests = [
-    "pytest>=8.4.1",
-    "pytest-tornasync>=0.6.0.post2",
-    "pytest-trio>=0.8.0",
-    "pytest-twisted>=1.14.3",
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.10",
+    "black>=23.0",
+    "isort>=5.12",
+    "mypy>=1.0",
+    "ipython>=8.0",
 ]
 
-# （可选）你可以继续添加其它 extra，比如文档、CI 等
-# [project.optional-dependencies]
-# docs = ["mkdocs>=1.6", "mkdocstrings>=0.25"]
+[project.urls]
+Homepage = "https://github.com/BaHb/deepsearch"
+Repository = "https://github.com/BaHb/deepsearch.git"
+
+[project.scripts]
+deepsearch = "deepsearch.main:main"
+
+[tool.setuptools]
+packages = ["deepsearch"]
+
+[tool.black]
+line-length = 100
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

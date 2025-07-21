@@ -8,6 +8,7 @@ from __future__ import annotations
 # ==============================================================================
 
 EVENT_SYSTEM_EXIT: str = "_SYSTEM_EXIT_"  # 系统退出事件
+EVENT_SYSTEM_READY: str = "_SYSTEM_READY_"  # 系统准备就绪事件
 
 # ==============================================================================
 # Trading Event Types
@@ -29,8 +30,8 @@ EVENT_LOG: str = "LOG"  # 日志事件
 # Reserved Event Types (Not Yet Implemented)
 # ==============================================================================
 
-# EVENT_ACCOUNT: str = "ACCOUNT"  # 账户信息
-# EVENT_POSITION: str = "POSITION"  # 持仓信息
+EVENT_ACCOUNT: str = "ACCOUNT"  # 账户信息
+EVENT_POSITION: str = "POSITION"  # 持仓信息
 
 # ==============================================================================
 # Module Summary

@@ -9,14 +9,14 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Optional, Any
 
-from deepsearch.event import (
+from deepsearch.event.bus.bus import CompositeMessageBus
+from deepsearch.event.const import (
     EVENT_TICK,
     EVENT_ORDER,
     EVENT_TRADE,
     EVENT_ERROR,
     EVENT_LOG,
 )
-from deepsearch.event.bus.bus import CompositeMessageBus
 from deepsearch.event.engine import Event
 
 # ==============================================================================
@@ -399,13 +399,106 @@ class BaseGateway(ABC):
         # Shutdown executor
         if self._executor:
             try:
-                self._executor.shutdown(wait=True, timeout=THREAD_SHUTDOWN_TIMEOUT)
+                self._executor.shutdown(wait=True)
             except Exception as e:
                 self.logger.error(f"Error shutting down executor: {e}")
             finally:
                 self._executor = None
 
         self.logger.info(f"网关 [{self.gateway_name}] 资源清理完成")
+
+
+# ==============================================================================
+# Mock Gateway Implementation for Testing
+# ==============================================================================
+
+
+class Gateway(BaseGateway):
+    """
+    简单的网关实现，用于测试和演示。
+    
+    这是一个模拟网关，实现了 BaseGateway 的所有抽象方法。
+    在实际使用中，应该为每个具体的交易所创建专门的网关实现。
+    """
+
+    def __init__(self, engine):
+        """初始化网关
+        
+        :param engine: 事件引擎实例
+        """
+        # 从事件引擎获取消息总线
+        from deepsearch.event.bus.bus import InMemoryMessageBus
+        message_bus = InMemoryMessageBus()
+
+        super().__init__(
+            message_bus=message_bus,
+            gateway_name="MockGateway"
+        )
+        self.engine = engine
+        self._connected = False
+
+    async def connect_async(self) -> None:
+        """模拟异步连接"""
+        self.write_log("正在连接到模拟交易所...")
+        # 模拟连接延迟
+        await asyncio.sleep(1)
+        self._connected = True
+        self.status = GatewayStatus.CONNECTED
+        self.write_log("成功连接到模拟交易所")
+
+    def close(self) -> None:
+        """关闭连接"""
+        if self._connected:
+            self._connected = False
+            self.status = GatewayStatus.DISCONNECTED
+            self.write_log("已断开与模拟交易所的连接")
+
+    def subscribe(self, symbol: str) -> None:
+        """订阅行情"""
+        if not self._connected:
+            raise RuntimeError("网关未连接")
+        self.write_log(f"已订阅 {symbol} 行情")
+
+    def send_order(self, order_req: Any) -> str:
+        """发送订单"""
+        if not self._connected:
+            raise RuntimeError("网关未连接")
+
+        # 生成模拟订单ID
+        import uuid
+        order_id = str(uuid.uuid4())[:8]
+        self.write_log(f"订单已发送: {order_id}")
+
+        # 发布订单事件
+        self.on_order({
+            "order_id": order_id,
+            "status": "submitted",
+            "data": order_req
+        })
+
+        return order_id
+
+    def cancel_order(self, order_id: str) -> None:
+        """取消订单"""
+        if not self._connected:
+            raise RuntimeError("网关未连接")
+
+        self.write_log(f"订单取消请求已发送: {order_id}")
+
+        # 发布订单取消事件
+        self.on_order({
+            "order_id": order_id,
+            "status": "cancelled"
+        })
+
+    def start(self) -> None:
+        """启动网关"""
+        self.connect()
+        self.start_heartbeat()
+
+    def stop(self) -> None:
+        """停止网关"""
+        self.cleanup()
 
 
 # ==============================================================================
@@ -421,6 +514,7 @@ Key Components:
    - Heartbeat mechanism with automatic reconnection
    - Connection lifecycle management
    - Thread-safe resource cleanup
+3. Gateway: Mock implementation for testing and demonstration
 
 Key Features:
 - Asynchronous connection support with sync/async compatibility
@@ -438,4 +532,5 @@ Improvements in this refactored version:
 - Added input validation throughout
 - Clear section organization for better maintainability
 - Added shutdown flag to prevent operations after cleanup
+- Added mock Gateway implementation for testing
 """

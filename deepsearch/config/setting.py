@@ -11,13 +11,13 @@
 """
 from __future__ import annotations
 
-import shutil
+import os
 import sys
 from pathlib import Path
-from typing import Any, Literal, List
+from typing import Any, Literal, List, Optional
 
 import yaml
-from platformdirs import user_config_path, user_log_path
+from platformdirs import user_log_path
 from pydantic import BaseModel, Field, PositiveInt, PostgresDsn, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -38,7 +38,6 @@ class AppConstants:
     """应用程序相关常量"""
     APP_NAME = "DeepSearch"
     APP_AUTHOR = "BaHb"
-    YAML_FILE_NAME = "settings.yaml"
     YAML_ENCODING = "utf-8"
 
     # 日志相关常量
@@ -46,24 +45,12 @@ class AppConstants:
     DEFAULT_LOG_ROTATION_TIME = "00:00"
 
     # 目录路径
-    CONFIG_DIR: Path = user_config_path(APP_NAME, appauthor=APP_AUTHOR)
     LOG_DIR: Path = user_log_path(APP_NAME, appauthor=APP_AUTHOR)
 
     @classmethod
     def ensure_directories(cls) -> None:
         """确保必要的目录存在"""
-        cls.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         cls.LOG_DIR.mkdir(parents=True, exist_ok=True)
-
-    @classmethod
-    def get_yaml_file_path(cls) -> Path:
-        """获取YAML配置文件路径"""
-        return cls.CONFIG_DIR / cls.YAML_FILE_NAME
-
-    @classmethod
-    def get_config_template_path(cls) -> Path:
-        """获取配置模板文件路径"""
-        return Path(__file__).parent / cls.YAML_FILE_NAME
 
 
 # 初始化目录
@@ -121,6 +108,44 @@ class BusInstanceConfig(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict, description="总线特定配置")
 
 
+class MonitoringConfig(BaseModel):
+    """监控配置"""
+    enable_metrics: bool = False
+    metrics_port: int = 9090
+
+
+class SecurityConfig(BaseModel):
+    """安全配置"""
+    enable_tls: bool = False
+    cert_file: Optional[str] = None
+    key_file: Optional[str] = None
+
+
+class PerformanceConfig(BaseModel):
+    """性能配置"""
+    max_workers: int = 32
+    queue_size: int = 10000
+    batch_size: int = 100
+
+
+class DebugConfig(BaseModel):
+    """调试配置"""
+    enable_profiling: bool = False
+    enable_tracing: bool = False
+    log_sql: bool = False
+
+
+class RedisConfig(BaseModel):
+    """Redis连接和存储配置"""
+    host: str = "localhost"
+    port: int = 6379
+    db: int = 0
+    password: Optional[str] = None
+    key_prefix: str = "deepsearch:ts:"
+    retention_ms: int = 86400000  # 24 hours
+    duplicate_policy: str = "LAST"
+
+
 class MessageBusConfig(BaseModel):
     """消息总线配置类"""
     buses: dict[str, BusInstanceConfig] = Field(
@@ -135,6 +160,9 @@ class MessageBusConfig(BaseModel):
     @staticmethod
     def _create_default_buses() -> dict[str, BusInstanceConfig]:
         """创建默认总线配置"""
+        # 获取 Redis 默认配置
+        redis_defaults = RedisConfig()
+        
         default_configs = {
             "zmq": {
                 "type": "zmq",
@@ -159,10 +187,12 @@ class MessageBusConfig(BaseModel):
                 "config": {
                     "url": "tcp://127.0.0.1:5555",
                     "storage_config": {
-                        "host": "localhost",
-                        "port": 6379,
-                        "db": 0,
-                        "key_prefix": "deepsearch:ts:"
+                        "host": redis_defaults.host,
+                        "port": redis_defaults.port,
+                        "db": redis_defaults.db,
+                        "key_prefix": redis_defaults.key_prefix,
+                        "retention_ms": redis_defaults.retention_ms,
+                        "duplicate_policy": redis_defaults.duplicate_policy
                     },
                     "enable_persistence": True
                 }
@@ -200,6 +230,10 @@ class Settings(BaseSettings):
     log: LogConfig = Field(default_factory=LogConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     message_bus: MessageBusConfig = Field(default_factory=MessageBusConfig)
+    monitoring: Optional[MonitoringConfig] = None
+    security: Optional[SecurityConfig] = None
+    performance: Optional[PerformanceConfig] = None
+    debug: Optional[DebugConfig] = None
 
     @property
     def zeromq(self) -> ZeroMQConfig:
@@ -222,10 +256,6 @@ class Settings(BaseSettings):
     @property
     def log_dir(self) -> Path:
         return AppConstants.LOG_DIR
-
-    @property
-    def config_dir(self) -> Path:
-        return AppConstants.CONFIG_DIR
 
     model_config = SettingsConfigDict(
         populate_by_name=True,
@@ -257,61 +287,31 @@ class Settings(BaseSettings):
 # ─────────────────────────────────────────────────────────────
 # YAML 文件管理 (YAML file management)
 # ─────────────────────────────────────────────────────────────
-def _create_basic_config() -> dict[str, Any]:
-    """创建基本配置字典"""
-    return {
-        "app": {
-            "env": "prod",
-            "name": AppConstants.APP_NAME,
-            "author": AppConstants.APP_AUTHOR
-        },
-        "log": {"level": "INFO", "active": True},
-        "database": {"url": None},
-        "message_bus": {
-            "buses": {
-                "zmq": {
-                    "type": "zmq",
-                    "enabled": True,
-                    "config": {
-                        "host": "127.0.0.1",
-                        "pub_port": 5556,
-                        "sub_port": 5557,
-                        "send_hwm": 1000,
-                        "recv_hwm": 1000,
-                        "verbose": True
-                    }
-                }
-            },
-            "routes": [{"match": "*", "buses": ["zmq"]}]
-        }
-    }
+
 
 
 def _ensure_yaml() -> dict[str, Any]:
-    """确保 YAML 文件存在且内容可用"""
-    yaml_file_path = AppConstants.get_yaml_file_path()
-    config_template_path = AppConstants.get_config_template_path()
+    """直接加载环境特定的配置文件"""
+    # 获取环境设置，默认为 prod
+    env = os.environ.get("APP__ENV", "prod")
 
-    if not yaml_file_path.exists():
-        try:
-            if config_template_path.exists():
-                shutil.copy2(config_template_path, yaml_file_path)
-                print(f"[Info] 已从模板创建配置文件: {yaml_file_path}")
-            else:
-                basic_config = _create_basic_config()
-                with yaml_file_path.open("w", encoding=AppConstants.YAML_ENCODING) as f:
-                    yaml.safe_dump(basic_config, f, sort_keys=False, allow_unicode=True)
-                print(f"[Warning] 模板文件不存在，已创建基本配置文件: {yaml_file_path}")
-        except Exception as exc:
-            print(f"[Error] 无法创建配置文件 {yaml_file_path}: {exc}", file=sys.stderr)
-            raise SystemExit(1)
+    # 构建环境特定的配置文件路径
+    env_config_path = Path(__file__).parent / f"settings.{env}.yaml"
 
+    # 检查配置文件是否存在
+    if not env_config_path.exists():
+        print(f"[Error] 环境配置文件不存在: {env_config_path}", file=sys.stderr)
+        print(f"[Info] 请确保存在 settings.{env}.yaml 文件", file=sys.stderr)
+        raise SystemExit(1)
+    
     try:
-        with yaml_file_path.open("r", encoding=AppConstants.YAML_ENCODING) as f:
-            return yaml.safe_load(f) or {}
+        with env_config_path.open("r", encoding=AppConstants.YAML_ENCODING) as f:
+            config = yaml.safe_load(f) or {}
+        print(f"[Info] 已加载环境配置: {env_config_path.name}")
+        return config
     except Exception as exc:
-        print(f"[Warning] 解析 {yaml_file_path} 失败: {exc}", file=sys.stderr)
-        return {}
+        print(f"[Error] 解析环境配置文件失败 {env_config_path}: {exc}", file=sys.stderr)
+        raise SystemExit(1)
 
 
 # ─────────────────────────────────────────────────────────────

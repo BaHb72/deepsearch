@@ -15,8 +15,8 @@ from typing import Any, Dict, List, Optional, Type, TypeVar
 from pydantic import BaseModel, Field, validator, ValidationError
 from pydantic.json_schema import JsonSchemaValue
 
-from deepsearch.event.const import EVENT_TICK, EVENT_ORDER, EVENT_TRADE, EVENT_POSITION, EVENT_ACCOUNT
-from deepsearch.event.engine import Event
+from .const import EVENT_TICK, EVENT_ORDER, EVENT_TRADE, EVENT_POSITION, EVENT_ACCOUNT
+from .engine import Event
 
 # ==============================================================================
 # Constants

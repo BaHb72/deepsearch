@@ -1,0 +1,90 @@
+# ─────────────────────────────
+# DeepSearch 开发环境配置
+# ─────────────────────────────
+
+app:
+  name: DeepSearch
+  author: BaHb
+  env: dev
+
+log:
+  active: true
+  level: DEBUG          # 开发环境使用 DEBUG 级别
+  rotation: "00:00"    # 每日 00:00 轮转
+  retention_days: 7
+  json: false          # 开发环境使用人类可读格式
+
+database:
+  url: null            # 开发环境使用 SQLite
+
+message_bus:
+  buses:
+    # --- ZeroMQ 消息总线 ---
+    zmq:
+      type: zmq
+      enabled: true
+      config:
+        host: 127.0.0.1
+        pub_port: 5556
+        sub_port: 5557
+        send_hwm: 1000
+        recv_hwm: 1000
+        verbose: true    # 开发环境启用详细日志
+    
+    # --- 内存总线 ---
+    inmem:
+      type: inmem
+      enabled: true      # 开发环境启用内存总线用于测试
+      config: { }
+    
+    # --- 时间序列总线 ---
+    timeseries:
+      type: timeseries
+      enabled: false     # 开发环境默认禁用，除非本地有 Redis
+      config:
+        host: 127.0.0.1
+        pub_port: 5558
+        sub_port: 5559
+        storage_config:
+          host: localhost
+          port: 6379
+          db: 0
+          key_prefix: "deepsearch:ts:"
+          retention_ms: 86400000  # 1 day for development
+          duplicate_policy: "LAST"
+        enable_persistence: true
+
+  # --- 路由规则 ---
+  routes:
+    - match: "*"           # 默认：全部消息发送到 zmq
+      buses: [ "zmq" ]
+
+# 开发环境特定配置
+debug:
+  enable_profiling: true   # 启用性能分析
+  enable_tracing: true     # 启用跟踪
+  log_sql: true           # 记录 SQL 查询
+
+# ═══════════════════════════════════════════════════════════════
+# 配置说明 (Configuration Notes)
+# ═══════════════════════════════════════════════════════════════
+# 
+# 1. 环境变量覆盖配置：
+#    - 使用双下划线分隔嵌套配置，例如：
+#      LOG__LEVEL=INFO
+#      MESSAGE_BUS__BUSES__ZMQ__CONFIG__HOST=10.0.0.5
+#      MESSAGE_BUS__ROUTES__0__BUSES='["zmq", "inmem"]'
+# 
+# 2. 消息总线类型说明：
+#    - inmem: 内存消息总线，适用于单进程内通信
+#    - zmq: ZeroMQ 消息总线，适用于高性能进程间通信
+#    - timeseries: 带持久化的 ZeroMQ 总线，数据存储到 Redis TimeSeries
+# 
+# 3. 路由匹配规则：
+#    - 使用 fnmatch 模式匹配
+#    - "*" 匹配任意字符
+#    - "?" 匹配单个字符
+#    - "[seq]" 匹配序列中的任意字符
+#    - 示例：
+#      - "data.*" 匹配 "data.stock", "data.news" 等
+#      - "event.user.*" 匹配 "event.user.login", "event.user.logout" 等

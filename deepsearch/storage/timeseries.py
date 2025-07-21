@@ -8,32 +8,27 @@ from typing import Any, Dict, List, Optional, Union
 import redis
 import redistimeseries.client as ts
 
+# Import configuration defaults
+from deepsearch.config.setting import RedisConfig
 from deepsearch.event.engine import Event
 
 # ==============================================================================
 # Constants
 # ==============================================================================
 
-# Key and suffix constants
+# Key and suffix constants (implementation details)
 MESSAGES_SUFFIX = ":messages"
-DEFAULT_KEY_PREFIX = "deepsearch:ts:"
 KEY_SEPARATOR = ":"
 
-# Time and retention constants
-DEFAULT_RETENTION_MS = 86400000  # 24 hours
+# Time constants (generic)
 MS_PER_SECOND = 1000
 
-# Redis constants
-DEFAULT_HOST = "localhost"
-DEFAULT_PORT = 6379
-DEFAULT_DB = 0
+# Redis-specific constants (implementation details)
 TTL_KEY_NOT_EXISTS = -2
-
-# Hash constants
 HASH_MASK = 0x7FFFFFFF
 
-# Default policies
-DEFAULT_DUPLICATE_POLICY = "LAST"
+# Get defaults from configuration
+_redis_defaults = RedisConfig()
 
 # ==============================================================================
 # Logging
@@ -60,13 +55,13 @@ class RedisTimeSeriesStorage:
     
     def __init__(
             self,
-            host: str = DEFAULT_HOST,
-            port: int = DEFAULT_PORT,
-            db: int = DEFAULT_DB,
+            host: str = None,
+            port: int = None,
+            db: int = None,
             password: Optional[str] = None,
-            key_prefix: str = DEFAULT_KEY_PREFIX,
-            retention_ms: int = DEFAULT_RETENTION_MS,
-            duplicate_policy: str = DEFAULT_DUPLICATE_POLICY,
+            key_prefix: str = None,
+            retention_ms: int = None,
+            duplicate_policy: str = None,
     ) -> None:
         """
         初始化 RedisTimeSeries 存储实例
@@ -79,23 +74,24 @@ class RedisTimeSeriesStorage:
         :param retention_ms: 数据保留时间（毫秒）
         :param duplicate_policy: 重复数据处理策略
         """
-        # Validate inputs
-        if port <= 0 or port > 65535:
-            raise ValueError(f"Invalid port number: {port}")
-        if db < 0:
-            raise ValueError(f"Invalid database number: {db}")
-        if retention_ms <= 0:
-            raise ValueError(f"Retention time must be positive: {retention_ms}")
-        if not key_prefix:
-            raise ValueError("Key prefix cannot be empty")
-            
-        self.host = host
-        self.port = port
-        self.db = db
+        # Use defaults from configuration if not provided
+        self.host = host if host is not None else _redis_defaults.host
+        self.port = port if port is not None else _redis_defaults.port
+        self.db = db if db is not None else _redis_defaults.db
         self.password = password
-        self.key_prefix = key_prefix
-        self.retention_ms = retention_ms
-        self.duplicate_policy = duplicate_policy
+        self.key_prefix = key_prefix if key_prefix is not None else _redis_defaults.key_prefix
+        self.retention_ms = retention_ms if retention_ms is not None else _redis_defaults.retention_ms
+        self.duplicate_policy = duplicate_policy if duplicate_policy is not None else _redis_defaults.duplicate_policy
+        
+        # Validate inputs
+        if self.port <= 0 or self.port > 65535:
+            raise ValueError(f"Invalid port number: {self.port}")
+        if self.db < 0:
+            raise ValueError(f"Invalid database number: {self.db}")
+        if self.retention_ms <= 0:
+            raise ValueError(f"Retention time must be positive: {self.retention_ms}")
+        if not self.key_prefix:
+            raise ValueError("Key prefix cannot be empty")
 
         # Initialize clients
         self.redis_client: Optional[redis.Redis] = None

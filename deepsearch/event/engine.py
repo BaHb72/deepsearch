@@ -49,7 +49,7 @@ from itertools import count
 from queue import Empty, Full, PriorityQueue
 from typing import Callable, Dict, List, Tuple, Optional
 
-from deepsearch.event.const import EVENT_SYSTEM_EXIT
+from .const import EVENT_SYSTEM_EXIT
 
 # ==============================================================================
 # Constants
@@ -413,7 +413,7 @@ class EventEngine:
         # Shutdown executor
         if self._executor:
             try:
-                self._executor.shutdown(wait=True, timeout=timeout)
+                self._executor.shutdown(wait=True)
             except Exception as e:
                 logger.error(f"Error shutting down executor: {e}")
             finally:
@@ -604,7 +604,10 @@ class EventEngine:
         """事件分发器线程主循环"""
         while self._running:
             try:
-                _, _, ev = self._queue.get(timeout=DISPATCHER_TIMEOUT)
+                # Use shorter timeout when batch processing is enabled
+                timeout = min(self._batch_timeout,
+                              DISPATCHER_TIMEOUT) if self._enable_batch_processing else DISPATCHER_TIMEOUT
+                _, _, ev = self._queue.get(timeout=timeout)
             except Empty:
                 # Check if we need to flush batches on timeout
                 if self._enable_batch_processing:
@@ -654,12 +657,17 @@ class EventEngine:
 
     def _add_to_batch(self, ev: Event) -> None:
         """Add event to batch and process if batch is full"""
+        should_process = False
         with self._batch_lock:
             self._event_batches[ev.type].append(ev)
 
             # Check if batch is full
             if len(self._event_batches[ev.type]) >= self._batch_size:
-                self._process_batch(ev.type)
+                should_process = True
+
+        # Process batch outside of lock to avoid deadlock
+        if should_process:
+            self._process_batch(ev.type)
 
     def _process_batch(self, event_type: str) -> None:
         """Process a batch of events for a specific type"""
