@@ -381,6 +381,102 @@ class ZeroMQMessageBus(AbstractMessageBus):
 
 
 # ==============================================================================
+# Persistence Rules
+# ==============================================================================
+
+
+class PersistenceRule:
+    """持久化规则基类"""
+
+    def should_persist(self, topic: str, event: Event) -> bool:
+        """判断是否应该持久化"""
+        raise NotImplementedError
+
+
+class AlwaysPersist(PersistenceRule):
+    """总是持久化"""
+
+    def should_persist(self, topic: str, event: Event) -> bool:
+        return True
+
+
+class NeverPersist(PersistenceRule):
+    """从不持久化"""
+
+    def should_persist(self, topic: str, event: Event) -> bool:
+        return False
+
+
+class TopicBasedPersist(PersistenceRule):
+    """基于主题的持久化规则"""
+
+    def __init__(self, persist_topics: List[str] = None, exclude_topics: List[str] = None):
+        self.persist_topics = set(persist_topics or [])
+        self.exclude_topics = set(exclude_topics or [])
+
+    def should_persist(self, topic: str, event: Event) -> bool:
+        if self.exclude_topics and topic in self.exclude_topics:
+            return False
+        if self.persist_topics:
+            return topic in self.persist_topics
+        return True
+
+
+class EventTypeBasedPersist(PersistenceRule):
+    """基于事件类型的持久化规则"""
+
+    def __init__(self, persist_types: List[str] = None, exclude_types: List[str] = None):
+        self.persist_types = set(persist_types or [])
+        self.exclude_types = set(exclude_types or [])
+
+    def should_persist(self, topic: str, event: Event) -> bool:
+        if self.exclude_types and event.type in self.exclude_types:
+            return False
+        if self.persist_types:
+            return event.type in self.persist_types
+        return True
+
+
+class SamplingPersist(PersistenceRule):
+    """采样持久化规则（用于高频数据）"""
+
+    def __init__(self, sample_rate: float = 0.1):
+        """
+        :param sample_rate: 采样率，0.1表示10%的消息会被持久化
+        """
+        self.sample_rate = max(0.0, min(1.0, sample_rate))
+        self._counter = 0
+        self._threshold = int(1 / self.sample_rate) if self.sample_rate > 0 else 0
+
+    def should_persist(self, topic: str, event: Event) -> bool:
+        if self.sample_rate <= 0:
+            return False
+        if self.sample_rate >= 1:
+            return True
+
+        self._counter += 1
+        return self._counter % self._threshold == 0
+
+
+class CompositePersistenceRule(PersistenceRule):
+    """组合持久化规则"""
+
+    def __init__(self, rules: List[PersistenceRule], mode: str = "all"):
+        """
+        :param rules: 规则列表
+        :param mode: "all" - 所有规则都满足才持久化, "any" - 任一规则满足就持久化
+        """
+        self.rules = rules
+        self.mode = mode
+
+    def should_persist(self, topic: str, event: Event) -> bool:
+        if self.mode == "all":
+            return all(rule.should_persist(topic, event) for rule in self.rules)
+        else:  # any
+            return any(rule.should_persist(topic, event) for rule in self.rules)
+
+
+# ==============================================================================
 # Time Series Enhanced ZeroMQ Bus
 # ==============================================================================
 
@@ -399,6 +495,7 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
             sub_port: int = DEFAULT_SUB_PORT,
             storage_config: Optional[Dict[str, Any]] = None,
             enable_persistence: bool = True,
+            persistence_rule: Optional[PersistenceRule] = None,
     ) -> None:
         """
         初始化支持 RedisTimeSeries 持久化的 ZeroMQ 消息总线
@@ -407,6 +504,7 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
         :param sub_port: 订阅端口
         :param storage_config: RedisTimeSeries 配置参数
         :param enable_persistence: 是否启用消息持久化
+        :param persistence_rule: 持久化规则，默认为 AlwaysPersist
         """
         # 创建ZeroMQ配置对象传递给父类
         from config.setting import ZeroMQConfig
@@ -418,6 +516,7 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
         super().__init__(config=zeromq_config)
         self.enable_persistence = enable_persistence
         self.storage: Optional[RedisTimeSeriesStorage] = None
+        self.persistence_rule = persistence_rule or AlwaysPersist()
 
         if enable_persistence:
             self._initialize_storage(storage_config or {})
@@ -453,16 +552,40 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
     # Message Publishing with Persistence
     # --------------------------------------------------------------------------
 
-    def publish(self, topic: str, event: Union[Event, Any]) -> None:
+    def publish(self, topic: str, event: Union[Event, Any], persist: Optional[bool] = None) -> None:
         """
-        发布事件到消息总线，并持久化到 RedisTimeSeries
+        发布事件到消息总线，根据持久化规则决定是否持久化到 RedisTimeSeries
+        
         :param topic: 主题
         :param event: 事件对象或数据
+        :param persist: 强制持久化标志（None=使用规则，True=强制持久化，False=强制不持久化）
         """
         super().publish(topic, event)
 
-        if self._is_persistence_available():
-            event_obj = self._ensure_event_object(event, topic)
+        if not self._is_persistence_available():
+            return
+
+        event_obj = self._ensure_event_object(event, topic)
+
+        # 决定是否持久化
+        should_persist = False
+
+        if persist is not None:
+            # 如果显式指定了 persist 参数，使用该参数
+            should_persist = persist
+        else:
+            # 检查事件对象是否有 _persist 标记
+            if hasattr(event_obj, 'data') and isinstance(event_obj.data, dict):
+                if '_persist' in event_obj.data:
+                    should_persist = event_obj.data.get('_persist', False)
+                else:
+                    # 使用持久化规则
+                    should_persist = self.persistence_rule.should_persist(topic, event_obj)
+            else:
+                # 使用持久化规则
+                should_persist = self.persistence_rule.should_persist(topic, event_obj)
+
+        if should_persist:
             try:
                 self.storage.store_event(event_obj, topic=topic, source="zeromq")
             except Exception as e:
