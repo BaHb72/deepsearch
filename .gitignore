@@ -46,7 +46,13 @@ Thumbs.db
 
 # Project specific
 config/settings.local.yaml
+settings.local.yaml
+settings.*.local.yaml
 *.db
 *.sqlite
 uv.lock
 /.claude/
+*_old.py
+*.bak
+/temp/
+/tmp/

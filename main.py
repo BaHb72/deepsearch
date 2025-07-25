@@ -8,8 +8,8 @@ DeepSearch - 量化交易事件系统主入口
 import logging
 import sys
 
+from deepsearch.constants import EVENT_SYSTEM_READY, EVENT_TICK, EVENT_ORDER, EVENT_TRADE
 from deepsearch.core import MainEngine
-from deepsearch.event.const import EVENT_SYSTEM_READY, EVENT_TICK, EVENT_ORDER, EVENT_TRADE
 
 
 def setup_default_handlers(engine: MainEngine) -> None:

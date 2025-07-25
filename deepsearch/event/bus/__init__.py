@@ -1,16 +1,32 @@
-"""消息总线模块
-
-包含各种消息总线实现，用于事件传递和处理。
 """
+Message bus module - Compatibility layer.
 
-from .bus import (
-    AbstractMessageBus,
-    CompositeMessageBus,
-    InMemoryMessageBus,
-    TimeSeriesZeroMQBus,
-    ZeroMQMessageBus,
+This module has been reorganized. The implementations have moved to:
+- deepsearch.messaging
+
+This file provides backward compatibility imports.
+"""
+import warnings
+
+# Issue deprecation warning
+warnings.warn(
+    "Importing from deepsearch.event.bus is deprecated. "
+    "Please use 'from deepsearch.messaging import ...' instead.",
+    DeprecationWarning,
+    stacklevel=2
 )
-from .type import BusName
+
+# Import from new location
+from deepsearch.messaging import (
+    MessageBus as AbstractMessageBus,
+    InMemoryMessageBus,
+    ZeroMQMessageBus,
+    BusName,
+)
+from deepsearch.messaging.bus import CompositeMessageBus
+
+# TimeSeriesZeroMQBus will remain here temporarily as it has storage dependencies
+from .bus import TimeSeriesZeroMQBus
 
 __all__ = [
     "AbstractMessageBus",

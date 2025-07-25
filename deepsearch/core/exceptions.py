@@ -1,18 +1,18 @@
 """
-Custom exceptions for DeepSearch application.
+DeepSearch 应用程序的自定义异常。
 
-This module defines a hierarchy of exceptions for better error handling
-and debugging throughout the application.
+本模块定义了一套异常层次结构，用于在整个应用程序中
+提供更好的错误处理和调试支持。
 """
 from typing import Any, Dict, Optional
 
 
 class DeepSearchError(Exception):
     """
-    Base exception for all DeepSearch errors.
+    所有 DeepSearch 错误的基类。
     
-    All custom exceptions should inherit from this class to allow
-    catching all DeepSearch-specific errors with a single except clause.
+    所有自定义异常都应该继承自这个类，这样可以通过
+    单个 except 语句捕获所有 DeepSearch 特定的错误。
     """
 
     def __init__(
@@ -22,12 +22,12 @@ class DeepSearchError(Exception):
             details: Optional[Dict[str, Any]] = None
     ):
         """
-        Initialize DeepSearch error.
+        初始化 DeepSearch 错误。
         
-        Args:
-            message: Error message
-            error_code: Optional error code for programmatic handling
-            details: Optional dictionary with additional error details
+        参数：
+            message: 错误消息
+            error_code: 可选的错误码，用于程序化处理
+            details: 可选的字典，包含额外的错误详情
         """
         super().__init__(message)
         self.message = message
@@ -35,13 +35,13 @@ class DeepSearchError(Exception):
         self.details = details or {}
 
     def __str__(self) -> str:
-        """String representation of the error."""
+        """错误的字符串表示。"""
         if self.error_code:
             return f"[{self.error_code}] {self.message}"
         return self.message
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert error to dictionary for serialization."""
+        """将错误转换为字典以便序列化。"""
         return {
             "error": self.__class__.__name__,
             "message": self.message,
@@ -51,97 +51,97 @@ class DeepSearchError(Exception):
 
 
 # ==============================================================================
-# Configuration Errors
+# 配置错误
 # ==============================================================================
 
 
 class ConfigurationError(DeepSearchError):
-    """Raised when there's an issue with configuration."""
+    """配置存在问题时引发。"""
     pass
 
 
 class InvalidConfigError(ConfigurationError):
-    """Raised when configuration values are invalid."""
+    """配置值无效时引发。"""
     pass
 
 
 class MissingConfigError(ConfigurationError):
-    """Raised when required configuration is missing."""
+    """缺少必需的配置时引发。"""
     pass
 
 
 # ==============================================================================
-# Validation Errors
+# 验证错误
 # ==============================================================================
 
 
 class ValidationError(DeepSearchError):
-    """Raised when data validation fails."""
+    """数据验证失败时引发。"""
     pass
 
 
 class SchemaValidationError(ValidationError):
-    """Raised when event data doesn't match schema."""
+    """事件数据不符合模式时引发。"""
     pass
 
 
 class FieldValidationError(ValidationError):
-    """Raised when a specific field fails validation."""
+    """特定字段验证失败时引发。"""
 
     def __init__(self, field: str, value: Any, reason: str, **kwargs):
         super().__init__(
-            f"Field '{field}' validation failed: {reason}",
+            f"字段 '{field}' 验证失败：{reason}",
             details={"field": field, "value": value, "reason": reason},
             **kwargs
         )
 
 
 # ==============================================================================
-# Connection Errors
+# 连接错误
 # ==============================================================================
 
 
 class ConnectionError(DeepSearchError):
-    """Raised when connection to external service fails."""
+    """连接到外部服务失败时引发。"""
     pass
 
 
 class NetworkError(ConnectionError):
-    """Raised when network communication fails."""
+    """网络通信失败时引发。"""
     pass
 
 
 class TimeoutError(ConnectionError):
-    """Raised when operation times out."""
+    """操作超时时引发。"""
     pass
 
 
 class AuthenticationError(ConnectionError):
-    """Raised when authentication fails."""
+    """认证失败时引发。"""
     pass
 
 
 # ==============================================================================
-# Event System Errors
+# 事件系统错误
 # ==============================================================================
 
 
 class EventError(DeepSearchError):
-    """Base class for event system errors."""
+    """事件系统错误的基类。"""
     pass
 
 
 class EventQueueFullError(EventError):
-    """Raised when event queue is full."""
+    """事件队列已满时引发。"""
     pass
 
 
 class EventHandlerError(EventError):
-    """Raised when event handler fails."""
+    """事件处理器失败时引发。"""
 
     def __init__(self, handler_name: str, event_type: str, original_error: Exception, **kwargs):
         super().__init__(
-            f"Handler '{handler_name}' failed for event '{event_type}': {original_error}",
+            f"处理器 '{handler_name}' 处理事件 '{event_type}' 失败：{original_error}",
             details={
                 "handler": handler_name,
                 "event_type": event_type,
@@ -152,92 +152,92 @@ class EventHandlerError(EventError):
 
 
 class EventValidationError(EventError):
-    """Raised when event validation fails."""
+    """事件验证失败时引发。"""
     pass
 
 
 # ==============================================================================
-# Storage Errors
+# 存储错误
 # ==============================================================================
 
 
 class StorageError(DeepSearchError):
-    """Base class for storage-related errors."""
+    """存储相关错误的基类。"""
     pass
 
 
 class StorageConnectionError(StorageError):
-    """Raised when connection to storage fails."""
+    """连接到存储失败时引发。"""
     pass
 
 
 class StorageReadError(StorageError):
-    """Raised when reading from storage fails."""
+    """从存储读取失败时引发。"""
     pass
 
 
 class StorageWriteError(StorageError):
-    """Raised when writing to storage fails."""
+    """写入存储失败时引发。"""
     pass
 
 
 class StorageNotFoundError(StorageError):
-    """Raised when requested data is not found in storage."""
+    """在存储中找不到请求的数据时引发。"""
     pass
 
 
 # ==============================================================================
-# Gateway Errors
+# 网关错误
 # ==============================================================================
 
 
 class GatewayError(DeepSearchError):
-    """Base class for gateway-related errors."""
+    """网关相关错误的基类。"""
     pass
 
 
 class GatewayConnectionError(GatewayError):
-    """Raised when gateway connection fails."""
+    """网关连接失败时引发。"""
     pass
 
 
 class GatewayAuthError(GatewayError):
-    """Raised when gateway authentication fails."""
+    """网关认证失败时引发。"""
     pass
 
 
 class GatewayOrderError(GatewayError):
-    """Raised when order submission fails."""
+    """订单提交失败时引发。"""
 
     def __init__(self, order_id: str, reason: str, **kwargs):
         super().__init__(
-            f"Order '{order_id}' failed: {reason}",
+            f"订单 '{order_id}' 失败：{reason}",
             details={"order_id": order_id, "reason": reason},
             **kwargs
         )
 
 
 class GatewayDataError(GatewayError):
-    """Raised when market data reception fails."""
+    """市场数据接收失败时引发。"""
     pass
 
 
 # ==============================================================================
-# Trading Errors
+# 交易错误
 # ==============================================================================
 
 
 class TradingError(DeepSearchError):
-    """Base class for trading-related errors."""
+    """交易相关错误的基类。"""
     pass
 
 
 class InsufficientBalanceError(TradingError):
-    """Raised when account has insufficient balance."""
+    """账户余额不足时引发。"""
 
     def __init__(self, required: float, available: float, currency: str, **kwargs):
         super().__init__(
-            f"Insufficient {currency} balance: required {required}, available {available}",
+            f"{currency} 余额不足：需要 {required}，可用 {available}",
             details={
                 "required": required,
                 "available": available,
@@ -248,70 +248,70 @@ class InsufficientBalanceError(TradingError):
 
 
 class PositionLimitError(TradingError):
-    """Raised when position limit is exceeded."""
+    """超出持仓限制时引发。"""
     pass
 
 
 class RiskLimitError(TradingError):
-    """Raised when risk limit is exceeded."""
+    """超出风险限制时引发。"""
     pass
 
 
 class InvalidOrderError(TradingError):
-    """Raised when order parameters are invalid."""
+    """订单参数无效时引发。"""
     pass
 
 
 # ==============================================================================
-# System Errors
+# 系统错误
 # ==============================================================================
 
 
 class SystemError(DeepSearchError):
-    """Base class for system-level errors."""
+    """系统级错误的基类。"""
     pass
 
 
 class StartupError(SystemError):
-    """Raised when system startup fails."""
+    """系统启动失败时引发。"""
     pass
 
 
 class ShutdownError(SystemError):
-    """Raised when system shutdown fails."""
+    """系统关闭失败时引发。"""
     pass
 
 
 class ResourceError(SystemError):
-    """Raised when system resource is unavailable."""
+    """系统资源不可用时引发。"""
     pass
 
 
 # ==============================================================================
-# Utility Functions
+# 工具函数
 # ==============================================================================
 
 
 def reraise_with_context(original_error: Exception, context: str, **details) -> None:
     """
-    Re-raise an exception with additional context.
+    重新引发异常并附加额外的上下文信息。
     
-    Args:
-        original_error: The original exception
-        context: Additional context message
-        **details: Additional details to include
+    参数：
+        original_error: 原始异常
+        context: 额外的上下文消息
+        **details: 要包含的额外详情
     """
     error_class = type(original_error)
 
-    # If it's already a DeepSearchError, preserve its details
+    # 如果已经是 DeepSearchError，保留其详情
     if isinstance(original_error, DeepSearchError):
-        original_error.message = f"{context}: {original_error.message}"
+        original_error.message = f"{context}：{original_error.message}"
         original_error.details.update(details)
         raise original_error
 
-    # Otherwise, wrap it in a DeepSearchError
+    # 否则，将其包装在 DeepSearchError 中
     raise DeepSearchError(
-        f"{context}: {original_error}",
+        f"{context}：{original_error}",
         details={
             "original_error": str(original_error),
             "original_type": error_class.__name__,

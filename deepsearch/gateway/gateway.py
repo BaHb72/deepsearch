@@ -9,8 +9,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Optional, Any
 
-from deepsearch.event.bus.bus import CompositeMessageBus
-from deepsearch.event.const import (
+from deepsearch.constants import (
     EVENT_TICK,
     EVENT_ORDER,
     EVENT_TRADE,
@@ -18,6 +17,7 @@ from deepsearch.event.const import (
     EVENT_LOG,
 )
 from deepsearch.event.engine import Event
+from deepsearch.messaging.bus import CompositeMessageBus
 
 # ==============================================================================
 # Constants

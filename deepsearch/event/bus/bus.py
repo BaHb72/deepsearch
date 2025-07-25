@@ -11,8 +11,8 @@ from typing import Any, Callable, TypeVar, Protocol, Optional, Dict, List, Union
 
 import zmq
 
-from deepsearch.config.setting import RouteConfig
-from .type import BusName
+from deepsearch.config.models import RouteConfig
+from deepsearch.messaging.types import BusName
 
 if TYPE_CHECKING:  # pragma: no cover - 类型检查时导入
     from deepsearch.event.engine import Event

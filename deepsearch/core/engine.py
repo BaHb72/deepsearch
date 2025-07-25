@@ -9,13 +9,13 @@ import signal
 import time
 from typing import Dict, Any, Optional, Callable, List
 
-from deepsearch.config.setting import settings
+from deepsearch.config import settings
+from deepsearch.constants import EVENT_SYSTEM_READY, EVENT_SYSTEM_EXIT
 from deepsearch.core.exceptions import DeepSearchError
-from deepsearch.event.bus.bus import CompositeMessageBus
-from deepsearch.event.const import EVENT_SYSTEM_READY, EVENT_SYSTEM_EXIT
-from deepsearch.event.engine import EventEngine, Event
-from deepsearch.event.monitoring import EventSystemMonitor
+from deepsearch.event.engine import Event, EventEngine
 from deepsearch.gateway.gateway import Gateway
+from deepsearch.messaging.bus import CompositeMessageBus
+from deepsearch.monitoring import EventSystemMonitor
 from deepsearch.observability.logger import logger_manager
 
 
