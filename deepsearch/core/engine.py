@@ -4,8 +4,10 @@
 该模块提供了MainEngine类，作为整个DeepSearch系统的核心管理器，
 负责初始化、启动、停止和协调所有子系统组件。
 """
+import asyncio
 import logging
 import signal
+import threading
 import time
 from typing import Dict, Any, Optional, Callable, List
 
@@ -47,6 +49,7 @@ class MainEngine:
         self._message_bus: Optional[CompositeMessageBus] = None
         self._monitor: Optional[EventSystemMonitor] = None
         self._gateway: Optional[Gateway] = None
+        self._webui_server = None  # WebUI服务器实例
 
         # 状态标记
         self._initialized = False
@@ -258,6 +261,9 @@ class MainEngine:
             self._gateway.start()
             self._logger.info("Gateway started")
 
+            # 启动WebUI后端服务器
+            self._start_webui_server()
+
             # 发送系统就绪事件
             self._event_engine.put(Event(
                 type=EVENT_SYSTEM_READY,
@@ -296,6 +302,9 @@ class MainEngine:
                 time.sleep(0.1)
             except Exception as e:
                 self._logger.error(f"Error sending system exit event: {e}")
+
+        # 停止WebUI服务器
+        self._stop_webui_server()
 
         # 按相反顺序停止组件
         components = [
@@ -346,6 +355,11 @@ class MainEngine:
         """检查引擎是否正在运行"""
         return self._running
 
+    @property
+    def event_engine(self) -> Optional[EventEngine]:
+        """获取事件引擎实例"""
+        return self._event_engine
+
     def get_component(self, name: str) -> Any:
         """
         获取组件实例
@@ -365,6 +379,66 @@ class MainEngine:
             raise ValueError(f"Unknown component: {name}")
 
         return component
+
+    def _start_webui_server(self) -> None:
+        """启动WebUI后端服务器"""
+        try:
+            self._logger.info("Starting WebUI server...")
+
+            # 创建一个线程来运行uvicorn服务器
+            def run_server():
+                import uvicorn
+                from deepsearch.webui.server import app, set_engine
+
+                # 将当前引擎实例传递给WebUI
+                set_engine(self)
+
+                # 创建新的事件循环
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # 配置uvicorn - 确保WebSocket支持
+                config = uvicorn.Config(
+                    app=app,
+                    host="0.0.0.0",
+                    port=8000,
+                    log_level="info",
+                    access_log=False,  # 减少日志输出
+                    ws="websockets",  # 明确指定使用websockets
+                    reload=False  # 在线程中运行时禁用reload
+                )
+                server = uvicorn.Server(config)
+
+                # 保存服务器实例以便后续停止
+                self._webui_server = server
+
+                # 运行服务器
+                loop.run_until_complete(server.serve())
+
+            # 在后台线程中启动服务器
+            self._webui_thread = threading.Thread(target=run_server, daemon=True)
+            self._webui_thread.start()
+
+            # 等待服务器启动
+            time.sleep(2)
+            self._logger.info("WebUI server started on http://localhost:8000")
+
+        except Exception as e:
+            self._logger.error(f"Failed to start WebUI server: {e}", exc_info=True)
+            # WebUI启动失败不应该影响主系统运行
+
+    def _stop_webui_server(self) -> None:
+        """停止WebUI后端服务器"""
+        if self._webui_server:
+            try:
+                self._logger.info("Stopping WebUI server...")
+                self._webui_server.should_exit = True
+                # 等待线程结束
+                if hasattr(self, '_webui_thread') and self._webui_thread.is_alive():
+                    self._webui_thread.join(timeout=5)
+                self._logger.info("WebUI server stopped")
+            except Exception as e:
+                self._logger.error(f"Error stopping WebUI server: {e}")
 
     def get_statistics(self) -> Dict[str, Any]:
         """

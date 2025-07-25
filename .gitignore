@@ -56,3 +56,5 @@ uv.lock
 *.bak
 /temp/
 /tmp/
+/deepsearch/webui/frontend/node_modules/
+/deepsearch/webui/frontend/package-lock.json
