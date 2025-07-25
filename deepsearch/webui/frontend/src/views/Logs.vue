@@ -70,7 +70,7 @@
 </template>
 
 <script setup>
-import {ref, computed, onMounted, onUnmounted, nextTick} from 'vue'
+import {computed, nextTick, onMounted, onUnmounted, ref} from 'vue'
 import {Search} from '@element-plus/icons-vue'
 import {ElMessage} from 'element-plus'
 
@@ -113,7 +113,9 @@ const mockLog = () => {
     nextTick(() => {
       if (logContainer.value) {
         const content = logContainer.value.querySelector('.log-content')
-        content.scrollTop = content.scrollHeight
+        if (content) {
+          content.scrollTop = content.scrollHeight
+        }
       }
     })
   }

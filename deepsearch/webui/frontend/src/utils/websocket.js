@@ -39,13 +39,17 @@ export class WebSocketManager {
         }
 
         this.isConnecting = true
-        console.log('正在连接 WebSocket:', this.url)
+
+        // 只在第一次连接时显示日志
+        if (this.reconnectAttempts === 0) {
+            console.log('正在连接 WebSocket:', this.url)
+        }
 
         try {
             this.ws = new WebSocket(this.url)
             this.setupEventHandlers()
         } catch (error) {
-            console.error('WebSocket 连接失败:', error)
+            // 静默处理连接失败
             this.isConnecting = false
             this.scheduleReconnect()
         }
@@ -74,7 +78,7 @@ export class WebSocketManager {
         }
 
         this.ws.onclose = (event) => {
-            console.log('WebSocket 已断开')
+            // 静默处理关闭，避免控制台噪音
             this.cleanup()
             this.emit('close', event)
 
@@ -84,7 +88,11 @@ export class WebSocketManager {
         }
 
         this.ws.onerror = (event) => {
-            console.error('WebSocket 错误:', event)
+            // 静默处理错误，特别是连接失败的情况
+            // 只在第一次连接失败时显示提示
+            if (this.reconnectAttempts === 0) {
+                console.debug('WebSocket 连接失败，将自动重试')
+            }
             this.emit('error', event)
         }
     }
@@ -134,14 +142,19 @@ export class WebSocketManager {
      */
     scheduleReconnect() {
         if (!this.shouldReconnect || this.reconnectAttempts >= this.options.maxReconnectAttempts) {
-            console.log('已达到最大重连次数，停止重连')
+            if (this.reconnectAttempts >= this.options.maxReconnectAttempts) {
+                console.debug('WebSocket: 已达到最大重连次数')
+            }
             return
         }
 
         this.reconnectAttempts++
         const delay = Math.min(this.options.reconnectInterval * this.reconnectAttempts, 30000)
 
-        console.log(`将在 ${delay}ms 后尝试第 ${this.reconnectAttempts} 次重连`)
+        // 只在前几次重连时显示日志
+        if (this.reconnectAttempts <= 3) {
+            console.debug(`WebSocket: 将在 ${delay}ms 后重连`)
+        }
 
         this.reconnectTimer = setTimeout(() => {
             this.connect()

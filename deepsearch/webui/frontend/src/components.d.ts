@@ -15,9 +15,13 @@ declare module 'vue' {
         ElCol: typeof import('element-plus/es')['ElCol']
         ElConfigProvider: typeof import('element-plus/es')['ElConfigProvider']
         ElContainer: typeof import('element-plus/es')['ElContainer']
+        ElDatePicker: typeof import('element-plus/es')['ElDatePicker']
+        ElForm: typeof import('element-plus/es')['ElForm']
+        ElFormItem: typeof import('element-plus/es')['ElFormItem']
         ElHeader: typeof import('element-plus/es')['ElHeader']
         ElIcon: typeof import('element-plus/es')['ElIcon']
         ElInput: typeof import('element-plus/es')['ElInput']
+        ElInputNumber: typeof import('element-plus/es')['ElInputNumber']
         ElMain: typeof import('element-plus/es')['ElMain']
         ElMenu: typeof import('element-plus/es')['ElMenu']
         ElMenuItem: typeof import('element-plus/es')['ElMenuItem']
@@ -28,10 +32,16 @@ declare module 'vue' {
         ElSwitch: typeof import('element-plus/es')['ElSwitch']
         ElTable: typeof import('element-plus/es')['ElTable']
         ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
+        ElTabPane: typeof import('element-plus/es')['ElTabPane']
+        ElTabs: typeof import('element-plus/es')['ElTabs']
         ElTag: typeof import('element-plus/es')['ElTag']
         ElTimeline: typeof import('element-plus/es')['ElTimeline']
         ElTimelineItem: typeof import('element-plus/es')['ElTimelineItem']
         RouterLink: typeof import('vue-router')['RouterLink']
         RouterView: typeof import('vue-router')['RouterView']
+    }
+
+    export interface ComponentCustomProperties {
+        vLoading: typeof import('element-plus/es')['ElLoadingDirective']
     }
 }

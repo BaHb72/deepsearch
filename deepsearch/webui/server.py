@@ -9,7 +9,7 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +17,6 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
-from deepsearch.config import settings
 from deepsearch.core import MainEngine
 from deepsearch.monitoring import EventSystemMonitor, MonitorAPI
 
@@ -110,11 +109,14 @@ def set_engine(external_engine: MainEngine):
     """设置外部传入的MainEngine实例"""
     global engine
     engine = external_engine
+    logger.info(f"Engine已设置: {engine}")
 
 
 # 获取全局对象的函数
 def get_engine():
     """获取引擎实例"""
+    if engine is None:
+        logger.warning("Engine未设置，返回None")
     return engine
 
 

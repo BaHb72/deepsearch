@@ -30,9 +30,11 @@ request.interceptors.response.use(
         return res
     },
     error => {
-        console.error('响应错误:', error)
-
+        // 不要在控制台显示每个错误
+        
         let message = '请求失败'
+        let showError = true
+        
         if (error.response) {
             switch (error.response.status) {
                 case 400:
@@ -57,10 +59,24 @@ request.interceptors.response.use(
                     message = error.response.data?.detail || error.response.data?.message || '请求失败'
             }
         } else if (error.request) {
-            message = '网络错误，请检查网络连接'
+            // 网络错误（包括后端未启动）
+            message = '无法连接到后端服务，请确保后端已启动'
+            // 对于某些周期性请求（如状态轮询），不显示错误
+            if (error.config?.url?.includes('/status') ||
+                error.config?.url?.includes('/statistics')) {
+                showError = false
+                console.debug('后端服务未就绪')
+            }
         }
 
-        ElMessage.error(message)
+        if (showError) {
+            ElMessage.error({
+                message,
+                duration: 3000,
+                showClose: true
+            })
+        }
+        
         return Promise.reject(error)
     }
 )

@@ -74,7 +74,7 @@
                       type="success"
                       @click="handleSystemStart"
                   >
-                    启动系统
+                    启动引擎
                   </el-button>
                   <el-button
                       v-else
@@ -83,7 +83,7 @@
                       type="danger"
                       @click="handleSystemStop"
                   >
-                    停止系统
+                    停止引擎
                   </el-button>
                 </el-button-group>
 
@@ -114,10 +114,10 @@
 </template>
 
 <script setup>
-import {ref, computed, onMounted, onUnmounted} from 'vue'
+import {computed, onMounted, onUnmounted, ref} from 'vue'
 import {useRoute} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
-import {Monitor, List, Setting, Document, TrendCharts, Moon, Sunny} from '@element-plus/icons-vue'
+import {Document, List, Monitor, Moon, Setting, Sunny, TrendCharts} from '@element-plus/icons-vue'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import {useSystemStore} from '@/stores/system'
 import {startSystem, stopSystem} from '@/api/system'
@@ -188,8 +188,8 @@ const handleSystemStart = async () => {
 const handleSystemStop = async () => {
   try {
     await ElMessageBox.confirm(
-        '确定要停止系统吗？这将停止所有交易活动。',
-        '系统提示',
+        '确定要停止交易引擎吗？这将停止所有交易活动，但WebUI仍会继续运行。',
+        '停止交易引擎',
         {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
@@ -239,112 +239,254 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss">
-/* 全局样式 */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html, body, #app {
-  height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-}
-
 /* 布局容器 */
 .layout-container {
   height: 100vh;
+  background: var(--bg-color);
 }
 
 /* 侧边栏 */
 .layout-aside {
-  background-color: #304156;
+  background: linear-gradient(180deg, #2b3144 0%, #1f2332 100%);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s;
 
   .logo {
-    height: 60px;
+    height: 64px;
     display: flex;
     align-items: center;
     justify-content: center;
+    background: rgba(0, 0, 0, 0.2);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+      animation: shimmer 3s infinite;
+    }
 
     h2 {
       color: #fff;
-      font-size: 20px;
-      font-weight: 600;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      z-index: 1;
     }
   }
 
   .el-menu {
     border-right: none;
-    height: calc(100% - 60px);
+    background: transparent;
+    height: calc(100% - 64px);
+
+    .el-menu-item {
+      color: rgba(255, 255, 255, 0.8);
+      transition: all 0.3s;
+      position: relative;
+
+      &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--primary-color);
+        transform: scaleY(0);
+        transition: transform 0.3s;
+      }
+
+      &:hover {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      &.is-active {
+        color: #fff;
+        background: rgba(64, 158, 255, 0.2);
+
+        &::before {
+          transform: scaleY(1);
+        }
+      }
+
+      .el-icon {
+        font-size: 18px;
+        margin-right: 10px;
+      }
+    }
   }
 }
 
 /* 顶部栏 */
 .layout-header {
-  background-color: #fff;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  background: var(--card-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 24px;
+  transition: all 0.3s;
 
-  .header-left h3 {
-    color: #303133;
-    font-size: 18px;
+  .header-left {
+    h3 {
+      color: var(--text-primary);
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0;
+    }
   }
 
-  .system-status {
-    .status-indicator {
-      margin-right: 4px;
-      font-size: 16px;
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
 
-      &.breathing {
-        animation: breathing 2s ease-in-out infinite;
+    .system-status {
+      .el-tag {
+        padding: 6px 16px;
+        font-weight: 500;
+        border-radius: 20px;
+
+        &.el-tag--success {
+          background: linear-gradient(135deg, #84cc16 0%, #22c55e 100%);
+          border: none;
+          color: #fff;
+        }
+
+        &.el-tag--danger {
+          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+          border: none;
+          color: #fff;
+        }
       }
+
+      .status-indicator {
+        margin-right: 6px;
+        font-size: 12px;
+        vertical-align: middle;
+
+        &.breathing {
+          animation: breathing 2s ease-in-out infinite;
+        }
+      }
+    }
+
+    .el-button-group {
+      .el-button {
+        border-radius: 8px;
+        font-weight: 500;
+
+        &:first-child {
+          border-top-right-radius: 0;
+          border-bottom-right-radius: 0;
+        }
+
+        &:last-child {
+          border-top-left-radius: 0;
+          border-bottom-left-radius: 0;
+        }
+      }
+    }
+
+    .el-switch {
+      --el-switch-on-color: var(--primary-color);
     }
   }
 }
 
 /* 主内容区 */
 .layout-main {
-  background-color: #f5f7fa;
-  padding: 20px;
+  background: var(--bg-color);
+  padding: 0;
+  overflow: auto;
+  height: calc(100vh - 60px);
 }
 
 /* 页面过渡动画 */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: all 0.3s ease;
 }
 
-.fade-enter-from,
+.fade-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
 .fade-leave-to {
   opacity: 0;
+  transform: translateX(-20px);
 }
 
-/* 呼吸动画 */
+/* 动画效果 */
 @keyframes breathing {
   0%, 100% {
     opacity: 1;
+    transform: scale(1);
   }
   50% {
-    opacity: 0.5;
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes shimmer {
+  to {
+    left: 100%;
   }
 }
 
 /* 暗色主题 */
 .dark {
-  .layout-header {
-    background-color: #1f1f1f;
+  .layout-aside {
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
 
-    .header-left h3 {
-      color: #fff;
+    .logo {
+      background: rgba(0, 0, 0, 0.5);
+    }
+
+    .el-menu-item {
+      &.is-active {
+        background: rgba(64, 158, 255, 0.3);
+      }
     }
   }
 
-  .layout-main {
-    background-color: #141414;
+  .layout-header {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .layout-aside {
+    width: 180px !important;
+  }
+  
+  .layout-header {
+    padding: 0 16px;
+    
+    .header-left h3 {
+      font-size: 16px;
+    }
+
+    .header-right {
+      gap: 8px;
+
+      .el-button {
+        padding: 8px 12px;
+        font-size: 12px;
+      }
+    }
   }
 }
 </style>

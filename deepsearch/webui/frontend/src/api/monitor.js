@@ -1,10 +1,11 @@
 import request from './request'
 
 // 获取仪表板数据
-export function getDashboard() {
+export function getDashboard(period = '1h') {
     return request({
         url: '/monitor/dashboard',
-        method: 'get'
+        method: 'get',
+        params: {period}
     })
 }
 

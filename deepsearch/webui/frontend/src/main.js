@@ -9,6 +9,9 @@ import App from './App.vue'
 // import TestApp from './TestApp.vue'
 import router from './router'
 
+// 导入全局样式
+import './assets/styles/global.scss'
+
 // 创建应用
 const app = createApp(App)
 // const app = createApp(TestApp)

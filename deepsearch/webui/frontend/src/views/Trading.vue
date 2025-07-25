@@ -22,8 +22,8 @@
             <el-table-column label="现价" prop="currentPrice" width="80"/>
             <el-table-column label="盈亏" width="100">
               <template #default="scope">
-                <span :class="scope.row.pnl >= 0 ? 'profit' : 'loss'">
-                  {{ scope.row.pnl.toFixed(2) }} ({{ scope.row.pnlPercent.toFixed(2) }}%)
+                <span :class="(scope.row.pnl || 0) >= 0 ? 'profit' : 'loss'">
+                  {{ (scope.row.pnl || 0).toFixed(2) }} ({{ (scope.row.pnlPercent || 0).toFixed(2) }}%)
                 </span>
               </template>
             </el-table-column>
@@ -138,7 +138,7 @@
 </template>
 
 <script setup>
-import {ref, onMounted} from 'vue'
+import {onMounted, ref} from 'vue'
 import {ElMessage} from 'element-plus'
 
 const positions = ref([
@@ -216,12 +216,26 @@ const formatTime = (row) => {
   return new Date(row.time).toLocaleString('zh-CN')
 }
 
-const refreshPositions = () => {
-  ElMessage.success('持仓信息已刷新')
+const refreshPositions = async () => {
+  try {
+    // TODO: 实际从API获取数据
+    // const response = await fetch('/api/trading/positions')
+    // positions.value = await response.json()
+    ElMessage.success('持仓信息已刷新')
+  } catch (error) {
+    ElMessage.error('刷新持仓信息失败: ' + error.message)
+  }
 }
 
-const refreshOrders = () => {
-  ElMessage.success('委托订单已刷新')
+const refreshOrders = async () => {
+  try {
+    // TODO: 实际从API获取数据
+    // const response = await fetch('/api/trading/orders')
+    // orders.value = await response.json()
+    ElMessage.success('委托订单已刷新')
+  } catch (error) {
+    ElMessage.error('刷新委托订单失败: ' + error.message)
+  }
 }
 
 const cancelOrder = (orderId) => {
