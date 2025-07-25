@@ -211,7 +211,7 @@ class ZeroMQMessageBus(AbstractMessageBus):
 
     def __init__(self, config=None, serializer: Serializer = None):
         # 延迟导入避免循环依赖
-        from deepsearch.config.setting import ZeroMQConfig
+        from deepsearch.config.models import ZeroMQConfig
         self._config = config or ZeroMQConfig()
         self._serializer = serializer or PickleSerializer()
         self._context = zmq.Context()
@@ -524,7 +524,7 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
         :param persistence_rule: 持久化规则，默认为 AlwaysPersist
         """
         # 创建ZeroMQ配置对象传递给父类
-        from deepsearch.config.setting import ZeroMQConfig
+        from deepsearch.config.models import ZeroMQConfig
         zeromq_config = ZeroMQConfig(
             host=host,
             pub_port=pub_port,
@@ -720,7 +720,7 @@ class CompositeMessageBus(AbstractMessageBus):
             routes: Optional[list[RouteConfig]] = None
     ):
         if buses is None or routes is None:
-            from deepsearch.config.setting import settings
+            from deepsearch.config import settings
             buses = buses or self._create_buses_from_config(settings)
             routes = routes or settings.message_bus.routes
 
@@ -797,7 +797,7 @@ class CompositeMessageBus(AbstractMessageBus):
 
     def _create_zeromq_bus(self, config: dict) -> ZeroMQMessageBus:
         """创建 ZeroMQ 总线实例"""
-        from deepsearch.config.setting import ZeroMQConfig
+        from deepsearch.config.models import ZeroMQConfig
 
         # 创建 ZeroMQConfig 对象
         zeromq_config = ZeroMQConfig(

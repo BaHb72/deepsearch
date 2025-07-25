@@ -17,8 +17,8 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Deque
 
 from deepsearch.core.interfaces import MonitoringHook
-from deepsearch.event.bus.bus import AbstractMessageBus
 from deepsearch.event.engine import Event, EventEngine
+from deepsearch.messaging.bus import MessageBus as AbstractMessageBus
 
 # ==============================================================================
 # Constants

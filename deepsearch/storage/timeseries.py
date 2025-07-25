@@ -9,7 +9,7 @@ import redis
 import redistimeseries.client as ts
 
 # Import configuration defaults
-from deepsearch.config.setting import RedisConfig
+from deepsearch.config.models import RedisConfig
 from deepsearch.event.engine import Event
 
 # ==============================================================================
