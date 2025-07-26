@@ -150,7 +150,7 @@ class ComponentManager:
         # 更新初始化顺序
         self._update_initialization_order()
 
-        self._logger.info(f"组件 {name} 注册成功")
+        self._logger.debug(f"已注册组件：{name}")
 
     def unregister_component(self, name: str) -> None:
         """
@@ -176,7 +176,7 @@ class ComponentManager:
         del self._component_info[name]
         self._update_initialization_order()
 
-        self._logger.info(f"组件 {name} 取消注册成功")
+        self._logger.debug(f"已取消注册：{name}")
 
     def initialize_component(self, name: str) -> None:
         """
@@ -191,17 +191,17 @@ class ComponentManager:
         info = self._component_info[name]
 
         if info.status != ComponentStatus.UNINITIALIZED:
-            self._logger.warning(f"Component {name} already initialized")
+            self._logger.debug(f"组件 {name} 已经初始化过了")
             return
 
         try:
             info.status = ComponentStatus.INITIALIZED
             component.initialize()
-            self._logger.info(f"组件 {name} 初始化成功")
+            self._logger.debug(f"初始化完成：{name}")
         except Exception as e:
             info.status = ComponentStatus.ERROR
             info.error_message = str(e)
-            self._logger.error(f"Failed to initialize component {name}: {e}")
+            self._logger.error(f"初始化 {name} 失败：{e}")
             raise ComponentError(f"Failed to initialize {name}: {e}") from e
 
     def initialize_all(self, component_type: Optional[ComponentType] = None) -> None:
@@ -230,7 +230,7 @@ class ComponentManager:
 
         # 检查组件状态
         if info.status == ComponentStatus.RUNNING:
-            self._logger.warning(f"Component {name} already running")
+            self._logger.debug(f"组件 {name} 已经在运行了")
             return
 
         if info.status == ComponentStatus.UNINITIALIZED:
@@ -250,11 +250,11 @@ class ComponentManager:
             info.status = ComponentStatus.RUNNING
             info.start_time = datetime.now()
             info.error_message = None
-            self._logger.info(f"组件 {name} 启动成功")
+            self._logger.debug(f"启动完成：{name}")
         except Exception as e:
             info.status = ComponentStatus.ERROR
             info.error_message = str(e)
-            self._logger.error(f"Failed to start component {name}: {e}")
+            self._logger.error(f"启动 {name} 失败：{e}")
             raise ComponentError(f"Failed to start {name}: {e}") from e
 
     def stop_component(self, name: str) -> None:
@@ -270,7 +270,7 @@ class ComponentManager:
         info = self._component_info[name]
 
         if info.status != ComponentStatus.RUNNING:
-            self._logger.warning(f"Component {name} is not running")
+            self._logger.debug(f"组件 {name} 未在运行")
             return
 
         # 检查是否有其他运行中的组件依赖此组件
@@ -285,11 +285,11 @@ class ComponentManager:
             component.stop()
             info.status = ComponentStatus.STOPPED
             info.stop_time = datetime.now()
-            self._logger.info(f"组件 {name} 停止成功")
+            self._logger.debug(f"停止完成：{name}")
         except Exception as e:
             info.status = ComponentStatus.ERROR
             info.error_message = str(e)
-            self._logger.error(f"Failed to stop component {name}: {e}")
+            self._logger.error(f"停止 {name} 失败：{e}")
             raise ComponentError(f"Failed to stop {name}: {e}") from e
 
     def start_infrastructure(self) -> None:
@@ -314,7 +314,7 @@ class ComponentManager:
                     try:
                         self.stop_component(name)
                     except Exception as e:
-                        self._logger.error(f"Error stopping component {name}: {e}")
+                        self._logger.debug(f"停止 {name} 时出错：{e}")
 
     def get_component_status(self, name: str) -> ComponentInfo:
         """
@@ -366,7 +366,7 @@ class ComponentManager:
                 try:
                     results[name] = info.health_check()
                 except Exception as e:
-                    self._logger.error(f"Health check failed for {name}: {e}")
+                    self._logger.debug(f"{name} 健康检查失败：{e}")
                     results[name] = False
             else:
                 results[name] = info.status == ComponentStatus.RUNNING

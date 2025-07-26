@@ -120,7 +120,7 @@ class CompositeMessageBus(MessageBus):
         if self._running:
             raise RuntimeError("Cannot add bus while running")
         self._buses[name] = bus
-        self.logger.info(f"Added bus '{name}' of type {type(bus).__name__}")
+        self.logger.debug(f"添加消息总线：{name} ({type(bus).__name__})")
 
     def add_route(self, route: RouteConfig) -> None:
         """
@@ -130,7 +130,7 @@ class CompositeMessageBus(MessageBus):
             route: The routing configuration to add
         """
         self._routes.append(route)
-        self.logger.info(f"Added route: {route.match} -> {route.buses}")
+        self.logger.debug(f"添加路由规则：{route.match} -> {route.buses}")
 
     def publish(self, topic: str, message: T) -> None:
         """Publish message to appropriate buses based on routing rules."""
@@ -140,7 +140,7 @@ class CompositeMessageBus(MessageBus):
         target_buses = self._get_target_buses(topic)
 
         if not target_buses:
-            self.logger.warning(f"没有为主题 '{topic}' 配置总线")
+            self.logger.warning(f"主题 '{topic}' 没有配置任何消息总线")
             return
 
         for bus_name in target_buses:
@@ -149,55 +149,55 @@ class CompositeMessageBus(MessageBus):
                 try:
                     bus.publish(topic, message)
                 except Exception as e:
-                    self.logger.error(f"发布到总线 '{bus_name}' 失败: {e}")
+                    self.logger.error(f"发送消息到 '{bus_name}' 失败：{e}")
 
     def subscribe(self, topic: str, handler: Callable[[str, T], None]) -> None:
         """Subscribe to all buses."""
         for name, bus in self._buses.items():
             try:
                 bus.subscribe(topic, handler)
-                self.logger.debug(f"Subscribed to topic '{topic}' on bus '{name}'")
+                self.logger.debug(f"订阅主题 '{topic}' - 总线：{name}")
             except Exception as e:
-                self.logger.error(f"Failed to subscribe to bus '{name}': {e}")
+                self.logger.error(f"订阅失败 - 总线：{name}，错误：{e}")
 
     def unsubscribe(self, topic: str, handler: Callable[[str, T], None]) -> None:
         """Unsubscribe from all buses."""
         for name, bus in self._buses.items():
             try:
                 bus.unsubscribe(topic, handler)
-                self.logger.debug(f"Unsubscribed from topic '{topic}' on bus '{name}'")
+                self.logger.debug(f"取消订阅 '{topic}' - 总线：{name}")
             except Exception as e:
-                self.logger.error(f"Failed to unsubscribe from bus '{name}': {e}")
+                self.logger.error(f"取消订阅失败 - 总线：{name}，错误：{e}")
 
     def start(self) -> None:
         """Start all configured buses."""
         if self._running:
             return
 
-        self.logger.info("正在启动复合消息总线...")
+        self.logger.debug("启动复合消息总线")
 
         for name, bus in self._buses.items():
             try:
                 bus.start()
-                self.logger.info(f"Started bus '{name}'")
+                self.logger.debug(f"启动消息总线：{name}")
             except Exception as e:
-                self.logger.error(f"Failed to start bus '{name}': {e}")
+                self.logger.error(f"启动 '{name}' 失败：{e}")
                 # Stop already started buses
                 self._stop_buses()
                 raise
 
         self._running = True
-        self.logger.info("复合消息总线已启动")
+        self.logger.debug("复合消息总线启动完成")
 
     def stop(self) -> None:
         """Stop all buses."""
         if not self._running:
             return
 
-        self.logger.info("正在停止复合消息总线...")
+        self.logger.debug("停止复合消息总线")
         self._stop_buses()
         self._running = False
-        self.logger.info("复合消息总线已停止")
+        self.logger.debug("复合消息总线停止完成")
 
     def is_running(self) -> bool:
         """Check if the composite bus is running."""
@@ -244,6 +244,6 @@ class CompositeMessageBus(MessageBus):
         for name, bus in self._buses.items():
             try:
                 bus.stop()
-                self.logger.info(f"Stopped bus '{name}'")
+                self.logger.debug(f"停止消息总线：{name}")
             except Exception as e:
-                self.logger.error(f"Error stopping bus '{name}': {e}")
+                self.logger.debug(f"停止 '{name}' 时出错：{e}")

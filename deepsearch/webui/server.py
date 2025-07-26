@@ -33,13 +33,13 @@ class WebSocketManager:
         """接受新的 WebSocket 连接"""
         await websocket.accept()
         self._connections.append(websocket)
-        logger.info(f"WebSocket 连接已建立 (当前连接数: {len(self._connections)})")
+        logger.debug(f"WebSocket 连接已建立（连接数：{len(self._connections)}）")
 
     def remove_connection(self, websocket: WebSocket) -> None:
         """移除 WebSocket 连接"""
         if websocket in self._connections:
             self._connections.remove(websocket)
-            logger.info(f"WebSocket 连接已断开 (当前连接数: {len(self._connections)})")
+            logger.debug(f"WebSocket 连接已断开（连接数：{len(self._connections)}）")
 
     async def broadcast_message(self, message: dict) -> None:
         """向所有客户端广播消息"""
@@ -135,7 +135,7 @@ class AppState:
     def set_engine(self, engine: MainEngine) -> None:
         """设置引擎实例"""
         self.engine = engine
-        logger.info(f"引擎已设置: {engine}")
+        logger.debug(f"引擎实例已设置：{engine}")
 
     def initialize_monitoring(self) -> None:
         """初始化监控组件"""
@@ -162,7 +162,7 @@ app_state = AppState()
 
 async def startup_handler():
     """应用启动处理"""
-    logger.info("正在启动 DeepSearch Web UI...")
+    logger.debug("启动 Web UI 服务...")
 
     try:
         # 如果没有外部引擎，创建新的（独立运行模式）
@@ -177,8 +177,8 @@ async def startup_handler():
 
         # 启动 WebSocket 监控广播
         await app_state.websocket_manager.start_monitoring_broadcast(app_state.monitor_api)
-        
-        logger.info("DeepSearch Web UI 启动成功")
+
+        logger.info("Web UI 服务启动成功")
 
     except Exception as e:
         logger.error(f"启动失败: {e}")
@@ -187,7 +187,7 @@ async def startup_handler():
 
 async def shutdown_handler():
     """应用关闭处理"""
-    logger.info("正在关闭 DeepSearch Web UI...")
+    logger.debug("关闭 Web UI 服务...")
 
     try:
         # 停止监控广播
@@ -202,8 +202,8 @@ async def shutdown_handler():
 
     except Exception as e:
         logger.error(f"关闭时出错: {e}")
-    
-    logger.info("DeepSearch Web UI 已关闭")
+
+    logger.debug("Web UI 服务已关闭")
 
 
 # 创建 FastAPI 应用

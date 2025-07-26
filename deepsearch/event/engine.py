@@ -419,7 +419,7 @@ class EventEngine:
         """启动事件引擎"""
         with self._lock:
             if self._running:
-                logger.warning("事件引擎已经在运行")
+                logger.debug("事件引擎已在运行")
                 return
 
             self._running = True
@@ -437,16 +437,16 @@ class EventEngine:
             self._dispatcher_th.start()
             self._scheduler_th.start()
 
-            logger.info("事件引擎已启动")
+            logger.debug("事件引擎启动完成")
 
     def stop(self, *, timeout: float = DEFAULT_TIMEOUT) -> None:
         """停止事件引擎"""
         with self._lock:
             if not self._running:
-                logger.warning("事件引擎已经停止")
+                logger.debug("事件引擎已经停止")
                 return
 
-            logger.info("正在关闭事件引擎...")
+            logger.debug("关闭事件引擎")
             self._running = False
 
         # Wake up scheduler thread
@@ -469,27 +469,27 @@ class EventEngine:
         if self._dispatcher_th and self._dispatcher_th.is_alive():
             self._dispatcher_th.join(timeout=timeout)
             if self._dispatcher_th.is_alive():
-                logger.warning("Dispatcher thread did not terminate within timeout")
+                logger.debug("事件分发线程未在超时内终止")
 
         if self._scheduler_th and self._scheduler_th.is_alive():
             self._scheduler_th.join(timeout=timeout)
             if self._scheduler_th.is_alive():
-                logger.warning("Scheduler thread did not terminate within timeout")
+                logger.debug("调度线程未在超时内终止")
 
         # Shutdown executor
         if self._executor:
             try:
                 self._executor.shutdown(wait=True)
             except Exception as e:
-                logger.error(f"Error shutting down executor: {e}")
+                logger.error(f"关闭线程池失败：{e}")
             finally:
                 self._executor = None
 
         # Reset thread references
         self._dispatcher_th = None
         self._scheduler_th = None
-        
-        logger.info("事件引擎已关闭")
+
+        logger.debug("事件引擎关闭完成")
 
     # ==========================================================================
     # Handler Registration
@@ -544,7 +544,7 @@ class EventEngine:
             raise TypeError("event must be an Event instance")
 
         if not self._running:
-            logger.warning("Cannot put event - engine is not running")
+            logger.debug("无法添加事件 - 引擎未运行")
             return False
         
         seq = next(self._seq_ctr)
@@ -553,7 +553,7 @@ class EventEngine:
             self._queue.put(item, block=block, timeout=timeout)
             return True
         except Full:
-            logger.warning("事件队列已满，%s 已被丢弃", event)
+            logger.warning("事件队列已满，丢弃事件：%s", event)
             return False
         except Exception as e:
             logger.error(f"Error putting event to queue: {e}")

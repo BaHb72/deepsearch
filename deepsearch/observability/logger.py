@@ -145,18 +145,56 @@ class SinkFactory:
         """创建控制台输出配置"""
         return {
             "sink": sys.stdout,
-            "level": self.config.level,
-            "format": _spring_formatter(color=True),
+            "level": "DEBUG",  # 控制台始终显示 DEBUG 级别
+            "format": self._console_formatter_with_colors(),
             "enqueue": True,
             "backtrace": self.config.level == "DEBUG",
             "diagnose": self.config.diagnose if self.config.diagnose is not None else (self.config.level == "DEBUG"),
         }
 
+    def _console_formatter_with_colors(self) -> Callable[[dict], str]:
+        """控制台格式化器，根据日志级别使用不同颜色"""
+
+        def _fmt(record: dict) -> str:
+            time_str = f"<green>{record['time'].strftime(TIME_FORMAT)[:-3]}</green>"
+
+            # 根据级别设置不同颜色
+            level_name = record["level"].name
+            if level_name == "DEBUG":
+                level_str = f"<dim>{level_name:<{LEVEL_WIDTH}}</dim>"  # 灰色
+            elif level_name == "INFO":
+                level_str = f"<level>{level_name:<{LEVEL_WIDTH}}</level>"  # 默认颜色
+            elif level_name == "WARNING":
+                level_str = f"<yellow>{level_name:<{LEVEL_WIDTH}}</yellow>"  # 黄色
+            elif level_name == "ERROR":
+                level_str = f"<red>{level_name:<{LEVEL_WIDTH}}</red>"  # 红色
+            elif level_name == "CRITICAL":
+                level_str = f"<red><bold>{level_name:<{LEVEL_WIDTH}}</bold></red>"  # 红色加粗
+            else:
+                level_str = f"<level>{level_name:<{LEVEL_WIDTH}}</level>"
+
+            proc_thr = f'{record["process"]:>{PROCESS_WIDTH}} --- [{record["thread"].name:>{THREAD_WIDTH}}]'
+            location = f'{record["file"].name}:{record["line"]:<4}'
+            service = record["extra"].get("service", "-")
+            service_str = f"<yellow>{str(service)}</yellow>"
+
+            # 消息内容也根据级别调整颜色
+            if level_name == "DEBUG":
+                message = f"<dim>{record['message']}</dim>"
+            elif level_name == "ERROR" or level_name == "CRITICAL":
+                message = f"<red>{record['message']}</red>"
+            else:
+                message = record['message']
+
+            return f"{time_str} | {level_str} | {proc_thr} | {location:{LOCATION_WIDTH}} | {service_str:{SERVICE_WIDTH}} | {message}\n"
+
+        return _fmt
+
     def create_plain_file_sink(self) -> dict[str, Any]:
         """创建普通文本文件输出配置"""
         return {
             "sink": self.config.log_dir / f"{self.log_file_prefix}.log",
-            "level": self.config.level,
+            "level": "DEBUG",  # 文件日志也记录 DEBUG 级别
             "format": _spring_formatter(color=False),
             "rotation": self.config.rotation_plain,
             "retention": self.config.retention_plain,
@@ -181,7 +219,7 @@ class SinkFactory:
         """创建JSON文件输出配置"""
         return {
             "sink": self.config.log_dir / f"{self.log_file_prefix}.json",
-            "level": self.config.level,
+            "level": "DEBUG",  # JSON 日志也记录 DEBUG 级别
             "serialize": True,
             "rotation": self.config.rotation_json,
             "retention": self.config.retention_json,

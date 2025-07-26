@@ -4,6 +4,7 @@
   "description": "DeepSearch 量化交易系统 Web 界面",
   "author": "DeepSearch Team",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

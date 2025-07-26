@@ -135,7 +135,7 @@ class BaseGateway(ABC):
 
         # Initialize logger
         self.logger = logging.getLogger(f"gateway.{gateway_name}")
-        self.logger.info("网关 [%s] 初始化完成", gateway_name)
+        self.logger.info(f"交易网关 [{gateway_name}] 启动成功")
 
     # ==========================================================================
     # Event Publishing
@@ -150,7 +150,7 @@ class BaseGateway(ABC):
             event = Event(etype, data)
             self.message_bus.publish(etype, event)
         except Exception as e:
-            self.logger.error(f"Failed to publish event {etype}: {e}")
+            self.logger.debug(f"发布事件 {etype} 失败：{e}")
 
     def on_tick(self, tick: Any) -> None:
         """处理行情tick事件"""
@@ -172,7 +172,9 @@ class BaseGateway(ABC):
     def write_log(self, msg: str, level: int = logging.INFO) -> None:
         """写日志并发布日志事件"""
         self.logger.log(level, msg)
-        self._publish(EVENT_LOG, msg)
+        # 只有重要日志才发布事件
+        if level >= logging.INFO:
+            self._publish(EVENT_LOG, msg)
 
     # ==========================================================================
     # Heartbeat Management
@@ -210,7 +212,7 @@ class BaseGateway(ABC):
             self._heartbeat_interval = interval
             self._schedule_heartbeat(interval)
 
-            self.write_log(f"心跳已启动，间隔={interval}s")
+            self.logger.debug(f"心跳机制已启动，间隔 {interval} 秒")
 
         except Exception as exc:
             # Rollback state
@@ -260,9 +262,9 @@ class BaseGateway(ABC):
                     handler=self._heartbeat_task,
                 )
             except Exception as e:
-                self.logger.warning(f"Failed to unsubscribe heartbeat: {e}")
-                
-            self.write_log("心跳已停止")
+                self.logger.debug(f"取消心跳订阅失败：{e}")
+
+            self.logger.debug("心跳机制已停止")
         finally:
             self._heartbeat_enabled = False
             self._heartbeat_interval = None
@@ -388,7 +390,7 @@ class BaseGateway(ABC):
         self._heartbeat_enabled = False
         self._heartbeat_interval = None
         self._executor = None
-        self.logger.info(f"网关 [{self.gateway_name}] 状态已重置")
+        self.logger.debug(f"网关 [{self.gateway_name}] 状态重置完成")
 
     def cleanup(self) -> None:
         """清理资源"""
@@ -398,7 +400,7 @@ class BaseGateway(ABC):
         try:
             self.stop_heartbeat()
         except Exception as e:
-            self.logger.error(f"Error stopping heartbeat: {e}")
+            self.logger.debug(f"停止心跳时出错：{e}")
 
         # Close connection
         try:
@@ -411,11 +413,11 @@ class BaseGateway(ABC):
             try:
                 self._executor.shutdown(wait=True)
             except Exception as e:
-                self.logger.error(f"Error shutting down executor: {e}")
+                self.logger.debug(f"关闭线程池时出错：{e}")
             finally:
                 self._executor = None
 
-        self.logger.info(f"网关 [{self.gateway_name}] 资源清理完成")
+        self.logger.debug(f"网关 [{self.gateway_name}] 资源清理完成")
 
 
 # ==============================================================================

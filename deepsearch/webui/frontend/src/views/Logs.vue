@@ -94,7 +94,7 @@ const connectionStatus = ref('disconnected')
 const fetchRecentLogs = async () => {
   isLoading.value = true
   try {
-    const response = await systemApi.getRecentLogs(200, selectedLevel.value || 'INFO')
+    const response = await systemApi.getRecentLogs(200, selectedLevel.value || 'DEBUG')
     if (response.status === 'success' && response.logs) {
       logs.value = response.logs.map((log, index) => ({
         id: log.id || index,

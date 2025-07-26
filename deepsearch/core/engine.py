@@ -116,10 +116,10 @@ class MainEngine:
             self._initialize_gateway()
 
             self._initialized = True
-            self._logger.info("主引擎初始化成功完成")
+            self._logger.info("系统初始化成功")
 
         except Exception as e:
-            self._logger.error(f"初始化主引擎失败: {e}", exc_info=True)
+            self._logger.error(f"系统初始化失败：{e}", exc_info=True)
             # 清理已初始化的组件
             self._cleanup_partial_initialization()
             raise ComponentLifecycleError(f"Initialization failed: {e}") from e
@@ -133,37 +133,38 @@ class MainEngine:
         self._logger.info("DeepSearch - 量化交易系统")
         self._logger.info("=" * 80)
         self._logger.info(f"运行环境: {settings.app.env}")
-        self._logger.info(f"日志级别: {settings.log.level}")
+        self._logger.debug(f"日志级别: {settings.log.level}")
 
     def _validate_configuration(self) -> None:
         """验证系统配置"""
-        self._logger.info("正在验证系统配置...")
+        self._logger.debug("开始检查系统配置...")
 
         # 检查端口配置
         from deepsearch.utils.port_checker import PortChecker
         conflicts = PortChecker.check_port_conflicts()
 
         if conflicts:
-            self._logger.error("检测到端口配置冲突:")
+            self._logger.error("发现端口冲突：")
             for conflict in conflicts:
                 if conflict["type"] == "duplicate":
-                    self._logger.error(f"  - 端口 {conflict['port']} 被多个服务使用: {', '.join(conflict['services'])}")
+                    self._logger.error(
+                        f"  - 端口 {conflict['port']} 被这些服务同时使用：{', '.join(conflict['services'])}")
                 else:
                     self._logger.error(
-                        f"  - 端口 {conflict['port']} 已被占用 (服务: {', '.join(conflict['services'])})")
+                        f"  - 端口 {conflict['port']} 已被占用（服务：{', '.join(conflict['services'])}）")
 
             # 只在有严重冲突时才抛出异常
             duplicate_conflicts = [c for c in conflicts if c["type"] == "duplicate"]
             if duplicate_conflicts:
                 raise ConfigurationError("多个服务配置使用相同的端口")
             else:
-                self._logger.warning("某些端口已被占用，服务可能无法启动")
+                self._logger.warning("有端口已被其他程序占用，可能会影响启动")
 
-        self._logger.info("配置验证通过")
+        self._logger.debug("配置检查完成")
 
     def _initialize_event_engine(self) -> None:
         """初始化事件引擎"""
-        self._logger.info("正在初始化事件引擎...")
+        self._logger.debug("初始化事件引擎...")
 
         # 从配置获取参数，如果有性能配置则使用
         if settings.performance:
@@ -196,11 +197,11 @@ class MainEngine:
         # 获取实例引用
         self._event_engine = event_engine_comp.get_instance()
 
-        self._logger.info("事件引擎初始化完成")
+        self._logger.debug("事件引擎初始化完成")
 
     def _initialize_message_bus(self) -> None:
         """初始化消息总线"""
-        self._logger.info("正在初始化消息总线...")
+        self._logger.debug("初始化消息总线...")
 
         # 创建消息总线组件
         message_bus_comp = MessageBusComponent()
@@ -219,11 +220,11 @@ class MainEngine:
         # 获取实例引用
         self._message_bus = message_bus_comp.get_instance()
 
-        self._logger.info("消息总线初始化完成")
+        self._logger.debug("消息总线初始化完成")
 
     def _initialize_monitor(self) -> None:
         """初始化系统监控"""
-        self._logger.info("正在初始化系统监控...")
+        self._logger.debug("初始化监控模块...")
 
         # 创建监控组件
         monitor_comp = MonitorComponent(self._event_engine, self._message_bus)
@@ -242,11 +243,11 @@ class MainEngine:
         # 获取实例引用
         self._monitor = monitor_comp.get_instance()
 
-        self._logger.info("系统监控初始化完成")
+        self._logger.debug("系统监控初始化完成")
 
     def _initialize_gateway(self) -> None:
         """初始化网关"""
-        self._logger.info("正在初始化网关...")
+        self._logger.debug("初始化交易网关...")
 
         # 创建网关组件
         gateway_comp = GatewayComponent(self._event_engine)
@@ -265,7 +266,7 @@ class MainEngine:
         # 获取实例引用
         self._gateway = gateway_comp.get_instance()
 
-        self._logger.info("网关初始化完成")
+        self._logger.debug("网关初始化完成")
 
     def _cleanup_partial_initialization(self) -> None:
         """清理部分初始化的组件"""
@@ -282,7 +283,7 @@ class MainEngine:
                 try:
                     if hasattr(component, 'stop'):
                         component.stop()
-                    self._logger.info(f"Cleaned up {name}")
+                    self._logger.debug(f"Cleaned up {name}")
                 except Exception as e:
                     self._logger.error(f"Error cleaning up {name}: {e}")
 
@@ -335,7 +336,7 @@ class MainEngine:
         if self._infrastructure_running:
             raise ComponentLifecycleError("Infrastructure already running")
 
-        self._logger.info("正在启动基础设施组件...")
+        self._logger.debug("启动基础设施组件...")
 
         try:
             # 启动所有基础设施组件
@@ -351,7 +352,7 @@ class MainEngine:
                 ))
 
             self._infrastructure_running = True
-            self._logger.info("基础设施组件启动成功")
+            self._logger.debug("基础设施组件启动成功")
 
         except Exception as e:
             self._logger.error(f"Failed to start infrastructure: {e}", exc_info=True)
@@ -382,7 +383,7 @@ class MainEngine:
         if not self._infrastructure_running:
             return
 
-        self._logger.info("Stopping infrastructure components...")
+        self._logger.debug("Stopping infrastructure components...")
 
         # 注意：WebUI服务器现在不在这里停止
 
@@ -393,7 +394,7 @@ class MainEngine:
             self._logger.error(f"Error stopping infrastructure components: {e}")
 
         self._infrastructure_running = False
-        self._logger.info("Infrastructure components stopped")
+        self._logger.debug("Infrastructure components stopped")
 
     def stop(self) -> None:
         """
@@ -404,7 +405,7 @@ class MainEngine:
         if not self._running and not self._infrastructure_running and not self._initialized:
             return
 
-        self._logger.info("正在停止主引擎组件...")
+        self._logger.debug("停止系统组件...")
         self._running = False
 
         # 发送系统退出事件
@@ -432,7 +433,7 @@ class MainEngine:
             self._logger.error(f"Error stopping components: {e}", exc_info=True)
 
         # 最后停止日志系统
-        self._logger.info("主引擎已停止")
+        self._logger.info("系统已完全停止")
         logger_manager.stop()
 
         self._initialized = False
@@ -451,7 +452,7 @@ class MainEngine:
         if not self._running:
             raise ComponentLifecycleError("MainEngine not started")
 
-        self._logger.info("MainEngine is running, press Ctrl+C to exit")
+        self._logger.info("系统正在运行，按 Ctrl+C 停止")
 
         try:
             while self._running:
@@ -459,7 +460,7 @@ class MainEngine:
                 # 这里可以添加健康检查逻辑
 
         except KeyboardInterrupt:
-            self._logger.info("Keyboard interrupt received")
+            self._logger.debug("收到键盘中断信号")
         except Exception as e:
             self._logger.error(f"Error in main loop: {e}", exc_info=True)
         finally:
@@ -553,7 +554,7 @@ class MainEngine:
         if not self._initialized:
             return
 
-        self._logger.info("正在停止业务组件...")
+        self._logger.debug("正在停止业务组件...")
 
         # 发送系统退出事件（只针对业务组件）
         if self._event_engine:
@@ -574,7 +575,7 @@ class MainEngine:
             self._logger.error(f"Error stopping business components: {e}", exc_info=True)
 
         self._running = False
-        self._logger.info("业务组件已停止")
+        self._logger.debug("业务组件已停止")
 
     def start_webui_backend(self) -> None:
         """
@@ -589,11 +590,11 @@ class MainEngine:
             self._logger.warning("WebUI backend already running")
             return
 
-        self._logger.info("正在启动WebUI后端服务器...")
+        self._logger.debug("启动 WebUI 后端...")
 
         try:
             self._start_webui_server()
-            self._logger.info("WebUI后端服务器启动成功")
+            self._logger.debug("WebUI后端服务器启动成功")
         except Exception as e:
             self._logger.error(f"Failed to start WebUI backend: {e}", exc_info=True)
             raise ComponentLifecycleError(f"WebUI backend start failed: {e}") from e
@@ -607,7 +608,7 @@ class MainEngine:
         if not self._webui_server:
             raise ComponentLifecycleError("WebUI backend must be running before starting frontend")
 
-        self._logger.info("正在启动WebUI前端服务器...")
+        self._logger.debug("启动 WebUI 前端...")
 
         try:
             # 获取配置
@@ -625,7 +626,7 @@ class MainEngine:
             # 检查 node_modules
             node_modules = frontend_dir / "node_modules"
             if not node_modules.exists():
-                self._logger.info("正在安装前端依赖...")
+                self._logger.info("首次启动，正在安装前端依赖包...")
                 result = subprocess.run(
                     ["npm", "install"],
                     cwd=str(frontend_dir),
@@ -656,7 +657,7 @@ class MainEngine:
             # 等待启动
             time.sleep(3)
             if self._frontend_process and self._frontend_process.poll() is None:
-                self._logger.info(f"WebUI前端服务器启动成功: http://localhost:{frontend_port}")
+                self._logger.info(f"前端地址：http://localhost:{frontend_port}")
             else:
                 raise ComponentLifecycleError("Frontend process failed to start")
 
@@ -685,7 +686,7 @@ class MainEngine:
                     self._frontend_process.terminate()
                     self._frontend_process.wait(timeout=3)
                 self._frontend_process = None
-                self._logger.info("WebUI前端服务器已停止")
+                self._logger.debug("WebUI前端服务器已停止")
             except Exception as e:
                 self._logger.error(f"停止前端失败: {e}")
 
@@ -701,7 +702,7 @@ class MainEngine:
         if not self._initialized:
             raise ComponentLifecycleError("MainEngine not initialized")
 
-        self._logger.info("开始分阶段启动系统...")
+        self._logger.info("正在启动 DeepSearch 系统")
 
         try:
             # 阶段1：启动基础设施（不含WebUI）
@@ -711,7 +712,7 @@ class MainEngine:
 
             # 阶段2：启动业务组件
             if include_business:
-                self._logger.info("正在启动业务组件...")
+                self._logger.debug("启动业务组件...")
                 for name, info in self._component_manager.get_all_components_status().items():
                     if info.component_type == ComponentType.BUSINESS:
                         if info.status != ComponentStatus.RUNNING:
@@ -735,7 +736,7 @@ class MainEngine:
                 ))
 
             self._running = True
-            self._logger.info("系统分阶段启动完成")
+            self._logger.info("✓ 系统启动成功")
 
         except Exception as e:
             self._logger.error(f"分阶段启动失败: {e}", exc_info=True)
@@ -755,7 +756,7 @@ class MainEngine:
         if not self._infrastructure_running:
             raise ComponentLifecycleError("Infrastructure not running")
 
-        self._logger.info("正在重启业务组件...")
+        self._logger.debug("正在重启业务组件...")
 
         # 先停止业务组件
         self.stop_business_components()
@@ -797,7 +798,7 @@ class MainEngine:
                 ))
 
             self._running = True
-            self._logger.info("业务组件重启完成")
+            self._logger.debug("业务组件重启完成")
 
         except Exception as e:
             self._logger.error(f"Failed to restart business components: {e}", exc_info=True)
@@ -808,7 +809,7 @@ class MainEngine:
     def _start_webui_server(self) -> None:
         """启动WebUI后端服务器"""
         try:
-            self._logger.info("正在启动 WebUI 服务器...")
+            self._logger.debug("启动 WebUI 服务器...")
 
             # 获取配置
             from deepsearch.config import get_config
@@ -864,21 +865,33 @@ class MainEngine:
                             self._webui_server.should_exit = True
 
                         # 给一些时间让任务完成
-                        loop.run_until_complete(asyncio.sleep(0.1))
-                        
-                        # 取消所有未完成的任务
-                        pending = asyncio.all_tasks(loop)
-                        for task in pending:
-                            task.cancel()
+                        if not loop.is_closed():
+                            loop.run_until_complete(asyncio.sleep(0.1))
 
-                        # 等待任务完成
+                        # 获取所有未完成的任务
+                        pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+
                         if pending:
+                            # 取消所有未完成的任务
+                            for task in pending:
+                                task.cancel()
+
+                            # 等待所有任务完成（包括被取消的）
                             loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
 
-                        # 关闭事件循环
-                        loop.close()
-                    except Exception:
-                        pass
+                            # 再次等待一小段时间，确保清理完成
+                            loop.run_until_complete(asyncio.sleep(0.1))
+
+                        # 确保没有任务在运行后才关闭事件循环
+                        remaining = [t for t in asyncio.all_tasks(loop) if not t.done()]
+                        if not remaining and not loop.is_closed():
+                            loop.close()
+                    except RuntimeError as e:
+                        # 忽略 "Event loop is closed" 错误
+                        if "Event loop is closed" not in str(e):
+                            self._logger.debug(f"Runtime error during cleanup: {e}")
+                    except Exception as e:
+                        self._logger.debug(f"Error during event loop cleanup: {e}")
 
             # 在后台线程中启动服务器
             self._webui_thread = threading.Thread(target=run_server, daemon=False)  # 改为非daemon线程
@@ -886,7 +899,7 @@ class MainEngine:
 
             # 等待服务器启动
             time.sleep(2)
-            self._logger.info(f"WebUI 服务器已启动: http://localhost:{port}")
+            self._logger.info(f"后端地址：http://localhost:{port}")
 
         except Exception as e:
             self._logger.error(f"Failed to start WebUI server: {e}", exc_info=True)
@@ -905,13 +918,13 @@ class MainEngine:
                         proc = psutil.Process(pid)
                         # 检查是否是Python进程
                         if 'python' in proc.name().lower():
-                            self._logger.warning(f"端口{port}被进程PID={pid}占用，尝试终止...")
+                            self._logger.warning(f"端口 {port} 被进程 {pid} 占用，正在释放...")
                             proc.terminate()
                             proc.wait(timeout=3)
-                            self._logger.info(f"已终止占用端口{port}的进程")
+                            self._logger.debug(f"已释放端口 {port}")
                     except Exception as e:
-                        self._logger.error(f"无法终止占用端口的进程: {e}")
-                        raise RuntimeError(f"端口{port}被占用且无法释放")
+                        self._logger.error(f"无法释放端口：{e}")
+                        raise RuntimeError(f"端口 {port} 被占用且无法释放")
 
     def _force_cleanup_processes(self) -> None:
         """强制清理残留进程（Windows专用）"""
@@ -932,14 +945,14 @@ class MainEngine:
                 try:
                     # 检查是否是Python进程
                     if 'python' in child.name().lower():
-                        self._logger.info(f"终止子进程 PID={child.pid}")
+                        self._logger.debug(f"清理子进程 {child.pid}")
                         child.terminate()
                         try:
                             child.wait(timeout=2)
                         except psutil.TimeoutExpired:
                             child.kill()
                 except Exception as e:
-                    self._logger.error(f"无法终止进程 PID={child.pid}: {e}")
+                    self._logger.debug(f"无法清理进程 {child.pid}：{e}")
 
             # 清理占用的端口
             from deepsearch.config import get_config
@@ -951,20 +964,20 @@ class MainEngine:
                         try:
                             proc = psutil.Process(conn.pid)
                             if 'python' in proc.name().lower():
-                                self._logger.info(f"清理占用端口 {conn.laddr.port} 的进程 PID={conn.pid}")
+                                self._logger.debug(f"清理端口 {conn.laddr.port} 占用进程 {conn.pid}")
                                 proc.terminate()
                                 proc.wait(timeout=2)
                         except Exception as e:
                             self._logger.debug(f"清理进程失败: {e}")
 
         except Exception as e:
-            self._logger.error(f"强制清理进程时出错: {e}")
+            self._logger.debug(f"清理进程时出错：{e}")
     
     def _stop_webui_server(self) -> None:
         """停止WebUI后端服务器"""
         if self._webui_server:
             try:
-                self._logger.info("Stopping WebUI server...")
+                self._logger.debug("Stopping WebUI server...")
                 self._webui_server.should_exit = True
 
                 # 强制停止服务器
@@ -981,28 +994,53 @@ class MainEngine:
                             future = concurrent.futures.Future()
 
                             def stop_server():
-                                try:
-                                    # 停止服务器
-                                    if self._webui_server:
-                                        self._webui_server.should_exit = True
-                                        if hasattr(self._webui_server, 'shutdown'):
-                                            asyncio.create_task(self._webui_server.shutdown())
-                                except Exception as e:
-                                    self._logger.error(f"Error in stop_server: {e}")
-                                finally:
-                                    future.set_result(True)
+                                async def _async_stop():
+                                    try:
+                                        # 停止服务器
+                                        if self._webui_server:
+                                            self._webui_server.should_exit = True
+                                            if hasattr(self._webui_server, 'shutdown'):
+                                                await self._webui_server.shutdown()
+
+                                        # 取消所有未完成的任务
+                                        tasks = [t for t in asyncio.all_tasks(self._webui_loop)
+                                                 if not t.done() and t != asyncio.current_task()]
+
+                                        for task in tasks:
+                                            task.cancel()
+
+                                        # 等待所有任务完成
+                                        if tasks:
+                                            await asyncio.gather(*tasks, return_exceptions=True)
+
+                                    except Exception as e:
+                                        self._logger.error(f"Error in async stop: {e}")
+                                    finally:
+                                        future.set_result(True)
+
+                                # 创建停止任务
+                                asyncio.run_coroutine_threadsafe(_async_stop(), self._webui_loop)
 
                             # 在事件循环中调度停止任务
                             self._webui_loop.call_soon_threadsafe(stop_server)
 
                             # 等待停止完成
                             try:
-                                future.result(timeout=2)
+                                future.result(timeout=5)  # 增加超时时间
                             except Exception:
                                 pass
 
-                            # 停止事件循环
-                            self._webui_loop.call_soon_threadsafe(self._webui_loop.stop)
+                            # 确保所有任务完成后再停止事件循环
+                            def final_stop():
+                                # 最后一次检查是否有未完成的任务
+                                pending = [t for t in asyncio.all_tasks(self._webui_loop) if not t.done()]
+                                if not pending:
+                                    self._webui_loop.stop()
+                                else:
+                                    # 如果还有任务，稍后再试
+                                    self._webui_loop.call_later(0.1, final_stop)
+
+                            self._webui_loop.call_soon_threadsafe(final_stop)
                     except Exception as e:
                         self._logger.error(f"Error stopping event loop: {e}")
                     
@@ -1017,7 +1055,7 @@ class MainEngine:
 
                 self._webui_server = None
                 self._webui_loop = None
-                self._logger.info("WebUI 服务器已停止")
+                self._logger.debug("WebUI 服务器已停止")
             except Exception as e:
                 self._logger.error(f"Error stopping WebUI server: {e}")
 
