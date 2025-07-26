@@ -572,10 +572,11 @@ class MainEngine:
                         app=app,
                         host="0.0.0.0",
                         port=port,
-                        log_level="info",
-                        access_log=False,  # 减少日志输出
-                        ws="websockets",  # 明确指定使用websockets
-                        reload=False  # 在线程中运行时禁用reload
+                        log_level="warning",
+                        access_log=False,
+                        ws="websockets",
+                        reload=False,
+                        loop="asyncio"
                     )
                     server = uvicorn.Server(config)
 
@@ -584,10 +585,26 @@ class MainEngine:
                     self._webui_loop = loop
 
                     # 运行服务器
-                    loop.run_until_complete(server.serve())
+                    try:
+                        loop.run_until_complete(server.serve())
+                    except (asyncio.CancelledError, KeyboardInterrupt):
+                        # 正常关闭，不报错
+                        pass
+                    except Exception as e:
+                        self._logger.error(f"WebUI服务器错误: {e}")
                 finally:
                     # 确保事件循环正确关闭
                     try:
+                        # 取消所有未完成的任务
+                        pending = asyncio.all_tasks(loop)
+                        for task in pending:
+                            task.cancel()
+
+                        # 等待任务完成
+                        if pending:
+                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+
+                        # 关闭事件循环
                         loop.close()
                     except Exception:
                         pass

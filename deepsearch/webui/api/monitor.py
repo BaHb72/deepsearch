@@ -1,12 +1,12 @@
 """
-监控相关 API 路由。
+监控相关 API 路由
 """
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 
-from deepsearch.webui.server import get_monitor_api
+from deepsearch.webui.server import app_state
 
 router = APIRouter()
 
@@ -19,7 +19,7 @@ async def get_dashboard() -> Dict[str, Any]:
     Returns:
         包含当前状态、趋势和告警的仪表板数据
     """
-    monitor_api = get_monitor_api()
+    monitor_api = app_state.monitor_api
     if not monitor_api:
         # 返回默认数据而不是错误
         logger.warning("监控系统未就绪，返回默认数据")
@@ -73,7 +73,7 @@ async def get_realtime_metrics(
     Returns:
         时间序列格式的指标数据
     """
-    monitor_api = get_monitor_api()
+    monitor_api = app_state.monitor_api
     if not monitor_api:
         # 返回空数据
         return {
@@ -120,7 +120,7 @@ async def get_slow_events(
     Returns:
         慢事件详细信息列表
     """
-    monitor_api = get_monitor_api()
+    monitor_api = app_state.monitor_api
     if not monitor_api:
         raise HTTPException(status_code=503, detail="监控系统未就绪")
 
@@ -144,7 +144,7 @@ async def get_historical_data(
     Returns:
         指定时间范围的历史数据
     """
-    monitor_api = get_monitor_api()
+    monitor_api = app_state.monitor_api
     if not monitor_api:
         raise HTTPException(status_code=503, detail="监控系统未就绪")
 
@@ -163,7 +163,7 @@ async def get_events_summary() -> Dict[str, Any]:
     Returns:
         各类事件的统计信息
     """
-    monitor_api = get_monitor_api()
+    monitor_api = app_state.monitor_api
     if not monitor_api:
         raise HTTPException(status_code=503, detail="监控系统未就绪")
 

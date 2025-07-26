@@ -1,5 +1,5 @@
 """
-FastAPI 服务器主应用。
+FastAPI 服务器主应用
 
 提供 REST API 和 WebSocket 端点，为前端提供数据接口。
 """
@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -21,54 +20,62 @@ from deepsearch.core import MainEngine
 from deepsearch.monitoring import EventSystemMonitor, MonitorAPI
 
 
-# WebSocket 连接管理器
-class ConnectionManager:
-    """WebSocket 连接管理器。"""
+class WebSocketManager:
+    """WebSocket 连接管理器"""
 
     def __init__(self):
-        self.active_connections: list[WebSocket] = []
+        self._connections: list[WebSocket] = []
         self._broadcast_task: Optional[asyncio.Task] = None
         self._monitor_api: Optional[MonitorAPI] = None
+        self._broadcast_interval: float = 2.0
 
-    async def connect(self, websocket: WebSocket):
-        """接受新的 WebSocket 连接。"""
+    async def accept_connection(self, websocket: WebSocket) -> None:
+        """接受新的 WebSocket 连接"""
         await websocket.accept()
-        self.active_connections.append(websocket)
-        logger.info(f"WebSocket 客户端已连接，当前连接数：{len(self.active_connections)}")
+        self._connections.append(websocket)
+        logger.info(f"WebSocket 连接已建立 (当前连接数: {len(self._connections)})")
 
-    def disconnect(self, websocket: WebSocket):
-        """断开 WebSocket 连接。"""
-        self.active_connections.remove(websocket)
-        logger.info(f"WebSocket 客户端已断开，当前连接数：{len(self.active_connections)}")
+    def remove_connection(self, websocket: WebSocket) -> None:
+        """移除 WebSocket 连接"""
+        if websocket in self._connections:
+            self._connections.remove(websocket)
+            logger.info(f"WebSocket 连接已断开 (当前连接数: {len(self._connections)})")
 
-    async def broadcast(self, message: dict):
-        """向所有连接的客户端广播消息。"""
-        if not self.active_connections:
+    async def broadcast_message(self, message: dict) -> None:
+        """向所有客户端广播消息"""
+        if not self._connections:
             return
 
-        message_str = json.dumps(message, ensure_ascii=False)
-        disconnected = []
+        message_text = json.dumps(message, ensure_ascii=False)
+        failed_connections = []
 
-        for connection in self.active_connections:
-            try:
-                await connection.send_text(message_str)
-            except Exception as e:
-                logger.error(f"发送消息失败：{e}")
-                disconnected.append(connection)
+        # 并发发送消息
+        tasks = []
+        for conn in self._connections:
+            tasks.append(self._send_to_connection(conn, message_text, failed_connections))
 
-        # 清理断开的连接
-        for conn in disconnected:
-            if conn in self.active_connections:
-                self.disconnect(conn)
+        await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def start_broadcasting(self, monitor_api: MonitorAPI):
-        """开始定期广播监控数据。"""
+        # 清理失败的连接
+        for conn in failed_connections:
+            self.remove_connection(conn)
+
+    async def _send_to_connection(self, conn: WebSocket, message: str, failed_list: list) -> None:
+        """发送消息到单个连接"""
+        try:
+            await conn.send_text(message)
+        except Exception as e:
+            logger.debug(f"消息发送失败: {e}")
+            failed_list.append(conn)
+
+    async def start_monitoring_broadcast(self, monitor_api: MonitorAPI) -> None:
+        """启动监控数据广播"""
         self._monitor_api = monitor_api
-        if self._broadcast_task is None or self._broadcast_task.done():
-            self._broadcast_task = asyncio.create_task(self._broadcast_loop())
+        if not self._broadcast_task or self._broadcast_task.done():
+            self._broadcast_task = asyncio.create_task(self._monitoring_loop())
 
-    async def stop_broadcasting(self):
-        """停止广播。"""
+    async def stop_monitoring_broadcast(self) -> None:
+        """停止监控数据广播"""
         if self._broadcast_task and not self._broadcast_task.done():
             self._broadcast_task.cancel()
             try:
@@ -76,110 +83,126 @@ class ConnectionManager:
             except asyncio.CancelledError:
                 pass
 
-    async def _broadcast_loop(self):
-        """定期广播监控数据。"""
+    async def _monitoring_loop(self) -> None:
+        """监控数据广播循环"""
         while True:
             try:
-                if self._monitor_api and self.active_connections:
-                    # 获取最新的监控数据
+                if self._monitor_api and self._connections:
                     data = {
                         "type": "monitor_update",
                         "data": self._monitor_api.get_dashboard_data()
                     }
-                    await self.broadcast(data)
+                    await self.broadcast_message(data)
 
-                await asyncio.sleep(2)  # 每2秒更新一次
+                await asyncio.sleep(self._broadcast_interval)
 
             except asyncio.CancelledError:
+                logger.debug("监控广播循环已停止")
                 break
             except Exception as e:
-                logger.error(f"广播循环错误：{e}")
-                await asyncio.sleep(5)
+                logger.error(f"监控广播错误: {e}")
+                await asyncio.sleep(5)  # 错误后等待更长时间
+
+    async def close_all_connections(self) -> None:
+        """关闭所有连接"""
+        tasks = []
+        for conn in self._connections[:]:
+            tasks.append(self._close_connection(conn))
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        self._connections.clear()
+
+    async def _close_connection(self, conn: WebSocket) -> None:
+        """关闭单个连接"""
+        try:
+            await conn.close()
+        except Exception:
+            pass
 
 
-# 全局对象
-manager = ConnectionManager()
-engine: Optional[MainEngine] = None
-monitor: Optional[EventSystemMonitor] = None
-monitor_api: Optional[MonitorAPI] = None
+# 应用状态管理
+class AppState:
+    """应用全局状态"""
+
+    def __init__(self):
+        self.websocket_manager = WebSocketManager()
+        self.engine: Optional[MainEngine] = None
+        self.monitor: Optional[EventSystemMonitor] = None
+        self.monitor_api: Optional[MonitorAPI] = None
+
+    def set_engine(self, engine: MainEngine) -> None:
+        """设置引擎实例"""
+        self.engine = engine
+        logger.info(f"引擎已设置: {engine}")
+
+    def initialize_monitoring(self) -> None:
+        """初始化监控组件"""
+        if not self.engine:
+            raise RuntimeError("引擎未设置")
+
+        # 获取或创建监控器
+        if hasattr(self.engine, '_monitor') and self.engine._monitor:
+            self.monitor = self.engine._monitor
+        else:
+            self.monitor = EventSystemMonitor(self.engine._event_engine)
+
+        self.monitor_api = MonitorAPI(self.monitor)
+
+        # 确保监控器已启动
+        if not hasattr(self.monitor, '_monitoring') or not self.monitor._monitoring:
+            self.monitor.start()
+        self.monitor_api.start()
 
 
-# 设置外部传入的引擎实例
-def set_engine(external_engine: MainEngine):
-    """设置外部传入的MainEngine实例"""
-    global engine
-    engine = external_engine
-    logger.info(f"Engine已设置: {engine}")
+# 全局应用状态
+app_state = AppState()
 
 
-# 获取全局对象的函数
-def get_engine():
-    """获取引擎实例"""
-    if engine is None:
-        logger.warning("Engine未设置，返回None")
-    return engine
-
-
-def get_monitor():
-    """获取监控器实例"""
-    return monitor
-
-
-def get_monitor_api():
-    """获取监控API实例"""
-    return monitor_api
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """应用生命周期管理。"""
-    global engine, monitor, monitor_api
-
-    # 启动时
+async def startup_handler():
+    """应用启动处理"""
     logger.info("正在启动 DeepSearch Web UI...")
 
-    # 初始化监控 - 使用外部传入的引擎或创建新的
     try:
-        if engine is None:
-            # 如果没有外部引擎，创建一个新的（独立运行模式）
+        # 如果没有外部引擎，创建新的（独立运行模式）
+        if not app_state.engine:
             engine = MainEngine()
             engine.initialize()
             engine.start()
+            app_state.set_engine(engine)
 
-        # 从引擎获取监控器
-        if hasattr(engine, '_monitor') and engine._monitor:
-            monitor = engine._monitor
-        else:
-            monitor = EventSystemMonitor(engine._event_engine)
+        # 初始化监控
+        app_state.initialize_monitoring()
 
-        monitor_api = MonitorAPI(monitor)
-
-        # 确保监控器已启动
-        if not hasattr(monitor, '_monitoring') or not monitor._monitoring:
-            monitor.start()
-        monitor_api.start()
-
-        # 启动 WebSocket 广播
-        await manager.start_broadcasting(monitor_api)
-
+        # 启动 WebSocket 监控广播
+        await app_state.websocket_manager.start_monitoring_broadcast(app_state.monitor_api)
+        
         logger.info("DeepSearch Web UI 启动成功")
 
     except Exception as e:
-        logger.error(f"启动失败：{e}")
+        logger.error(f"启动失败: {e}")
         raise
 
-    yield
 
-    # 关闭时
+async def shutdown_handler():
+    """应用关闭处理"""
     logger.info("正在关闭 DeepSearch Web UI...")
 
-    # 停止广播
-    await manager.stop_broadcasting()
+    try:
+        # 停止监控广播
+        await app_state.websocket_manager.stop_monitoring_broadcast()
 
-    # 停止监控API（但不停止监控器本身，因为它可能被主系统使用）
-    if monitor_api:
-        monitor_api.stop()
+        # 关闭所有 WebSocket 连接
+        await app_state.websocket_manager.close_all_connections()
 
+        # 停止监控 API
+        if app_state.monitor_api:
+            app_state.monitor_api.stop()
+
+    except Exception as e:
+        logger.error(f"关闭时出错: {e}")
+    
     logger.info("DeepSearch Web UI 已关闭")
 
 
@@ -188,7 +211,8 @@ app = FastAPI(
     title="DeepSearch Web UI",
     description="DeepSearch 量化交易系统 Web 界面",
     version="0.1.0",
-    lifespan=lifespan
+    on_startup=[startup_handler],
+    on_shutdown=[shutdown_handler]
 )
 
 # 配置 CORS
@@ -232,28 +256,36 @@ async def root():
 
 @app.websocket("/ws/monitor")
 async def websocket_monitor(websocket: WebSocket):
-    """监控数据 WebSocket 端点。"""
-    await manager.connect(websocket)
+    """监控数据 WebSocket 端点"""
+    await app_state.websocket_manager.accept_connection(websocket)
+    
     try:
         while True:
             # 保持连接，等待客户端消息
             data = await websocket.receive_text()
-            # 可以处理客户端命令
+
+            # 处理客户端命令
             if data == "ping":
                 await websocket.send_text("pong")
+            elif data == "get_status":
+                status = {
+                    "type": "status",
+                    "data": app_state.monitor_api.get_health_status() if app_state.monitor_api else {}
+                }
+                await websocket.send_json(status)
 
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        app_state.websocket_manager.remove_connection(websocket)
     except Exception as e:
-        logger.error(f"WebSocket 错误：{e}")
-        manager.disconnect(websocket)
+        logger.error(f"WebSocket 错误: {e}")
+        app_state.websocket_manager.remove_connection(websocket)
 
 
 @app.get("/health")
 async def health_check():
-    """健康检查端点。"""
-    if monitor_api:
-        health_status = monitor_api.get_health_status()
+    """健康检查端点"""
+    if app_state.monitor_api:
+        health_status = app_state.monitor_api.get_health_status()
         return {
             "status": "healthy" if health_status.get("status") == "healthy" else "unhealthy",
             "details": health_status
@@ -261,10 +293,33 @@ async def health_check():
     return {"status": "starting", "details": {}}
 
 
+# 向后兼容的函数
+def set_engine(engine: MainEngine) -> None:
+    """设置引擎实例（向后兼容）"""
+    app_state.set_engine(engine)
+
+
+def get_engine() -> Optional[MainEngine]:
+    """获取引擎实例（向后兼容）"""
+    return app_state.engine
+
+
+def get_monitor() -> Optional[EventSystemMonitor]:
+    """获取监控器实例（向后兼容）"""
+    return app_state.monitor
+
+
+def get_monitor_api() -> Optional[MonitorAPI]:
+    """获取监控API实例（向后兼容）"""
+    return app_state.monitor_api
+
+
 if __name__ == "__main__":
     import uvicorn
-
+    from .server_manager import get_server_manager
+    
     # 开发环境运行
+    manager = get_server_manager()
     uvicorn.run(
         "deepsearch.webui.server:app",
         host="0.0.0.0",

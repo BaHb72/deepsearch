@@ -1,13 +1,11 @@
 """
-系统控制 API 路由。
+系统控制 API 路由
 """
 from datetime import datetime
 from typing import Dict, Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from loguru import logger
-
-from deepsearch.webui.server import get_engine, get_monitor, get_monitor_api
 
 router = APIRouter()
 
@@ -43,7 +41,8 @@ async def get_system_status() -> Dict[str, Any]:
     }
 
     # 检查引擎状态
-    engine = get_engine()
+    from deepsearch.webui.server import app_state
+    engine = app_state.engine
     if engine and hasattr(engine, "event_engine"):
         event_engine = engine.event_engine
         status["engine"]["running"] = event_engine._running
@@ -58,7 +57,8 @@ async def get_system_status() -> Dict[str, Any]:
             status["engine"]["queue_size"] = event_engine._queue.qsize()
 
     # 检查监控状态
-    monitor = get_monitor()
+    from deepsearch.webui.server import app_state
+    monitor = app_state.monitor
     if monitor:
         status["monitor"]["running"] = monitor._monitoring
 
@@ -105,7 +105,8 @@ async def start_system(request: Request) -> Dict[str, Any]:
                 raise HTTPException(status_code=500, detail="启动引擎失败")
 
         # 非独立模式：原有逻辑
-        engine = get_engine()
+        from deepsearch.webui.server import app_state
+    engine = app_state.engine
         if engine and engine.event_engine._running:
             return {
                 "status": "already_running",
@@ -118,7 +119,10 @@ async def start_system(request: Request) -> Dict[str, Any]:
             logger.info("系统引擎已启动")
 
         # 启动监控
-        monitor = get_monitor()
+    from deepsearch.webui.server import app_state
+
+
+monitor = app_state.monitor
         if monitor and not monitor._monitoring:
             monitor.start()
             logger.info("监控系统已启动")
@@ -169,7 +173,8 @@ async def stop_system(request: Request) -> Dict[str, Any]:
                 raise HTTPException(status_code=500, detail="停止引擎失败")
 
         # 非独立模式：原有逻辑
-        engine = get_engine()
+        from deepsearch.webui.server import app_state
+    engine = app_state.engine
         if not engine or not engine.event_engine._running:
             return {
                 "status": "not_running",
@@ -202,7 +207,8 @@ async def restart_system() -> Dict[str, Any]:
     """
     try:
         # 先停止
-        engine = get_engine()
+        from deepsearch.webui.server import app_state
+    engine = app_state.engine
         if engine and engine.event_engine._running:
             await stop_system()
 
@@ -262,13 +268,15 @@ async def get_system_statistics() -> Dict[str, Any]:
     }
 
     # 获取引擎统计
-    engine = get_engine()
+    from deepsearch.webui.server import app_state
+    engine = app_state.engine
     if engine:
         engine_stats = engine.get_statistics()
         stats["engine"] = engine_stats
 
     # 获取监控统计
-    monitor = get_monitor()
+    from deepsearch.webui.server import app_state
+    monitor = app_state.monitor
     if monitor:
         monitor_stats = monitor.get_statistics()
         stats["monitoring"] = monitor_stats
@@ -297,7 +305,8 @@ async def get_all_components() -> Dict[str, Any]:
     Returns:
         所有组件的状态信息
     """
-    engine = get_engine()
+    from deepsearch.webui.server import app_state
+    engine = app_state.engine
     if not engine:
         raise HTTPException(status_code=503, detail="系统未初始化")
 
@@ -344,7 +353,8 @@ async def get_component_status(component_name: str) -> Dict[str, Any]:
     Returns:
         组件状态信息
     """
-    engine = get_engine()
+    from deepsearch.webui.server import app_state
+    engine = app_state.engine
     if not engine:
         raise HTTPException(status_code=503, detail="系统未初始化")
 
@@ -387,7 +397,8 @@ async def start_component(component_name: str) -> Dict[str, Any]:
     Returns:
         启动结果
     """
-    engine = get_engine()
+    from deepsearch.webui.server import app_state
+    engine = app_state.engine
     if not engine:
         raise HTTPException(status_code=503, detail="系统未初始化")
 
@@ -426,7 +437,8 @@ async def stop_component(component_name: str) -> Dict[str, Any]:
     Returns:
         停止结果
     """
-    engine = get_engine()
+    from deepsearch.webui.server import app_state
+    engine = app_state.engine
     if not engine:
         raise HTTPException(status_code=503, detail="系统未初始化")
 
@@ -459,7 +471,8 @@ async def check_component_health(component_name: str) -> Dict[str, Any]:
     Returns:
         健康检查结果
     """
-    engine = get_engine()
+    from deepsearch.webui.server import app_state
+    engine = app_state.engine
     if not engine:
         raise HTTPException(status_code=503, detail="系统未初始化")
 
