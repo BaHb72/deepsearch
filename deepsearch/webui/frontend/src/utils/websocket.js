@@ -82,7 +82,8 @@ export class WebSocketManager {
             this.cleanup()
             this.emit('close', event)
 
-            if (this.shouldReconnect) {
+            // 只在非正常关闭时重连
+            if (this.shouldReconnect && event.code !== 1000) {
                 this.scheduleReconnect()
             }
         }
@@ -148,12 +149,19 @@ export class WebSocketManager {
             return
         }
 
+        // 清除之前的重连定时器
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer)
+            this.reconnectTimer = null
+        }
+
         this.reconnectAttempts++
-        const delay = Math.min(this.options.reconnectInterval * this.reconnectAttempts, 30000)
+        // 使用指数退避，但最大不超过30秒
+        const delay = Math.min(this.options.reconnectInterval * Math.pow(1.5, this.reconnectAttempts - 1), 30000)
 
         // 只在前几次重连时显示日志
         if (this.reconnectAttempts <= 3) {
-            console.debug(`WebSocket: 将在 ${delay}ms 后重连`)
+            console.debug(`WebSocket: 将在 ${Math.round(delay / 1000)}秒后重连 (第${this.reconnectAttempts}次)`)
         }
 
         this.reconnectTimer = setTimeout(() => {
@@ -229,7 +237,14 @@ export class WebSocketManager {
 }
 
 // 创建默认的 WebSocket 管理器实例
-export const wsManager = new WebSocketManager('/ws/monitor', {
-    reconnectInterval: 3000,
-    maxReconnectAttempts: 20
+let wsUrl = '/ws/monitor'
+if (window.location.host) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    wsUrl = `${protocol}//${window.location.host}/ws/monitor`
+}
+
+export const wsManager = new WebSocketManager(wsUrl, {
+    reconnectInterval: 5000,  // 增加重连间隔到5秒
+    maxReconnectAttempts: 10,  // 减少最大重连次数
+    heartbeatInterval: 30000  // 30秒心跳
 })

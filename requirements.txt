@@ -8,8 +8,8 @@ pydantic-settings>=2.10.1
 pyyaml>=6.0.2
 twisted>=25.5.0
 pyzmq~=27.0.0
-redis
-redistimeseries
+redis~=6.2.0
+redistimeseries~=1.4.3
 
 # ==== Web UI 依赖 ====
 fastapi>=0.100.0
@@ -25,3 +25,8 @@ pytest-tornasync>=0.6.0.post2
 pytest-trio>=0.8.0
 pytest-twisted>=1.14.3
 
+
+deepsearch~=0.1.0
+psutil~=7.0.0
+setuptools~=80.9.0
+click~=8.2.1

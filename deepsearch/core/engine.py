@@ -6,13 +6,14 @@
 """
 import asyncio
 import logging
+import sys
 import threading
 import time
 from typing import Dict, Any, Optional, Callable, List
 
 from deepsearch.config import settings
 from deepsearch.constants import EVENT_SYSTEM_READY, EVENT_SYSTEM_EXIT
-from deepsearch.core.component_manager import ComponentManager, ComponentType
+from deepsearch.core.component_manager import ComponentManager, ComponentType, ComponentStatus
 from deepsearch.core.components import (
     EventEngineComponent,
     MessageBusComponent,
@@ -443,6 +444,10 @@ class MainEngine:
         self._initialized = False
         self._infrastructure_running = False
 
+        # 在 Windows 上执行额外的清理
+        if sys.platform == "win32":
+            self._force_cleanup_processes()
+
     def run(self) -> None:
         """
         主运行循环
@@ -610,7 +615,7 @@ class MainEngine:
                         pass
 
             # 在后台线程中启动服务器
-            self._webui_thread = threading.Thread(target=run_server, daemon=True)
+            self._webui_thread = threading.Thread(target=run_server, daemon=False)  # 改为非daemon线程
             self._webui_thread.start()
 
             # 等待服务器启动
@@ -641,6 +646,51 @@ class MainEngine:
                     except Exception as e:
                         self._logger.error(f"无法终止占用端口的进程: {e}")
                         raise RuntimeError(f"端口{port}被占用且无法释放")
+
+    def _force_cleanup_processes(self) -> None:
+        """强制清理残留进程（Windows专用）"""
+        if sys.platform != "win32":
+            return
+
+        try:
+            import psutil
+            import os
+
+            current_pid = os.getpid()
+            current_proc = psutil.Process(current_pid)
+
+            # 查找所有子进程
+            children = current_proc.children(recursive=True)
+
+            for child in children:
+                try:
+                    # 检查是否是Python进程
+                    if 'python' in child.name().lower():
+                        self._logger.info(f"终止子进程 PID={child.pid}")
+                        child.terminate()
+                        try:
+                            child.wait(timeout=2)
+                        except psutil.TimeoutExpired:
+                            child.kill()
+                except Exception as e:
+                    self._logger.error(f"无法终止进程 PID={child.pid}: {e}")
+
+            # 清理占用的端口
+            ports_to_clean = [8000, 3000]  # WebUI相关端口
+            for conn in psutil.net_connections():
+                if conn.laddr.port in ports_to_clean and conn.status == 'LISTEN':
+                    if conn.pid and conn.pid != current_pid:
+                        try:
+                            proc = psutil.Process(conn.pid)
+                            if 'python' in proc.name().lower():
+                                self._logger.info(f"清理占用端口 {conn.laddr.port} 的进程 PID={conn.pid}")
+                                proc.terminate()
+                                proc.wait(timeout=2)
+                        except Exception as e:
+                            self._logger.debug(f"清理进程失败: {e}")
+
+        except Exception as e:
+            self._logger.error(f"强制清理进程时出错: {e}")
     
     def _stop_webui_server(self) -> None:
         """停止WebUI后端服务器"""
@@ -652,15 +702,53 @@ class MainEngine:
                 # 强制停止服务器
                 if hasattr(self._webui_server, 'force_exit'):
                     self._webui_server.force_exit = True
+
+                # 如果有事件循环，确保其正确关闭
+                if hasattr(self, '_webui_loop') and self._webui_loop:
+                    try:
+                        # 在事件循环线程中安排停止任务
+                        if self._webui_loop.is_running():
+                            # 创建一个 future 来同步停止操作
+                            import concurrent.futures
+                            future = concurrent.futures.Future()
+
+                            def stop_server():
+                                try:
+                                    # 停止服务器
+                                    if self._webui_server:
+                                        self._webui_server.should_exit = True
+                                        if hasattr(self._webui_server, 'shutdown'):
+                                            asyncio.create_task(self._webui_server.shutdown())
+                                except Exception as e:
+                                    self._logger.error(f"Error in stop_server: {e}")
+                                finally:
+                                    future.set_result(True)
+
+                            # 在事件循环中调度停止任务
+                            self._webui_loop.call_soon_threadsafe(stop_server)
+
+                            # 等待停止完成
+                            try:
+                                future.result(timeout=2)
+                            except Exception:
+                                pass
+
+                            # 停止事件循环
+                            self._webui_loop.call_soon_threadsafe(self._webui_loop.stop)
+                    except Exception as e:
+                        self._logger.error(f"Error stopping event loop: {e}")
                     
                 # 等待线程结束
                 if hasattr(self, '_webui_thread') and self._webui_thread.is_alive():
-                    self._webui_thread.join(timeout=2)
+                    self._webui_thread.join(timeout=3)
                     if self._webui_thread.is_alive():
-                        self._logger.warning("WebUI线程未能正常结束，强制终止")
-                        # 线程已设置为daemon，会随主进程退出
+                        self._logger.warning("WebUI线程未能正常结束")
+                        # 在 Windows 上，尝试强制终止相关进程
+                        if sys.platform == "win32":
+                            self._force_cleanup_processes()
 
                 self._webui_server = None
+                self._webui_loop = None
                 self._logger.info("WebUI server stopped")
             except Exception as e:
                 self._logger.error(f"Error stopping WebUI server: {e}")

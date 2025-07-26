@@ -14,7 +14,7 @@ from typing import Any, Callable, Literal, Optional
 from loguru import logger
 from platformdirs import user_log_path
 
-from deepsearch.config.setting import settings
+from deepsearch.config import settings
 
 # ==============================================================================
 # Constants
@@ -323,6 +323,28 @@ class LoggerManager:
     def log_path(self) -> Optional[Path]:
         """获取日志目录路径"""
         return self._log_path
+
+    def set_level(self, level: str) -> None:
+        """
+        动态设置日志级别
+        
+        :param level: 日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        """
+        try:
+            # 如果日志系统未启动，先启动
+            if not self._configured:
+                config = LoggerConfig(level=level)
+                self.start(config)
+                return
+
+            # 动态更新日志级别
+            logger.remove()
+            config = LoggerConfig(level=level)
+            self._configurator._setup_logger(config)
+            _patch_std(level)
+            logger.info(f"Log level changed to: {level}")
+        except Exception as e:
+            print(f"[ERROR] Failed to set log level: {e}", file=sys.stderr)
 
 
 # ==============================================================================

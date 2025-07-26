@@ -58,3 +58,24 @@ uv.lock
 /tmp/
 /deepsearch/webui/frontend/node_modules/
 /deepsearch/webui/frontend/package-lock.json
+/.venv/
+/tests/
+
+# Data files
+data/monitoring/*.json
+
+# Temporary test scripts
+test_*.py
+*_test.py
+check_*.py
+force_*.py
+quick_*.py
+simple_*.py
+run_tests.py
+safe_start.py
+
+# Temporary documentation
+README_NEW.md
+REFACTORING_*.md
+SYSTEM_*.md
+WEBUI_*.md

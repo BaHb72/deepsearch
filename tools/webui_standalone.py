@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-DeepSearch WebUI 独立启动脚本
+DeepSearch WebUI 独立启动脚本（已废弃）
 
-这个脚本启动一个独立的WebUI服务，可以通过Web界面控制整个DeepSearch系统。
-WebUI和系统引擎是分离的，WebUI可以启动、停止和管理系统引擎。
+此脚本已被新的 CLI 接口替代，请使用：
+  python -m deepsearch webui
+
+保留此文件仅为向后兼容。
 """
 import asyncio
 import logging
@@ -249,4 +251,11 @@ def main():
 
 
 if __name__ == "__main__":
+    import warnings
+
+    warnings.warn(
+        "webui_standalone.py 已废弃，请使用 'python -m deepsearch webui' 命令",
+        DeprecationWarning,
+        stacklevel=2
+    )
     main()

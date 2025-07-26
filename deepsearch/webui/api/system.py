@@ -10,6 +10,17 @@ from loguru import logger
 router = APIRouter()
 
 
+def get_monitor_api() -> Optional[Any]:
+    """获取监控 API 实例（如果存在）"""
+    try:
+        from deepsearch.webui.server import app_state
+        if hasattr(app_state, 'monitor_api'):
+            return app_state.monitor_api
+    except:
+        pass
+    return None
+
+
 def get_standalone_manager(request: Request) -> Optional[Any]:
     """获取独立模式管理器（如果存在）"""
     if hasattr(request.app.state, 'manager'):
@@ -40,37 +51,52 @@ async def get_system_status() -> Dict[str, Any]:
         "components": {}
     }
 
-    # 检查引擎状态
-    from deepsearch.webui.server import app_state
-    engine = app_state.engine
-    if engine and hasattr(engine, "event_engine"):
-        event_engine = engine.event_engine
-        status["engine"]["running"] = event_engine._running
+    try:
+        # 检查引擎状态
+        from deepsearch.webui.server import app_state
+        engine = getattr(app_state, 'engine', None)
+        if engine:
+            # 检查引擎是否正在运行
+            is_running = engine.is_running() if hasattr(engine, 'is_running') else False
+            status["engine"]["running"] = is_running
 
-        if event_engine._running:
-            # 获取运行时长
-            if hasattr(event_engine, "_start_time"):
-                uptime = (datetime.now() - event_engine._start_time).total_seconds()
-                status["engine"]["uptime"] = uptime
+            if is_running:
+                # 获取事件引擎信息
+                event_engine = getattr(engine, '_event_engine', None) or getattr(engine, 'event_engine', None)
+                if event_engine:
+                    # 获取运行时长
+                    if hasattr(event_engine, "_start_time"):
+                        uptime = (datetime.now() - event_engine._start_time).total_seconds()
+                        status["engine"]["uptime"] = uptime
 
-            # 获取队列大小
-            status["engine"]["queue_size"] = event_engine._queue.qsize()
+                    # 获取队列大小
+                    if hasattr(event_engine, '_queue'):
+                        status["engine"]["queue_size"] = event_engine._queue.qsize()
 
-    # 检查监控状态
-    from deepsearch.webui.server import app_state
-    monitor = app_state.monitor
-    if monitor:
-        status["monitor"]["running"] = monitor._monitoring
+                    # 获取事件数量
+                    if hasattr(event_engine, '_event_count'):
+                        status["engine"]["event_count"] = event_engine._event_count
 
-    monitor_api = get_monitor_api()
-    if monitor_api:
-        status["monitor"]["api_running"] = monitor_api._running
+        # 检查监控状态
+        monitor = getattr(app_state, 'monitor', None)
+        if monitor:
+            status["monitor"]["running"] = getattr(monitor, '_monitoring', False)
 
-    # 检查组件状态
-    if engine:
-        # 获取各个组件的状态
-        components = engine.get_statistics()
-        status["components"] = components.get("components", {})
+        monitor_api = get_monitor_api()
+        if monitor_api:
+            status["monitor"]["api_running"] = getattr(monitor_api, '_running', False)
+
+        # 检查组件状态
+        if engine and hasattr(engine, 'get_statistics'):
+            try:
+                # 获取各个组件的状态
+                stats = engine.get_statistics()
+                status["components"] = stats.get("components", {})
+            except Exception as e:
+                logger.warning(f"获取组件状态失败: {e}")
+    except Exception as e:
+        logger.error(f"获取系统状态失败: {e}")
+        # 返回默认状态，而不是抛出异常
 
     return status
 
@@ -106,7 +132,7 @@ async def start_system(request: Request) -> Dict[str, Any]:
 
         # 非独立模式：原有逻辑
         from deepsearch.webui.server import app_state
-    engine = app_state.engine
+        engine = app_state.engine
         if engine and engine.event_engine._running:
             return {
                 "status": "already_running",
@@ -119,10 +145,8 @@ async def start_system(request: Request) -> Dict[str, Any]:
             logger.info("系统引擎已启动")
 
         # 启动监控
-    from deepsearch.webui.server import app_state
-
-
-monitor = app_state.monitor
+        from deepsearch.webui.server import app_state
+        monitor = app_state.monitor
         if monitor and not monitor._monitoring:
             monitor.start()
             logger.info("监控系统已启动")
@@ -174,7 +198,7 @@ async def stop_system(request: Request) -> Dict[str, Any]:
 
         # 非独立模式：原有逻辑
         from deepsearch.webui.server import app_state
-    engine = app_state.engine
+        engine = app_state.engine
         if not engine or not engine.event_engine._running:
             return {
                 "status": "not_running",
@@ -208,7 +232,7 @@ async def restart_system() -> Dict[str, Any]:
     try:
         # 先停止
         from deepsearch.webui.server import app_state
-    engine = app_state.engine
+        engine = app_state.engine
         if engine and engine.event_engine._running:
             await stop_system()
 
@@ -242,14 +266,91 @@ async def get_recent_logs(
     Returns:
         最近的日志内容
     """
-    # 这是一个简化实现
-    # 实际应该从日志文件或日志系统读取
+    from pathlib import Path
+    from collections import deque
 
-    return {
-        "status": "not_implemented",
-        "message": "日志查看功能需要集成日志系统",
-        "logs": []
-    }
+    logs = []
+
+    try:
+        # 获取日志目录
+        log_dir = Path("logs")
+        if not log_dir.exists():
+            # 尝试其他可能的日志位置
+            from deepsearch.observability.logger import logger_manager
+            if logger_manager.log_path:
+                log_dir = logger_manager.log_path
+
+        # 查找最新的日志文件
+        log_files = list(log_dir.glob("deepsearch_*.log"))
+        if not log_files:
+            # 如果没有找到日志文件，返回空列表
+            return {
+                "status": "success",
+                "logs": [],
+                "total": 0
+            }
+
+        # 按修改时间排序，获取最新的文件
+        latest_log = max(log_files, key=lambda f: f.stat().st_mtime)
+
+        # 读取日志文件的最后N行
+        with open(latest_log, 'r', encoding='utf-8') as f:
+            # 使用 deque 来高效地保留最后 N 行
+            last_lines = deque(f, lines * 2)  # 读取更多行以便过滤
+
+        # 解析日志行
+        level_priority = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3}
+        min_level = level_priority.get(level.upper(), 1)
+
+        for line in last_lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # 解析日志格式：时间 | 级别 | 进程信息 | 文件位置 | 服务 | 消息
+            parts = line.split(" | ")
+            if len(parts) >= 6:
+                try:
+                    log_entry = {
+                        "id": len(logs),
+                        "timestamp": parts[0].strip(),
+                        "level": parts[1].strip(),
+                        "process_info": parts[2].strip(),
+                        "location": parts[3].strip(),
+                        "service": parts[4].strip(),
+                        "message": " | ".join(parts[5:])  # 消息可能包含 |
+                    }
+
+                    # 过滤日志级别
+                    log_level = log_entry["level"].upper()
+                    if log_level in level_priority and level_priority[log_level] >= min_level:
+                        logs.append(log_entry)
+                except:
+                    # 如果解析失败，作为原始日志添加
+                    logs.append({
+                        "id": len(logs),
+                        "timestamp": datetime.now().isoformat(),
+                        "level": "INFO",
+                        "message": line
+                    })
+
+        # 只返回请求的行数
+        logs = logs[-lines:] if len(logs) > lines else logs
+
+        return {
+            "status": "success",
+            "logs": logs,
+            "total": len(logs),
+            "log_file": str(latest_log)
+        }
+
+    except Exception as e:
+        logger.error(f"读取日志失败: {e}")
+        return {
+            "status": "error",
+            "message": f"读取日志失败: {str(e)}",
+            "logs": []
+        }
 
 
 @router.get("/statistics")

@@ -28,12 +28,18 @@ export default defineConfig({
     server: {
         port: 3000,
         proxy: {
+            // 代理日志WebSocket
+            '/api/logs/ws': {
+                target: 'ws://localhost:8000',
+                ws: true,
+                changeOrigin: true
+            },
             // 代理 API 请求到后端
             '/api': {
                 target: 'http://localhost:8000',
                 changeOrigin: true
             },
-            // 代理 WebSocket
+            // 代理监控WebSocket
             '/ws': {
                 target: 'ws://localhost:8000',
                 ws: true,

@@ -1,5 +1,20 @@
 import request from './request'
 
+// 导出统一的API对象
+export const systemApi = {
+    getStatus: getSystemStatus,
+    start: startSystem,
+    stop: stopSystem,
+    restart: restartSystem,
+    getStatistics: getSystemStatistics,
+    getRecentLogs,
+    getAllComponents,
+    getComponentStatus,
+    startComponent,
+    stopComponent,
+    checkComponentHealth
+}
+
 // 获取系统状态
 export function getSystemStatus() {
     return request({
