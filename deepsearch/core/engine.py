@@ -399,8 +399,11 @@ class MainEngine:
 
         except Exception as e:
             self._logger.error(f"Failed to start MainEngine: {e}", exc_info=True)
-            # 停止已启动的组件
-            self.stop()
+            # 只停止业务组件，不停止整个系统
+            try:
+                self.stop_business_components()
+            except Exception:
+                pass
             raise ComponentLifecycleError(f"Start failed: {e}") from e
 
     def stop_infrastructure(self) -> None:
@@ -569,6 +572,100 @@ class MainEngine:
         info = self._component_manager.get_component_status(name)
         if info.component_type == ComponentType.BUSINESS:
             self._running = False
+
+    def stop_business_components(self) -> None:
+        """
+        仅停止业务组件，保持基础设施组件运行
+        
+        这个方法用于通过WebUI停止系统时，确保WebUI本身继续运行
+        """
+        if not self._initialized:
+            return
+
+        self._logger.info("正在停止业务组件...")
+
+        # 发送系统退出事件（只针对业务组件）
+        if self._event_engine:
+            try:
+                self._event_engine.put(Event(
+                    type=EVENT_SYSTEM_EXIT,
+                    data={"message": "Business components shutting down"}
+                ))
+                # 给一点时间处理退出事件
+                time.sleep(0.1)
+            except Exception as e:
+                self._logger.error(f"Error sending business exit event: {e}")
+
+        # 停止所有业务组件
+        try:
+            self._component_manager.stop_all(ComponentType.BUSINESS)
+        except Exception as e:
+            self._logger.error(f"Error stopping business components: {e}", exc_info=True)
+
+        self._running = False
+        self._logger.info("业务组件已停止")
+
+    def restart_business_components(self) -> None:
+        """
+        重启业务组件
+        
+        先停止所有业务组件，然后重新启动它们
+        """
+        if not self._initialized:
+            raise ComponentLifecycleError("MainEngine not initialized")
+
+        if not self._infrastructure_running:
+            raise ComponentLifecycleError("Infrastructure not running")
+
+        self._logger.info("正在重启业务组件...")
+
+        # 先停止业务组件
+        self.stop_business_components()
+
+        # 等待一段时间确保清理完成
+        time.sleep(1)
+
+        # 重新启动业务组件
+        try:
+            self._logger.info("正在启动业务组件...")
+
+            # 启动所有业务组件
+            failed_components = []
+            for name, info in self._component_manager.get_all_components_status().items():
+                if info.component_type == ComponentType.BUSINESS:
+                    if info.status != ComponentStatus.RUNNING:
+                        try:
+                            self._component_manager.start_component(name)
+                        except Exception as e:
+                            self._logger.error(f"Failed to start component {name}: {e}")
+                            failed_components.append((name, str(e)))
+
+            # 如果有组件启动失败，报告但不抛出异常
+            if failed_components:
+                error_msg = "; ".join([f"{name}: {error}" for name, error in failed_components])
+                self._logger.error(f"部分组件重启失败: {error_msg}")
+                # 如果所有业务组件都失败了，才抛出异常
+                all_business_components = [name for name, info in
+                                           self._component_manager.get_all_components_status().items()
+                                           if info.component_type == ComponentType.BUSINESS]
+                if len(failed_components) == len(all_business_components):
+                    raise ComponentLifecycleError(f"所有业务组件重启失败: {error_msg}")
+
+            # 发送系统就绪事件
+            if self._event_engine:
+                self._event_engine.put(Event(
+                    type=EVENT_SYSTEM_READY,
+                    data={"message": "Business components restarted"}
+                ))
+
+            self._running = True
+            self._logger.info("业务组件重启完成")
+
+        except Exception as e:
+            self._logger.error(f"Failed to restart business components: {e}", exc_info=True)
+            # 确保不会因为重启失败而关闭基础设施
+            self._running = False
+            raise ComponentLifecycleError(f"Restart failed: {e}") from e
 
     def _start_webui_server(self) -> None:
         """启动WebUI后端服务器"""

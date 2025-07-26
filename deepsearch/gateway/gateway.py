@@ -379,7 +379,17 @@ class BaseGateway(ABC):
     # ==========================================================================
     # Resource Cleanup
     # ==========================================================================
-    
+
+    def reset(self) -> None:
+        """重置网关状态，允许重新启动"""
+        self._shutdown = False
+        self._reconnecting = False
+        self.status = GatewayStatus.DISCONNECTED
+        self._heartbeat_enabled = False
+        self._heartbeat_interval = None
+        self._executor = None
+        self.logger.info(f"网关 [{self.gateway_name}] 状态已重置")
+
     def cleanup(self) -> None:
         """清理资源"""
         self._shutdown = True
@@ -493,6 +503,11 @@ class Gateway(BaseGateway):
 
     def start(self) -> None:
         """启动网关"""
+        # 如果网关已经被关闭，重置状态
+        if self._shutdown:
+            self.reset()
+            self._connected = False
+        
         self.connect()
         self.start_heartbeat()
 

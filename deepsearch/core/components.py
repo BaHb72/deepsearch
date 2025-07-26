@@ -168,6 +168,12 @@ class GatewayComponent(Component):
         """启动网关"""
         if not self.gateway:
             raise RuntimeError("Gateway not initialized")
+
+        # 如果网关已经被关闭，需要重新创建实例
+        if hasattr(self.gateway, '_shutdown') and self.gateway._shutdown:
+            self._logger.info("网关已关闭，重新创建实例...")
+            self.gateway = Gateway(self.event_engine)
+        
         self.gateway.start()
         self._status = ComponentStatus.RUNNING
         self._logger.info("网关已启动")
@@ -183,7 +189,9 @@ class GatewayComponent(Component):
         """健康检查"""
         if not self.gateway:
             return False
-        return self.gateway._active
+        # 检查网关状态和连接状态
+        return (hasattr(self.gateway, '_connected') and self.gateway._connected and
+                not getattr(self.gateway, '_shutdown', False))
 
     def get_instance(self) -> Gateway:
         """获取网关实例"""

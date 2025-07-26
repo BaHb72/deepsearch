@@ -85,6 +85,15 @@
                   >
                     停止引擎
                   </el-button>
+                  <el-button
+                      v-if="systemStatus.running"
+                      :loading="systemLoading"
+                      size="small"
+                      type="warning"
+                      @click="handleSystemRestart"
+                  >
+                    重启引擎
+                  </el-button>
                 </el-button-group>
 
                 <!-- 主题切换 -->
@@ -120,7 +129,7 @@ import {ElMessage, ElMessageBox} from 'element-plus'
 import {Document, List, Monitor, Moon, Setting, Sunny, TrendCharts} from '@element-plus/icons-vue'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import {useSystemStore} from '@/stores/system'
-import {startSystem, stopSystem} from '@/api/system'
+import {restartSystem, startSystem, stopSystem} from '@/api/system'
 import {storage, STORAGE_KEYS} from '@/utils/storage'
 
 const route = useRoute()
@@ -156,6 +165,9 @@ const systemStatus = computed(() => {
 // 系统操作加载状态
 const systemLoading = ref(false)
 
+// 是否暂停状态轮询
+const pauseStatusPolling = ref(false)
+
 // 暗色主题 - 使用安全的 storage
 const isDark = ref(storage.getItem(STORAGE_KEYS.THEME) === 'dark')
 
@@ -174,11 +186,17 @@ const toggleTheme = (value) => {
 const handleSystemStart = async () => {
   try {
     systemLoading.value = true
+    pauseStatusPolling.value = true  // 暂停轮询
     const result = await startSystem()
     ElMessage.success(result.message || '系统启动成功')
-    systemStore.fetchStatus()
+    // 延迟一下再恢复轮询
+    setTimeout(() => {
+      pauseStatusPolling.value = false
+      systemStore.fetchStatus()
+    }, 1000)
   } catch (error) {
     ElMessage.error(error.message || '系统启动失败')
+    pauseStatusPolling.value = false  // 失败时恢复轮询
   } finally {
     systemLoading.value = false
   }
@@ -198,13 +216,51 @@ const handleSystemStop = async () => {
     )
 
     systemLoading.value = true
+    pauseStatusPolling.value = true  // 暂停轮询
     const result = await stopSystem()
-    ElMessage.success(result.message || '系统停止成功')
-    systemStore.fetchStatus()
+    ElMessage.success(result.message || '交易引擎已停止')
+    // 延迟一下再恢复轮询
+    setTimeout(() => {
+      pauseStatusPolling.value = false
+      systemStore.fetchStatus()
+    }, 1000)
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(error.message || '系统停止失败')
     }
+    pauseStatusPolling.value = false  // 失败时恢复轮询
+  } finally {
+    systemLoading.value = false
+  }
+}
+
+// 重启系统
+const handleSystemRestart = async () => {
+  try {
+    await ElMessageBox.confirm(
+        '确定要重启交易引擎吗？这将中断当前所有交易活动并重新启动。',
+        '重启交易引擎',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning',
+        }
+    )
+
+    systemLoading.value = true
+    pauseStatusPolling.value = true  // 暂停轮询
+    const result = await restartSystem()
+    ElMessage.success(result.message || '交易引擎重启成功')
+    // 延迟一下再恢复轮询
+    setTimeout(() => {
+      pauseStatusPolling.value = false
+      systemStore.fetchStatus()
+    }, 2000)  // 重启需要更长时间
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '系统重启失败')
+    }
+    pauseStatusPolling.value = false  // 失败时恢复轮询
   } finally {
     systemLoading.value = false
   }
@@ -225,9 +281,15 @@ onMounted(() => {
   })
 
   statusTimer = setInterval(() => {
-    systemStore.fetchStatus().catch(err => {
-      console.warn('更新系统状态失败:', err)
-    })
+    // 如果正在进行系统操作，跳过轮询
+    if (!pauseStatusPolling.value && !systemLoading.value) {
+      systemStore.fetchStatus().catch(err => {
+        // 只在非系统操作期间才显示警告
+        if (!systemLoading.value) {
+          console.warn('更新系统状态失败:', err)
+        }
+      })
+    }
   }, 5000) // 每5秒更新一次
 })
 

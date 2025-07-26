@@ -7,6 +7,8 @@ from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Request
 from loguru import logger
 
+from deepsearch.core.component_manager import ComponentType, ComponentStatus
+
 router = APIRouter()
 
 
@@ -130,10 +132,12 @@ async def start_system(request: Request) -> Dict[str, Any]:
             else:
                 raise HTTPException(status_code=500, detail="启动引擎失败")
 
-        # 非独立模式：原有逻辑
+        # 非独立模式：检查业务组件状态
         from deepsearch.webui.server import app_state
         engine = app_state.engine
-        if engine and engine.event_engine._running:
+
+        # 检查业务组件是否在运行（而不是基础设施）
+        if engine and engine.is_running():
             return {
                 "status": "already_running",
                 "message": "系统已经在运行"
@@ -141,20 +145,37 @@ async def start_system(request: Request) -> Dict[str, Any]:
 
         # 启动引擎
         if engine:
-            engine.start()
-            logger.info("系统引擎已启动")
+            try:
+                # 如果基础设施未运行，先启动基础设施
+                if not engine._infrastructure_running:
+                    engine.start_infrastructure()
+                    logger.info("基础设施组件已启动")
 
-        # 启动监控
-        from deepsearch.webui.server import app_state
-        monitor = app_state.monitor
-        if monitor and not monitor._monitoring:
-            monitor.start()
-            logger.info("监控系统已启动")
+                # 启动业务组件 - 使用更安全的方式
+                failed_components = []
+                component_manager = engine.get_component_manager()
+                for name, info in component_manager.get_all_components_status().items():
+                    if info.component_type == ComponentType.BUSINESS and info.status != ComponentStatus.RUNNING:
+                        try:
+                            component_manager.start_component(name)
+                            logger.info(f"业务组件 {name} 已启动")
+                        except Exception as e:
+                            logger.error(f"启动组件 {name} 失败: {e}")
+                            failed_components.append((name, str(e)))
 
-        monitor_api = get_monitor_api()
-        if monitor_api and not monitor_api._running:
-            monitor_api.start()
-            logger.info("监控 API 已启动")
+                if failed_components:
+                    # 如果有组件启动失败，但不是全部失败，仍然返回部分成功
+                    error_msg = "; ".join([f"{name}: {error}" for name, error in failed_components])
+                    logger.warning(f"部分组件启动失败: {error_msg}")
+
+                # 更新引擎运行状态
+                engine._running = True
+                logger.info("业务组件启动完成")
+            except Exception as e:
+                logger.error(f"启动业务组件时出错: {e}")
+                raise HTTPException(status_code=500, detail=f"启动失败：{str(e)}")
+        else:
+            raise HTTPException(status_code=503, detail="系统未初始化")
 
         return {
             "status": "started",
@@ -171,6 +192,8 @@ async def start_system(request: Request) -> Dict[str, Any]:
 async def stop_system(request: Request) -> Dict[str, Any]:
     """
     停止系统。
+    
+    注意：只停止业务组件，保持WebUI服务继续运行
     
     Returns:
         停止结果
@@ -196,23 +219,23 @@ async def stop_system(request: Request) -> Dict[str, Any]:
             else:
                 raise HTTPException(status_code=500, detail="停止引擎失败")
 
-        # 非独立模式：原有逻辑
+        # 非独立模式：只停止业务组件
         from deepsearch.webui.server import app_state
         engine = app_state.engine
-        if not engine or not engine.event_engine._running:
+        if not engine or not engine.is_running():
             return {
                 "status": "not_running",
                 "message": "系统未在运行"
             }
 
-        # 停止引擎
+        # 只停止业务组件，保持基础设施运行
         if engine:
-            engine.stop()
-            logger.info("系统引擎已停止")
+            engine.stop_business_components()
+            logger.info("业务组件已停止")
 
         return {
             "status": "stopped",
-            "message": "系统停止成功",
+            "message": "交易引擎已停止，WebUI继续运行",
             "timestamp": datetime.now().isoformat()
         }
 
@@ -222,30 +245,59 @@ async def stop_system(request: Request) -> Dict[str, Any]:
 
 
 @router.post("/restart")
-async def restart_system() -> Dict[str, Any]:
+async def restart_system(request: Request) -> Dict[str, Any]:
     """
     重启系统。
+    
+    重启业务组件，保持WebUI服务持续运行
     
     Returns:
         重启结果
     """
     try:
-        # 先停止
+        # 检查是否在独立模式
+        manager = get_standalone_manager(request)
+        if manager:
+            # 独立模式：先停止再启动
+            if manager.engine:
+                manager.stop_engine()
+                # 等待一下确保完全停止
+                import asyncio
+                await asyncio.sleep(1)
+
+            success = manager.start_engine()
+            if success:
+                return {
+                    "status": "restarted",
+                    "message": "系统重启成功",
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:
+                raise HTTPException(status_code=500, detail="重启失败")
+
+        # 非独立模式：使用新的重启方法
         from deepsearch.webui.server import app_state
         engine = app_state.engine
-        if engine and engine.event_engine._running:
-            await stop_system()
 
-            # 等待一下确保完全停止
-            import asyncio
-            await asyncio.sleep(1)
+        if not engine:
+            raise HTTPException(status_code=503, detail="系统未初始化")
 
-        # 再启动
-        result = await start_system()
-        result["message"] = "系统重启成功"
+        # 使用引擎的重启业务组件方法
+        try:
+            engine.restart_business_components()
 
-        return result
+            return {
+                "status": "restarted",
+                "message": "交易引擎重启成功",
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"重启业务组件失败：{e}")
+            # 重启失败时，保持 WebUI 运行，只返回错误信息
+            raise HTTPException(status_code=500, detail=f"重启失败：{str(e)}")
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"重启系统失败：{e}")
         raise HTTPException(status_code=500, detail=f"重启失败：{str(e)}")
