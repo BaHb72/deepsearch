@@ -39,11 +39,15 @@ def run(mode, config, log_level, no_frontend, open_browser):
     if mode == 'full':
         if no_frontend:
             click.echo("启动系统（不含前端）...")
-            # 只启动后端引擎
+            # 使用分阶段启动，但不启动前端
             from deepsearch.core import MainEngine
             engine = MainEngine()
             engine.initialize()
-            engine.start()
+            engine.start_phased(
+                include_business=True,
+                include_webui=True,
+                include_frontend=False  # 不启动前端
+            )
 
             try:
                 click.echo("系统运行中，按 Ctrl+C 退出")
@@ -59,14 +63,34 @@ def run(mode, config, log_level, no_frontend, open_browser):
                 engine.stop()
         else:
             click.echo("启动完整系统（含前端）...")
-            # Full模式：启动前端+后端
-            from deepsearch.webui.runner import run_standalone
-            run_standalone(
-                start_frontend=True,
-                auto_open_browser=open_browser,
-                start_engine=True,
-                infrastructure_only=False  # 启动所有组件
+            # 使用分阶段启动，启动所有组件
+            from deepsearch.core import MainEngine
+            engine = MainEngine()
+            engine.initialize()
+            engine.start_phased(
+                include_business=True,
+                include_webui=True,
+                include_frontend=True  # 启动前端
             )
+
+            try:
+                click.echo("系统运行中，按 Ctrl+C 退出")
+                from deepsearch.config import get_config
+                config = get_config()
+                click.echo(f"WebUI 前端: http://localhost:{config.webui.frontend_port}")
+                click.echo(f"WebUI API: http://localhost:{config.webui.backend_port}")
+
+                if open_browser:
+                    import webbrowser
+                    webbrowser.open(f"http://localhost:{config.webui.frontend_port}")
+
+                import time
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                click.echo("\n正在关闭系统...")
+            finally:
+                engine.stop()
 
     elif mode == 'engine':
         click.echo("仅启动引擎...")

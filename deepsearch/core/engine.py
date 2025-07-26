@@ -6,9 +6,12 @@
 """
 import asyncio
 import logging
+import os
+import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List
 
 from deepsearch.config import settings
@@ -60,6 +63,7 @@ class MainEngine:
         self._monitor: Optional[EventSystemMonitor] = None
         self._gateway: Optional[Gateway] = None
         self._webui_server = None  # WebUI服务器实例
+        self._frontend_process = None  # WebUI前端进程
 
         # 状态标记
         self._initialized = False
@@ -322,8 +326,8 @@ class MainEngine:
         """
         仅启动基础设施组件
         
-        启动事件引擎、消息总线、监控系统和WebUI，
-        但不启动业务组件（如网关、交易模块等）
+        启动事件引擎、消息总线、监控系统，
+        但不启动业务组件（如网关、交易模块等）和WebUI
         """
         if not self._initialized:
             raise ComponentLifecycleError("MainEngine not initialized")
@@ -337,8 +341,7 @@ class MainEngine:
             # 启动所有基础设施组件
             self._component_manager.start_infrastructure()
 
-            # 启动WebUI后端服务器
-            self._start_webui_server()
+            # 注意：WebUI服务器现在不在这里启动
 
             # 发送基础设施就绪事件
             if self._event_engine:
@@ -356,55 +359,21 @@ class MainEngine:
             self.stop_infrastructure()
             raise ComponentLifecycleError(f"Infrastructure start failed: {e}") from e
 
-    def start(self, start_business_components: bool = True) -> None:
+    def start(self, start_business_components: bool = True, start_webui: bool = True,
+              start_frontend: bool = True) -> None:
         """
-        启动系统
+        启动系统（使用分阶段启动）
         
         :param start_business_components: 是否启动业务组件，默认为True
+        :param start_webui: 是否启动WebUI后端，默认为True
+        :param start_frontend: 是否启动WebUI前端，默认为True
         """
-        if not self._initialized:
-            raise ComponentLifecycleError("MainEngine not initialized")
-
-        if self._running:
-            raise ComponentLifecycleError("MainEngine already running")
-
-        self._logger.info("正在启动主引擎组件...")
-
-        try:
-            # 如果基础设施还未启动，先启动基础设施
-            if not self._infrastructure_running:
-                self.start_infrastructure()
-
-            # 根据参数决定是否启动业务组件
-            if start_business_components:
-                self._logger.info("正在启动业务组件...")
-
-                # 启动所有业务组件
-                for name, info in self._component_manager.get_all_components_status().items():
-                    if info.component_type == ComponentType.BUSINESS:
-                        if info.status != ComponentStatus.RUNNING:
-                            self._component_manager.start_component(name)
-
-                # 发送系统就绪事件
-                if self._event_engine:
-                    self._event_engine.put(Event(
-                        type=EVENT_SYSTEM_READY,
-                        data={"message": "All components initialized"}
-                    ))
-
-                self._running = True
-                self._logger.info("所有组件启动成功")
-            else:
-                self._logger.info("Business components not started (start_business_components=False)")
-
-        except Exception as e:
-            self._logger.error(f"Failed to start MainEngine: {e}", exc_info=True)
-            # 只停止业务组件，不停止整个系统
-            try:
-                self.stop_business_components()
-            except Exception:
-                pass
-            raise ComponentLifecycleError(f"Start failed: {e}") from e
+        # 调用分阶段启动方法
+        self.start_phased(
+            include_business=start_business_components,
+            include_webui=start_webui,
+            include_frontend=start_frontend
+        )
 
     def stop_infrastructure(self) -> None:
         """
@@ -415,8 +384,7 @@ class MainEngine:
 
         self._logger.info("Stopping infrastructure components...")
 
-        # 停止WebUI服务器
-        self._stop_webui_server()
+        # 注意：WebUI服务器现在不在这里停止
 
         # 停止所有基础设施组件
         try:
@@ -451,7 +419,10 @@ class MainEngine:
             except Exception as e:
                 self._logger.error(f"Error sending system exit event: {e}")
 
-        # 停止WebUI服务器
+        # 停止WebUI前端服务器
+        self.stop_webui_frontend()
+
+        # 停止WebUI后端服务器
         self._stop_webui_server()
 
         # 停止所有组件（组件管理器会按照依赖关系逆序停止）
@@ -604,6 +575,173 @@ class MainEngine:
 
         self._running = False
         self._logger.info("业务组件已停止")
+
+    def start_webui_backend(self) -> None:
+        """
+        启动WebUI后端服务器
+        
+        在基础设施和业务组件启动后调用
+        """
+        if not self._infrastructure_running:
+            raise ComponentLifecycleError("Infrastructure must be running before starting WebUI backend")
+
+        if self._webui_server:
+            self._logger.warning("WebUI backend already running")
+            return
+
+        self._logger.info("正在启动WebUI后端服务器...")
+
+        try:
+            self._start_webui_server()
+            self._logger.info("WebUI后端服务器启动成功")
+        except Exception as e:
+            self._logger.error(f"Failed to start WebUI backend: {e}", exc_info=True)
+            raise ComponentLifecycleError(f"WebUI backend start failed: {e}") from e
+
+    def start_webui_frontend(self) -> None:
+        """
+        启动WebUI前端服务器
+        
+        在WebUI后端启动后调用
+        """
+        if not self._webui_server:
+            raise ComponentLifecycleError("WebUI backend must be running before starting frontend")
+
+        self._logger.info("正在启动WebUI前端服务器...")
+
+        try:
+            # 获取配置
+            from deepsearch.config import get_config
+            config = get_config()
+            frontend_port = config.webui.frontend_port
+
+            # 前端目录
+            frontend_dir = Path(__file__).parent.parent / "webui" / "frontend"
+
+            if not frontend_dir.exists():
+                self._logger.error(f"前端目录不存在: {frontend_dir}")
+                raise ComponentLifecycleError(f"Frontend directory not found: {frontend_dir}")
+
+            # 检查 node_modules
+            node_modules = frontend_dir / "node_modules"
+            if not node_modules.exists():
+                self._logger.info("正在安装前端依赖...")
+                result = subprocess.run(
+                    ["npm", "install"],
+                    cwd=str(frontend_dir),
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode != 0:
+                    raise ComponentLifecycleError(f"Failed to install frontend dependencies: {result.stderr}")
+
+            # 启动前端服务
+            env = os.environ.copy()
+            env["PORT"] = str(frontend_port)
+
+            if sys.platform == "win32":
+                self._frontend_process = subprocess.Popen(
+                    f'cd /d "{frontend_dir}" && npm run dev',
+                    shell=True,
+                    env=env,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                )
+            else:
+                self._frontend_process = subprocess.Popen(
+                    ["npm", "run", "dev"],
+                    cwd=str(frontend_dir),
+                    env=env
+                )
+
+            # 等待启动
+            time.sleep(3)
+            if self._frontend_process and self._frontend_process.poll() is None:
+                self._logger.info(f"WebUI前端服务器启动成功: http://localhost:{frontend_port}")
+            else:
+                raise ComponentLifecycleError("Frontend process failed to start")
+
+        except Exception as e:
+            self._logger.error(f"Failed to start WebUI frontend: {e}", exc_info=True)
+            raise ComponentLifecycleError(f"WebUI frontend start failed: {e}") from e
+
+    def stop_webui_frontend(self) -> None:
+        """停止WebUI前端服务器"""
+        if hasattr(self, '_frontend_process') and self._frontend_process:
+            try:
+                if sys.platform == "win32":
+                    # Windows上使用taskkill强制终止进程树
+                    result = subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(self._frontend_process.pid)],
+                        capture_output=True,
+                        text=True
+                    )
+                    if result.returncode != 0:
+                        # 如果taskkill失败，尝试直接终止
+                        try:
+                            self._frontend_process.terminate()
+                        except:
+                            pass
+                else:
+                    self._frontend_process.terminate()
+                    self._frontend_process.wait(timeout=3)
+                self._frontend_process = None
+                self._logger.info("WebUI前端服务器已停止")
+            except Exception as e:
+                self._logger.error(f"停止前端失败: {e}")
+
+    def start_phased(self, include_business: bool = True, include_webui: bool = True,
+                     include_frontend: bool = True) -> None:
+        """
+        分阶段启动系统
+        
+        :param include_business: 是否包含业务组件
+        :param include_webui: 是否包含WebUI后端
+        :param include_frontend: 是否包含WebUI前端
+        """
+        if not self._initialized:
+            raise ComponentLifecycleError("MainEngine not initialized")
+
+        self._logger.info("开始分阶段启动系统...")
+
+        try:
+            # 阶段1：启动基础设施（不含WebUI）
+            if not self._infrastructure_running:
+                self.start_infrastructure()
+                time.sleep(1)  # 给基础设施一些启动时间
+
+            # 阶段2：启动业务组件
+            if include_business:
+                self._logger.info("正在启动业务组件...")
+                for name, info in self._component_manager.get_all_components_status().items():
+                    if info.component_type == ComponentType.BUSINESS:
+                        if info.status != ComponentStatus.RUNNING:
+                            self._component_manager.start_component(name)
+                time.sleep(1)  # 给业务组件一些启动时间
+
+            # 阶段3：启动WebUI后端
+            if include_webui:
+                self.start_webui_backend()
+                time.sleep(2)  # 给后端服务器充足的启动时间
+
+            # 阶段4：启动WebUI前端
+            if include_frontend and include_webui:
+                self.start_webui_frontend()
+
+            # 发送系统就绪事件
+            if self._event_engine:
+                self._event_engine.put(Event(
+                    type=EVENT_SYSTEM_READY,
+                    data={"message": "All components initialized"}
+                ))
+
+            self._running = True
+            self._logger.info("系统分阶段启动完成")
+
+        except Exception as e:
+            self._logger.error(f"分阶段启动失败: {e}", exc_info=True)
+            # 清理已启动的组件
+            self.stop()
+            raise
 
     def restart_business_components(self) -> None:
         """

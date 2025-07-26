@@ -81,10 +81,13 @@ class WebUIRunner:
 
             def run_engine():
                 try:
-                    if infrastructure_only:
-                        self.engine.start_infrastructure()
-                    else:
-                        self.engine.start()
+                    # 使用新的分阶段启动方法
+                    # 注意：这里不启动WebUI，因为WebUIRunner会自己管理WebUI
+                    self.engine.start_phased(
+                        include_business=not infrastructure_only,
+                        include_webui=False,  # WebUIRunner自己管理WebUI
+                        include_frontend=False  # WebUIRunner自己管理前端
+                    )
 
                     while self.engine.is_running() and self._running:
                         time.sleep(1)
