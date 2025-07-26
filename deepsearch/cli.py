@@ -47,7 +47,9 @@ def run(mode, config, log_level, no_frontend, open_browser):
 
             try:
                 click.echo("系统运行中，按 Ctrl+C 退出")
-                click.echo(f"WebUI API: http://localhost:8000")
+                from deepsearch.config import get_config
+                config = get_config()
+                click.echo(f"WebUI API: http://localhost:{config.webui.backend_port}")
                 import time
                 while True:
                     time.sleep(1)
@@ -61,8 +63,6 @@ def run(mode, config, log_level, no_frontend, open_browser):
             from deepsearch.webui.runner import run_standalone
             run_standalone(
                 start_frontend=True,
-                frontend_port=3000,
-                backend_port=8000,
                 auto_open_browser=open_browser,
                 start_engine=True,
                 infrastructure_only=False  # 启动所有组件
@@ -99,15 +99,21 @@ def run(mode, config, log_level, no_frontend, open_browser):
 @cli.command()
 @click.option('--frontend/--no-frontend', default=True,
               help='是否启动前端')
-@click.option('--frontend-port', type=int, default=3000,
-              help='前端端口')
-@click.option('--backend-port', type=int, default=8000,
-              help='后端端口')
+@click.option('--frontend-port', type=int, default=None,
+              help='前端端口（默认从配置读取）')
+@click.option('--backend-port', type=int, default=None,
+              help='后端端口（默认从配置读取）')
 @click.option('--open-browser/--no-open-browser', default=False,
               help='是否自动打开浏览器')
 def webui(frontend, frontend_port, backend_port, open_browser):
     """运行 WebUI（独立模式）"""
     from deepsearch.webui.runner import run_standalone
+    from deepsearch.utils.port_checker import PortChecker
+
+    # 检查端口冲突
+    if not PortChecker.validate_ports():
+        click.echo("请解决端口冲突后再启动服务。")
+        return
 
     run_standalone(
         start_frontend=frontend,
@@ -117,6 +123,13 @@ def webui(frontend, frontend_port, backend_port, open_browser):
         start_engine=True,
         infrastructure_only=True
     )
+
+
+@cli.command()
+def check_ports():
+    """检查端口配置和占用情况"""
+    from deepsearch.utils.port_checker import check_and_report_ports
+    check_and_report_ports()
 
 
 @cli.command()

@@ -5,7 +5,6 @@
 """
 import sys
 from datetime import datetime
-from typing import Dict, Any
 
 from loguru import logger
 
@@ -37,12 +36,12 @@ class PrettyLogger:
     }
 
     @classmethod
-    def format_time(cls, record: Dict[str, Any]) -> str:
+    def format_time(cls, record) -> str:
         """格式化时间"""
         return datetime.now().strftime("%H:%M:%S")
 
     @classmethod
-    def format_module(cls, record: Dict[str, Any]) -> str:
+    def format_module(cls, record) -> str:
         """格式化模块名"""
         module = record["name"]
 
@@ -58,7 +57,7 @@ class PrettyLogger:
         return module
 
     @classmethod
-    def format_message(cls, record: Dict[str, Any]) -> str:
+    def format_message(cls, record) -> str:
         """格式化日志消息"""
         level = record["level"].name
         style = cls.LEVEL_STYLES.get(level, {"color": "<white>", "icon": "•"})
@@ -74,13 +73,13 @@ class PrettyLogger:
             return f"<dim>{style['icon']} [{time_str}] [{module_str}] {message}</dim>"
         elif level in ["INFO", "SUCCESS"]:
             # INFO 和 SUCCESS 使用简洁格式
-            return f"{style['color']}{style['icon']} [{time_str}] {message}{style['color']}"
+            return f"{style['color']}{style['icon']} [{time_str}] {message}</>"
         elif level == "WARNING":
             # WARNING 突出显示
-            return f"{style['color']}{style['icon']} [{time_str}] [{module_str}] {message}{style['color']}"
+            return f"{style['color']}{style['icon']} [{time_str}] [{module_str}] {message}</>"
         elif level in ["ERROR", "CRITICAL"]:
             # ERROR 和 CRITICAL 使用醒目格式
-            return f"{style['color']}<bold>{style['icon']} [{time_str}] [{module_str}] {message}</bold>{style['color']}"
+            return f"{style['color']}<bold>{style['icon']} [{time_str}] [{module_str}] {message}</bold></>"
         else:
             return f"{style['icon']} [{time_str}] [{module_str}] {message}"
 

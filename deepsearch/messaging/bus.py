@@ -140,7 +140,7 @@ class CompositeMessageBus(MessageBus):
         target_buses = self._get_target_buses(topic)
 
         if not target_buses:
-            self.logger.warning(f"No buses configured for topic '{topic}'")
+            self.logger.warning(f"没有为主题 '{topic}' 配置总线")
             return
 
         for bus_name in target_buses:
@@ -149,7 +149,7 @@ class CompositeMessageBus(MessageBus):
                 try:
                     bus.publish(topic, message)
                 except Exception as e:
-                    self.logger.error(f"Failed to publish to bus '{bus_name}': {e}")
+                    self.logger.error(f"发布到总线 '{bus_name}' 失败: {e}")
 
     def subscribe(self, topic: str, handler: Callable[[str, T], None]) -> None:
         """Subscribe to all buses."""
@@ -174,7 +174,7 @@ class CompositeMessageBus(MessageBus):
         if self._running:
             return
 
-        self.logger.info("Starting composite message bus...")
+        self.logger.info("正在启动复合消息总线...")
 
         for name, bus in self._buses.items():
             try:
@@ -187,17 +187,17 @@ class CompositeMessageBus(MessageBus):
                 raise
 
         self._running = True
-        self.logger.info("Composite message bus started")
+        self.logger.info("复合消息总线已启动")
 
     def stop(self) -> None:
         """Stop all buses."""
         if not self._running:
             return
 
-        self.logger.info("Stopping composite message bus...")
+        self.logger.info("正在停止复合消息总线...")
         self._stop_buses()
         self._running = False
-        self.logger.info("Composite message bus stopped")
+        self.logger.info("复合消息总线已停止")
 
     def is_running(self) -> bool:
         """Check if the composite bus is running."""

@@ -23,6 +23,7 @@ from .models import (
     MonitoringConfig,
     PerformanceConfig,
     SecurityConfig,
+    WebUIConfig,
     ZeroMQConfig,
 )
 
@@ -33,6 +34,7 @@ class Settings(BaseSettings):
     log: LogConfig = Field(default_factory=LogConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     message_bus: MessageBusConfig = Field(default_factory=MessageBusConfig)
+    webui: WebUIConfig = Field(default_factory=WebUIConfig)
     monitoring: Optional[MonitoringConfig] = None
     security: Optional[SecurityConfig] = None
     performance: Optional[PerformanceConfig] = None

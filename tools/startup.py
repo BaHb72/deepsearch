@@ -18,7 +18,9 @@ def cleanup_old_processes():
     print("检查系统环境...")
 
     # 检查端口占用
-    ports_to_check = [8000, 3000]  # 后端和前端端口
+    from deepsearch.config import get_config
+    config = get_config()
+    ports_to_check = [config.webui.backend_port, config.webui.frontend_port]  # 后端和前端端口
 
     for port in ports_to_check:
         for conn in psutil.net_connections():

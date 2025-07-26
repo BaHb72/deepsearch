@@ -13,6 +13,7 @@ from .monitoring import MonitoringConfig
 from .performance import PerformanceConfig
 from .redis import RedisConfig
 from .security import SecurityConfig
+from .webui import WebUIConfig
 from .zeromq import ZeroMQConfig
 
 __all__ = [
@@ -38,6 +39,8 @@ __all__ = [
     "RedisConfig",
     # 安全
     "SecurityConfig",
+    # WebUI
+    "WebUIConfig",
     # ZeroMQ
     "ZeroMQConfig",
 ]

@@ -8,7 +8,7 @@ import sys
 from pydantic import ValidationError
 
 # 导入新的配置管理器
-from .manager import ConfigManager, config_manager, get_config, set_config
+from .manager import ConfigManager, config_manager, get_config as get_config_value, set_config
 # 保留原有的 settings 以保持向后兼容
 from .settings import Settings
 
@@ -20,11 +20,20 @@ except ValidationError as e:
     # 不再直接退出，而是使用默认配置
     settings = None
 
+
+def get_config() -> Settings:
+    """获取全局配置对象"""
+    global settings
+    if settings is None:
+        settings = Settings()
+    return settings
+
 __all__ = [
     "settings",
     "Settings",
     "ConfigManager",
     "config_manager",
     "get_config",
+    "get_config_value",
     "set_config"
 ]

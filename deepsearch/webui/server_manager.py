@@ -60,7 +60,7 @@ class ServerManager:
             self,
             app,
             host: str = "0.0.0.0",
-            port: int = 8000,
+            port: Optional[int] = None,
             **kwargs
     ) -> Config:
         """
@@ -75,6 +75,12 @@ class ServerManager:
         Returns:
             uvicorn.Config 实例
         """
+        # 如果没有指定端口，从配置读取
+        if port is None:
+            from deepsearch.config import get_config
+            config = get_config()
+            port = config.webui.backend_port
+            
         default_config = {
             "host": host,
             "port": port,

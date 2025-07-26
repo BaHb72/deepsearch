@@ -296,7 +296,7 @@ class PerformanceMonitor:
         self._monitoring_hook = MetricsCollectorHook(self._collector)
         self._engine.add_monitoring_hook(self._monitoring_hook)
 
-        logger.info("Performance monitoring started")
+        logger.info("性能监控已启动")
 
     def stop_monitoring(self) -> None:
         """Stop monitoring event handlers"""
@@ -310,7 +310,7 @@ class PerformanceMonitor:
             self._engine.remove_monitoring_hook(self._monitoring_hook)
             self._monitoring_hook = None
 
-        logger.info("Performance monitoring stopped")
+        logger.info("性能监控已停止")
 
     def get_statistics(self) -> Dict[str, Any]:
         """获取性能监控统计信息"""
@@ -360,7 +360,7 @@ class HealthMonitor:
         self._monitoring = True
         self._thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self._thread.start()
-        logger.info("Health monitoring started")
+        logger.info("健康监控已启动")
 
     def stop_monitoring(self) -> None:
         """Stop health monitoring"""
@@ -370,7 +370,7 @@ class HealthMonitor:
         self._monitoring = False
         if self._thread:
             self._thread.join(timeout=10)
-        logger.info("Health monitoring stopped")
+        logger.info("健康监控已停止")
 
     def _monitor_loop(self) -> None:
         """Main monitoring loop"""
@@ -493,12 +493,14 @@ class EventSystemMonitor:
             return True, None
 
         try:
-            # Simple connectivity check
-            test_event = Event("_health_check", {"timestamp": time.time()})
-            self._bus.publish("_health_check", test_event)
-            return True, None
+            # 简单的连通性检查 - 不发布事件，只检查总线状态
+            # 检查是否有可用的总线实例
+            if hasattr(self._bus, '_buses') and self._bus._buses:
+                return True, None
+            else:
+                return False, "没有配置的消息总线"
         except Exception as e:
-            return False, f"Bus error: {str(e)}"
+            return False, f"总线错误: {str(e)}"
 
     def _check_queue_size(self) -> Tuple[bool, Optional[str]]:
         """Check event queue size"""
@@ -535,7 +537,7 @@ class EventSystemMonitor:
         self._export_thread = threading.Thread(target=self._export_loop, daemon=True)
         self._export_thread.start()
 
-        logger.info("Event system monitoring started")
+        logger.info("事件系统监控已启动")
 
     def stop(self) -> None:
         """Stop all monitoring"""
@@ -549,7 +551,7 @@ class EventSystemMonitor:
         if self._export_thread:
             self._export_thread.join(timeout=10)
 
-        logger.info("Event system monitoring stopped")
+        logger.info("事件系统监控已停止")
 
     def _export_loop(self) -> None:
         """Export metrics periodically"""

@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from deepsearch.config import get_config
 from deepsearch.core import MainEngine
 from deepsearch.observability.logger import logger_manager
 from .server import app, set_engine
@@ -26,22 +27,25 @@ class WebUIRunner:
 
     def __init__(self,
                  start_frontend: bool = True,
-                 frontend_port: int = 3000,
-                 backend_port: int = 8000,
+                 frontend_port: Optional[int] = None,
+                 backend_port: Optional[int] = None,
                  auto_open_browser: bool = False):
         """
         初始化 WebUI 运行器
         
         Args:
             start_frontend: 是否启动前端开发服务器
-            frontend_port: 前端端口
-            backend_port: 后端端口
+            frontend_port: 前端端口，None 表示从配置读取
+            backend_port: 后端端口，None 表示从配置读取
             auto_open_browser: 是否自动打开浏览器
         """
         self.logger = logging.getLogger(__name__)
         self.start_frontend = start_frontend
-        self.frontend_port = frontend_port
-        self.backend_port = backend_port
+
+        # 从配置读取端口
+        config = get_config()
+        self.frontend_port = frontend_port or config.webui.frontend_port
+        self.backend_port = backend_port or config.webui.backend_port
         self.auto_open_browser = auto_open_browser
 
         # 引擎和服务器实例
@@ -359,8 +363,8 @@ class WebUIRunner:
 
 def run_standalone(
         start_frontend: bool = True,
-        frontend_port: int = 3000,
-        backend_port: int = 8000,
+        frontend_port: Optional[int] = None,
+        backend_port: Optional[int] = None,
         auto_open_browser: bool = False,
         start_engine: bool = True,
         infrastructure_only: bool = True
@@ -370,8 +374,8 @@ def run_standalone(
     
     Args:
         start_frontend: 是否启动前端
-        frontend_port: 前端端口
-        backend_port: 后端端口  
+        frontend_port: 前端端口，None 表示从配置读取
+        backend_port: 后端端口，None 表示从配置读取
         auto_open_browser: 是否自动打开浏览器
         start_engine: 是否启动引擎
         infrastructure_only: 是否只启动基础设施

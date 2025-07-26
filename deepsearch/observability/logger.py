@@ -282,18 +282,18 @@ class LoggerManager:
         :param config: 可选的日志配置，如果不提供则使用默认配置
         """
         if self._configured:
-            logger.warning("Logger system already started")
+            logger.warning("日志系统已经启动")
             return
 
         try:
             self._log_path = self._configurator.configure(config)
             self._configured = True
-            logger.info("Logger system started successfully")
+            logger.info("日志系统启动成功")
             if self._log_path:
-                logger.info(f"Log directory: {self._log_path}")
+                logger.info(f"日志目录: {self._log_path}")
         except Exception as e:
             # 日志系统启动失败不应该阻止程序运行，使用标准输出
-            print(f"[ERROR] Failed to start logger system: {e}", file=sys.stderr)
+            print(f"[错误] 启动日志系统失败: {e}", file=sys.stderr)
             self._configured = False
 
     def stop(self) -> None:
@@ -310,9 +310,9 @@ class LoggerManager:
             logger.remove()
             self._configured = False
             # 使用print因为logger已经被移除
-            print("[INFO] Logger system stopped")
+            print("[信息] 日志系统已停止")
         except Exception as e:
-            print(f"[ERROR] Failed to stop logger system: {e}", file=sys.stderr)
+            print(f"[错误] 停止日志系统失败: {e}", file=sys.stderr)
 
     @property
     def is_running(self) -> bool:

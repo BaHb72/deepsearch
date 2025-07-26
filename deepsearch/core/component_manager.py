@@ -150,7 +150,7 @@ class ComponentManager:
         # 更新初始化顺序
         self._update_initialization_order()
 
-        self._logger.info(f"Component {name} registered successfully")
+        self._logger.info(f"组件 {name} 注册成功")
 
     def unregister_component(self, name: str) -> None:
         """
@@ -176,7 +176,7 @@ class ComponentManager:
         del self._component_info[name]
         self._update_initialization_order()
 
-        self._logger.info(f"Component {name} unregistered successfully")
+        self._logger.info(f"组件 {name} 取消注册成功")
 
     def initialize_component(self, name: str) -> None:
         """
@@ -197,7 +197,7 @@ class ComponentManager:
         try:
             info.status = ComponentStatus.INITIALIZED
             component.initialize()
-            self._logger.info(f"Component {name} initialized successfully")
+            self._logger.info(f"组件 {name} 初始化成功")
         except Exception as e:
             info.status = ComponentStatus.ERROR
             info.error_message = str(e)
@@ -250,7 +250,7 @@ class ComponentManager:
             info.status = ComponentStatus.RUNNING
             info.start_time = datetime.now()
             info.error_message = None
-            self._logger.info(f"Component {name} started successfully")
+            self._logger.info(f"组件 {name} 启动成功")
         except Exception as e:
             info.status = ComponentStatus.ERROR
             info.error_message = str(e)
@@ -285,7 +285,7 @@ class ComponentManager:
             component.stop()
             info.status = ComponentStatus.STOPPED
             info.stop_time = datetime.now()
-            self._logger.info(f"Component {name} stopped successfully")
+            self._logger.info(f"组件 {name} 停止成功")
         except Exception as e:
             info.status = ComponentStatus.ERROR
             info.error_message = str(e)

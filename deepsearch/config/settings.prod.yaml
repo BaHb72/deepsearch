@@ -81,6 +81,16 @@ performance:
   queue_size: 50000       # 更大的队列容量
   batch_size: 500         # 更大的批处理大小
 
+# WebUI 配置
+webui:
+  backend_host: "0.0.0.0"
+  backend_port: 8000
+  frontend_host: "localhost"
+  frontend_port: 3000
+  enable_cors: true
+  reload: false           # 生产环境禁用热重载
+  workers: 4              # 生产环境使用多个工作进程
+
 # ═══════════════════════════════════════════════════════════════
 # 配置说明 (Configuration Notes)
 # ═══════════════════════════════════════════════════════════════

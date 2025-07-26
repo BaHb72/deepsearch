@@ -319,13 +319,15 @@ def get_monitor_api() -> Optional[MonitorAPI]:
 if __name__ == "__main__":
     import uvicorn
     from .server_manager import get_server_manager
+    from deepsearch.config import get_config
     
     # 开发环境运行
+    config = get_config()
     manager = get_server_manager()
     uvicorn.run(
         "deepsearch.webui.server:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
+        host=config.webui.backend_host,
+        port=config.webui.backend_port,
+        reload=config.webui.reload,
         log_level="info"
     )

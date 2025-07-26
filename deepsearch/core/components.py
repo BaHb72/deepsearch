@@ -26,7 +26,7 @@ class EventEngineComponent(Component):
 
     def initialize(self) -> None:
         """初始化事件引擎"""
-        self._logger.info("Initializing event engine...")
+        self._logger.info("正在初始化事件引擎...")
         self.engine = EventEngine(
             queue_size=self.queue_size,
             max_workers=self.max_workers,
@@ -35,7 +35,7 @@ class EventEngineComponent(Component):
             batch_timeout=0.1
         )
         self._status = ComponentStatus.INITIALIZED
-        self._logger.info("Event engine initialized")
+        self._logger.info("事件引擎初始化完成")
 
     def start(self) -> None:
         """启动事件引擎"""
@@ -43,14 +43,14 @@ class EventEngineComponent(Component):
             raise RuntimeError("Event engine not initialized")
         self.engine.start()
         self._status = ComponentStatus.RUNNING
-        self._logger.info("Event engine started")
+        self._logger.info("事件引擎已启动")
 
     def stop(self) -> None:
         """停止事件引擎"""
         if self.engine:
             self.engine.stop()
         self._status = ComponentStatus.STOPPED
-        self._logger.info("Event engine stopped")
+        self._logger.info("事件引擎已停止")
 
     def health_check(self) -> bool:
         """健康检查"""
@@ -74,10 +74,10 @@ class MessageBusComponent(Component):
 
     def initialize(self) -> None:
         """初始化消息总线"""
-        self._logger.info("Initializing message bus...")
+        self._logger.info("正在初始化消息总线...")
         self.bus = CompositeMessageBus()
         self._status = ComponentStatus.INITIALIZED
-        self._logger.info("Message bus initialized")
+        self._logger.info("消息总线初始化完成")
 
     def start(self) -> None:
         """启动消息总线"""
@@ -85,14 +85,14 @@ class MessageBusComponent(Component):
             raise RuntimeError("Message bus not initialized")
         self.bus.start()
         self._status = ComponentStatus.RUNNING
-        self._logger.info("Message bus started")
+        self._logger.info("消息总线已启动")
 
     def stop(self) -> None:
         """停止消息总线"""
         if self.bus:
             self.bus.stop()
         self._status = ComponentStatus.STOPPED
-        self._logger.info("Message bus stopped")
+        self._logger.info("消息总线已停止")
 
     def health_check(self) -> bool:
         """健康检查"""
@@ -116,10 +116,10 @@ class MonitorComponent(Component):
 
     def initialize(self) -> None:
         """初始化监控器"""
-        self._logger.info("Initializing system monitor...")
+        self._logger.info("正在初始化系统监控...")
         self.monitor = EventSystemMonitor(self.event_engine, self.message_bus)
         self._status = ComponentStatus.INITIALIZED
-        self._logger.info("System monitor initialized")
+        self._logger.info("系统监控初始化完成")
 
     def start(self) -> None:
         """启动监控器"""
@@ -127,14 +127,14 @@ class MonitorComponent(Component):
             raise RuntimeError("Monitor not initialized")
         self.monitor.start()
         self._status = ComponentStatus.RUNNING
-        self._logger.info("System monitor started")
+        self._logger.info("系统监控已启动")
 
     def stop(self) -> None:
         """停止监控器"""
         if self.monitor:
             self.monitor.stop()
         self._status = ComponentStatus.STOPPED
-        self._logger.info("System monitor stopped")
+        self._logger.info("系统监控已停止")
 
     def health_check(self) -> bool:
         """健康检查"""
@@ -159,10 +159,10 @@ class GatewayComponent(Component):
 
     def initialize(self) -> None:
         """初始化网关"""
-        self._logger.info("Initializing gateway...")
+        self._logger.info("正在初始化网关...")
         self.gateway = Gateway(self.event_engine)
         self._status = ComponentStatus.INITIALIZED
-        self._logger.info("Gateway initialized")
+        self._logger.info("网关初始化完成")
 
     def start(self) -> None:
         """启动网关"""
@@ -170,14 +170,14 @@ class GatewayComponent(Component):
             raise RuntimeError("Gateway not initialized")
         self.gateway.start()
         self._status = ComponentStatus.RUNNING
-        self._logger.info("Gateway started")
+        self._logger.info("网关已启动")
 
     def stop(self) -> None:
         """停止网关"""
         if self.gateway:
             self.gateway.stop()
         self._status = ComponentStatus.STOPPED
-        self._logger.info("Gateway stopped")
+        self._logger.info("网关已停止")
 
     def health_check(self) -> bool:
         """健康检查"""

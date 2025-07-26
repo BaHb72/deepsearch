@@ -273,21 +273,39 @@ async def get_recent_logs(
 
     try:
         # 获取日志目录
-        log_dir = Path("logs")
-        if not log_dir.exists():
-            # 尝试其他可能的日志位置
-            from deepsearch.observability.logger import logger_manager
-            if logger_manager.log_path:
-                log_dir = logger_manager.log_path
+        from deepsearch.observability.logger import logger_manager
 
+        # 优先使用 logger_manager 的日志路径
+        if logger_manager.log_path:
+            log_dir = logger_manager.log_path
+        else:
+            # 如果没有，尝试默认位置
+            log_dir = Path("logs")
+            if not log_dir.exists():
+                # 尝试系统日志目录
+                from deepsearch.constants import LOG_DIR
+                log_dir = LOG_DIR
+
+        # 确保日志目录存在
+        if not log_dir.exists():
+            logger.warning(f"日志目录不存在: {log_dir}")
+            return {
+                "status": "success",
+                "logs": [],
+                "total": 0,
+                "message": f"日志目录不存在: {log_dir}"
+            }
+            
         # 查找最新的日志文件
         log_files = list(log_dir.glob("deepsearch_*.log"))
         if not log_files:
             # 如果没有找到日志文件，返回空列表
+            logger.warning(f"在 {log_dir} 中未找到日志文件")
             return {
                 "status": "success",
                 "logs": [],
-                "total": 0
+                "total": 0,
+                "message": f"未找到日志文件"
             }
 
         # 按修改时间排序，获取最新的文件

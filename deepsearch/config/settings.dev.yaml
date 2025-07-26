@@ -59,6 +59,15 @@ message_bus:
     - match: "*"           # 默认：全部消息发送到 zmq
       buses: [ "zmq" ]
 
+# WebUI 配置
+webui:
+  backend_host: "0.0.0.0"
+  backend_port: 8000
+  frontend_host: "localhost"
+  frontend_port: 3000
+  enable_cors: true
+  reload: true            # 开发环境启用热重载
+
 # 开发环境特定配置
 debug:
   enable_profiling: true   # 启用性能分析
@@ -72,6 +81,8 @@ debug:
 # 1. 环境变量覆盖配置：
 #    - 使用双下划线分隔嵌套配置，例如：
 #      LOG__LEVEL=INFO
+#      WEBUI__BACKEND_PORT=8080
+#      WEBUI__FRONTEND_PORT=3001
 #      MESSAGE_BUS__BUSES__ZMQ__CONFIG__HOST=10.0.0.5
 #      MESSAGE_BUS__ROUTES__0__BUSES='["zmq", "inmem"]'
 # 

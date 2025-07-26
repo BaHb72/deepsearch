@@ -112,10 +112,10 @@ class MainEngine:
             self._initialize_gateway()
 
             self._initialized = True
-            self._logger.info("MainEngine initialization completed successfully")
+            self._logger.info("主引擎初始化成功完成")
 
         except Exception as e:
-            self._logger.error(f"Failed to initialize MainEngine: {e}", exc_info=True)
+            self._logger.error(f"初始化主引擎失败: {e}", exc_info=True)
             # 清理已初始化的组件
             self._cleanup_partial_initialization()
             raise ComponentLifecycleError(f"Initialization failed: {e}") from e
@@ -128,18 +128,38 @@ class MainEngine:
         self._logger.info("=" * 80)
         self._logger.info("DeepSearch - 量化交易系统")
         self._logger.info("=" * 80)
-        self._logger.info(f"Environment: {settings.app.env}")
-        self._logger.info(f"Log level: {settings.log.level}")
+        self._logger.info(f"运行环境: {settings.app.env}")
+        self._logger.info(f"日志级别: {settings.log.level}")
 
     def _validate_configuration(self) -> None:
         """验证系统配置"""
-        self._logger.info("Validating system configuration...")
-        # 这里可以添加配置验证逻辑
-        self._logger.info("Configuration validation passed")
+        self._logger.info("正在验证系统配置...")
+
+        # 检查端口配置
+        from deepsearch.utils.port_checker import PortChecker
+        conflicts = PortChecker.check_port_conflicts()
+
+        if conflicts:
+            self._logger.error("检测到端口配置冲突:")
+            for conflict in conflicts:
+                if conflict["type"] == "duplicate":
+                    self._logger.error(f"  - 端口 {conflict['port']} 被多个服务使用: {', '.join(conflict['services'])}")
+                else:
+                    self._logger.error(
+                        f"  - 端口 {conflict['port']} 已被占用 (服务: {', '.join(conflict['services'])})")
+
+            # 只在有严重冲突时才抛出异常
+            duplicate_conflicts = [c for c in conflicts if c["type"] == "duplicate"]
+            if duplicate_conflicts:
+                raise ConfigurationError("多个服务配置使用相同的端口")
+            else:
+                self._logger.warning("某些端口已被占用，服务可能无法启动")
+
+        self._logger.info("配置验证通过")
 
     def _initialize_event_engine(self) -> None:
         """初始化事件引擎"""
-        self._logger.info("Initializing event engine...")
+        self._logger.info("正在初始化事件引擎...")
 
         # 从配置获取参数，如果有性能配置则使用
         if settings.performance:
@@ -172,11 +192,11 @@ class MainEngine:
         # 获取实例引用
         self._event_engine = event_engine_comp.get_instance()
 
-        self._logger.info("Event engine initialized")
+        self._logger.info("事件引擎初始化完成")
 
     def _initialize_message_bus(self) -> None:
         """初始化消息总线"""
-        self._logger.info("Initializing message bus...")
+        self._logger.info("正在初始化消息总线...")
 
         # 创建消息总线组件
         message_bus_comp = MessageBusComponent()
@@ -194,12 +214,12 @@ class MainEngine:
 
         # 获取实例引用
         self._message_bus = message_bus_comp.get_instance()
-        
-        self._logger.info("Message bus initialized")
+
+        self._logger.info("消息总线初始化完成")
 
     def _initialize_monitor(self) -> None:
         """初始化系统监控"""
-        self._logger.info("Initializing system monitor...")
+        self._logger.info("正在初始化系统监控...")
 
         # 创建监控组件
         monitor_comp = MonitorComponent(self._event_engine, self._message_bus)
@@ -217,12 +237,12 @@ class MainEngine:
 
         # 获取实例引用
         self._monitor = monitor_comp.get_instance()
-        
-        self._logger.info("System monitor initialized")
+
+        self._logger.info("系统监控初始化完成")
 
     def _initialize_gateway(self) -> None:
         """初始化网关"""
-        self._logger.info("Initializing gateway...")
+        self._logger.info("正在初始化网关...")
 
         # 创建网关组件
         gateway_comp = GatewayComponent(self._event_engine)
@@ -240,8 +260,8 @@ class MainEngine:
 
         # 获取实例引用
         self._gateway = gateway_comp.get_instance()
-        
-        self._logger.info("Gateway initialized")
+
+        self._logger.info("网关初始化完成")
 
     def _cleanup_partial_initialization(self) -> None:
         """清理部分初始化的组件"""
@@ -311,7 +331,7 @@ class MainEngine:
         if self._infrastructure_running:
             raise ComponentLifecycleError("Infrastructure already running")
 
-        self._logger.info("Starting infrastructure components...")
+        self._logger.info("正在启动基础设施组件...")
 
         try:
             # 启动所有基础设施组件
@@ -328,7 +348,7 @@ class MainEngine:
                 ))
 
             self._infrastructure_running = True
-            self._logger.info("Infrastructure components started successfully")
+            self._logger.info("基础设施组件启动成功")
 
         except Exception as e:
             self._logger.error(f"Failed to start infrastructure: {e}", exc_info=True)
@@ -348,7 +368,7 @@ class MainEngine:
         if self._running:
             raise ComponentLifecycleError("MainEngine already running")
 
-        self._logger.info("Starting MainEngine components...")
+        self._logger.info("正在启动主引擎组件...")
 
         try:
             # 如果基础设施还未启动，先启动基础设施
@@ -357,7 +377,7 @@ class MainEngine:
 
             # 根据参数决定是否启动业务组件
             if start_business_components:
-                self._logger.info("Starting business components...")
+                self._logger.info("正在启动业务组件...")
 
                 # 启动所有业务组件
                 for name, info in self._component_manager.get_all_components_status().items():
@@ -373,7 +393,7 @@ class MainEngine:
                     ))
 
                 self._running = True
-                self._logger.info("All components started successfully")
+                self._logger.info("所有组件启动成功")
             else:
                 self._logger.info("Business components not started (start_business_components=False)")
 
@@ -413,7 +433,7 @@ class MainEngine:
         if not self._running and not self._infrastructure_running and not self._initialized:
             return
 
-        self._logger.info("Stopping MainEngine components...")
+        self._logger.info("正在停止主引擎组件...")
         self._running = False
 
         # 发送系统退出事件
@@ -438,7 +458,7 @@ class MainEngine:
             self._logger.error(f"Error stopping components: {e}", exc_info=True)
 
         # 最后停止日志系统
-        self._logger.info("MainEngine stopped")
+        self._logger.info("主引擎已停止")
         logger_manager.stop()
 
         self._initialized = False
@@ -553,7 +573,12 @@ class MainEngine:
     def _start_webui_server(self) -> None:
         """启动WebUI后端服务器"""
         try:
-            self._logger.info("Starting WebUI server...")
+            self._logger.info("正在启动 WebUI 服务器...")
+
+            # 获取配置
+            from deepsearch.config import get_config
+            app_config = get_config()
+            port = app_config.webui.backend_port
 
             # 创建一个线程来运行uvicorn服务器
             def run_server():
@@ -570,12 +595,11 @@ class MainEngine:
                 try:
                     # 配置uvicorn - 确保WebSocket支持
                     # 在启动前检查并释放端口
-                    port = 8000
                     self._check_and_free_port(port)
 
                     config = uvicorn.Config(
                         app=app,
-                        host="0.0.0.0",
+                        host=app_config.webui.backend_host,
                         port=port,
                         log_level="warning",
                         access_log=False,
@@ -596,10 +620,17 @@ class MainEngine:
                         # 正常关闭，不报错
                         pass
                     except Exception as e:
-                        self._logger.error(f"WebUI服务器错误: {e}")
+                        self._logger.error(f"WebUI 服务器错误: {e}")
                 finally:
                     # 确保事件循环正确关闭
                     try:
+                        # 停止服务器
+                        if hasattr(self, '_webui_server') and self._webui_server:
+                            self._webui_server.should_exit = True
+
+                        # 给一些时间让任务完成
+                        loop.run_until_complete(asyncio.sleep(0.1))
+                        
                         # 取消所有未完成的任务
                         pending = asyncio.all_tasks(loop)
                         for task in pending:
@@ -620,7 +651,7 @@ class MainEngine:
 
             # 等待服务器启动
             time.sleep(2)
-            self._logger.info("WebUI server started on http://localhost:8000")
+            self._logger.info(f"WebUI 服务器已启动: http://localhost:{port}")
 
         except Exception as e:
             self._logger.error(f"Failed to start WebUI server: {e}", exc_info=True)
@@ -676,7 +707,9 @@ class MainEngine:
                     self._logger.error(f"无法终止进程 PID={child.pid}: {e}")
 
             # 清理占用的端口
-            ports_to_clean = [8000, 3000]  # WebUI相关端口
+            from deepsearch.config import get_config
+            app_config = get_config()
+            ports_to_clean = [app_config.webui.backend_port, app_config.webui.frontend_port]  # WebUI相关端口
             for conn in psutil.net_connections():
                 if conn.laddr.port in ports_to_clean and conn.status == 'LISTEN':
                     if conn.pid and conn.pid != current_pid:
@@ -749,7 +782,7 @@ class MainEngine:
 
                 self._webui_server = None
                 self._webui_loop = None
-                self._logger.info("WebUI server stopped")
+                self._logger.info("WebUI 服务器已停止")
             except Exception as e:
                 self._logger.error(f"Error stopping WebUI server: {e}")
 
