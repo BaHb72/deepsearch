@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +19,10 @@ from loguru import logger
 
 from deepsearch.core import MainEngine
 from deepsearch.monitoring import EventSystemMonitor, MonitorAPI
+
+# Windows 兼容性：psycopg3 需要 SelectorEventLoop
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 class WebSocketManager:
@@ -293,6 +298,12 @@ async def health_check():
             "details": health_status
         }
     return {"status": "starting", "details": {}}
+
+
+@app.get("/api/health")
+async def api_health_check():
+    """API健康检查端点"""
+    return await health_check()
 
 
 # 向后兼容的函数

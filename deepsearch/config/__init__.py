@@ -15,17 +15,43 @@ from .settings import Settings
 # 创建单例配置实例
 try:
     settings = Settings()
-except ValidationError as e:
-    print(f"[错误] 配置验证失败：\n{e}", file=sys.stderr)
-    # 不再直接退出，而是使用默认配置
-    settings = None
+except (ValidationError, FileNotFoundError, ValueError) as e:
+    print(f"[错误] 配置加载失败：{e}", file=sys.stderr)
+    # 创建一个具有默认值的配置实例
+    try:
+        # 使用默认工厂创建最小配置
+        from .models import AppConfig, LogConfig, DatabaseConfig, MessageBusConfig, WebUIConfig
+
+        settings = Settings(
+            app=AppConfig(),
+            log=LogConfig(),
+            database=DatabaseConfig(),
+            message_bus=MessageBusConfig(),
+            webui=WebUIConfig()
+        )
+        print("[警告] 使用默认配置运行", file=sys.stderr)
+    except Exception as e2:
+        print(f"[错误] 无法创建默认配置：{e2}", file=sys.stderr)
+        settings = None
 
 
 def get_config() -> Settings:
     """获取全局配置对象"""
     global settings
     if settings is None:
-        settings = Settings()
+        # 尝试再次加载配置
+        try:
+            settings = Settings()
+        except Exception as e:
+            # 如果仍然失败，使用默认配置
+            from .models import AppConfig, LogConfig, DatabaseConfig, MessageBusConfig, WebUIConfig
+            settings = Settings(
+                app=AppConfig(),
+                log=LogConfig(),
+                database=DatabaseConfig(),
+                message_bus=MessageBusConfig(),
+                webui=WebUIConfig()
+            )
     return settings
 
 __all__ = [

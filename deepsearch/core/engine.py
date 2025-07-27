@@ -615,6 +615,7 @@ class MainEngine:
             from deepsearch.config import get_config
             config = get_config()
             frontend_port = config.webui.frontend_port
+            backend_port = config.webui.backend_port
 
             # 前端目录
             frontend_dir = Path(__file__).parent.parent / "webui" / "frontend"
@@ -639,27 +640,41 @@ class MainEngine:
             # 启动前端服务
             env = os.environ.copy()
             env["PORT"] = str(frontend_port)
+            env["VITE_API_BASE_URL"] = f"http://localhost:{backend_port}"
 
             if sys.platform == "win32":
                 self._frontend_process = subprocess.Popen(
                     f'cd /d "{frontend_dir}" && npm run dev',
                     shell=True,
                     env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
                 )
             else:
                 self._frontend_process = subprocess.Popen(
                     ["npm", "run", "dev"],
                     cwd=str(frontend_dir),
-                    env=env
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
                 )
 
-            # 等待启动
-            time.sleep(3)
+            # 等待启动并检查输出
+            time.sleep(5)  # 给更多时间启动
             if self._frontend_process and self._frontend_process.poll() is None:
                 self._logger.info(f"前端地址：http://localhost:{frontend_port}")
             else:
-                raise ComponentLifecycleError("Frontend process failed to start")
+                # 尝试读取错误输出
+                try:
+                    stdout, stderr = self._frontend_process.communicate(timeout=1)
+                    error_msg = f"Frontend process exited. Return code: {self._frontend_process.returncode}\nstdout: {stdout}\nstderr: {stderr}"
+                except:
+                    error_msg = "Frontend process failed to start"
+                self._logger.error(error_msg)
+                raise ComponentLifecycleError(error_msg)
 
         except Exception as e:
             self._logger.error(f"Failed to start WebUI frontend: {e}", exc_info=True)
@@ -726,7 +741,12 @@ class MainEngine:
 
             # 阶段4：启动WebUI前端
             if include_frontend and include_webui:
-                self.start_webui_frontend()
+                try:
+                    self.start_webui_frontend()
+                except Exception as e:
+                    # 前端启动失败不应该阻塞整个系统
+                    self._logger.error(f"前端启动失败，但系统将继续运行: {e}")
+                    self._logger.info("您可以手动启动前端：cd deepsearch/webui/frontend && npm run dev")
 
             # 发送系统就绪事件
             if self._event_engine:

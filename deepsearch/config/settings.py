@@ -62,7 +62,6 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         populate_by_name=True,
-        env_nested_delimiter="__",
         case_sensitive=False,
     )
 
@@ -81,9 +80,6 @@ class Settings(BaseSettings):
             return load_yaml_config()
 
         return (
-            env_settings,
-            yaml_settings,
+            yaml_settings,  # 只使用 YAML 配置
             init_settings,
-            dotenv_settings,
-            file_secret_settings,
         )

@@ -320,7 +320,7 @@ class LoggerManager:
         :param config: 可选的日志配置，如果不提供则使用默认配置
         """
         if self._configured:
-            logger.warning("日志系统已经启动")
+            logger.info("日志系统已经启动")
             return
 
         try:

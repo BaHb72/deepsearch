@@ -4,7 +4,6 @@
 本模块处理从各种来源加载配置，
 特别是基于环境的 YAML 文件。
 """
-import os
 import sys
 from pathlib import Path
 from typing import Any, Dict
@@ -24,8 +23,8 @@ def load_yaml_config() -> Dict[str, Any]:
     异常：
         SystemExit: 如果配置文件缺失或无效
     """
-    # 获取环境设置，默认为 prod
-    env = os.environ.get("APP__ENV", "prod")
+    # 默认使用开发环境
+    env = "dev"
 
     # 构建特定环境的配置文件路径
     config_dir = Path(__file__).parent
@@ -35,7 +34,7 @@ def load_yaml_config() -> Dict[str, Any]:
     if not env_config_path.exists():
         print(f"[错误] 未找到环境配置文件：{env_config_path}", file=sys.stderr)
         print(f"[信息] 请确保 settings.{env}.yaml 存在", file=sys.stderr)
-        raise SystemExit(1)
+        raise FileNotFoundError(f"配置文件不存在: {env_config_path}")
 
     try:
         with env_config_path.open("r", encoding=YAML_ENCODING) as f:
@@ -44,4 +43,4 @@ def load_yaml_config() -> Dict[str, Any]:
         return config
     except Exception as exc:
         print(f"[错误] 解析配置文件失败 {env_config_path}：{exc}", file=sys.stderr)
-        raise SystemExit(1)
+        raise ValueError(f"配置文件解析失败: {exc}")

@@ -1,121 +1,16 @@
-# ─────────────────────────────
-# DeepSearch 生产环境配置
-# ─────────────────────────────
-
-app:
-  name: DeepSearch
-  author: BaHb
-  env: prod
-
-log:
-  active: true
-  level: INFO          # 生产环境使用 INFO 级别
-  rotation: "00:00"    # 每日 00:00 轮转
-  retention_days: 30   # 生产环境保留 30 天
-  json: true           # 生产环境使用 JSON 格式便于日志分析
-
 database:
-  url: postgresql://user:pass@localhost/deepsearch  # 生产数据库连接
-
-message_bus:
-  buses:
-    # --- ZeroMQ 消息总线 ---
-    zmq:
-      type: zmq
-      enabled: true
-      config:
-        host: 0.0.0.0      # 绑定所有网络接口
-        pub_port: 5556
-        sub_port: 5557
-        send_hwm: 10000    # 生产环境使用更大的缓冲区
-        recv_hwm: 10000
-        verbose: false     # 生产环境关闭详细日志
-    
-    # --- 内存总线 ---
-    inmem:
-      type: inmem
-      enabled: false       # 生产环境通常不使用内存总线
-      config: { }
-    
-    # --- 时间序列总线 ---
-    timeseries:
-      type: timeseries
-      enabled: true        # 生产环境启用数据持久化
-      config:
-        host: 0.0.0.0
-        pub_port: 5558
-        sub_port: 5559
-        storage_config:
-          host: redis.production.local
-          port: 6379
-          db: 0
-          password: ${REDIS_PASSWORD}  # 从环境变量读取密码
-          key_prefix: "deepsearch:ts:"
-          retention_ms: 604800000  # 7 days for production
-          duplicate_policy: "LAST"
-        enable_persistence: true
-
-  # --- 路由规则 ---
-  routes:
-    - match: "data.*"      # 数据消息发送到时间序列总线进行持久化
-      buses: [ "zmq", "timeseries" ]
-    - match: "event.*"     # 事件消息只发送到 ZMQ
-      buses: [ "zmq" ]
-    - match: "*"           # 默认：全部消息发送到 zmq
-      buses: [ "zmq" ]
-
-# 生产环境监控配置
-monitoring:
-  enable_metrics: true
-  metrics_port: 9090      # Prometheus metrics 端口
-
-# 生产环境安全配置
-security:
-  enable_tls: true
-  cert_file: /etc/deepsearch/cert.pem
-  key_file: /etc/deepsearch/key.pem
-
-# 生产环境性能配置
-performance:
-  max_workers: 64         # 更多的工作线程
-  queue_size: 50000       # 更大的队列容量
-  batch_size: 500         # 更大的批处理大小
-
-# WebUI 配置
-webui:
-  backend_host: "0.0.0.0"
-  backend_port: 8000
-  frontend_host: "localhost"
-  frontend_port: 3000
-  enable_cors: true
-  reload: false           # 生产环境禁用热重载
-  workers: 4              # 生产环境使用多个工作进程
-
-# ═══════════════════════════════════════════════════════════════
-# 配置说明 (Configuration Notes)
-# ═══════════════════════════════════════════════════════════════
-# 
-# 1. 环境变量覆盖配置：
-#    - 使用双下划线分隔嵌套配置，例如：
-#      LOG__LEVEL=WARNING
-#      DATABASE__URL=postgresql://prod_user:${DB_PASSWORD}@db.prod/deepsearch
-#      MESSAGE_BUS__BUSES__TIMESERIES__CONFIG__STORAGE_CONFIG__PASSWORD=${REDIS_PASSWORD}
-# 
-# 2. 消息总线类型说明：
-#    - inmem: 内存消息总线，适用于单进程内通信
-#    - zmq: ZeroMQ 消息总线，适用于高性能进程间通信
-#    - timeseries: 带持久化的 ZeroMQ 总线，数据存储到 Redis TimeSeries
-# 
-# 3. 路由匹配规则：
-#    - 使用 fnmatch 模式匹配
-#    - "*" 匹配任意字符
-#    - "?" 匹配单个字符
-#    - "[seq]" 匹配序列中的任意字符
-#    - 示例：
-#      - "data.*" 匹配 "data.stock", "data.news" 等
-#      - "event.user.*" 匹配 "event.user.login", "event.user.logout" 等
-# 
-# 4. 安全注意事项：
-#    - 使用环境变量存储敏感信息（密码、密钥等）
-#    - 确保 TLS 证书文件权限正确（600）
-#    - 定期轮换数据库和 Redis 密码
+  main:
+    type: postgresql
+    host: localhost
+    port: 5432
+    database: deepsearch
+    username: bahb
+    path: ./data/deepsearch.db
+  cache:
+    enabled: false
+    host: localhost
+    port: 6379
+    password: ''
+    db: 0
+    poolSize: 10
+    pool_size: 10

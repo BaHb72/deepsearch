@@ -6,7 +6,7 @@ DeepSearch 的配置模型定义。
 
 from .app import AppConfig, AppEnvironment
 from .bus import BusInstanceConfig, MessageBusConfig, RouteConfig
-from .database import DatabaseConfig
+from .database import DatabaseConfig, MainDatabaseConfig, CacheDatabaseConfig
 from .debug import DebugConfig
 from .log import LogConfig, LogLevel
 from .monitoring import MonitoringConfig
@@ -26,6 +26,8 @@ __all__ = [
     "RouteConfig",
     # 数据库
     "DatabaseConfig",
+    "MainDatabaseConfig",
+    "CacheDatabaseConfig",
     # 调试
     "DebugConfig",
     # 日志
