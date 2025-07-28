@@ -333,10 +333,34 @@ class ComponentManager:
         # 执行健康检查
         if info.status == ComponentStatus.RUNNING and info.health_check:
             try:
-                healthy = info.health_check()
-                if not healthy:
-                    info.status = ComponentStatus.ERROR
-                    info.error_message = "Health check failed"
+                import inspect
+                import asyncio
+
+                # 检查是否是协程函数
+                if inspect.iscoroutinefunction(info.health_check):
+                    # 如果是协程，尝试在现有事件循环中运行
+                    try:
+                        loop = asyncio.get_running_loop()
+                        # 在当前事件循环中，无法同步等待协程
+                        # 跳过健康检查，避免运行时警告
+                        pass
+                    except RuntimeError:
+                        # 没有运行的事件循环，创建新的
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            healthy = loop.run_until_complete(info.health_check())
+                            if not healthy:
+                                info.status = ComponentStatus.ERROR
+                                info.error_message = "Health check failed"
+                        finally:
+                            loop.close()
+                else:
+                    # 同步函数，直接调用
+                    healthy = info.health_check()
+                    if not healthy:
+                        info.status = ComponentStatus.ERROR
+                        info.error_message = "Health check failed"
             except Exception as e:
                 info.status = ComponentStatus.ERROR
                 info.error_message = f"Health check error: {e}"

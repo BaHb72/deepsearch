@@ -5,7 +5,7 @@ database:
     port: 5432
     database: deepsearch
     username: bahb
-    password: '123456'
+    password: '123456'  # 可以使用明文或加密密码 (格式: encrypted:xxxxx)
     path: ./data/deepsearch.db
   cache:
     enabled: false
@@ -15,3 +15,13 @@ database:
     db: 0
     poolSize: 10
     pool_size: 10
+
+message_bus:
+  buses:
+    inmem:
+      type: inmem
+      enabled: true
+      config: { }
+  routes:
+    - match: "*"
+      buses: [ "inmem" ]

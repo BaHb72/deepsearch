@@ -84,7 +84,7 @@
                     @click="saveMainDatabase"
                 >
                   <el-icon style="margin-right: 4px">
-                    <i-ep-document-checked/>
+                    <DocumentChecked/>
                   </el-icon>
                   {{ hasMainDbChanges ? '保存配置 *' : '保存配置' }}
                 </el-button>
@@ -155,7 +155,7 @@
                     @click="saveCacheDatabase"
                 >
                   <el-icon style="margin-right: 4px">
-                    <i-ep-document-checked/>
+                    <DocumentChecked/>
                   </el-icon>
                   {{ hasCacheDbChanges ? '保存配置 *' : '保存配置' }}
                 </el-button>
@@ -210,6 +210,7 @@
 <script setup>
 import {onMounted, ref, watch} from 'vue'
 import {ElMessage, ElNotification} from 'element-plus'
+import {DocumentChecked} from '@element-plus/icons-vue'
 
 const activeTab = ref('basic')
 const mainDbTesting = ref(false)

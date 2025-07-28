@@ -3,7 +3,7 @@
 """
 from typing import Optional, Literal
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class MainDatabaseConfig(BaseModel):
@@ -19,23 +19,39 @@ class MainDatabaseConfig(BaseModel):
     password: str = Field(default="", description="密码")
     path: str = Field(default="./data/deepsearch.db", description="SQLite数据库文件路径")
 
-    @validator("port")
+    @field_validator("port")
     def validate_port(cls, v):
         if not 1 <= v <= 65535:
             raise ValueError("端口必须在1-65535之间")
         return v
 
     def get_url(self) -> Optional[str]:
-        """构建数据库连接URL。"""
+        """构建数据库连接URL。
+        
+        如果密码以 "encrypted:" 开头，会自动解密。
+        """
+        # 处理密码
+        actual_password = self.password
+        if self.password and self.password.startswith("encrypted:"):
+            try:
+                from deepsearch.config.crypto import decrypt_password
+                encrypted_part = self.password[10:]  # 移除 "encrypted:" 前缀
+                actual_password = decrypt_password(encrypted_part)
+            except Exception as e:
+                # 如果解密失败，使用原始密码
+                import logging
+                logging.warning(f"Failed to decrypt password: {e}")
+                actual_password = self.password
+        
         if self.type == "sqlite":
             return f"sqlite:///{self.path}"
         elif self.type == "postgresql":
-            if self.password:
-                return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+            if actual_password:
+                return f"postgresql://{self.username}:{actual_password}@{self.host}:{self.port}/{self.database}"
             return f"postgresql://{self.username}@{self.host}:{self.port}/{self.database}"
         elif self.type == "mysql":
-            if self.password:
-                return f"mysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+            if actual_password:
+                return f"mysql://{self.username}:{actual_password}@{self.host}:{self.port}/{self.database}"
             return f"mysql://{self.username}@{self.host}:{self.port}/{self.database}"
         return None
 
@@ -49,13 +65,13 @@ class CacheDatabaseConfig(BaseModel):
     db: int = Field(default=0, description="Redis数据库索引")
     pool_size: int = Field(default=10, description="连接池大小")
 
-    @validator("port")
+    @field_validator("port")
     def validate_port(cls, v):
         if not 1 <= v <= 65535:
             raise ValueError("端口必须在1-65535之间")
         return v
 
-    @validator("db")
+    @field_validator("db")
     def validate_db(cls, v):
         if not 0 <= v <= 15:
             raise ValueError("Redis数据库索引必须在0-15之间")

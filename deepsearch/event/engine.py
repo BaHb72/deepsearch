@@ -394,6 +394,8 @@ class EventEngine:
         # Thread synchronization
         self._lock = threading.RLock()
         self._cond = threading.Condition(self._lock)
+        self._handler_lock = threading.RLock()  # 处理器注册/注销锁
+        self._stats_lock = threading.RLock()  # 统计信息锁
 
         # Worker threads (initialized but not started)
         self._dispatcher_th: Optional[threading.Thread] = None
@@ -409,7 +411,7 @@ class EventEngine:
         self._batch_size = batch_size
         self._batch_timeout = batch_timeout
         self._event_batches: Dict[str, List[Event]] = defaultdict(list)
-        self._batch_lock = threading.Lock()
+        self._batch_lock = threading.RLock()  # 使用可重入锁避免死锁
         self._last_batch_flush = time.time()
 
     # ==========================================================================
@@ -503,8 +505,10 @@ class EventEngine:
             raise ValueError("event_type cannot be empty")
         if not callable(handler):
             raise TypeError("handler must be callable")
-        
-        self._handler_manager.register(event_type=event_type, handler=handler, priority=priority, async_flag=async_flag)
+
+        with self._handler_lock:
+            self._handler_manager.register(event_type=event_type, handler=handler, priority=priority,
+                                           async_flag=async_flag)
 
     def unregister(self, *, event_type: str, handler: Handler) -> None:
         """注销事件处理器"""
@@ -512,23 +516,26 @@ class EventEngine:
             raise ValueError("event_type cannot be empty")
         if not callable(handler):
             raise TypeError("handler must be callable")
-        
-        self._handler_manager.unregister(event_type=event_type, handler=handler)
+
+        with self._handler_lock:
+            self._handler_manager.unregister(event_type=event_type, handler=handler)
 
     def register_general(self, *, handler: Handler, priority: int = DEFAULT_PRIORITY,
                          async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
         """注册通用事件处理器"""
         if not callable(handler):
             raise TypeError("handler must be callable")
-        
-        self._handler_manager.register_general(handler=handler, priority=priority, async_flag=async_flag)
+
+        with self._handler_lock:
+            self._handler_manager.register_general(handler=handler, priority=priority, async_flag=async_flag)
 
     def unregister_general(self, *, handler: Handler) -> None:
         """注销通用事件处理器"""
         if not callable(handler):
             raise TypeError("handler must be callable")
-        
-        self._handler_manager.unregister_general(handler=handler)
+
+        with self._handler_lock:
+            self._handler_manager.unregister_general(handler=handler)
 
     # ==========================================================================
     # Event Queue Operations

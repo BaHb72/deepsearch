@@ -50,6 +50,8 @@ settings.local.yaml
 settings.*.local.yaml
 *.db
 *.sqlite
+config/.crypto_key
+.crypto_key
 uv.lock
 /.claude/
 *_old.py

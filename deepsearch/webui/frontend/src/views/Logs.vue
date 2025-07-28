@@ -145,6 +145,11 @@ const connectLogWebSocket = () => {
 
     logWebSocket.value.onmessage = (event) => {
       try {
+        // 处理心跳响应
+        if (event.data === 'pong') {
+          return
+        }
+        
         const data = JSON.parse(event.data)
 
         if (data.type === 'initial') {

@@ -241,11 +241,13 @@ def setup_routes():
     from .api import config as config_routes
     from .api import system as system_routes
     from .api import logs as logs_routes
+    from .api import data as data_routes
 
     app.include_router(monitor_routes.router, prefix="/api/monitor", tags=["监控"])
     app.include_router(config_routes.router, prefix="/api/config", tags=["配置"])
     app.include_router(system_routes.router, prefix="/api/system", tags=["系统"])
     app.include_router(logs_routes.router, prefix="/api/logs", tags=["日志"])
+    app.include_router(data_routes.router, prefix="/api/data", tags=["数据管理"])
 
 
 # 设置路由

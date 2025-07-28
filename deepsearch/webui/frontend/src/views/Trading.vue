@@ -10,7 +10,7 @@
           <template #header>
             <div class="card-header">
               <span>持仓信息</span>
-              <el-button type="text" @click="refreshPositions">刷新</el-button>
+              <el-button link @click="refreshPositions">刷新</el-button>
             </div>
           </template>
 
@@ -36,7 +36,7 @@
           <template #header>
             <div class="card-header">
               <span>委托订单</span>
-              <el-button type="text" @click="refreshOrders">刷新</el-button>
+              <el-button link @click="refreshOrders">刷新</el-button>
             </div>
           </template>
 
@@ -64,7 +64,7 @@
                 <el-button
                     v-if="scope.row.status === 'PENDING'"
                     size="small"
-                    type="text"
+                    link
                     @click="cancelOrder(scope.row.orderId)"
                 >
                   撤单

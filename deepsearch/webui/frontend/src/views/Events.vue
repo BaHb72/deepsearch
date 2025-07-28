@@ -76,9 +76,9 @@
 import {ref, computed, onMounted, onUnmounted} from 'vue'
 import {Search} from '@element-plus/icons-vue'
 import {ElMessage} from 'element-plus'
-import {systemStore} from '@/stores/system'
+import {useSystemStore} from '@/stores/system'
 
-const store = systemStore()
+const store = useSystemStore()
 const events = ref([])
 const searchText = ref('')
 const selectedType = ref('')

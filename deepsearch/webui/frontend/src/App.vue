@@ -45,6 +45,12 @@
               </el-icon>
               <span>交易监控</span>
             </el-menu-item>
+            <el-menu-item index="/data">
+              <el-icon>
+                <DataAnalysis/>
+              </el-icon>
+              <span>数据管理</span>
+            </el-menu-item>
           </el-menu>
         </el-aside>
 
@@ -126,7 +132,7 @@
 import {computed, onMounted, onUnmounted, ref} from 'vue'
 import {useRoute} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
-import {Document, List, Monitor, Moon, Setting, Sunny, TrendCharts} from '@element-plus/icons-vue'
+import {DataAnalysis, Document, List, Monitor, Moon, Setting, Sunny, TrendCharts} from '@element-plus/icons-vue'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import {useSystemStore} from '@/stores/system'
 import {restartSystem, startSystem, stopSystem} from '@/api/system'

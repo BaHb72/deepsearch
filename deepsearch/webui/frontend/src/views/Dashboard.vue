@@ -202,7 +202,7 @@
             v-for="(alert, index) in dashboardData.alerts"
             :key="index"
             :timestamp="formatTime(alert.timestamp)"
-            :type="getAlertType(alert.level)"
+            :type="getTimelineType(alert.level)"
             placement="top"
         >
           <el-alert
@@ -321,7 +321,7 @@ const initCharts = () => {
         }
       },
       legend: {
-        data: ['处理数', '成功率', '平均耗时']
+        data: ['处理数', '成功率']
       },
       grid: {
         left: '3%',
@@ -406,7 +406,8 @@ const updateCharts = async () => {
   try {
     const metrics = await getRealtimeMetrics()
 
-    if (trendChartInstance && metrics.series) {
+    // 检查图表实例是否存在且未被销毁
+    if (trendChartInstance && !trendChartInstance.isDisposed() && metrics.series) {
       const timestamps = metrics.timestamps?.map(t => dayjs(t).format('HH:mm:ss')) || []
       const series = []
 
@@ -439,7 +440,7 @@ const updateCharts = async () => {
     }
 
     // 更新饼图
-    if (pieChartInstance && metrics.series) {
+    if (pieChartInstance && !pieChartInstance.isDisposed() && metrics.series) {
       const pieData = Object.entries(metrics.series).map(([name, data]) => ({
         name,
         value: data.count?.reduce((sum, val) => sum + val, 0) || 0
@@ -491,10 +492,21 @@ const getHealthText = (status) => {
   return texts[status] || '未知'
 }
 
-// 获取告警类型
+// 获取告警类型（用于 ElAlert）
 const getAlertType = (level) => {
   const types = {
     'error': 'error',
+    'warning': 'warning',
+    'info': 'info'
+  }
+  return types[level] || 'info'
+}
+
+// 获取时间线项类型（用于 ElTimelineItem）
+const getTimelineType = (level) => {
+  // ElTimelineItem 接受: primary, success, warning, danger, info
+  const types = {
+    'error': 'danger',  // ElTimelineItem 使用 'danger' 而不是 'error'
     'warning': 'warning',
     'info': 'info'
   }
@@ -684,8 +696,12 @@ const handleStopComponent = async (component) => {
 
 // 处理窗口大小变化
 const handleResize = () => {
-  trendChartInstance?.resize()
-  pieChartInstance?.resize()
+  if (trendChartInstance && !trendChartInstance.isDisposed()) {
+    trendChartInstance.resize()
+  }
+  if (pieChartInstance && !pieChartInstance.isDisposed()) {
+    pieChartInstance.resize()
+  }
 }
 
 // 监听系统状态变化

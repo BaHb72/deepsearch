@@ -19,7 +19,7 @@ class SafeStorage {
             localStorage.removeItem(testKey)
             return true
         } catch (e) {
-            console.warn('localStorage 不可用，将使用内存存储', e)
+            // 静默处理，避免控制台噪音
             return false
         }
     }

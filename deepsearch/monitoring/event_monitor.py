@@ -495,10 +495,14 @@ class EventSystemMonitor:
         try:
             # 简单的连通性检查 - 不发布事件，只检查总线状态
             # 检查是否有可用的总线实例
-            if hasattr(self._bus, '_buses') and self._bus._buses:
-                return True, None
+            if hasattr(self._bus, '_buses'):
+                if self._bus._buses:
+                    return True, None
+                else:
+                    # 没有配置的消息总线也是正常的
+                    return True, "没有启用的消息总线"
             else:
-                return False, "没有配置的消息总线"
+                return False, "消息总线状态异常"
         except Exception as e:
             return False, f"总线错误: {str(e)}"
 

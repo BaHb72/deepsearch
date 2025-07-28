@@ -21,7 +21,8 @@ from deepsearch.core.components import (
     EventEngineComponent,
     MessageBusComponent,
     MonitorComponent,
-    GatewayComponent
+    GatewayComponent,
+    DatabaseComponent
 )
 from deepsearch.core.exceptions import DeepSearchError
 from deepsearch.event.engine import Event, EventEngine
@@ -62,6 +63,7 @@ class MainEngine:
         self._message_bus: Optional[CompositeMessageBus] = None
         self._monitor: Optional[EventSystemMonitor] = None
         self._gateway: Optional[Gateway] = None
+        self._database: Optional[DatabaseComponent] = None
         self._webui_server = None  # WebUI服务器实例
         self._frontend_process = None  # WebUI前端进程
 
@@ -109,10 +111,13 @@ class MainEngine:
             # 4. 初始化消息总线
             self._initialize_message_bus()
 
-            # 5. 初始化系统监控
+            # 5. 初始化数据库
+            self._initialize_database()
+
+            # 6. 初始化系统监控
             self._initialize_monitor()
 
-            # 6. 初始化网关
+            # 7. 初始化网关
             self._initialize_gateway()
 
             self._initialized = True
@@ -221,6 +226,29 @@ class MainEngine:
         self._message_bus = message_bus_comp.get_instance()
 
         self._logger.debug("消息总线初始化完成")
+
+    def _initialize_database(self) -> None:
+        """初始化数据库组件"""
+        self._logger.debug("初始化数据库...")
+
+        # 创建数据库组件
+        database_comp = DatabaseComponent()
+
+        # 注册到组件管理器
+        self._component_manager.register_component(
+            component=database_comp,
+            display_name="数据库",
+            description="PostgreSQL 数据库连接和管理，支持 TimescaleDB 时序数据"
+            # 数据库不依赖其他组件
+        )
+
+        # 初始化组件
+        self._component_manager.initialize_component("database")
+
+        # 获取实例引用
+        self._database = database_comp
+
+        self._logger.debug("数据库初始化完成")
 
     def _initialize_monitor(self) -> None:
         """初始化系统监控"""
