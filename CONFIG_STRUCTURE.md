@@ -68,6 +68,11 @@ log:
 
 database:
   url: null  # or postgresql://...
+  analytics: # DuckDB分析数据库配置
+    enabled: true
+    path: "./data/analytics.duckdb"
+    memory_limit: "4GB"
+    threads: 4
 ```
 
 ### Message Bus Configuration
@@ -126,6 +131,12 @@ export MESSAGE_BUS__ROUTES__0__BUSES='["zmq", "inmem"]'
 # Sensitive data
 export DATABASE__URL=postgresql://user:${DB_PASSWORD}@db/deepsearch
 export MESSAGE_BUS__BUSES__TIMESERIES__CONFIG__STORAGE_CONFIG__PASSWORD=${REDIS_PASSWORD}
+
+# Analytics database
+export DATABASE__ANALYTICS__ENABLED=true
+export DATABASE__ANALYTICS__PATH="./data/analytics.duckdb"
+export DATABASE__ANALYTICS__MEMORY_LIMIT="8GB"
+export DATABASE__ANALYTICS__THREADS=8
 ```
 
 ## Adding New Environments
@@ -152,3 +163,38 @@ If migrating from the old structure with `setting.yaml`:
 2. No more base template + overrides
 3. Direct loading based on `APP__ENV`
 4. Simplified configuration management without merging
+
+## Recent Configuration Updates
+
+### Analytics Database (DuckDB)
+
+Added support for DuckDB as an analytics database for historical data analysis:
+
+```yaml
+database:
+  analytics:
+    enabled: true                    # Enable/disable analytics database
+    path: "./data/analytics.duckdb"  # Database file location
+    memory_limit: "4GB"              # Memory allocation for DuckDB
+    threads: 4                       # Number of processing threads
+```
+
+This configuration allows:
+
+- Fast OLAP queries on historical market data
+- Efficient factor calculation and backtesting
+- Parquet file import/export support
+- Complex analytical queries without impacting main database
+
+### Usage Example
+
+```python
+from deepsearch.storage.analytics import AnalyticsDB
+
+# Initialize analytics database
+analytics = AnalyticsDB(
+    config.database.analytics.path,
+    memory_limit=config.database.analytics.memory_limit,
+    threads=config.database.analytics.threads
+)
+```

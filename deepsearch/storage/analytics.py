@@ -3,10 +3,11 @@
 用于日级别数据的分析和存储
 """
 import os
+from datetime import date
 from typing import Optional, List, Dict, Any
-from datetime import datetime, date
-import pandas as pd
+
 import duckdb
+import pandas as pd
 
 from deepsearch.observability.logger import logger
 
@@ -21,13 +22,24 @@ class AnalyticsDB:
         """初始化分析数据库
         
         Args:
-            db_path: 数据库文件路径，默认为 data/analytics.duckdb
+            db_path: 数据库文件路径，如果不提供则从配置中读取
         """
         if db_path is None:
-            # 确保数据目录存在
-            data_dir = os.path.join(os.path.dirname(__file__), '../../data')
-            os.makedirs(data_dir, exist_ok=True)
-            db_path = os.path.join(data_dir, 'analytics.duckdb')
+            # 从配置中读取
+            try:
+                from deepsearch.config import get_config
+                config = get_config()
+                db_path = config.database.analytics.path
+            except Exception:
+                # 如果配置读取失败，使用默认路径
+                data_dir = os.path.join(os.path.dirname(__file__), '../../data')
+                os.makedirs(data_dir, exist_ok=True)
+                db_path = os.path.join(data_dir, 'analytics.duckdb')
+
+        # 确保目录存在
+        db_dir = os.path.dirname(db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
 
         self.db_path = db_path
         self.conn: Optional[duckdb.DuckDBPyConnection] = None
@@ -36,9 +48,28 @@ class AnalyticsDB:
     def connect(self) -> None:
         """连接到数据库"""
         try:
+            # 获取配置
+            try:
+                from deepsearch.config import get_config
+                config = get_config()
+                memory_limit = config.database.analytics.memory_limit
+                threads = config.database.analytics.threads
+            except Exception:
+                # 使用默认值
+                memory_limit = "4GB"
+                threads = 4
+
+            # 连接数据库
             self.conn = duckdb.connect(self.db_path)
+
+            # 设置内存限制和线程数
+            self.conn.execute(f"SET memory_limit='{memory_limit}'")
+            self.conn.execute(f"SET threads={threads}")
+
+            # 初始化架构
             self._init_schema()
-            self.logger.info(f"连接到 DuckDB: {self.db_path}")
+
+            self.logger.info(f"连接到 DuckDB: {self.db_path} (内存限制: {memory_limit}, 线程数: {threads})")
         except Exception as e:
             self.logger.error(f"连接 DuckDB 失败: {e}")
             raise

@@ -229,6 +229,14 @@ class MainEngine:
 
     def _initialize_database(self) -> None:
         """初始化数据库组件"""
+        from deepsearch.config import get_config
+        config = get_config()
+
+        # 检查数据库是否启用
+        if not config.database.main.enabled:
+            self._logger.info("数据库已禁用，跳过初始化")
+            return
+            
         self._logger.debug("初始化数据库...")
 
         # 创建数据库组件
@@ -699,8 +707,8 @@ class MainEngine:
                 try:
                     stdout, stderr = self._frontend_process.communicate(timeout=1)
                     error_msg = f"Frontend process exited. Return code: {self._frontend_process.returncode}\nstdout: {stdout}\nstderr: {stderr}"
-                except:
-                    error_msg = "Frontend process failed to start"
+                except (subprocess.TimeoutExpired, Exception) as e:
+                    error_msg = f"Frontend process failed to start: {str(e)}"
                 self._logger.error(error_msg)
                 raise ComponentLifecycleError(error_msg)
 
@@ -723,15 +731,17 @@ class MainEngine:
                         # 如果taskkill失败，尝试直接终止
                         try:
                             self._frontend_process.terminate()
-                        except:
-                            pass
+                        except (OSError, ProcessLookupError) as e:
+                            self._logger.debug(f"进程可能已经终止: {e}")
                 else:
                     self._frontend_process.terminate()
                     self._frontend_process.wait(timeout=3)
-                self._frontend_process = None
                 self._logger.debug("WebUI前端服务器已停止")
             except Exception as e:
                 self._logger.error(f"停止前端失败: {e}")
+            finally:
+                # 确保进程对象被清理
+                self._frontend_process = None
 
     def start_phased(self, include_business: bool = True, include_webui: bool = True,
                      include_frontend: bool = True) -> None:

@@ -238,10 +238,12 @@ class DatabaseComponent(Component):
 
     async def initialize_async(self) -> None:
         """异步初始化数据库连接"""
-        from datetime import datetime
-        from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, AsyncEngine
+        from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
         from sqlalchemy.orm import sessionmaker
-        from sqlalchemy import text
+        import warnings
+
+        # 忽略 asyncpg 的协程警告
+        warnings.filterwarnings("ignore", message="coroutine.*was never awaited")
 
         if self.status != ComponentStatus.UNINITIALIZED:
             raise RuntimeError(f"{self.name} has already been initialized")
@@ -252,7 +254,32 @@ class DatabaseComponent(Component):
             # 获取数据库配置
             from deepsearch.config import settings
             db_config = settings.database.main
+
+            # 调试信息
+            self._logger.debug(f"数据库配置: type={db_config.type}, host={db_config.host}, "
+                               f"port={db_config.port}, database={db_config.database}, "
+                               f"username={db_config.username}, has_password={bool(db_config.password)}, "
+                               f"auto_connect={db_config.auto_connect}")
+
+            # 检查是否应该自动连接
+            if not db_config.auto_connect:
+                self._logger.info("数据库组件已初始化（未连接）- auto_connect=false")
+                self._status = ComponentStatus.INITIALIZED
+                self._engine = None
+                self._session_factory = None
+                return
+
+            # 检查密码是否为空或是占位符
+            if db_config.type != "sqlite" and (not db_config.password or db_config.password == "***"):
+                self._logger.warning("数据库密码为空或无效，跳过连接。请在配置页面设置数据库密码。")
+                self._status = ComponentStatus.INITIALIZED
+                self._engine = None
+                self._session_factory = None
+                return
+            
             db_url = db_config.get_url()
+            self._logger.debug(
+                f"构建的数据库URL: {db_url.replace(db_config.password, '***') if db_config.password else db_url}")
 
             if not db_url:
                 raise RuntimeError("数据库 URL 未配置")
@@ -289,24 +316,48 @@ class DatabaseComponent(Component):
 
         except Exception as e:
             self._status = ComponentStatus.ERROR
-            self._logger.error(f"数据库组件初始化失败: {e}")
-            raise RuntimeError(f"Failed to initialize database: {e}")
+            error_msg = self._get_friendly_error_message(e)
+            self._logger.error(f"数据库组件初始化失败: {error_msg}")
+
+            # 提供解决方案建议
+            if "connection was closed" in str(e) or "ConnectionDoesNotExistError" in str(e):
+                self._logger.info("解决方案：")
+                self._logger.info("1. 检查 PostgreSQL 服务是否正在运行")
+                self._logger.info("2. 确认数据库配置信息是否正确（主机、端口、用户名、密码）")
+                self._logger.info("3. 使用命令测试连接: psql -h localhost -U bahb -d deepsearch")
+            elif "password authentication failed" in str(e):
+                self._logger.info("解决方案：请检查数据库密码是否正确")
+            elif "database" in str(e) and "does not exist" in str(e):
+                self._logger.info("解决方案：请先创建数据库 'deepsearch'")
+
+            raise RuntimeError(f"Failed to initialize database: {error_msg}")
 
     def initialize(self) -> None:
         """同步初始化接口（为兼容组件管理器）"""
         import asyncio
         try:
-            asyncio.run(self.initialize_async())
+            # 尝试获取当前运行的事件循环
+            loop = asyncio.get_running_loop()
+            # 如果在异步上下文中，创建任务
+            task = loop.create_task(self.initialize_async())
+            # 注意：这里不会等待任务完成，因为我们已经在事件循环中
         except RuntimeError:
-            # 如果已经在事件循环中，使用现有循环
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(self.initialize_async())
+            # 不在异步上下文中，创建新的事件循环
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self.initialize_async())
+            finally:
+                # 清理事件循环
+                loop.close()
+                asyncio.set_event_loop(None)
 
     async def _test_connection(self) -> None:
         """测试数据库连接"""
         from sqlalchemy import text
 
-        async with self._engine.begin() as conn:
+        # 使用 connect() 而不是 begin() 来避免警告
+        async with self._engine.connect() as conn:
             result = await conn.execute(text("SELECT 1"))
             if not result:
                 raise RuntimeError("数据库连接测试失败")
@@ -316,41 +367,39 @@ class DatabaseComponent(Component):
             version = version_result.scalar()
             self._logger.info(f"数据库版本: {version}")
 
+            # 显式提交以确保连接正确关闭
+            await conn.commit()
+
     async def _setup_timescaledb(self) -> None:
-        """安装和配置 TimescaleDB"""
+        """检查 TimescaleDB 是否可用"""
         from sqlalchemy import text
 
         try:
-            async with self._engine.begin() as conn:
+            async with self._engine.connect() as conn:
                 # 检查 TimescaleDB 是否已安装
                 check_sql = """
                             SELECT EXISTS (SELECT 1
                                            FROM pg_extension
-                                           WHERE extname = 'timescaledb'); \
+                                           WHERE extname = 'timescaledb');
                             """
                 result = await conn.execute(text(check_sql))
                 exists = result.scalar()
 
-                if not exists:
-                    self._logger.info("正在安装 TimescaleDB 扩展...")
-                    try:
-                        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"))
-                        self._logger.info("✓ TimescaleDB 扩展安装成功")
-                    except Exception as e:
-                        self._logger.warning(f"TimescaleDB 安装失败: {e}")
-                        self._logger.warning("将继续使用普通 PostgreSQL 功能")
-                        return
+                if exists:
+                    self._is_timescale_enabled = True
+                    # 获取 TimescaleDB 版本
+                    version_sql = "SELECT extversion FROM pg_extension WHERE extname = 'timescaledb';"
+                    result = await conn.execute(text(version_sql))
+                    version = result.scalar()
+                    self._logger.info(f"✓ TimescaleDB 已启用，版本: {version}")
+                else:
+                    self._is_timescale_enabled = False
+                    self._logger.info("TimescaleDB 未安装，使用标准 PostgreSQL 功能")
 
-                self._is_timescale_enabled = True
-
-                # 获取 TimescaleDB 版本
-                version_sql = "SELECT extversion FROM pg_extension WHERE extname = 'timescaledb';"
-                result = await conn.execute(text(version_sql))
-                version = result.scalar()
-                self._logger.info(f"✓ TimescaleDB 版本: {version}")
+                await conn.commit()
 
         except Exception as e:
-            self._logger.warning(f"TimescaleDB 设置失败: {e}")
+            self._logger.debug(f"检查 TimescaleDB 时出错: {e}")
             self._is_timescale_enabled = False
 
     async def start_async(self) -> None:
@@ -404,6 +453,7 @@ class DatabaseComponent(Component):
             if self._engine:
                 # Properly dispose of the engine with timeout
                 try:
+                    # 直接处置引擎，这会关闭所有连接
                     await asyncio.wait_for(self._engine.dispose(), timeout=5.0)
                 except asyncio.TimeoutError:
                     self._logger.warning("数据库连接关闭超时")
@@ -463,8 +513,8 @@ class DatabaseComponent(Component):
                         "overflow": pool.overflow(),
                         "total": pool.size() + pool.overflow()
                     }
-                except:
-                    pool_status = {"status": "unavailable"}
+                except (AttributeError, Exception) as e:
+                    pool_status = {"status": "unavailable", "error": str(e)}
 
                 # 检查 TimescaleDB 状态
                 timescale_status = {
@@ -504,6 +554,9 @@ class DatabaseComponent(Component):
             "status": self.status.value,
         }
 
+        # 添加数据库连接状态
+        info["connection_status"] = "connected" if self._engine else "disconnected"
+        
         # 添加数据库特定信息
         if self._engine:
             try:
@@ -512,8 +565,10 @@ class DatabaseComponent(Component):
                     "size": pool.size() if hasattr(pool, 'size') else 'N/A',
                     "overflow": pool.overflow() if hasattr(pool, 'overflow') else 'N/A'
                 }
-            except:
-                info["connection_pool"] = {"status": "unavailable"}
+            except (AttributeError, Exception) as e:
+                info["connection_pool"] = {"status": "unavailable", "error": str(e)}
+        else:
+            info["connection_pool"] = {"status": "not connected"}
 
         info["timescaledb_enabled"] = self._is_timescale_enabled
         info["last_health_check"] = (
@@ -521,27 +576,161 @@ class DatabaseComponent(Component):
             if self._last_health_check else None
         )
 
+        # 如果未连接，添加原因说明
+        if not self._engine:
+            from deepsearch.config import settings
+            db_config = settings.database.main
+            if not db_config.auto_connect:
+                info["disconnect_reason"] = "自动连接已禁用"
+            elif not db_config.password and db_config.type != "sqlite":
+                info["disconnect_reason"] = "数据库密码未设置"
+
         return info
 
     @property
     def engine(self):
         """获取数据库引擎"""
         if not self._engine:
-            raise RuntimeError("数据库引擎未初始化")
+            raise RuntimeError("数据库未连接。请先在配置页面设置数据库连接信息。")
         return self._engine
 
     @property
     def session_factory(self):
         """获取会话工厂"""
         if not self._session_factory:
-            raise RuntimeError("会话工厂未初始化")
+            raise RuntimeError("数据库未连接。请先在配置页面设置数据库连接信息。")
         return self._session_factory
 
     def get_session(self):
         """获取新的数据库会话"""
+        if not self._session_factory:
+            raise RuntimeError("数据库未连接。请先在配置页面设置数据库连接信息。")
         return self.session_factory()
 
     @property
     def is_timescale_enabled(self) -> bool:
         """TimescaleDB 是否启用"""
         return self._is_timescale_enabled
+
+    def _get_friendly_error_message(self, error: Exception) -> str:
+        """将技术错误转换为友好的错误信息"""
+        error_str = str(error)
+
+        if "connection was closed" in error_str or "ConnectionDoesNotExistError" in error_str:
+            return "无法连接到数据库服务器"
+        elif "password authentication failed" in error_str:
+            return "数据库密码验证失败"
+        elif "database" in error_str and "does not exist" in error_str:
+            return "数据库不存在"
+        elif "Connection refused" in error_str:
+            return "数据库服务器拒绝连接（可能未启动）"
+        elif "timeout" in error_str.lower():
+            return "数据库连接超时"
+        else:
+            return error_str
+
+    async def connect_async(self) -> None:
+        """手动连接数据库"""
+        from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+        from sqlalchemy.orm import sessionmaker
+
+        if self._engine is not None:
+            self._logger.warning("数据库已经连接")
+            return
+
+        try:
+            self._logger.info("正在手动连接数据库...")
+
+            # 获取数据库配置
+            from deepsearch.config import settings
+            db_config = settings.database.main
+
+            # 检查密码是否为空
+            if not db_config.password and db_config.type != "sqlite":
+                raise RuntimeError("数据库密码未设置")
+
+            db_url = db_config.get_url()
+            if not db_url:
+                raise RuntimeError("数据库 URL 未配置")
+
+            # 创建异步引擎
+            if db_url.startswith("postgresql://"):
+                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+
+            self._engine = create_async_engine(
+                db_url,
+                echo=(settings.app.env == "dev"),
+                pool_size=20,
+                max_overflow=10,
+                pool_pre_ping=True,
+                pool_recycle=3600,
+            )
+
+            # 创建会话工厂
+            self._session_factory = sessionmaker(
+                self._engine,
+                class_=AsyncSession,
+                expire_on_commit=False
+            )
+
+            # 测试连接
+            await self._test_connection()
+
+            # 检查并安装 TimescaleDB
+            if db_config.type == "postgresql":
+                await self._setup_timescaledb()
+
+            self._logger.info("✓ 数据库连接成功")
+
+        except Exception as e:
+            error_msg = self._get_friendly_error_message(e)
+            self._logger.error(f"数据库连接失败: {error_msg}")
+            # 清理资源
+            if self._engine:
+                await self._engine.dispose()
+                self._engine = None
+                self._session_factory = None
+            raise RuntimeError(f"数据库连接失败: {error_msg}")
+
+    def connect(self) -> None:
+        """同步连接接口"""
+        import asyncio
+        try:
+            asyncio.run(self.connect_async())
+        except RuntimeError:
+            # 如果已经在事件循环中，使用现有循环
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(self.connect_async())
+
+    async def disconnect_async(self) -> None:
+        """断开数据库连接"""
+        if self._engine is None:
+            self._logger.warning("数据库未连接")
+            return
+
+        try:
+            self._logger.info("正在断开数据库连接...")
+            await self._engine.dispose()
+            self._engine = None
+            self._session_factory = None
+            self._logger.info("✓ 数据库连接已断开")
+        except Exception as e:
+            self._logger.error(f"断开数据库连接失败: {e}")
+            raise
+
+    def disconnect(self) -> None:
+        """同步断开连接接口"""
+        import asyncio
+        if self._engine is None:
+            return
+
+        try:
+            asyncio.run(self.disconnect_async())
+        except RuntimeError:
+            # 如果已经在事件循环中，使用现有循环
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(self.disconnect_async())
+
+    def is_connected(self) -> bool:
+        """检查数据库是否已连接"""
+        return self._engine is not None

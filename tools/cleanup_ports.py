@@ -37,8 +37,8 @@ def cleanup_ports():
                 try:
                     # 使用os.system执行Windows命令
                     os.system(f'taskkill /PID {pid} /F >nul 2>&1')
-                except:
-                    pass
+                except OSError as e:
+                    print(f"  警告: 无法终止进程 {pid}: {e}")
             print("清理完成!")
         else:
             print("没有找到需要清理的进程")

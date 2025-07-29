@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class MainDatabaseConfig(BaseModel):
     """主数据库配置。"""
+    enabled: bool = Field(default=True, description="是否启用数据库")
     type: Literal["postgresql", "mysql", "sqlite"] = Field(
         default="postgresql",
         description="数据库类型"
@@ -18,6 +19,7 @@ class MainDatabaseConfig(BaseModel):
     username: str = Field(default="postgres", description="用户名")
     password: str = Field(default="", description="密码")
     path: str = Field(default="./data/deepsearch.db", description="SQLite数据库文件路径")
+    auto_connect: bool = Field(default=False, description="启动时自动连接数据库")
 
     @field_validator("port")
     def validate_port(cls, v):
@@ -29,9 +31,15 @@ class MainDatabaseConfig(BaseModel):
         """构建数据库连接URL。
         
         如果密码以 "encrypted:" 开头，会自动解密。
+        如果密码是 "***"，表示脱敏的密码，返回 None。
         """
         # 处理密码
         actual_password = self.password
+
+        # 如果密码是脱敏的占位符，不能用于连接
+        if self.password == "***":
+            return None
+            
         if self.password and self.password.startswith("encrypted:"):
             try:
                 from deepsearch.config.crypto import decrypt_password
@@ -78,6 +86,14 @@ class CacheDatabaseConfig(BaseModel):
         return v
 
 
+class AnalyticsDatabaseConfig(BaseModel):
+    """分析数据库配置（DuckDB）。"""
+    enabled: bool = Field(default=True, description="是否启用分析数据库")
+    path: str = Field(default="./data/analytics.duckdb", description="DuckDB数据库文件路径")
+    memory_limit: str = Field(default="4GB", description="内存限制")
+    threads: int = Field(default=4, description="线程数")
+
+
 class DatabaseConfig(BaseModel):
     """数据库配置。"""
     # 保留原有的url字段以保持向后兼容
@@ -91,6 +107,10 @@ class DatabaseConfig(BaseModel):
     cache: CacheDatabaseConfig = Field(
         default_factory=CacheDatabaseConfig,
         description="缓存数据库配置"
+    )
+    analytics: AnalyticsDatabaseConfig = Field(
+        default_factory=AnalyticsDatabaseConfig,
+        description="分析数据库配置"
     )
 
     def get_main_url(self) -> Optional[str]:

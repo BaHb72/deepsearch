@@ -228,8 +228,10 @@ class BaseGateway(ABC):
                 try:
                     time.sleep(interval)
                     if self._heartbeat_enabled and not self._shutdown:
-                        event = Event(HEARTBEAT_EVENT_TYPE, {"gateway": self.gateway_name})
-                        self.message_bus.publish(HEARTBEAT_EVENT_TYPE, event)
+                        # 检查消息总线是否正在运行
+                        if self.message_bus and hasattr(self.message_bus, '_running') and self.message_bus._running:
+                            event = Event(HEARTBEAT_EVENT_TYPE, {"gateway": self.gateway_name})
+                            self.message_bus.publish(HEARTBEAT_EVENT_TYPE, event)
                 except Exception as exc:
                     if not self._shutdown:
                         self.logger.error(f"心跳调度失败: {exc}")
@@ -439,7 +441,7 @@ class Gateway(BaseGateway):
         :param engine: 事件引擎实例
         """
         # 从事件引擎获取消息总线
-        from deepsearch.event.bus.bus import InMemoryMessageBus
+        from deepsearch.messaging.implementations.inmemory import InMemoryMessageBus
         message_bus = InMemoryMessageBus()
 
         super().__init__(

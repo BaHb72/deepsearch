@@ -68,34 +68,27 @@
         </el-form>
       </el-tab-pane>
 
-      <el-tab-pane label="数据存储" name="database">
+      <el-tab-pane name="database">
+        <template #label>
+          <span>数据存储</span>
+          <el-icon v-if="hasDbConnectionIssue" style="margin-left: 4px; color: #ff6b6b;">
+            <Warning/>
+          </el-icon>
+        </template>
         <div class="database-tab-content">
         <el-card shadow="never" style="margin-bottom: 20px">
           <template #header>
             <div class="card-header">
               <span>主数据库配置</span>
               <div class="header-right">
-                <el-tag size="small" type="info">用于存储交易数据、历史记录等</el-tag>
-                <el-button
-                    :loading="mainDbSaving"
-                    :type="hasMainDbChanges ? 'warning' : 'success'"
-                    size="small"
-                    style="margin-left: 10px"
-                    @click="saveMainDatabase"
-                >
-                  <el-icon style="margin-right: 4px">
-                    <DocumentChecked/>
-                  </el-icon>
-                  {{ hasMainDbChanges ? '保存配置 *' : '保存配置' }}
-                </el-button>
                 <el-button
                     :loading="mainDbTesting"
                     size="small"
                     style="margin-left: 10px"
-                    type="primary"
-                    @click="testMainDatabase"
+                    :type="mainDbStatus?.success ? 'danger' : 'primary'"
+                    @click="toggleMainDatabase"
                 >
-                  测试连接
+                  {{ mainDbStatus?.success ? '断开连接' : '连接' }}
                 </el-button>
                 <el-tag
                     v-if="mainDbStatus !== null"
@@ -103,6 +96,10 @@
                     size="small"
                     style="margin-left: 10px"
                 >
+                  <el-icon style="margin-right: 4px">
+                    <CircleCheck v-if="mainDbStatus.success"/>
+                    <CircleClose v-else/>
+                  </el-icon>
                   {{ mainDbStatus.success ? '已连接' : '未连接' }}
                 </el-tag>
               </div>
@@ -116,23 +113,71 @@
                 <el-option label="SQLite" value="sqlite"/>
               </el-select>
             </el-form-item>
-            <el-form-item v-if="config.database.main.type !== 'sqlite'" label="主机地址">
-              <el-input v-model="config.database.main.host"/>
+            <el-form-item v-if="config.database.main.type !== 'sqlite'" label="连接地址" required>
+              <div style="display: flex; gap: 10px; width: 100%;">
+                <el-input
+                    v-model="config.database.main.host"
+                    :class="{'is-error': !config.database.main.host && showValidation}"
+                    placeholder="主机地址"
+                    style="flex: 1;"
+                >
+                  <template #prepend>主机</template>
+                </el-input>
+                <el-input-number
+                    v-model="config.database.main.port"
+                    :max="65535"
+                    :min="1"
+                    controls-position="right"
+                    placeholder="端口"
+                    style="width: 120px;"
+                />
+              </div>
+              <div v-if="!config.database.main.host && showValidation" class="el-form-item__error">
+                请输入主机地址
+              </div>
             </el-form-item>
-            <el-form-item v-if="config.database.main.type !== 'sqlite'" label="端口">
-              <el-input-number v-model="config.database.main.port" :max="65535" :min="1"/>
+            <el-form-item v-if="config.database.main.type !== 'sqlite'" label="数据库名" required>
+              <el-input
+                  v-model="config.database.main.database"
+                  :class="{'is-error': !config.database.main.database && showValidation}"
+                  placeholder="输入数据库名称"
+              />
+              <div v-if="!config.database.main.database && showValidation" class="el-form-item__error">
+                请输入数据库名称
+              </div>
             </el-form-item>
-            <el-form-item v-if="config.database.main.type !== 'sqlite'" label="数据库名">
-              <el-input v-model="config.database.main.database"/>
-            </el-form-item>
-            <el-form-item v-if="config.database.main.type !== 'sqlite'" label="用户名">
-              <el-input v-model="config.database.main.username"/>
+            <el-form-item v-if="config.database.main.type !== 'sqlite'" label="用户名" required>
+              <el-input
+                  v-model="config.database.main.username"
+                  :class="{'is-error': !config.database.main.username && showValidation}"
+                  placeholder="输入数据库用户名"
+              />
+              <div v-if="!config.database.main.username && showValidation" class="el-form-item__error">
+                请输入用户名
+              </div>
             </el-form-item>
             <el-form-item v-if="config.database.main.type !== 'sqlite'" label="密码">
               <div style="display: flex; align-items: center; width: 100%;">
-                <el-input v-model="config.database.main.password" show-password style="flex: 1;" type="password"/>
+                <el-input
+                    v-model="config.database.main.password"
+                    :placeholder="config.database.main.password === '***' ? '已保存密码（留空保持不变）' : '请输入密码'"
+                    show-password
+                    style="flex: 1;"
+                    type="password"
+                />
+                <el-tag
+                    v-if="config.database.main.password === '***'"
+                    size="small"
+                    style="margin-left: 8px;"
+                    type="success"
+                >
+                  已保存
+                </el-tag>
                 <el-checkbox v-model="rememberMainDbPassword" style="margin-left: 12px;">记住密码</el-checkbox>
               </div>
+            </el-form-item>
+            <el-form-item label="连接选项">
+              <el-checkbox v-model="config.database.main.auto_connect">启动时自动连接数据库</el-checkbox>
             </el-form-item>
             <el-form-item v-if="config.database.main.type === 'sqlite'" label="文件路径">
               <el-input v-model="config.database.main.path" placeholder="例如: ./data/deepsearch.db"/>
@@ -145,29 +190,15 @@
             <div class="card-header">
               <span>缓存配置 (Redis)</span>
               <div class="header-right">
-                <el-tag size="small" type="success">用于高速缓存、消息队列等</el-tag>
-                <el-button
-                    :disabled="!config.database.cache.enabled"
-                    :loading="cacheDbSaving"
-                    :type="hasCacheDbChanges ? 'warning' : 'success'"
-                    size="small"
-                    style="margin-left: 10px"
-                    @click="saveCacheDatabase"
-                >
-                  <el-icon style="margin-right: 4px">
-                    <DocumentChecked/>
-                  </el-icon>
-                  {{ hasCacheDbChanges ? '保存配置 *' : '保存配置' }}
-                </el-button>
                 <el-button
                     :disabled="!config.database.cache.enabled"
                     :loading="cacheDbTesting"
                     size="small"
                     style="margin-left: 10px"
-                    type="primary"
-                    @click="testCacheDatabase"
+                    :type="cacheDbStatus?.success ? 'danger' : 'primary'"
+                    @click="toggleCacheDatabase"
                 >
-                  测试连接
+                  {{ cacheDbStatus?.success ? '断开连接' : '连接' }}
                 </el-button>
                 <el-tag
                     v-if="cacheDbStatus !== null"
@@ -175,6 +206,10 @@
                     size="small"
                     style="margin-left: 10px"
                 >
+                  <el-icon style="margin-right: 4px">
+                    <CircleCheck v-if="cacheDbStatus.success"/>
+                    <CircleClose v-else/>
+                  </el-icon>
                   {{ cacheDbStatus.success ? '已连接' : '未连接' }}
                 </el-tag>
               </div>
@@ -184,14 +219,43 @@
             <el-form-item label="启用缓存">
               <el-switch v-model="config.database.cache.enabled"/>
             </el-form-item>
-            <el-form-item v-if="config.database.cache.enabled" label="Redis 主机">
-              <el-input v-model="config.database.cache.host"/>
-            </el-form-item>
-            <el-form-item v-if="config.database.cache.enabled" label="Redis 端口">
-              <el-input-number v-model="config.database.cache.port" :max="65535" :min="1"/>
+            <el-form-item v-if="config.database.cache.enabled" label="连接地址">
+              <div style="display: flex; gap: 10px; width: 100%;">
+                <el-input
+                    v-model="config.database.cache.host"
+                    placeholder="主机地址"
+                    style="flex: 1;"
+                >
+                  <template #prepend>主机</template>
+                </el-input>
+                <el-input-number
+                    v-model="config.database.cache.port"
+                    :max="65535"
+                    :min="1"
+                    controls-position="right"
+                    placeholder="端口"
+                    style="width: 120px;"
+                />
+              </div>
             </el-form-item>
             <el-form-item v-if="config.database.cache.enabled" label="Redis 密码">
-              <el-input v-model="config.database.cache.password" show-password type="password"/>
+              <div style="display: flex; align-items: center; width: 100%;">
+                <el-input
+                    v-model="config.database.cache.password"
+                    :placeholder="config.database.cache.password === '***' ? '已保存密码（留空保持不变）' : '请输入密码'"
+                    show-password
+                    style="flex: 1;"
+                    type="password"
+                />
+                <el-tag
+                    v-if="config.database.cache.password === '***'"
+                    size="small"
+                    style="margin-left: 8px;"
+                    type="success"
+                >
+                  已保存
+                </el-tag>
+              </div>
             </el-form-item>
             <el-form-item v-if="config.database.cache.enabled" label="数据库索引">
               <el-input-number v-model="config.database.cache.db" :max="15" :min="0"/>
@@ -208,21 +272,27 @@
 </template>
 
 <script setup>
-import {onMounted, ref, watch} from 'vue'
+import {computed, onMounted, ref} from 'vue'
 import {ElMessage, ElNotification} from 'element-plus'
-import {DocumentChecked} from '@element-plus/icons-vue'
+import {CircleCheck, CircleClose, Warning} from '@element-plus/icons-vue'
 
 const activeTab = ref('basic')
 const mainDbTesting = ref(false)
 const cacheDbTesting = ref(false)
 const mainDbStatus = ref(null)
 const cacheDbStatus = ref(null)
-const mainDbSaving = ref(false)
-const cacheDbSaving = ref(false)
 const originalConfig = ref(null)
-const hasMainDbChanges = ref(false)
-const hasCacheDbChanges = ref(false)
 const rememberMainDbPassword = ref(false)
+const showValidation = ref(false)
+
+// 计算属性：检查是否有数据库连接问题
+const hasDbConnectionIssue = computed(() => {
+  const mainDbNotConnected = config.value.database.main.enabled &&
+      (!mainDbStatus.value || !mainDbStatus.value.success)
+  const cacheDbNotConnected = config.value.database.cache.enabled &&
+      (!cacheDbStatus.value || !cacheDbStatus.value.success)
+  return mainDbNotConnected || cacheDbNotConnected
+})
 
 const config = ref({
   basic: {
@@ -250,7 +320,8 @@ const config = ref({
       database: 'deepsearch',
       username: 'postgres',
       password: '',
-      path: './data/deepsearch.db'
+      path: './data/deepsearch.db',
+      auto_connect: false
     },
     cache: {
       enabled: true,
@@ -300,17 +371,35 @@ const loadConfig = async () => {
       if (data.database) {
         // 新格式，直接合并
         if (data.database.main) {
+          // 先保存has_saved_password状态
+          const hasSavedPassword = data.database.main.has_saved_password
           Object.assign(config.value.database.main, data.database.main)
-          // 如果密码是脱敏的，清空显示
+          // 如果密码是脱敏的，根据是否有保存的密码决定如何处理
           if (data.database.main.password === '***') {
-            config.value.database.main.password = ''
+            if (hasSavedPassword) {
+              // 如果有保存的密码，保留脱敏标记，并设置记住密码为true
+              config.value.database.main.password = '***'
+              rememberMainDbPassword.value = true
+            } else {
+              // 如果没有保存的密码，清空显示
+              config.value.database.main.password = ''
+              rememberMainDbPassword.value = false
+            }
           }
         }
         if (data.database.cache) {
+          // 先保存has_saved_password状态
+          const hasSavedPassword = data.database.cache.has_saved_password
           Object.assign(config.value.database.cache, data.database.cache)
-          // 如果密码是脱敏的，清空显示
+          // 如果密码是脱敏的，根据是否有保存的密码决定如何处理
           if (data.database.cache.password === '***') {
-            config.value.database.cache.password = ''
+            if (hasSavedPassword) {
+              // 如果有保存的密码，保留脱敏标记
+              config.value.database.cache.password = '***'
+            } else {
+              // 如果没有保存的密码，清空显示
+              config.value.database.cache.password = ''
+            }
           }
         }
       }
@@ -333,7 +422,10 @@ const saveConfig = async () => {
       log: config.value.log,
       database: {
         // 使用新格式
-        main: config.value.database.main,
+        main: {
+          ...config.value.database.main,
+          rememberPassword: rememberMainDbPassword.value
+        },
         cache: config.value.database.cache
       }
     }
@@ -350,6 +442,17 @@ const saveConfig = async () => {
 
     if (result.success) {
       ElMessage.success(result.message || '配置保存成功')
+
+      // 保存成功后自动尝试连接
+      if (config.value.database.main.enabled && rememberMainDbPassword.value && config.value.database.main.password && config.value.database.main.password !== '***') {
+        // 如果启用了主数据库、勾选了记住密码、且有新密码，自动连接
+        await connectMainDatabase()
+      }
+
+      if (config.value.database.cache.enabled && config.value.database.cache.password) {
+        // 如果启用了缓存且有密码，自动连接
+        await connectCacheDatabase()
+      }
     } else {
       ElMessage.error(result.message || '保存失败')
     }
@@ -358,9 +461,18 @@ const saveConfig = async () => {
   }
 }
 
-const testMainDatabase = async () => {
+const toggleMainDatabase = async () => {
+  if (mainDbStatus.value?.success) {
+    // 断开连接
+    await disconnectMainDatabase()
+  } else {
+    // 建立连接
+    await connectMainDatabase()
+  }
+}
+
+const connectMainDatabase = async () => {
   mainDbTesting.value = true
-  mainDbStatus.value = null
 
   try {
     const testConfig = {
@@ -384,9 +496,7 @@ const testMainDatabase = async () => {
     const result = await response.json()
     mainDbStatus.value = result
 
-    if (result.success) {
-      ElMessage.success(result.message)
-    } else {
+    if (!result.success) {
       ElMessage.error(result.message)
     }
   } catch (error) {
@@ -402,9 +512,24 @@ const testMainDatabase = async () => {
   }
 }
 
-const testCacheDatabase = async () => {
+const disconnectMainDatabase = async () => {
+  // TODO: 实现断开连接的API
+  mainDbStatus.value = {success: false}
+  ElMessage.success('数据库连接已断开')
+}
+
+const toggleCacheDatabase = async () => {
+  if (cacheDbStatus.value?.success) {
+    // 断开连接
+    await disconnectCacheDatabase()
+  } else {
+    // 建立连接
+    await connectCacheDatabase()
+  }
+}
+
+const connectCacheDatabase = async () => {
   cacheDbTesting.value = true
-  cacheDbStatus.value = null
 
   try {
     const testConfig = {
@@ -425,9 +550,7 @@ const testCacheDatabase = async () => {
     const result = await response.json()
     cacheDbStatus.value = result
 
-    if (result.success) {
-      ElMessage.success(result.message)
-    } else {
+    if (!result.success) {
       ElMessage.error(result.message)
     }
   } catch (error) {
@@ -443,125 +566,37 @@ const testCacheDatabase = async () => {
   }
 }
 
-const saveMainDatabase = async () => {
-  mainDbSaving.value = true
+const disconnectCacheDatabase = async () => {
+  // TODO: 实现断开连接的API
+  cacheDbStatus.value = {success: false}
+  ElMessage.success('Redis连接已断开')
+}
 
-  try {
-    // 只保存数据库相关配置
-    const dataToSave = {
-      database: {
-        main: {
-          ...config.value.database.main,
-          rememberPassword: rememberMainDbPassword.value
-        },
-        cache: config.value.database.cache
-      }
+
+// 检查数据库连接状态
+const checkConnectionStatus = async () => {
+  // 检查主数据库状态
+  if (config.value.database.main.enabled) {
+    try {
+      await connectMainDatabase()
+    } catch (error) {
+      console.log('主数据库未连接')
     }
+  }
 
-    const response = await fetch('/api/config/save', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(dataToSave)
-    })
-
-    const result = await response.json()
-
-    if (result.success) {
-      ElMessage.success('主数据库配置保存成功')
-      // 更新原始配置，重置变化状态
-      if (originalConfig.value) {
-        originalConfig.value.database.main = JSON.parse(JSON.stringify(config.value.database.main))
-      }
-      hasMainDbChanges.value = false
-      // 保存成功后自动测试连接
-      await testMainDatabase()
-    } else {
-      ElMessage.error(result.message || '保存失败')
+  // 检查缓存数据库状态
+  if (config.value.database.cache.enabled) {
+    try {
+      await connectCacheDatabase()
+    } catch (error) {
+      console.log('缓存数据库未连接')
     }
-  } catch (error) {
-    ElMessage.error('保存失败: ' + error.message)
-  } finally {
-    mainDbSaving.value = false
   }
 }
 
-const saveCacheDatabase = async () => {
-  cacheDbSaving.value = true
-
-  try {
-    // 只保存数据库相关配置
-    const dataToSave = {
-      database: {
-        main: config.value.database.main,
-        cache: config.value.database.cache
-      }
-    }
-
-    const response = await fetch('/api/config/save', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(dataToSave)
-    })
-
-    const result = await response.json()
-
-    if (result.success) {
-      ElMessage.success('缓存配置保存成功')
-      // 更新原始配置，重置变化状态
-      if (originalConfig.value) {
-        originalConfig.value.database.cache = JSON.parse(JSON.stringify(config.value.database.cache))
-      }
-      hasCacheDbChanges.value = false
-      // 如果启用了缓存，保存成功后自动测试连接
-      if (config.value.database.cache.enabled) {
-        await testCacheDatabase()
-      }
-    } else {
-      ElMessage.error(result.message || '保存失败')
-    }
-  } catch (error) {
-    ElMessage.error('保存失败: ' + error.message)
-  } finally {
-    cacheDbSaving.value = false
-  }
-}
-
-// 监听主数据库配置变化
-watch(() => config.value.database.main, (newVal) => {
-  if (originalConfig.value) {
-    const original = originalConfig.value.database.main
-    // 比较配置是否有变化（忽略密码字段的空值）
-    hasMainDbChanges.value = JSON.stringify({
-      ...newVal,
-      password: newVal.password || undefined
-    }) !== JSON.stringify({
-      ...original,
-      password: original.password || undefined
-    })
-  }
-}, {deep: true})
-
-// 监听缓存配置变化
-watch(() => config.value.database.cache, (newVal) => {
-  if (originalConfig.value) {
-    const original = originalConfig.value.database.cache
-    // 比较配置是否有变化（忽略密码字段的空值）
-    hasCacheDbChanges.value = JSON.stringify({
-      ...newVal,
-      password: newVal.password || undefined
-    }) !== JSON.stringify({
-      ...original,
-      password: original.password || undefined
-    })
-  }
-}, {deep: true})
-
-onMounted(() => {
-  loadConfig()
+onMounted(async () => {
+  await loadConfig()
+  // 不再自动检查连接状态，避免不必要的弹窗
 })
 </script>
 
@@ -739,6 +774,18 @@ onMounted(() => {
       padding-left: 8px;
     }
   }
+}
+
+/* 必填项标记 */
+.el-form-item[required] .el-form-item__label::before {
+  content: '*';
+  color: #ff4d4f;
+  margin-right: 4px;
+}
+
+/* 错误输入框样式 */
+.el-input.is-error .el-input__wrapper {
+  box-shadow: 0 0 0 1px #ff4d4f inset;
 }
 
 /* 连接状态标签样式优化 */

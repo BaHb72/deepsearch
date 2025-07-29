@@ -1,3 +1,18 @@
+app:
+  appName: DeepSearch
+  env: prod
+  debug: true
+  name: DeepSearch
+  author: BaHb
+log:
+  level: INFO
+  format: verbose
+  toFile: true
+  toConsole: true
+  active: true
+  rotation: 00:00
+  retention_days: 7
+  enable_json: false
 database:
   main:
     type: postgresql
@@ -5,8 +20,11 @@ database:
     port: 5432
     database: deepsearch
     username: bahb
-    password: ''  # 使用 python -m deepsearch.tools.encrypt_password 加密密码
+    password: '123456'
     path: ./data/deepsearch.db
+    auto_connect: true
+    enabled: true
+    has_saved_password: false
   cache:
     enabled: true
     host: localhost
@@ -15,13 +33,4 @@ database:
     db: 0
     poolSize: 10
     pool_size: 10
-
-message_bus:
-  buses:
-    inmem:
-      type: inmem
-      enabled: true
-      config: { }
-  routes:
-    - match: "*"
-      buses: [ "inmem" ]
+    has_saved_password: false

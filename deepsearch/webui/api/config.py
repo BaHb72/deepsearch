@@ -163,10 +163,18 @@ async def get_config() -> Dict[str, Any]:
         if "database" in config_dict:
             if "main" in config_dict["database"] and "password" in config_dict["database"]["main"]:
                 if config_dict["database"]["main"]["password"]:
+                    # 添加标志表示是否有保存的密码
+                    config_dict["database"]["main"]["has_saved_password"] = True
                     config_dict["database"]["main"]["password"] = "***"
+                else:
+                    config_dict["database"]["main"]["has_saved_password"] = False
             if "cache" in config_dict["database"] and "password" in config_dict["database"]["cache"]:
                 if config_dict["database"]["cache"]["password"]:
+                    # 添加标志表示是否有保存的密码
+                    config_dict["database"]["cache"]["has_saved_password"] = True
                     config_dict["database"]["cache"]["password"] = "***"
+                else:
+                    config_dict["database"]["cache"]["has_saved_password"] = False
 
         return config_dict
 
@@ -246,21 +254,37 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
                 # 处理主数据库密码保存逻辑
                 if "main" in save_data["database"] and "password" in save_data["database"]["main"]:
                     remember_password = db_config.get("main", {}).get("rememberPassword", False)
-                    if save_data["database"]["main"]["password"] == "***":
-                        # 如果是脱敏的密码，不更新
-                        del save_data["database"]["main"]["password"]
+                    password = save_data["database"]["main"]["password"]
+
+                    if password == "***":
+                        # 如果是脱敏的密码，检查是否要保留
+                        if remember_password:
+                            # 如果勾选了记住密码，不更新密码字段（保留原密码）
+                            del save_data["database"]["main"]["password"]
+                        else:
+                            # 如果取消了记住密码，清空密码
+                            save_data["database"]["main"]["password"] = ""
+                    elif remember_password and password:
+                        # 如果勾选记住密码且密码不为空，明文保存（暂时不加密）
+                        save_data["database"]["main"]["password"] = password
                     elif not remember_password:
-                        # 如果没有勾选记住密码，则删除密码字段
-                        del save_data["database"]["main"]["password"]
-                    # 否则保存密码
+                        # 如果没有勾选记住密码，清空密码
+                        save_data["database"]["main"]["password"] = ""
+                    else:
+                        # 密码为空的情况
+                        save_data["database"]["main"]["password"] = ""
 
                 # 删除临时的rememberPassword字段
                 if "main" in save_data["database"] and "rememberPassword" in save_data["database"]["main"]:
                     del save_data["database"]["main"]["rememberPassword"]
                 if "cache" in save_data["database"] and "password" in save_data["database"]["cache"]:
-                    if save_data["database"]["cache"]["password"] == "***":
+                    cache_password = save_data["database"]["cache"]["password"]
+                    if cache_password == "***":
                         # 如果是脱敏的密码，不更新
                         del save_data["database"]["cache"]["password"]
+                    elif cache_password:
+                        # 如果密码不为空，明文保存（暂时不加密）
+                        save_data["database"]["cache"]["password"] = cache_password
             # 兼容旧格式
             elif "url" in db_config:
                 save_data["database"] = {"url": db_config["url"]}
@@ -422,6 +446,15 @@ async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, 
         连接测试结果
     """
     try:
+        # 如果密码是 ***，从配置中读取实际密码
+        actual_password = config.password
+        if config.password == "***" and settings:
+            # 从配置中获取保存的密码
+            if config.db_type == "postgresql":
+                saved_password = settings.database.main.password
+                if saved_password:
+                    actual_password = saved_password
+        
         if config.db_type == "postgresql":
             # 测试 PostgreSQL 连接
             try:
@@ -433,7 +466,7 @@ async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, 
                         port=config.port,
                         dbname=config.database,
                         user=config.username,
-                        password=config.password,
+                        password=actual_password,
                         connect_timeout=5
                 ) as conn:
                     async with conn.cursor() as cur:
@@ -467,7 +500,7 @@ async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, 
                     port=config.port,
                     db=config.database,
                     user=config.username,
-                    password=config.password,
+                    password=actual_password,
                     connect_timeout=5
                 )
                 cursor = await conn.cursor()
@@ -544,6 +577,12 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
         连接测试结果
     """
     try:
+        # 如果密码是 ***，从配置中读取实际密码
+        actual_password = config.password
+        if config.password == "***" and settings:
+            saved_password = settings.database.cache.password
+            if saved_password:
+                actual_password = saved_password
         # 尝试使用 redis-py 的异步客户端
         try:
             import redis.asyncio as redis_async
@@ -551,7 +590,7 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
             client = redis_async.Redis(
                 host=config.host,
                 port=config.port,
-                password=config.password if config.password else None,
+                password=actual_password if actual_password else None,
                 db=config.db,
                 socket_connect_timeout=5
             )
@@ -578,7 +617,7 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
                 client = redis.Redis(
                     host=config.host,
                     port=config.port,
-                    password=config.password if config.password else None,
+                    password=actual_password if actual_password else None,
                     db=config.db,
                     socket_connect_timeout=5
                 )

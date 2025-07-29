@@ -1,5 +1,6 @@
 database:
   main:
+    enabled: true  # 设置为 false 可以禁用数据库
     type: postgresql
     host: localhost
     port: 5432
@@ -8,7 +9,7 @@ database:
     password: '123456'  # 可以使用明文或加密密码 (格式: encrypted:xxxxx)
     path: ./data/deepsearch.db
   cache:
-    enabled: false
+    enabled: true
     host: localhost
     port: 6379
     password: ''

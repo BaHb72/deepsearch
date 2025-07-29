@@ -193,8 +193,8 @@ class WebUIRunner:
                         # 如果taskkill失败，尝试直接终止
                         try:
                             self.frontend_process.terminate()
-                        except:
-                            pass
+                        except (OSError, ProcessLookupError) as e:
+                            logger.debug(f"前端进程可能已经终止: {e}")
                 else:
                     self.frontend_process.terminate()
                     self.frontend_process.wait(timeout=3)
@@ -337,8 +337,8 @@ class WebUIRunner:
                     except (psutil.NoSuchProcess, psutil.TimeoutExpired):
                         try:
                             child.kill()
-                        except:
-                            pass
+                        except (OSError, ProcessLookupError) as e:
+                            logger.debug(f"前端进程可能已经终止: {e}")
                     except Exception as e:
                         self.logger.error(f"无法终止进程 PID={child.pid}: {e}")
             except Exception as e:

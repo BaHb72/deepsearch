@@ -18,7 +18,8 @@ def get_monitor_api() -> Optional[Any]:
         from deepsearch.webui.server import app_state
         if hasattr(app_state, 'monitor_api'):
             return app_state.monitor_api
-    except:
+    except ImportError:
+        # server 模块可能未加载
         pass
     return None
 
@@ -395,7 +396,7 @@ async def get_recent_logs(
                     log_level = log_entry["level"].upper()
                     if log_level in level_priority and level_priority[log_level] >= min_level:
                         logs.append(log_entry)
-                except:
+                except (ValueError, KeyError):
                     # 如果解析失败，作为原始日志添加
                     logs.append({
                         "id": len(logs),

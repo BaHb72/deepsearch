@@ -76,7 +76,8 @@ def parse_log_line(line: str, line_id: int) -> Optional[Dict[str, Any]]:
                 "service": parts[4].strip(),
                 "message": " | ".join(parts[5:])
             }
-        except:
+        except Exception:
+            # 忽略解析错误
             pass
 
     # 如果无法解析，返回原始行
@@ -99,7 +100,8 @@ def get_latest_log_file() -> Optional[Path]:
             from deepsearch.observability.logger import logger_manager
             if logger_manager.log_path:
                 log_dir = logger_manager.log_path
-        except:
+        except Exception:
+            # 忽略解析错误
             pass
 
     if not log_dir.exists():
@@ -153,7 +155,9 @@ async def stream_logs(
 
             # 如果需要跟踪新日志
             if follow:
-                with open(log_file, 'r', encoding='utf-8') as f:
+                f = None
+                try:
+                    f = open(log_file, 'r', encoding='utf-8')
                     # 移动到文件末尾
                     f.seek(0, 2)
 
@@ -167,6 +171,9 @@ async def stream_logs(
                         else:
                             # 没有新行，等待一下
                             await asyncio.sleep(0.5)
+                finally:
+                    if f:
+                        f.close()
 
         except asyncio.CancelledError:
             # 客户端断开连接
@@ -260,7 +267,8 @@ async def websocket_logs(websocket: WebSocket):
                 "type": "error",
                 "message": str(e)
             })
-        except:
+        except Exception:
+            # 忽略解析错误
             pass
 
 
@@ -279,7 +287,8 @@ async def list_log_files() -> Dict[str, Any]:
             from deepsearch.observability.logger import logger_manager
             if logger_manager.log_path:
                 log_dir = logger_manager.log_path
-        except:
+        except Exception:
+            # 忽略解析错误
             pass
 
     if not log_dir.exists():
@@ -329,7 +338,8 @@ async def download_log_file(filename: str) -> StreamingResponse:
             from deepsearch.observability.logger import logger_manager
             if logger_manager.log_path:
                 log_dir = logger_manager.log_path
-        except:
+        except Exception:
+            # 忽略解析错误
             pass
 
     log_file = log_dir / filename

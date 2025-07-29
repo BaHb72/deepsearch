@@ -7,8 +7,11 @@ export {}
 
 declare module 'vue' {
   export interface GlobalComponents {
+      DatabaseAlert: typeof import('./components/DatabaseAlert.vue')['default']
+      DatabaseStatusCard: typeof import('./components/DatabaseStatusCard.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAside: typeof import('element-plus/es')['ElAside']
+      ElBadge: typeof import('element-plus/es')['ElBadge']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElButtonGroup: typeof import('element-plus/es')['ElButtonGroup']
     ElCard: typeof import('element-plus/es')['ElCard']
@@ -46,6 +49,7 @@ declare module 'vue' {
       ElUpload: typeof import('element-plus/es')['ElUpload']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+      SystemAlerts: typeof import('./components/SystemAlerts.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

@@ -23,8 +23,9 @@ def load_yaml_config() -> Dict[str, Any]:
     异常：
         SystemExit: 如果配置文件缺失或无效
     """
-    # 默认使用开发环境
-    env = "dev"
+    # 从环境变量获取环境设置，默认使用生产环境
+    import os
+    env = os.getenv("APP__ENV", "prod")
 
     # 构建特定环境的配置文件路径
     config_dir = Path(__file__).parent
@@ -32,14 +33,25 @@ def load_yaml_config() -> Dict[str, Any]:
 
     # 检查配置文件是否存在
     if not env_config_path.exists():
-        print(f"[错误] 未找到环境配置文件：{env_config_path}", file=sys.stderr)
-        print(f"[信息] 请确保 settings.{env}.yaml 存在", file=sys.stderr)
-        raise FileNotFoundError(f"配置文件不存在: {env_config_path}")
+        # 尝试查找包安装后的配置文件位置
+        try:
+            import deepsearch
+            package_dir = Path(deepsearch.__file__).parent
+            alt_config_path = package_dir / "config" / f"settings.{env}.yaml"
+            if alt_config_path.exists():
+                env_config_path = alt_config_path
+            else:
+                print(f"[错误] 未找到环境配置文件：{env_config_path}", file=sys.stderr)
+                print(f"[信息] 请确保 settings.{env}.yaml 存在", file=sys.stderr)
+                raise FileNotFoundError(f"配置文件不存在: {env_config_path}")
+        except ImportError:
+            print(f"[错误] 未找到环境配置文件：{env_config_path}", file=sys.stderr)
+            raise FileNotFoundError(f"配置文件不存在: {env_config_path}")
 
     try:
         with env_config_path.open("r", encoding=YAML_ENCODING) as f:
             config = yaml.safe_load(f) or {}
-        print(f"[信息] 已加载环境配置：{env_config_path.name}")
+        print(f"[信息] 已加载环境配置：{env_config_path.name} (环境: {env})")
         return config
     except Exception as exc:
         print(f"[错误] 解析配置文件失败 {env_config_path}：{exc}", file=sys.stderr)

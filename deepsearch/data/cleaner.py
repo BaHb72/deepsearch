@@ -2,10 +2,10 @@
 
 提供行情数据清洗和标准化功能
 """
-from typing import Optional, List, Tuple
-import pandas as pd
+from typing import List, Tuple
+
 import numpy as np
-from datetime import datetime, time
+import pandas as pd
 
 from deepsearch.observability.logger import logger
 
@@ -367,8 +367,8 @@ class DataCleaner:
                 if col in df.columns:
                     try:
                         pd.to_datetime(df[col])
-                    except:
-                        errors.append(f"列 {col} 无法转换为时间类型")
+                    except (ValueError, TypeError) as e:
+                        errors.append(f"列 {col} 无法转换为时间类型: {str(e)}")
 
             # 检查数值列
             numeric_cols = ['open', 'high', 'low', 'close', 'volume', 'turnover']

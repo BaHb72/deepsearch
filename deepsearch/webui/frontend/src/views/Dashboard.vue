@@ -1,5 +1,8 @@
 <template>
   <div class="dashboard">
+    <!-- 系统待办事项 -->
+    <SystemAlerts/>
+
     <!-- 状态卡片 -->
     <el-row :gutter="20" class="status-cards">
       <el-col :md="6" :sm="12" :xs="24">
@@ -249,6 +252,7 @@ import {getDashboard, getRealtimeMetrics} from '@/api/monitor'
 import {getAllComponents, startComponent, stopComponent} from '@/api/system'
 import {wsManager} from '@/utils/websocket'
 import {useSystemStore} from '@/stores/system'
+import SystemAlerts from '@/components/SystemAlerts.vue'
 
 // 系统状态
 const systemStore = useSystemStore()

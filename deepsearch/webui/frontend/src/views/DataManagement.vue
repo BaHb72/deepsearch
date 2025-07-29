@@ -11,6 +11,9 @@
       </template>
     </el-page-header>
 
+    <!-- 数据库状态卡片 -->
+    <DatabaseStatusCard/>
+
     <!-- 数据统计卡片 -->
     <el-row :gutter="20" class="stats-row">
       <el-col :span="6">
@@ -259,17 +262,18 @@
 </template>
 
 <script setup>
-import {ref, reactive, onMounted, nextTick} from 'vue'
+import {nextTick, onMounted, reactive, ref} from 'vue'
 import {ElMessage} from 'element-plus'
 import * as echarts from 'echarts'
 import {
-  getDataStatistics,
-  queryMarketData,
-  importCsvData,
-  exportData,
   calculateIndicators,
-  getSymbolList
+  exportData,
+  getDataStatistics,
+  getSymbolList,
+  importCsvData,
+  queryMarketData
 } from '@/api/data'
+import DatabaseStatusCard from '@/components/DatabaseStatusCard.vue'
 
 // 组件数据
 const activeTab = ref('query')
