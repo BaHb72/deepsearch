@@ -190,7 +190,10 @@
           </el-form>
         </el-card>
 
-        <el-card shadow="never">
+          <!-- Redis 缓存状态卡片 -->
+          <CacheStatusCard style="margin-bottom: 20px"/>
+
+          <el-card shadow="never">
           <template #header>
             <div class="card-header">
               <span>缓存配置 (Redis)</span>
@@ -200,22 +203,22 @@
                     :loading="cacheDbTesting"
                     size="small"
                     style="margin-left: 10px"
-                    :type="cacheDbStatus?.success ? 'danger' : 'primary'"
+                    :type="systemStore.isCacheConnected ? 'danger' : 'primary'"
                     @click="toggleCacheDatabase"
                 >
-                  {{ cacheDbStatus?.success ? '断开连接' : '连接' }}
+                  {{ systemStore.isCacheConnected ? '断开连接' : '连接' }}
                 </el-button>
                 <el-tag
-                    v-if="cacheDbStatus !== null"
-                    :type="cacheDbStatus.success ? 'success' : 'danger'"
+                    v-if="systemStore.cacheStatus.connectionStatus"
+                    :type="systemStore.isCacheConnected ? 'success' : 'danger'"
                     size="small"
                     style="margin-left: 10px"
                 >
                   <el-icon style="margin-right: 4px">
-                    <CircleCheck v-if="cacheDbStatus.success"/>
+                    <CircleCheck v-if="systemStore.isCacheConnected"/>
                     <CircleClose v-else/>
                   </el-icon>
-                  {{ cacheDbStatus.success ? '已连接' : '未连接' }}
+                  {{ systemStore.isCacheConnected ? '已连接' : '未连接' }}
                 </el-tag>
               </div>
             </div>
@@ -251,6 +254,8 @@
                     show-password
                     style="flex: 1;"
                     type="password"
+                    @blur="handlePasswordBlur"
+                    @focus="handlePasswordFocus"
                 />
                 <el-tag
                     v-if="config.database.cache.password === '***'"
@@ -268,6 +273,9 @@
             <el-form-item v-if="config.database.cache.enabled" label="连接池大小">
               <el-input-number v-model="config.database.cache.poolSize" :max="100" :min="1"/>
             </el-form-item>
+            <el-form-item v-if="config.database.cache.enabled" label="连接选项">
+              <el-checkbox v-model="config.database.cache.auto_connect">启动时自动连接 Redis</el-checkbox>
+            </el-form-item>
           </el-form>
         </el-card>
         </div>
@@ -281,9 +289,11 @@ import {computed, onMounted, ref, watch} from 'vue'
 import {ElMessage, ElNotification} from 'element-plus'
 import {CircleCheck, CircleClose, Warning} from '@element-plus/icons-vue'
 import {connectDatabase, disconnectDatabase} from '@/api/database'
+import {connectCache, disconnectCache} from '@/api/cache'
 import {getAllComponents} from '@/api/system'
 import {useSystemStore} from '@/stores/system'
 import DatabaseStatusCard from '@/components/DatabaseStatusCard.vue'
+import CacheStatusCard from '@/components/CacheStatusCard.vue'
 
 // 定义组件名称
 defineOptions({
@@ -295,7 +305,7 @@ const activeTab = ref('basic')
 const mainDbTesting = ref(false)
 const cacheDbTesting = ref(false)
 const mainDbStatus = ref(null)
-const cacheDbStatus = ref(null)
+// 移除本地缓存状态，直接使用 store
 const originalConfig = ref(null)
 const rememberMainDbPassword = ref(false)
 const showValidation = ref(false)
@@ -341,7 +351,8 @@ const config = ref({
       port: 6379,
       password: '',
       db: 0,
-      poolSize: 10
+      poolSize: 10,
+      auto_connect: true
     }
   }
 })
@@ -594,8 +605,10 @@ const updateDatabaseStatus = async () => {
   }
 }
 
+// 缓存状态通过 store 统一管理，无需本地更新函数
+
 const toggleCacheDatabase = async () => {
-  if (cacheDbStatus.value?.success) {
+  if (systemStore.isCacheConnected) {
     // 断开连接
     await disconnectCacheDatabase()
   } else {
@@ -608,34 +621,41 @@ const connectCacheDatabase = async () => {
   cacheDbTesting.value = true
 
   try {
-    const testConfig = {
-      host: config.value.database.cache.host,
-      port: config.value.database.cache.port,
-      password: config.value.database.cache.password,
-      db: config.value.database.cache.db
-    }
+    // 调用连接缓存 API，传递密码
+    const result = await connectCache(config.value.database.cache.password)
 
-    const response = await fetch('/api/config/test-cache', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(testConfig)
-    })
+    if (result.success) {
+      ElMessage.success(result.message || 'Redis 缓存连接成功')
 
-    const result = await response.json()
-    cacheDbStatus.value = result
+      // 更新缓存状态到 store
+      await systemStore.fetchCacheStatus()
 
-    if (!result.success) {
-      ElMessage.error(result.message)
+      // 更新组件状态到 systemStore
+      await refreshComponentsStatus()
+
+      // 更新 store 中的缓存状态
+      systemStore.updateCacheConnection(true)
+
+      // 连接成功后保存配置（包括密码）
+      if (config.value.database.cache.password) {
+        await saveConfig()
+      }
+    } else {
+      ElMessage.error(result.message || 'Redis 缓存连接失败')
     }
   } catch (error) {
-    cacheDbStatus.value = {success: false}
-    // 前端网络错误的友好提示
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+
+    // 处理不同类型的错误
+    if (error.response) {
+      // 服务器返回错误
+      const errorData = error.response.data
+      ElMessage.error(errorData.detail || errorData.message || 'Redis 缓存连接失败')
+    } else if (error.request) {
+      // 网络错误
       ElMessage.error('网络请求失败，请检查服务是否正常运行')
     } else {
-      ElMessage.error('无法连接到服务器')
+      // 其他错误
+      ElMessage.error('连接失败：' + error.message)
     }
   } finally {
     cacheDbTesting.value = false
@@ -643,9 +663,37 @@ const connectCacheDatabase = async () => {
 }
 
 const disconnectCacheDatabase = async () => {
-  // TODO: 实现断开连接的API
-  cacheDbStatus.value = {success: false}
-  ElMessage.success('Redis连接已断开')
+  cacheDbTesting.value = true
+
+  try {
+    // 调用断开缓存 API
+    const result = await disconnectCache()
+
+    if (result.success) {
+      ElMessage.success(result.message || 'Redis 缓存连接已断开')
+
+      // 更新缓存状态到 store
+      await systemStore.fetchCacheStatus()
+
+      // 更新组件状态到 systemStore
+      await refreshComponentsStatus()
+
+      // 更新 store 中的缓存状态
+      systemStore.updateCacheConnection(false, '用户手动断开连接')
+    } else {
+      ElMessage.error(result.message || '断开连接失败')
+    }
+  } catch (error) {
+    // 处理错误
+    if (error.response) {
+      const errorData = error.response.data
+      ElMessage.error(errorData.detail || errorData.message || '断开连接失败')
+    } else {
+      ElMessage.error('断开连接失败：' + error.message)
+    }
+  } finally {
+    cacheDbTesting.value = false
+  }
 }
 
 
@@ -696,6 +744,11 @@ watch(() => systemStore.isDatabaseConnected, (newVal) => {
   }
 })
 
+// 监听 store 中的缓存状态变化（无需更新本地状态）
+watch(() => systemStore.isCacheConnected, (newVal) => {
+  // 状态已经在 store 中，无需本地更新
+})
+
 onMounted(async () => {
   // 从 URL 参数获取当前标签
   const urlParams = new URLSearchParams(window.location.search)
@@ -707,9 +760,9 @@ onMounted(async () => {
   await loadConfig()
   // 加载后更新数据库连接状态
   await updateDatabaseStatus()
-  // 初始加载时也刷新组件状态
+  // 初始加载时刷新组件状态（这会更新所有状态到 store）
   await refreshComponentsStatus()
-  // 确保 store 的数据库状态也被初始化
+  // 确保数据库状态也被初始化
   await systemStore.fetchDatabaseStatus()
 })
 </script>

@@ -115,11 +115,29 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" prop="status" width="120">
+        <el-table-column label="状态" min-width="180" prop="status">
           <template #default="scope">
-            <el-tag :type="getComponentStatusType(scope.row.status)" size="small">
-              {{ getComponentStatusText(scope.row.status) }}
-            </el-tag>
+            <div class="status-cell">
+              <el-tooltip
+                  v-if="getComponentErrorMessage(scope.row)"
+                  :content="getComponentErrorMessage(scope.row)"
+                  placement="top"
+              >
+                <el-tag :type="getComponentStatusType(scope.row.status)" size="small">
+                  {{ getComponentStatusText(scope.row.status) }}
+                </el-tag>
+              </el-tooltip>
+              <el-tag
+                  v-else
+                  :type="getComponentStatusType(scope.row.status)"
+                  size="small"
+              >
+                {{ getComponentStatusText(scope.row.status) }}
+              </el-tag>
+              <span v-if="getComponentErrorMessage(scope.row)" class="error-hint">
+                ({{ getShortErrorMessage(getComponentErrorMessage(scope.row)) }})
+              </span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column fixed="right" label="操作" width="180">
@@ -536,6 +554,7 @@ const fetchInitialData = async () => {
     dashboardData.value = await getDashboard(chartPeriod.value)
     await updateCharts()
     await refreshComponents()
+    // 缓存状态已经通过 refreshComponents 更新到 store 中
   } catch (error) {
     ElMessage.error('获取仪表板数据失败')
   }
@@ -608,6 +627,46 @@ const getComponentStatusText = (status) => {
     'stopping': '正在停止'
   }
   return texts[status] || status
+}
+
+// 获取组件错误信息
+const getComponentErrorMessage = (component) => {
+  // 对于缓存组件，优先使用 systemStore 中的状态
+  if (component.name === 'cache') {
+    const cacheStatus = systemStore.cacheStatus
+    if (cacheStatus && !cacheStatus.connected && cacheStatus.disconnectReason) {
+      return cacheStatus.disconnectReason
+    }
+  }
+
+  // 对于其他组件或者缓存组件没有特殊状态时，使用原始错误信息
+  return component.status === 'error' ? component.error_message : null
+}
+
+// 获取简短的错误信息
+const getShortErrorMessage = (errorMessage) => {
+  if (!errorMessage) return ''
+
+  // 针对常见错误提供简短描述
+  if (errorMessage.includes('Redis 服务未连接')) {
+    return 'Redis未连接'
+  }
+  if (errorMessage.includes('认证失败')) {
+    return '认证失败'
+  }
+  if (errorMessage.includes('连接超时')) {
+    return '连接超时'
+  }
+  if (errorMessage.includes('健康检查异常')) {
+    return '健康检查异常'
+  }
+
+  // 如果错误信息太长，截断
+  if (errorMessage.length > 20) {
+    return errorMessage.substring(0, 20) + '...'
+  }
+
+  return errorMessage
 }
 
 // 判断是否可以启动组件
@@ -730,6 +789,9 @@ watch(() => systemStore.isRunning, (isRunning) => {
   }
 })
 
+// 定时刷新相关
+let refreshTimer = null
+
 onMounted(async () => {
   await fetchInitialData()
   await nextTick()
@@ -741,12 +803,29 @@ onMounted(async () => {
   }
   
   window.addEventListener('resize', handleResize)
+
+  // 设置定时刷新（每30秒刷新一次组件状态）
+  refreshTimer = setInterval(async () => {
+    try {
+      await refreshComponents()
+      // 同时刷新系统状态，包括缓存状态
+      await systemStore.fetchStatus()
+    } catch (error) {
+      console.error('定时刷新失败:', error)
+    }
+  }, 30000)
 })
 
 onUnmounted(() => {
   // 组件卸载时断开 WebSocket
   wsManager.shouldReconnect = false
   wsManager.disconnect()
+
+  // 清除定时器
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
   
   trendChartInstance?.dispose()
   pieChartInstance?.dispose()
@@ -1009,6 +1088,18 @@ onUnmounted(() => {
 
     .chart-container {
       height: 300px;
+    }
+  }
+
+  // 状态单元格样式
+  .status-cell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    .error-hint {
+      font-size: 12px;
+      color: #909399;
     }
   }
 }

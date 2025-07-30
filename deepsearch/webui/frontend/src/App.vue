@@ -124,6 +124,9 @@
           </el-main>
         </el-container>
       </el-container>
+
+      <!-- 错误监控组件 -->
+      <ErrorMonitor/>
     </div>
   </el-config-provider>
 </template>
@@ -137,6 +140,7 @@ import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import {useSystemStore} from '@/stores/system'
 import {restartSystem, startSystem, stopSystem} from '@/api/system'
 import {storage, STORAGE_KEYS} from '@/utils/storage'
+import ErrorMonitor from '@/components/ErrorMonitor.vue'
 
 // 定义组件名称
 defineOptions({

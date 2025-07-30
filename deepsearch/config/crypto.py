@@ -11,6 +11,7 @@ from typing import Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from deepsearch.observability import logger
 
 
 class PasswordCrypto:
@@ -85,8 +86,13 @@ class PasswordCrypto:
             encrypted_bytes = base64.urlsafe_b64decode(encrypted_password.encode())
             decrypted = self._cipher.decrypt(encrypted_bytes)
             return decrypted.decode()
-        except Exception:
-            # 如果解密失败，可能是明文密码，直接返回
+        except (ValueError, base64.binascii.Error) as e:
+            # Base64 解码失败，可能是明文密码
+            logger.debug(f"密码解码失败，可能是明文: {type(e).__name__}")
+            return encrypted_password
+        except Exception as e:
+            # 其他解密错误，如 InvalidToken
+            logger.warning(f"密码解密失败: {type(e).__name__}")
             return encrypted_password
 
 

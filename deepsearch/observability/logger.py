@@ -2,14 +2,24 @@ from __future__ import annotations
 
 """
 日志系统配置与初始化 (Logging configuration and bootstrap)
+
+该模块提供了完整的日志系统，包括：
+1. 日志分类（系统日志、业务日志、监控日志）
+2. 结构化日志支持
+3. 上下文管理
+4. 敏感信息脱敏
+5. 多输出通道
+6. 美化输出格式
 """
+import json
 import logging
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional, Set
 
 from loguru import logger
 from platformdirs import user_log_path
@@ -41,6 +51,91 @@ ERROR_RETENTION_MULTIPLIER = 2
 # Log depth for interceptor
 INTERCEPTOR_DEPTH = 6
 
+# 日志级别样式（整合自 pretty_logger）
+LEVEL_STYLES = {
+    "TRACE": {"color": "<white>", "icon": "🔍"},
+    "DEBUG": {"color": "<cyan>", "icon": "🐛"},
+    "INFO": {"color": "<green>", "icon": "ℹ️"},
+    "SUCCESS": {"color": "<bold green>", "icon": "✅"},
+    "WARNING": {"color": "<yellow>", "icon": "⚠️"},
+    "ERROR": {"color": "<red>", "icon": "❌"},
+    "CRITICAL": {"color": "<bold red>", "icon": "🚨"}
+}
+
+# 模块名称映射（简化显示）
+MODULE_NAMES = {
+    "deepsearch.core.engine": "引擎",
+    "deepsearch.event.engine": "事件",
+    "deepsearch.monitoring": "监控",
+    "deepsearch.webui": "界面",
+    "deepsearch.gateway": "网关",
+    "deepsearch.messaging": "消息",
+    "deepsearch.core.component_manager": "组件",
+    "deepsearch.observability.logger": "日志",
+    "deepsearch.trading": "交易",
+    "deepsearch.strategy": "策略",
+    "deepsearch.indicators": "指标",
+}
+
+
+# ==============================================================================
+# Log Classification
+# ==============================================================================
+
+class LogClassifier:
+    """日志分类器，根据模块名和内容分类日志"""
+
+    # 模块分类定义
+    SYSTEM_MODULES = ["core", "event", "messaging", "gateway", "webui", "config", "observability"]
+    BUSINESS_MODULES = ["trading", "strategy", "indicators", "data"]
+    MONITOR_MODULES = ["monitoring", "health", "metrics"]
+
+    @classmethod
+    def classify(cls, record: dict) -> str:
+        """根据记录分类日志类型"""
+        module = record.get("name", "")
+
+        # 检查是否是业务日志
+        for mod in cls.BUSINESS_MODULES:
+            if mod in module:
+                return "business"
+
+        # 检查是否是监控日志
+        for mod in cls.MONITOR_MODULES:
+            if mod in module:
+                return "monitor"
+
+        # 默认为系统日志
+        return "system"
+
+
+# ==============================================================================
+# Sensitive Information Filter
+# ==============================================================================
+
+class SensitiveFilter:
+    """敏感信息过滤器"""
+
+    # 敏感信息模式
+    PATTERNS = {
+        "password": r"password['\"]?\s*[:=]\s*['\"]?([^'\"\}\s]+)",
+        "token": r"token['\"]?\s*[:=]\s*['\"]?([^'\"\}\s]+)",
+        "key": r"(?:api_key|secret_key|access_key)['\"]?\s*[:=]\s*['\"]?([^'\"\}\s]+)",
+        "secret": r"secret['\"]?\s*[:=]\s*['\"]?([^'\"\}\s]+)",
+    }
+
+    @classmethod
+    def filter(cls, message: str) -> str:
+        """过滤消息中的敏感信息"""
+        if not isinstance(message, str):
+            return str(message)
+
+        filtered = message
+        for name, pattern in cls.PATTERNS.items():
+            filtered = re.sub(pattern, f"{name}=******", filtered, flags=re.IGNORECASE)
+
+        return filtered
+
 
 # ==============================================================================
 # Logger Configuration Data Class
@@ -65,9 +160,14 @@ class LoggerConfig:
     retention_plain: str = f"{settings.log.retention_days} days"
     retention_error: str = f"{settings.log.retention_days * ERROR_RETENTION_MULTIPLIER} days"
     retention_json: str = f"{settings.log.retention_days} days"
+    # 业务日志特殊配置
+    retention_business: str = f"{settings.log.retention_days * 2} days"  # 业务日志保留更长时间
     diagnose: Optional[bool] = None
     compress: str = "zip"
     log_dir: Path = field(init=False)
+    # 美化输出配置
+    pretty_output: bool = True
+    use_icons: bool = True
 
     def __post_init__(self) -> None:
         self.log_dir = user_log_path(appname=self.app_name, appauthor=self.app_author)
@@ -108,8 +208,55 @@ def _patch_std(level: str | int) -> None:
 
 
 # ==============================================================================
-# Spring Boot Style Formatter
+# Context Manager
 # ==============================================================================
+
+class LogContext:
+    """日志上下文管理器"""
+
+    def __init__(self):
+        self._context: Dict[str, Any] = {}
+
+    def bind(self, **kwargs) -> "logger":
+        """绑定上下文信息"""
+        self._context.update(kwargs)
+        return logger.bind(**self._context)
+
+    def unbind(self, *keys) -> None:
+        """解绑上下文信息"""
+        for key in keys:
+            self._context.pop(key, None)
+
+    def clear(self) -> None:
+        """清除所有上下文"""
+        self._context.clear()
+
+    @property
+    def context(self) -> Dict[str, Any]:
+        """获取当前上下文"""
+        return self._context.copy()
+
+
+# ==============================================================================
+# Formatters
+# ==============================================================================
+
+def _format_module_name(module: str) -> str:
+    """格式化模块名称"""
+    # 查找匹配的模块名映射
+    for key, value in MODULE_NAMES.items():
+        if module.startswith(key):
+            return value
+
+    # 默认返回简化的模块名
+    parts = module.split(".")
+    if "deepsearch" in parts:
+        idx = parts.index("deepsearch")
+        if idx + 1 < len(parts):
+            return parts[idx + 1]
+
+    return parts[-1] if parts else module
+
 
 def _spring_formatter(color: bool = True) -> Callable[[dict], str]:
     """Spring Boot 风格格式化器"""
@@ -119,15 +266,93 @@ def _spring_formatter(color: bool = True) -> Callable[[dict], str]:
     yellow = (lambda t: f"<yellow>{t}</yellow>") if color else (lambda t: t)
 
     def _fmt(record: dict) -> str:
+        # 应用敏感信息过滤
+        message = SensitiveFilter.filter(record["message"])
+        
         time_str = green(record["time"].strftime(TIME_FORMAT)[:-3])
         level_str = level_fmt(record["level"].name)
         proc_thr = f'{record["process"]:>{PROCESS_WIDTH}} --- [{record["thread"].name:>{THREAD_WIDTH}}]'
         location = f'{record["file"].name}:{record["line"]:<4}'
         service = record["extra"].get("service", "-")
         service_str = yellow(str(service))
-        return f"{time_str} | {level_str} | {proc_thr} | {location:{LOCATION_WIDTH}} | {service_str:{SERVICE_WIDTH}} | {record['message']}\n"
+        return f"{time_str} | {level_str} | {proc_thr} | {location:{LOCATION_WIDTH}} | {service_str:{SERVICE_WIDTH}} | {message}\n"
 
     return _fmt
+
+
+def _pretty_formatter(config: LoggerConfig) -> Callable[[dict], str]:
+    """美化格式化器（整合自 pretty_logger）"""
+
+    def _fmt(record: dict) -> str:
+        level = record["level"].name
+        style = LEVEL_STYLES.get(level, {"color": "<white>", "icon": "•"})
+
+        # 应用敏感信息过滤
+        message = SensitiveFilter.filter(record["message"])
+
+        # 时间格式
+        time_str = record["time"].strftime("%H:%M:%S")
+
+        # 模块名
+        module_str = _format_module_name(record["name"])
+
+        # 根据级别使用不同的格式
+        if config.use_icons:
+            icon = style["icon"]
+        else:
+            icon = ""
+
+        if level == "DEBUG":
+            # DEBUG 信息使用灰色，不显眼
+            return f"<dim>{icon} [{time_str}] [{module_str}] {message}</dim>"
+        elif level in ["INFO", "SUCCESS"]:
+            # INFO 和 SUCCESS 使用简洁格式
+            return f"{style['color']}{icon} [{time_str}] {message}</>"
+        elif level == "WARNING":
+            # WARNING 突出显示
+            return f"{style['color']}{icon} [{time_str}] [{module_str}] {message}</>"
+        elif level in ["ERROR", "CRITICAL"]:
+            # ERROR 和 CRITICAL 使用醒目格式
+            return f"{style['color']}<bold>{icon} [{time_str}] [{module_str}] {message}</bold></>"
+        else:
+            return f"{icon} [{time_str}] [{module_str}] {message}"
+
+    return _fmt
+
+
+def _structured_formatter(record: dict) -> str:
+    """结构化JSON格式化器"""
+    # 基础字段
+    structured = {
+        "timestamp": record["time"].isoformat(),
+        "level": record["level"].name,
+        "logger": record["name"],
+        "message": SensitiveFilter.filter(record["message"]),
+        "module": record["module"],
+        "function": record["function"],
+        "line": record["line"],
+    }
+
+    # 添加额外字段
+    if record.get("extra"):
+        # 分类日志类型
+        log_category = LogClassifier.classify(record)
+        structured["category"] = log_category
+
+        # 添加所有额外字段
+        for key, value in record["extra"].items():
+            if key not in structured:
+                structured[key] = value
+
+    # 异常信息
+    if record.get("exception"):
+        structured["exception"] = {
+            "type": record["exception"].type.__name__,
+            "value": str(record["exception"].value),
+            "traceback": record["exception"].traceback
+        }
+
+    return json.dumps(structured, ensure_ascii=False) + "\n"
 
 
 # ==============================================================================
@@ -260,6 +485,10 @@ class LoggerConfigurator:
         _patch_std(config.level)
 
         self._configured = True
+
+        # 静默第三方库的日志
+        self._silence_third_party_loggers()
+        
         logger.debug("Logger configured → {} (pid={})", config.log_dir, os.getpid())
         return config.log_dir
 
@@ -293,6 +522,22 @@ class LoggerConfigurator:
             sinks.append(sink_factory.create_json_file_sink())
 
         return sinks
+
+    def _silence_third_party_loggers(self) -> None:
+        """静默第三方库的日志"""
+        third_party_loggers = [
+            "urllib3",
+            "asyncio",
+            "websockets",
+            "watchfiles",
+            "httpx",
+            "httpcore",
+            "uvicorn",
+            "fastapi",
+        ]
+
+        for logger_name in third_party_loggers:
+            logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 
 # ==============================================================================
@@ -391,6 +636,7 @@ class LoggerManager:
 
 _logger_configurator = LoggerConfigurator()
 logger_manager = LoggerManager()
+log_context = LogContext()  # 全局日志上下文
 
 
 def configure_logger(cfg: Optional[LoggerConfig] = None) -> Optional[Path]:
@@ -403,6 +649,20 @@ def get_logger(**extra) -> logger:
     if not _logger_configurator._configured:
         configure_logger()
     return logger.bind(**extra)
+
+
+def get_business_logger(**extra) -> logger:
+    """获取业务日志记录器"""
+    if not _logger_configurator._configured:
+        configure_logger()
+    return logger.bind(category="business", **extra)
+
+
+def get_monitor_logger(**extra) -> logger:
+    """获取监控日志记录器"""
+    if not _logger_configurator._configured:
+        configure_logger()
+    return logger.bind(category="monitor", **extra)
 
 
 # ==============================================================================
