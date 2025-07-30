@@ -7,6 +7,11 @@
 </template>
 
 <script setup>
+// 定义组件名称
+defineOptions({
+  name: 'TestApp'
+})
+
 console.log('TestApp.vue loaded successfully')
 </script>
 

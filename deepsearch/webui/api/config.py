@@ -228,9 +228,15 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
 
         # 读取现有配置文件（保留注释等）
         existing_content = ""
+        existing_config = {}  # 新增：保存解析后的配置
         if config_path.exists():
             with config_path.open("r", encoding=YAML_ENCODING) as f:
                 existing_content = f.read()
+            # 新增：解析现有配置
+            try:
+                existing_config = yaml.safe_load(existing_content) or {}
+            except:
+                existing_config = {}
 
         # 准备要保存的配置
         save_data = {}
@@ -252,39 +258,51 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
                     "cache": db_config.get("cache", {})
                 }
                 # 处理主数据库密码保存逻辑
-                if "main" in save_data["database"] and "password" in save_data["database"]["main"]:
-                    remember_password = db_config.get("main", {}).get("rememberPassword", False)
-                    password = save_data["database"]["main"]["password"]
+                if "main" in save_data["database"]:
+                    # 获取现有密码
+                    existing_password = existing_config.get("database", {}).get("main", {}).get("password", "")
 
-                    if password == "***":
-                        # 如果是脱敏的密码，检查是否要保留
-                        if remember_password:
-                            # 如果勾选了记住密码，不更新密码字段（保留原密码）
-                            del save_data["database"]["main"]["password"]
+                    if "password" in save_data["database"]["main"]:
+                        remember_password = db_config.get("main", {}).get("rememberPassword", False)
+                        password = save_data["database"]["main"]["password"]
+
+                        if password == "***":
+                            # 脱敏密码，使用现有密码
+                            save_data["database"]["main"]["password"] = existing_password
+                        elif remember_password and password:
+                            # 新密码且记住密码
+                            save_data["database"]["main"]["password"] = password
                         else:
-                            # 如果取消了记住密码，清空密码
+                            # 不记住密码或密码为空
                             save_data["database"]["main"]["password"] = ""
-                    elif remember_password and password:
-                        # 如果勾选记住密码且密码不为空，明文保存（暂时不加密）
-                        save_data["database"]["main"]["password"] = password
-                    elif not remember_password:
-                        # 如果没有勾选记住密码，清空密码
-                        save_data["database"]["main"]["password"] = ""
                     else:
-                        # 密码为空的情况
-                        save_data["database"]["main"]["password"] = ""
+                        # 如果没有密码字段，保持现有密码
+                        save_data["database"]["main"]["password"] = existing_password
+                    
 
                 # 删除临时的rememberPassword字段
                 if "main" in save_data["database"] and "rememberPassword" in save_data["database"]["main"]:
                     del save_data["database"]["main"]["rememberPassword"]
-                if "cache" in save_data["database"] and "password" in save_data["database"]["cache"]:
-                    cache_password = save_data["database"]["cache"]["password"]
-                    if cache_password == "***":
-                        # 如果是脱敏的密码，不更新
-                        del save_data["database"]["cache"]["password"]
-                    elif cache_password:
-                        # 如果密码不为空，明文保存（暂时不加密）
-                        save_data["database"]["cache"]["password"] = cache_password
+                # 处理缓存数据库密码保存逻辑
+                if "cache" in save_data["database"]:
+                    # 获取现有密码
+                    existing_cache_password = existing_config.get("database", {}).get("cache", {}).get("password", "")
+
+                    if "password" in save_data["database"]["cache"]:
+                        cache_password = save_data["database"]["cache"]["password"]
+                        if cache_password == "***":
+                            # 脱敏密码，使用现有密码
+                            save_data["database"]["cache"]["password"] = existing_cache_password
+                        elif cache_password:
+                            # 新密码，明文保存
+                            save_data["database"]["cache"]["password"] = cache_password
+                        else:
+                            # 密码为空
+                            save_data["database"]["cache"]["password"] = ""
+                    else:
+                        # 如果没有密码字段，保持现有密码
+                        save_data["database"]["cache"]["password"] = existing_cache_password
+                    
             # 兼容旧格式
             elif "url" in db_config:
                 save_data["database"] = {"url": db_config["url"]}

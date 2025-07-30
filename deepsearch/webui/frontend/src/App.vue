@@ -138,6 +138,11 @@ import {useSystemStore} from '@/stores/system'
 import {restartSystem, startSystem, stopSystem} from '@/api/system'
 import {storage, STORAGE_KEYS} from '@/utils/storage'
 
+// 定义组件名称
+defineOptions({
+  name: 'App'
+})
+
 const route = useRoute()
 const systemStore = useSystemStore()
 

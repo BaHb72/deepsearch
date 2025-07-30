@@ -15,12 +15,14 @@
           class="alert-item"
       >
         <div class="alert-content">
-          <el-icon class="alert-icon">
-            <component :is="getAlertIcon(alert.type)"/>
-          </el-icon>
-          <div class="alert-text">
-            <div class="alert-title">{{ alert.title }}</div>
-            <div class="alert-description">{{ alert.description }}</div>
+          <div class="alert-main">
+            <el-icon class="alert-icon">
+              <component :is="getAlertIcon(alert.type)"/>
+            </el-icon>
+            <div class="alert-text">
+              <div class="alert-title">{{ alert.title }}</div>
+              <div class="alert-description">{{ alert.description }}</div>
+            </div>
           </div>
           <el-button
               v-if="alert.action"
@@ -43,6 +45,11 @@ import {useRouter} from 'vue-router'
 import {useSystemStore} from '@/stores/system'
 import {CircleClose, Connection, InfoFilled, Key, Setting, Warning} from '@element-plus/icons-vue'
 
+// 定义组件名称
+defineOptions({
+  name: 'SystemAlerts'
+})
+
 const router = useRouter()
 const systemStore = useSystemStore()
 const alerts = ref([])
@@ -64,18 +71,19 @@ const getAlertIcon = (type) => {
 const checkSystemStatus = async () => {
   const newAlerts = []
 
-  // 检查数据库连接状态
-  const components = systemStore.components || []
-  const dbComponent = components.find(c => c.name === 'database')
-
-  if (!dbComponent || dbComponent.status !== 'running' || dbComponent.info?.connection_status !== 'connected') {
+  // 使用 store 的统一数据库状态
+  if (systemStore.hasDatabaseIssue) {
+    const dbStatus = systemStore.databaseStatus
+    const dbComponent = systemStore.components.find(c => c.name === 'database')
+    
     newAlerts.push({
       id: 'db-connection',
       type: 'database',
       title: '数据库未连接',
-      description: dbComponent?.status === 'initialized'
-          ? '数据库配置不完整或密码未设置'
-          : '请配置并连接数据库以使用完整功能',
+      description: dbStatus.disconnectReason ||
+          (dbComponent?.status === 'initialized'
+              ? '数据库配置不完整或密码未设置'
+              : '请配置并连接数据库以使用完整功能'),
       action: true,
       actionText: '前往配置',
       actionRoute: {name: 'config', query: {tab: 'database'}}
@@ -83,8 +91,8 @@ const checkSystemStatus = async () => {
   }
 
   // 检查Redis连接状态（可选）
-  const cacheComponent = components.find(c => c.name === 'cache')
-  if (cacheComponent?.enabled && (!cacheComponent || cacheComponent.status !== 'running')) {
+  const cacheComponent = systemStore.components.find(c => c.name === 'cache')
+  if (cacheComponent?.enabled && !systemStore.isCacheConnected) {
     newAlerts.push({
       id: 'cache-connection',
       type: 'database',
@@ -130,6 +138,11 @@ const handleAction = (alert) => {
 
 // 监听系统组件状态变化
 watch(() => systemStore.components, () => {
+  checkSystemStatus()
+}, {deep: true})
+
+// 监听数据库状态变化
+watch(() => systemStore.database, () => {
   checkSystemStatus()
 }, {deep: true})
 
@@ -215,6 +228,14 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  justify-content: space-between;
+}
+
+.alert-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
 }
 
 .alert-icon {

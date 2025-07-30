@@ -76,7 +76,10 @@
           </el-icon>
         </template>
         <div class="database-tab-content">
-        <el-card shadow="never" style="margin-bottom: 20px">
+          <!-- 数据库状态卡片 -->
+          <DatabaseStatusCard style="margin-bottom: 20px"/>
+
+          <el-card shadow="never" style="margin-bottom: 20px">
           <template #header>
             <div class="card-header">
               <span>主数据库配置</span>
@@ -164,6 +167,8 @@
                     show-password
                     style="flex: 1;"
                     type="password"
+                    @blur="handlePasswordBlur"
+                    @focus="handlePasswordFocus"
                 />
                 <el-tag
                     v-if="config.database.main.password === '***'"
@@ -272,10 +277,20 @@
 </template>
 
 <script setup>
-import {computed, onMounted, ref} from 'vue'
+import {computed, onMounted, ref, watch} from 'vue'
 import {ElMessage, ElNotification} from 'element-plus'
 import {CircleCheck, CircleClose, Warning} from '@element-plus/icons-vue'
+import {connectDatabase, disconnectDatabase} from '@/api/database'
+import {getAllComponents} from '@/api/system'
+import {useSystemStore} from '@/stores/system'
+import DatabaseStatusCard from '@/components/DatabaseStatusCard.vue'
 
+// 定义组件名称
+defineOptions({
+  name: 'Config'
+})
+
+const systemStore = useSystemStore()
 const activeTab = ref('basic')
 const mainDbTesting = ref(false)
 const cacheDbTesting = ref(false)
@@ -287,11 +302,8 @@ const showValidation = ref(false)
 
 // 计算属性：检查是否有数据库连接问题
 const hasDbConnectionIssue = computed(() => {
-  const mainDbNotConnected = config.value.database.main.enabled &&
-      (!mainDbStatus.value || !mainDbStatus.value.success)
-  const cacheDbNotConnected = config.value.database.cache.enabled &&
-      (!cacheDbStatus.value || !cacheDbStatus.value.success)
-  return mainDbNotConnected || cacheDbNotConnected
+  // 使用 store 的统一状态
+  return systemStore.hasDatabaseIssue
 })
 
 const config = ref({
@@ -442,17 +454,6 @@ const saveConfig = async () => {
 
     if (result.success) {
       ElMessage.success(result.message || '配置保存成功')
-
-      // 保存成功后自动尝试连接
-      if (config.value.database.main.enabled && rememberMainDbPassword.value && config.value.database.main.password && config.value.database.main.password !== '***') {
-        // 如果启用了主数据库、勾选了记住密码、且有新密码，自动连接
-        await connectMainDatabase()
-      }
-
-      if (config.value.database.cache.enabled && config.value.database.cache.password) {
-        // 如果启用了缓存且有密码，自动连接
-        await connectCacheDatabase()
-      }
     } else {
       ElMessage.error(result.message || '保存失败')
     }
@@ -475,37 +476,52 @@ const connectMainDatabase = async () => {
   mainDbTesting.value = true
 
   try {
-    const testConfig = {
-      db_type: config.value.database.main.type,
-      host: config.value.database.main.host,
-      port: config.value.database.main.port,
-      database: config.value.database.main.database,
-      username: config.value.database.main.username,
-      password: config.value.database.main.password,
-      path: config.value.database.main.path
+    // 验证密码是否为空
+    if (config.value.database.main.type !== 'sqlite' && !config.value.database.main.password) {
+      ElMessage.error('请先输入数据库密码')
+      mainDbStatus.value = {success: false}
+      mainDbTesting.value = false
+      return
     }
 
-    const response = await fetch('/api/config/test-database', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(testConfig)
-    })
+    // 调用连接数据库 API，传递密码
+    const result = await connectDatabase(config.value.database.main.password)
 
-    const result = await response.json()
-    mainDbStatus.value = result
+    if (result.success) {
+      mainDbStatus.value = {success: true}
+      ElMessage.success(result.message || '数据库连接成功')
 
-    if (!result.success) {
-      ElMessage.error(result.message)
+      // 更新数据库状态
+      await updateDatabaseStatus()
+
+      // 更新组件状态到 systemStore
+      await refreshComponentsStatus()
+
+      // 更新 store 中的数据库状态
+      systemStore.updateDatabaseConnection(true)
+
+      // 连接成功后保存配置（包括密码）
+      if (config.value.database.main.password && config.value.database.main.password !== '***') {
+        await saveConfig()
+      }
+    } else {
+      mainDbStatus.value = {success: false}
+      ElMessage.error(result.message || '数据库连接失败')
     }
   } catch (error) {
     mainDbStatus.value = {success: false}
-    // 前端网络错误的友好提示
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+
+    // 处理不同类型的错误
+    if (error.response) {
+      // 服务器返回错误
+      const errorData = error.response.data
+      ElMessage.error(errorData.detail || errorData.message || '数据库连接失败')
+    } else if (error.request) {
+      // 网络错误
       ElMessage.error('网络请求失败，请检查服务是否正常运行')
     } else {
-      ElMessage.error('无法连接到服务器')
+      // 其他错误
+      ElMessage.error('连接失败：' + error.message)
     }
   } finally {
     mainDbTesting.value = false
@@ -513,9 +529,69 @@ const connectMainDatabase = async () => {
 }
 
 const disconnectMainDatabase = async () => {
-  // TODO: 实现断开连接的API
-  mainDbStatus.value = {success: false}
-  ElMessage.success('数据库连接已断开')
+  mainDbTesting.value = true
+
+  try {
+    // 调用断开数据库 API
+    const result = await disconnectDatabase()
+
+    if (result.success) {
+      mainDbStatus.value = {success: false}
+      ElMessage.success(result.message || '数据库连接已断开')
+
+      // 更新数据库状态
+      await updateDatabaseStatus()
+
+      // 更新组件状态到 systemStore
+      await refreshComponentsStatus()
+
+      // 更新 store 中的数据库状态
+      systemStore.updateDatabaseConnection(false, '用户手动断开连接')
+    } else {
+      ElMessage.error(result.message || '断开连接失败')
+    }
+  } catch (error) {
+    // 处理错误
+    if (error.response) {
+      const errorData = error.response.data
+      ElMessage.error(errorData.detail || errorData.message || '断开连接失败')
+    } else {
+      ElMessage.error('断开连接失败：' + error.message)
+    }
+  } finally {
+    mainDbTesting.value = false
+  }
+}
+
+// 新增：刷新组件状态到 systemStore
+const refreshComponentsStatus = async () => {
+  try {
+    const res = await getAllComponents()
+    // 转换成数组格式
+    const components = Object.entries(res.components || {}).map(([name, info]) => ({
+      name,
+      ...info
+    }))
+    // 更新到 systemStore
+    systemStore.updateComponents(components)
+  } catch (error) {
+    console.error('刷新组件状态失败:', error)
+  }
+}
+
+// 新增：更新数据库状态
+const updateDatabaseStatus = async () => {
+  try {
+    // 使用 store 获取数据库状态
+    await systemStore.fetchDatabaseStatus()
+    const status = systemStore.databaseStatus
+    mainDbStatus.value = {
+      success: status.connected,
+      ...status
+    }
+  } catch (error) {
+    console.error('获取数据库状态失败:', error)
+  }
 }
 
 const toggleCacheDatabase = async () => {
@@ -594,9 +670,47 @@ const checkConnectionStatus = async () => {
   }
 }
 
+// 处理密码输入框焦点事件，用于处理浏览器扩展干扰
+const handlePasswordFocus = (event) => {
+  try {
+    // 忽略浏览器密码管理器的干扰
+    event.target.setAttribute('autocomplete', 'new-password')
+  } catch (error) {
+    console.warn('忽略密码输入框焦点错误:', error)
+  }
+}
+
+const handlePasswordBlur = (event) => {
+  try {
+    // 清理可能的浏览器扩展事件
+    event.stopPropagation()
+  } catch (error) {
+    console.warn('忽略密码输入框失焦错误:', error)
+  }
+}
+
+// 监听 store 中的数据库状态变化
+watch(() => systemStore.isDatabaseConnected, (newVal) => {
+  if (mainDbStatus.value) {
+    mainDbStatus.value.success = newVal
+  }
+})
+
 onMounted(async () => {
+  // 从 URL 参数获取当前标签
+  const urlParams = new URLSearchParams(window.location.search)
+  const tab = urlParams.get('tab')
+  if (tab) {
+    activeTab.value = tab
+  }
+  
   await loadConfig()
-  // 不再自动检查连接状态，避免不必要的弹窗
+  // 加载后更新数据库连接状态
+  await updateDatabaseStatus()
+  // 初始加载时也刷新组件状态
+  await refreshComponentsStatus()
+  // 确保 store 的数据库状态也被初始化
+  await systemStore.fetchDatabaseStatus()
 })
 </script>
 

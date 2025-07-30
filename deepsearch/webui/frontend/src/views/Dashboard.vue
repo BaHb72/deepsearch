@@ -254,6 +254,11 @@ import {wsManager} from '@/utils/websocket'
 import {useSystemStore} from '@/stores/system'
 import SystemAlerts from '@/components/SystemAlerts.vue'
 
+// 定义组件名称
+defineOptions({
+  name: 'Dashboard'
+})
+
 // 系统状态
 const systemStore = useSystemStore()
 
@@ -565,10 +570,13 @@ const refreshComponents = async () => {
       name,
       ...info
     }))
+    // 更新到 systemStore
+    systemStore.updateComponents(components.value)
   } catch (error) {
     console.error('获取组件列表失败:', error)
     // 如果后端未启动，显示默认数据
     components.value = []
+    systemStore.updateComponents([])
   } finally {
     componentLoading.value = false
   }

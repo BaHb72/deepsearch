@@ -80,6 +80,11 @@ import {Search} from '@element-plus/icons-vue'
 import {ElMessage} from 'element-plus'
 import {systemApi} from '../api/system'
 
+// 定义组件名称
+defineOptions({
+  name: 'Logs'
+})
+
 const logs = ref([])
 const searchText = ref('')
 const selectedLevel = ref('')

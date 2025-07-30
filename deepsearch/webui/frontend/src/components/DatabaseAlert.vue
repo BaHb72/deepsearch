@@ -23,6 +23,11 @@ import {onMounted, ref, watch} from 'vue'
 import {useRouter} from 'vue-router'
 import {useSystemStore} from '@/stores/system'
 
+// 定义组件名称
+defineOptions({
+  name: 'DatabaseAlert'
+})
+
 const props = defineProps({
   message: {
     type: String,

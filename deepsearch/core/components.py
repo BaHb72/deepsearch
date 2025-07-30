@@ -271,7 +271,9 @@ class DatabaseComponent(Component):
 
             # 检查密码是否为空或是占位符
             if db_config.type != "sqlite" and (not db_config.password or db_config.password == "***"):
-                self._logger.warning("数据库密码为空或无效，跳过连接。请在配置页面设置数据库密码。")
+                self._logger.warning(
+                    f"数据库密码为空或无效，跳过连接。密码值: {'空' if not db_config.password else '***'}")
+                self._logger.info(f"当前配置: type={db_config.type}, auto_connect={db_config.auto_connect}")
                 self._status = ComponentStatus.INITIALIZED
                 self._engine = None
                 self._session_factory = None

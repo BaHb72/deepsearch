@@ -73,10 +73,15 @@
 </template>
 
 <script setup>
-import {ref, computed, onMounted, onUnmounted} from 'vue'
+import {computed, onMounted, onUnmounted, ref} from 'vue'
 import {Search} from '@element-plus/icons-vue'
 import {ElMessage} from 'element-plus'
 import {useSystemStore} from '@/stores/system'
+
+// 定义组件名称
+defineOptions({
+  name: 'Events'
+})
 
 const store = useSystemStore()
 const events = ref([])

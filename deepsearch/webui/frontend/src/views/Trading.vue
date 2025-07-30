@@ -141,6 +141,11 @@
 import {onMounted, ref} from 'vue'
 import {ElMessage} from 'element-plus'
 
+// 定义组件名称
+defineOptions({
+  name: 'Trading'
+})
+
 const positions = ref([
   {
     symbol: 'AAPL',

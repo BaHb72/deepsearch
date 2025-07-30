@@ -11,9 +11,6 @@
       </template>
     </el-page-header>
 
-    <!-- 数据库状态卡片 -->
-    <DatabaseStatusCard/>
-
     <!-- 数据统计卡片 -->
     <el-row :gutter="20" class="stats-row">
       <el-col :span="6">
@@ -273,7 +270,11 @@ import {
   importCsvData,
   queryMarketData
 } from '@/api/data'
-import DatabaseStatusCard from '@/components/DatabaseStatusCard.vue'
+
+// 定义组件名称
+defineOptions({
+  name: 'DataManagement'
+})
 
 // 组件数据
 const activeTab = ref('query')
