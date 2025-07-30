@@ -149,8 +149,75 @@ async def query_market_data(query: MarketDataQuery):
             return MarketDataResponse(count=len(data), data=data)
 
         else:
-            # TODO: 从 PostgreSQL 查询分钟或 Tick 数据
-            raise HTTPException(status_code=501, detail=f"暂不支持 {query.data_type} 数据查询")
+            # 从 PostgreSQL 查询分钟或 Tick 数据
+            from deepsearch.storage.sync_database import get_db
+            from deepsearch.storage.models import MinuteKline, TickData
+            from sqlalchemy.orm import Session
+            from sqlalchemy import and_
+
+            db: Session = next(get_db())
+
+            try:
+                if query.data_type == "minute":
+                    # 查询分钟线数据
+                    q = db.query(MinuteKline)
+
+                    if query.symbols:
+                        q = q.filter(MinuteKline.symbol.in_(query.symbols))
+                    if query.start_date:
+                        q = q.filter(MinuteKline.datetime >= query.start_date)
+                    if query.end_date:
+                        q = q.filter(MinuteKline.datetime <= query.end_date)
+
+                    q = q.order_by(MinuteKline.datetime.desc())
+                    if query.limit:
+                        q = q.limit(query.limit)
+
+                    results = q.all()
+                    data = [{
+                        "symbol": r.symbol,
+                        "datetime": r.datetime.isoformat(),
+                        "open": float(r.open),
+                        "high": float(r.high),
+                        "low": float(r.low),
+                        "close": float(r.close),
+                        "volume": r.volume
+                    } for r in results]
+
+                elif query.data_type == "tick":
+                    # 查询 Tick 数据
+                    q = db.query(TickData)
+
+                    if query.symbols:
+                        q = q.filter(TickData.symbol.in_(query.symbols))
+                    if query.start_date:
+                        q = q.filter(TickData.datetime >= query.start_date)
+                    if query.end_date:
+                        q = q.filter(TickData.datetime <= query.end_date)
+
+                    q = q.order_by(TickData.datetime.desc())
+                    if query.limit:
+                        q = q.limit(query.limit)
+
+                    results = q.all()
+                    data = [{
+                        "symbol": r.symbol,
+                        "datetime": r.datetime.isoformat(),
+                        "price": float(r.price),
+                        "volume": r.volume,
+                        "bid_price": float(r.bid_price) if r.bid_price else None,
+                        "ask_price": float(r.ask_price) if r.ask_price else None,
+                        "bid_volume": r.bid_volume,
+                        "ask_volume": r.ask_volume
+                    } for r in results]
+
+                else:
+                    raise HTTPException(status_code=400, detail=f"不支持的数据类型: {query.data_type}")
+
+                return MarketDataResponse(count=len(data), data=data)
+
+            finally:
+                db.close()
 
     except Exception as e:
         logger.error(f"查询市场数据失败: {e}")
@@ -234,8 +301,31 @@ async def export_data(
                 )
 
             elif format == "parquet":
-                # TODO: 实现 Parquet 导出
-                raise HTTPException(status_code=501, detail="Parquet 导出暂未实现")
+                # 实现 Parquet 导出
+                try:
+                    import pyarrow.parquet as pq
+                    import pyarrow as pa
+                    from fastapi.responses import StreamingResponse
+                    import io
+
+                    # 将 DataFrame 转换为 Parquet
+                    table = pa.Table.from_pandas(df)
+                    buffer = io.BytesIO()
+                    pq.write_table(table, buffer)
+                    buffer.seek(0)
+
+                    return StreamingResponse(
+                        buffer,
+                        media_type="application/octet-stream",
+                        headers={
+                            "Content-Disposition": f"attachment; filename=market_daily_{datetime.now().strftime('%Y%m%d')}.parquet"
+                        }
+                    )
+                except ImportError:
+                    raise HTTPException(
+                        status_code=501,
+                        detail="Parquet 导出需要安装 pyarrow 库: pip install pyarrow"
+                    )
 
         else:
             raise HTTPException(status_code=501, detail=f"暂不支持导出 {data_type} 数据")
@@ -295,8 +385,60 @@ async def clean_old_data(
 ):
     """清理旧数据"""
     try:
-        # TODO: 实现数据清理功能
-        raise HTTPException(status_code=501, detail="数据清理功能暂未实现")
+        from deepsearch.storage.database import get_db
+        from deepsearch.storage.models import DailyKline, MinuteKline, TickData
+        from sqlalchemy.orm import Session
+
+        db: Session = next(get_db())
+        deleted_count = {
+            "daily": 0,
+            "minute": 0,
+            "tick": 0
+        }
+
+        try:
+            # 清理日线数据
+            if data_type in ["all", "daily"]:
+                # 使用 DuckDB 清理日线数据
+                analytics_db = get_analytics_db()
+                conn = analytics_db.conn
+                result = conn.execute(
+                    "DELETE FROM daily_kline WHERE date < ?",
+                    [before_date]
+                ).fetchone()
+                deleted_count["daily"] = result[0] if result else 0
+
+            # 清理分钟线数据
+            if data_type in ["all", "minute"]:
+                result = db.query(MinuteKline).filter(
+                    MinuteKline.datetime < before_date
+                ).delete()
+                deleted_count["minute"] = result
+
+            # 清理 Tick 数据
+            if data_type in ["all", "tick"]:
+                result = db.query(TickData).filter(
+                    TickData.datetime < before_date
+                ).delete()
+                deleted_count["tick"] = result
+
+            # 提交事务
+            db.commit()
+
+            total_deleted = sum(deleted_count.values())
+
+            return {
+                "status": "success",
+                "message": f"成功删除 {total_deleted} 条数据",
+                "details": deleted_count,
+                "before_date": before_date.isoformat()
+            }
+
+        except Exception as e:
+            db.rollback()
+            raise e
+        finally:
+            db.close()
 
     except Exception as e:
         logger.error(f"清理数据失败: {e}")

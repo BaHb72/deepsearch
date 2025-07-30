@@ -64,6 +64,7 @@ class MainEngine:
         self._monitor: Optional[EventSystemMonitor] = None
         self._gateway: Optional[Gateway] = None
         self._database: Optional[DatabaseComponent] = None
+        self._cache = None  # Redis 缓存组件
         self._webui_server = None  # WebUI服务器实例
         self._frontend_process = None  # WebUI前端进程
 
@@ -114,10 +115,13 @@ class MainEngine:
             # 5. 初始化数据库
             self._initialize_database()
 
-            # 6. 初始化系统监控
+            # 6. 初始化缓存
+            self._initialize_cache()
+
+            # 7. 初始化系统监控
             self._initialize_monitor()
 
-            # 7. 初始化网关
+            # 8. 初始化网关
             self._initialize_gateway()
 
             self._initialized = True
@@ -257,6 +261,38 @@ class MainEngine:
         self._database = database_comp
 
         self._logger.debug("数据库初始化完成")
+
+    def _initialize_cache(self) -> None:
+        """初始化缓存组件"""
+        from deepsearch.config import get_config
+        config = get_config()
+
+        # 检查缓存是否启用
+        if not config.database.cache.enabled:
+            self._logger.info("Redis 缓存已禁用，跳过初始化")
+            return
+
+        self._logger.debug("初始化 Redis 缓存...")
+
+        # 创建缓存组件
+        from deepsearch.core.cache_component import CacheComponent
+        cache_comp = CacheComponent()
+
+        # 注册到组件管理器
+        self._component_manager.register_component(
+            component=cache_comp,
+            display_name="Redis 缓存",
+            description="Redis 缓存服务，提供高速数据缓存和消息队列功能"
+            # 缓存不依赖其他组件
+        )
+
+        # 初始化组件
+        self._component_manager.initialize_component("cache")
+
+        # 获取实例引用
+        self._cache = cache_comp
+
+        self._logger.debug("Redis 缓存初始化完成")
 
     def _initialize_monitor(self) -> None:
         """初始化系统监控"""
@@ -535,8 +571,12 @@ class MainEngine:
             comp_wrapper = self._component_manager._components.get(name)
             if comp_wrapper and hasattr(comp_wrapper, 'get_instance'):
                 return comp_wrapper.get_instance()
-        except Exception:
-            pass
+        except AttributeError as e:
+            # 组件包装器缺少必要的方法
+            self._logger.error(f"组件 {name} 缺少 get_instance 方法: {e}")
+        except Exception as e:
+            # 其他未预期的错误
+            self._logger.error(f"获取组件 {name} 时发生错误: {e}")
 
         raise ValueError(f"Unknown component: {name}")
 

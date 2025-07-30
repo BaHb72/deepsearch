@@ -251,6 +251,14 @@ def setup_routes():
     app.include_router(data_routes.router, prefix="/api/data", tags=["数据管理"])
     app.include_router(database_routes.router, prefix="/api/database", tags=["数据库管理"])
 
+    # 导入并注册缓存路由
+    from .api import cache as cache_routes
+    app.include_router(cache_routes.router, prefix="/api/cache", tags=["缓存管理"])
+
+    # 导入并注册前端错误日志路由
+    from .api import frontend_errors as frontend_errors_routes
+    app.include_router(frontend_errors_routes.router, prefix="/api/frontend", tags=["前端错误"])
+
 
 # 设置路由
 setup_routes()

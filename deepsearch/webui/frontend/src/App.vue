@@ -124,6 +124,9 @@
           </el-main>
         </el-container>
       </el-container>
+
+      <!-- 错误监控组件 -->
+      <ErrorMonitor/>
     </div>
   </el-config-provider>
 </template>
@@ -131,12 +134,13 @@
 <script setup>
 import {computed, onMounted, onUnmounted, ref} from 'vue'
 import {useRoute} from 'vue-router'
-import {ElMessage, ElMessageBox} from 'element-plus'
+import {ElLoading, ElMessage, ElMessageBox} from 'element-plus'
 import {DataAnalysis, Document, List, Monitor, Moon, Setting, Sunny, TrendCharts} from '@element-plus/icons-vue'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import {useSystemStore} from '@/stores/system'
 import {restartSystem, startSystem, stopSystem} from '@/api/system'
 import {storage, STORAGE_KEYS} from '@/utils/storage'
+import ErrorMonitor from '@/components/ErrorMonitor.vue'
 
 // 定义组件名称
 defineOptions({
@@ -280,16 +284,32 @@ const handleSystemRestart = async () => {
 // 定时获取系统状态
 let statusTimer = null
 
-onMounted(() => {
-  // 初始化主题
-  if (isDark.value) {
-    document.documentElement.classList.add('dark')
-  }
+// 在组件挂载前显示全屏loading
+const loading = ElLoading.service({
+  lock: true,
+  text: '正在初始化 DeepSearch 系统...',
+  background: 'rgba(0, 0, 0, 0.7)',
+  customClass: 'deepsearch-loading'
+})
 
-  // 获取系统状态
-  systemStore.fetchStatus().catch(err => {
+onMounted(async () => {
+  try {
+    // 初始化主题
+    if (isDark.value) {
+      document.documentElement.classList.add('dark')
+    }
+
+    // 获取系统状态
+    await systemStore.fetchStatus()
+
+    // 延迟一点关闭loading，确保界面渲染完成
+    setTimeout(() => {
+      loading.close()
+    }, 300)
+  } catch (err) {
     console.warn('获取系统状态失败，将使用默认值:', err)
-  })
+    loading.close()
+  }
 
   statusTimer = setInterval(() => {
     // 如果正在进行系统操作，跳过轮询
@@ -312,6 +332,8 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss">
+@import '@/assets/styles/design-tokens.scss';
+
 /* 布局容器 */
 .layout-container {
   height: 100vh;
@@ -320,16 +342,30 @@ onUnmounted(() => {
 
 /* 侧边栏 */
 .layout-aside {
-  background: linear-gradient(180deg, #2b3144 0%, #1f2332 100%);
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s;
+  background: linear-gradient(180deg, $neutral-800 0%, $neutral-900 100%);
+  box-shadow: $shadow-lg;
+  transition: all $duration-base $ease-out;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at top right, rgba($brand-primary, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at bottom left, rgba($brand-secondary, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+  }
 
   .logo {
-    height: 64px;
+    height: 72px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(0, 0, 0, 0.3);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     position: relative;
     overflow: hidden;
@@ -345,55 +381,105 @@ onUnmounted(() => {
       animation: shimmer 3s infinite;
     }
 
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, $brand-primary, transparent);
+    }
+
     h2 {
-      color: #fff;
-      font-size: 22px;
-      font-weight: 700;
+      color: white;
+      font-size: $font-size-2xl;
+      font-weight: $font-weight-bold;
       letter-spacing: 1px;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
       z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: $spacing-2;
+
+      &::before {
+        content: '⚇';
+        font-size: 28px;
+        @include gradient-text($brand-primary, $brand-secondary);
+      }
     }
   }
 
   .el-menu {
     border-right: none;
     background: transparent;
-    height: calc(100% - 64px);
+    height: calc(100% - 72px);
+    padding: $spacing-2 0;
 
     .el-menu-item {
-      color: rgba(255, 255, 255, 0.8);
-      transition: all 0.3s;
+      color: rgba(255, 255, 255, 0.7);
+      transition: all $duration-base $ease-out;
       position: relative;
+      margin: $spacing-1 $spacing-2;
+      border-radius: $radius-base;
+      height: 48px;
+      line-height: 48px;
 
       &::before {
         content: '';
         position: absolute;
         left: 0;
-        top: 0;
-        bottom: 0;
-        width: 3px;
-        background: var(--primary-color);
-        transform: scaleY(0);
-        transition: transform 0.3s;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 4px;
+        height: 0;
+        background: $brand-primary;
+        border-radius: $radius-sm;
+        transition: height $duration-base $ease-out;
+      }
+
+      &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, rgba($brand-primary, 0.15), transparent);
+        opacity: 0;
+        transition: opacity $duration-base;
+        border-radius: $radius-base;
       }
 
       &:hover {
-        color: #fff;
-        background: rgba(255, 255, 255, 0.1);
+        color: white;
+
+        &::after {
+          opacity: 1;
+        }
       }
 
       &.is-active {
-        color: #fff;
-        background: rgba(64, 158, 255, 0.2);
+        color: white;
+        background: rgba($brand-primary, 0.15);
+        font-weight: $font-weight-medium;
 
         &::before {
-          transform: scaleY(1);
+          height: 24px;
+        }
+
+        .el-icon {
+          color: $brand-primary;
         }
       }
 
       .el-icon {
-        font-size: 18px;
-        margin-right: 10px;
+        font-size: 20px;
+        margin-right: $spacing-3;
+        transition: all $duration-base;
+      }
+
+      span {
+        position: relative;
+        z-index: 1;
       }
     }
   }
@@ -402,19 +488,42 @@ onUnmounted(() => {
 /* 顶部栏 */
 .layout-header {
   background: var(--card-bg);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: $shadow-sm;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
-  transition: all 0.3s;
+  padding: 0 $spacing-6;
+  transition: all $duration-base;
+  position: relative;
+  z-index: 10;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+  }
 
   .header-left {
     h3 {
       color: var(--text-primary);
-      font-size: 20px;
-      font-weight: 600;
+      font-size: $font-size-xl;
+      font-weight: $font-weight-semibold;
       margin: 0;
+      display: flex;
+      align-items: center;
+      gap: $spacing-2;
+
+      &::before {
+        content: '';
+        width: 4px;
+        height: 24px;
+        background: $brand-primary;
+        border-radius: $radius-sm;
+      }
     }
   }
 
@@ -430,25 +539,33 @@ onUnmounted(() => {
         border-radius: 20px;
 
         &.el-tag--success {
-          background: linear-gradient(135deg, #84cc16 0%, #22c55e 100%);
+          @include gradient-bg($color-success, darken($color-success, 10%));
           border: none;
-          color: #fff;
+          color: white;
+          box-shadow: 0 2px 8px rgba($color-success, 0.3);
         }
 
         &.el-tag--danger {
-          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+          @include gradient-bg($color-danger, darken($color-danger, 10%));
           border: none;
-          color: #fff;
+          color: white;
+          box-shadow: 0 2px 8px rgba($color-danger, 0.3);
+        }
+
+        &.el-tag--info {
+          background: rgba($color-info, 0.1);
+          border: 1px solid rgba($color-info, 0.3);
+          color: $color-info;
         }
       }
 
       .status-indicator {
-        margin-right: 6px;
+        margin-right: $spacing-2;
         font-size: 12px;
         vertical-align: middle;
 
         &.breathing {
-          animation: breathing 2s ease-in-out infinite;
+          @include breathing-animation;
         }
       }
     }
@@ -471,7 +588,12 @@ onUnmounted(() => {
     }
 
     .el-switch {
-      --el-switch-on-color: var(--primary-color);
+      --el-switch-on-color: #{$brand-primary};
+
+      :deep(.el-switch__core) {
+        border-radius: $radius-full;
+        box-shadow: $shadow-inner;
+      }
     }
   }
 }
@@ -482,12 +604,15 @@ onUnmounted(() => {
   padding: 0;
   overflow: auto;
   height: calc(100vh - 60px);
+  position: relative;
+
+  @include custom-scrollbar(12px, var(--bg-color), var(--border-color));
 }
 
 /* 页面过渡动画 */
 .fade-enter-active,
 .fade-leave-active {
-  transition: all 0.3s ease;
+  transition: all $duration-base $ease-out;
 }
 
 .fade-enter-from {
@@ -501,65 +626,190 @@ onUnmounted(() => {
 }
 
 /* 动画效果 */
-@keyframes breathing {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.6;
-    transform: scale(1.1);
-  }
-}
-
 @keyframes shimmer {
   to {
     left: 100%;
   }
 }
 
+/* 状态按钮组 */
+.el-button-group {
+  .el-button {
+    &--success {
+      &:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: $shadow-success;
+      }
+    }
+
+    &--danger {
+      &:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: $shadow-danger;
+      }
+    }
+
+    &--warning {
+      &:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba($color-warning, 0.4);
+      }
+    }
+  }
+}
+
 /* 暗色主题 */
 .dark {
   .layout-aside {
-    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    background: linear-gradient(180deg, $dark-bg-tertiary 0%, $dark-bg-secondary 100%);
+
+    &::before {
+      background: radial-gradient(circle at top right, rgba($brand-primary, 0.15) 0%, transparent 50%),
+      radial-gradient(circle at bottom left, rgba($brand-secondary, 0.15) 0%, transparent 50%);
+    }
 
     .logo {
       background: rgba(0, 0, 0, 0.5);
+      border-bottom-color: rgba(255, 255, 255, 0.05);
     }
 
     .el-menu-item {
       &.is-active {
-        background: rgba(64, 158, 255, 0.3);
+        background: rgba($brand-primary, 0.2);
       }
     }
   }
 
   .layout-header {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+    background: $dark-bg-elevated;
+
+    &::after {
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+    }
+  }
+
+  .layout-main {
+    background: $dark-bg-primary;
   }
 }
 
 /* 响应式 */
-@media (max-width: 768px) {
+@media (max-width: $breakpoint-md) {
   .layout-aside {
     width: 180px !important;
+
+    .logo h2 {
+      font-size: $font-size-lg;
+    }
+
+    .el-menu-item {
+      height: 44px;
+      line-height: 44px;
+      margin: $spacing-1;
+
+      .el-icon {
+        font-size: 18px;
+      }
+    }
   }
   
   .layout-header {
-    padding: 0 16px;
+    padding: 0 $spacing-4;
     
     .header-left h3 {
-      font-size: 16px;
+      font-size: $font-size-base;
+
+      &::before {
+        height: 20px;
+      }
     }
 
     .header-right {
-      gap: 8px;
+      gap: $spacing-2;
 
+      .system-status {
+        .el-tag {
+          padding: $spacing-1 $spacing-2;
+          font-size: $font-size-xs;
+        }
+      }
+      
       .el-button {
-        padding: 8px 12px;
-        font-size: 12px;
+        padding: $spacing-2 $spacing-3;
+        font-size: $font-size-xs;
+        height: 32px;
       }
     }
+  }
+}
+
+/* 快捷键提示 */
+.el-menu-item {
+  position: relative;
+
+  &[data-shortcut]::after {
+    content: attr(data-shortcut);
+    position: absolute;
+    right: $spacing-4;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: $font-size-xs;
+    color: rgba(255, 255, 255, 0.4);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 2px 6px;
+    border-radius: $radius-sm;
+    font-family: $font-mono;
+  }
+}
+</style>
+
+<style>
+/* 自定义 ElLoading 样式 */
+.deepsearch-loading {
+  .el-loading-spinner {
+    margin-top: -40px;
+  }
+
+  .el-loading-spinner .circular {
+    width: 50px;
+    height: 50px;
+    animation: loading-rotate 2s linear infinite;
+  }
+
+  .el-loading-spinner .path {
+    stroke: #409eff;
+    stroke-width: 3;
+    animation: loading-dash 1.5s ease-in-out infinite;
+  }
+
+  .el-loading-text {
+    margin-top: 20px;
+    font-size: 16px;
+    color: #409eff;
+    font-weight: 500;
+    letter-spacing: 1px;
+  }
+}
+
+@keyframes loading-rotate {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loading-dash {
+  0% {
+    stroke-dasharray: 1, 200;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -40px;
+  }
+  100% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -120px;
   }
 }
 </style>

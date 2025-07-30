@@ -20,6 +20,11 @@ export default defineConfig({
             dts: 'src/components.d.ts'
         })
     ],
+    // 优化配置，避免权限问题
+    optimizeDeps: {
+        force: false, // 不强制重新构建
+        exclude: [] // 不排除任何依赖
+    },
     resolve: {
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url))
@@ -50,7 +55,7 @@ export default defineConfig({
     css: {
         preprocessorOptions: {
             scss: {
-                api: 'modern-compiler'
+                // api: 'modern-compiler'  // 注释掉以使用默认 API
             }
         }
     },

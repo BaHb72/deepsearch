@@ -493,7 +493,7 @@ async def get_all_components() -> Dict[str, Any]:
         }
 
         for name, info in all_components.items():
-            result["components"][name] = {
+            component_data = {
                 "name": info.name,
                 "display_name": info.display_name,
                 "description": info.description,
@@ -506,6 +506,25 @@ async def get_all_components() -> Dict[str, Any]:
                 "config": info.config,
                 "metrics": info.metrics
             }
+
+            # 获取组件实例并调用其 get_status_info 方法获取详细信息
+            component = component_manager.get_component(name)
+            if component and hasattr(component, 'get_status_info'):
+                try:
+                    component_info = component.get_status_info()
+                    # 合并组件自己提供的状态信息
+                    component_data['info'] = component_info
+
+                    # 对于缓存组件，确保错误信息被正确传递
+                    if name == 'cache' and info.error_message:
+                        component_data['info']['error_message'] = info.error_message
+                        # 同步到 disconnect_reason
+                        if not component_data['info'].get('disconnect_reason'):
+                            component_data['info']['disconnect_reason'] = info.error_message
+                except Exception as e:
+                    logger.warning(f"获取组件 {name} 详细状态失败: {e}")
+
+            result["components"][name] = component_data
 
         return result
 

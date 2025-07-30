@@ -151,108 +151,148 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import '@/assets/styles/design-tokens.scss';
+
 .system-alerts {
-  margin-bottom: 20px;
-  background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  margin-bottom: $spacing-5;
+  background: linear-gradient(135deg, rgba($color-warning, 0.05) 0%, rgba($color-warning, 0.1) 100%);
+  border-radius: $radius-lg;
+  padding: $spacing-4;
+  box-shadow: $shadow-sm;
+  border: 1px solid rgba($color-warning, 0.2);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    @include gradient-bg($color-warning, darken($color-warning, 10%));
+  }
 }
 
 .alerts-header {
   display: flex;
   align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  margin-bottom: $spacing-3;
+  padding-bottom: $spacing-3;
+  border-bottom: 1px solid rgba($color-warning, 0.15);
 }
 
 .header-icon {
   font-size: 20px;
-  color: #ff9800;
-  margin-right: 8px;
+  color: $color-warning;
+  margin-right: $spacing-2;
+  animation: pulse 2s infinite;
 }
 
 .header-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
+  font-size: $font-size-base;
+  font-weight: $font-weight-semibold;
+  color: var(--text-primary);
   flex: 1;
 }
 
 .alerts-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: $spacing-2;
 }
 
 .alert-item {
-  background: white;
-  border-radius: 8px;
-  padding: 12px 16px;
+  background: var(--card-bg);
+  border-radius: $radius-base;
+  padding: $spacing-3 $spacing-4;
   border-left: 4px solid;
-  transition: all 0.3s ease;
+  transition: all $duration-base $ease-out;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: right $duration-slow;
+  }
 }
 
 .alert-item:hover {
   transform: translateX(4px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: $shadow-md;
+
+  &::before {
+    right: 100%;
+  }
 }
 
 .alert-database {
-  border-color: #ff6b6b;
+  border-color: $color-danger;
+  background: linear-gradient(to right, rgba($color-danger, 0.05), transparent);
 }
 
 .alert-config {
-  border-color: #4ecdc4;
+  border-color: $brand-accent;
+  background: linear-gradient(to right, rgba($brand-accent, 0.05), transparent);
 }
 
 .alert-security {
-  border-color: #f7b731;
+  border-color: $color-warning;
+  background: linear-gradient(to right, rgba($color-warning, 0.05), transparent);
 }
 
 .alert-error {
-  border-color: #ee5a6f;
+  border-color: darken($color-danger, 10%);
+  background: linear-gradient(to right, rgba($color-danger, 0.08), transparent);
 }
 
 .alert-warning {
-  border-color: #f39c12;
+  border-color: $color-warning;
+  background: linear-gradient(to right, rgba($color-warning, 0.05), transparent);
 }
 
 .alert-info {
-  border-color: #3498db;
+  border-color: $color-info;
+  background: linear-gradient(to right, rgba($color-info, 0.05), transparent);
 }
 
 .alert-content {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: $spacing-3;
   justify-content: space-between;
 }
 
 .alert-main {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: $spacing-3;
   flex: 1;
 }
 
 .alert-icon {
   font-size: 24px;
   flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 }
 
 .alert-database .alert-icon {
-  color: #ff6b6b;
+  color: $color-danger;
 }
 
 .alert-config .alert-icon {
-  color: #4ecdc4;
+  color: $brand-accent;
 }
 
 .alert-security .alert-icon {
-  color: #f7b731;
+  color: $color-warning;
 }
 
 .alert-text {
@@ -260,21 +300,22 @@ onMounted(() => {
 }
 
 .alert-title {
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 4px;
+  font-weight: $font-weight-semibold;
+  color: var(--text-primary);
+  margin-bottom: $spacing-1;
+  font-size: $font-size-base;
 }
 
 .alert-description {
-  font-size: 14px;
-  color: #666;
-  line-height: 1.4;
+  font-size: $font-size-sm;
+  color: var(--text-secondary);
+  line-height: $line-height-relaxed;
 }
 
 /* 动画效果 */
 .alert-list-enter-active,
 .alert-list-leave-active {
-  transition: all 0.3s ease;
+  transition: all $duration-base $ease-out;
 }
 
 .alert-list-enter-from {
@@ -288,18 +329,54 @@ onMounted(() => {
 }
 
 .alert-list-move {
-  transition: transform 0.3s ease;
+  transition: transform $duration-base $ease-out;
+}
+
+/* 按钮样式 */
+.alert-item {
+  .el-button {
+    font-size: $font-size-sm;
+    padding: $spacing-1 $spacing-3;
+    height: 28px;
+    border-radius: $radius-base;
+    font-weight: $font-weight-medium;
+  }
 }
 
 /* 响应式设计 */
-@media (max-width: 768px) {
+@media (max-width: $breakpoint-md) {
+  .system-alerts {
+    padding: $spacing-3;
+  }
+  
   .alert-content {
     flex-direction: column;
     align-items: flex-start;
+    gap: $spacing-2;
+  }
+
+  .alert-main {
+    width: 100%;
   }
 
   .alert-icon {
-    margin-bottom: 8px;
+    margin-bottom: $spacing-2;
+  }
+}
+
+/* 暗色主题 */
+.dark {
+  .system-alerts {
+    background: linear-gradient(135deg, rgba($color-warning, 0.1) 0%, rgba($color-warning, 0.15) 100%);
+    border-color: rgba($color-warning, 0.3);
+  }
+
+  .alert-item {
+    background: var(--card-bg);
+
+    &:hover {
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
   }
 }
 </style>

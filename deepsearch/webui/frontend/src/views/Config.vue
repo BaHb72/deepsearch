@@ -1,79 +1,252 @@
 <template>
   <div class="config-view">
     <div class="page-header">
-      <h1>系统配置</h1>
-      <el-button type="primary" @click="saveConfig">保存配置</el-button>
+      <div class="header-content">
+        <h1 class="page-title">
+          <el-icon class="title-icon">
+            <Setting/>
+          </el-icon>
+          系统配置
+        </h1>
+        <p class="page-subtitle">管理系统各项参数配置，优化系统性能</p>
+      </div>
+      <div class="header-actions">
+        <el-button @click="resetConfig">
+          <el-icon>
+            <RefreshLeft/>
+          </el-icon>
+          重置配置
+        </el-button>
+        <el-button type="primary" @click="saveConfig">
+          <el-icon>
+            <Check/>
+          </el-icon>
+          保存配置
+        </el-button>
+      </div>
     </div>
 
-    <el-tabs v-model="activeTab">
-      <el-tab-pane label="基础配置" name="basic">
-        <el-form :model="config.basic" label-width="120px">
-          <el-form-item label="应用名称">
-            <el-input v-model="config.basic.appName"/>
-          </el-form-item>
-          <el-form-item label="环境">
-            <el-select v-model="config.basic.env">
-              <el-option label="开发" value="dev"/>
-              <el-option label="测试" value="test"/>
-              <el-option label="生产" value="prod"/>
-            </el-select>
-          </el-form-item>
-          <el-form-item label="调试模式">
-            <el-switch v-model="config.basic.debug"/>
-          </el-form-item>
-        </el-form>
+    <el-tabs v-model="activeTab" class="config-tabs">
+      <el-tab-pane name="basic">
+        <template #label>
+          <span class="tab-label">
+            <el-icon><Platform/></el-icon>
+            基础配置
+          </span>
+        </template>
+        <el-card class="config-card">
+          <el-form :model="config.basic" label-width="140px">
+            <el-form-item label="应用名称">
+              <el-input
+                  v-model="config.basic.appName"
+                  clearable
+                  placeholder="输入应用名称"
+              >
+                <template #prefix>
+                  <el-icon>
+                    <Promotion/>
+                  </el-icon>
+                </template>
+              </el-input>
+            </el-form-item>
+            <el-form-item label="运行环境">
+              <el-select v-model="config.basic.env" placeholder="选择运行环境">
+                <el-option label="开发环境" value="dev">
+                  <span class="option-label">
+                    <el-icon><Edit/></el-icon>
+                    开发环境
+                  </span>
+                </el-option>
+                <el-option label="测试环境" value="test">
+                  <span class="option-label">
+                    <el-icon><Cpu/></el-icon>
+                    测试环境
+                  </span>
+                </el-option>
+                <el-option label="生产环境" value="prod">
+                  <span class="option-label">
+                    <el-icon><Trophy/></el-icon>
+                    生产环境
+                  </span>
+                </el-option>
+              </el-select>
+            </el-form-item>
+            <el-form-item label="调试模式">
+              <el-switch
+                  v-model="config.basic.debug"
+                  active-text="开启"
+                  inactive-text="关闭"
+              />
+              <span class="form-item-tip">开启后将输出详细调试信息</span>
+            </el-form-item>
+          </el-form>
+        </el-card>
       </el-tab-pane>
 
-      <el-tab-pane label="事件引擎" name="event">
-        <el-form :model="config.event" label-width="120px">
-          <el-form-item label="队列大小">
-            <el-input-number v-model="config.event.queueSize" :max="100000" :min="1000"/>
-          </el-form-item>
-          <el-form-item label="工作线程数">
-            <el-input-number v-model="config.event.maxWorkers" :max="64" :min="1"/>
-          </el-form-item>
-          <el-form-item label="批处理大小">
-            <el-input-number v-model="config.event.batchSize" :max="1000" :min="1"/>
-          </el-form-item>
-          <el-form-item label="批处理超时">
-            <el-input-number v-model="config.event.batchTimeout" :max="1" :min="0.01" :step="0.01"/>
-            <span style="margin-left: 10px">秒</span>
-          </el-form-item>
-        </el-form>
+      <el-tab-pane name="event">
+        <template #label>
+          <span class="tab-label">
+            <el-icon><Connection/></el-icon>
+            事件引擎
+          </span>
+        </template>
+        <el-card class="config-card">
+          <el-form :model="config.event" label-width="140px">
+            <el-form-item label="队列大小">
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-input-number
+                      v-model="config.event.queueSize"
+                      :max="100000"
+                      :min="1000"
+                      :step="1000"
+                      controls-position="right"
+                      style="width: 100%"
+                  />
+                </el-col>
+                <el-col :span="12">
+                  <el-progress
+                      :format="() => config.event.queueSize + ' 个'"
+                      :percentage="(config.event.queueSize / 100000) * 100"
+                      :stroke-width="10"
+                  />
+                </el-col>
+              </el-row>
+            </el-form-item>
+            <el-form-item label="工作线程数">
+              <el-row :gutter="20" align="middle">
+                <el-col :span="12">
+                  <el-slider
+                      v-model="config.event.maxWorkers"
+                      :max="64"
+                      :min="1"
+                      show-input
+                  />
+                </el-col>
+                <el-col :span="12">
+                  <span class="form-item-tip">推荐值: CPU核心数 * 2</span>
+                </el-col>
+              </el-row>
+            </el-form-item>
+            <el-form-item label="批处理大小">
+              <el-input-number
+                  v-model="config.event.batchSize"
+                  :max="1000"
+                  :min="1"
+                  :step="10"
+                  controls-position="right"
+              />
+              <span class="form-item-tip">每批次处理的事件数量</span>
+            </el-form-item>
+            <el-form-item label="批处理超时">
+              <el-input-number
+                  v-model="config.event.batchTimeout"
+                  :max="1"
+                  :min="0.01"
+                  :precision="2"
+                  :step="0.01"
+                  controls-position="right"
+              />
+              <span style="margin-left: 10px">秒</span>
+            </el-form-item>
+          </el-form>
+        </el-card>
       </el-tab-pane>
 
-      <el-tab-pane label="日志配置" name="log">
-        <el-form :model="config.log" label-width="120px">
-          <el-form-item label="日志级别">
-            <el-select v-model="config.log.level">
-              <el-option label="DEBUG" value="DEBUG"/>
-              <el-option label="INFO" value="INFO"/>
-              <el-option label="WARNING" value="WARNING"/>
-              <el-option label="ERROR" value="ERROR"/>
-            </el-select>
-          </el-form-item>
-          <el-form-item label="输出格式">
-            <el-select v-model="config.log.format">
-              <el-option label="简单" value="simple"/>
-              <el-option label="详细" value="verbose"/>
-              <el-option label="JSON" value="json"/>
-            </el-select>
-          </el-form-item>
-          <el-form-item label="文件输出">
-            <el-switch v-model="config.log.toFile"/>
-          </el-form-item>
-          <el-form-item label="控制台输出">
-            <el-switch v-model="config.log.toConsole"/>
-          </el-form-item>
-        </el-form>
+      <el-tab-pane name="log">
+        <template #label>
+          <span class="tab-label">
+            <el-icon><Document/></el-icon>
+            日志配置
+          </span>
+        </template>
+        <el-card class="config-card">
+          <el-form :model="config.log" label-width="140px">
+            <el-form-item label="日志级别">
+              <el-radio-group v-model="config.log.level">
+                <el-radio-button value="DEBUG">
+                  <el-icon>
+                    <View/>
+                  </el-icon>
+                  DEBUG
+                </el-radio-button>
+                <el-radio-button value="INFO">
+                  <el-icon>
+                    <InfoFilled/>
+                  </el-icon>
+                  INFO
+                </el-radio-button>
+                <el-radio-button value="WARNING">
+                  <el-icon>
+                    <WarningFilled/>
+                  </el-icon>
+                  WARNING
+                </el-radio-button>
+                <el-radio-button value="ERROR">
+                  <el-icon>
+                    <CircleCloseFilled/>
+                  </el-icon>
+                  ERROR
+                </el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="输出格式">
+              <el-select v-model="config.log.format" placeholder="选择输出格式">
+                <el-option label="简单格式" value="simple">
+                  <span class="option-label">
+                    <el-icon><Memo/></el-icon>
+                    简单格式 - 基本日志信息
+                  </span>
+                </el-option>
+                <el-option label="详细格式" value="verbose">
+                  <span class="option-label">
+                    <el-icon><Tickets/></el-icon>
+                    详细格式 - 包含完整上下文
+                  </span>
+                </el-option>
+                <el-option label="JSON格式" value="json">
+                  <span class="option-label">
+                    <el-icon><DocumentCopy/></el-icon>
+                    JSON格式 - 便于机器解析
+                  </span>
+                </el-option>
+              </el-select>
+            </el-form-item>
+            <el-form-item label="输出位置">
+              <div class="output-options">
+                <div class="output-option">
+                  <el-switch
+                      v-model="config.log.toFile"
+                      active-text="文件输出"
+                      inactive-text="不输出到文件"
+                  />
+                  <el-icon :class="{ active: config.log.toFile }" class="option-icon">
+                    <FolderOpened/>
+                  </el-icon>
+                </div>
+                <div class="output-option">
+                  <el-switch
+                      v-model="config.log.toConsole"
+                      active-text="控制台输出"
+                      inactive-text="不输出到控制台"
+                  />
+                  <el-icon :class="{ active: config.log.toConsole }" class="option-icon">
+                    <Monitor/>
+                  </el-icon>
+                </div>
+              </div>
+            </el-form-item>
+          </el-form>
+        </el-card>
       </el-tab-pane>
 
       <el-tab-pane name="database">
         <template #label>
-          <span>数据存储</span>
-          <el-icon v-if="hasDbConnectionIssue" style="margin-left: 4px; color: #ff6b6b;">
-            <Warning/>
-          </el-icon>
+          <span class="tab-label">
+            <el-icon><Coin/></el-icon>
+            数据存储
+            <el-badge v-if="hasDbConnectionIssue" class="tab-badge" is-dot/>
+          </span>
         </template>
         <div class="database-tab-content">
           <!-- 数据库状态卡片 -->
@@ -190,7 +363,10 @@
           </el-form>
         </el-card>
 
-        <el-card shadow="never">
+          <!-- Redis 缓存状态卡片 -->
+          <CacheStatusCard style="margin-bottom: 20px"/>
+
+          <el-card shadow="never">
           <template #header>
             <div class="card-header">
               <span>缓存配置 (Redis)</span>
@@ -200,22 +376,22 @@
                     :loading="cacheDbTesting"
                     size="small"
                     style="margin-left: 10px"
-                    :type="cacheDbStatus?.success ? 'danger' : 'primary'"
+                    :type="systemStore.isCacheConnected ? 'danger' : 'primary'"
                     @click="toggleCacheDatabase"
                 >
-                  {{ cacheDbStatus?.success ? '断开连接' : '连接' }}
+                  {{ systemStore.isCacheConnected ? '断开连接' : '连接' }}
                 </el-button>
                 <el-tag
-                    v-if="cacheDbStatus !== null"
-                    :type="cacheDbStatus.success ? 'success' : 'danger'"
+                    v-if="systemStore.cacheStatus.connectionStatus"
+                    :type="systemStore.isCacheConnected ? 'success' : 'danger'"
                     size="small"
                     style="margin-left: 10px"
                 >
                   <el-icon style="margin-right: 4px">
-                    <CircleCheck v-if="cacheDbStatus.success"/>
+                    <CircleCheck v-if="systemStore.isCacheConnected"/>
                     <CircleClose v-else/>
                   </el-icon>
-                  {{ cacheDbStatus.success ? '已连接' : '未连接' }}
+                  {{ systemStore.isCacheConnected ? '已连接' : '未连接' }}
                 </el-tag>
               </div>
             </div>
@@ -251,6 +427,8 @@
                     show-password
                     style="flex: 1;"
                     type="password"
+                    @blur="handlePasswordBlur"
+                    @focus="handlePasswordFocus"
                 />
                 <el-tag
                     v-if="config.database.cache.password === '***'"
@@ -268,6 +446,9 @@
             <el-form-item v-if="config.database.cache.enabled" label="连接池大小">
               <el-input-number v-model="config.database.cache.poolSize" :max="100" :min="1"/>
             </el-form-item>
+            <el-form-item v-if="config.database.cache.enabled" label="连接选项">
+              <el-checkbox v-model="config.database.cache.auto_connect">启动时自动连接 Redis</el-checkbox>
+            </el-form-item>
           </el-form>
         </el-card>
         </div>
@@ -278,12 +459,37 @@
 
 <script setup>
 import {computed, onMounted, ref, watch} from 'vue'
-import {ElMessage, ElNotification} from 'element-plus'
-import {CircleCheck, CircleClose, Warning} from '@element-plus/icons-vue'
+import {ElMessage, ElMessageBox, ElNotification} from 'element-plus'
+import {
+  Check,
+  CircleCheck,
+  CircleClose,
+  CircleCloseFilled,
+  Coin,
+  Connection,
+  Cpu,
+  Document,
+  DocumentCopy,
+  Edit,
+  FolderOpened,
+  InfoFilled,
+  Memo,
+  Monitor,
+  Platform,
+  Promotion,
+  RefreshLeft,
+  Setting,
+  Tickets,
+  Trophy,
+  View,
+  WarningFilled
+} from '@element-plus/icons-vue'
 import {connectDatabase, disconnectDatabase} from '@/api/database'
+import {connectCache, disconnectCache} from '@/api/cache'
 import {getAllComponents} from '@/api/system'
 import {useSystemStore} from '@/stores/system'
 import DatabaseStatusCard from '@/components/DatabaseStatusCard.vue'
+import CacheStatusCard from '@/components/CacheStatusCard.vue'
 
 // 定义组件名称
 defineOptions({
@@ -295,7 +501,7 @@ const activeTab = ref('basic')
 const mainDbTesting = ref(false)
 const cacheDbTesting = ref(false)
 const mainDbStatus = ref(null)
-const cacheDbStatus = ref(null)
+// 移除本地缓存状态，直接使用 store
 const originalConfig = ref(null)
 const rememberMainDbPassword = ref(false)
 const showValidation = ref(false)
@@ -341,7 +547,8 @@ const config = ref({
       port: 6379,
       password: '',
       db: 0,
-      poolSize: 10
+      poolSize: 10,
+      auto_connect: true
     }
   }
 })
@@ -422,6 +629,28 @@ const loadConfig = async () => {
   } catch (error) {
     console.error('Failed to load config:', error)
     ElMessage.error('加载配置失败: ' + error.message)
+  }
+}
+
+const resetConfig = async () => {
+  try {
+    await ElMessageBox.confirm(
+        '确定要重置所有配置为默认值吗？此操作不可恢复。',
+        '重置配置',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning',
+        }
+    )
+
+    // 重新加载配置
+    await loadConfig()
+    ElMessage.success('配置已重置为默认值')
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('重置配置失败')
+    }
   }
 }
 
@@ -594,8 +823,10 @@ const updateDatabaseStatus = async () => {
   }
 }
 
+// 缓存状态通过 store 统一管理，无需本地更新函数
+
 const toggleCacheDatabase = async () => {
-  if (cacheDbStatus.value?.success) {
+  if (systemStore.isCacheConnected) {
     // 断开连接
     await disconnectCacheDatabase()
   } else {
@@ -608,34 +839,41 @@ const connectCacheDatabase = async () => {
   cacheDbTesting.value = true
 
   try {
-    const testConfig = {
-      host: config.value.database.cache.host,
-      port: config.value.database.cache.port,
-      password: config.value.database.cache.password,
-      db: config.value.database.cache.db
-    }
+    // 调用连接缓存 API，传递密码
+    const result = await connectCache(config.value.database.cache.password)
 
-    const response = await fetch('/api/config/test-cache', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(testConfig)
-    })
+    if (result.success) {
+      ElMessage.success(result.message || 'Redis 缓存连接成功')
 
-    const result = await response.json()
-    cacheDbStatus.value = result
+      // 更新缓存状态到 store
+      await systemStore.fetchCacheStatus()
 
-    if (!result.success) {
-      ElMessage.error(result.message)
+      // 更新组件状态到 systemStore
+      await refreshComponentsStatus()
+
+      // 更新 store 中的缓存状态
+      systemStore.updateCacheConnection(true)
+
+      // 连接成功后保存配置（包括密码）
+      if (config.value.database.cache.password) {
+        await saveConfig()
+      }
+    } else {
+      ElMessage.error(result.message || 'Redis 缓存连接失败')
     }
   } catch (error) {
-    cacheDbStatus.value = {success: false}
-    // 前端网络错误的友好提示
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+
+    // 处理不同类型的错误
+    if (error.response) {
+      // 服务器返回错误
+      const errorData = error.response.data
+      ElMessage.error(errorData.detail || errorData.message || 'Redis 缓存连接失败')
+    } else if (error.request) {
+      // 网络错误
       ElMessage.error('网络请求失败，请检查服务是否正常运行')
     } else {
-      ElMessage.error('无法连接到服务器')
+      // 其他错误
+      ElMessage.error('连接失败：' + error.message)
     }
   } finally {
     cacheDbTesting.value = false
@@ -643,9 +881,37 @@ const connectCacheDatabase = async () => {
 }
 
 const disconnectCacheDatabase = async () => {
-  // TODO: 实现断开连接的API
-  cacheDbStatus.value = {success: false}
-  ElMessage.success('Redis连接已断开')
+  cacheDbTesting.value = true
+
+  try {
+    // 调用断开缓存 API
+    const result = await disconnectCache()
+
+    if (result.success) {
+      ElMessage.success(result.message || 'Redis 缓存连接已断开')
+
+      // 更新缓存状态到 store
+      await systemStore.fetchCacheStatus()
+
+      // 更新组件状态到 systemStore
+      await refreshComponentsStatus()
+
+      // 更新 store 中的缓存状态
+      systemStore.updateCacheConnection(false, '用户手动断开连接')
+    } else {
+      ElMessage.error(result.message || '断开连接失败')
+    }
+  } catch (error) {
+    // 处理错误
+    if (error.response) {
+      const errorData = error.response.data
+      ElMessage.error(errorData.detail || errorData.message || '断开连接失败')
+    } else {
+      ElMessage.error('断开连接失败：' + error.message)
+    }
+  } finally {
+    cacheDbTesting.value = false
+  }
 }
 
 
@@ -696,6 +962,11 @@ watch(() => systemStore.isDatabaseConnected, (newVal) => {
   }
 })
 
+// 监听 store 中的缓存状态变化（无需更新本地状态）
+watch(() => systemStore.isCacheConnected, (newVal) => {
+  // 状态已经在 store 中，无需本地更新
+})
+
 onMounted(async () => {
   // 从 URL 参数获取当前标签
   const urlParams = new URLSearchParams(window.location.search)
@@ -707,99 +978,247 @@ onMounted(async () => {
   await loadConfig()
   // 加载后更新数据库连接状态
   await updateDatabaseStatus()
-  // 初始加载时也刷新组件状态
+  // 初始加载时刷新组件状态（这会更新所有状态到 store）
   await refreshComponentsStatus()
-  // 确保 store 的数据库状态也被初始化
+  // 确保数据库状态也被初始化
   await systemStore.fetchDatabaseStatus()
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import '@/assets/styles/design-tokens.scss';
+
 .config-view {
-  padding: 20px;
+  padding: $spacing-6;
+  background: var(--bg-color);
+  min-height: 100vh;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: $spacing-8;
+  padding: $spacing-6;
+  background: var(--card-bg);
+  border-radius: $radius-xl;
+  box-shadow: $shadow-sm;
+
+  .header-content {
+    .page-title {
+      margin: 0 0 $spacing-2 0;
+      font-size: $font-size-3xl;
+      font-weight: $font-weight-bold;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: $spacing-3;
+
+      .title-icon {
+        font-size: 36px;
+        @include gradient-text($brand-primary, $brand-secondary);
+      }
+    }
+
+    .page-subtitle {
+      margin: 0;
+      font-size: $font-size-base;
+      color: var(--text-secondary);
+      padding-left: 48px;
+    }
+  }
+
+  .header-actions {
+    display: flex;
+    gap: $spacing-3;
+
+    .el-button {
+      padding: $spacing-2 $spacing-4;
+      height: 40px;
+
+      .el-icon {
+        margin-right: $spacing-1;
+      }
+    }
+  }
 }
 
-.page-header h1 {
-  margin: 0;
+.config-tabs {
+  background: transparent;
+
+  :deep(.el-tabs__nav-wrap) {
+    &::after {
+      display: none;
+    }
+  }
+
+  :deep(.el-tabs__item) {
+    height: 48px;
+    padding: 0 $spacing-5;
+    font-size: $font-size-base;
+    font-weight: $font-weight-medium;
+    color: var(--text-secondary);
+    border: none;
+    transition: all $duration-base;
+
+    &:hover {
+      color: $brand-primary;
+    }
+
+    &.is-active {
+      color: $brand-primary;
+      background: rgba($brand-primary, 0.1);
+      border-radius: $radius-base;
+
+      .tab-label {
+        font-weight: $font-weight-semibold;
+      }
+    }
+  }
+
+  .tab-label {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
+
+    .el-icon {
+      font-size: 18px;
+    }
+  }
+
+  .tab-badge {
+    margin-left: $spacing-2;
+  }
 }
 
-.el-tabs {
-  background: white;
-  padding: 20px;
-  border-radius: 4px;
+.config-card {
+  margin-top: $spacing-5;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+
+  &:hover {
+    box-shadow: $shadow-md;
+  }
+
+  :deep(.el-form) {
+    padding: $spacing-2 0;
+
+    .el-form-item {
+      margin-bottom: $spacing-6;
+
+      &__label {
+        font-weight: $font-weight-medium;
+        color: var(--text-primary);
+      }
+    }
+  }
+
+  .form-item-tip {
+    margin-left: $spacing-3;
+    font-size: $font-size-sm;
+    color: var(--text-secondary);
+  }
+
+  .option-label {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
+
+    .el-icon {
+      font-size: 16px;
+    }
+  }
+
+  .output-options {
+    display: flex;
+    gap: $spacing-8;
+
+    .output-option {
+      display: flex;
+      align-items: center;
+      gap: $spacing-3;
+
+      .option-icon {
+        font-size: 24px;
+        color: var(--text-secondary);
+        transition: all $duration-base;
+
+        &.active {
+          color: $brand-primary;
+        }
+      }
+    }
+  }
 }
 
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 0;
+  padding: $spacing-1 0;
 
   span {
-    font-weight: 600;
-    font-size: 18px;
-    color: #1f2329;
+    font-weight: $font-weight-semibold;
+    font-size: $font-size-lg;
+    color: var(--text-primary);
     display: flex;
     align-items: center;
+    position: relative;
+    padding-left: $spacing-6;
 
     &::before {
       content: '';
+      position: absolute;
+      left: 0;
       width: 4px;
-      height: 20px;
-      background: linear-gradient(180deg, #409eff 0%, #79bbff 100%);
-      border-radius: 2px;
-      margin-right: 12px;
+      height: 24px;
+      @include gradient-bg($brand-primary, $brand-secondary);
+      border-radius: $radius-sm;
     }
   }
 
   .header-right {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: $spacing-3;
   }
 
   .el-tag {
-    border-radius: 4px;
-    padding: 2px 12px;
-    font-size: 13px;
+    border-radius: $radius-full;
+    padding: $spacing-1 $spacing-3;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
   }
 
   .el-button {
-    border-radius: 6px;
-    height: 32px;
-    padding: 0 16px;
-    font-size: 14px;
+    border-radius: $radius-base;
+    height: 36px;
+    padding: 0 $spacing-4;
+    font-size: $font-size-sm;
   }
 }
 
 /* 数据库配置卡片样式 */
 .el-card {
-  border-radius: 12px;
-  border: 1px solid #e8ecef;
+  border-radius: $radius-lg;
+  border: none;
+  transition: all $duration-base $ease-out;
 
   &:hover {
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+    box-shadow: $shadow-md;
     transform: translateY(-2px);
-    transition: all 0.3s ease;
   }
 }
 
 /* 数据库表单样式 */
 .database-form {
-  padding: 10px 20px;
+  padding: $spacing-3 $spacing-5;
 
   .el-form-item {
-    margin-bottom: 24px;
+    margin-bottom: $spacing-6;
 
     &:last-child {
-      margin-bottom: 16px;
+      margin-bottom: $spacing-4;
     }
   }
 
@@ -807,71 +1226,62 @@ onMounted(async () => {
     width: 100%;
   }
 
-  .el-input__inner {
-    border-radius: 6px;
+  :deep(.el-input__inner) {
+    border-radius: $radius-base;
     height: 40px;
+    transition: all $duration-fast;
 
     &:focus {
-      border-color: #409eff;
-      box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.15);
+      border-color: $brand-primary;
+      box-shadow: 0 0 0 3px rgba($brand-primary, 0.15);
     }
   }
 
-  .el-select .el-input__inner {
+  :deep(.el-select .el-input__inner) {
     cursor: pointer;
   }
 
   .el-input-number {
     width: 200px;
 
-    .el-input__inner {
+    :deep(.el-input__inner) {
       text-align: left;
     }
   }
 
-  .el-form-item__label {
-    font-weight: 500;
-    color: #333;
-    font-size: 14px;
+  :deep(.el-form-item__label) {
+    font-weight: $font-weight-medium;
+    color: var(--text-primary);
+    font-size: $font-size-sm;
   }
 }
 
 /* 保存按钮样式优化 */
-.header-right .el-button[type="success"] {
-  font-weight: 500;
+.header-right {
+  .el-button[type="success"] {
+    font-weight: $font-weight-medium;
 
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(103, 194, 58, 0.3);
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: $shadow-success;
+    }
   }
-}
 
-.header-right .el-button[type="warning"] {
-  font-weight: 600;
-  animation: pulse 2s infinite;
-  
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(230, 162, 60, 0.3);
-  }
-}
+  .el-button[type="warning"] {
+    font-weight: $font-weight-semibold;
+    animation: pulse 2s infinite;
 
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(230, 162, 60, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(230, 162, 60, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(230, 162, 60, 0);
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba($color-warning, 0.3);
+    }
   }
 }
 
 /* 数据库页签内容样式 */
 .database-tab-content {
   .el-card {
-    margin-bottom: 24px;
+    margin-bottom: $spacing-6;
 
     &:last-child {
       margin-bottom: 0;
@@ -879,45 +1289,72 @@ onMounted(async () => {
   }
 
   /* 密码记住选项样式 */
-
   .el-checkbox {
-    font-size: 14px;
-    color: #606266;
+    font-size: $font-size-sm;
+    color: var(--text-regular);
 
-    .el-checkbox__label {
-      padding-left: 8px;
+    :deep(.el-checkbox__label) {
+      padding-left: $spacing-2;
     }
   }
 }
 
 /* 必填项标记 */
-.el-form-item[required] .el-form-item__label::before {
-  content: '*';
-  color: #ff4d4f;
-  margin-right: 4px;
+:deep(.el-form-item.is-required) {
+  .el-form-item__label::before {
+    content: '*';
+    color: $color-danger;
+    margin-right: $spacing-1;
+  }
 }
 
 /* 错误输入框样式 */
-.el-input.is-error .el-input__wrapper {
-  box-shadow: 0 0 0 1px #ff4d4f inset;
+:deep(.el-input.is-error .el-input__wrapper) {
+  box-shadow: 0 0 0 1px $color-danger inset;
 }
 
-/* 连接状态标签样式优化 */
-.el-tag[type="success"] {
-  background-color: #f0f9ff;
-  border-color: #d0f0ff;
-  color: #10b981;
+/* 响应式 */
+@media (max-width: $breakpoint-md) {
+  .config-view {
+    padding: $spacing-4;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: $spacing-4;
+
+    .header-content {
+      .page-title {
+        font-size: $font-size-2xl;
+      }
+    }
+
+    .header-actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
+  }
+
+  .config-tabs {
+    :deep(.el-tabs__item) {
+      padding: 0 $spacing-3;
+
+      .tab-label {
+        font-size: $font-size-sm;
+
+        .el-icon {
+          font-size: 16px;
+        }
+      }
+    }
+  }
 }
 
-.el-tag[type="danger"] {
-  background-color: #fef2f2;
-  border-color: #fee2e2;
-  color: #ef4444;
-}
-
-.el-tag[type="info"] {
-  background-color: #f5f7fa;
-  border-color: #e4e7ed;
-  color: #909399;
+/* 暗色主题 */
+.dark {
+  .config-card {
+    @include dark-glassmorphism(0.95, 5px);
+  }
 }
 </style>

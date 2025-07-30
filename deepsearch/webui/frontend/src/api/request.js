@@ -1,5 +1,6 @@
 import axios from 'axios'
 import {ElMessage} from 'element-plus'
+import {logApiError} from '@/utils/errorTracker'
 
 // 创建 axios 实例
 const request = axios.create({
@@ -67,6 +68,15 @@ request.interceptors.response.use(
                 showError = false
                 console.debug('后端服务未就绪')
             }
+        }
+
+        // 记录到错误追踪系统
+        // 排除一些不需要记录的请求
+        const skipUrls = ['/status', '/statistics', '/frontend/errors']
+        const shouldLog = !skipUrls.some(url => error.config?.url?.includes(url))
+
+        if (shouldLog) {
+            logApiError(error, error.config)
         }
 
         if (showError) {

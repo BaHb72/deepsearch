@@ -7,6 +7,7 @@ export {}
 
 declare module 'vue' {
   export interface GlobalComponents {
+      CacheStatusCard: typeof import('./components/CacheStatusCard.vue')['default']
       DatabaseAlert: typeof import('./components/DatabaseAlert.vue')['default']
       DatabaseStatusCard: typeof import('./components/DatabaseStatusCard.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
@@ -21,6 +22,10 @@ declare module 'vue' {
     ElConfigProvider: typeof import('element-plus/es')['ElConfigProvider']
     ElContainer: typeof import('element-plus/es')['ElContainer']
     ElDatePicker: typeof import('element-plus/es')['ElDatePicker']
+      ElDescriptions: typeof import('element-plus/es')['ElDescriptions']
+      ElDescriptionsItem: typeof import('element-plus/es')['ElDescriptionsItem']
+      ElDialog: typeof import('element-plus/es')['ElDialog']
+      ElEmpty: typeof import('element-plus/es')['ElEmpty']
     ElForm: typeof import('element-plus/es')['ElForm']
     ElFormItem: typeof import('element-plus/es')['ElFormItem']
     ElHeader: typeof import('element-plus/es')['ElHeader']
@@ -32,10 +37,13 @@ declare module 'vue' {
     ElMenuItem: typeof import('element-plus/es')['ElMenuItem']
     ElOption: typeof import('element-plus/es')['ElOption']
       ElPageHeader: typeof import('element-plus/es')['ElPageHeader']
+      ElProgress: typeof import('element-plus/es')['ElProgress']
       ElRadio: typeof import('element-plus/es')['ElRadio']
+      ElRadioButton: typeof import('element-plus/es')['ElRadioButton']
       ElRadioGroup: typeof import('element-plus/es')['ElRadioGroup']
     ElRow: typeof import('element-plus/es')['ElRow']
     ElSelect: typeof import('element-plus/es')['ElSelect']
+      ElSlider: typeof import('element-plus/es')['ElSlider']
     ElSpace: typeof import('element-plus/es')['ElSpace']
       ElStatistic: typeof import('element-plus/es')['ElStatistic']
     ElSwitch: typeof import('element-plus/es')['ElSwitch']
@@ -46,9 +54,12 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTimeline: typeof import('element-plus/es')['ElTimeline']
     ElTimelineItem: typeof import('element-plus/es')['ElTimelineItem']
+      ElTooltip: typeof import('element-plus/es')['ElTooltip']
       ElUpload: typeof import('element-plus/es')['ElUpload']
+      ErrorMonitor: typeof import('./components/ErrorMonitor.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+      StatusCard: typeof import('./components/StatusCard.vue')['default']
       SystemAlerts: typeof import('./components/SystemAlerts.vue')['default']
   }
   export interface ComponentCustomProperties {

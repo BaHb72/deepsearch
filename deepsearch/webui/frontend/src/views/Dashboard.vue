@@ -4,87 +4,70 @@
     <SystemAlerts/>
 
     <!-- 状态卡片 -->
-    <el-row :gutter="20" class="status-cards">
+    <el-row :gutter="24" class="status-cards">
       <el-col :md="6" :sm="12" :xs="24">
-        <el-card class="status-card" shadow="hover">
-          <div class="card-header">
-            <el-icon class="card-icon" color="#409eff">
-              <DataLine/>
-            </el-icon>
-            <span>处理事件</span>
-          </div>
-          <div class="card-value">{{ formatNumber(dashboardData.current?.total_events || 0) }}</div>
-          <div v-if="dashboardData.trends?.events_change !== undefined" class="card-trend">
-            <el-icon v-if="dashboardData.trends.events_change > 0" color="#67c23a">
-              <Top/>
-            </el-icon>
-            <el-icon v-else-if="dashboardData.trends.events_change < 0" color="#f56c6c">
-              <Bottom/>
-            </el-icon>
-            <span :class="getTrendClass(dashboardData.trends.events_change)">
-              {{ Math.abs(dashboardData.trends.events_change) }}
-            </span>
-          </div>
-        </el-card>
+        <StatusCard
+            :icon="DataAnalysis"
+            :progress="getEventProgress()"
+            :status="getTrendStatus(dashboardData.trends?.events_change)"
+            :status-type="getTrendStatusType(dashboardData.trends?.events_change)"
+            :subtitle="dashboardData.trends?.events_change !== undefined ? '较上次统计' : '累计处理'"
+            :value="dashboardData.current?.total_events || 0"
+            progress-status=""
+            title="事件处理"
+            type="primary"
+            unit="个"
+        />
       </el-col>
 
       <el-col :md="6" :sm="12" :xs="24">
-        <el-card class="status-card" shadow="hover">
-          <div class="card-header">
-            <el-icon class="card-icon" color="#67c23a">
-              <CircleCheck/>
-            </el-icon>
-            <span>健康状态</span>
-          </div>
-          <div class="card-value">
-            <el-tag :type="getHealthType(dashboardData.current?.health_status)" size="large">
-              {{ getHealthText(dashboardData.current?.health_status) }}
-            </el-tag>
-          </div>
-          <div class="card-trend">
-            <!-- 占位元素，保持卡片高度一致 -->
-            <span style="visibility: hidden;">占位</span>
-          </div>
-        </el-card>
+        <StatusCard
+            :icon="CircleCheck"
+            :progress="getHealthScore()"
+            :progress-status="getHealthProgressStatus()"
+            :pulse="dashboardData.current?.health_status === 'good'"
+            :status="getHealthText(dashboardData.current?.health_status)"
+            :status-dot="true"
+            :status-type="getHealthType(dashboardData.current?.health_status)"
+            :type="getHealthCardType(dashboardData.current?.health_status)"
+            :value="getHealthScore()"
+            subtitle="所有组件运行状态"
+            title="系统健康"
+            unit="%"
+        />
       </el-col>
 
       <el-col :md="6" :sm="12" :xs="24">
-        <el-card class="status-card" shadow="hover">
-          <div class="card-header">
-            <el-icon class="card-icon" color="#e6a23c">
-              <Clock/>
-            </el-icon>
-            <span>队列大小</span>
-          </div>
-          <div class="card-value">{{ dashboardData.current?.queue_size || 0 }}</div>
-          <div v-if="dashboardData.trends?.queue_size_change !== undefined" class="card-trend">
-            <el-icon v-if="dashboardData.trends.queue_size_change > 0" color="#f56c6c">
-              <Top/>
-            </el-icon>
-            <el-icon v-else-if="dashboardData.trends.queue_size_change < 0" color="#67c23a">
-              <Bottom/>
-            </el-icon>
-            <span :class="getTrendClass(dashboardData.trends.queue_size_change, true)">
-              {{ Math.abs(dashboardData.trends.queue_size_change) }}
-            </span>
-          </div>
-        </el-card>
+        <StatusCard
+            :icon="List"
+            :progress="getQueueProgress(dashboardData.current?.queue_size)"
+            :progress-status="getQueueProgressStatus(dashboardData.current?.queue_size)"
+            :status="getQueueStatus(dashboardData.current?.queue_size)"
+            :status-type="getQueueStatusType(dashboardData.current?.queue_size)"
+            :subtitle="dashboardData.trends?.queue_size_change !== undefined ? '队列压力' : '当前积压'"
+            :value="dashboardData.current?.queue_size || 0"
+            title="事件队列"
+            type="warning"
+            unit="个"
+        />
       </el-col>
 
       <el-col :md="6" :sm="12" :xs="24">
-        <el-card class="status-card" shadow="hover">
-          <div class="card-header">
-            <el-icon class="card-icon" color="#f56c6c">
-              <Warning/>
-            </el-icon>
-            <span>活跃告警</span>
-          </div>
-          <div class="card-value">{{ dashboardData.current?.active_alerts || 0 }}</div>
-          <div class="card-trend">
-            <!-- 占位元素，保持卡片高度一致 -->
-            <span style="visibility: hidden;">占位</span>
-          </div>
-        </el-card>
+        <StatusCard
+            :icon="Warning"
+            :progress="getAlertProgress()"
+            :progress-status="getAlertProgressStatus()"
+            :pulse="dashboardData.current?.active_alerts > 0"
+            :status="getAlertStatus(dashboardData.current?.active_alerts)"
+            :status-type="getAlertStatusType(dashboardData.current?.active_alerts)"
+            :type="dashboardData.current?.active_alerts > 0 ? 'danger' : 'success'"
+            :value="dashboardData.current?.active_alerts || 0"
+            clickable
+            subtitle="需要关注的问题"
+            title="活跃告警"
+            unit="个"
+            @click="navigateToAlerts"
+        />
       </el-col>
     </el-row>
 
@@ -115,11 +98,29 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" prop="status" width="120">
+        <el-table-column label="状态" min-width="180" prop="status">
           <template #default="scope">
-            <el-tag :type="getComponentStatusType(scope.row.status)" size="small">
-              {{ getComponentStatusText(scope.row.status) }}
-            </el-tag>
+            <div class="status-cell">
+              <el-tooltip
+                  v-if="getComponentErrorMessage(scope.row)"
+                  :content="getComponentErrorMessage(scope.row)"
+                  placement="top"
+              >
+                <el-tag :type="getComponentStatusType(scope.row.status)" size="small">
+                  {{ getComponentStatusText(scope.row.status) }}
+                </el-tag>
+              </el-tooltip>
+              <el-tag
+                  v-else
+                  :type="getComponentStatusType(scope.row.status)"
+                  size="small"
+              >
+                {{ getComponentStatusText(scope.row.status) }}
+              </el-tag>
+              <span v-if="getComponentErrorMessage(scope.row)" class="error-hint">
+                ({{ getShortErrorMessage(getComponentErrorMessage(scope.row)) }})
+              </span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column fixed="right" label="操作" width="180">
@@ -233,15 +234,14 @@
 <script setup>
 import {nextTick, onMounted, onUnmounted, ref, watch} from 'vue'
 import {ElLoading, ElMessage, ElMessageBox} from 'element-plus'
+import {useRouter} from 'vue-router'
 import {
-  Bottom,
   CircleCheck,
-  Clock,
-  DataLine,
+  DataAnalysis,
   Link,
+  List,
   Refresh,
   Setting,
-  Top,
   VideoPause,
   VideoPlay,
   Warning
@@ -253,12 +253,15 @@ import {getAllComponents, startComponent, stopComponent} from '@/api/system'
 import {wsManager} from '@/utils/websocket'
 import {useSystemStore} from '@/stores/system'
 import SystemAlerts from '@/components/SystemAlerts.vue'
+import StatusCard from '@/components/StatusCard.vue'
 
 // 定义组件名称
 defineOptions({
   name: 'Dashboard'
 })
 
+// 路由
+const router = useRouter()
 // 系统状态
 const systemStore = useSystemStore()
 
@@ -530,12 +533,136 @@ const getTrendClass = (value, inverse = false) => {
   return value > 0 ? 'trend-up' : 'trend-down'
 }
 
+// 获取趋势状态文字
+const getTrendStatus = (change) => {
+  if (change === undefined || change === null) return '持平'
+  if (change === 0) return '持平'
+  const absChange = Math.abs(change)
+  const prefix = change > 0 ? '↑' : '↓'
+  return `${prefix} ${absChange}%`
+}
+
+// 获取趋势状态类型
+const getTrendStatusType = (change) => {
+  if (change === undefined || change === null || change === 0) return 'info'
+  return change > 0 ? 'success' : 'danger'
+}
+
+// 获取事件进度
+const getEventProgress = () => {
+  const total = dashboardData.value.current?.total_events || 0
+  if (total === 0) return 0
+  // 假设每天目标处理 10000 个事件
+  const progress = Math.min(100, (total / 10000) * 100)
+  return Math.round(progress) // 确保返回整数
+}
+
+// 获取健康卡片类型
+const getHealthCardType = (status) => {
+  const typeMap = {
+    good: 'success',
+    warning: 'warning',
+    error: 'danger'
+  }
+  return typeMap[status] || 'info'
+}
+
+// 获取队列状态
+const getQueueStatus = (size) => {
+  if (size === 0) return '空闲'
+  if (size < 100) return '正常'
+  if (size < 500) return '繁忙'
+  return '拥堵'
+}
+
+// 获取队列状态类型
+const getQueueStatusType = (size) => {
+  if (size === 0) return 'info'
+  if (size < 100) return 'success'
+  if (size < 500) return 'warning'
+  return 'danger'
+}
+
+// 获取队列进度
+const getQueueProgress = (size) => {
+  if (!size || size === 0) return 0
+  // 假设队列最大容量 1000
+  const progress = Math.min(100, (size / 1000) * 100)
+  return Math.round(progress) // 确保返回整数
+}
+
+// 获取队列进度状态
+const getQueueProgressStatus = (size) => {
+  if (size < 100) return 'success'
+  if (size < 500) return 'warning'
+  return 'exception'
+}
+
+// 获取告警状态
+const getAlertStatus = (count) => {
+  if (count === 0) return '无告警'
+  if (count < 5) return '有告警'
+  return '告警过多'
+}
+
+// 获取告警状态类型
+const getAlertStatusType = (count) => {
+  if (count === 0) return 'success'
+  if (count < 5) return 'warning'
+  return 'danger'
+}
+
+// 导航到告警页面
+const navigateToAlerts = () => {
+  router.push('/logs')
+}
+
+// 获取健康分数
+const getHealthScore = () => {
+  const status = dashboardData.value.current?.health_status
+  const scoreMap = {
+    'healthy': 100,
+    'good': 100,
+    'degraded': 75,
+    'warning': 50,
+    'unhealthy': 25,
+    'error': 0
+  }
+  return scoreMap[status] || 0
+}
+
+// 获取健康进度状态
+const getHealthProgressStatus = () => {
+  const score = getHealthScore()
+  if (score >= 90) return 'success'
+  if (score >= 70) return 'warning'
+  return 'exception'
+}
+
+// 获取告警进度
+const getAlertProgress = () => {
+  const count = dashboardData.value.current?.active_alerts || 0
+  if (count === 0) return 0
+  // 假设最多10个告警为100%
+  const progress = Math.min(100, (count / 10) * 100)
+  return Math.round(progress) // 确保返回整数
+}
+
+// 获取告警进度状态
+const getAlertProgressStatus = () => {
+  const count = dashboardData.value.current?.active_alerts || 0
+  if (count === 0) return 'success'
+  if (count < 5) return 'warning'
+  return 'exception'
+}
+
 // 获取初始数据
 const fetchInitialData = async () => {
   try {
     dashboardData.value = await getDashboard(chartPeriod.value)
     await updateCharts()
     await refreshComponents()
+    // 缓存状态已经通过 refreshComponents 更新到 store 中
   } catch (error) {
     ElMessage.error('获取仪表板数据失败')
   }
@@ -608,6 +735,84 @@ const getComponentStatusText = (status) => {
     'stopping': '正在停止'
   }
   return texts[status] || status
+}
+
+// 获取组件错误信息
+const getComponentErrorMessage = (component) => {
+  // 对于缓存组件，完全使用 systemStore 中的状态
+  if (component.name === 'cache') {
+    // 如果组件正在运行，不显示错误信息
+    if (component.status === 'running') {
+      return null
+    }
+    
+    const cacheStatus = systemStore.cacheStatus
+    // 优先显示断开原因
+    if (cacheStatus.disconnectReason) {
+      return cacheStatus.disconnectReason
+    }
+    // 如果有健康检查错误
+    if (cacheStatus.health?.error) {
+      return cacheStatus.health.error
+    }
+    // 如果状态是错误但没有具体信息
+    if (component.status === 'error' && component.error_message) {
+      return component.error_message
+    }
+    // 未连接但没有具体原因
+    if (!cacheStatus.connected && component.status !== 'running') {
+      return "Redis 服务未连接"
+    }
+    return null
+  }
+
+  // 对于其他组件，使用原始错误信息
+  return component.status === 'error' ? component.error_message : null
+}
+
+// 获取简短的错误信息
+const getShortErrorMessage = (errorMessage) => {
+  if (!errorMessage) return ''
+
+  // 针对常见错误提供简短描述
+  if (errorMessage.includes('Redis 服务未连接')) {
+    return 'Redis未连接'
+  }
+  if (errorMessage.includes('认证失败')) {
+    return '认证失败'
+  }
+  if (errorMessage.includes('连接超时')) {
+    return '连接超时'
+  }
+  if (errorMessage.includes('健康检查异常')) {
+    // 提取更多信息
+    const match = errorMessage.match(/健康检查异常:\s*(.+)/)
+    if (match && match[1]) {
+      // 如果是 coroutine 相关错误，显示更清晰的信息
+      if (match[1].includes('coroutine')) {
+        return '异步错误'
+      }
+      // 保留更多原始信息，但限制长度
+      return match[1].substring(0, 30) + (match[1].length > 30 ? '...' : '')
+    }
+    return '健康检查异常'
+  }
+  if (errorMessage.includes('Redis 服务异常')) {
+    // 提取具体错误
+    const match = errorMessage.match(/Redis 服务异常:\s*(.+)/)
+    if (match && match[1]) {
+      // 保留更多信息
+      return 'Redis异常: ' + match[1].substring(0, 25) + (match[1].length > 25 ? '...' : '')
+    }
+    return 'Redis服务异常'
+  }
+
+  // 如果错误信息太长，保留更多内容
+  if (errorMessage.length > 35) {
+    return errorMessage.substring(0, 35) + '...'
+  }
+
+  return errorMessage
 }
 
 // 判断是否可以启动组件
@@ -730,6 +935,9 @@ watch(() => systemStore.isRunning, (isRunning) => {
   }
 })
 
+// 定时刷新相关
+let refreshTimer = null
+
 onMounted(async () => {
   await fetchInitialData()
   await nextTick()
@@ -741,12 +949,29 @@ onMounted(async () => {
   }
   
   window.addEventListener('resize', handleResize)
+
+  // 设置定时刷新（每30秒刷新一次组件状态）
+  refreshTimer = setInterval(async () => {
+    try {
+      await refreshComponents()
+      // 同时刷新系统状态，包括缓存状态
+      await systemStore.fetchStatus()
+    } catch (error) {
+      console.error('定时刷新失败:', error)
+    }
+  }, 30000)
 })
 
 onUnmounted(() => {
   // 组件卸载时断开 WebSocket
   wsManager.shouldReconnect = false
   wsManager.disconnect()
+
+  // 清除定时器
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
   
   trendChartInstance?.dispose()
   pieChartInstance?.dispose()
@@ -755,175 +980,117 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
+@import '@/assets/styles/design-tokens.scss';
+
 .dashboard {
-  padding: 20px;
+  padding: $spacing-5;
   background: var(--bg-color);
   min-height: 100vh;
 
   .status-cards {
-    margin-bottom: 24px;
+    margin-bottom: $spacing-6;
 
-    .status-card {
-      transition: all 0.3s ease;
-      border-radius: 12px;
-      overflow: hidden;
-      position: relative;
-      min-height: 160px; // 设置最小高度确保卡片大小一致
-
-      // 确保内容垂直分布均匀
-      :deep(.el-card__body) {
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-      }
-
-      &::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-        background: linear-gradient(90deg, var(--primary-color), var(--success-color));
-        opacity: 0;
-        transition: opacity 0.3s;
-      }
-
-      &:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-
-        &::before {
-          opacity: 1;
-        }
-      }
-
-      .card-header {
-        display: flex;
-        align-items: center;
-        margin-bottom: 16px;
-        color: var(--text-secondary);
-        font-size: 14px;
-        font-weight: 500;
-
-        .card-icon {
-          font-size: 32px;
-          margin-right: 12px;
-          opacity: 0.9;
-        }
-      }
-
-      .card-value {
-        font-size: 32px;
-        font-weight: 700;
-        color: var(--text-primary);
-        margin-bottom: 12px;
-        letter-spacing: -1px;
-      }
-
-      .card-trend {
-        display: flex;
-        align-items: center;
-        font-size: 14px;
-        font-weight: 500;
-
-        .el-icon {
-          margin-right: 4px;
-        }
-
-        .trend-up {
-          color: var(--success-color);
-        }
-
-        .trend-down {
-          color: var(--danger-color);
-        }
-      }
+    .el-col {
+      margin-bottom: $spacing-5;
     }
   }
 
   .chart-area {
-    margin-bottom: 24px;
+    margin-bottom: $spacing-6;
 
     .el-card {
-      border-radius: 12px;
+      border-radius: $radius-lg;
+      overflow: hidden;
 
       .card-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
 
-        h3 {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 600;
+        span {
+          font-size: $font-size-lg;
+          font-weight: $font-weight-semibold;
           color: var(--text-primary);
+        }
+
+        .el-button-group {
+          .el-button {
+            padding: $spacing-1 $spacing-3;
+            font-size: $font-size-sm;
+          }
         }
       }
     }
 
     .chart-container {
       height: 380px;
-      padding: 12px 0;
+      padding: $spacing-3 0;
     }
   }
 
   .components-card {
-    margin-bottom: 24px;
-    border-radius: 12px;
+    margin-bottom: $spacing-6;
+    border-radius: $radius-lg;
+    overflow: hidden;
 
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .el-card__header {
+      background: linear-gradient(135deg, var(--card-bg) 0%, rgba($brand-primary, 0.05) 100%);
+      border-bottom: $border-width solid var(--border-lighter);
 
-      span {
+      .card-header {
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        font-size: 18px;
-        font-weight: 600;
-        color: var(--text-primary);
 
-        .el-icon {
-          margin-right: 8px;
-          font-size: 20px;
+        span {
+          display: flex;
+          align-items: center;
+          gap: $spacing-2;
+          font-size: $font-size-lg;
+          font-weight: $font-weight-semibold;
+          color: var(--text-primary);
+
+          .el-icon {
+            font-size: 20px;
+          }
         }
       }
     }
 
     .el-table {
-      font-size: 14px;
+      font-size: $font-size-sm;
 
       .el-table__row {
-        transition: all 0.3s;
+        transition: all $duration-base;
 
         &:hover {
-          background-color: var(--bg-color);
+          background-color: rgba($brand-primary, 0.02);
         }
       }
 
       .component-status {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: $spacing-2;
 
         .el-tag {
-          font-weight: 500;
+          font-weight: $font-weight-medium;
+          border-radius: $radius-full;
         }
       }
     }
   }
 
   .alerts-card {
-    margin-bottom: 24px;
-    border-radius: 12px;
+    margin-bottom: $spacing-6;
+    border-radius: $radius-lg;
+    overflow: hidden;
 
     .el-timeline {
-      padding: 16px 0;
+      padding: $spacing-4 0;
 
       .el-timeline-item {
-        padding-bottom: 24px;
+        padding-bottom: $spacing-6;
 
         &:last-child {
           padding-bottom: 0;
@@ -934,82 +1101,74 @@ onUnmounted(() => {
 
   .ws-status {
     position: fixed;
-    bottom: 24px;
-    right: 24px;
-    z-index: 999;
+    bottom: $spacing-6;
+    right: $spacing-6;
+    z-index: $z-index-sticky;
 
     .el-tag {
-      padding: 8px 16px;
-      font-weight: 500;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      padding: $spacing-2 $spacing-4;
+      font-weight: $font-weight-medium;
+      box-shadow: $shadow-lg;
+      border-radius: $radius-full;
+      backdrop-filter: blur(10px);
     }
   }
 }
 
-// 呼吸动画
-@keyframes breathing {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.6;
-    transform: scale(1.2);
-  }
-}
-
+// 状态指示器
 .status-indicator {
   display: inline-block;
-  margin-right: 4px;
+  margin-right: $spacing-1;
 
   &.breathing {
-    animation: breathing 2s ease-in-out infinite;
+    @include breathing-animation;
   }
 }
 
 // 暗色主题适配
 .dark {
   .dashboard {
-    background: var(--bg-color);
-
-    .status-card {
-      background: var(--card-bg);
-
-      .card-value {
-        color: var(--text-primary);
-      }
-
-      &:hover {
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    .components-card {
+      .el-card__header {
+        background: linear-gradient(135deg, var(--card-bg) 0%, rgba($brand-primary, 0.1) 100%);
       }
     }
 
-    .el-card {
-      background: var(--card-bg);
+    .ws-status {
+      .el-tag {
+        @include dark-glassmorphism(0.8, 10px);
+      }
     }
   }
 }
 
 // 响应式
-@media (max-width: 768px) {
+@media (max-width: $breakpoint-md) {
   .dashboard {
-    padding: 12px;
-
-    .status-card {
-      .card-header {
-        .card-icon {
-          font-size: 24px;
-        }
-      }
-
-      .card-value {
-        font-size: 24px;
-      }
-    }
+    padding: $spacing-3;
 
     .chart-container {
       height: 300px;
     }
+
+    .ws-status {
+      bottom: $spacing-4;
+      right: $spacing-4;
+    }
+  }
+}
+
+// 状态单元格样式
+.status-cell {
+  display: flex;
+  align-items: center;
+  gap: $spacing-1;
+
+  .error-hint {
+    font-size: $font-size-xs;
+    color: var(--text-secondary);
+    @include truncate;
+    max-width: 200px;
   }
 }
 </style>

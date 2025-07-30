@@ -62,27 +62,27 @@ def run(mode, config, log_level, no_frontend, open_browser):
             finally:
                 engine.stop()
         else:
-            click.echo("启动完整系统（含前端）...")
-            # 使用分阶段启动，启动所有组件
+            click.echo("启动完整系统...")
+            # 使用分阶段启动，启动所有组件（不含前端）
             from deepsearch.core import MainEngine
             engine = MainEngine()
             engine.initialize()
             engine.start_phased(
                 include_business=True,
                 include_webui=True,
-                include_frontend=True  # 启动前端
+                include_frontend=False  # 不启动前端
             )
 
             try:
                 click.echo("系统运行中，按 Ctrl+C 退出")
                 from deepsearch.config import get_config
                 config = get_config()
-                click.echo(f"WebUI 前端: http://localhost:{config.webui.frontend_port}")
                 click.echo(f"WebUI API: http://localhost:{config.webui.backend_port}")
+                click.echo("提示：前端需要单独启动 - cd deepsearch/webui/frontend && npm run dev")
 
                 if open_browser:
                     import webbrowser
-                    webbrowser.open(f"http://localhost:{config.webui.frontend_port}")
+                    webbrowser.open(f"http://localhost:{config.webui.backend_port}")
 
                 import time
                 while True:
@@ -186,18 +186,88 @@ def start(component):
 @click.argument('component', type=click.Choice(['gateway', 'trader', 'strategy', 'all']))
 def stop(component):
     """停止指定组件"""
-    click.echo(f"停止组件: {component}")
-    # TODO: 实现组件停止逻辑
+    from deepsearch.core.engine import MainEngine
+    from deepsearch.core.component_manager import ComponentManager
+
+    try:
+        # 获取组件管理器实例
+        component_manager = ComponentManager()
+
+        if component == 'all':
+            click.echo("停止所有组件...")
+            # 创建引擎实例来停止所有组件
+            engine = MainEngine()
+            engine.stop()
+            click.echo("[OK] 所有组件已停止")
+        else:
+            # 停止特定组件
+            component_map = {
+                'gateway': 'gateway',
+                'trader': 'trader',
+                'strategy': 'strategy'
+            }
+
+            component_name = component_map.get(component)
+            if component_name:
+                click.echo(f"停止组件: {component}")
+                if component_manager.stop_component(component_name):
+                    click.echo(f"[OK] {component} 已停止")
+                else:
+                    click.echo(f"[ERROR] 无法停止 {component}")
+            else:
+                click.echo(f"[ERROR] 未知组件: {component}")
+    except Exception as e:
+        click.echo(f"[ERROR] 停止组件失败: {e}")
 
 
 @cli.command()
 def status():
     """查看系统状态"""
+    from deepsearch.core.component_manager import ComponentManager
+    import psutil
+    
     click.echo("系统状态:")
-    # TODO: 实现状态查询逻辑
-    click.echo("  - 引擎: 未运行")
-    click.echo("  - WebUI: 未运行")
-    click.echo("  - 网关: 未运行")
+
+    try:
+        # 获取组件管理器实例
+        component_manager = ComponentManager()
+
+        # 检查各组件状态
+        components = component_manager.get_all_components_status()
+
+        if not components:
+            click.echo("  没有已注册的组件")
+        else:
+            for name, info in components.items():
+                # info 是 ComponentInfo 对象
+                status = info.status.value if hasattr(info, 'status') else 'UNKNOWN'
+                status_color = 'green' if status == 'running' else 'red'
+                click.echo(f"  - {name}: ", nl=False)
+                click.secho(status.upper(), fg=status_color)
+
+        # 检查端口占用情况
+        click.echo("\n端口占用情况:")
+        ports_to_check = {
+            8000: "WebUI Backend",
+            3000: "WebUI Frontend",
+            5556: "ZeroMQ Pub",
+            5557: "ZeroMQ Sub"
+        }
+
+        for port, service in ports_to_check.items():
+            in_use = False
+            for conn in psutil.net_connections():
+                if conn.laddr.port == port and conn.status == 'LISTEN':
+                    in_use = True
+                    break
+
+            status = "占用" if in_use else "空闲"
+            color = 'red' if in_use else 'green'
+            click.echo(f"  - {service} (:{port}): ", nl=False)
+            click.secho(status, fg=color)
+
+    except Exception as e:
+        click.echo(f"[ERROR] 获取状态失败: {e}")
 
 
 @cli.command()
@@ -237,34 +307,71 @@ def init(output):
     """初始化配置文件"""
     click.echo(f"生成配置文件: {output}")
 
-    # TODO: 实现配置文件生成逻辑
-    config_template = """# DeepSearch 配置文件
-version: 1.0
+    from deepsearch.config import settings
+    import yaml
+    from pathlib import Path
 
-# 系统配置
-system:
-  name: DeepSearch
-  mode: production
-  
-# 日志配置
-logging:
-  level: INFO
-  output: file
-  
-# WebUI 配置
-webui:
-  host: 0.0.0.0
-  port: 8000
-  
-# 交易配置
-trading:
-  # 添加你的交易配置
-"""
+    # 检查文件是否已存在
+    output_path = Path(output)
+    if output_path.exists():
+        if not click.confirm(f"文件 {output} 已存在，是否覆盖？"):
+            click.echo("[CANCELLED] 操作已取消")
+            return
 
+    # 基于当前配置生成模板
+    config_template = {
+        "app": {
+            "name": settings.app.name,
+            "author": settings.app.author,
+            "version": settings.app.version,
+            "debug": False
+        },
+        "log": {
+            "active": True,
+            "level": "INFO",
+            "rotation": "00:00",
+            "retention_days": 7,
+            "json": False
+        },
+        "webui": {
+            "backend_host": "0.0.0.0",
+            "backend_port": 8000,
+            "frontend_port": 3000,
+            "auto_open_browser": True
+        },
+        "message_bus": {
+            "buses": {
+                "zmq": {
+                    "type": "zeromq",
+                    "config": {
+                        "host": "127.0.0.1",
+                        "pub_port": 5556,
+                        "sub_port": 5557
+                    }
+                }
+            }
+        },
+        "monitoring": {
+            "enabled": True,
+            "metrics_interval": 60,
+            "health_check_interval": 30
+        },
+        "database": {
+            "main": {
+                "url": "sqlite:///deepsearch.db",
+                "echo": False
+            }
+        }
+    }
+
+    # 写入配置文件
     with open(output, 'w', encoding='utf-8') as f:
-        f.write(config_template)
+        yaml.dump(config_template, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
-    click.echo(f"[OK] Config file generated: {output}")
+    click.echo(f"[OK] 配置文件已生成: {output}")
+    click.echo("\n提示：")
+    click.echo("  1. 请根据实际需求修改配置文件")
+    click.echo("  2. 使用 'deepsearch run --config <file>' 指定配置文件运行")
 
 
 @cli.group()
@@ -274,19 +381,121 @@ def config():
 
 
 @config.command('show')
-def config_show():
+@click.option('--format', type=click.Choice(['yaml', 'json', 'table']), default='yaml', help='输出格式')
+def config_show(format):
     """显示当前配置"""
+    from deepsearch.config import settings
+    import yaml
+    import json
+    
     click.echo("当前配置:")
-    # TODO: 实现配置显示逻辑
+    click.echo(f"环境: {settings.env}\n")
+
+    # 将配置转换为字典
+    config_dict = settings.dict()
+
+    if format == 'yaml':
+        # YAML 格式输出
+        yaml_str = yaml.dump(config_dict, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        click.echo(yaml_str)
+    elif format == 'json':
+        # JSON 格式输出
+        json_str = json.dumps(config_dict, indent=2, ensure_ascii=False)
+        click.echo(json_str)
+    else:
+        # 表格格式输出（使用内置方法）
+        def flatten_dict(d, parent_key='', sep='.'):
+            items = []
+            for k, v in d.items():
+                new_key = f"{parent_key}{sep}{k}" if parent_key else k
+                if isinstance(v, dict):
+                    items.extend(flatten_dict(v, new_key, sep=sep).items())
+                else:
+                    items.append((new_key, v))
+            return dict(items)
+
+        flat_config = flatten_dict(config_dict)
+
+        # 计算最大宽度
+        max_key_width = max(len(k) for k in flat_config.keys()) if flat_config else 10
+        max_val_width = max(len(str(v)) for v in flat_config.values()) if flat_config else 10
+
+        # 打印表格头
+        click.echo("+" + "-" * (max_key_width + 2) + "+" + "-" * (max_val_width + 2) + "+")
+        click.echo(f"| {'配置项':<{max_key_width}} | {'值':<{max_val_width}} |")
+        click.echo("+" + "=" * (max_key_width + 2) + "+" + "=" * (max_val_width + 2) + "+")
+
+        # 打印数据行
+        for key, value in flat_config.items():
+            click.echo(f"| {key:<{max_key_width}} | {str(value):<{max_val_width}} |")
+
+        # 打印表格尾
+        click.echo("+" + "-" * (max_key_width + 2) + "+" + "-" * (max_val_width + 2) + "+")
 
 
 @config.command('set')
 @click.argument('key')
 @click.argument('value')
-def config_set(key, value):
+@click.option('--env', type=click.Choice(['dev', 'prod']), help='目标环境')
+def config_set(key, value, env):
     """设置配置项"""
-    click.echo(f"设置配置: {key} = {value}")
-    # TODO: 实现配置设置逻辑
+    from deepsearch.config import settings
+    import yaml
+    from pathlib import Path
+
+    # 确定目标环境
+    target_env = env or settings.env
+    config_file = Path(f"deepsearch/config/settings.{target_env}.yaml")
+
+    if not config_file.exists():
+        click.echo(f"[ERROR] 配置文件不存在: {config_file}")
+        return
+
+    try:
+        # 读取现有配置
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f) or {}
+
+        # 解析键路径（支持嵌套，如 webui.backend_port）
+        keys = key.split('.')
+        current = config
+
+        # 导航到目标键的父级
+        for k in keys[:-1]:
+            if k not in current:
+                current[k] = {}
+            current = current[k]
+
+        # 设置值
+        final_key = keys[-1]
+        old_value = current.get(final_key, '<未设置>')
+
+        # 尝试转换值的类型
+        if value.lower() in ['true', 'false']:
+            value = value.lower() == 'true'
+        elif value.isdigit():
+            value = int(value)
+        else:
+            try:
+                value = float(value)
+            except ValueError:
+                pass  # 保持字符串
+
+        current[final_key] = value
+
+        # 写回配置文件
+        with open(config_file, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+        click.echo(f"[OK] 配置已更新")
+        click.echo(f"  环境: {target_env}")
+        click.echo(f"  配置项: {key}")
+        click.echo(f"  旧值: {old_value}")
+        click.echo(f"  新值: {value}")
+        click.echo("\n注意：需要重启服务才能使配置生效")
+
+    except Exception as e:
+        click.echo(f"[ERROR] 设置配置失败: {e}")
 
 
 def main():

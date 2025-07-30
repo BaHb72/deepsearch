@@ -104,8 +104,44 @@ class ConfigManager(metaclass=Singleton):
 
     def _validate_config(self) -> None:
         """验证配置的有效性"""
-        # TODO: 实现配置验证逻辑
-        pass
+        required_keys = [
+            "app.name",
+            "log.level",
+            "webui.backend_port",
+            "message_bus.buses"
+        ]
+
+        # 检查必需的配置项
+        for key in required_keys:
+            value = self.get(key)
+            if value is None:
+                raise ConfigurationError(f"缺少必需的配置项: {key}")
+
+        # 验证端口范围
+        backend_port = self.get("webui.backend_port")
+        if backend_port:
+            if not isinstance(backend_port, int) or not (1 <= backend_port <= 65535):
+                raise ConfigurationError(f"无效的后端端口: {backend_port}")
+
+        frontend_port = self.get("webui.frontend_port")
+        if frontend_port:
+            if not isinstance(frontend_port, int) or not (1 <= frontend_port <= 65535):
+                raise ConfigurationError(f"无效的前端端口: {frontend_port}")
+
+        # 验证日志级别
+        valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        log_level = self.get("log.level")
+        if log_level and log_level not in valid_log_levels:
+            raise ConfigurationError(f"无效的日志级别: {log_level}")
+
+        # 验证消息总线配置
+        buses = self.get("message_bus.buses")
+        if buses and isinstance(buses, dict):
+            for name, bus_config in buses.items():
+                if not isinstance(bus_config, dict):
+                    raise ConfigurationError(f"无效的消息总线配置: {name}")
+                if "type" not in bus_config:
+                    raise ConfigurationError(f"消息总线 {name} 缺少类型配置")
 
     def _load_defaults(self) -> None:
         """加载默认配置"""

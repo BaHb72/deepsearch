@@ -1,50 +1,53 @@
 /* 全局样式文件 */
 
+// 导入设计令牌
+@import './design-tokens.scss';
+
 /* 自定义CSS变量 */
 :root {
   /* 主题色 */
-  --primary-color: #409eff;
-  --success-color: #67c23a;
-  --warning-color: #e6a23c;
-  --danger-color: #f56c6c;
-  --info-color: #909399;
+  --primary-color: #{$brand-primary};
+  --success-color: #{$color-success};
+  --warning-color: #{$color-warning};
+  --danger-color: #{$color-danger};
+  --info-color: #{$color-info};
 
   /* 背景色 */
-  --bg-color: #f5f7fa;
-  --card-bg: #ffffff;
-  --sidebar-bg: #304156;
+  --bg-color: #{$bg-secondary};
+  --card-bg: #{$bg-primary};
+  --sidebar-bg: #{$neutral-800};
 
   /* 文字颜色 */
-  --text-primary: #303133;
-  --text-regular: #606266;
-  --text-secondary: #909399;
-  --text-placeholder: #c0c4cc;
+  --text-primary: #{$neutral-900};
+  --text-regular: #{$neutral-700};
+  --text-secondary: #{$neutral-500};
+  --text-placeholder: #{$neutral-400};
 
   /* 边框 */
-  --border-color: #dcdfe6;
-  --border-light: #e4e7ed;
-  --border-lighter: #ebeef5;
+  --border-color: #{$border-color};
+  --border-light: #{$border-color-light};
+  --border-lighter: #{$neutral-100};
 
   /* 阴影 */
-  --shadow-light: 0 2px 4px rgba(0, 0, 0, 0.12), 0 0 6px rgba(0, 0, 0, 0.04);
-  --shadow-base: 0 2px 4px rgba(0, 0, 0, 0.12), 0 0 6px rgba(0, 0, 0, 0.12);
-  --shadow-dark: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --shadow-light: #{$shadow-sm};
+  --shadow-base: #{$shadow-base};
+  --shadow-dark: #{$shadow-lg};
 }
 
 /* 暗色主题 */
 .dark {
-  --bg-color: #1a1a1a;
-  --card-bg: #242424;
-  --sidebar-bg: #1f1f1f;
+  --bg-color: #{$dark-bg-primary};
+  --card-bg: #{$dark-bg-secondary};
+  --sidebar-bg: #{$dark-bg-tertiary};
 
-  --text-primary: #e4e7ed;
-  --text-regular: #d0d4db;
-  --text-secondary: #a3a6ad;
-  --text-placeholder: #5c5f66;
+  --text-primary: #{$neutral-100};
+  --text-regular: #{$neutral-200};
+  --text-secondary: #{$neutral-400};
+  --text-placeholder: #{$neutral-500};
 
-  --border-color: #4c4d4f;
-  --border-light: #3a3b3d;
-  --border-lighter: #2b2b2c;
+  --border-color: #{$neutral-700};
+  --border-light: #{$neutral-800};
+  --border-lighter: #{$neutral-800};
 }
 
 /* 全局样式重置 */
@@ -54,47 +57,38 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-  'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family: $font-sans;
+  font-size: $font-size-base;
+  line-height: $line-height-normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-color);
   color: var(--text-primary);
-  transition: background-color 0.3s, color 0.3s;
+  transition: background-color $duration-base, color $duration-base;
 }
 
 /* 滚动条美化 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--border-lighter);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+* {
+  @include custom-scrollbar(8px, var(--border-lighter), var(--border-color));
 }
 
 /* 卡片样式 */
 .el-card {
   border: none;
-  box-shadow: var(--shadow-light);
-  transition: all 0.3s;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  transition: all $duration-base $ease-out;
+  overflow: hidden;
 
   &:hover {
-    box-shadow: var(--shadow-base);
+    box-shadow: $shadow-md;
+    transform: translateY(-2px);
   }
 
   .el-card__header {
-    border-bottom-color: var(--border-lighter);
-    padding: 16px 20px;
+    border-bottom: $border-width solid var(--border-lighter);
+    padding: $spacing-5 $spacing-6;
+    background: var(--card-bg);
 
     .card-header {
       display: flex;
@@ -103,36 +97,70 @@ body {
 
       h3 {
         margin: 0;
-        font-size: 18px;
-        font-weight: 500;
+        font-size: $font-size-lg;
+        font-weight: $font-weight-semibold;
         color: var(--text-primary);
       }
     }
+  }
+
+  .el-card__body {
+    padding: $spacing-6;
   }
 }
 
 /* 按钮美化 */
 .el-button {
-  font-weight: 400;
-  transition: all 0.3s;
+  font-weight: $font-weight-medium;
+  border-radius: $radius-base;
+  transition: all $duration-fast $ease-out;
+  padding: $spacing-2 $spacing-4;
 
   &--primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-color: #667eea;
+    @include gradient-bg($brand-primary, $brand-secondary);
+    border: none;
+    color: white;
+    box-shadow: $shadow-sm;
 
-    &:hover {
-      background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-      border-color: #764ba2;
+    &:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: $shadow-primary;
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(0);
     }
   }
 
   &--success {
-    background: linear-gradient(135deg, #84cc16 0%, #22c55e 100%);
-    border-color: #84cc16;
+    background-color: $color-success;
+    border-color: $color-success;
+    color: white;
 
-    &:hover {
-      background: linear-gradient(135deg, #22c55e 0%, #84cc16 100%);
-      border-color: #22c55e;
+    &:hover:not(:disabled) {
+      background-color: darken($color-success, 10%);
+      border-color: darken($color-success, 10%);
+      transform: translateY(-1px);
+      box-shadow: $shadow-success;
+    }
+  }
+
+  &--danger {
+    background-color: $color-danger;
+    border-color: $color-danger;
+    color: white;
+
+    &:hover:not(:disabled) {
+      background-color: darken($color-danger, 10%);
+      border-color: darken($color-danger, 10%);
+      transform: translateY(-1px);
+      box-shadow: $shadow-danger;
+    }
+  }
+
+  &--text {
+    &:hover:not(:disabled) {
+      background-color: rgba($brand-primary, 0.1);
     }
   }
 }
@@ -140,26 +168,34 @@ body {
 /* 标签美化 */
 .el-tag {
   border: none;
-  font-weight: 500;
+  border-radius: $radius-full;
+  font-weight: $font-weight-medium;
+  padding: $spacing-1 $spacing-3;
+  font-size: $font-size-sm;
 
   &--success {
-    background: rgba(103, 194, 58, 0.1);
-    color: var(--success-color);
+    background: rgba($color-success, 0.1);
+    color: $color-success;
   }
 
   &--warning {
-    background: rgba(230, 162, 60, 0.1);
-    color: var(--warning-color);
+    background: rgba($color-warning, 0.1);
+    color: $color-warning;
   }
 
   &--danger {
-    background: rgba(245, 108, 108, 0.1);
-    color: var(--danger-color);
+    background: rgba($color-danger, 0.1);
+    color: $color-danger;
   }
 
   &--info {
-    background: rgba(144, 147, 153, 0.1);
-    color: var(--info-color);
+    background: rgba($color-info, 0.1);
+    color: $color-info;
+  }
+
+  &--primary {
+    background: rgba($brand-primary, 0.1);
+    color: $brand-primary;
   }
 }
 
@@ -200,14 +236,33 @@ body {
 
 /* 渐变背景 */
 .gradient-bg {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  @include gradient-bg($brand-primary, $brand-secondary);
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  @include gradient-text($brand-primary, $brand-secondary);
+}
+
+/* 玻璃态效果 */
+.glass-effect {
+  @include glassmorphism();
+}
+
+.dark .glass-effect {
+  @include dark-glassmorphism();
+}
+
+/* 光晕效果 */
+.glow-primary {
+  @include glow($brand-primary);
+}
+
+.glow-success {
+  @include glow($color-success);
+}
+
+.glow-danger {
+  @include glow($color-danger);
 }
 
 /* 响应式布局 */
@@ -223,7 +278,7 @@ body {
 
 /* 加载动画优化 */
 .el-loading-mask {
-  background-color: rgba(0, 0, 0, 0.8);
+  @include dark-glassmorphism(0.8, 20px);
 
   .el-loading-spinner {
     .circular {
@@ -231,9 +286,9 @@ body {
     }
 
     .el-loading-text {
-      color: #fff;
-      font-size: 16px;
-      margin-top: 10px;
+      color: white;
+      font-size: $font-size-base;
+      margin-top: $spacing-3;
     }
   }
 }
@@ -251,13 +306,15 @@ body {
 
 /* 自定义组件样式 */
 .component-card {
-  margin-bottom: 12px;
+  margin-bottom: $spacing-3;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all $duration-base $ease-out;
+  border-radius: $radius-lg;
+  overflow: hidden;
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: var(--shadow-dark);
+    box-shadow: $shadow-md;
   }
 
   .component-header {
@@ -269,19 +326,20 @@ body {
       flex: 1;
 
       .component-name {
-        font-size: 16px;
-        font-weight: 500;
-        margin-bottom: 4px;
+        font-size: $font-size-base;
+        font-weight: $font-weight-semibold;
+        margin-bottom: $spacing-1;
       }
 
       .component-desc {
-        font-size: 13px;
+        font-size: $font-size-sm;
         color: var(--text-secondary);
+        @include line-clamp(2);
       }
     }
 
     .component-status {
-      margin-left: 16px;
+      margin-left: $spacing-4;
     }
   }
 }
@@ -289,46 +347,72 @@ body {
 /* 统计卡片 */
 .stat-card {
   text-align: center;
-  padding: 20px;
+  padding: $spacing-6;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity $duration-base;
+  }
+
+  &:hover::before {
+    opacity: 1;
+  }
 
   .stat-icon {
     font-size: 48px;
-    margin-bottom: 12px;
-    opacity: 0.8;
+    margin-bottom: $spacing-3;
+    opacity: 0.9;
+    transition: transform $duration-base $ease-bounce;
+  }
+
+  &:hover .stat-icon {
+    transform: scale(1.1);
   }
 
   .stat-value {
-    font-size: 32px;
-    font-weight: 600;
-    margin-bottom: 8px;
+    font-size: $font-size-3xl;
+    font-weight: $font-weight-bold;
+    margin-bottom: $spacing-2;
+    letter-spacing: -0.02em;
   }
 
   .stat-label {
-    font-size: 14px;
+    font-size: $font-size-sm;
     color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   &.success {
     .stat-icon, .stat-value {
-      color: var(--success-color);
+      @include gradient-text($color-success, darken($color-success, 10%));
     }
   }
 
   &.warning {
     .stat-icon, .stat-value {
-      color: var(--warning-color);
+      @include gradient-text($color-warning, darken($color-warning, 10%));
     }
   }
 
   &.danger {
     .stat-icon, .stat-value {
-      color: var(--danger-color);
+      @include gradient-text($color-danger, darken($color-danger, 10%));
     }
   }
 
   &.info {
     .stat-icon, .stat-value {
-      color: var(--info-color);
+      @include gradient-text($color-info, darken($color-info, 10%));
     }
   }
 }

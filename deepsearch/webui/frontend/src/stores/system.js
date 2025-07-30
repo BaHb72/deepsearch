@@ -1,6 +1,7 @@
 import {defineStore} from 'pinia'
 import {getSystemStatus} from '@/api/system'
 import {getDatabaseStatus} from '@/api/database'
+import {getCacheStatus} from '@/api/cache'
 
 export const useSystemStore = defineStore('system', {
     state: () => ({
@@ -33,7 +34,12 @@ export const useSystemStore = defineStore('system', {
             cache: {
                 connected: false,
                 status: 'unknown',
-                config: {}
+                connectionStatus: 'disconnected',
+                config: {},
+                connectionInfo: {},
+                lastHealthCheck: null,
+                disconnectReason: null,
+                health: null
             }
         },
         loading: false,
@@ -57,6 +63,14 @@ export const useSystemStore = defineStore('system', {
                 return !state.database.main.connected
             }
             return false
+        },
+        // 检查是否有缓存连接问题
+        hasCacheIssue: (state) => {
+            const cacheComponent = state.components.find(c => c.name === 'cache')
+            if (cacheComponent && cacheComponent.config?.enabled !== false) {
+                return !state.database.cache.connected
+            }
+            return false
         }
     },
 
@@ -69,6 +83,8 @@ export const useSystemStore = defineStore('system', {
                 this.status = data
                 // 同时获取数据库状态
                 await this.fetchDatabaseStatus()
+                // 获取缓存状态
+                await this.fetchCacheStatus()
             } catch (error) {
                 this.error = error.message
                 console.error('获取系统状态失败:', error)
@@ -82,6 +98,35 @@ export const useSystemStore = defineStore('system', {
             this.components = components
             // 从组件状态更新数据库连接状态
             this.updateDatabaseStatusFromComponents()
+
+            // 从组件信息中更新缓存状态
+            const cacheComponent = components.find(c => c.name === 'cache')
+            if (cacheComponent) {
+                // 合并组件状态和详细信息
+                const info = cacheComponent.info || {}
+
+                // 如果组件正在运行，清除错误信息
+                const isRunning = cacheComponent.status === 'running'
+                
+                this.database.cache = {
+                    connected: info.connected || false,
+                    status: cacheComponent.status || 'unknown',
+                    connectionStatus: info.connection_status || 'disconnected',
+                    config: info.config || {},
+                    connectionInfo: info.connection_info || {},
+                    lastHealthCheck: info.last_health_check,
+                    // 运行状态下清除断开原因
+                    disconnectReason: isRunning ? null : (info.disconnect_reason || info.error_message || cacheComponent.error_message),
+                    health: info.health || null,
+                    // 保存原始错误信息
+                    errorMessage: isRunning ? null : cacheComponent.error_message
+                }
+
+                // 如果组件状态是错误但没有断开原因，使用错误信息
+                if (cacheComponent.status === 'error' && !this.database.cache.disconnectReason && cacheComponent.error_message) {
+                    this.database.cache.disconnectReason = cacheComponent.error_message
+                }
+            }
         },
 
         // 获取数据库状态
@@ -135,12 +180,7 @@ export const useSystemStore = defineStore('system', {
                 }
             }
 
-            // 更新缓存状态
-            const cacheComponent = this.components.find(c => c.name === 'cache')
-            if (cacheComponent) {
-                this.database.cache.connected = cacheComponent.status === 'running'
-                this.database.cache.status = cacheComponent.status || 'unknown'
-            }
+            // 缓存状态通过单独的 API 调用更新，不从组件状态推断
         },
 
         // 更新数据库连接状态
@@ -149,6 +189,39 @@ export const useSystemStore = defineStore('system', {
             this.database.main.connectionStatus = connected ? 'connected' : 'disconnected'
             if (!connected && reason) {
                 this.database.main.disconnectReason = reason
+            }
+        },
+
+        // 获取缓存状态
+        async fetchCacheStatus() {
+            try {
+                const status = await getCacheStatus()
+
+                // 更新缓存状态
+                this.database.cache = {
+                    connected: status.connected || false,
+                    status: status.status || 'unknown',
+                    connectionStatus: status.connection_status || 'disconnected',
+                    config: status.config || {},
+                    connectionInfo: status.connection_info || {},
+                    lastHealthCheck: status.last_health_check,
+                    disconnectReason: status.disconnect_reason,
+                    health: status.health || null
+                }
+
+                return status
+            } catch (error) {
+                console.error('获取缓存状态失败:', error)
+                // 保持当前状态不变
+            }
+        },
+
+        // 更新缓存连接状态
+        updateCacheConnection(connected, reason = null) {
+            this.database.cache.connected = connected
+            this.database.cache.connectionStatus = connected ? 'connected' : 'disconnected'
+            if (!connected && reason) {
+                this.database.cache.disconnectReason = reason
             }
         }
     }

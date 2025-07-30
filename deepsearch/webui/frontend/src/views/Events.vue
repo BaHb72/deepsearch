@@ -1,81 +1,169 @@
 <template>
   <div class="events-view">
     <div class="page-header">
-      <h1>事件监控</h1>
+      <div class="header-content">
+        <h1 class="page-title">
+          <el-icon class="title-icon">
+            <List/>
+          </el-icon>
+          事件监控
+        </h1>
+        <p class="page-subtitle">实时监控系统事件流，跟踪所有交易活动</p>
+      </div>
       <div class="header-actions">
         <el-button :disabled="events.length === 0" @click="clearEvents">
+          <el-icon>
+            <Delete/>
+          </el-icon>
           清除所有
         </el-button>
         <el-button type="primary" @click="exportEvents">
+          <el-icon>
+            <Download/>
+          </el-icon>
           导出日志
         </el-button>
       </div>
     </div>
 
-    <div class="filters">
-      <el-input
-          v-model="searchText"
-          clearable
-          placeholder="搜索事件..."
-          style="width: 300px"
-      >
-        <template #prefix>
-          <el-icon>
-            <Search/>
-          </el-icon>
-        </template>
-      </el-input>
+    <el-card class="filter-card">
+      <div class="filters">
+        <el-input
+            v-model="searchText"
+            class="search-input"
+            clearable
+            placeholder="搜索事件内容..."
+        >
+          <template #prefix>
+            <el-icon>
+              <Search/>
+            </el-icon>
+          </template>
+        </el-input>
 
-      <el-select
-          v-model="selectedType"
-          clearable
-          placeholder="事件类型"
-          style="width: 200px"
-      >
-        <el-option
-            v-for="type in eventTypes"
-            :key="type"
-            :label="type"
-            :value="type"
-        />
-      </el-select>
-    </div>
+        <el-select
+            v-model="selectedType"
+            class="type-select"
+            clearable
+            placeholder="选择事件类型"
+        >
+          <el-option
+              v-for="type in eventTypes"
+              :key="type"
+              :value="type"
+          >
+            <span class="option-label">
+              <el-icon :color="getTypeColor(type)"><Lightning/></el-icon>
+              {{ type }}
+            </span>
+          </el-option>
+        </el-select>
 
-    <el-table
-        :data="filteredEvents"
-        max-height="600"
-        style="width: 100%"
-    >
-      <el-table-column
-          :formatter="formatTime"
-          label="时间"
-          prop="timestamp"
-          width="180"
-      />
-      <el-table-column
-          label="类型"
-          prop="type"
-          width="150"
-      >
-        <template #default="scope">
-          <el-tag :type="getTagType(scope.row.type)">
-            {{ scope.row.type }}
+        <div class="filter-stats">
+          <el-tag type="info">
+            <el-icon>
+              <DataAnalysis/>
+            </el-icon>
+            总计: {{ events.length }} 条
           </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column
-          :formatter="formatData"
-          label="数据"
-          prop="data"
-      />
-    </el-table>
+          <el-tag v-if="filteredEvents.length !== events.length" type="primary">
+            <el-icon>
+              <Filter/>
+            </el-icon>
+            筛选: {{ filteredEvents.length }} 条
+          </el-tag>
+        </div>
+      </div>
+    </el-card>
+
+    <el-card class="events-card">
+      <template v-if="filteredEvents.length > 0">
+        <el-table
+            :data="filteredEvents"
+            class="events-table"
+            max-height="600"
+            stripe
+        >
+          <el-table-column
+              fixed="left"
+              label="时间"
+              prop="timestamp"
+              width="200"
+          >
+            <template #default="scope">
+              <div class="time-cell">
+                <el-icon class="time-icon">
+                  <Clock/>
+                </el-icon>
+                <span class="time-text">{{ formatTime(scope.row) }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column
+              label="类型"
+              prop="type"
+              width="180"
+          >
+            <template #default="scope">
+              <el-tag
+                  :type="getTagType(scope.row.type)"
+                  class="type-tag"
+                  effect="dark"
+              >
+                <el-icon>
+                  <Lightning/>
+                </el-icon>
+                {{ scope.row.type }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column
+              label="数据内容"
+              min-width="300"
+              prop="data"
+          >
+            <template #default="scope">
+              <div class="data-cell">
+                <pre class="data-content">{{ formatDataPretty(scope.row.data) }}</pre>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column
+              fixed="right"
+              label="操作"
+              width="120"
+          >
+            <template #default="scope">
+              <el-button
+                  link
+                  size="small"
+                  type="primary"
+                  @click="viewEventDetail(scope.row)"
+              >
+                <el-icon>
+                  <View/>
+                </el-icon>
+                详情
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+      <template v-else>
+        <el-empty description="暂无事件数据">
+          <el-button type="primary" @click="mockEvents">
+            生成模拟数据
+          </el-button>
+        </el-empty>
+      </template>
+    </el-card>
   </div>
 </template>
 
 <script setup>
 import {computed, onMounted, onUnmounted, ref} from 'vue'
-import {Search} from '@element-plus/icons-vue'
-import {ElMessage} from 'element-plus'
+import {Clock, DataAnalysis, Delete, Download, Filter, Lightning, List, Search, View} from '@element-plus/icons-vue'
+import {ElMessage, ElMessageBox} from 'element-plus'
 import {useSystemStore} from '@/stores/system'
 
 // 定义组件名称
@@ -131,6 +219,32 @@ const formatData = (row) => {
   return JSON.stringify(row.data)
 }
 
+const formatDataPretty = (data) => {
+  return JSON.stringify(data, null, 2)
+}
+
+const getTypeColor = (type) => {
+  const colors = {
+    'EVENT_TICK': '#409eff',
+    'EVENT_ORDER': '#e6a23c',
+    'EVENT_TRADE': '#67c23a',
+    'EVENT_LOG': '#909399',
+    'EVENT_ERROR': '#f56c6c'
+  }
+  return colors[type] || '#909399'
+}
+
+const viewEventDetail = (event) => {
+  ElMessageBox.alert(
+      `<pre>${JSON.stringify(event, null, 2)}</pre>`,
+      '事件详情',
+      {
+        dangerouslyUseHTMLString: true,
+        customClass: 'event-detail-dialog'
+      }
+  )
+}
+
 const getTagType = (type) => {
   if (type.includes('ERROR')) return 'danger'
   if (type.includes('TRADE')) return 'success'
@@ -169,30 +283,248 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import '@/assets/styles/design-tokens.scss';
+
 .events-view {
-  padding: 20px;
+  padding: $spacing-6;
+  background: var(--bg-color);
+  min-height: 100vh;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: $spacing-6;
+  padding: $spacing-6;
+  background: var(--card-bg);
+  border-radius: $radius-xl;
+  box-shadow: $shadow-sm;
+
+  .header-content {
+    .page-title {
+      margin: 0 0 $spacing-2 0;
+      font-size: $font-size-3xl;
+      font-weight: $font-weight-bold;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: $spacing-3;
+
+      .title-icon {
+        font-size: 36px;
+        @include gradient-text($brand-primary, $brand-secondary);
+      }
+    }
+
+    .page-subtitle {
+      margin: 0;
+      font-size: $font-size-base;
+      color: var(--text-secondary);
+      padding-left: 48px;
+    }
+  }
+
+  .header-actions {
+    display: flex;
+    gap: $spacing-3;
+
+    .el-button {
+      padding: $spacing-2 $spacing-4;
+      height: 40px;
+
+      .el-icon {
+        margin-right: $spacing-1;
+      }
+    }
+  }
 }
 
-.page-header h1 {
-  margin: 0;
+.filter-card {
+  margin-bottom: $spacing-5;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+
+  .filters {
+    display: flex;
+    align-items: center;
+    gap: $spacing-4;
+    flex-wrap: wrap;
+
+    .search-input {
+      flex: 1;
+      min-width: 300px;
+
+      :deep(.el-input__wrapper) {
+        border-radius: $radius-base;
+        transition: all $duration-fast;
+
+        &:hover {
+          box-shadow: $shadow-sm;
+        }
+      }
+    }
+
+    .type-select {
+      width: 240px;
+
+      .option-label {
+        display: flex;
+        align-items: center;
+        gap: $spacing-2;
+
+        .el-icon {
+          font-size: 16px;
+        }
+      }
+    }
+
+    .filter-stats {
+      display: flex;
+      gap: $spacing-2;
+      margin-left: auto;
+
+      .el-tag {
+        border-radius: $radius-full;
+        padding: $spacing-1 $spacing-3;
+        font-weight: $font-weight-medium;
+
+        .el-icon {
+          margin-right: $spacing-1;
+        }
+      }
+    }
+  }
 }
 
-.header-actions {
-  display: flex;
-  gap: 10px;
+.events-card {
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  overflow: hidden;
+
+  .events-table {
+    :deep(.el-table__header) {
+      th {
+        background: var(--bg-color);
+        font-weight: $font-weight-semibold;
+        color: var(--text-primary);
+      }
+    }
+
+    :deep(.el-table__row) {
+      transition: all $duration-base;
+
+      &:hover {
+        background: rgba($brand-primary, 0.02);
+      }
+    }
+
+    .time-cell {
+      display: flex;
+      align-items: center;
+      gap: $spacing-2;
+
+      .time-icon {
+        color: var(--text-secondary);
+        font-size: 16px;
+      }
+
+      .time-text {
+        font-family: $font-mono;
+        font-size: $font-size-sm;
+        color: var(--text-regular);
+      }
+    }
+
+    .type-tag {
+      border-radius: $radius-full;
+      padding: $spacing-1 $spacing-3;
+      font-weight: $font-weight-medium;
+
+      .el-icon {
+        margin-right: $spacing-1;
+      }
+    }
+
+    .data-cell {
+      .data-content {
+        margin: 0;
+        padding: $spacing-2;
+        background: var(--bg-color);
+        border-radius: $radius-base;
+        font-family: $font-mono;
+        font-size: $font-size-xs;
+        color: var(--text-regular);
+        max-height: 100px;
+        overflow-y: auto;
+        @include custom-scrollbar(6px, var(--bg-color), var(--border-color));
+      }
+    }
+  }
 }
 
-.filters {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
+/* 响应式 */
+@media (max-width: $breakpoint-md) {
+  .events-view {
+    padding: $spacing-4;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: $spacing-4;
+
+    .header-content {
+      .page-title {
+        font-size: $font-size-2xl;
+      }
+    }
+  }
+
+  .filter-card {
+    .filters {
+      .search-input {
+        min-width: 100%;
+      }
+
+      .filter-stats {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  }
+}
+
+/* 暗色主题 */
+.dark {
+  .filter-card,
+  .events-card {
+    @include dark-glassmorphism(0.95, 5px);
+  }
+
+  .events-table {
+    .data-cell {
+      .data-content {
+        background: $dark-bg-tertiary;
+      }
+    }
+  }
+}
+
+/* 事件详情弹窗样式 */
+:global(.event-detail-dialog) {
+  .el-message-box__content {
+    pre {
+      font-family: $font-mono;
+      font-size: $font-size-sm;
+      background: var(--bg-color);
+      padding: $spacing-4;
+      border-radius: $radius-base;
+      overflow: auto;
+      max-height: 60vh;
+      @include custom-scrollbar(8px, var(--bg-color), var(--border-color));
+    }
+  }
 }
 </style>

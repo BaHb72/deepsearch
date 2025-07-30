@@ -88,6 +88,19 @@ class Component:
         """获取错误信息"""
         return self._error_message
 
+    def get_status_info(self) -> Dict[str, Any]:
+        """
+        获取组件状态信息
+        
+        子类可以重写此方法以添加额外的状态信息
+        """
+        return {
+            'name': self.name,
+            'type': self.component_type.value,
+            'status': self._status.value,
+            'error_message': self._error_message
+        }
+
 
 class ComponentManager:
     """
@@ -316,6 +329,15 @@ class ComponentManager:
                     except Exception as e:
                         self._logger.debug(f"停止 {name} 时出错：{e}")
 
+    def get_component(self, name: str) -> Optional[Component]:
+        """
+        获取指定名称的组件实例
+        
+        :param name: 组件名称
+        :return: 组件实例，如果不存在返回 None
+        """
+        return self._components.get(name)
+    
     def get_component_status(self, name: str) -> ComponentInfo:
         """
         获取组件状态信息
@@ -327,8 +349,14 @@ class ComponentManager:
             raise ComponentError(f"Component {name} not found")
 
         info = self._component_info[name]
+        component = self._components[name]
+        
         # 更新状态
-        info.status = self._components[name].status
+        info.status = component.status
+
+        # 先获取组件自己的错误信息
+        if hasattr(component, '_error_message') and component._error_message:
+            info.error_message = component._error_message
 
         # 执行健康检查
         if info.status == ComponentStatus.RUNNING and info.health_check:
@@ -352,7 +380,9 @@ class ComponentManager:
                             healthy = loop.run_until_complete(info.health_check())
                             if not healthy:
                                 info.status = ComponentStatus.ERROR
-                                info.error_message = "Health check failed"
+                                # 如果组件没有设置具体的错误信息，使用默认信息
+                                if not info.error_message:
+                                    info.error_message = "Health check failed"
                         finally:
                             loop.close()
                 else:
@@ -360,7 +390,9 @@ class ComponentManager:
                     healthy = info.health_check()
                     if not healthy:
                         info.status = ComponentStatus.ERROR
-                        info.error_message = "Health check failed"
+                        # 如果组件没有设置具体的错误信息，使用默认信息
+                        if not info.error_message:
+                            info.error_message = "Health check failed"
             except Exception as e:
                 info.status = ComponentStatus.ERROR
                 info.error_message = f"Health check error: {e}"
