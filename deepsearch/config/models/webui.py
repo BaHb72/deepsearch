@@ -22,6 +22,10 @@ class WebUIConfig(BaseModel):
     )
 
     # 前端开发服务器配置
+    frontend_enabled: bool = Field(
+        default=True,
+        description="是否启动前端开发服务器"
+    )
     frontend_host: str = Field(
         default="localhost",
         description="前端服务监听地址"

@@ -3,7 +3,16 @@ DeepSearch 应用程序的自定义异常。
 
 本模块定义了一套异常层次结构，用于在整个应用程序中
 提供更好的错误处理和调试支持。
+
+增强功能：
+1. 支持异常链和原因追踪
+2. 自动捕获异常上下文
+3. 提供结构化的错误信息
+4. 支持错误处理上下文管理器
 """
+import traceback
+from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 
@@ -13,13 +22,20 @@ class DeepSearchError(Exception):
     
     所有自定义异常都应该继承自这个类，这样可以通过
     单个 except 语句捕获所有 DeepSearch 特定的错误。
+    
+    增强功能：
+    - 支持异常链（cause）
+    - 自动记录时间戳
+    - 结构化的上下文信息
+    - 堆栈跟踪捕获
     """
 
     def __init__(
             self,
             message: str,
             error_code: Optional[int] = None,
-            details: Optional[Dict[str, Any]] = None
+            details: Optional[Dict[str, Any]] = None,
+            cause: Optional[Exception] = None
     ):
         """
         初始化 DeepSearch 错误。
@@ -28,11 +44,22 @@ class DeepSearchError(Exception):
             message: 错误消息
             error_code: 可选的错误码，用于程序化处理
             details: 可选的字典，包含额外的错误详情
+            cause: 导致此错误的原始异常
         """
         super().__init__(message)
         self.message = message
         self.error_code = error_code
         self.details = details or {}
+        self.cause = cause
+        self.timestamp = datetime.now()
+        self.traceback_str = traceback.format_exc() if traceback.format_exc() != "NoneType: None\n" else None
+
+        # 如果有原因异常，添加到详情中
+        if cause:
+            self.details['cause'] = {
+                'type': type(cause).__name__,
+                'message': str(cause)
+            }
 
     def __str__(self) -> str:
         """错误的字符串表示。"""
@@ -46,8 +73,15 @@ class DeepSearchError(Exception):
             "error": self.__class__.__name__,
             "message": self.message,
             "error_code": self.error_code,
-            "details": self.details
+            "details": self.details,
+            "timestamp": self.timestamp.isoformat(),
+            "traceback": self.traceback_str
         }
+
+    def with_context(self, **kwargs) -> 'DeepSearchError':
+        """添加额外的上下文信息"""
+        self.details.update(kwargs)
+        return self
 
 
 # ==============================================================================
@@ -288,8 +322,169 @@ class ResourceError(SystemError):
 
 
 # ==============================================================================
+# 组件相关错误
+# ==============================================================================
+
+
+class ComponentError(DeepSearchError):
+    """组件相关的基础异常"""
+
+    def __init__(self, component_name: str, message: str,
+                 error_code: Optional[int] = None,
+                 details: Optional[Dict[str, Any]] = None,
+                 cause: Optional[Exception] = None):
+        details = details or {}
+        details['component'] = component_name
+        super().__init__(message, error_code, details, cause)
+        self.component_name = component_name
+
+
+class ComponentLifecycleError(ComponentError):
+    """组件生命周期管理异常"""
+
+    def __init__(self, component_name: str, lifecycle_phase: str,
+                 message: str, cause: Optional[Exception] = None):
+        details = {'lifecycle_phase': lifecycle_phase}
+        super().__init__(
+            component_name,
+            f"Component {component_name} lifecycle error in {lifecycle_phase}: {message}",
+            details=details,
+            cause=cause
+        )
+        self.lifecycle_phase = lifecycle_phase
+
+
+class ComponentNotFoundError(ComponentError):
+    """组件未找到异常"""
+    pass
+
+
+class ComponentAlreadyExistsError(ComponentError):
+    """组件已存在异常"""
+    pass
+
+
+class ComponentDependencyError(ComponentError):
+    """组件依赖异常"""
+
+    def __init__(self, component_name: str, dependency_name: str,
+                 message: str, cause: Optional[Exception] = None):
+        details = {'dependency': dependency_name}
+        super().__init__(
+            component_name,
+            f"Component {component_name} dependency error with {dependency_name}: {message}",
+            details=details,
+            cause=cause
+        )
+        self.dependency_name = dependency_name
+
+
+# ==============================================================================
+# 数据库相关错误
+# ==============================================================================
+
+
+class DatabaseError(DeepSearchError):
+    """数据库相关异常基类"""
+    pass
+
+
+class DatabaseConnectionError(DatabaseError):
+    """数据库连接异常"""
+
+    def __init__(self, database_url: str, message: str,
+                 cause: Optional[Exception] = None):
+        super().__init__(
+            f"Database connection error: {message}",
+            details={'database_url': database_url},
+            cause=cause
+        )
+
+
+class DatabaseQueryError(DatabaseError):
+    """数据库查询异常"""
+
+    def __init__(self, query: str, message: str,
+                 cause: Optional[Exception] = None):
+        super().__init__(
+            f"Database query error: {message}",
+            details={'query': query[:200]},  # 限制查询长度
+            cause=cause
+        )
+
+
+# ==============================================================================
 # 工具函数
 # ==============================================================================
+
+
+class ErrorHandler:
+    """统一的错误处理器"""
+
+    @staticmethod
+    def handle_error(error: Exception, component_name: Optional[str] = None,
+                     operation: Optional[str] = None) -> DeepSearchError:
+        """
+        将任意异常转换为DeepSearch异常
+        
+        Args:
+            error: 原始异常
+            component_name: 组件名称
+            operation: 正在执行的操作
+            
+        Returns:
+            DeepSearchError: 转换后的异常
+        """
+        # 如果已经是DeepSearchError，添加上下文后返回
+        if isinstance(error, DeepSearchError):
+            if component_name and 'component' not in error.details:
+                error.details['component'] = component_name
+            if operation and 'operation' not in error.details:
+                error.details['operation'] = operation
+            return error
+
+        # 转换为合适的DeepSearchError子类
+        details = {}
+        if component_name:
+            details['component'] = component_name
+        if operation:
+            details['operation'] = operation
+
+        # 根据异常类型选择合适的包装类
+        error_message = str(error)
+
+        if 'connection' in error_message.lower():
+            if 'database' in error_message.lower():
+                return DatabaseConnectionError('unknown', error_message, cause=error)
+            else:
+                return ConnectionError(error_message, details=details, cause=error)
+
+        if 'timeout' in error_message.lower():
+            return TimeoutError(error_message, details=details, cause=error)
+
+        if component_name:
+            return ComponentError(component_name, error_message, details=details, cause=error)
+
+        # 默认包装
+        return DeepSearchError(error_message, details=details, cause=error)
+
+
+@contextmanager
+def error_context(component_name: str, operation: str):
+    """
+    错误上下文管理器
+    
+    使用示例：
+        with error_context('database', 'query_execution'):
+            # 执行可能出错的代码
+            pass
+    """
+    try:
+        yield
+    except Exception as e:
+        # 转换并重新抛出异常
+        wrapped_error = ErrorHandler.handle_error(e, component_name, operation)
+        raise wrapped_error from e
 
 
 def reraise_with_context(original_error: Exception, context: str, **details) -> None:
@@ -316,5 +511,6 @@ def reraise_with_context(original_error: Exception, context: str, **details) -> 
             "original_error": str(original_error),
             "original_type": error_class.__name__,
             **details
-        }
+        },
+        cause=original_error
     ) from original_error

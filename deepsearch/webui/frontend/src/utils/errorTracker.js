@@ -10,6 +10,13 @@ class ErrorTracker {
         this.apiEndpoint = '/api/frontend/errors'
         this.listeners = new Set()
         this.errorId = 0
+        this.reportQueue = []
+        this.isReporting = false
+        this.lastReportTime = 0
+        this.reportInterval = 1000 // 最少1秒间隔
+        this.maxReportQueueSize = 10
+        this.errorSignatures = new Map() // 用于去重
+        this.signatureTimeout = 5000 // 5秒内相同错误只记录一次
     }
 
     /**
@@ -82,10 +89,40 @@ class ErrorTracker {
     }
 
     /**
+     * 生成错误签名用于去重
+     */
+    generateErrorSignature(errorInfo) {
+        return `${errorInfo.type}-${errorInfo.message}-${errorInfo.filename || ''}-${errorInfo.lineno || ''}`
+    }
+
+    /**
      * 捕获错误
      */
     captureError(errorInfo) {
         try {
+            // 生成错误签名
+            const signature = this.generateErrorSignature(errorInfo)
+            const now = Date.now()
+
+            // 检查是否是重复错误
+            const lastOccurrence = this.errorSignatures.get(signature)
+            if (lastOccurrence && (now - lastOccurrence) < this.signatureTimeout) {
+                // 相同错误在超时时间内，跳过
+                return
+            }
+
+            // 更新错误签名时间
+            this.errorSignatures.set(signature, now)
+
+            // 清理过期的签名
+            if (this.errorSignatures.size > 100) {
+                for (const [sig, time] of this.errorSignatures) {
+                    if (now - time > this.signatureTimeout) {
+                        this.errorSignatures.delete(sig)
+                    }
+                }
+            }
+
         const error = {
             id: ++this.errorId,
             timestamp: new Date().toISOString(),
@@ -104,11 +141,11 @@ class ErrorTracker {
         // 通知监听器
         this.notifyListeners(error)
 
-        // 上报到服务器
-        this.reportError(error)
+            // 添加到上报队列而不是直接上报
+            this.addToReportQueue(error)
 
         // 在控制台输出（开发环境）
-        if (import.meta.env.DEV) {
+            if (import.meta.env.DEV && errorInfo.type !== 'api-error') {
             console.group(`🚨 ${error.type} - ${error.level}`)
             console.error('错误信息:', error.message)
             if (error.stack) {
@@ -130,6 +167,56 @@ class ErrorTracker {
     }
 
     /**
+     * 添加错误到上报队列
+     */
+    addToReportQueue(error) {
+        // 限制队列大小
+        if (this.reportQueue.length >= this.maxReportQueueSize) {
+            this.reportQueue.shift() // 移除最旧的
+        }
+
+        this.reportQueue.push(error)
+
+        // 如果没有正在上报，开始处理队列
+        if (!this.isReporting) {
+            this.processReportQueue()
+        }
+    }
+
+    /**
+     * 处理上报队列
+     */
+    async processReportQueue() {
+        if (this.isReporting || this.reportQueue.length === 0) {
+            return
+        }
+
+        const now = Date.now()
+        if (now - this.lastReportTime < this.reportInterval) {
+            // 等待下一个间隔
+            setTimeout(() => this.processReportQueue(), this.reportInterval - (now - this.lastReportTime))
+            return
+        }
+
+        this.isReporting = true
+        this.lastReportTime = now
+
+        // 批量处理错误
+        const batch = this.reportQueue.splice(0, Math.min(5, this.reportQueue.length))
+
+        for (const error of batch) {
+            await this.reportError(error)
+        }
+
+        this.isReporting = false
+
+        // 如果还有错误待处理，继续
+        if (this.reportQueue.length > 0) {
+            setTimeout(() => this.processReportQueue(), this.reportInterval)
+        }
+    }
+
+    /**
      * 上报错误到服务器
      */
     async reportError(error) {
@@ -144,17 +231,18 @@ class ErrorTracker {
             })
 
             if (!response.ok) {
-                // 如果是 404，说明后端可能还没启动，静默处理
-                if (response.status === 404) {
+                // 如果是 404 或 503，说明后端可能还没启动，静默处理
+                if (response.status === 404 || response.status === 503) {
                     return
                 }
-                console.warn('错误上报失败:', response.status, response.statusText)
+                // 只在开发环境下输出警告
+                if (import.meta.env.DEV) {
+                    console.warn('错误上报失败:', response.status, response.statusText)
+                }
             }
         } catch (e) {
-            // 静默处理网络错误，避免控制台噪音
-            if (import.meta.env.DEV && !e.message.includes('Failed to fetch')) {
-                console.warn('错误上报失败:', e)
-            }
+            // 完全静默处理网络错误
+            // 不产生任何控制台输出，避免递归
         }
     }
 

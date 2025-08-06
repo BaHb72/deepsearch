@@ -8,6 +8,7 @@ from .app import AppConfig, AppEnvironment
 from .bus import BusInstanceConfig, MessageBusConfig, RouteConfig
 from .database import DatabaseConfig, MainDatabaseConfig, CacheDatabaseConfig
 from .debug import DebugConfig
+from .health import HealthCheckConfig
 from .log import LogConfig, LogLevel
 from .monitoring import MonitoringConfig
 from .performance import PerformanceConfig
@@ -45,4 +46,6 @@ __all__ = [
     "WebUIConfig",
     # ZeroMQ
     "ZeroMQConfig",
+    # 健康检查
+    "HealthCheckConfig",
 ]

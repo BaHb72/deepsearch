@@ -19,7 +19,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Set
+from typing import Any, Callable, Dict, Literal, Optional
 
 from loguru import logger
 from platformdirs import user_log_path
@@ -368,6 +368,16 @@ class SinkFactory:
 
     def create_console_sink(self) -> dict[str, Any]:
         """创建控制台输出配置"""
+        # Windows 系统需要特殊处理编码
+        if sys.platform == "win32":
+            # 尝试设置控制台为 UTF-8 编码
+            try:
+                import ctypes
+                kernel32 = ctypes.windll.kernel32
+                kernel32.SetConsoleOutputCP(65001)  # UTF-8
+            except:
+                pass
+        
         return {
             "sink": sys.stdout,
             "level": "DEBUG",  # 控制台始终显示 DEBUG 级别
@@ -565,18 +575,18 @@ class LoggerManager:
         :param config: 可选的日志配置，如果不提供则使用默认配置
         """
         if self._configured:
-            logger.info("日志系统已经启动")
+            logger.info("Logger system already started")
             return
 
         try:
             self._log_path = self._configurator.configure(config)
             self._configured = True
-            logger.info("日志系统启动成功")
+            logger.info("Logger system started successfully")
             if self._log_path:
-                logger.info(f"日志目录: {self._log_path}")
+                logger.info(f"Log directory: {self._log_path}")
         except Exception as e:
             # 日志系统启动失败不应该阻止程序运行，使用标准输出
-            print(f"[错误] 启动日志系统失败: {e}", file=sys.stderr)
+            print(f"[ERROR] Failed to start logger system: {e}", file=sys.stderr)
             self._configured = False
 
     def stop(self) -> None:
@@ -593,9 +603,9 @@ class LoggerManager:
             logger.remove()
             self._configured = False
             # 使用print因为logger已经被移除
-            print("[信息] 日志系统已停止")
+            print("[INFO] Logger system stopped")
         except Exception as e:
-            print(f"[错误] 停止日志系统失败: {e}", file=sys.stderr)
+            print(f"[ERROR] Failed to stop logger system: {e}", file=sys.stderr)
 
     @property
     def is_running(self) -> bool:

@@ -111,7 +111,7 @@
 </template>
 
 <script setup>
-import {ref, computed, onMounted, onUnmounted} from 'vue'
+import {computed, onMounted, onUnmounted, ref} from 'vue'
 import {ElMessage} from 'element-plus'
 import {Close, Connection, Monitor, Warning} from '@element-plus/icons-vue'
 import {errorTracker} from '@/utils/errorTracker'
@@ -129,6 +129,9 @@ const isConnected = ref(false)
 const showDetail = ref(false)
 const selectedError = ref(null)
 const eventSource = ref(null)
+const retryCount = ref(0)
+const maxRetries = 5
+const retryTimer = ref(null)
 
 // 计算属性
 const errorCount = computed(() => errors.value.length)
@@ -207,10 +210,17 @@ const loadErrors = async () => {
 
 // 连接 SSE
 const connectSSE = () => {
+  // 如果已经达到最大重试次数，停止重试
+  if (retryCount.value >= maxRetries) {
+    console.warn('错误监控 SSE 达到最大重试次数，停止重试')
+    return
+  }
+
   eventSource.value = new EventSource('/api/frontend/errors/stream')
 
   eventSource.value.onopen = () => {
     isConnected.value = true
+    retryCount.value = 0 // 重置重试计数
     console.log('错误监控 SSE 已连接')
   }
 
@@ -236,13 +246,26 @@ const connectSSE = () => {
 
   eventSource.value.onerror = () => {
     isConnected.value = false
-    console.error('错误监控 SSE 连接断开')
-    // 5秒后重连
-    setTimeout(() => {
-      if (eventSource.value) {
-        connectSSE()
+    retryCount.value++
+
+    if (retryCount.value < maxRetries) {
+      // 使用指数退避算法
+      const delay = Math.min(5000 * Math.pow(2, retryCount.value - 1), 60000)
+      console.warn(`错误监控 SSE 连接断开，${delay / 1000}秒后重试 (${retryCount.value}/${maxRetries})`)
+
+      // 清除之前的定时器
+      if (retryTimer.value) {
+        clearTimeout(retryTimer.value)
       }
-    }, 5000)
+
+      retryTimer.value = setTimeout(() => {
+        if (eventSource.value) {
+          connectSSE()
+        }
+      }, delay)
+    } else {
+      console.error('错误监控 SSE 连接失败，已达到最大重试次数')
+    }
   }
 }
 
@@ -274,6 +297,12 @@ onUnmounted(() => {
   if (eventSource.value) {
     eventSource.value.close()
     eventSource.value = null
+  }
+
+  // 清除重试定时器
+  if (retryTimer.value) {
+    clearTimeout(retryTimer.value)
+    retryTimer.value = null
   }
 
   // 移除监听器

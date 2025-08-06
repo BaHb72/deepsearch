@@ -25,6 +25,7 @@ from .models import (
     SecurityConfig,
     WebUIConfig,
     ZeroMQConfig,
+    HealthCheckConfig,
 )
 
 
@@ -39,6 +40,7 @@ class Settings(BaseSettings):
     security: Optional[SecurityConfig] = None
     performance: Optional[PerformanceConfig] = None
     debug: Optional[DebugConfig] = None
+    health_check: HealthCheckConfig = Field(default_factory=HealthCheckConfig)
 
     @property
     def zeromq(self) -> ZeroMQConfig:

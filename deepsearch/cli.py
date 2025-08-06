@@ -3,6 +3,9 @@ DeepSearch 命令行接口
 
 提供统一的命令行工具来管理和运行 DeepSearch 系统。
 """
+import time
+from datetime import datetime
+
 import click
 
 # 延迟导入以避免循环依赖
@@ -31,93 +34,49 @@ def run(mode, config, log_level, no_frontend, open_browser):
     """运行 DeepSearch 系统"""
     # 延迟导入
     from deepsearch.observability.logger import logger_manager
+    from deepsearch.core.async_runner import run_async_engine
+    from deepsearch.config import get_config
 
     # 设置日志级别
     logger_manager.set_level(log_level)
     logger_manager.start()
 
-    if mode == 'full':
-        if no_frontend:
-            click.echo("启动系统（不含前端）...")
-            # 使用分阶段启动，但不启动前端
-            from deepsearch.core import MainEngine
-            engine = MainEngine()
-            engine.initialize()
-            engine.start_phased(
-                include_business=True,
-                include_webui=True,
-                include_frontend=False  # 不启动前端
-            )
+    # 加载配置
+    if config:
+        from deepsearch.config import config_manager
+        config_manager.load(config)
 
-            try:
-                click.echo("系统运行中，按 Ctrl+C 退出")
-                from deepsearch.config import get_config
-                config = get_config()
-                click.echo(f"WebUI API: http://localhost:{config.webui.backend_port}")
-                import time
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                click.echo("\n正在关闭系统...")
-            finally:
-                engine.stop()
-        else:
-            click.echo("启动完整系统...")
-            # 使用分阶段启动，启动所有组件（不含前端）
-            from deepsearch.core import MainEngine
-            engine = MainEngine()
-            engine.initialize()
-            engine.start_phased(
-                include_business=True,
-                include_webui=True,
-                include_frontend=False  # 不启动前端
-            )
-
-            try:
-                click.echo("系统运行中，按 Ctrl+C 退出")
-                from deepsearch.config import get_config
-                config = get_config()
-                click.echo(f"WebUI API: http://localhost:{config.webui.backend_port}")
-                click.echo("提示：前端需要单独启动 - cd deepsearch/webui/frontend && npm run dev")
-
-                if open_browser:
-                    import webbrowser
-                    webbrowser.open(f"http://localhost:{config.webui.backend_port}")
-
-                import time
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                click.echo("\n正在关闭系统...")
-            finally:
-                engine.stop()
-
-    elif mode == 'engine':
-        click.echo("仅启动引擎...")
-        # 加载配置
-        if config:
-            from deepsearch.config import config_manager
-            config_manager.load(config)
-
-        from deepsearch.core import MainEngine
-        engine = MainEngine()
-        engine.initialize()
-        engine.start_infrastructure()
-
-        try:
-            click.echo("引擎运行中，按 Ctrl+C 退出")
-            import time
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            click.echo("\n正在关闭引擎...")
-        finally:
-            engine.stop()
-
-    elif mode == 'webui':
+    # 使用上下文管理器管理引擎生命周期
+    if mode == 'webui':
+        # WebUI 模式特殊处理
         click.echo("启动 WebUI...")
         from deepsearch.webui.runner import run_standalone
         run_standalone()
+    else:
+        # 配置参数
+        context_config = {
+            'no_frontend': no_frontend,
+            'open_browser': open_browser
+        }
+
+        click.echo(f"启动模式: {mode}")
+
+        # 显示访问信息
+        if mode == 'full':
+            app_config = get_config()
+            click.echo(f"WebUI API: http://localhost:{app_config.webui.backend_port}")
+            if no_frontend:
+                click.echo(
+                    "Note: Frontend needs to be started separately - cd deepsearch/webui/frontend && npm run dev")
+
+            if open_browser and not no_frontend:
+                import webbrowser
+                webbrowser.open(f"http://localhost:{app_config.webui.backend_port}")
+
+        # 使用异步运行器
+        click.echo("System running, press Ctrl+C to exit")
+        run_async_engine(mode=mode, config=context_config)
+        click.echo("System closed")
 
 
 @cli.command()
@@ -160,26 +119,26 @@ def check_ports():
 @click.argument('component', type=click.Choice(['gateway', 'trader', 'strategy', 'all']))
 def start(component):
     """启动指定组件"""
+    from deepsearch.core.engine_context import EngineContext
+    
     click.echo(f"启动组件: {component}")
 
-    from deepsearch.core import MainEngine
-    engine = MainEngine()
-    engine.initialize()
+    # 使用上下文管理器
+    with EngineContext(mode='engine') as engine:
+        try:
+            if component == 'all':
+                # 启动所有业务组件
+                engine.start()
+            else:
+                # 启动特定组件
+                engine.start_component(component)
 
-    if component == 'all':
-        engine.start()
-    else:
-        engine.start_infrastructure()
-        engine.start_component(component)
+            # 主循环
+            while engine.is_running():
+                time.sleep(1)
 
-    try:
-        import time
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        engine.stop()
+        except KeyboardInterrupt:
+            click.echo("\n正在关闭...")
 
 
 @cli.command()
@@ -271,33 +230,132 @@ def status():
 
 
 @cli.command()
-@click.option('--all', is_flag=True, help='清理所有端口')
-def cleanup(all):
+@click.option('--all', is_flag=True, help='清理所有端口和进程')
+@click.option('--force', is_flag=True, help='强制清理')
+def cleanup(all, force):
     """清理占用的端口和进程"""
     click.echo("清理占用的端口和进程...")
 
-    import psutil
+    from deepsearch.core.process_manager import process_manager
 
-    # 要清理的端口
-    ports_to_clean = [8000, 3000] if all else [8000]
+    # 显示当前状态
+    status = process_manager.get_status()
+    active_count = len(status["active_resources"])
 
-    cleaned = 0
-    for conn in psutil.net_connections():
-        if conn.laddr.port in ports_to_clean and conn.status == 'LISTEN':
-            try:
-                proc = psutil.Process(conn.pid)
-                if 'python' in proc.name().lower():
-                    click.echo(f"  终止进程 PID={conn.pid} (端口 {conn.laddr.port})")
+    if active_count > 0:
+        click.echo(f"\n发现 {active_count} 个活跃资源:")
+        for resource in status["active_resources"]:
+            click.echo(f"  - {resource['type']}: {resource['name']}")
+
+    # 执行清理
+    click.echo("\n开始清理...")
+    process_manager.shutdown(timeout=10.0, force=force)
+
+    # 额外的端口清理
+    if all:
+        import psutil
+        from deepsearch.config import get_config
+        config = get_config()
+
+        ports_to_clean = [
+            config.webui.backend_port,
+            config.webui.frontend_port
+        ]
+
+        # 添加 ZMQ 端口（如果配置存在）
+        if 'zmq' in config.message_bus.buses:
+            zmq_config = config.message_bus.buses['zmq'].config
+            if hasattr(zmq_config, 'pub_port'):
+                ports_to_clean.append(zmq_config.pub_port)
+                ports_to_clean.append(zmq_config.sub_port)
+            elif isinstance(zmq_config, dict):
+                ports_to_clean.append(zmq_config.get('pub_port', 5556))
+                ports_to_clean.append(zmq_config.get('sub_port', 5557))
+
+        cleaned = 0
+        for conn in psutil.net_connections():
+            if hasattr(conn, 'laddr') and conn.laddr.port in ports_to_clean and conn.status == 'LISTEN':
+                try:
+                    proc = psutil.Process(conn.pid)
+                    click.echo(f"  清理端口 {conn.laddr.port} (PID={conn.pid}, {proc.name()})")
                     proc.terminate()
                     proc.wait(timeout=3)
                     cleaned += 1
-            except Exception as e:
-                click.echo(f"  无法终止进程 PID={conn.pid}: {e}")
+                except Exception as e:
+                    if force:
+                        try:
+                            proc.kill()
+                            cleaned += 1
+                        except:
+                            pass
 
-    if cleaned > 0:
-        click.echo(f"[OK] Cleaned {cleaned} processes")
+        if cleaned > 0:
+            click.echo(f"\n[OK] 清理了 {cleaned} 个进程")
+
+    click.echo("\n[OK] 清理完成")
+
+
+@cli.command()
+def diagnose():
+    """诊断系统资源状态"""
+    from deepsearch.core.process_manager import process_manager
+    import json
+
+    click.echo("系统资源诊断\n")
+
+    # 获取状态
+    status = process_manager.get_status()
+
+    # 显示概览
+    click.echo("资源概览:")
+    click.echo(f"  总资源数: {status['total_resources']}")
+    click.echo(f"  关闭中: {'是' if status['shutting_down'] else '否'}")
+
+    # 按类型统计
+    click.echo("\n按类型统计:")
+    for rtype, count in status['resources_by_type'].items():
+        if count > 0:
+            click.echo(f"  {rtype}: {count}")
+
+    # 按状态统计
+    click.echo("\n按状态统计:")
+    for rstatus, count in status['resources_by_status'].items():
+        if count > 0:
+            click.echo(f"  {rstatus}: {count}")
+
+    # 活跃资源详情
+    if status['active_resources']:
+        click.echo("\n活跃资源详情:")
+        for resource in status['active_resources']:
+            click.echo(f"\n  [{resource['type']}] {resource['name']}")
+            click.echo(f"    ID: {resource['id']}")
+            click.echo(f"    状态: {resource['status']}")
+            click.echo(f"    创建时间: {resource['created_at']}")
+
+    # 检查潜在问题
+    click.echo("\n潜在问题检查:")
+    issues = []
+
+    # 检查僵尸线程
+    if status['resources_by_status'].get('running', 0) > 10:
+        issues.append("发现过多运行中的资源，可能存在资源泄露")
+
+    # 检查失败的资源
+    if status['resources_by_status'].get('failed', 0) > 0:
+        issues.append(f"有 {status['resources_by_status']['failed']} 个资源处于失败状态")
+
+    if issues:
+        for issue in issues:
+            click.secho(f"  ⚠ {issue}", fg='yellow')
     else:
-        click.echo("[OK] No processes to clean")
+        click.secho("  ✓ 未发现明显问题", fg='green')
+
+    # 导出详细信息
+    if click.confirm("\n是否导出详细诊断信息到文件？"):
+        filename = f"deepsearch-diagnose-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(status, f, indent=2, ensure_ascii=False)
+        click.echo(f"\n诊断信息已保存到: {filename}")
 
 
 @cli.command()

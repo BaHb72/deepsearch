@@ -7,32 +7,10 @@
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from typing import Dict, List, Optional, Any, Callable, Set
 
-from deepsearch.core.exceptions import DeepSearchError
-
-
-class ComponentError(DeepSearchError):
-    """组件相关错误"""
-    pass
-
-
-class ComponentStatus(Enum):
-    """组件状态枚举"""
-    UNINITIALIZED = "uninitialized"  # 未初始化
-    INITIALIZED = "initialized"  # 已初始化
-    STARTING = "starting"  # 正在启动
-    RUNNING = "running"  # 运行中
-    STOPPING = "stopping"  # 正在停止
-    STOPPED = "stopped"  # 已停止
-    ERROR = "error"  # 错误状态
-
-
-class ComponentType(Enum):
-    """组件类型枚举"""
-    INFRASTRUCTURE = "infrastructure"  # 基础设施组件
-    BUSINESS = "business"  # 业务组件
+from deepsearch.core.exceptions import ComponentError
+from .interfaces import ComponentStatus, ComponentType, Component
 
 
 @dataclass
@@ -52,54 +30,7 @@ class ComponentInfo:
     metrics: Dict[str, Any] = field(default_factory=dict)  # 组件指标
 
 
-class Component:
-    """组件基类"""
-
-    def __init__(self, name: str, component_type: ComponentType = ComponentType.BUSINESS):
-        self.name = name
-        self.component_type = component_type
-        self._logger = logging.getLogger(f"{__name__}.{name}")
-        self._status = ComponentStatus.UNINITIALIZED
-        self._error_message: Optional[str] = None
-
-    def initialize(self) -> None:
-        """初始化组件"""
-        raise NotImplementedError
-
-    def start(self) -> None:
-        """启动组件"""
-        raise NotImplementedError
-
-    def stop(self) -> None:
-        """停止组件"""
-        raise NotImplementedError
-
-    def health_check(self) -> bool:
-        """健康检查"""
-        return self._status == ComponentStatus.RUNNING
-
-    @property
-    def status(self) -> ComponentStatus:
-        """获取组件状态"""
-        return self._status
-
-    @property
-    def error_message(self) -> Optional[str]:
-        """获取错误信息"""
-        return self._error_message
-
-    def get_status_info(self) -> Dict[str, Any]:
-        """
-        获取组件状态信息
-        
-        子类可以重写此方法以添加额外的状态信息
-        """
-        return {
-            'name': self.name,
-            'type': self.component_type.value,
-            'status': self._status.value,
-            'error_message': self._error_message
-        }
+# Component类现在定义在interfaces.py中作为Protocol
 
 
 class ComponentManager:
@@ -141,6 +72,12 @@ class ComponentManager:
 
         if name in self._components:
             raise ComponentError(f"Component {name} already registered")
+
+        # 验证组件必需的属性
+        if not hasattr(component, 'component_type') or component.component_type is None:
+            raise ComponentError(f"Component {name} must have a valid component_type")
+        if not hasattr(component, 'status') or component.status is None:
+            raise ComponentError(f"Component {name} must have a valid status")
 
         # 验证依赖
         if dependencies:
@@ -310,6 +247,18 @@ class ComponentManager:
         for name in self._initialization_order:
             info = self._component_info[name]
             if info.component_type == ComponentType.INFRASTRUCTURE:
+                if info.status != ComponentStatus.RUNNING:
+                    self.start_component(name)
+
+    def start_all(self, component_type: Optional[ComponentType] = None) -> None:
+        """
+        启动所有组件（或指定类型的组件）
+        
+        :param component_type: 组件类型，None表示所有组件
+        """
+        for name in self._initialization_order:
+            info = self._component_info[name]
+            if component_type is None or info.component_type == component_type:
                 if info.status != ComponentStatus.RUNNING:
                     self.start_component(name)
 

@@ -142,6 +142,15 @@ class MonitorAPI:
         self._persist_interval = 300  # 5分钟持久化一次
         self._last_persist_time = time.time()
 
+        # 注册到统计收集器
+        from deepsearch.core.statistics import get_statistics_collector
+        self._statistics_collector = get_statistics_collector()
+        self._statistics_collector.register_provider("monitor_api", self)
+
+        # 如果 monitor 也是 StatisticsProvider，注册它
+        if hasattr(monitor, 'get_statistics'):
+            self._statistics_collector.register_provider("event_monitor", monitor)
+
     def start(self) -> None:
         """启动 API 服务。"""
         if self._running:
@@ -163,6 +172,12 @@ class MonitorAPI:
 
         # 最后保存一次数据
         self._data_store.save_to_file()
+
+        # 从统计收集器注销
+        self._statistics_collector.unregister_provider("monitor_api")
+        if hasattr(self._monitor, 'get_statistics'):
+            self._statistics_collector.unregister_provider("event_monitor")
+            
         logger.info("监控 API 已停止")
 
     def _update_loop(self) -> None:
@@ -419,3 +434,23 @@ class MonitorAPI:
             "trends": {},
             "alerts": []
         }
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """
+        实现 StatisticsProvider 接口
+        
+        Returns:
+            监控API的统计信息
+        """
+        # 从统计收集器获取全局统计
+        all_stats = self._statistics_collector.collect_all(use_cache=True)
+
+        # 添加监控特定的信息
+        monitor_stats = {
+            "timestamp": all_stats.get("timestamp"),
+            "system_summary": self._statistics_collector.get_summary(),
+            "dashboard_data": self.get_dashboard_data(),
+            "data_store_size": len(self._data_store._realtime_data)
+        }
+
+        return monitor_stats

@@ -6,8 +6,8 @@ Redis 缓存管理 API 路由
 from typing import Dict, Any, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 from loguru import logger
+from pydantic import BaseModel
 
 from deepsearch.core.component_manager import ComponentStatus
 
@@ -27,27 +27,14 @@ def get_cache_component():
             logger.warning("引擎未初始化")
             raise HTTPException(status_code=503, detail="系统未初始化")
 
-        # 获取组件管理器
-        try:
-            component_manager = engine.get_component_manager()
-        except Exception as e:
-            logger.error(f"获取组件管理器失败: {e}")
-            raise HTTPException(status_code=500, detail="无法获取组件管理器")
-
         # 获取缓存组件
         try:
-            cache_component = component_manager.get_component('cache')
+            cache_component = engine.get_component_by_name('cache')
             if not cache_component:
-                logger.warning("缓存组件未注册")
+                logger.warning("缓存组件未找到")
                 raise HTTPException(status_code=404, detail="Redis 缓存组件未找到")
         except Exception as e:
             logger.error(f"获取缓存组件时出错: {e}")
-            # 尝试从内部属性获取（向后兼容）
-            if hasattr(component_manager, '_components'):
-                cache_component = component_manager._components.get('cache')
-                if cache_component:
-                    logger.info("使用备用方法获取缓存组件成功")
-                    return cache_component
             raise HTTPException(status_code=404, detail="Redis 缓存组件未找到")
 
         return cache_component
@@ -88,6 +75,8 @@ async def get_cache_status() -> Dict[str, Any]:
         # 获取状态信息
         try:
             status_info = cache_component.get_status_info()
+            if status_info is None:
+                status_info = {}
             logger.debug(f"获取到缓存组件状态: connected={status_info.get('connection_status')}")
         except Exception as e:
             logger.error(f"获取组件状态信息失败: {e}")
@@ -120,11 +109,12 @@ async def get_cache_status() -> Dict[str, Any]:
             result["connected"] = False
 
         # 更新状态信息
-        result["status"] = status_info.get("status", "unknown")
-        result["connection_status"] = status_info.get("connection_status", "disconnected")
-        result["connection_info"] = status_info.get("connection_info", {})
-        result["last_health_check"] = status_info.get("last_health_check")
-        result["disconnect_reason"] = status_info.get("disconnect_reason")
+        if status_info:
+            result["status"] = status_info.get("status", "unknown")
+            result["connection_status"] = status_info.get("connection_status", "disconnected")
+            result["connection_info"] = status_info.get("connection_info", {})
+            result["last_health_check"] = status_info.get("last_health_check")
+            result["disconnect_reason"] = status_info.get("disconnect_reason")
 
         # 更新配置信息
         if cache_config:
@@ -141,14 +131,15 @@ async def get_cache_status() -> Dict[str, Any]:
                 logger.warning(f"读取配置属性失败: {e}")
                 result["config"] = {"enabled": False, "error": str(e)}
 
-        # 如果有健康检查信息，执行一次健康检查
-        if result["connected"] and hasattr(cache_component, 'health_check_async'):
-            try:
-                health_result = await cache_component.health_check_async()
-                result["health"] = health_result
-            except Exception as e:
-                logger.warning(f"Redis 健康检查失败: {e}")
-                result["health"] = {"status": "error", "error": str(e)}
+        # 健康状态检查（暂时简化，待健康管理器实现后再完善）
+        try:
+            if cache_component.is_connected():
+                result["health"] = {"status": "healthy", "message": "Cache is connected"}
+            else:
+                result["health"] = {"status": "unhealthy", "message": "Cache is not connected"}
+        except Exception as e:
+            logger.warning(f"获取Redis健康状态失败: {e}")
+            result["health"] = {"status": "error", "error": str(e)}
 
         logger.debug(f"返回缓存状态: connected={result.get('connected')}, status={result.get('status')}")
         return result

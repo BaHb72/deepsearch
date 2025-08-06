@@ -73,6 +73,17 @@ class CacheDatabaseConfig(BaseModel):
     db: int = Field(default=0, description="Redis数据库索引")
     pool_size: int = Field(default=10, description="连接池大小")
 
+    # 连接池高级配置
+    socket_timeout: int = Field(default=5, description="Socket超时时间（秒）")
+    socket_connect_timeout: int = Field(default=5, description="Socket连接超时时间（秒）")
+    socket_keepalive: bool = Field(default=True, description="是否启用TCP keepalive")
+    retry_on_timeout: bool = Field(default=True, description="超时是否重试")
+    health_check_interval: int = Field(default=30, description="健康检查间隔（秒）")
+
+    # 连接池行为配置
+    max_idle_time: int = Field(default=300, description="最大空闲时间（秒）")
+    idle_check_interval: int = Field(default=60, description="空闲检查间隔（秒）")
+
     @field_validator("port")
     def validate_port(cls, v):
         if not 1 <= v <= 65535:

@@ -8,8 +8,15 @@ from fastapi import APIRouter, HTTPException, Request
 from loguru import logger
 
 from deepsearch.core.component_manager import ComponentType, ComponentStatus
+from deepsearch.diagnostics import diagnostic_logger, log_diagnostic
 
 router = APIRouter()
+
+# 记录模块加载
+log_diagnostic("MODULE_LOAD", "system.py", {
+    "router": str(router),
+    "imports": ["ComponentType", "ComponentStatus"]
+})
 
 
 def get_monitor_api() -> Optional[Any]:
@@ -32,6 +39,7 @@ def get_standalone_manager(request: Request) -> Optional[Any]:
 
 
 @router.get("/status")
+@diagnostic_logger.diagnostic_method
 async def get_system_status() -> Dict[str, Any]:
     """
     获取系统运行状态。
@@ -39,6 +47,11 @@ async def get_system_status() -> Dict[str, Any]:
     Returns:
         系统状态信息
     """
+    log_diagnostic("API_REQUEST", "/api/system/status", {
+        "method": "GET",
+        "endpoint": "get_system_status"
+    })
+    
     status = {
         "timestamp": datetime.now().isoformat(),
         "engine": {
@@ -56,8 +69,30 @@ async def get_system_status() -> Dict[str, Any]:
 
     try:
         # 检查引擎状态
+        log_diagnostic("IMPORT_APP_STATE", "get_system_status", {
+            "before_import": True
+        })
+        
         from deepsearch.webui.server import app_state
+
+        log_diagnostic("IMPORT_APP_STATE", "get_system_status", {
+            "after_import": True,
+            "app_state": str(app_state),
+            "app_state_id": id(app_state),
+            "app_state_type": type(app_state).__name__,
+            "has_engine_attr": hasattr(app_state, 'engine'),
+            "engine_is_none": app_state.engine is None if hasattr(app_state, 'engine') else "NO_ATTR"
+        })
+        
         engine = getattr(app_state, 'engine', None)
+
+        log_diagnostic("GET_ENGINE", "get_system_status", {
+            "engine": str(engine),
+            "engine_type": type(engine).__name__ if engine else "None",
+            "engine_id": id(engine) if engine else None,
+            "is_none": engine is None,
+            "app_state_engine": str(app_state.engine) if hasattr(app_state, 'engine') else "NO_ATTR"
+        })
         if engine:
             # 检查引擎是否正在运行
             is_running = engine.is_running() if hasattr(engine, 'is_running') else False
@@ -89,17 +124,20 @@ async def get_system_status() -> Dict[str, Any]:
         if monitor_api:
             status["monitor"]["api_running"] = getattr(monitor_api, '_running', False)
 
-        # 检查组件状态
-        if engine and hasattr(engine, 'get_statistics'):
-            try:
-                # 获取各个组件的状态
-                stats = engine.get_statistics()
-                status["components"] = stats.get("components", {})
-            except Exception as e:
-                logger.warning(f"获取组件状态失败: {e}")
+        # 从统计收集器获取组件状态
+        try:
+            from deepsearch.core.statistics import get_statistics_collector
+            collector = get_statistics_collector()
+            summary = collector.get_summary()
+            status["total_components"] = summary.get("total_providers", 0)
+            status["healthy_components"] = summary.get("healthy_providers", 0)
+            status["key_metrics"] = summary.get("key_metrics", {})
+        except Exception as e:
+            logger.warning(f"获取组件状态失败: {e}")
     except Exception as e:
         logger.error(f"获取系统状态失败: {e}")
         # 返回默认状态，而不是抛出异常
+        status["error"] = str(e)
 
     return status
 
@@ -154,12 +192,16 @@ async def start_system(request: Request) -> Dict[str, Any]:
 
                 # 启动业务组件 - 使用更安全的方式
                 failed_components = []
-                component_manager = engine.get_component_manager()
-                for name, info in component_manager.get_all_components_status().items():
-                    if info.component_type == ComponentType.BUSINESS and info.status != ComponentStatus.RUNNING:
+                all_components = engine.get_all_components()
+                for name, component in all_components.items():
+                    # 检查是否是业务组件且未运行
+                    if hasattr(component, 'status') and component.status != ComponentStatus.RUNNING:
                         try:
-                            component_manager.start_component(name)
-                            logger.info(f"业务组件 {name} 已启动")
+                            # 检查组件类型
+                            if hasattr(component,
+                                       'component_type') and component.component_type == ComponentType.BUSINESS:
+                                await component.start_async()
+                                logger.info(f"业务组件 {name} 已启动")
                         except Exception as e:
                             logger.error(f"启动组件 {name} 失败: {e}")
                             failed_components.append((name, str(e)))
@@ -439,19 +481,17 @@ async def get_system_statistics() -> Dict[str, Any]:
         "performance": {}
     }
 
-    # 获取引擎统计
-    from deepsearch.webui.server import app_state
-    engine = app_state.engine
-    if engine:
-        engine_stats = engine.get_statistics()
-        stats["engine"] = engine_stats
+    # 从统计收集器获取全局统计
+    from deepsearch.core.statistics import get_statistics_collector
+    collector = get_statistics_collector()
 
-    # 获取监控统计
-    from deepsearch.webui.server import app_state
-    monitor = app_state.monitor
-    if monitor:
-        monitor_stats = monitor.get_statistics()
-        stats["monitoring"] = monitor_stats
+    # 获取所有统计数据
+    all_stats = collector.collect_all(use_cache=True)
+    stats["providers"] = all_stats.get("providers", {})
+
+    # 获取系统摘要
+    summary = collector.get_summary()
+    stats["summary"] = summary
 
     # 获取性能指标
     monitor_api = get_monitor_api()
@@ -470,6 +510,7 @@ async def get_system_statistics() -> Dict[str, Any]:
 # ==================== 组件管理 API ====================
 
 @router.get("/components")
+@diagnostic_logger.diagnostic_method
 async def get_all_components() -> Dict[str, Any]:
     """
     获取所有组件的状态。
@@ -477,14 +518,30 @@ async def get_all_components() -> Dict[str, Any]:
     Returns:
         所有组件的状态信息
     """
+    log_diagnostic("API_REQUEST", "/api/system/components", {
+        "method": "GET",
+        "endpoint": "get_all_components"
+    })
+    
     from deepsearch.webui.server import app_state
+
+    log_diagnostic("CHECK_ENGINE", "get_all_components", {
+        "app_state": str(app_state),
+        "app_state_id": id(app_state),
+        "has_engine": hasattr(app_state, 'engine'),
+        "engine_value": str(getattr(app_state, 'engine', None))
+    })
+    
     engine = app_state.engine
     if not engine:
+        log_diagnostic("ENGINE_NOT_INITIALIZED", "get_all_components", {
+            "engine_is_none": True,
+            "raising_503": True
+        })
         raise HTTPException(status_code=503, detail="系统未初始化")
 
     try:
-        component_manager = engine.get_component_manager()
-        all_components = component_manager.get_all_components_status()
+        all_components = engine.get_all_components()
 
         # 转换为可序列化的格式
         result = {
@@ -492,35 +549,42 @@ async def get_all_components() -> Dict[str, Any]:
             "components": {}
         }
 
-        for name, info in all_components.items():
+        for name, component in all_components.items():
             component_data = {
-                "name": info.name,
-                "display_name": info.display_name,
-                "description": info.description,
-                "type": info.component_type.value,
-                "status": info.status.value,
-                "error_message": info.error_message,
-                "start_time": info.start_time.isoformat() if info.start_time else None,
-                "stop_time": info.stop_time.isoformat() if info.stop_time else None,
-                "dependencies": list(info.dependencies),
-                "config": info.config,
-                "metrics": info.metrics
+                "name": name,
+                "display_name": getattr(component, 'display_name', name),
+                "description": getattr(component, 'description', ''),
+                "type": component.component_type.value if hasattr(component, 'component_type') else "unknown",
+                "status": component.status.value if hasattr(component, 'status') else "unknown",
+                "error_message": getattr(component, 'error_message', None),
+                "start_time": component.start_time.isoformat() if hasattr(component,
+                                                                          'start_time') and component.start_time else None,
+                "stop_time": component.stop_time.isoformat() if hasattr(component,
+                                                                        'stop_time') and component.stop_time else None,
+                "dependencies": list(getattr(component, 'dependencies', [])),
+                "config": getattr(component, 'config', {}),
+                "metrics": getattr(component, 'metrics', {})
             }
 
-            # 获取组件实例并调用其 get_status_info 方法获取详细信息
-            component = component_manager.get_component(name)
-            if component and hasattr(component, 'get_status_info'):
+            # 获取组件详细状态信息
+            if hasattr(component, 'get_status_info'):
                 try:
                     component_info = component.get_status_info()
+                    # 确保 component_info 不是 None
+                    if component_info is None:
+                        logger.warning(f"组件 {name} 的 get_status_info 返回了 None")
+                        component_info = {}
+                    
                     # 合并组件自己提供的状态信息
                     component_data['info'] = component_info
 
                     # 对于缓存组件，确保错误信息被正确传递
-                    if name == 'cache' and info.error_message:
-                        component_data['info']['error_message'] = info.error_message
-                        # 同步到 disconnect_reason
-                        if not component_data['info'].get('disconnect_reason'):
-                            component_data['info']['disconnect_reason'] = info.error_message
+                    if name == 'cache' and component_data['error_message']:
+                        if isinstance(component_data['info'], dict):
+                            component_data['info']['error_message'] = component_data['error_message']
+                            # 同步到 disconnect_reason
+                            if not component_data['info'].get('disconnect_reason'):
+                                component_data['info']['disconnect_reason'] = component_data['error_message']
                 except Exception as e:
                     logger.warning(f"获取组件 {name} 详细状态失败: {e}")
 
@@ -550,8 +614,24 @@ async def get_component_status(component_name: str) -> Dict[str, Any]:
         raise HTTPException(status_code=503, detail="系统未初始化")
 
     try:
-        component_manager = engine.get_component_manager()
-        info = component_manager.get_component_status(component_name)
+        component = engine.get_component_by_name(component_name)
+        if not component:
+            raise Exception(f"Component not found: {component_name}")
+
+        # 构建组件信息
+        info = type('ComponentInfo', (), {
+            'name': component_name,
+            'display_name': getattr(component, 'display_name', component_name),
+            'description': getattr(component, 'description', ''),
+            'component_type': getattr(component, 'component_type', None),
+            'status': getattr(component, 'status', None),
+            'error_message': getattr(component, 'error_message', None),
+            'start_time': getattr(component, 'start_time', None),
+            'stop_time': getattr(component, 'stop_time', None),
+            'dependencies': getattr(component, 'dependencies', set()),
+            'config': getattr(component, 'config', {}),
+            'metrics': getattr(component, 'metrics', {})
+        })()
 
         return {
             "timestamp": datetime.now().isoformat(),
@@ -559,8 +639,8 @@ async def get_component_status(component_name: str) -> Dict[str, Any]:
                 "name": info.name,
                 "display_name": info.display_name,
                 "description": info.description,
-                "type": info.component_type.value,
-                "status": info.status.value,
+                "type": info.component_type.value if info.component_type else "unknown",
+                "status": info.status.value if info.status else "unknown",
                 "error_message": info.error_message,
                 "start_time": info.start_time.isoformat() if info.start_time else None,
                 "stop_time": info.stop_time.isoformat() if info.stop_time else None,
@@ -668,13 +748,18 @@ async def check_component_health(component_name: str) -> Dict[str, Any]:
         raise HTTPException(status_code=503, detail="系统未初始化")
 
     try:
-        component_manager = engine.get_component_manager()
-        health_results = component_manager.perform_health_check()
-
-        if component_name not in health_results:
+        component = engine.get_component_by_name(component_name)
+        if not component:
             raise HTTPException(status_code=404, detail=f"组件不存在：{component_name}")
 
-        is_healthy = health_results[component_name]
+        # 执行组件的健康检查
+        is_healthy = True
+        if hasattr(component, 'health_check'):
+            try:
+                is_healthy = await component.health_check()
+            except Exception as e:
+                logger.error(f"Health check failed for {component_name}: {e}")
+                is_healthy = False
 
         return {
             "timestamp": datetime.now().isoformat(),

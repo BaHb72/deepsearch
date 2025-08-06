@@ -3,12 +3,10 @@
 用于初始化数据库表结构和 TimescaleDB 配置
 """
 import asyncio
-from typing import Optional
 
-from deepsearch.config import get_config
-from deepsearch.core.components import DatabaseComponent
-from deepsearch.storage.database import DatabaseService
+from deepsearch.core.unified_components import DatabaseComponent
 from deepsearch.observability.logger import logger
+from deepsearch.storage.database import DatabaseService
 
 
 async def init_database(drop_existing: bool = False) -> None:

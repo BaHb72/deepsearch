@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import heapq
 import logging
+import os
 import threading
 import time
 from collections import defaultdict
@@ -57,7 +58,7 @@ from .const import EVENT_SYSTEM_EXIT
 
 # Default configuration values
 DEFAULT_QUEUE_SIZE = 10000
-DEFAULT_MAX_WORKERS = 32
+DEFAULT_MAX_WORKERS = min(32, (os.cpu_count() or 1) * 2)  # 默认为CPU核心数的2倍，最多32
 DEFAULT_TIMEOUT = 5.0
 
 # Threading timeouts and intervals
@@ -429,15 +430,32 @@ class EventEngine:
             # Initialize thread pool executor if needed
             if self._max_workers > 0:
                 self._executor = ThreadPoolExecutor(max_workers=self._max_workers, thread_name_prefix="EventEngine")
+                # 注册线程池到 ProcessManager
+                from deepsearch.core.process_manager import process_manager
+                process_manager.register_executor(
+                    self._executor,
+                    name="EventEngine-ThreadPool"
+                )
             else:
                 self._executor = None
 
             # Create and start worker threads
-            self._dispatcher_th = threading.Thread(target=self._dispatcher, name="EventEngine-Dispatcher", daemon=True)
-            self._scheduler_th = threading.Thread(target=self._scheduler, name="EventEngine-Scheduler", daemon=True)
+            self._dispatcher_th = threading.Thread(target=self._dispatcher, name="EventEngine-Dispatcher", daemon=False)
+            self._scheduler_th = threading.Thread(target=self._scheduler, name="EventEngine-Scheduler", daemon=False)
 
             self._dispatcher_th.start()
             self._scheduler_th.start()
+
+            # 注册到 ProcessManager
+            from deepsearch.core.process_manager import process_manager
+            process_manager.register_thread(
+                self._dispatcher_th,
+                name="EventEngine-Dispatcher"
+            )
+            process_manager.register_thread(
+                self._scheduler_th,
+                name="EventEngine-Scheduler"
+            )
 
             logger.debug("事件引擎启动完成")
 
@@ -478,13 +496,33 @@ class EventEngine:
             if self._scheduler_th.is_alive():
                 logger.debug("调度线程未在超时内终止")
 
-        # Shutdown executor
+        # Shutdown executor with enhanced cleanup
         if self._executor:
             try:
-                self._executor.shutdown(wait=True)
+                import sys
+                # Python 3.9+ 支持 cancel_futures 参数
+                if sys.version_info >= (3, 9):
+                    # 使用 cancel_futures 来取消待处理的任务
+                    self._executor.shutdown(wait=True, cancel_futures=False)
+                else:
+                    # 旧版本 Python 只支持 wait 参数
+                    self._executor.shutdown(wait=True)
+
+                # 等待一小段时间让线程清理
+                import time
+                time.sleep(0.1)
+                
             except Exception as e:
                 logger.error(f"关闭线程池失败：{e}")
+                try:
+                    # 兜底：仅使用基本的shutdown
+                    self._executor.shutdown(wait=False)
+                    import time
+                    time.sleep(0.1)
+                except Exception as force_error:
+                    logger.error(f"强制关闭线程池也失败：{force_error}")
             finally:
+                # 确保释放引用
                 self._executor = None
 
         # Reset thread references
@@ -743,28 +781,41 @@ class EventEngine:
     def _add_to_batch(self, ev: Event) -> None:
         """Add event to batch and process if batch is full"""
         should_process = False
+        batch_to_process = None
+        
         with self._batch_lock:
             self._event_batches[ev.type].append(ev)
 
             # Check if batch is full
             if len(self._event_batches[ev.type]) >= self._batch_size:
                 should_process = True
+                # 获取批次副本并清空原批次，减少锁持有时间
+                batch_to_process = self._event_batches[ev.type].copy()
+                self._event_batches[ev.type] = []
 
         # Process batch outside of lock to avoid deadlock
-        if should_process:
-            self._process_batch(ev.type)
+        if should_process and batch_to_process:
+            self._process_batch_direct(event_type=ev.type, batch=batch_to_process)
 
     def _process_batch(self, event_type: str) -> None:
         """Process a batch of events for a specific type"""
+        batch_to_process = None
+        
         with self._batch_lock:
             batch = self._event_batches[event_type]
             if not batch:
                 return
 
-            # Clear the batch
+            # 获取批次副本并清空原批次
+            batch_to_process = batch.copy()
             self._event_batches[event_type] = []
 
         # Process batch outside of lock
+        if batch_to_process:
+            self._process_batch_direct(event_type=event_type, batch=batch_to_process)
+
+    def _process_batch_direct(self, event_type: str, batch: List[Event]) -> None:
+        """直接处理批次，不需要锁"""
         executor = self._executor
         specific, general = self._handler_manager.get_handlers(event_type)
 
@@ -811,12 +862,18 @@ class EventEngine:
 
     def _flush_all_batches(self) -> None:
         """Flush all pending batches"""
+        # 获取所有待处理批次的快照，避免长时间持有锁
+        batches_to_process = {}
+        
         with self._batch_lock:
-            event_types = list(self._event_batches.keys())
+            for event_type, batch in self._event_batches.items():
+                if batch:
+                    batches_to_process[event_type] = batch.copy()
+                    self._event_batches[event_type] = []
 
-        for event_type in event_types:
-            if self._event_batches[event_type]:
-                self._process_batch(event_type)
+        # 在锁外处理所有批次
+        for event_type, batch in batches_to_process.items():
+            self._process_batch_direct(event_type=event_type, batch=batch)
 
     def _scheduler(self) -> None:
         """调度器线程主循环"""

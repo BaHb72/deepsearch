@@ -1,0 +1,1801 @@
+[
+  {
+    "timestamp": "2025-08-07T01:41:29.380725",
+    "elapsed": 1.9788742065429688e-05,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "DIAGNOSTIC_START",
+    "location": "DiagnosticLogger.__init__",
+    "details": {
+      "start_time": "2025-08-07T01:41:29.380708",
+      "log_file": "diagnostic_log.json"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.381199",
+    "elapsed": 0.0004949569702148438,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "MODULE_IMPORT",
+    "location": "server.py",
+    "details": {
+      "imports": [
+        "MainEngine",
+        "EventSystemMonitor",
+        "MonitorAPI",
+        "FastAPI"
+      ],
+      "platform": "win32"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.381630",
+    "elapsed": 0.0009255409240722656,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "CLASS_DECORATED",
+    "location": "deepsearch.webui.server.AppState",
+    "details": {
+      "methods": [],
+      "attributes": [
+        "initialize_monitoring",
+        "set_engine"
+      ]
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.381970",
+    "elapsed": 0.0012655258178710938,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "CREATE_APP_STATE",
+    "location": "server.py",
+    "details": {
+      "location": "global",
+      "before_creation": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.382269",
+    "elapsed": 0.0015649795532226562,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "APP_STATE_INIT",
+    "location": "AppState.__init__",
+    "details": {
+      "thread": "MainThread",
+      "instance_id": 1879664837024
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.382557",
+    "elapsed": 0.0018520355224609375,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "CREATE_APP_STATE",
+    "location": "server.py",
+    "details": {
+      "location": "global",
+      "after_creation": true,
+      "app_state_id": 1879664837024,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "has_engine": true,
+      "engine_value": "None"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.388688",
+    "elapsed": 0.007983922958374023,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "MODULE_LOAD",
+    "location": "system.py",
+    "details": {
+      "router": "<fastapi.routing.APIRouter object at 0x000001B5A668A060>",
+      "imports": [
+        "ComponentType",
+        "ComponentStatus"
+      ]
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.978345",
+    "elapsed": 0.5976426601409912,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "METHOD_START",
+    "location": "deepsearch.webui.server.set_engine",
+    "details": {
+      "self_type": "AppState",
+      "self_id": 1879664837024,
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.978864",
+    "elapsed": 0.5981600284576416,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "METHOD_START",
+    "location": "deepsearch.webui.server.set_engine",
+    "details": {
+      "self_type": "AppState",
+      "self_id": 1879664837024,
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.979218",
+    "elapsed": 0.5985133647918701,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "SET_ENGINE_START",
+    "location": "AppState.set_engine",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "has_engine_before": false,
+      "old_engine_id": null,
+      "instance_id": 1879664837024
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.979811",
+    "elapsed": 0.5991060733795166,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "SET_ENGINE_AFTER",
+    "location": "AppState.set_engine",
+    "details": {
+      "self.engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "self.engine_id": 1879664838704,
+      "engine_is_set": true,
+      "same_object": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.981117",
+    "elapsed": 0.6004116535186768,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "METHOD_SUCCESS",
+    "location": "deepsearch.webui.server.set_engine",
+    "details": {
+      "duration": 0.002283811569213867,
+      "result_type": "NoneType",
+      "result_preview": "None",
+      "result_id": null
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.981556",
+    "elapsed": 0.6008522510528564,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "METHOD_SUCCESS",
+    "location": "deepsearch.webui.server.set_engine",
+    "details": {
+      "duration": 0.0032494068145751953,
+      "result_type": "NoneType",
+      "result_preview": "None",
+      "result_id": null
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.981986",
+    "elapsed": 0.6012821197509766,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "METHOD_START",
+    "location": "deepsearch.webui.server.initialize_monitoring",
+    "details": {
+      "self_type": "AppState",
+      "self_id": 1879664837024
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:29.993307",
+    "elapsed": 0.612602710723877,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "METHOD_SUCCESS",
+    "location": "deepsearch.webui.server.initialize_monitoring",
+    "details": {
+      "duration": 0.011345863342285156,
+      "result_type": "NoneType",
+      "result_preview": "None",
+      "result_id": null
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:30.022350",
+    "elapsed": 0.6416459083557129,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "METHOD_START",
+    "location": "deepsearch.webui.server.initialize_monitoring",
+    "details": {
+      "self_type": "AppState",
+      "self_id": 1879664837024
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:30.032949",
+    "elapsed": 0.6522455215454102,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "METHOD_SUCCESS",
+    "location": "deepsearch.webui.server.initialize_monitoring",
+    "details": {
+      "duration": 0.010629892349243164,
+      "result_type": "NoneType",
+      "result_preview": "None",
+      "result_id": null
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.315667",
+    "elapsed": 23.9349684715271,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.316942",
+    "elapsed": 23.936241626739502,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.317909",
+    "elapsed": 23.937204360961914,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.319208",
+    "elapsed": 23.938512086868286,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.320153",
+    "elapsed": 23.93945074081421,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.344436",
+    "elapsed": 23.96373414993286,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.028819561004638672,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:41:53.317900', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880504466752
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.557278",
+    "elapsed": 24.176578283309937,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.559249",
+    "elapsed": 24.178552865982056,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.560132",
+    "elapsed": 24.179426431655884,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.561307",
+    "elapsed": 24.180606842041016,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.562541",
+    "elapsed": 24.181841135025024,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.563766",
+    "elapsed": 24.183064460754395,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.006497859954833984,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:41:53.560123', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880514461888
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.803750",
+    "elapsed": 24.423051595687866,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_all_components",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.805006",
+    "elapsed": 24.424307107925415,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/components",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_all_components"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.806534",
+    "elapsed": 24.42583394050598,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "CHECK_ENGINE",
+    "location": "get_all_components",
+    "details": {
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "has_engine": true,
+      "engine_value": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:53.808378",
+    "elapsed": 24.427674770355225,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_all_components",
+    "details": {
+      "duration": 0.004572153091430664,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:41:53.808118', 'components': {'event_engine': {'name': 'event_engine', 'display_name': '事件引擎', 'description': '', 'type': 'infrastructure', 'status': 'running', 'error_mes",
+      "result_id": 1880504539904
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:58.378246",
+    "elapsed": 28.997544765472412,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:58.379309",
+    "elapsed": 28.99860692024231,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:58.379968",
+    "elapsed": 28.999262809753418,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:58.380576",
+    "elapsed": 28.999871969223022,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:58.381204",
+    "elapsed": 29.000499725341797,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:41:58.396775",
+    "elapsed": 29.01607370376587,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.018555402755737305,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:41:58.379964', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880511717184
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.317971",
+    "elapsed": 33.93727087974548,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.319276",
+    "elapsed": 33.938576459884644,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.320311",
+    "elapsed": 33.939605474472046,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.321203",
+    "elapsed": 33.940500259399414,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.322185",
+    "elapsed": 33.94148278236389,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.336936",
+    "elapsed": 33.95623707771301,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.019002199172973633,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:03.320303', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880515109632
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.382502",
+    "elapsed": 34.001805782318115,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.384154",
+    "elapsed": 34.00345206260681,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.385049",
+    "elapsed": 34.00434350967407,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.385874",
+    "elapsed": 34.00516986846924,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.386666",
+    "elapsed": 34.005961418151855,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:03.387652",
+    "elapsed": 34.006948709487915,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.005219459533691406,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:03.385043', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880515476224
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:08.380043",
+    "elapsed": 38.99934124946594,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:08.381263",
+    "elapsed": 39.00056052207947,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:08.382161",
+    "elapsed": 39.00145506858826,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:08.382982",
+    "elapsed": 39.002278327941895,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:08.383846",
+    "elapsed": 39.00314235687256,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:08.396019",
+    "elapsed": 39.015315771102905,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.0160064697265625,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:08.382156', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880515517568
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:13.384073",
+    "elapsed": 44.003371715545654,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:13.385311",
+    "elapsed": 44.00460886955261,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:13.386218",
+    "elapsed": 44.00551199913025,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:13.387224",
+    "elapsed": 44.00652003288269,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:13.388137",
+    "elapsed": 44.00743269920349,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:13.401000",
+    "elapsed": 44.02029776573181,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.016957998275756836,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:13.386213', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880511789504
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:18.380437",
+    "elapsed": 48.9997341632843,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:18.381611",
+    "elapsed": 49.00090670585632,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:18.382536",
+    "elapsed": 49.001829862594604,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:18.383482",
+    "elapsed": 49.00277757644653,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:18.384414",
+    "elapsed": 49.0037100315094,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:18.396904",
+    "elapsed": 49.01620078086853,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.016492843627929688,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:18.382532', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880511790016
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.313518",
+    "elapsed": 53.93281888961792,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.314923",
+    "elapsed": 53.934221029281616,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.316005",
+    "elapsed": 53.93529915809631,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.317425",
+    "elapsed": 53.936720848083496,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.318564",
+    "elapsed": 53.937859773635864,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.331796",
+    "elapsed": 53.95109486579895,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.018318891525268555,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:23.316000', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880515108800
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.379516",
+    "elapsed": 53.99881458282471,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.381092",
+    "elapsed": 54.00039005279541,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.382232",
+    "elapsed": 54.00152659416199,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.383259",
+    "elapsed": 54.00255465507507,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.384282",
+    "elapsed": 54.00357747077942,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.385312",
+    "elapsed": 54.00460767745972,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.0058209896087646484,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:23.382227', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880515562112
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.912097",
+    "elapsed": 54.53139543533325,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_all_components",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.913710",
+    "elapsed": 54.53300857543945,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/components",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_all_components"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.914989",
+    "elapsed": 54.534287214279175,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "CHECK_ENGINE",
+    "location": "get_all_components",
+    "details": {
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "has_engine": true,
+      "engine_value": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.916437",
+    "elapsed": 54.53573203086853,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_all_components",
+    "details": {
+      "duration": 0.0043261051177978516,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:23.916314', 'components': {'event_engine': {'name': 'event_engine', 'display_name': '事件引擎', 'description': '', 'type': 'infrastructure', 'status': 'running', 'error_mes",
+      "result_id": 1880515564992
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.934749",
+    "elapsed": 54.55404710769653,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.936155",
+    "elapsed": 54.5554518699646,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.937425",
+    "elapsed": 54.556720495224,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.938748",
+    "elapsed": 54.558046102523804,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.939970",
+    "elapsed": 54.55926561355591,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:23.941290",
+    "elapsed": 54.56058645248413,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.0065691471099853516,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:23.937418', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880512282816
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:28.376478",
+    "elapsed": 58.99577593803406,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:28.377972",
+    "elapsed": 58.99726867675781,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:28.379203",
+    "elapsed": 58.99849724769592,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:28.380474",
+    "elapsed": 58.999770164489746,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:28.381661",
+    "elapsed": 59.00095725059509,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:28.394862",
+    "elapsed": 59.014158487319946,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.018409252166748047,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:28.379198', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880512296512
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:32.414735",
+    "elapsed": 63.03403353691101,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_all_components",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:32.416478",
+    "elapsed": 63.03577971458435,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/components",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_all_components"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:32.418046",
+    "elapsed": 63.03734302520752,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "CHECK_ENGINE",
+    "location": "get_all_components",
+    "details": {
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "has_engine": true,
+      "engine_value": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:32.419661",
+    "elapsed": 63.038955211639404,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_all_components",
+    "details": {
+      "duration": 0.0049228668212890625,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:32.419564', 'components': {'event_engine': {'name': 'event_engine', 'display_name': '事件引擎', 'description': '', 'type': 'infrastructure', 'status': 'running', 'error_mes",
+      "result_id": 1880512129664
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.343133",
+    "elapsed": 63.96243071556091,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.344659",
+    "elapsed": 63.96395683288574,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.346086",
+    "elapsed": 63.965381383895874,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.347584",
+    "elapsed": 63.96688103675842,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.348987",
+    "elapsed": 63.96828556060791,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.363537",
+    "elapsed": 63.98284316062927,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.020414113998413086,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:33.346080', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880512498944
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.377793",
+    "elapsed": 63.99709129333496,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_START",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {},
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.379840",
+    "elapsed": 63.999143838882446,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "API_REQUEST",
+    "location": "/api/system/status",
+    "details": {
+      "method": "GET",
+      "endpoint": "get_system_status"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.381689",
+    "elapsed": 64.00098466873169,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "before_import": true
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.383130",
+    "elapsed": 64.00242805480957,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "IMPORT_APP_STATE",
+    "location": "get_system_status",
+    "details": {
+      "after_import": true,
+      "app_state": "<deepsearch.webui.server.AppState object at 0x000001B5A4C141A0>",
+      "app_state_id": 1879664837024,
+      "app_state_type": "AppState",
+      "has_engine_attr": true,
+      "engine_is_none": false
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.384699",
+    "elapsed": 64.00399923324585,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "GET_ENGINE",
+    "location": "get_system_status",
+    "details": {
+      "engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>",
+      "engine_type": "MainEngine",
+      "engine_id": 1879664838704,
+      "is_none": false,
+      "app_state_engine": "<deepsearch.core.engine.MainEngine object at 0x000001B5A4C14830>"
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  },
+  {
+    "timestamp": "2025-08-07T01:42:33.386272",
+    "elapsed": 64.00556969642639,
+    "thread_id": 7412,
+    "thread_name": "MainThread",
+    "event_type": "ASYNC_METHOD_SUCCESS",
+    "location": "deepsearch.webui.api.system.get_system_status",
+    "details": {
+      "duration": 0.008500814437866211,
+      "result_type": "dict",
+      "result_preview": "{'timestamp': '2025-08-07T01:42:33.381681', 'engine': {'running': True, 'uptime': 0, 'event_count': 0, 'queue_size': 0}, 'monitor': {'running': True, 'api_running': True}, 'components': {}, 'total_com",
+      "result_id": 1880515564992
+    },
+    "error": null,
+    "error_type": null,
+    "traceback": null
+  }
+]

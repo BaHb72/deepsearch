@@ -3,7 +3,28 @@
 
 定义系统中的核心接口和协议，确保组件之间的一致性和可监控性。
 """
+from enum import Enum
 from typing import Protocol, Dict, Any, runtime_checkable
+
+
+class ComponentStatus(Enum):
+    """组件状态枚举"""
+    UNINITIALIZED = "uninitialized"
+    INITIALIZED = "initialized"
+    STARTING = "starting"
+    RUNNING = "running"
+    STOPPING = "stopping"
+    STOPPED = "stopped"
+    ERROR = "error"
+
+
+class ComponentType(Enum):
+    """组件类型枚举"""
+    INFRASTRUCTURE = "infrastructure"  # 基础设施组件（事件引擎、消息总线等）
+    BUSINESS = "business"  # 业务组件（网关、策略等）
+    EXTERNAL = "external"  # 外部组件（数据库、缓存等）
+    SUPPORTING = "supporting"  # 支持组件（监控、日志等）
+    INTERFACE = "interface"  # 界面组件（WebUI、API等）
 
 
 @runtime_checkable
@@ -51,7 +72,33 @@ class Component(Monitorable, Lifecycle, Protocol):
     
     组合了监控和生命周期管理功能。
     """
-    pass
+
+    @property
+    def name(self) -> str:
+        """获取组件名称"""
+        ...
+
+    @property
+    def component_type(self) -> ComponentType:
+        """获取组件类型"""
+        ...
+
+    @property
+    def status(self) -> ComponentStatus:
+        """获取组件状态"""
+        ...
+
+    def initialize(self) -> None:
+        """初始化组件"""
+        ...
+
+    def health_check(self) -> bool:
+        """健康检查"""
+        ...
+
+    def get_status_info(self) -> Dict[str, Any]:
+        """获取组件状态信息"""
+        ...
 
 
 class MonitoringHook:

@@ -26,3 +26,23 @@ message_bus:
   routes:
     - match: "*"
       buses: [ "inmem" ]
+
+# 健康检查配置
+health_check:
+  enabled: true                   # 是否启用健康检查
+  interval: 30.0                  # 健康检查间隔（秒）
+  timeout: 5.0                    # 单个健康检查超时时间（秒）
+  
+  # 各组件的健康检查开关
+  components:
+    database: true
+    cache: true
+    event_engine: true
+    message_bus: true
+    monitor: true
+    gateway: true
+  
+  # 高级配置
+  history_size: 100               # 保留的历史记录数量
+  alert_enabled: false            # 是否启用健康状态告警
+  alert_threshold: 3              # 连续失败多少次后触发告警

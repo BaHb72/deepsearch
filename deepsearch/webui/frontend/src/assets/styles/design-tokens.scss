@@ -1,0 +1,316 @@
+// Design Tokens - DeepSearch Design System
+// 设计令牌 - 统一的设计系统变量
+
+// ==========================================
+// 颜色系统 Color System
+// ==========================================
+
+// 品牌色 Brand Colors
+$brand-primary: #6366f1; // 主色调 - 高级紫蓝色
+$brand-secondary: #8b5cf6; // 次要色 - 紫色
+$brand-accent: #06b6d4; // 强调色 - 青色
+
+// 语义色 Semantic Colors
+$color-success: #10b981; // 成功 - 绿色
+$color-warning: #f59e0b; // 警告 - 橙色
+$color-danger: #ef4444; // 危险 - 红色
+$color-info: #3b82f6; // 信息 - 蓝色
+
+// 中性色 Neutral Colors
+$neutral-50: #fafafa;
+$neutral-100: #f4f4f5;
+$neutral-200: #e4e4e7;
+$neutral-300: #d4d4d8;
+$neutral-400: #a1a1aa;
+$neutral-500: #71717a;
+$neutral-600: #52525b;
+$neutral-700: #3f3f46;
+$neutral-800: #27272a;
+$neutral-900: #18181b;
+
+// 背景色 Background Colors
+$bg-primary: #ffffff;
+$bg-secondary: #fafafa;
+$bg-tertiary: #f4f4f5;
+$bg-inverse: #18181b;
+
+// 暗色模式背景 Dark Mode Backgrounds
+$dark-bg-primary: #0f0f11;
+$dark-bg-secondary: #1a1a1e;
+$dark-bg-tertiary: #25252b;
+$dark-bg-elevated: #2a2a32;
+
+// ==========================================
+// 间距系统 Spacing System
+// ==========================================
+
+// 基础间距单位
+$spacing-unit: 4px;
+
+// 间距刻度
+$spacing-1: $spacing-unit * 1; // 4px
+$spacing-2: $spacing-unit * 2; // 8px
+$spacing-3: $spacing-unit * 3; // 12px
+$spacing-4: $spacing-unit * 4; // 16px
+$spacing-5: $spacing-unit * 5; // 20px
+$spacing-6: $spacing-unit * 6; // 24px
+$spacing-8: $spacing-unit * 8; // 32px
+$spacing-10: $spacing-unit * 10; // 40px
+$spacing-12: $spacing-unit * 12; // 48px
+$spacing-16: $spacing-unit * 16; // 64px
+
+// ==========================================
+// 字体系统 Typography System
+// ==========================================
+
+// 字体家族
+$font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue',
+Helvetica, Arial, sans-serif;
+$font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas,
+'Courier New', monospace;
+
+// 字体大小
+$font-size-xs: 12px;
+$font-size-sm: 14px;
+$font-size-base: 16px;
+$font-size-lg: 18px;
+$font-size-xl: 20px;
+$font-size-2xl: 24px;
+$font-size-3xl: 30px;
+$font-size-4xl: 36px;
+
+// 字重
+$font-weight-light: 300;
+$font-weight-normal: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+
+// 行高
+$line-height-tight: 1.25;
+$line-height-normal: 1.5;
+$line-height-relaxed: 1.75;
+
+// ==========================================
+// 圆角系统 Border Radius System
+// ==========================================
+
+$radius-sm: 4px;
+$radius-base: 8px;
+$radius-lg: 12px;
+$radius-xl: 16px;
+$radius-2xl: 24px;
+$radius-full: 9999px;
+
+// ==========================================
+// 阴影系统 Shadow System
+// ==========================================
+
+// 基础阴影
+$shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+$shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+$shadow-base: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+$shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+$shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+$shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+
+// 彩色阴影
+$shadow-primary: 0 10px 40px -10px rgba(99, 102, 241, 0.35);
+$shadow-success: 0 10px 40px -10px rgba(16, 185, 129, 0.35);
+$shadow-danger: 0 10px 40px -10px rgba(239, 68, 68, 0.35);
+
+// 内阴影
+$shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+
+// ==========================================
+// 动画系统 Animation System
+// ==========================================
+
+// 动画时长
+$duration-fast: 150ms;
+$duration-base: 300ms;
+$duration-slow: 500ms;
+$duration-slower: 700ms;
+
+// 动画缓动函数
+$ease-in: cubic-bezier(0.4, 0, 1, 1);
+$ease-out: cubic-bezier(0, 0, 0.2, 1);
+$ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+$ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+// ==========================================
+// 边框系统 Border System
+// ==========================================
+
+$border-width: 1px;
+$border-width-2: 2px;
+$border-width-4: 4px;
+
+$border-color: $neutral-200;
+$border-color-light: $neutral-100;
+$border-color-dark: $neutral-300;
+
+// ==========================================
+// Z-index 层级系统
+// ==========================================
+
+$z-index-dropdown: 1000;
+$z-index-sticky: 1020;
+$z-index-fixed: 1030;
+$z-index-modal-backdrop: 1040;
+$z-index-modal: 1050;
+$z-index-popover: 1060;
+$z-index-tooltip: 1070;
+
+// ==========================================
+// 断点系统 Breakpoint System
+// ==========================================
+
+$breakpoint-xs: 0;
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+$breakpoint-2xl: 1536px;
+
+// ==========================================
+// 特效 Effects
+// ==========================================
+
+// 玻璃态效果
+@mixin glassmorphism($bg-opacity: 0.7, $blur: 10px) {
+  background: rgba(255, 255, 255, $bg-opacity);
+  backdrop-filter: blur($blur);
+  -webkit-backdrop-filter: blur($blur);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+// 暗色玻璃态
+@mixin dark-glassmorphism($bg-opacity: 0.7, $blur: 10px) {
+  background: rgba(0, 0, 0, $bg-opacity);
+  backdrop-filter: blur($blur);
+  -webkit-backdrop-filter: blur($blur);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+// 渐变背景
+@mixin gradient-bg($from, $to, $deg: 135deg) {
+  background: linear-gradient($deg, $from 0%, $to 100%);
+}
+
+// 文字渐变
+@mixin gradient-text($from, $to, $deg: 135deg) {
+  background: linear-gradient($deg, $from 0%, $to 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+// 光晕效果
+@mixin glow($color, $size: 20px) {
+  box-shadow: 0 0 $size $color;
+}
+
+// 呼吸动画
+@mixin breathing-animation($duration: 2s) {
+  animation: breathing $duration ease-in-out infinite;
+}
+
+@keyframes breathing {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+// 脉冲动画
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(99, 102, 241, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+  }
+}
+
+// 闪光动画
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+// ==========================================
+// 实用工具类 Utility Mixins
+// ==========================================
+
+// 截断文本
+@mixin truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 多行截断
+@mixin line-clamp($lines: 2) {
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// 清除浮动
+@mixin clearfix {
+  &::after {
+    content: '';
+    display: table;
+    clear: both;
+  }
+}
+
+// 响应式
+@mixin respond-to($breakpoint) {
+  @media (min-width: $breakpoint) {
+    @content;
+  }
+}
+
+// 隐藏滚动条
+@mixin hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+// 自定义滚动条
+@mixin custom-scrollbar($width: 8px, $track-color: $neutral-100, $thumb-color: $neutral-400) {
+  &::-webkit-scrollbar {
+    width: $width;
+    height: $width;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: $track-color;
+    border-radius: $radius-full;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: $thumb-color;
+    border-radius: $radius-full;
+    transition: filter $duration-fast;
+
+    &:hover {
+      filter: brightness(0.9);
+    }
+  }
+}

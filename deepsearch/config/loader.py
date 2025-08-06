@@ -41,18 +41,18 @@ def load_yaml_config() -> Dict[str, Any]:
             if alt_config_path.exists():
                 env_config_path = alt_config_path
             else:
-                print(f"[错误] 未找到环境配置文件：{env_config_path}", file=sys.stderr)
-                print(f"[信息] 请确保 settings.{env}.yaml 存在", file=sys.stderr)
-                raise FileNotFoundError(f"配置文件不存在: {env_config_path}")
+                print(f"[ERROR] Environment config file not found: {env_config_path}", file=sys.stderr)
+                print(f"[INFO] Please ensure settings.{env}.yaml exists", file=sys.stderr)
+                raise FileNotFoundError(f"Config file not found: {env_config_path}")
         except ImportError:
-            print(f"[错误] 未找到环境配置文件：{env_config_path}", file=sys.stderr)
-            raise FileNotFoundError(f"配置文件不存在: {env_config_path}")
+            print(f"[ERROR] Environment config file not found: {env_config_path}", file=sys.stderr)
+            raise FileNotFoundError(f"Config file not found: {env_config_path}")
 
     try:
         with env_config_path.open("r", encoding=YAML_ENCODING) as f:
             config = yaml.safe_load(f) or {}
-        print(f"[信息] 已加载环境配置：{env_config_path.name} (环境: {env})")
+        print(f"[INFO] Loaded environment config: {env_config_path.name} (env: {env})")
         return config
     except Exception as exc:
-        print(f"[错误] 解析配置文件失败 {env_config_path}：{exc}", file=sys.stderr)
-        raise ValueError(f"配置文件解析失败: {exc}")
+        print(f"[ERROR] Failed to parse config file {env_config_path}: {exc}", file=sys.stderr)
+        raise ValueError(f"Config file parsing failed: {exc}")

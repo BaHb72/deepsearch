@@ -63,7 +63,7 @@ class WebUIRunner:
 
     def start_engine(self, infrastructure_only: bool = True) -> bool:
         """
-        启动系统引擎
+        启动系统引擎（使用上下文管理器）
         
         Args:
             infrastructure_only: 是否只启动基础设施
@@ -71,32 +71,22 @@ class WebUIRunner:
         Returns:
             是否成功启动
         """
-        if self.engine and self.engine.is_running():
+        if hasattr(self, '_engine_context') and self.engine:
             self.logger.warning("引擎已在运行")
             return False
 
         try:
-            self.engine = MainEngine()
-            self.engine.initialize()
+            from deepsearch.core.engine_context import EngineContext
 
-            def run_engine():
-                try:
-                    # 使用新的分阶段启动方法
-                    # 注意：这里不启动WebUI，因为WebUIRunner会自己管理WebUI
-                    self.engine.start_phased(
-                        include_business=not infrastructure_only,
-                        include_webui=False,  # WebUIRunner自己管理WebUI
-                        include_frontend=False  # WebUIRunner自己管理前端
-                    )
+            # 创建引擎上下文
+            self._engine_context = EngineContext(
+                mode='webui',
+                config={'infrastructure_only': infrastructure_only}
+            )
 
-                    while self.engine.is_running() and self._running:
-                        time.sleep(1)
-                except Exception as e:
-                    self.logger.error(f"引擎运行错误: {e}", exc_info=True)
-
-            self.engine_thread = threading.Thread(target=run_engine, daemon=False)  # 改为非daemon线程
-            self.engine_thread.start()
-
+            # 进入上下文
+            self.engine = self._engine_context.__enter__()
+            
             # 设置引擎到应用
             set_engine(self.engine)
 
@@ -105,6 +95,10 @@ class WebUIRunner:
 
         except Exception as e:
             self.logger.error(f"启动引擎失败: {e}", exc_info=True)
+            # 清理上下文
+            if hasattr(self, '_engine_context'):
+                self._engine_context.__exit__(None, None, None)
+                self._engine_context = None
             return False
 
     def stop_engine(self) -> bool:
@@ -113,11 +107,12 @@ class WebUIRunner:
             return False
 
         try:
-            self.engine.stop()
-            if self.engine_thread:
-                self.engine_thread.join(timeout=5)
+            # 使用上下文管理器的退出方法
+            if hasattr(self, '_engine_context'):
+                self._engine_context.__exit__(None, None, None)
+                self._engine_context = None
+            
             self.engine = None
-            self.engine_thread = None
             self.logger.info("系统引擎已停止")
             return True
 
@@ -164,6 +159,13 @@ class WebUIRunner:
                     cwd=str(self.frontend_dir),
                     env=env
                 )
+
+            # 注册到 ProcessManager
+            from deepsearch.core.process_manager import process_manager
+            process_manager.register_process(
+                self.frontend_process,
+                name="WebUI-Frontend-Dev"
+            )
 
             # 等待启动
             time.sleep(3)
@@ -283,9 +285,9 @@ class WebUIRunner:
         if self.frontend_process:
             self._stop_frontend_server()
 
-        # Windows上执行额外的清理
-        if sys.platform == "win32":
-            self._cleanup_windows_processes()
+        # 使用 ProcessManager 进行全面清理
+        from deepsearch.core.process_manager import process_manager
+        process_manager.shutdown(timeout=10.0, force=sys.platform == "win32")
 
         print("系统已关闭")
 
@@ -315,53 +317,6 @@ class WebUIRunner:
             # Windows上注册atexit处理器
             atexit.register(self.shutdown)
 
-    def _cleanup_windows_processes(self):
-        """清理Windows上的残留进程"""
-        if sys.platform != "win32":
-            return
-
-        try:
-            import psutil
-            current_pid = os.getpid()
-
-            # 查找并终止所有子进程
-            try:
-                current_proc = psutil.Process(current_pid)
-                children = current_proc.children(recursive=True)
-
-                for child in children:
-                    try:
-                        self.logger.info(f"终止子进程 PID={child.pid}")
-                        child.terminate()
-                        child.wait(timeout=2)
-                    except (psutil.NoSuchProcess, psutil.TimeoutExpired):
-                        try:
-                            child.kill()
-                        except (OSError, ProcessLookupError) as e:
-                            logger.debug(f"前端进程可能已经终止: {e}")
-                    except Exception as e:
-                        self.logger.error(f"无法终止进程 PID={child.pid}: {e}")
-            except Exception as e:
-                self.logger.error(f"获取子进程失败: {e}")
-
-            # 清理占用的端口
-            ports_to_clean = [self.backend_port, self.frontend_port]
-            for conn in psutil.net_connections():
-                if hasattr(conn, 'laddr') and conn.laddr.port in ports_to_clean:
-                    if conn.pid and conn.pid != current_pid:
-                        try:
-                            proc = psutil.Process(conn.pid)
-                            if 'python' in proc.name().lower() or 'node' in proc.name().lower():
-                                self.logger.info(f"清理占用端口 {conn.laddr.port} 的进程 PID={conn.pid}")
-                                proc.terminate()
-                                proc.wait(timeout=2)
-                        except Exception:
-                            pass
-
-        except ImportError:
-            self.logger.warning("psutil未安装，无法执行进程清理")
-        except Exception as e:
-            self.logger.error(f"清理Windows进程时出错: {e}")
 
 
 def run_standalone(

@@ -410,13 +410,31 @@ class BaseGateway(ABC):
         except Exception as exc:
             self.write_log(f"关闭网关异常: {exc}", level=logging.ERROR)
 
-        # Shutdown executor
+        # Shutdown executor with enhanced cleanup
         if self._executor:
             try:
-                self._executor.shutdown(wait=True)
+                import sys
+                # Python 3.9+ 支持 cancel_futures 参数
+                if sys.version_info >= (3, 9):
+                    # 使用 cancel_futures 来取消待处理的任务
+                    self._executor.shutdown(wait=True, cancel_futures=False)
+                else:
+                    # 旧版本 Python 只支持 wait 参数
+                    self._executor.shutdown(wait=True)
+
+                # 等待一小段时间让线程清理
+                time.sleep(0.1)
+                
             except Exception as e:
-                self.logger.debug(f"关闭线程池时出错：{e}")
+                self.logger.warning(f"关闭线程池失败：{e}")
+                try:
+                    # 兜底：仅使用基本的shutdown
+                    self._executor.shutdown(wait=False)
+                    time.sleep(0.1)
+                except Exception as force_error:
+                    self.logger.error(f"强制关闭线程池也失败：{force_error}")
             finally:
+                # 确保释放引用
                 self._executor = None
 
         self.logger.debug(f"网关 [{self.gateway_name}] 资源清理完成")

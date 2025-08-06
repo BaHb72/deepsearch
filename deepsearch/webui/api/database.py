@@ -22,8 +22,7 @@ def get_database_component():
             raise HTTPException(status_code=503, detail="系统未初始化")
 
         # 获取数据库组件
-        component_manager = engine.get_component_manager()
-        db_component = component_manager._components.get('database')
+        db_component = engine.get_component_by_name('database')
 
         if not db_component:
             raise HTTPException(status_code=404, detail="数据库组件未找到")
@@ -50,6 +49,10 @@ async def get_database_status() -> Dict[str, Any]:
         # 获取状态信息
         status_info = db_component.get_status_info()
 
+        # 确保status_info不为None
+        if status_info is None:
+            status_info = {}
+
         # 添加额外的配置信息
         from deepsearch.config import get_config
         config = get_config()
@@ -74,15 +77,15 @@ async def get_database_status() -> Dict[str, Any]:
             "disconnect_reason": status_info.get("disconnect_reason")
         }
 
-        # 如果有健康检查信息，执行一次健康检查
-        if db_component.is_connected() and hasattr(db_component, 'health_check'):
-            try:
-                import asyncio
-                health_result = await db_component.health_check()
-                result["health"] = health_result
-            except Exception as e:
-                logger.warning(f"健康检查失败: {e}")
-                result["health"] = {"status": "error", "error": str(e)}
+        # 健康状态检查（暂时简化，待健康管理器实现后再完善）
+        try:
+            if db_component.is_connected():
+                result["health"] = {"status": "healthy", "message": "Database is connected"}
+            else:
+                result["health"] = {"status": "unhealthy", "message": "Database is not connected"}
+        except Exception as e:
+            logger.warning(f"获取健康状态失败: {e}")
+            result["health"] = {"status": "error", "error": str(e)}
 
         return result
 
@@ -169,7 +172,7 @@ async def connect_database(request: ConnectRequest) -> Dict[str, Any]:
             await db_component.connect_async()
 
             # 如果组件未启动，启动它
-            if db_component.status != ComponentStatus.RUNNING:
+            if db_component.status and db_component.status != ComponentStatus.RUNNING:
                 await db_component.start_async()
 
             return {

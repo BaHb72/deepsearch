@@ -1,8 +1,17 @@
 import axios from 'axios'
 import {ElMessage} from 'element-plus'
 import {logApiError} from '@/utils/errorTracker'
+import backendStatus from '@/utils/backendStatus'
+
+// 调试日志工具
+const debugLog = (stage, message, data = null) => {
+    const timestamp = new Date().toISOString()
+    const logEntry = `[request.js ${timestamp}] ${stage}: ${message}`
+    console.log('%c' + logEntry, 'color: #e6a23c; font-weight: bold;', data)
+}
 
 // 创建 axios 实例
+debugLog('INIT', '创建axios实例', {baseURL: '/api', timeout: 30000})
 const request = axios.create({
     baseURL: '/api',
     timeout: 30000,
@@ -11,14 +20,51 @@ const request = axios.create({
     }
 })
 
+// 请求计数器
+let requestCounter = 0
+
 // 请求拦截器
 request.interceptors.request.use(
     config => {
+        const requestId = ++requestCounter
+        config.requestId = requestId
+        config.requestStartTime = Date.now()
+
+        // 检查是否是状态检查请求
+        const isStatusCheck = config.url === '/system/status' && !config.skipBackendCheck
+
+        // 如果不是状态检查请求，且后端不可用，直接拒绝
+        if (!isStatusCheck && !backendStatus.isAvailable) {
+            debugLog('REQUEST_BLOCKED', `#${requestId} 后端不可用，拒绝请求`, {
+                url: config.url,
+                backendAvailable: false
+            })
+
+            const error = new Error('后端服务不可用')
+            error.code = 'BACKEND_UNAVAILABLE'
+            error.config = config
+            return Promise.reject(error)
+        }
+
+        debugLog('REQUEST', `#${requestId} 发起请求`, {
+            method: config.method?.toUpperCase(),
+            url: config.url,
+            baseURL: config.baseURL,
+            fullURL: config.baseURL + config.url,
+            params: config.params,
+            data: config.data,
+            headers: config.headers
+        })
+        
         // 可以在这里添加认证 token
         // config.headers['Authorization'] = 'Bearer ' + getToken()
         return config
     },
     error => {
+        debugLog('REQUEST_ERROR', '请求配置错误', {
+            error: error.message,
+            stack: error.stack
+        })
         console.error('请求错误:', error)
         return Promise.reject(error)
     }
@@ -27,11 +73,38 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
     response => {
+        const requestId = response.config.requestId
+        const duration = Date.now() - response.config.requestStartTime
+
+        debugLog('RESPONSE', `#${requestId} 请求成功`, {
+            url: response.config.url,
+            duration: `${duration}ms`,
+            status: response.status,
+            statusText: response.statusText,
+            dataSize: JSON.stringify(response.data).length,
+            data: response.data
+        })
+        
         const res = response.data
         return res
     },
     error => {
-        // 不要在控制台显示每个错误
+        const requestId = error.config?.requestId || 'unknown'
+        const duration = error.config?.requestStartTime ? Date.now() - error.config.requestStartTime : 'unknown'
+
+        // 详细错误日志
+        debugLog('RESPONSE_ERROR', `#${requestId} 请求失败`, {
+            url: error.config?.url,
+            duration: duration === 'unknown' ? duration : `${duration}ms`,
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            errorMessage: error.message,
+            errorCode: error.code,
+            responseData: error.response?.data,
+            isNetworkError: !error.response,
+            isTimeout: error.code === 'ECONNABORTED',
+            stack: error.stack
+        })
         
         let message = '请求失败'
         let showError = true
@@ -62,12 +135,25 @@ request.interceptors.response.use(
         } else if (error.request) {
             // 网络错误（包括后端未启动）
             message = '无法连接到后端服务，请确保后端已启动'
+
+            // 更新后端状态
+            if (error.config?.url === '/system/status') {
+                backendStatus.setAvailable(false)
+            }
+            
             // 对于某些周期性请求（如状态轮询），不显示错误
             if (error.config?.url?.includes('/status') ||
                 error.config?.url?.includes('/statistics')) {
                 showError = false
+                debugLog('SILENT_ERROR', `#${requestId} 静默处理周期性请求错误`, {
+                    url: error.config?.url
+                })
                 console.debug('后端服务未就绪')
             }
+        } else if (error.code === 'BACKEND_UNAVAILABLE') {
+            // 后端不可用错误
+            message = '后端服务不可用'
+            showError = false // 不显示错误，因为用户已经知道
         }
 
         // 记录到错误追踪系统
@@ -76,10 +162,12 @@ request.interceptors.response.use(
         const shouldLog = !skipUrls.some(url => error.config?.url?.includes(url))
 
         if (shouldLog) {
+            debugLog('ERROR_TRACKING', `#${requestId} 记录到错误追踪系统`)
             logApiError(error, error.config)
         }
 
         if (showError) {
+            debugLog('USER_NOTIFICATION', `#${requestId} 显示错误消息: ${message}`)
             ElMessage.error({
                 message,
                 duration: 3000,

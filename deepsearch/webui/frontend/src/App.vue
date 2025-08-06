@@ -132,7 +132,7 @@
 </template>
 
 <script setup>
-import {computed, onMounted, onUnmounted, ref} from 'vue'
+import {computed, onBeforeMount, onMounted, onUnmounted, ref} from 'vue'
 import {useRoute} from 'vue-router'
 import {ElLoading, ElMessage, ElMessageBox} from 'element-plus'
 import {DataAnalysis, Document, List, Monitor, Moon, Setting, Sunny, TrendCharts} from '@element-plus/icons-vue'
@@ -141,6 +141,7 @@ import {useSystemStore} from '@/stores/system'
 import {restartSystem, startSystem, stopSystem} from '@/api/system'
 import {storage, STORAGE_KEYS} from '@/utils/storage'
 import ErrorMonitor from '@/components/ErrorMonitor.vue'
+import backendStatus from '@/utils/backendStatus'
 
 // 定义组件名称
 defineOptions({
@@ -199,6 +200,12 @@ const toggleTheme = (value) => {
 
 // 启动系统
 const handleSystemStart = async () => {
+  // 检查后端是否可用
+  if (!backendStatus.isAvailable) {
+    ElMessage.error('后端服务不可用，请先启动后端服务')
+    return
+  }
+  
   try {
     systemLoading.value = true
     pauseStatusPolling.value = true  // 暂停轮询
@@ -219,6 +226,12 @@ const handleSystemStart = async () => {
 
 // 停止系统
 const handleSystemStop = async () => {
+  // 检查后端是否可用
+  if (!backendStatus.isAvailable) {
+    ElMessage.error('后端服务不可用')
+    return
+  }
+  
   try {
     await ElMessageBox.confirm(
         '确定要停止交易引擎吗？这将停止所有交易活动，但WebUI仍会继续运行。',
@@ -251,6 +264,12 @@ const handleSystemStop = async () => {
 
 // 重启系统
 const handleSystemRestart = async () => {
+  // 检查后端是否可用
+  if (!backendStatus.isAvailable) {
+    ElMessage.error('后端服务不可用')
+    return
+  }
+  
   try {
     await ElMessageBox.confirm(
         '确定要重启交易引擎吗？这将中断当前所有交易活动并重新启动。',
@@ -284,7 +303,29 @@ const handleSystemRestart = async () => {
 // 定时获取系统状态
 let statusTimer = null
 
+// 后端状态监听
+const handleBackendStatusChange = (available) => {
+  debugLog('BACKEND', `Backend status changed: ${available ? 'available' : 'unavailable'}`)
+
+  if (available) {
+    // 后端恢复，立即获取状态
+    if (!pauseStatusPolling.value && !systemLoading.value) {
+      systemStore.fetchStatus().catch(err => {
+        debugLog('API', 'Status fetch failed after backend recovery', {error: err.message})
+      })
+    }
+  }
+}
+
+// 调试日志工具
+const debugLog = (stage, message, data = null) => {
+  const timestamp = new Date().toISOString()
+  const logEntry = `[App.vue ${timestamp}] ${stage}: ${message}`
+  console.log('%c' + logEntry, 'color: #409eff; font-weight: bold;', data)
+}
+
 // 在组件挂载前显示全屏loading
+debugLog('INIT', '创建全屏Loading')
 const loading = ElLoading.service({
   lock: true,
   text: '正在初始化 DeepSearch 系统...',
@@ -292,42 +333,136 @@ const loading = ElLoading.service({
   customClass: 'deepsearch-loading'
 })
 
+// 添加Loading超时保护 - 增加超时时间到15秒
+const loadingTimeout = setTimeout(() => {
+  debugLog('ERROR', 'Loading超时，强制关闭', {timeout: '15秒'})
+  if (loading) {
+    loading.close()
+    ElMessage.warning('系统初始化较慢，已自动关闭Loading。如有问题请检查后端服务状态。')
+  }
+}, 15000)
+
+// 组件挂载前
+onBeforeMount(() => {
+  debugLog('LIFECYCLE', 'onBeforeMount执行')
+})
+
 onMounted(async () => {
+  debugLog('LIFECYCLE', 'onMounted开始执行')
+  const mountStartTime = Date.now()
+  
   try {
     // 初始化主题
+    debugLog('THEME', '初始化主题', {isDark: isDark.value})
     if (isDark.value) {
       document.documentElement.classList.add('dark')
     }
 
-    // 获取系统状态
-    await systemStore.fetchStatus()
+    // 检查后端状态
+    debugLog('API', '检查后端状态')
+    const isBackendAvailable = await backendStatus.checkStatus()
+
+    if (isBackendAvailable) {
+      // 获取系统状态
+      debugLog('API', '开始获取系统状态')
+      const fetchStartTime = Date.now()
+
+      try {
+        await systemStore.fetchStatus()
+        const fetchDuration = Date.now() - fetchStartTime
+        debugLog('API', '系统状态获取成功', {
+          duration: `${fetchDuration}ms`,
+          status: systemStore.status
+        })
+      } catch (fetchError) {
+        const fetchDuration = Date.now() - fetchStartTime
+        debugLog('API', '系统状态获取失败', {
+          duration: `${fetchDuration}ms`,
+          error: fetchError.message,
+          stack: fetchError.stack
+        })
+        throw fetchError
+      }
+    } else {
+      debugLog('API', '后端不可用，跳过状态获取')
+    }
 
     // 延迟一点关闭loading，确保界面渲染完成
+    debugLog('LOADING', '准备关闭Loading，延迟300ms')
     setTimeout(() => {
-      loading.close()
+      if (loading) {
+        debugLog('LOADING', 'Loading关闭成功')
+        loading.close()
+        clearTimeout(loadingTimeout) // 清除超时计时器
+      }
     }, 300)
+
+    const mountDuration = Date.now() - mountStartTime
+    debugLog('LIFECYCLE', 'onMounted执行完成', {totalDuration: `${mountDuration}ms`})
+    
   } catch (err) {
+    const mountDuration = Date.now() - mountStartTime
+    debugLog('ERROR', 'onMounted执行出错', {
+      duration: `${mountDuration}ms`,
+      error: err.message,
+      stack: err.stack
+    })
     console.warn('获取系统状态失败，将使用默认值:', err)
-    loading.close()
+
+    // 确保Loading被关闭
+    if (loading) {
+      debugLog('LOADING', '错误状态下关闭Loading')
+      loading.close()
+      clearTimeout(loadingTimeout)
+    }
   }
 
-  statusTimer = setInterval(() => {
+  // 监听后端状态变化
+  backendStatus.addListener(handleBackendStatusChange)
+
+  // 启动状态轮询
+  debugLog('POLLING', '启动状态轮询定时器', {interval: '5000ms'})
+  statusTimer = setInterval(async () => {
     // 如果正在进行系统操作，跳过轮询
     if (!pauseStatusPolling.value && !systemLoading.value) {
-      systemStore.fetchStatus().catch(err => {
-        // 只在非系统操作期间才显示警告
-        if (!systemLoading.value) {
-          console.warn('更新系统状态失败:', err)
-        }
+      // 先检查后端是否可用
+      if (backendStatus.isAvailable) {
+        debugLog('POLLING', '执行状态轮询')
+        systemStore.fetchStatus().catch(err => {
+          // 只在非系统操作期间才显示警告
+          if (!systemLoading.value) {
+            debugLog('POLLING', '状态轮询失败', {error: err.message})
+            console.warn('更新系统状态失败:', err)
+          }
+        })
+      } else {
+        debugLog('POLLING', '后端不可用，跳过状态轮询')
+      }
+    } else {
+      debugLog('POLLING', '跳过状态轮询', {
+        pauseStatusPolling: pauseStatusPolling.value,
+        systemLoading: systemLoading.value
       })
     }
   }, 5000) // 每5秒更新一次
 })
 
+// 组件更新时
+onUpdated(() => {
+  debugLog('LIFECYCLE', 'onUpdated执行', {route: route.path})
+})
+
 onUnmounted(() => {
+  // 清除状态轮询定时器
   if (statusTimer) {
     clearInterval(statusTimer)
+    statusTimer = null
   }
+
+  // 移除后端状态监听器
+  backendStatus.removeListener(handleBackendStatusChange)
+
+  debugLog('LIFECYCLE', 'onUnmounted - cleaned up resources')
 })
 </script>
 
