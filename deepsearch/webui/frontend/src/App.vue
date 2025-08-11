@@ -51,6 +51,30 @@
               </el-icon>
               <span>数据管理</span>
             </el-menu-item>
+            <el-menu-item index="/data-source">
+              <el-icon>
+                <Connection/>
+              </el-icon>
+              <span>数据源监控</span>
+            </el-menu-item>
+            <el-menu-item index="/market">
+              <el-icon>
+                <TrendCharts/>
+              </el-icon>
+              <span>市场数据</span>
+            </el-menu-item>
+            <el-menu-item index="/chart">
+              <el-icon>
+                <DataLine/>
+              </el-icon>
+              <span>K线图表</span>
+            </el-menu-item>
+            <el-menu-item index="/workers-proxy">
+              <el-icon>
+                <Link/>
+              </el-icon>
+              <span>Workers 代理</span>
+            </el-menu-item>
           </el-menu>
         </el-aside>
 
@@ -135,7 +159,19 @@
 import {computed, onBeforeMount, onMounted, onUnmounted, ref} from 'vue'
 import {useRoute} from 'vue-router'
 import {ElLoading, ElMessage, ElMessageBox} from 'element-plus'
-import {DataAnalysis, Document, List, Monitor, Moon, Setting, Sunny, TrendCharts} from '@element-plus/icons-vue'
+import {
+  Connection,
+  DataAnalysis,
+  DataLine,
+  Document,
+  Link,
+  List,
+  Monitor,
+  Moon,
+  Setting,
+  Sunny,
+  TrendCharts
+} from '@element-plus/icons-vue'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import {useSystemStore} from '@/stores/system'
 import {restartSystem, startSystem, stopSystem} from '@/api/system'
@@ -467,7 +503,7 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss">
-@import '@/assets/styles/design-tokens.scss';
+@use '@/assets/styles/design-tokens.scss' as tokens;
 
 /* 布局容器 */
 .layout-container {
@@ -475,14 +511,21 @@ onUnmounted(() => {
   background: var(--bg-color);
 }
 
-/* 侧边栏 */
+/* 侧边栏 - 增强版玻璃态 */
 .layout-aside {
-  background: linear-gradient(180deg, $neutral-800 0%, $neutral-900 100%);
-  box-shadow: $shadow-lg;
-  transition: all $duration-base $ease-out;
+  @include tokens.dark-glassmorphism(0.8, 20px);
+  background: linear-gradient(
+          180deg,
+          rgba(tokens.$neutral-800, 0.95) 0%,
+          rgba(tokens.$neutral-900, 0.98) 100%
+  );
+  box-shadow: tokens.$shadow-layered;
+  transition: all tokens.$duration-base tokens.$ease-out;
   position: relative;
   overflow: hidden;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
 
+  // 渐变光效背景
   &::before {
     content: '';
     position: absolute;
@@ -490,9 +533,20 @@ onUnmounted(() => {
     left: 0;
     right: 0;
     bottom: 0;
-    background: radial-gradient(circle at top right, rgba($brand-primary, 0.1) 0%, transparent 50%),
-    radial-gradient(circle at bottom left, rgba($brand-secondary, 0.1) 0%, transparent 50%);
+    background: radial-gradient(circle at 20% 20%, rgba(tokens.$brand-primary, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(tokens.$brand-secondary, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(tokens.$brand-accent, 0.08) 0%, transparent 60%);
     pointer-events: none;
+    animation: gradientShift 20s ease infinite;
+  }
+
+  @keyframes gradientShift {
+    0%, 100% {
+      opacity: 0.8;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 
   .logo {
@@ -524,24 +578,24 @@ onUnmounted(() => {
       transform: translateX(-50%);
       width: 60%;
       height: 1px;
-      background: linear-gradient(90deg, transparent, $brand-primary, transparent);
+      background: linear-gradient(90deg, transparent, tokens.$brand-primary, transparent);
     }
 
     h2 {
       color: white;
-      font-size: $font-size-2xl;
-      font-weight: $font-weight-bold;
+      font-size: tokens.$font-size-2xl;
+      font-weight: tokens.$font-weight-bold;
       letter-spacing: 1px;
       text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
       z-index: 1;
       display: flex;
       align-items: center;
-      gap: $spacing-2;
+      gap: tokens.$spacing-2;
 
       &::before {
         content: '⚇';
         font-size: 28px;
-        @include gradient-text($brand-primary, $brand-secondary);
+        @include tokens.gradient-text(tokens.$brand-primary, tokens.$brand-secondary);
       }
     }
   }
@@ -550,66 +604,85 @@ onUnmounted(() => {
     border-right: none;
     background: transparent;
     height: calc(100% - 72px);
-    padding: $spacing-2 0;
+    padding: tokens.$spacing-2 0;
 
     .el-menu-item {
       color: rgba(255, 255, 255, 0.7);
-      transition: all $duration-base $ease-out;
+      transition: all tokens.$duration-base tokens.$ease-out;
       position: relative;
-      margin: $spacing-1 $spacing-2;
-      border-radius: $radius-base;
+      margin: tokens.$spacing-1 tokens.$spacing-2;
+      border-radius: tokens.$radius-base;
       height: 48px;
       line-height: 48px;
+      overflow: hidden;
 
+      // 光晕扩散背景
       &::before {
         content: '';
         position: absolute;
-        left: 0;
+        left: 50%;
         top: 50%;
         transform: translateY(-50%);
         width: 4px;
         height: 0;
-        background: $brand-primary;
-        border-radius: $radius-sm;
-        transition: height $duration-base $ease-out;
+        background: tokens.$brand-primary;
+        border-radius: tokens.$radius-sm;
+        transition: height tokens.$duration-base tokens.$ease-out;
       }
 
       &::after {
         content: '';
         position: absolute;
         inset: 0;
-        background: linear-gradient(90deg, rgba($brand-primary, 0.15), transparent);
+        background: linear-gradient(90deg, rgba(tokens.$brand-primary, 0.15), transparent);
         opacity: 0;
-        transition: opacity $duration-base;
-        border-radius: $radius-base;
+        transition: opacity tokens.$duration-base;
+        border-radius: tokens.$radius-base;
       }
 
       &:hover {
         color: white;
-
+        transform: translateX(4px);
+        
         &::after {
           opacity: 1;
+        }
+
+        .el-icon {
+          transform: scale(1.1);
+          filter: drop-shadow(0 0 8px rgba(tokens.$brand-primary, 0.5));
         }
       }
 
       &.is-active {
         color: white;
-        background: rgba($brand-primary, 0.15);
-        font-weight: $font-weight-medium;
+        background: linear-gradient(
+                90deg,
+                rgba(tokens.$brand-primary, 0.25) 0%,
+                rgba(tokens.$brand-primary, 0.1) 100%
+        );
+        font-weight: tokens.$font-weight-medium;
+        @include tokens.inner-glow(tokens.$brand-primary, 8px);
+        border: 1px solid rgba(tokens.$brand-primary, 0.3);
 
         &::before {
           height: 24px;
+          width: 3px;
+          left: 0;
+          background: tokens.$brand-primary;
+          box-shadow: 0 0 10px tokens.$brand-primary;
         }
 
         .el-icon {
-          color: $brand-primary;
+          color: tokens.$brand-primary;
+          filter: drop-shadow(0 0 10px tokens.$brand-primary);
         }
       }
 
       .el-icon {
         font-size: 20px;
-        margin-right: $spacing-3;
-        transition: all $duration-base;
+        margin-right: tokens.$spacing-3;
+        transition: all tokens.$duration-base;
       }
 
       span {
@@ -620,17 +693,36 @@ onUnmounted(() => {
   }
 }
 
-/* 顶部栏 */
+/* 顶部栏 - 增强版 */
 .layout-header {
+  @include tokens.glassmorphism(0.8, 10px);
   background: var(--card-bg);
-  box-shadow: $shadow-sm;
+  box-shadow: tokens.$shadow-md;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 $spacing-6;
-  transition: all $duration-base;
+  padding: 0 tokens.$spacing-6;
+  transition: all tokens.$duration-base;
   position: relative;
   z-index: 10;
+  border-bottom: 1px solid rgba(tokens.$brand-primary, 0.1);
+
+  // 添加微光效果
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(
+            90deg,
+            transparent,
+            tokens.$brand-primary,
+            transparent
+    );
+    animation: shimmer 8s infinite;
+  }
 
   &::after {
     content: '';
@@ -639,25 +731,36 @@ onUnmounted(() => {
     left: 0;
     right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+    background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(tokens.$brand-primary, 0.5),
+            transparent
+    );
+  }
+
+  @keyframes shimmer {
+    to {
+      left: 100%;
+    }
   }
 
   .header-left {
     h3 {
       color: var(--text-primary);
-      font-size: $font-size-xl;
-      font-weight: $font-weight-semibold;
+      font-size: tokens.$font-size-xl;
+      font-weight: tokens.$font-weight-semibold;
       margin: 0;
       display: flex;
       align-items: center;
-      gap: $spacing-2;
+      gap: tokens.$spacing-2;
 
       &::before {
         content: '';
         width: 4px;
         height: 24px;
-        background: $brand-primary;
-        border-radius: $radius-sm;
+        background: tokens.$brand-primary;
+        border-radius: tokens.$radius-sm;
       }
     }
   }
@@ -674,33 +777,33 @@ onUnmounted(() => {
         border-radius: 20px;
 
         &.el-tag--success {
-          @include gradient-bg($color-success, darken($color-success, 10%));
+          @include tokens.gradient-bg(tokens.$color-success, tokens.$color-success-dark);
           border: none;
           color: white;
-          box-shadow: 0 2px 8px rgba($color-success, 0.3);
+          box-shadow: 0 2px 8px rgba(tokens.$color-success, 0.3);
         }
 
         &.el-tag--danger {
-          @include gradient-bg($color-danger, darken($color-danger, 10%));
+          @include tokens.gradient-bg(tokens.$color-danger, tokens.$color-danger-dark);
           border: none;
           color: white;
-          box-shadow: 0 2px 8px rgba($color-danger, 0.3);
+          box-shadow: 0 2px 8px rgba(tokens.$color-danger, 0.3);
         }
 
         &.el-tag--info {
-          background: rgba($color-info, 0.1);
-          border: 1px solid rgba($color-info, 0.3);
-          color: $color-info;
+          background: rgba(tokens.$color-info, 0.1);
+          border: 1px solid rgba(tokens.$color-info, 0.3);
+          color: tokens.$color-info;
         }
       }
 
       .status-indicator {
-        margin-right: $spacing-2;
+        margin-right: tokens.$spacing-2;
         font-size: 12px;
         vertical-align: middle;
 
         &.breathing {
-          @include breathing-animation;
+          @include tokens.breathing-animation;
         }
       }
     }
@@ -723,11 +826,11 @@ onUnmounted(() => {
     }
 
     .el-switch {
-      --el-switch-on-color: #{$brand-primary};
+      --el-switch-on-color: #{tokens.$brand-primary};
 
       :deep(.el-switch__core) {
-        border-radius: $radius-full;
-        box-shadow: $shadow-inner;
+        border-radius: tokens.$radius-full;
+        box-shadow: tokens.$shadow-inner;
       }
     }
   }
@@ -741,13 +844,13 @@ onUnmounted(() => {
   height: calc(100vh - 60px);
   position: relative;
 
-  @include custom-scrollbar(12px, var(--bg-color), var(--border-color));
+  @include tokens.custom-scrollbar(12px, var(--bg-color), var(--border-color));
 }
 
 /* 页面过渡动画 */
 .fade-enter-active,
 .fade-leave-active {
-  transition: all $duration-base $ease-out;
+  transition: all tokens.$duration-base tokens.$ease-out;
 }
 
 .fade-enter-from {
@@ -773,21 +876,21 @@ onUnmounted(() => {
     &--success {
       &:hover:not(:disabled) {
         transform: translateY(-1px);
-        box-shadow: $shadow-success;
+        box-shadow: tokens.$shadow-success;
       }
     }
 
     &--danger {
       &:hover:not(:disabled) {
         transform: translateY(-1px);
-        box-shadow: $shadow-danger;
+        box-shadow: tokens.$shadow-danger;
       }
     }
 
     &--warning {
       &:hover:not(:disabled) {
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba($color-warning, 0.4);
+        box-shadow: 0 4px 12px rgba(tokens.$color-warning, 0.4);
       }
     }
   }
@@ -796,11 +899,11 @@ onUnmounted(() => {
 /* 暗色主题 */
 .dark {
   .layout-aside {
-    background: linear-gradient(180deg, $dark-bg-tertiary 0%, $dark-bg-secondary 100%);
+    background: linear-gradient(180deg, tokens.$dark-bg-tertiary 0%, tokens.$dark-bg-secondary 100%);
 
     &::before {
-      background: radial-gradient(circle at top right, rgba($brand-primary, 0.15) 0%, transparent 50%),
-      radial-gradient(circle at bottom left, rgba($brand-secondary, 0.15) 0%, transparent 50%);
+      background: radial-gradient(circle at top right, rgba(tokens.$brand-primary, 0.15) 0%, transparent 50%),
+      radial-gradient(circle at bottom left, rgba(tokens.$brand-secondary, 0.15) 0%, transparent 50%);
     }
 
     .logo {
@@ -810,14 +913,14 @@ onUnmounted(() => {
 
     .el-menu-item {
       &.is-active {
-        background: rgba($brand-primary, 0.2);
+        background: rgba(tokens.$brand-primary, 0.2);
       }
     }
   }
 
   .layout-header {
     box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
-    background: $dark-bg-elevated;
+    background: tokens.$dark-bg-elevated;
 
     &::after {
       background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
@@ -825,23 +928,23 @@ onUnmounted(() => {
   }
 
   .layout-main {
-    background: $dark-bg-primary;
+    background: tokens.$dark-bg-primary;
   }
 }
 
 /* 响应式 */
-@media (max-width: $breakpoint-md) {
+@media (max-width: tokens.$breakpoint-md) {
   .layout-aside {
     width: 180px !important;
 
     .logo h2 {
-      font-size: $font-size-lg;
+      font-size: tokens.$font-size-lg;
     }
 
     .el-menu-item {
       height: 44px;
       line-height: 44px;
-      margin: $spacing-1;
+      margin: tokens.$spacing-1;
 
       .el-icon {
         font-size: 18px;
@@ -850,10 +953,10 @@ onUnmounted(() => {
   }
   
   .layout-header {
-    padding: 0 $spacing-4;
+    padding: 0 tokens.$spacing-4;
     
     .header-left h3 {
-      font-size: $font-size-base;
+      font-size: tokens.$font-size-base;
 
       &::before {
         height: 20px;
@@ -861,18 +964,18 @@ onUnmounted(() => {
     }
 
     .header-right {
-      gap: $spacing-2;
+      gap: tokens.$spacing-2;
 
       .system-status {
         .el-tag {
-          padding: $spacing-1 $spacing-2;
-          font-size: $font-size-xs;
+          padding: tokens.$spacing-1 tokens.$spacing-2;
+          font-size: tokens.$font-size-xs;
         }
       }
       
       .el-button {
-        padding: $spacing-2 $spacing-3;
-        font-size: $font-size-xs;
+        padding: tokens.$spacing-2 tokens.$spacing-3;
+        font-size: tokens.$font-size-xs;
         height: 32px;
       }
     }
@@ -886,15 +989,15 @@ onUnmounted(() => {
   &[data-shortcut]::after {
     content: attr(data-shortcut);
     position: absolute;
-    right: $spacing-4;
+    right: tokens.$spacing-4;
     top: 50%;
     transform: translateY(-50%);
-    font-size: $font-size-xs;
+    font-size: tokens.$font-size-xs;
     color: rgba(255, 255, 255, 0.4);
     background: rgba(0, 0, 0, 0.2);
     padding: 2px 6px;
-    border-radius: $radius-sm;
-    font-family: $font-mono;
+    border-radius: tokens.$radius-sm;
+    font-family: tokens.$font-mono;
   }
 }
 </style>

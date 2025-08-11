@@ -152,15 +152,15 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-@import '@/assets/styles/design-tokens.scss';
+@use '@/assets/styles/design-tokens.scss' as tokens;
 
 .system-alerts {
-  margin-bottom: $spacing-5;
-  background: linear-gradient(135deg, rgba($color-warning, 0.05) 0%, rgba($color-warning, 0.1) 100%);
-  border-radius: $radius-lg;
-  padding: $spacing-4;
-  box-shadow: $shadow-sm;
-  border: 1px solid rgba($color-warning, 0.2);
+  margin-bottom: tokens.$spacing-5;
+  background: linear-gradient(135deg, rgba(tokens.$color-warning, 0.05) 0%, rgba(tokens.$color-warning, 0.1) 100%);
+  border-radius: tokens.$radius-lg;
+  padding: tokens.$spacing-4;
+  box-shadow: tokens.$shadow-sm;
+  border: 1px solid rgba(tokens.$color-warning, 0.2);
   position: relative;
   overflow: hidden;
 
@@ -171,28 +171,28 @@ onMounted(() => {
     left: 0;
     right: 0;
     height: 3px;
-    @include gradient-bg($color-warning, darken($color-warning, 10%));
+    @include tokens.gradient-bg(tokens.$color-warning, tokens.$color-warning-dark);
   }
 }
 
 .alerts-header {
   display: flex;
   align-items: center;
-  margin-bottom: $spacing-3;
-  padding-bottom: $spacing-3;
-  border-bottom: 1px solid rgba($color-warning, 0.15);
+  margin-bottom: tokens.$spacing-3;
+  padding-bottom: tokens.$spacing-3;
+  border-bottom: 1px solid rgba(tokens.$color-warning, 0.15);
 }
 
 .header-icon {
   font-size: 20px;
-  color: $color-warning;
-  margin-right: $spacing-2;
+  color: tokens.$color-warning;
+  margin-right: tokens.$spacing-2;
   animation: pulse 2s infinite;
 }
 
 .header-title {
-  font-size: $font-size-base;
-  font-weight: $font-weight-semibold;
+  font-size: tokens.$font-size-base;
+  font-weight: tokens.$font-weight-semibold;
   color: var(--text-primary);
   flex: 1;
 }
@@ -200,15 +200,15 @@ onMounted(() => {
 .alerts-list {
   display: flex;
   flex-direction: column;
-  gap: $spacing-2;
+  gap: tokens.$spacing-2;
 }
 
 .alert-item {
   background: var(--card-bg);
-  border-radius: $radius-base;
-  padding: $spacing-3 $spacing-4;
+  border-radius: tokens.$radius-base;
+  padding: tokens.$spacing-3 tokens.$spacing-4;
   border-left: 4px solid;
-  transition: all $duration-base $ease-out;
+  transition: all tokens.$duration-base tokens.$ease-out;
   position: relative;
   overflow: hidden;
 
@@ -220,13 +220,13 @@ onMounted(() => {
     width: 100%;
     height: 100%;
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-    transition: right $duration-slow;
+    transition: right tokens.$duration-slow;
   }
 }
 
 .alert-item:hover {
   transform: translateX(4px);
-  box-shadow: $shadow-md;
+  box-shadow: tokens.$shadow-md;
 
   &::before {
     right: 100%;
@@ -234,46 +234,46 @@ onMounted(() => {
 }
 
 .alert-database {
-  border-color: $color-danger;
-  background: linear-gradient(to right, rgba($color-danger, 0.05), transparent);
+  border-color: tokens.$color-danger;
+  background: linear-gradient(to right, rgba(tokens.$color-danger, 0.05), transparent);
 }
 
 .alert-config {
-  border-color: $brand-accent;
-  background: linear-gradient(to right, rgba($brand-accent, 0.05), transparent);
+  border-color: tokens.$brand-accent;
+  background: linear-gradient(to right, rgba(tokens.$brand-accent, 0.05), transparent);
 }
 
 .alert-security {
-  border-color: $color-warning;
-  background: linear-gradient(to right, rgba($color-warning, 0.05), transparent);
+  border-color: tokens.$color-warning;
+  background: linear-gradient(to right, rgba(tokens.$color-warning, 0.05), transparent);
 }
 
 .alert-error {
-  border-color: darken($color-danger, 10%);
-  background: linear-gradient(to right, rgba($color-danger, 0.08), transparent);
+  border-color: tokens.$color-danger-dark;
+  background: linear-gradient(to right, rgba(tokens.$color-danger, 0.08), transparent);
 }
 
 .alert-warning {
-  border-color: $color-warning;
-  background: linear-gradient(to right, rgba($color-warning, 0.05), transparent);
+  border-color: tokens.$color-warning;
+  background: linear-gradient(to right, rgba(tokens.$color-warning, 0.05), transparent);
 }
 
 .alert-info {
-  border-color: $color-info;
-  background: linear-gradient(to right, rgba($color-info, 0.05), transparent);
+  border-color: tokens.$color-info;
+  background: linear-gradient(to right, rgba(tokens.$color-info, 0.05), transparent);
 }
 
 .alert-content {
   display: flex;
   align-items: center;
-  gap: $spacing-3;
+  gap: tokens.$spacing-3;
   justify-content: space-between;
 }
 
 .alert-main {
   display: flex;
   align-items: center;
-  gap: $spacing-3;
+  gap: tokens.$spacing-3;
   flex: 1;
 }
 
@@ -284,15 +284,15 @@ onMounted(() => {
 }
 
 .alert-database .alert-icon {
-  color: $color-danger;
+  color: tokens.$color-danger;
 }
 
 .alert-config .alert-icon {
-  color: $brand-accent;
+  color: tokens.$brand-accent;
 }
 
 .alert-security .alert-icon {
-  color: $color-warning;
+  color: tokens.$color-warning;
 }
 
 .alert-text {
@@ -300,22 +300,22 @@ onMounted(() => {
 }
 
 .alert-title {
-  font-weight: $font-weight-semibold;
+  font-weight: tokens.$font-weight-semibold;
   color: var(--text-primary);
-  margin-bottom: $spacing-1;
-  font-size: $font-size-base;
+  margin-bottom: tokens.$spacing-1;
+  font-size: tokens.$font-size-base;
 }
 
 .alert-description {
-  font-size: $font-size-sm;
+  font-size: tokens.$font-size-sm;
   color: var(--text-secondary);
-  line-height: $line-height-relaxed;
+  line-height: tokens.$line-height-relaxed;
 }
 
 /* 动画效果 */
 .alert-list-enter-active,
 .alert-list-leave-active {
-  transition: all $duration-base $ease-out;
+  transition: all tokens.$duration-base tokens.$ease-out;
 }
 
 .alert-list-enter-from {
@@ -329,30 +329,30 @@ onMounted(() => {
 }
 
 .alert-list-move {
-  transition: transform $duration-base $ease-out;
+  transition: transform tokens.$duration-base tokens.$ease-out;
 }
 
 /* 按钮样式 */
 .alert-item {
   .el-button {
-    font-size: $font-size-sm;
-    padding: $spacing-1 $spacing-3;
+    font-size: tokens.$font-size-sm;
+    padding: tokens.$spacing-1 tokens.$spacing-3;
     height: 28px;
-    border-radius: $radius-base;
-    font-weight: $font-weight-medium;
+    border-radius: tokens.$radius-base;
+    font-weight: tokens.$font-weight-medium;
   }
 }
 
 /* 响应式设计 */
-@media (max-width: $breakpoint-md) {
+@media (max-width: tokens.$breakpoint-md) {
   .system-alerts {
-    padding: $spacing-3;
+    padding: tokens.$spacing-3;
   }
   
   .alert-content {
     flex-direction: column;
     align-items: flex-start;
-    gap: $spacing-2;
+    gap: tokens.$spacing-2;
   }
 
   .alert-main {
@@ -360,15 +360,15 @@ onMounted(() => {
   }
 
   .alert-icon {
-    margin-bottom: $spacing-2;
+    margin-bottom: tokens.$spacing-2;
   }
 }
 
 /* 暗色主题 */
 .dark {
   .system-alerts {
-    background: linear-gradient(135deg, rgba($color-warning, 0.1) 0%, rgba($color-warning, 0.15) 100%);
-    border-color: rgba($color-warning, 0.3);
+    background: linear-gradient(135deg, rgba(tokens.$color-warning, 0.1) 0%, rgba(tokens.$color-warning, 0.15) 100%);
+    border-color: rgba(tokens.$color-warning, 0.3);
   }
 
   .alert-item {

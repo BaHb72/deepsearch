@@ -113,14 +113,22 @@ class ProcessManager:
 
         def signal_handler(signum, frame):
             self.logger.info(f"收到信号 {signum}，开始优雅关闭...")
-            # 如果有引擎，先停止引擎
-            if self._primary_engine:
-                try:
-                    self._primary_engine.stop()
-                except Exception as e:
-                    self.logger.error(f"停止引擎时出错: {e}")
-            # 然后执行全面清理
-            self.shutdown()
+
+            try:
+                # 尝试获取当前事件循环
+                loop = asyncio.get_running_loop()
+                # 在事件循环内，创建异步任务
+                loop.create_task(self._async_shutdown())
+                self.logger.debug("Created async shutdown task in running event loop")
+            except RuntimeError:
+                # 不在事件循环内，进行同步关闭
+                if self._primary_engine:
+                    try:
+                        self._primary_engine.stop()
+                    except Exception as e:
+                        self.logger.error(f"停止引擎时出错: {e}")
+                # 执行全面清理
+                self.shutdown()
 
         # Unix/Linux 信号
         if sys.platform != "win32":
@@ -487,8 +495,8 @@ class ProcessManager:
                 except (psutil.NoSuchProcess, psutil.TimeoutExpired):
                     try:
                         child.kill()
-                    except:
-                        pass
+                    except Exception as e:
+                        self.logger.debug(f"Failed to kill child process {child.pid}: {e}")
                 except Exception as e:
                     self.logger.debug(f"清理进程 {child.pid} 失败: {e}")
 
@@ -508,8 +516,20 @@ class ProcessManager:
             name = process.name().lower()
             return any(keyword in name for keyword in ['python', 'node', 'npm', 'uvicorn'])
 
-        except:
+        except Exception as e:
+            self.logger.debug(f"Failed to check if process is related: {e}")
             return False
+
+    async def _async_shutdown(self):
+        """异步关闭方法"""
+        if self._primary_engine:
+            try:
+                await self._primary_engine.stop_async()
+            except Exception as e:
+                self.logger.error(f"异步停止引擎时出错: {e}")
+
+        # 调用同步的 shutdown 进行其他清理
+        self.shutdown()
 
     def shutdown(self, timeout: float = 10.0, force: bool = False):
         """
@@ -645,8 +665,8 @@ class ProcessManager:
                                 self.logger.info(f"清理端口 {conn.laddr.port} (PID={conn.pid})")
                                 proc.terminate()
                                 proc.wait(timeout=2)
-                        except:
-                            pass
+                        except Exception as e:
+                            self.logger.debug(f"Failed to clean up port process: {e}")
 
         except Exception as e:
             self.logger.error(f"清理端口失败: {e}")

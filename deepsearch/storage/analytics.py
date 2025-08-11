@@ -3,6 +3,7 @@
 用于日级别数据的分析和存储
 """
 import os
+import re
 from datetime import date
 from typing import Optional, List, Dict, Any
 
@@ -13,6 +14,13 @@ from deepsearch.observability.logger import logger
 
 
 class AnalyticsDB:
+
+    @staticmethod
+    def _validate_table_name(table_name: str) -> bool:
+        """验证表名是否安全，防止SQL注入"""
+        pattern = r'^[a-zA-Z_][a-zA-Z0-9_]*$'
+        return bool(re.match(pattern, table_name))
+    
     """DuckDB 分析数据库
     
     用于存储和分析日级别的市场数据
@@ -368,10 +376,19 @@ class AnalyticsDB:
         if not self.conn:
             raise RuntimeError("未连接到数据库")
 
+        # 验证表名防止SQL注入
+        if not self._validate_table_name(table_name):
+            raise ValueError(f"Invalid table name: {table_name}")
+
         # 先获取记录数
         count_before = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
-        # 导入数据
+        # 导入数据 - 注意: DuckDB 的 read_parquet 需要使用字符串参数
+        # 为了安全，先验证文件路径存在
+        import os
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+            
         self.conn.execute(f"""
             INSERT OR REPLACE INTO {table_name} 
             SELECT * FROM read_parquet('{file_path}')
@@ -391,9 +408,10 @@ class AnalyticsDB:
 
         stats = {}
 
-        # 获取各表记录数
+        # 获取各表记录数 - 使用白名单的表名
         tables = ['market_daily', 'factor_data', 'indicator_data']
         for table in tables:
+            # 这里表名是硬编码的白名单，安全
             count = self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             stats[f"{table}_count"] = count
 

@@ -39,6 +39,12 @@ export default defineConfig({
                 ws: true,
                 changeOrigin: true
             },
+            // 数据源日志 WebSocket（用于 DataSource.vue）
+            '/api/data-source/logs': {
+                target: 'ws://localhost:8000',
+                ws: true,
+                changeOrigin: true
+            },
             // 代理 API 请求到后端
             '/api': {
                 target: 'http://localhost:8000',
@@ -55,7 +61,7 @@ export default defineConfig({
     css: {
         preprocessorOptions: {
             scss: {
-                // api: 'modern-compiler'  // 注释掉以使用默认 API
+                api: 'modern-compiler'  // 使用现代编译器 API，避免弃用警告
             }
         }
     },

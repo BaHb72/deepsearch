@@ -133,7 +133,7 @@ class EngineIPCServer:
             "start_time": self.engine._start_time.isoformat() if self.engine._start_time else None,
             "components": {
                 name: {
-                    "status": comp.get_status().value,
+                    "status": comp.status.value,
                     "type": comp.__class__.__name__
                 }
                 for name, comp in self.engine._components.items()
@@ -180,7 +180,7 @@ class EngineIPCServer:
 
     async def _handle_get_metrics(self, data: dict) -> dict:
         """获取系统指标"""
-        # TODO: 实现指标收集
+        # 目前返回空指标，后续可根据需要实现
         return {
             "cpu_usage": 0,
             "memory_usage": 0,
@@ -212,7 +212,7 @@ class EngineIPCServer:
                 await self.cache.set(
                     "engine:status",
                     json.dumps(status),
-                    ttl=60  # 60秒过期
+                    expire=60  # 60秒过期
                 )
 
                 # 发布状态更新事件

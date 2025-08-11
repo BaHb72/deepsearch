@@ -4,7 +4,7 @@
 使用新的异步组件基类，消除了重复的sync/async方法，
 并实现了清晰的关注点分离。
 """
-import asyncio
+import re
 from typing import Optional, Dict, Any
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -13,7 +13,8 @@ from sqlalchemy.orm import sessionmaker
 from deepsearch.config import settings
 from deepsearch.event.engine import EventEngine
 from deepsearch.gateway.gateway import Gateway
-from deepsearch.messaging.bus import CompositeMessageBus
+from deepsearch.messaging.bus import CompositeMessageBus, RouteConfig
+from deepsearch.messaging.factory import MessageBusFactory
 from deepsearch.monitoring import EventSystemMonitor
 from .async_component import AsyncComponent, SimpleAsyncComponent
 from .exceptions import error_context, ComponentLifecycleError
@@ -94,8 +95,54 @@ class MessageBusComponent(AsyncComponent[CompositeMessageBus]):
         """初始化消息总线"""
         with error_context(self.name, "initialize"):
             # 从配置创建消息总线
-            self._instance = CompositeMessageBus()
-            # CompositeMessageBus 没有 initialize 方法，初始化在构造函数中完成
+            buses = {}
+            routes = []
+
+            # 检查是否有消息总线配置
+            if hasattr(settings, 'message_bus'):
+                msg_bus_config = settings.message_bus
+
+                # 创建各个总线实例
+                if hasattr(msg_bus_config, 'buses'):
+                    for bus_name, bus_cfg in msg_bus_config.buses.items():
+                        if bus_cfg.enabled:
+                            # bus_cfg.type 可能是枚举，需要转换为字符串
+                            bus_type = str(bus_cfg.type.value) if hasattr(bus_cfg.type, 'value') else str(bus_cfg.type)
+                            bus_config = bus_cfg.config if bus_cfg.config else {}
+                            try:
+                                bus_instance = MessageBusFactory.create(bus_type, bus_config)
+                                buses[bus_name] = bus_instance
+                                self._logger.info(f"创建消息总线: {bus_name} (type={bus_type})")
+                            except Exception as e:
+                                self._logger.error(f"创建消息总线 {bus_name} 失败: {e}")
+
+                # 创建路由配置
+                if hasattr(msg_bus_config, 'routes'):
+                    for route_cfg in msg_bus_config.routes:
+                        # 将buses转换为字符串列表（如果是枚举的话）
+                        bus_list = []
+                        for bus in route_cfg.buses:
+                            if hasattr(bus, 'value'):
+                                bus_list.append(bus.value)
+                            else:
+                                bus_list.append(str(bus))
+
+                        route = RouteConfig(
+                            match=route_cfg.match,
+                            buses=bus_list
+                        )
+                        routes.append(route)
+                        self._logger.debug(f"添加路由规则: {route.match} -> {route.buses}")
+
+            # 如果没有配置，使用默认的内存总线
+            if not buses:
+                self._logger.warning("未找到消息总线配置，使用默认内存总线")
+                buses['inmem'] = MessageBusFactory.create('inmem', {})
+                routes.append(RouteConfig(match='*', buses=['inmem']))
+
+            # 创建CompositeMessageBus实例
+            self._instance = CompositeMessageBus(buses=buses, routes=routes)
+            self._logger.info(f"消息总线初始化完成: {len(buses)} 个总线, {len(routes)} 条路由")
 
     async def _start(self) -> None:
         """启动消息总线"""
@@ -128,6 +175,21 @@ class DatabaseComponent(AsyncComponent[Any]):
         self._engine = None
         self._session_factory = None
         self._is_timescale_enabled = False
+
+    @staticmethod
+    def validate_table_name(table_name: str) -> bool:
+        """
+        验证表名是否安全，防止SQL注入
+        
+        Args:
+            table_name: 要验证的表名
+            
+        Returns:
+            bool: 表名是否有效
+        """
+        # 只允许字母、数字、下划线
+        pattern = r'^[a-zA-Z_][a-zA-Z0-9_]*$'
+        return bool(re.match(pattern, table_name))
 
     async def _initialize(self) -> None:
         """初始化数据库连接"""
@@ -197,16 +259,15 @@ class DatabaseComponent(AsyncComponent[Any]):
 
     def _health_check(self) -> bool:
         """检查数据库健康状态"""
-        if not self._session_factory:
+        if not self._engine:
             return False
 
         try:
-            # 尝试创建一个会话并执行简单查询
-            async def check():
-                async with self._session_factory() as session:
-                    await session.execute("SELECT 1")
-
-            asyncio.run(check())
+            # 使用同步连接进行健康检查，避免协程警告
+            from sqlalchemy import text
+            with self._engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+                conn.commit()
             return True
         except Exception:
             return False
@@ -271,8 +332,13 @@ class CacheComponent(AsyncComponent[Any]):
                 'password': redis_config.get('password'),
             }
 
-            # 尝试建立连接
-            await self._connect_to_redis()
+            # 尝试建立连接（可选，失败不影响系统）
+            try:
+                await self._connect_to_redis()
+            except Exception as e:
+                self._logger.warning(f"Redis connection failed (will run without cache): {e}")
+                self._connected = False
+                self._connection_error = str(e)
 
             # 设置实例为self以满足基类要求
             self._instance = self
@@ -333,7 +399,7 @@ class CacheComponent(AsyncComponent[Any]):
         if self._redis_client:
             try:
                 if hasattr(self._redis_client, 'close'):
-                    self._redis_client.close()
+                    await self._redis_client.close()
                     if hasattr(self._redis_client, 'wait_closed'):
                         await self._redis_client.wait_closed()
                     else:

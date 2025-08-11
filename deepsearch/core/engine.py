@@ -9,6 +9,7 @@ import logging
 import signal
 import sys
 import threading
+from concurrent.futures import TimeoutError
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -16,14 +17,24 @@ from deepsearch.config import settings
 from deepsearch.constants import EVENT_SYSTEM_READY, EVENT_SYSTEM_EXIT
 from deepsearch.event.engine import Event
 from deepsearch.observability.logger import logger_manager
+from deepsearch.utils.port_checker import PortChecker
 from .container import AsyncContainer, ServiceProvider
 from .exceptions import error_context
+from .health.manager import HealthCheckManager
 from .interfaces import Component, ComponentStatus
 from .ipc import EngineIPCServer
 from .unified_components import (
     EventEngineComponent, MessageBusComponent, DatabaseComponent,
     CacheComponent, GatewayComponent, WebUIComponent
 )
+
+try:
+    from deepsearch.cloudflare import CloudflareTunnelComponent
+
+    TUNNEL_AVAILABLE = True
+except ImportError:
+    CloudflareTunnelComponent = None
+    TUNNEL_AVAILABLE = False
 
 
 class MainEngine:
@@ -58,9 +69,13 @@ class MainEngine:
         # IPC 服务器
         self._ipc_server = None
 
+        # 健康检查管理器
+        self._health_check_manager: Optional[HealthCheckManager] = None
+
         # 异步任务管理
         self._tasks: List[asyncio.Task] = []
         self._webui_task: Optional[asyncio.Task] = None
+        self._actual_webui_port: Optional[int] = None  # 存储实际使用的 WebUI 端口
         
         # 信号处理
         self._original_sigint = None
@@ -91,6 +106,11 @@ class MainEngine:
         container.register_singleton(MessageBusComponent)
         container.register_singleton(DatabaseComponent)
         container.register_singleton(CacheComponent)
+
+        # 注释掉 Cloudflare Tunnel 组件注册，因为不需要映射 webui 3000 端口
+        # 保留代码以备将来使用
+        # if TUNNEL_AVAILABLE and CloudflareTunnelComponent:
+        #     container.register_singleton(CloudflareTunnelComponent)
 
         # 注册支持组件 - 暂时不注册 MonitorComponent，因为它依赖 EventEngine
         # MonitorComponent 需要在 EventEngine 初始化后手动设置
@@ -145,6 +165,9 @@ class MainEngine:
             if threading.current_thread() is threading.main_thread():
                 await self._initialize_ipc_server()
 
+            # 初始化健康检查管理器
+            await self._initialize_health_check_manager()
+
             self._logger.info("[OK] System initialization completed")
 
     def _load_components(self) -> None:
@@ -158,6 +181,11 @@ class MainEngine:
             GatewayComponent,
             WebUIComponent
         ]
+
+        # 注释掉 Cloudflare Tunnel 组件，因为不需要自动加载
+        # 保留代码以备将来使用
+        # if TUNNEL_AVAILABLE and CloudflareTunnelComponent:
+        #     component_types.append(CloudflareTunnelComponent)
 
         for component_type in component_types:
             try:
@@ -177,8 +205,33 @@ class MainEngine:
 
     async def _initialize_components(self) -> None:
         """按依赖顺序初始化组件"""
-        # 使用容器的异步初始化功能
-        await self._container.initialize_async_services(self._provider)
+        initialized_components = []
+        try:
+            # 使用容器的异步初始化功能
+            await self._container.initialize_async_services(self._provider)
+
+            # 记录初始化成功的组件
+            for name, component in self._components.items():
+                if component.status == ComponentStatus.INITIALIZED:
+                    initialized_components.append(name)
+
+        except Exception as e:
+            self._logger.error(f"Component initialization failed: {e}")
+            # 回滚已初始化的组件
+            await self._rollback_initialization(initialized_components)
+            raise
+
+    async def _rollback_initialization(self, initialized_components: List[str]) -> None:
+        """回滚已初始化的组件"""
+        self._logger.info(f"Rolling back {len(initialized_components)} initialized components...")
+        for name in reversed(initialized_components):
+            try:
+                component = self._components.get(name)
+                if component and hasattr(component, 'stop_async'):
+                    await component.stop_async()
+                    self._logger.debug(f"Rolled back component: {name}")
+            except Exception as e:
+                self._logger.error(f"Error rolling back component {name}: {e}")
 
     async def _initialize_ipc_server(self) -> None:
         """初始化 IPC 服务器"""
@@ -207,6 +260,23 @@ class MainEngine:
             self._logger.error(f"Failed to initialize IPC server: {e}")
             # IPC 服务器是可选的，失败不影响主系统
 
+    async def _initialize_health_check_manager(self) -> None:
+        """初始化健康检查管理器"""
+        try:
+            # 创建健康检查管理器
+            self._health_check_manager = HealthCheckManager(
+                check_interval=30.0,
+                check_timeout=5.0
+            )
+
+            # 自动注册所有组件的健康检查器
+            self._health_check_manager.auto_register_checkers(self._components)
+
+            self._logger.info("[OK] Health check manager initialized")
+        except Exception as e:
+            self._logger.error(f"Failed to initialize health check manager: {e}")
+            # 健康检查是可选的，失败不影响主系统
+
     async def start(self) -> None:
         """启动引擎和所有组件"""
         with error_context("MainEngine", "start"):
@@ -216,26 +286,67 @@ class MainEngine:
 
             self._logger.info("Starting DeepSearch System...")
             self._start_time = datetime.now()
+            started_components = []
 
-            # 设置信号处理
-            self._setup_signal_handlers()
+            try:
+                # 设置信号处理
+                self._setup_signal_handlers()
 
-            # 启动所有组件
-            await self._container.start_async_services(self._provider)
+                # 启动所有组件
+                await self._container.start_async_services(self._provider)
 
-            self._running = True
+                # 记录启动成功的组件
+                for name, component in self._components.items():
+                    if component.status == ComponentStatus.RUNNING:
+                        started_components.append(name)
 
-            # 发送系统就绪事件
-            event_engine = self.get_component(EventEngineComponent)
-            if event_engine:
-                event = Event(EVENT_SYSTEM_READY, {
-                    "timestamp": datetime.now(),
-                    "mode": self._mode
-                })
-                event_engine.get_instance().put(event)
+                # 启动健康检查
+                if self._health_check_manager:
+                    await self._health_check_manager.start()
 
-            self._logger.info("[OK] DeepSearch System started successfully")
-            self._logger.info(f"System is running in {self._mode} mode")
+                # 验证关键组件是否启动成功
+                await self._validate_startup()
+
+                self._running = True
+
+                # 发送系统就绪事件
+                event_engine = self.get_component(EventEngineComponent)
+                if event_engine:
+                    event = Event(EVENT_SYSTEM_READY, {
+                        "timestamp": datetime.now(),
+                        "mode": self._mode
+                    })
+                    event_engine.get_instance().put(event)
+
+                self._logger.info("[OK] DeepSearch System started successfully")
+                self._logger.info(f"System is running in {self._mode} mode")
+
+            except Exception as e:
+                self._logger.error(f"System startup failed: {e}")
+                # 回滚已启动的组件
+                await self._rollback_startup(started_components)
+                raise
+
+    async def _validate_startup(self) -> None:
+        """验证关键组件是否启动成功"""
+        critical_components = ['event_engine', 'message_bus']
+
+        for name in critical_components:
+            component = self.get_component_by_name(name)
+            if component and component.status != ComponentStatus.RUNNING:
+                raise RuntimeError(f"Critical component {name} failed to start")
+
+    async def _rollback_startup(self, started_components: List[str]) -> None:
+        """回滚已启动的组件"""
+        self._logger.info(f"Rolling back {len(started_components)} started components...")
+        for name in reversed(started_components):
+            try:
+                component = self._components.get(name)
+                if component and hasattr(component, 'stop_async'):
+                    await component.stop_async()
+                    self._logger.debug(f"Stopped component: {name}")
+            except Exception as e:
+                self._logger.error(f"Error stopping component {name}: {e}")
 
     async def run(self) -> None:
         """运行引擎直到收到停止信号"""
@@ -258,38 +369,103 @@ class MainEngine:
                 return
 
             self._logger.info("Stopping DeepSearch System...")
+            shutdown_start = datetime.now()
 
-            # 发送系统退出事件
+            # 分阶段关闭，每个阶段都有超时保护
+            try:
+                # 阶段1: 发送系统退出事件 (1秒超时)
+                await self._shutdown_phase_events(1.0)
+
+                # 阶段2: 停止健康检查 (2秒超时)
+                await self._shutdown_phase_health(2.0)
+
+                # 阶段3: 取消异步任务 (5秒超时)
+                await self._shutdown_phase_tasks(5.0)
+
+                # 阶段4: 停止IPC服务器 (2秒超时)
+                await self._shutdown_phase_ipc(2.0)
+
+                # 阶段5: 停止所有组件 (10秒超时)
+                await self._shutdown_phase_components(10.0)
+
+            except Exception as e:
+                self._logger.error(f"Error during shutdown: {e}")
+                # 继续关闭流程，不中断
+
+            finally:
+                # 恢复信号处理
+                self._restore_signal_handlers()
+
+                self._running = False
+                shutdown_time = (datetime.now() - shutdown_start).total_seconds()
+                self._logger.info(f"[OK] DeepSearch System stopped (took {shutdown_time:.2f}s)")
+
+    async def _shutdown_phase_events(self, timeout: float) -> None:
+        """关闭阶段1: 发送系统退出事件"""
+        try:
             event_engine = self.get_component(EventEngineComponent)
             if event_engine and event_engine.status == ComponentStatus.RUNNING:
                 event = Event(EVENT_SYSTEM_EXIT, {
                     "timestamp": datetime.now(),
-                    "uptime": (datetime.now() - self._start_time).total_seconds()
+                    "uptime": (datetime.now() - self._start_time).total_seconds() if self._start_time else 0
                 })
                 event_engine.get_instance().put(event)
+                await asyncio.wait_for(asyncio.sleep(0.5), timeout=timeout)
+        except asyncio.TimeoutError:
+            self._logger.warning("Event notification phase timed out")
+        except Exception as e:
+            self._logger.error(f"Error in event phase: {e}")
 
-                # 等待事件处理完成
-                await asyncio.sleep(0.5)
+    async def _shutdown_phase_health(self, timeout: float) -> None:
+        """关闭阶段2: 停止健康检查"""
+        try:
+            if self._health_check_manager:
+                await asyncio.wait_for(
+                    self._health_check_manager.stop(),
+                    timeout=timeout
+                )
+        except asyncio.TimeoutError:
+            self._logger.warning("Health check shutdown timed out")
+        except Exception as e:
+            self._logger.error(f"Error stopping health checks: {e}")
 
-            # 取消所有异步任务
-            await self._cancel_all_tasks()
+    async def _shutdown_phase_tasks(self, timeout: float) -> None:
+        """关闭阶段3: 取消异步任务"""
+        try:
+            await asyncio.wait_for(
+                self._cancel_all_tasks(),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            self._logger.warning("Task cancellation timed out")
+        except Exception as e:
+            self._logger.error(f"Error cancelling tasks: {e}")
 
-            # 停止 IPC 服务器
+    async def _shutdown_phase_ipc(self, timeout: float) -> None:
+        """关闭阶段4: 停止IPC服务器"""
+        try:
             if self._ipc_server:
-                try:
-                    await self._ipc_server.stop_async()
-                    self._logger.info("IPC Server stopped")
-                except Exception as e:
-                    self._logger.error(f"Error stopping IPC server: {e}")
+                await asyncio.wait_for(
+                    self._ipc_server.stop_async(),
+                    timeout=timeout
+                )
+                self._logger.info("IPC Server stopped")
+        except asyncio.TimeoutError:
+            self._logger.warning("IPC server shutdown timed out")
+        except Exception as e:
+            self._logger.error(f"Error stopping IPC server: {e}")
 
-            # 停止所有组件
-            await self._container.stop_async_services(self._provider)
-
-            # 恢复信号处理
-            self._restore_signal_handlers()
-            
-            self._running = False
-            self._logger.info("[OK] DeepSearch System stopped")
+    async def _shutdown_phase_components(self, timeout: float) -> None:
+        """关闭阶段5: 停止所有组件"""
+        try:
+            await asyncio.wait_for(
+                self._container.stop_async_services(self._provider),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            self._logger.warning("Component shutdown timed out")
+        except Exception as e:
+            self._logger.error(f"Error stopping components: {e}")
 
     async def _cancel_all_tasks(self) -> None:
         """取消所有异步任务"""
@@ -303,13 +479,22 @@ class MainEngine:
             if not task.done():
                 task.cancel()
 
-        # 等待所有任务完成
-        results = await asyncio.gather(*self._tasks, return_exceptions=True)
-
-        # 记录任何错误
-        for i, result in enumerate(results):
-            if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
-                self._logger.error(f"Task {i} error: {result}")
+        # 等待所有任务完成，设置超时以避免永久等待
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*self._tasks, return_exceptions=True),
+                timeout=5.0
+            )
+            # 记录任何错误
+            for i, result in enumerate(results):
+                if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
+                    self._logger.error(f"Task {i} error: {result}")
+        except asyncio.TimeoutError:
+            self._logger.warning("Some tasks did not complete within timeout")
+            # 强制取消所有未完成的任务
+            for task in self._tasks:
+                if not task.done():
+                    task.cancel()
 
         self._tasks.clear()
         self._webui_task = None
@@ -323,19 +508,36 @@ class MainEngine:
             return
 
         if sys.platform != "win32":
-            loop = asyncio.get_event_loop()
-            for sig in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(
-                    sig, lambda: asyncio.create_task(self._signal_handler())
-                )
+            try:
+                loop = asyncio.get_event_loop()
+                for sig in (signal.SIGINT, signal.SIGTERM):
+                    loop.add_signal_handler(
+                        sig, lambda: asyncio.create_task(self._signal_handler())
+                    )
+            except RuntimeError:
+                # 没有事件循环，使用标准信号处理
+                self._setup_standard_signal_handlers()
         else:
-            # Windows不支持add_signal_handler，使用signal.signal
-            self._original_sigint = signal.signal(
-                signal.SIGINT, lambda s, f: asyncio.create_task(self._signal_handler())
-            )
-            self._original_sigterm = signal.signal(
-                signal.SIGTERM, lambda s, f: asyncio.create_task(self._signal_handler())
-            )
+            # Windows使用标准信号处理
+            self._setup_standard_signal_handlers()
+
+    def _setup_standard_signal_handlers(self) -> None:
+        """设置标准信号处理器（用于Windows和无事件循环的情况）"""
+
+        def signal_handler(signum, frame):
+            self._logger.info(f"Received signal {signum}")
+            # 使用线程安全的方式设置停止事件
+            self._stop_event.set()
+            # 如果在异步环境中，尝试创建任务
+            try:
+                loop = asyncio.get_running_loop()
+                asyncio.create_task(self._signal_handler())
+            except RuntimeError:
+                # 不在异步环境中，直接设置停止标志
+                pass
+
+        self._original_sigint = signal.signal(signal.SIGINT, signal_handler)
+        self._original_sigterm = signal.signal(signal.SIGTERM, signal_handler)
 
     def _restore_signal_handlers(self) -> None:
         """恢复原始信号处理器"""
@@ -362,7 +564,6 @@ class MainEngine:
         """异步运行 WebUI 服务器"""
         server = None
         try:
-
             # 获取 WebUI 组件配置
             from deepsearch.config import get_config
             config = get_config()
@@ -374,27 +575,55 @@ class MainEngine:
             # 设置引擎到 app_state（通过 app.state 访问）
             app.state.app_state.set_engine(self)
 
-            # 初始化监控
-            app.state.app_state.initialize_monitoring()
+            # 监控初始化已移到 FastAPI startup 事件中
+            # 这里只负责设置引擎实例
 
-            # 启动 WebSocket 监控广播
-            if app.state.app_state.monitor_api:
-                await app.state.app_state.websocket_manager.start_monitoring_broadcast(app.state.app_state.monitor_api)
+            # 检查端口是否可用，如果不可用则自动寻找可用端口
+            port = config.webui.backend_port
+            original_port = port
 
-            self._logger.info(f"Starting WebUI server on port {config.webui.backend_port}...")
+            if not PortChecker.is_port_available(port, host="127.0.0.1"):
+                self._logger.warning(f"Port {port} is already in use, searching for available port...")
+
+                # 尝试获取可用端口
+                new_port = PortChecker.get_available_port(start_port=port + 1, max_attempts=50)
+
+                if new_port:
+                    self._logger.info(f"Found available port {new_port}, using it instead of {original_port}")
+                    port = new_port
+
+                    # 通知前端实际使用的端口（可以通过 WebSocket 或状态 API）
+                    # 这里可以将实际端口存储在引擎状态中
+                    self._actual_webui_port = port
+                else:
+                    # 如果找不到可用端口，仍然尝试使用原端口，让错误明确报告
+                    self._logger.error(
+                        f"Could not find any available port after checking 50 ports starting from {port + 1}")
+                    self._logger.warning(f"Attempting to use original port {original_port} anyway...")
+                    port = original_port
+            else:
+                self._logger.info(f"Port {port} is available")
+                self._actual_webui_port = port
+
+            self._logger.info(f"Starting WebUI server on port {port}...")
 
             # 配置并启动服务器
             server_config = uvicorn.Config(
                 app=app,
                 host="0.0.0.0",
-                port=config.webui.backend_port,
+                port=port,
                 log_level="warning",  # 减少日志输出
                 loop="asyncio",
-                access_log=False  # 避免重复日志
+                access_log=False,  # 避免重复日志
+                # 禁用uvicorn的信号处理，由引擎统一管理
+                # 注意：uvicorn在不同版本中处理方式可能不同
             )
             server = uvicorn.Server(server_config)
 
-            # 方法一：直接运行服务器，让它在任务被取消时退出
+            # 如果server有install_signal_handlers属性，将其设置为False
+            if hasattr(server, 'install_signal_handlers'):
+                server.install_signal_handlers = lambda: None
+
             self._logger.info("WebUI server starting...")
 
             # 添加详细的异常处理
@@ -405,11 +634,17 @@ class MainEngine:
                 self._logger.info("WebUI server stopped normally")
             except asyncio.CancelledError:
                 self._logger.info("Server.serve() was cancelled")
+                # 确保服务器正确关闭
+                if server:
+                    server.should_exit = True
+                    # 给服务器一些时间来清理
+                    await asyncio.sleep(0.5)
                 raise
             except OSError as e:
                 self._logger.error(f"OSError in server.serve(): {e}")
                 if "Address already in use" in str(e):
-                    self._logger.error(f"Port {config.webui.backend_port} is already in use!")
+                    self._logger.error(f"Port {port} is already in use despite our checks!")
+                    self._logger.error("This might happen if another process grabbed the port between check and bind")
                 raise
             except Exception as e:
                 self._logger.error(f"Unexpected error in server.serve(): {type(e).__name__}: {e}")
@@ -418,13 +653,17 @@ class MainEngine:
                 raise
 
         except asyncio.CancelledError:
-            self._logger.info("WebUI task cancelled")
+            self._logger.info("WebUI task cancelled, cleaning up...")
             if server:
                 server.should_exit = True
-            raise
+            # 不重新抛出，让任务正常结束
         except Exception as e:
             self._logger.error(f"WebUI task error: {e}", exc_info=True)
-            raise
+        finally:
+            # 确保资源被清理
+            if server:
+                server.should_exit = True
+            self._logger.info("WebUI task cleanup completed")
 
     # ==================== 组件访问 ====================
 
@@ -449,6 +688,7 @@ class MainEngine:
             "mode": self._mode,
             "start_time": self._start_time.isoformat() if self._start_time else None,
             "uptime": (datetime.now() - self._start_time).total_seconds() if self._start_time else 0,
+            "webui_port": self._actual_webui_port,  # 包含实际使用的 WebUI 端口
             "components": {}
         }
 
@@ -469,17 +709,56 @@ class MainEngine:
             "components": {}
         }
 
-        for name, component in self._components.items():
-            component_health = component.health_check()
-            health["components"][name] = {
-                "healthy": component_health,
-                "status": component.status.value
-            }
+        # 如果有健康检查管理器，使用它获取更详细的信息
+        if self._health_check_manager:
+            # 使用缓存的结果，避免同步调用异步方法
+            last_results = self._health_check_manager.get_last_results()
+            overall_status = self._health_check_manager.get_overall_status()
 
-            if not component_health:
-                health["healthy"] = False
+            health["healthy"] = overall_status.value == "healthy"
+            health["overall_status"] = overall_status.value
+
+            for name, result in last_results.items():
+                health["components"][name] = {
+                    "healthy": result.status.value == "healthy",
+                    "status": result.status.value,
+                    "message": result.message,
+                    "last_check": result.timestamp.isoformat()
+                }
+        else:
+            # 使用传统方式
+            for name, component in self._components.items():
+                component_health = component.health_check()
+                health["components"][name] = {
+                    "healthy": component_health,
+                    "status": component.status.value
+                }
+
+                if not component_health:
+                    health["healthy"] = False
 
         return health
+
+    async def health_check_async(self) -> Dict[str, Any]:
+        """异步健康检查"""
+        if self._health_check_manager:
+            # 执行完整的健康检查
+            report = await self._health_check_manager.get_health_report()
+            return report
+        else:
+            # 返回同步版本的结果
+            return self.health_check()
+
+    def _handle_task_exception(self, task: asyncio.Task) -> None:
+        """处理任务异常"""
+        try:
+            exc = task.exception()
+            if exc and not isinstance(exc, asyncio.CancelledError):
+                self._logger.error(f"Task {task.get_name()} failed with exception: {exc}")
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            self._logger.error(f"Error handling task exception: {e}")
 
     # ==================== 兼容性方法 ====================
 
@@ -491,12 +770,14 @@ class MainEngine:
         """同步初始化方法（向后兼容）"""
         try:
             loop = asyncio.get_running_loop()
-            # 如果已经有运行的循环，创建任务
-            task = asyncio.create_task(self.initialize_async())
-            # 等待任务完成
-            loop.run_until_complete(task)
+            # 如果已经有运行的循环，说明在异步环境中
+            # 不能在异步环境中调用同步方法，抛出错误
+            raise RuntimeError(
+                "Cannot call synchronous initialize() from async context. "
+                "Use await initialize_async() instead."
+            )
         except RuntimeError:
-            # 没有运行的循环，使用 asyncio.run
+            # 没有运行的循环，可以安全地创建新循环
             asyncio.run(self.initialize_async())
 
     async def initialize_async(self) -> None:
@@ -507,12 +788,16 @@ class MainEngine:
                      include_webui: bool = True,
                      include_frontend: bool = True) -> None:
         """分阶段启动引擎（同步包装器）"""
-        # 获取当前事件循环，如果没有则创建一个新的
         try:
             loop = asyncio.get_running_loop()
-            # 如果已经有运行的循环，创建任务
-            task = asyncio.create_task(self._start_phased_async(include_business, include_webui, include_frontend))
-        except RuntimeError:
+            # 在异步环境中不能调用同步方法
+            raise RuntimeError(
+                "Cannot call synchronous start_phased() from async context. "
+                "Use await _start_phased_async() instead."
+            )
+        except RuntimeError as e:
+            if "Cannot call synchronous" in str(e):
+                raise
             # 没有运行的循环，使用 asyncio.run
             asyncio.run(self._start_phased_async(include_business, include_webui, include_frontend))
 
@@ -540,7 +825,10 @@ class MainEngine:
             # 确保在正确的事件循环中创建任务
             try:
                 loop = asyncio.get_running_loop()
+                # 创建任务并添加错误处理
                 self._webui_task = loop.create_task(self._run_webui_async())
+                # 添加任务完成回调以处理异常
+                self._webui_task.add_done_callback(self._handle_task_exception)
                 self._tasks.append(self._webui_task)
                 self._logger.info("启动 WebUI 异步任务")
             except RuntimeError:
@@ -557,10 +845,16 @@ class MainEngine:
         """同步停止方法（向后兼容）"""
         try:
             loop = asyncio.get_running_loop()
-            # 如果已经有运行的循环，创建任务
-            task = asyncio.create_task(self.stop_async())
-            # 等待任务完成
-            loop.run_until_complete(task)
+            # 如果在异步环境中，创建任务并返回
+            # 使用call_soon_threadsafe确保线程安全
+            future = asyncio.run_coroutine_threadsafe(
+                self.stop_async(), loop
+            )
+            # 等待完成，但设置超时避免永久阻塞
+            try:
+                future.result(timeout=30)
+            except TimeoutError:
+                self._logger.error("Stop operation timed out after 30 seconds")
         except RuntimeError:
             # 没有运行的循环，使用 asyncio.run
             asyncio.run(self.stop_async())

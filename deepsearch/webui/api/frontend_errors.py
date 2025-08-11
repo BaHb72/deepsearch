@@ -2,15 +2,15 @@
 前端错误日志 API
 收集和管理前端错误信息
 """
-from datetime import datetime
-from typing import Dict, Any, List
-from collections import deque
 import asyncio
+import json
+from collections import deque
+from datetime import datetime
+from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from loguru import logger
-import json
 
 router = APIRouter()
 
@@ -204,7 +204,9 @@ async def get_error_stats() -> Dict[str, Any]:
             error_time = datetime.fromisoformat(error.get('timestamp', '')).timestamp()
             if error_time > one_hour_ago:
                 recent_errors += 1
-        except:
+        except Exception as e:
+            # Skip invalid timestamp entries
+            logger.debug(f"Invalid timestamp in error entry: {e}")
             pass
 
     return {

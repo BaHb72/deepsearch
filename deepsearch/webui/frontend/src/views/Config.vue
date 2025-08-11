@@ -986,10 +986,10 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
-@import '@/assets/styles/design-tokens.scss';
+@use '@/assets/styles/design-tokens.scss' as tokens;
 
 .config-view {
-  padding: $spacing-6;
+  padding: tokens.$spacing-6;
   background: var(--bg-color);
   min-height: 100vh;
 }
@@ -998,31 +998,31 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: $spacing-8;
-  padding: $spacing-6;
+  margin-bottom: tokens.$spacing-8;
+  padding: tokens.$spacing-6;
   background: var(--card-bg);
-  border-radius: $radius-xl;
-  box-shadow: $shadow-sm;
+  border-radius: tokens.$radius-xl;
+  box-shadow: tokens.$shadow-sm;
 
   .header-content {
     .page-title {
-      margin: 0 0 $spacing-2 0;
-      font-size: $font-size-3xl;
-      font-weight: $font-weight-bold;
+      margin: 0 0 tokens.$spacing-2 0;
+      font-size: tokens.$font-size-3xl;
+      font-weight: tokens.$font-weight-bold;
       color: var(--text-primary);
       display: flex;
       align-items: center;
-      gap: $spacing-3;
+      gap: tokens.$spacing-3;
 
       .title-icon {
         font-size: 36px;
-        @include gradient-text($brand-primary, $brand-secondary);
+        @include tokens.gradient-text(tokens.$brand-primary, tokens.$brand-secondary);
       }
     }
 
     .page-subtitle {
       margin: 0;
-      font-size: $font-size-base;
+      font-size: tokens.$font-size-base;
       color: var(--text-secondary);
       padding-left: 48px;
     }
@@ -1030,14 +1030,14 @@ onMounted(async () => {
 
   .header-actions {
     display: flex;
-    gap: $spacing-3;
+    gap: tokens.$spacing-3;
 
     .el-button {
-      padding: $spacing-2 $spacing-4;
+      padding: tokens.$spacing-2 tokens.$spacing-4;
       height: 40px;
 
       .el-icon {
-        margin-right: $spacing-1;
+        margin-right: tokens.$spacing-1;
       }
     }
   }
@@ -1054,24 +1054,24 @@ onMounted(async () => {
 
   :deep(.el-tabs__item) {
     height: 48px;
-    padding: 0 $spacing-5;
-    font-size: $font-size-base;
-    font-weight: $font-weight-medium;
+    padding: 0 tokens.$spacing-5;
+    font-size: tokens.$font-size-base;
+    font-weight: tokens.$font-weight-medium;
     color: var(--text-secondary);
     border: none;
-    transition: all $duration-base;
+    transition: all tokens.$duration-base;
 
     &:hover {
-      color: $brand-primary;
+      color: tokens.$brand-primary;
     }
 
     &.is-active {
-      color: $brand-primary;
-      background: rgba($brand-primary, 0.1);
-      border-radius: $radius-base;
+      color: tokens.$brand-primary;
+      background: rgba(tokens.$brand-primary, 0.1);
+      border-radius: tokens.$radius-base;
 
       .tab-label {
-        font-weight: $font-weight-semibold;
+        font-weight: tokens.$font-weight-semibold;
       }
     }
   }
@@ -1079,7 +1079,7 @@ onMounted(async () => {
   .tab-label {
     display: flex;
     align-items: center;
-    gap: $spacing-2;
+    gap: tokens.$spacing-2;
 
     .el-icon {
       font-size: 18px;
@@ -1087,42 +1087,42 @@ onMounted(async () => {
   }
 
   .tab-badge {
-    margin-left: $spacing-2;
+    margin-left: tokens.$spacing-2;
   }
 }
 
 .config-card {
-  margin-top: $spacing-5;
-  border-radius: $radius-lg;
-  box-shadow: $shadow-sm;
+  margin-top: tokens.$spacing-5;
+  border-radius: tokens.$radius-lg;
+  box-shadow: tokens.$shadow-sm;
 
   &:hover {
-    box-shadow: $shadow-md;
+    box-shadow: tokens.$shadow-md;
   }
 
   :deep(.el-form) {
-    padding: $spacing-2 0;
+    padding: tokens.$spacing-2 0;
 
     .el-form-item {
-      margin-bottom: $spacing-6;
+      margin-bottom: tokens.$spacing-6;
 
       &__label {
-        font-weight: $font-weight-medium;
+        font-weight: tokens.$font-weight-medium;
         color: var(--text-primary);
       }
     }
   }
 
   .form-item-tip {
-    margin-left: $spacing-3;
-    font-size: $font-size-sm;
+    margin-left: tokens.$spacing-3;
+    font-size: tokens.$font-size-sm;
     color: var(--text-secondary);
   }
 
   .option-label {
     display: flex;
     align-items: center;
-    gap: $spacing-2;
+    gap: tokens.$spacing-2;
 
     .el-icon {
       font-size: 16px;
@@ -1131,20 +1131,20 @@ onMounted(async () => {
 
   .output-options {
     display: flex;
-    gap: $spacing-8;
+    gap: tokens.$spacing-8;
 
     .output-option {
       display: flex;
       align-items: center;
-      gap: $spacing-3;
+      gap: tokens.$spacing-3;
 
       .option-icon {
         font-size: 24px;
         color: var(--text-secondary);
-        transition: all $duration-base;
+        transition: all tokens.$duration-base;
 
         &.active {
-          color: $brand-primary;
+          color: tokens.$brand-primary;
         }
       }
     }
@@ -1155,16 +1155,16 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: $spacing-1 0;
+  padding: tokens.$spacing-1 0;
 
   span {
-    font-weight: $font-weight-semibold;
-    font-size: $font-size-lg;
+    font-weight: tokens.$font-weight-semibold;
+    font-size: tokens.$font-size-lg;
     color: var(--text-primary);
     display: flex;
     align-items: center;
     position: relative;
-    padding-left: $spacing-6;
+    padding-left: tokens.$spacing-6;
 
     &::before {
       content: '';
@@ -1172,53 +1172,53 @@ onMounted(async () => {
       left: 0;
       width: 4px;
       height: 24px;
-      @include gradient-bg($brand-primary, $brand-secondary);
-      border-radius: $radius-sm;
+      @include tokens.gradient-bg(tokens.$brand-primary, tokens.$brand-secondary);
+      border-radius: tokens.$radius-sm;
     }
   }
 
   .header-right {
     display: flex;
     align-items: center;
-    gap: $spacing-3;
+    gap: tokens.$spacing-3;
   }
 
   .el-tag {
-    border-radius: $radius-full;
-    padding: $spacing-1 $spacing-3;
-    font-size: $font-size-sm;
-    font-weight: $font-weight-medium;
+    border-radius: tokens.$radius-full;
+    padding: tokens.$spacing-1 tokens.$spacing-3;
+    font-size: tokens.$font-size-sm;
+    font-weight: tokens.$font-weight-medium;
   }
 
   .el-button {
-    border-radius: $radius-base;
+    border-radius: tokens.$radius-base;
     height: 36px;
-    padding: 0 $spacing-4;
-    font-size: $font-size-sm;
+    padding: 0 tokens.$spacing-4;
+    font-size: tokens.$font-size-sm;
   }
 }
 
 /* 数据库配置卡片样式 */
 .el-card {
-  border-radius: $radius-lg;
+  border-radius: tokens.$radius-lg;
   border: none;
-  transition: all $duration-base $ease-out;
+  transition: all tokens.$duration-base tokens.$ease-out;
 
   &:hover {
-    box-shadow: $shadow-md;
+    box-shadow: tokens.$shadow-md;
     transform: translateY(-2px);
   }
 }
 
 /* 数据库表单样式 */
 .database-form {
-  padding: $spacing-3 $spacing-5;
+  padding: tokens.$spacing-3 tokens.$spacing-5;
 
   .el-form-item {
-    margin-bottom: $spacing-6;
+    margin-bottom: tokens.$spacing-6;
 
     &:last-child {
-      margin-bottom: $spacing-4;
+      margin-bottom: tokens.$spacing-4;
     }
   }
 
@@ -1227,13 +1227,13 @@ onMounted(async () => {
   }
 
   :deep(.el-input__inner) {
-    border-radius: $radius-base;
+    border-radius: tokens.$radius-base;
     height: 40px;
-    transition: all $duration-fast;
+    transition: all tokens.$duration-fast;
 
     &:focus {
-      border-color: $brand-primary;
-      box-shadow: 0 0 0 3px rgba($brand-primary, 0.15);
+      border-color: tokens.$brand-primary;
+      box-shadow: 0 0 0 3px rgba(tokens.$brand-primary, 0.15);
     }
   }
 
@@ -1250,30 +1250,30 @@ onMounted(async () => {
   }
 
   :deep(.el-form-item__label) {
-    font-weight: $font-weight-medium;
+    font-weight: tokens.$font-weight-medium;
     color: var(--text-primary);
-    font-size: $font-size-sm;
+    font-size: tokens.$font-size-sm;
   }
 }
 
 /* 保存按钮样式优化 */
 .header-right {
   .el-button[type="success"] {
-    font-weight: $font-weight-medium;
+    font-weight: tokens.$font-weight-medium;
 
     &:hover {
       transform: translateY(-1px);
-      box-shadow: $shadow-success;
+      box-shadow: tokens.$shadow-success;
     }
   }
 
   .el-button[type="warning"] {
-    font-weight: $font-weight-semibold;
+    font-weight: tokens.$font-weight-semibold;
     animation: pulse 2s infinite;
 
     &:hover {
       transform: translateY(-1px);
-      box-shadow: 0 2px 8px rgba($color-warning, 0.3);
+      box-shadow: 0 2px 8px rgba(tokens.$color-warning, 0.3);
     }
   }
 }
@@ -1281,7 +1281,7 @@ onMounted(async () => {
 /* 数据库页签内容样式 */
 .database-tab-content {
   .el-card {
-    margin-bottom: $spacing-6;
+    margin-bottom: tokens.$spacing-6;
 
     &:last-child {
       margin-bottom: 0;
@@ -1290,11 +1290,11 @@ onMounted(async () => {
 
   /* 密码记住选项样式 */
   .el-checkbox {
-    font-size: $font-size-sm;
+    font-size: tokens.$font-size-sm;
     color: var(--text-regular);
 
     :deep(.el-checkbox__label) {
-      padding-left: $spacing-2;
+      padding-left: tokens.$spacing-2;
     }
   }
 }
@@ -1303,30 +1303,30 @@ onMounted(async () => {
 :deep(.el-form-item.is-required) {
   .el-form-item__label::before {
     content: '*';
-    color: $color-danger;
-    margin-right: $spacing-1;
+    color: tokens.$color-danger;
+    margin-right: tokens.$spacing-1;
   }
 }
 
 /* 错误输入框样式 */
 :deep(.el-input.is-error .el-input__wrapper) {
-  box-shadow: 0 0 0 1px $color-danger inset;
+  box-shadow: 0 0 0 1px tokens.$color-danger inset;
 }
 
 /* 响应式 */
-@media (max-width: $breakpoint-md) {
+@media (max-width: tokens.$breakpoint-md) {
   .config-view {
-    padding: $spacing-4;
+    padding: tokens.$spacing-4;
   }
 
   .page-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: $spacing-4;
+    gap: tokens.$spacing-4;
 
     .header-content {
       .page-title {
-        font-size: $font-size-2xl;
+        font-size: tokens.$font-size-2xl;
       }
     }
 
@@ -1338,10 +1338,10 @@ onMounted(async () => {
 
   .config-tabs {
     :deep(.el-tabs__item) {
-      padding: 0 $spacing-3;
+      padding: 0 tokens.$spacing-3;
 
       .tab-label {
-        font-size: $font-size-sm;
+        font-size: tokens.$font-size-sm;
 
         .el-icon {
           font-size: 16px;
@@ -1354,7 +1354,7 @@ onMounted(async () => {
 /* 暗色主题 */
 .dark {
   .config-card {
-    @include dark-glassmorphism(0.95, 5px);
+    @include tokens.dark-glassmorphism(0.95, 5px);
   }
 }
 </style>

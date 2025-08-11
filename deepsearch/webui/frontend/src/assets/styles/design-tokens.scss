@@ -5,16 +5,35 @@
 // 颜色系统 Color System
 // ==========================================
 
-// 品牌色 Brand Colors
+// 品牌色 Brand Colors - 更现代的科技感配色
 $brand-primary: #6366f1; // 主色调 - 高级紫蓝色
 $brand-secondary: #8b5cf6; // 次要色 - 紫色
 $brand-accent: #06b6d4; // 强调色 - 青色
+$brand-gradient-start: #667eea; // 渐变起始色
+$brand-gradient-end: #764ba2; // 渐变结束色
+
+// 金融数据专用色 Financial Data Colors
+$color-bullish: #10b981; // 上涨 - 翠绿
+$color-bearish: #ef4444; // 下跌 - 朱红
+$color-neutral: #6b7280; // 横盘 - 中性灰
 
 // 语义色 Semantic Colors
 $color-success: #10b981; // 成功 - 绿色
-$color-warning: #f59e0b; // 警告 - 橙色
+$color-warning: #f59e0b; // 警告 - 琥珀
 $color-danger: #ef4444; // 危险 - 红色
 $color-info: #3b82f6; // 信息 - 蓝色
+
+// 语义色深色版本 Semantic Colors - Dark Variants
+$color-success-dark: #0e9f6e; // 成功深色
+$color-warning-dark: #d97706; // 警告深色
+$color-danger-dark: #dc2626; // 危险深色
+$color-info-dark: #2563eb; // 信息深色
+
+// 发光色 Glow Colors
+$glow-primary: rgba(99, 102, 241, 0.6);
+$glow-success: rgba(16, 185, 129, 0.6);
+$glow-danger: rgba(239, 68, 68, 0.6);
+$glow-warning: rgba(245, 158, 11, 0.6);
 
 // 中性色 Neutral Colors
 $neutral-50: #fafafa;
@@ -107,7 +126,7 @@ $radius-full: 9999px;
 // 阴影系统 Shadow System
 // ==========================================
 
-// 基础阴影
+// 基础阴影 - 增强层次感
 $shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 $shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 $shadow-base: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
@@ -115,13 +134,21 @@ $shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.
 $shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 $shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 
-// 彩色阴影
-$shadow-primary: 0 10px 40px -10px rgba(99, 102, 241, 0.35);
-$shadow-success: 0 10px 40px -10px rgba(16, 185, 129, 0.35);
-$shadow-danger: 0 10px 40px -10px rgba(239, 68, 68, 0.35);
+// 多层阴影 - 增加深度
+$shadow-layered: 0 2px 4px -1px rgba(0, 0, 0, 0.06),
+0 4px 6px -1px rgba(0, 0, 0, 0.08),
+0 8px 10px -2px rgba(0, 0, 0, 0.08),
+0 16px 24px -4px rgba(0, 0, 0, 0.10);
+
+// 彩色阴影 - 更鲜艳
+$shadow-primary: 0 10px 40px -10px rgba(99, 102, 241, 0.5);
+$shadow-success: 0 10px 40px -10px rgba(16, 185, 129, 0.5);
+$shadow-danger: 0 10px 40px -10px rgba(239, 68, 68, 0.5);
+$shadow-warning: 0 10px 40px -10px rgba(245, 158, 11, 0.5);
 
 // 内阴影
 $shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+$shadow-inner-lg: inset 0 4px 8px 0 rgba(0, 0, 0, 0.12);
 
 // ==========================================
 // 动画系统 Animation System
@@ -178,20 +205,44 @@ $breakpoint-2xl: 1536px;
 // 特效 Effects
 // ==========================================
 
-// 玻璃态效果
-@mixin glassmorphism($bg-opacity: 0.7, $blur: 10px) {
+// 玻璃态效果 - 增强版
+@mixin glassmorphism($bg-opacity: 0.7, $blur: 12px, $saturation: 1.5) {
   background: rgba(255, 255, 255, $bg-opacity);
-  backdrop-filter: blur($blur);
-  -webkit-backdrop-filter: blur($blur);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur($blur) saturate($saturation);
+  -webkit-backdrop-filter: blur($blur) saturate($saturation);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15),
+  inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
-// 暗色玻璃态
-@mixin dark-glassmorphism($bg-opacity: 0.7, $blur: 10px) {
-  background: rgba(0, 0, 0, $bg-opacity);
-  backdrop-filter: blur($blur);
-  -webkit-backdrop-filter: blur($blur);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+// 暗色玻璃态 - 增强版
+@mixin dark-glassmorphism($bg-opacity: 0.6, $blur: 16px, $saturation: 1.8) {
+  background: linear-gradient(
+                  135deg,
+                  rgba(10, 10, 20, $bg-opacity) 0%,
+                  rgba(20, 20, 40, $bg-opacity * 0.8) 100%
+  );
+  backdrop-filter: blur($blur) saturate($saturation);
+  -webkit-backdrop-filter: blur($blur) saturate($saturation);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37),
+  inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+// 噪点纹理
+@mixin noise-texture() {
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='noise'%3E%3CfeTurbulence baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.4'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+  }
 }
 
 // 渐变背景
@@ -207,9 +258,26 @@ $breakpoint-2xl: 1536px;
   background-clip: text;
 }
 
-// 光晕效果
-@mixin glow($color, $size: 20px) {
-  box-shadow: 0 0 $size $color;
+// 光晕效果 - 增强版
+@mixin glow($color, $size: 20px, $intensity: 1) {
+  box-shadow: 0 0 #{$size * 0.5} rgba($color, 0.8 * $intensity),
+  0 0 #{$size} rgba($color, 0.5 * $intensity),
+  0 0 #{$size * 2} rgba($color, 0.3 * $intensity);
+}
+
+// 内发光效果
+@mixin inner-glow($color, $size: 10px) {
+  box-shadow: inset 0 0 #{$size * 0.5} rgba($color, 0.5),
+  inset 0 0 #{$size} rgba($color, 0.3);
+}
+
+// 霓虹效果
+@mixin neon-effect($color) {
+  color: $color;
+  text-shadow: 0 0 10px rgba($color, 0.8),
+  0 0 20px rgba($color, 0.6),
+  0 0 30px rgba($color, 0.4),
+  0 0 40px rgba($color, 0.2);
 }
 
 // 呼吸动画

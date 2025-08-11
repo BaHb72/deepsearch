@@ -27,6 +27,7 @@ from .models import (
     ZeroMQConfig,
     HealthCheckConfig,
 )
+from .models.data_source import CloudflareConfig, DataProviderSettings
 
 
 class Settings(BaseSettings):
@@ -41,6 +42,9 @@ class Settings(BaseSettings):
     performance: Optional[PerformanceConfig] = None
     debug: Optional[DebugConfig] = None
     health_check: HealthCheckConfig = Field(default_factory=HealthCheckConfig)
+    cloudflare: Optional[CloudflareConfig] = None
+    cloudflare_workers: Optional[Dict[str, Any]] = None  # Workers 代理配置
+    data_providers: Optional[DataProviderSettings] = None
 
     @property
     def zeromq(self) -> ZeroMQConfig:

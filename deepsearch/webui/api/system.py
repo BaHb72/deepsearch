@@ -4,11 +4,12 @@
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from loguru import logger
 
 from deepsearch.core.component_manager import ComponentType, ComponentStatus
 from deepsearch.diagnostics import diagnostic_logger, log_diagnostic
+from deepsearch.webui.auth import optional_auth, require_auth
 
 router = APIRouter()
 
@@ -232,7 +233,7 @@ async def start_system(request: Request) -> Dict[str, Any]:
 
 
 @router.post("/stop")
-async def stop_system(request: Request) -> Dict[str, Any]:
+async def stop_system(request: Request, auth: Dict[str, Any] = Depends(require_auth)) -> Dict[str, Any]:
     """
     停止系统。
     
@@ -288,7 +289,7 @@ async def stop_system(request: Request) -> Dict[str, Any]:
 
 
 @router.post("/restart")
-async def restart_system(request: Request) -> Dict[str, Any]:
+async def restart_system(request: Request, auth: Dict[str, Any] = Depends(require_auth)) -> Dict[str, Any]:
     """
     重启系统。
     

@@ -235,7 +235,8 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
             # 新增：解析现有配置
             try:
                 existing_config = yaml.safe_load(existing_content) or {}
-            except:
+            except Exception as e:
+                logger.warning(f"Failed to parse existing config: {e}")
                 existing_config = {}
 
         # 准备要保存的配置

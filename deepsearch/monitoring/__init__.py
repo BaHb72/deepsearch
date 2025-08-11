@@ -11,13 +11,10 @@ DeepSearch 的系统监控和指标收集。
 from .event_monitor import EventSystemMonitor
 from .metrics import MetricsCollector
 from .monitor_api import MonitorAPI, MonitorDataStore
-from .simple_monitor import SimpleMonitor, setup_simple_monitoring
 
 __all__ = [
     "EventSystemMonitor",
     "MetricsCollector",
     "MonitorAPI",
     "MonitorDataStore",
-    "SimpleMonitor",
-    "setup_simple_monitoring",
 ]

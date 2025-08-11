@@ -41,7 +41,11 @@ class WebSocketManager:
         self._connections_lock = asyncio.Lock()  # 添加异步锁保护连接列表
         self._broadcast_task: Optional[asyncio.Task] = None
         self._monitor_api: Optional[MonitorAPI] = None
+        self._base_broadcast_interval: float = 2.0
         self._broadcast_interval: float = 2.0
+        self._last_data_hash: Optional[int] = None  # 用于检测数据变化
+        self._slow_connections_count: int = 0  # 慢连接计数
+        self._send_timeout: float = 0.5  # 单连接发送超时（500ms）
 
     async def accept_connection(self, websocket: WebSocket) -> None:
         """接受新的 WebSocket 连接"""
@@ -82,9 +86,17 @@ class WebSocketManager:
             await self.remove_connection(conn)
 
     async def _send_to_connection(self, conn: WebSocket, message: str, failed_list: list) -> None:
-        """发送消息到单个连接"""
+        """发送消息到单个连接（带超时控制）"""
         try:
-            await conn.send_text(message)
+            # 使用超时控制，避免慢连接阻塞
+            await asyncio.wait_for(
+                conn.send_text(message),
+                timeout=self._send_timeout
+            )
+        except asyncio.TimeoutError:
+            logger.debug(f"消息发送超时，标记为慢连接")
+            self._slow_connections_count += 1
+            failed_list.append(conn)
         except Exception as e:
             logger.debug(f"消息发送失败: {e}")
             failed_list.append(conn)
@@ -105,19 +117,46 @@ class WebSocketManager:
                 pass
 
     async def _monitoring_loop(self) -> None:
-        """监控数据广播循环"""
+        """监控数据广播循环（带背压控制）"""
         while True:
             try:
                 # 检查是否有连接，避免不必要的数据收集
                 async with self._connections_lock:
                     has_connections = bool(self._connections)
+                    connection_count = len(self._connections)
 
                 if self._monitor_api and has_connections:
-                    data = {
-                        "type": "monitor_update",
-                        "data": self._monitor_api.get_dashboard_data()
-                    }
-                    await self.broadcast_message(data)
+                    # 动态调整广播间隔
+                    self._adjust_broadcast_interval(connection_count)
+
+                    # 获取监控数据
+                    monitor_data = self._monitor_api.get_dashboard_data()
+
+                    # 检查数据是否有变化（简单哈希对比）
+                    data_str = json.dumps(monitor_data, sort_keys=True)
+                    current_hash = hash(data_str)
+
+                    if self._last_data_hash is None or self._last_data_hash != current_hash:
+                        # 数据有变化，执行广播
+                        self._last_data_hash = current_hash
+                        self._slow_connections_count = 0  # 重置慢连接计数
+
+                        data = {
+                            "type": "monitor_update",
+                            "data": monitor_data,
+                            "interval": self._broadcast_interval  # 告知客户端当前间隔
+                        }
+                        await self.broadcast_message(data)
+
+                        # 如果有太多慢连接，记录警告
+                        if self._slow_connections_count > connection_count * 0.3:
+                            logger.warning(
+                                f"慢连接比例过高 ({self._slow_connections_count}/{connection_count})，"
+                                f"广播间隔已调整至 {self._broadcast_interval:.1f}秒"
+                            )
+                    else:
+                        # 数据无变化，跳过广播（节省带宽）
+                        logger.debug("监控数据无变化，跳过本次广播")
 
                 await asyncio.sleep(self._broadcast_interval)
 
@@ -127,6 +166,32 @@ class WebSocketManager:
             except Exception as e:
                 logger.error(f"监控广播错误: {e}")
                 await asyncio.sleep(5)  # 错误后等待更长时间
+
+    def _adjust_broadcast_interval(self, connection_count: int) -> None:
+        """根据连接数和慢连接情况动态调整广播间隔"""
+        # 基于连接数的调整
+        if connection_count <= 5:
+            new_interval = self._base_broadcast_interval  # 2秒
+        elif connection_count <= 10:
+            new_interval = self._base_broadcast_interval * 1.5  # 3秒
+        elif connection_count <= 20:
+            new_interval = self._base_broadcast_interval * 2  # 4秒
+        else:
+            new_interval = self._base_broadcast_interval * 2.5  # 5秒
+
+        # 基于慢连接的额外调整
+        if self._slow_connections_count > connection_count * 0.2:
+            # 超过20%的连接是慢连接，进一步延长间隔
+            new_interval *= 1.5
+            new_interval = min(new_interval, 10.0)  # 最长10秒
+
+        # 平滑过渡，避免间隔突变
+        if hasattr(self, '_broadcast_interval'):
+            # 渐进式调整，每次最多改变50%
+            diff = new_interval - self._broadcast_interval
+            self._broadcast_interval += diff * 0.5
+        else:
+            self._broadcast_interval = new_interval
 
     async def close_all_connections(self) -> None:
         """关闭所有连接"""
@@ -248,11 +313,12 @@ def create_startup_handler(app_state: AppState):
                 # 在有限模式下运行，不创建新引擎
                 return
 
-            # 初始化监控
-            app_state.initialize_monitoring()
+            # 只在引擎存在且监控未初始化时初始化
+            if not app_state.monitor_api:
+                app_state.initialize_monitoring()
 
-            # 启动 WebSocket 监控广播
-            if app_state.monitor_api:
+            # 只在监控API存在且广播未启动时启动
+            if app_state.monitor_api and not app_state.websocket_manager._broadcast_task:
                 await app_state.websocket_manager.start_monitoring_broadcast(app_state.monitor_api)
 
             logger.info("Web UI 服务启动成功")
@@ -281,6 +347,14 @@ def create_shutdown_handler(app_state: AppState):
             # 停止监控 API
             if app_state.monitor_api:
                 app_state.monitor_api.stop()
+                app_state.monitor_api = None
+
+            # 停止监控器
+            if app_state.monitor:
+                app_state.monitor.stop()
+                app_state.monitor = None
+
+            logger.info("Web UI 服务优雅关闭完成")
 
         except Exception as e:
             logger.error(f"关闭时出错: {e}")
@@ -308,13 +382,27 @@ def create_app() -> FastAPI:
     app.add_event_handler("startup", create_startup_handler(app_state))
     app.add_event_handler("shutdown", create_shutdown_handler(app_state))
 
-    # 配置 CORS
+    # 配置 CORS（根据环境区分）
+    from deepsearch.config import get_config
+    config = get_config()
+
+    # 根据环境配置CORS
+    if config.app.env == "dev":
+        # 开发环境允许所有来源
+        cors_origins = ["*"]
+    else:
+        # 生产环境使用配置的白名单
+        cors_origins = getattr(config.webui, "cors_origins", ["http://localhost:3000"])
+        if isinstance(cors_origins, str):
+            cors_origins = [cors_origins]
+    
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # 生产环境应该限制具体域名
+        allow_origins=cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"],
+        expose_headers=["X-Total-Count", "X-Page-Count"],  # 暴露分页相关header
     )
 
     # 挂载静态文件
@@ -325,18 +413,26 @@ def create_app() -> FastAPI:
     # 导入并注册所有路由
     from deepsearch.webui.api import (
         database, cache, system, health, frontend_errors,
-        monitor, config, logs, data
+        monitor, config, logs, data, data_source, workers_proxy_simple as workers_proxy,
+        system_info, market, chart
     )
 
     app.include_router(monitor.router, prefix="/api/monitor", tags=["Monitor"])
     app.include_router(config.router, prefix="/api/config", tags=["Config"])
     app.include_router(system.router, prefix="/api/system", tags=["System"])
+    app.include_router(system_info.router)  # 系统信息路由
     app.include_router(logs.router, prefix="/api/logs", tags=["Logs"])
     app.include_router(data.router, prefix="/api/data", tags=["Data"])
+    app.include_router(data_source.router, tags=["DataSource"])  # 已包含 /api/data-source 前缀
     app.include_router(database.router, prefix="/api/database", tags=["Database"])
     app.include_router(cache.router, prefix="/api/cache", tags=["Cache"])
     app.include_router(health.router, prefix="/api/health", tags=["Health"])
     app.include_router(frontend_errors.router, prefix="/api/frontend", tags=["Frontend Errors"])
+    app.include_router(workers_proxy.router, tags=["Workers Proxy"])  # 已包含 /api/workers 前缀
+    app.include_router(market.router, tags=["Market"])  # 市场数据路由，已包含 /api/market 前缀
+    app.include_router(chart.router, tags=["Chart"])  # 图表数据路由，已包含 /api/chart 前缀
+    # 注释掉 Cloudflare Tunnel API，因为不需要映射 webui 端口
+    # app.include_router(tunnel.router, tags=["Cloudflare Tunnel"])  # 已包含 /api/tunnel 前缀
 
     return app
 

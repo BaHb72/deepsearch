@@ -1,53 +1,57 @@
 /* 全局样式文件 */
 
 // 导入设计令牌
-@import './design-tokens.scss';
+@use './design-tokens.scss' as tokens;
+// 导入动画
+@use './animations.scss' as animations;
+// 导入特效
+@use './effects.scss' as effects;
 
 /* 自定义CSS变量 */
 :root {
   /* 主题色 */
-  --primary-color: #{$brand-primary};
-  --success-color: #{$color-success};
-  --warning-color: #{$color-warning};
-  --danger-color: #{$color-danger};
-  --info-color: #{$color-info};
+  --primary-color: #{tokens.$brand-primary};
+  --success-color: #{tokens.$color-success};
+  --warning-color: #{tokens.$color-warning};
+  --danger-color: #{tokens.$color-danger};
+  --info-color: #{tokens.$color-info};
 
   /* 背景色 */
-  --bg-color: #{$bg-secondary};
-  --card-bg: #{$bg-primary};
-  --sidebar-bg: #{$neutral-800};
+  --bg-color: #{tokens.$bg-secondary};
+  --card-bg: #{tokens.$bg-primary};
+  --sidebar-bg: #{tokens.$neutral-800};
 
   /* 文字颜色 */
-  --text-primary: #{$neutral-900};
-  --text-regular: #{$neutral-700};
-  --text-secondary: #{$neutral-500};
-  --text-placeholder: #{$neutral-400};
+  --text-primary: #{tokens.$neutral-900};
+  --text-regular: #{tokens.$neutral-700};
+  --text-secondary: #{tokens.$neutral-500};
+  --text-placeholder: #{tokens.$neutral-400};
 
   /* 边框 */
-  --border-color: #{$border-color};
-  --border-light: #{$border-color-light};
-  --border-lighter: #{$neutral-100};
+  --border-color: #{tokens.$border-color};
+  --border-light: #{tokens.$border-color-light};
+  --border-lighter: #{tokens.$neutral-100};
 
   /* 阴影 */
-  --shadow-light: #{$shadow-sm};
-  --shadow-base: #{$shadow-base};
-  --shadow-dark: #{$shadow-lg};
+  --shadow-light: #{tokens.$shadow-sm};
+  --shadow-base: #{tokens.$shadow-base};
+  --shadow-dark: #{tokens.$shadow-lg};
 }
 
 /* 暗色主题 */
 .dark {
-  --bg-color: #{$dark-bg-primary};
-  --card-bg: #{$dark-bg-secondary};
-  --sidebar-bg: #{$dark-bg-tertiary};
+  --bg-color: #{tokens.$dark-bg-primary};
+  --card-bg: #{tokens.$dark-bg-secondary};
+  --sidebar-bg: #{tokens.$dark-bg-tertiary};
 
-  --text-primary: #{$neutral-100};
-  --text-regular: #{$neutral-200};
-  --text-secondary: #{$neutral-400};
-  --text-placeholder: #{$neutral-500};
+  --text-primary: #{tokens.$neutral-100};
+  --text-regular: #{tokens.$neutral-200};
+  --text-secondary: #{tokens.$neutral-400};
+  --text-placeholder: #{tokens.$neutral-500};
 
-  --border-color: #{$neutral-700};
-  --border-light: #{$neutral-800};
-  --border-lighter: #{$neutral-800};
+  --border-color: #{tokens.$neutral-700};
+  --border-light: #{tokens.$neutral-800};
+  --border-lighter: #{tokens.$neutral-800};
 }
 
 /* 全局样式重置 */
@@ -57,37 +61,78 @@
 
 body {
   margin: 0;
-  font-family: $font-sans;
-  font-size: $font-size-base;
-  line-height: $line-height-normal;
+  font-family: tokens.$font-sans;
+  font-size: tokens.$font-size-base;
+  line-height: tokens.$line-height-normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-color);
   color: var(--text-primary);
-  transition: background-color $duration-base, color $duration-base;
+  transition: background-color tokens.$duration-base, color tokens.$duration-base;
+  position: relative;
+
+  // 添加噪点纹理背景
+  &::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.02;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence baseFrequency='0.85'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noiseFilter)' opacity='0.4'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
 }
 
 /* 滚动条美化 */
 * {
-  @include custom-scrollbar(8px, var(--border-lighter), var(--border-color));
+  @include tokens.custom-scrollbar(8px, var(--border-lighter), var(--border-color));
 }
 
-/* 卡片样式 */
+/* 卡片样式 - 增强版 */
 .el-card {
   border: none;
-  border-radius: $radius-lg;
-  box-shadow: $shadow-sm;
-  transition: all $duration-base $ease-out;
+  border-radius: tokens.$radius-lg;
+  box-shadow: tokens.$shadow-layered;
+  transition: all tokens.$duration-base tokens.$ease-out;
   overflow: hidden;
+  position: relative;
+  background: var(--card-bg);
+
+  // 添加微妙的渐变背景
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+                    135deg,
+                    rgba(tokens.$brand-primary, 0.02) 0%,
+                    transparent 50%
+    );
+    pointer-events: none;
+  }
 
   &:hover {
-    box-shadow: $shadow-md;
-    transform: translateY(-2px);
+    box-shadow: tokens.$shadow-lg;
+    transform: translateY(-4px) scale(1.01);
+
+    &::before {
+      background: linear-gradient(
+                      135deg,
+                      rgba(tokens.$brand-primary, 0.05) 0%,
+                      transparent 50%
+      );
+    }
   }
 
   .el-card__header {
-    border-bottom: $border-width solid var(--border-lighter);
-    padding: $spacing-5 $spacing-6;
+    border-bottom: tokens.$border-width solid var(--border-lighter);
+    padding: tokens.$spacing-5 tokens.$spacing-6;
     background: var(--card-bg);
 
     .card-header {
@@ -97,34 +142,58 @@ body {
 
       h3 {
         margin: 0;
-        font-size: $font-size-lg;
-        font-weight: $font-weight-semibold;
+        font-size: tokens.$font-size-lg;
+        font-weight: tokens.$font-weight-semibold;
         color: var(--text-primary);
       }
     }
   }
 
   .el-card__body {
-    padding: $spacing-6;
+    padding: tokens.$spacing-6;
   }
 }
 
-/* 按钮美化 */
+/* 按钮美化 - 增强版 */
 .el-button {
-  font-weight: $font-weight-medium;
-  border-radius: $radius-base;
-  transition: all $duration-fast $ease-out;
-  padding: $spacing-2 $spacing-4;
+  font-weight: tokens.$font-weight-medium;
+  border-radius: tokens.$radius-base;
+  transition: all tokens.$duration-fast tokens.$ease-out;
+  padding: tokens.$spacing-2 tokens.$spacing-4;
+  position: relative;
+  overflow: hidden;
+
+  // 添加涟漪效果容器
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+    pointer-events: none;
+  }
+
+  &:active::after {
+    width: 300px;
+    height: 300px;
+    opacity: 0;
+  }
 
   &--primary {
-    @include gradient-bg($brand-primary, $brand-secondary);
+    @include tokens.gradient-bg(tokens.$brand-gradient-start, tokens.$brand-gradient-end);
     border: none;
     color: white;
-    box-shadow: $shadow-sm;
+    box-shadow: tokens.$shadow-sm;
 
     &:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: $shadow-primary;
+      transform: translateY(-2px);
+      box-shadow: tokens.$shadow-primary;
+      filter: brightness(1.1);
     }
 
     &:active:not(:disabled) {
@@ -133,34 +202,34 @@ body {
   }
 
   &--success {
-    background-color: $color-success;
-    border-color: $color-success;
+    background-color: tokens.$color-success;
+    border-color: tokens.$color-success;
     color: white;
 
     &:hover:not(:disabled) {
-      background-color: darken($color-success, 10%);
-      border-color: darken($color-success, 10%);
+      background-color: tokens.$color-success-dark;
+      border-color: tokens.$color-success-dark;
       transform: translateY(-1px);
-      box-shadow: $shadow-success;
+      box-shadow: tokens.$shadow-success;
     }
   }
 
   &--danger {
-    background-color: $color-danger;
-    border-color: $color-danger;
+    background-color: tokens.$color-danger;
+    border-color: tokens.$color-danger;
     color: white;
 
     &:hover:not(:disabled) {
-      background-color: darken($color-danger, 10%);
-      border-color: darken($color-danger, 10%);
+      background-color: tokens.$color-danger-dark;
+      border-color: tokens.$color-danger-dark;
       transform: translateY(-1px);
-      box-shadow: $shadow-danger;
+      box-shadow: tokens.$shadow-danger;
     }
   }
 
   &--text {
     &:hover:not(:disabled) {
-      background-color: rgba($brand-primary, 0.1);
+      background-color: rgba(tokens.$brand-primary, 0.1);
     }
   }
 }
@@ -168,34 +237,34 @@ body {
 /* 标签美化 */
 .el-tag {
   border: none;
-  border-radius: $radius-full;
-  font-weight: $font-weight-medium;
-  padding: $spacing-1 $spacing-3;
-  font-size: $font-size-sm;
+  border-radius: tokens.$radius-full;
+  font-weight: tokens.$font-weight-medium;
+  padding: tokens.$spacing-1 tokens.$spacing-3;
+  font-size: tokens.$font-size-sm;
 
   &--success {
-    background: rgba($color-success, 0.1);
-    color: $color-success;
+    background: rgba(tokens.$color-success, 0.1);
+    color: tokens.$color-success;
   }
 
   &--warning {
-    background: rgba($color-warning, 0.1);
-    color: $color-warning;
+    background: rgba(tokens.$color-warning, 0.1);
+    color: tokens.$color-warning;
   }
 
   &--danger {
-    background: rgba($color-danger, 0.1);
-    color: $color-danger;
+    background: rgba(tokens.$color-danger, 0.1);
+    color: tokens.$color-danger;
   }
 
   &--info {
-    background: rgba($color-info, 0.1);
-    color: $color-info;
+    background: rgba(tokens.$color-info, 0.1);
+    color: tokens.$color-info;
   }
 
   &--primary {
-    background: rgba($brand-primary, 0.1);
-    color: $brand-primary;
+    background: rgba(tokens.$brand-primary, 0.1);
+    color: tokens.$brand-primary;
   }
 }
 
@@ -236,33 +305,33 @@ body {
 
 /* 渐变背景 */
 .gradient-bg {
-  @include gradient-bg($brand-primary, $brand-secondary);
+  @include tokens.gradient-bg(tokens.$brand-primary, tokens.$brand-secondary);
 }
 
 .gradient-text {
-  @include gradient-text($brand-primary, $brand-secondary);
+  @include tokens.gradient-text(tokens.$brand-primary, tokens.$brand-secondary);
 }
 
 /* 玻璃态效果 */
 .glass-effect {
-  @include glassmorphism();
+  @include tokens.glassmorphism();
 }
 
 .dark .glass-effect {
-  @include dark-glassmorphism();
+  @include tokens.dark-glassmorphism();
 }
 
 /* 光晕效果 */
 .glow-primary {
-  @include glow($brand-primary);
+  @include tokens.glow(tokens.$brand-primary);
 }
 
 .glow-success {
-  @include glow($color-success);
+  @include tokens.glow(tokens.$color-success);
 }
 
 .glow-danger {
-  @include glow($color-danger);
+  @include tokens.glow(tokens.$color-danger);
 }
 
 /* 响应式布局 */
@@ -278,7 +347,7 @@ body {
 
 /* 加载动画优化 */
 .el-loading-mask {
-  @include dark-glassmorphism(0.8, 20px);
+  @include tokens.dark-glassmorphism(0.8, 20px);
 
   .el-loading-spinner {
     .circular {
@@ -287,8 +356,8 @@ body {
 
     .el-loading-text {
       color: white;
-      font-size: $font-size-base;
-      margin-top: $spacing-3;
+      font-size: tokens.$font-size-base;
+      margin-top: tokens.$spacing-3;
     }
   }
 }
@@ -306,15 +375,15 @@ body {
 
 /* 自定义组件样式 */
 .component-card {
-  margin-bottom: $spacing-3;
+  margin-bottom: tokens.$spacing-3;
   cursor: pointer;
-  transition: all $duration-base $ease-out;
-  border-radius: $radius-lg;
+  transition: all tokens.$duration-base tokens.$ease-out;
+  border-radius: tokens.$radius-lg;
   overflow: hidden;
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: $shadow-md;
+    box-shadow: tokens.$shadow-md;
   }
 
   .component-header {
@@ -326,20 +395,20 @@ body {
       flex: 1;
 
       .component-name {
-        font-size: $font-size-base;
-        font-weight: $font-weight-semibold;
-        margin-bottom: $spacing-1;
+        font-size: tokens.$font-size-base;
+        font-weight: tokens.$font-weight-semibold;
+        margin-bottom: tokens.$spacing-1;
       }
 
       .component-desc {
-        font-size: $font-size-sm;
+        font-size: tokens.$font-size-sm;
         color: var(--text-secondary);
-        @include line-clamp(2);
+        @include tokens.line-clamp(2);
       }
     }
 
     .component-status {
-      margin-left: $spacing-4;
+      margin-left: tokens.$spacing-4;
     }
   }
 }
@@ -347,7 +416,7 @@ body {
 /* 统计卡片 */
 .stat-card {
   text-align: center;
-  padding: $spacing-6;
+  padding: tokens.$spacing-6;
   position: relative;
   overflow: hidden;
 
@@ -360,7 +429,7 @@ body {
     height: 200%;
     background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
     opacity: 0;
-    transition: opacity $duration-base;
+    transition: opacity tokens.$duration-base;
   }
 
   &:hover::before {
@@ -369,9 +438,9 @@ body {
 
   .stat-icon {
     font-size: 48px;
-    margin-bottom: $spacing-3;
+    margin-bottom: tokens.$spacing-3;
     opacity: 0.9;
-    transition: transform $duration-base $ease-bounce;
+    transition: transform tokens.$duration-base tokens.$ease-bounce;
   }
 
   &:hover .stat-icon {
@@ -379,14 +448,14 @@ body {
   }
 
   .stat-value {
-    font-size: $font-size-3xl;
-    font-weight: $font-weight-bold;
-    margin-bottom: $spacing-2;
+    font-size: tokens.$font-size-3xl;
+    font-weight: tokens.$font-weight-bold;
+    margin-bottom: tokens.$spacing-2;
     letter-spacing: -0.02em;
   }
 
   .stat-label {
-    font-size: $font-size-sm;
+    font-size: tokens.$font-size-sm;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -394,25 +463,25 @@ body {
 
   &.success {
     .stat-icon, .stat-value {
-      @include gradient-text($color-success, darken($color-success, 10%));
+      @include tokens.gradient-text(tokens.$color-success, tokens.$color-success-dark);
     }
   }
 
   &.warning {
     .stat-icon, .stat-value {
-      @include gradient-text($color-warning, darken($color-warning, 10%));
+      @include tokens.gradient-text(tokens.$color-warning, tokens.$color-warning-dark);
     }
   }
 
   &.danger {
     .stat-icon, .stat-value {
-      @include gradient-text($color-danger, darken($color-danger, 10%));
+      @include tokens.gradient-text(tokens.$color-danger, tokens.$color-danger-dark);
     }
   }
 
   &.info {
     .stat-icon, .stat-value {
-      @include gradient-text($color-info, darken($color-info, 10%));
+      @include tokens.gradient-text(tokens.$color-info, tokens.$color-info-dark);
     }
   }
 }

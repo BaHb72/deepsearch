@@ -375,7 +375,8 @@ class SinkFactory:
                 import ctypes
                 kernel32 = ctypes.windll.kernel32
                 kernel32.SetConsoleOutputCP(65001)  # UTF-8
-            except:
+            except Exception as e:
+                # Windows console encoding setup failed, not critical
                 pass
         
         return {

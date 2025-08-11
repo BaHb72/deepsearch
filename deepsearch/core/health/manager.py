@@ -111,13 +111,15 @@ class HealthCheckManager:
         for name, component in components.items():
             if name in checker_mapping:
                 try:
-                    checker_class = checker_mapping[name]
-                    checker = checker_class()
-                    checker.component = component
-                    self.register_checker(checker)
-                    logger.debug(f"自动注册健康检查器: {name}")
+                    # 只为运行中的组件注册健康检查器
+                    if hasattr(component, 'status') and component.status.value in ['initialized', 'running']:
+                        checker_class = checker_mapping[name]
+                        checker = checker_class()
+                        checker.component = component
+                        self.register_checker(checker)
+                        logger.debug(f"自动注册健康检查器: {name}")
                 except Exception as e:
-                    logger.error(f"自动注册健康检查器失败 {name}: {e}")
+                    logger.warning(f"自动注册健康检查器失败 {name}: {e}")
 
     async def check_all(self, timeout: Optional[float] = None) -> Dict[str, HealthCheckResult]:
         """

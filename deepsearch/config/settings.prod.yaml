@@ -34,3 +34,91 @@ database:
     poolSize: 10
     pool_size: 10
     has_saved_password: false
+
+# ========================================
+# Cloudflare 配置
+# ========================================
+cloudflare:
+  # 支持多个 Worker URLs（优先使用）
+  workers:
+    - "https://wandering-sea-d394.934073514.workers.dev"
+    # 可以添加更多 Worker 节点以实现负载均衡和故障转移
+    # - "https://backup-worker.workers.dev"
+  
+  # 单个 Worker URL（向后兼容）
+  worker_url: "https://wandering-sea-d394.934073514.workers.dev"
+  
+  # Tunnel 配置
+  tunnel_url: "${CLOUDFLARE_TUNNEL_URL:https://akshare-api.yourdomain.com}"
+  
+  # 通用配置
+  timeout: 30
+  retry_count: 3
+
+# ========================================
+# Cloudflare Workers 代理配置
+# ========================================
+cloudflare_workers:
+  # 是否启用 Workers 代理
+  enabled: false
+  
+  # Workers 域名
+  url: "wandering-sea-d394.934073514.workers.dev"
+  
+  # 请求超时时间（秒）
+  timeout: 30
+  
+  # 重试次数
+  retry_count: 3
+  
+  # 重试延迟（秒）
+  retry_delay: 1
+  
+  # API 密钥（可选）
+  api_key: ""
+  
+  # Workers 失败时是否自动切换到直连
+  # 暂时禁用直到完全测试
+  fallback_to_direct: false
+  
+  # 缓存配置
+  cache_enabled: true
+  cache_ttl: 300  # 缓存过期时间（秒）
+  secret_key: "${CLOUDFLARE_SECRET_KEY:}"
+
+# ========================================
+# 数据提供者配置
+# ========================================
+message_bus:
+  buses:
+    inmem:
+      type: inmem
+      enabled: true
+      config: { }
+  routes:
+    - match: "*"
+      buses: [ "inmem" ]
+
+# ========================================
+# 数据提供者配置
+# ========================================
+data_providers:
+  # 默认提供者
+  default: "cloudflare_proxy"
+  
+  # Cloudflare Worker 代理
+  cloudflare_proxy:
+    enabled: true
+    worker_url: "https://wandering-sea-d394.934073514.workers.dev"
+    timeout: 30
+    retry_count: 3
+    cache_ttl: 60
+  
+  # AkShare 代理配置
+  akshare_proxy:
+    enabled: false
+    use_proxy: true
+    cache_ttl: 300  # 5分钟本地缓存
+    rate_limit:
+      max_requests: 100
+      time_window: 60

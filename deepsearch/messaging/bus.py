@@ -3,10 +3,12 @@ Base message bus interface and composite implementation.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from fnmatch import fnmatch
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar, Awaitable, DefaultDict
 
 from deepsearch.config.models import RouteConfig
 
@@ -108,6 +110,8 @@ class CompositeMessageBus(MessageBus):
         self._routes: List[RouteConfig] = routes or []
         self._running = False
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        # 维护 async handler -> sync wrapper 的映射，按 topic 分组
+        self._async_wrappers: DefaultDict[str, Dict[Callable, Callable]] = defaultdict(dict)
 
     def add_bus(self, name: str, bus: MessageBus) -> None:
         """
@@ -247,3 +251,80 @@ class CompositeMessageBus(MessageBus):
                 self.logger.debug(f"停止消息总线：{name}")
             except Exception as e:
                 self.logger.debug(f"停止 '{name}' 时出错：{e}")
+
+    async def publish_async(self, topic: str, message: T) -> None:
+        """
+        Async wrapper for publish. 与同步行为一致并校验运行状态。
+        
+        Args:
+            topic: The topic to publish to
+            message: The message to publish
+        """
+        # 保持与 publish 一致的运行状态语义
+        if not self._running:
+            raise RuntimeError("Message bus is not running")
+        # 直接使用同步路径，确保在当前线程内操作底层 ZeroMQ socket（线程安全）
+        self.publish(topic, message)
+
+    async def subscribe_async(self, topic: str, async_handler: Callable[[str, T], Awaitable[None]]) -> None:
+        """
+        允许以异步 handler 订阅；内部包装为同步 handler 并把执行调度回事件循环。
+        
+        Args:
+            topic: The topic pattern to subscribe to (supports wildcards)
+            async_handler: Async callback function to handle received messages
+            
+        Raises:
+            RuntimeError: If called outside of a running event loop
+        """
+        try:
+            # 在订阅时捕获当前事件循环（主循环）
+            loop = asyncio.get_running_loop()
+        except RuntimeError as e:
+            # 如果调用点不在协程上下文中，明确报错
+            self.logger.error(
+                "subscribe_async() must be called from within a running async event loop. "
+                "Use 'await subscribe_async()' from an async function or coroutine."
+            )
+            raise RuntimeError(
+                "subscribe_async() requires a running event loop. "
+                "It must be called from within an async context (async function or coroutine)."
+            ) from e
+
+        def _sync_wrapper(t: str, msg: T) -> None:
+            # 注意：这里运行在 ZeroMQ 订阅线程（或其他非事件循环线程）
+            try:
+                # 确保事件循环仍在运行
+                if loop.is_closed():
+                    self.logger.error(f"Event loop is closed, cannot schedule handler for topic '{t}'")
+                    return
+
+                # 使用 call_soon_threadsafe 安全地调度异步任务
+                loop.call_soon_threadsafe(asyncio.create_task, async_handler(t, msg))
+            except RuntimeError as e:
+                # 事件循环可能已停止
+                self.logger.error(f"Event loop no longer running for topic '{t}': {e}")
+            except Exception as e:
+                self.logger.error(f"Failed to schedule async handler for topic '{t}': {e}", exc_info=True)
+
+        # 保存映射用于取消订阅
+        self._async_wrappers[topic][async_handler] = _sync_wrapper
+
+        # 复用现有同步订阅到所有底层总线
+        self.subscribe(topic, _sync_wrapper)
+
+    async def unsubscribe_async(self, topic: str, async_handler: Callable[[str, T], Awaitable[None]]) -> None:
+        """
+        按 topic 和 async_handler 取消订阅。
+        
+        Args:
+            topic: The topic pattern to unsubscribe from
+            async_handler: The async handler to remove
+        """
+        wrapper = self._async_wrappers.get(topic, {}).pop(async_handler, None)
+        if wrapper is None:
+            # 没找到匹配包装器：可能未订阅或已取消；可选择告警但不抛错
+            self.logger.debug(f"No async subscription found for topic '{topic}' to remove")
+            return
+        # 调用同步取消订阅，使之在所有底层总线上移除
+        self.unsubscribe(topic, wrapper)

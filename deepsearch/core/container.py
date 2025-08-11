@@ -7,7 +7,7 @@
 import asyncio
 import inspect
 from enum import Enum
-from typing import Dict, Type, Any, Optional, Callable, List, TypeVar
+from typing import Dict, Type, Any, Optional, Callable, List, TypeVar, Union, get_args, get_origin
 
 from .exceptions import (
     ComponentNotFoundError, ComponentAlreadyExistsError,
@@ -56,7 +56,24 @@ class ServiceDescriptor:
             if name == 'self':
                 continue
             if param.annotation != inspect.Parameter.empty:
-                self.dependencies.append(param.annotation)
+                # 处理 Optional 类型注解
+                annotation = param.annotation
+                origin = get_origin(annotation)
+
+                # 如果是 Optional[Type]，提取内部类型
+                if origin is Union:
+                    args = get_args(annotation)
+                    # Optional[X] 等价于 Union[X, None]
+                    non_none_types = [arg for arg in args if arg is not type(None)]
+                    if non_none_types:
+                        # 只添加非 None 的类型作为依赖
+                        for dep_type in non_none_types:
+                            # 确保是一个类型而不是字符串
+                            if isinstance(dep_type, type):
+                                self.dependencies.append(dep_type)
+                elif annotation is not type(None) and isinstance(annotation, type):
+                    # 普通类型，直接添加
+                    self.dependencies.append(annotation)
 
 
 class ServiceProvider:

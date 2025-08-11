@@ -93,6 +93,76 @@ const router = createRouter({
                     throw err
                 })
             }
+        },
+        {
+            path: '/data-source',
+            name: 'dataSource',
+            component: () => {
+                debugLog('ROUTE_LOAD', '开始加载DataSource组件')
+                return import('@/views/DataSource.vue').then(module => {
+                    debugLog('ROUTE_LOAD', 'DataSource组件加载成功')
+                    return module
+                }).catch(err => {
+                    debugLog('ROUTE_ERROR', 'DataSource组件加载失败', {error: err.message})
+                    throw err
+                })
+            }
+        },
+        {
+            path: '/cloudflare-tunnel',
+            name: 'cloudflareTunnel',
+            component: () => {
+                debugLog('ROUTE_LOAD', '开始加载CloudflareTunnel组件')
+                return import('@/views/CloudflareTunnel.vue').then(module => {
+                    debugLog('ROUTE_LOAD', 'CloudflareTunnel组件加载成功')
+                    return module
+                }).catch(err => {
+                    debugLog('ROUTE_ERROR', 'CloudflareTunnel组件加载失败', {error: err.message})
+                    throw err
+                })
+            }
+        },
+        {
+            path: '/workers-proxy',
+            name: 'workersProxy',
+            component: () => {
+                debugLog('ROUTE_LOAD', '开始加载WorkersProxy组件')
+                return import('@/views/WorkersProxy.vue').then(module => {
+                    debugLog('ROUTE_LOAD', 'WorkersProxy组件加载成功')
+                    return module
+                }).catch(err => {
+                    debugLog('ROUTE_ERROR', 'WorkersProxy组件加载失败', {error: err.message})
+                    throw err
+                })
+            }
+        },
+        {
+            path: '/market',
+            name: 'market',
+            component: () => {
+                debugLog('ROUTE_LOAD', '开始加载Market组件')
+                return import('@/views/Market.vue').then(module => {
+                    debugLog('ROUTE_LOAD', 'Market组件加载成功')
+                    return module
+                }).catch(err => {
+                    debugLog('ROUTE_ERROR', 'Market组件加载失败', {error: err.message})
+                    throw err
+                })
+            }
+        },
+        {
+            path: '/chart',
+            name: 'chart',
+            component: () => {
+                debugLog('ROUTE_LOAD', '开始加载SymbolChart组件')
+                return import('@/views/SymbolChart.vue').then(module => {
+                    debugLog('ROUTE_LOAD', 'SymbolChart组件加载成功')
+                    return module
+                }).catch(err => {
+                    debugLog('ROUTE_ERROR', 'SymbolChart组件加载失败', {error: err.message})
+                    throw err
+                })
+            }
         }
     ]
 })

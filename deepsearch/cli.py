@@ -286,7 +286,8 @@ def cleanup(all, force):
                         try:
                             proc.kill()
                             cleaned += 1
-                        except:
+                        except Exception as e:
+                            logger.debug(f"Failed to kill process {proc.pid}: {e}")
                             pass
 
         if cleaned > 0:

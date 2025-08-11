@@ -442,15 +442,20 @@ class MonitorAPI:
         Returns:
             监控API的统计信息
         """
-        # 从统计收集器获取全局统计
-        all_stats = self._statistics_collector.collect_all(use_cache=True)
+        # MonitorAPI 作为顶层组件，只返回自己的监控数据
+        # 不再调用 collect_all 避免循环依赖
 
-        # 添加监控特定的信息
+        # 获取最新的监控记录
+        latest_records = self._data_store.get_realtime_data(limit=1)
+        latest = latest_records[-1] if latest_records else None
+        
         monitor_stats = {
-            "timestamp": all_stats.get("timestamp"),
-            "system_summary": self._statistics_collector.get_summary(),
+            "timestamp": datetime.now().isoformat(),
+            "monitor_running": self._running,
+            "update_interval": self._update_interval,
+            "data_store_size": len(self._data_store._realtime_data),
             "dashboard_data": self.get_dashboard_data(),
-            "data_store_size": len(self._data_store._realtime_data)
+            "latest_record": latest
         }
 
         return monitor_stats

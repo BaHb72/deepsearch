@@ -692,11 +692,13 @@ const refreshComponents = async () => {
   componentLoading.value = true
   try {
     const res = await getAllComponents()
-    // 转换成数组格式
-    components.value = Object.entries(res.components || {}).map(([name, info]) => ({
-      name,
-      ...info
-    }))
+    // 转换成数组格式，并过滤掉 webui 组件
+    components.value = Object.entries(res.components || {})
+        .filter(([name]) => name !== 'webui')  // 过滤掉 webui 组件
+        .map(([name, info]) => ({
+          name,
+          ...info
+        }))
     // 更新到 systemStore
     systemStore.updateComponents(components.value)
   } catch (error) {
@@ -980,26 +982,26 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
-@import '@/assets/styles/design-tokens.scss';
+@use '@/assets/styles/design-tokens.scss' as tokens;
 
 .dashboard {
-  padding: $spacing-5;
+  padding: tokens.$spacing-5;
   background: var(--bg-color);
   min-height: 100vh;
 
   .status-cards {
-    margin-bottom: $spacing-6;
+    margin-bottom: tokens.$spacing-6;
 
     .el-col {
-      margin-bottom: $spacing-5;
+      margin-bottom: tokens.$spacing-5;
     }
   }
 
   .chart-area {
-    margin-bottom: $spacing-6;
+    margin-bottom: tokens.$spacing-6;
 
     .el-card {
-      border-radius: $radius-lg;
+      border-radius: tokens.$radius-lg;
       overflow: hidden;
 
       .card-header {
@@ -1008,15 +1010,15 @@ onUnmounted(() => {
         align-items: center;
 
         span {
-          font-size: $font-size-lg;
-          font-weight: $font-weight-semibold;
+          font-size: tokens.$font-size-lg;
+          font-weight: tokens.$font-weight-semibold;
           color: var(--text-primary);
         }
 
         .el-button-group {
           .el-button {
-            padding: $spacing-1 $spacing-3;
-            font-size: $font-size-sm;
+            padding: tokens.$spacing-1 tokens.$spacing-3;
+            font-size: tokens.$font-size-sm;
           }
         }
       }
@@ -1024,18 +1026,18 @@ onUnmounted(() => {
 
     .chart-container {
       height: 380px;
-      padding: $spacing-3 0;
+      padding: tokens.$spacing-3 0;
     }
   }
 
   .components-card {
-    margin-bottom: $spacing-6;
-    border-radius: $radius-lg;
+    margin-bottom: tokens.$spacing-6;
+    border-radius: tokens.$radius-lg;
     overflow: hidden;
 
     .el-card__header {
-      background: linear-gradient(135deg, var(--card-bg) 0%, rgba($brand-primary, 0.05) 100%);
-      border-bottom: $border-width solid var(--border-lighter);
+      background: linear-gradient(135deg, var(--card-bg) 0%, rgba(tokens.$brand-primary, 0.05) 100%);
+      border-bottom: tokens.$border-width solid var(--border-lighter);
 
       .card-header {
         display: flex;
@@ -1045,9 +1047,9 @@ onUnmounted(() => {
         span {
           display: flex;
           align-items: center;
-          gap: $spacing-2;
-          font-size: $font-size-lg;
-          font-weight: $font-weight-semibold;
+          gap: tokens.$spacing-2;
+          font-size: tokens.$font-size-lg;
+          font-weight: tokens.$font-weight-semibold;
           color: var(--text-primary);
 
           .el-icon {
@@ -1058,39 +1060,39 @@ onUnmounted(() => {
     }
 
     .el-table {
-      font-size: $font-size-sm;
+      font-size: tokens.$font-size-sm;
 
       .el-table__row {
-        transition: all $duration-base;
+        transition: all tokens.$duration-base;
 
         &:hover {
-          background-color: rgba($brand-primary, 0.02);
+          background-color: rgba(tokens.$brand-primary, 0.02);
         }
       }
 
       .component-status {
         display: flex;
         align-items: center;
-        gap: $spacing-2;
+        gap: tokens.$spacing-2;
 
         .el-tag {
-          font-weight: $font-weight-medium;
-          border-radius: $radius-full;
+          font-weight: tokens.$font-weight-medium;
+          border-radius: tokens.$radius-full;
         }
       }
     }
   }
 
   .alerts-card {
-    margin-bottom: $spacing-6;
-    border-radius: $radius-lg;
+    margin-bottom: tokens.$spacing-6;
+    border-radius: tokens.$radius-lg;
     overflow: hidden;
 
     .el-timeline {
-      padding: $spacing-4 0;
+      padding: tokens.$spacing-4 0;
 
       .el-timeline-item {
-        padding-bottom: $spacing-6;
+        padding-bottom: tokens.$spacing-6;
 
         &:last-child {
           padding-bottom: 0;
@@ -1101,15 +1103,15 @@ onUnmounted(() => {
 
   .ws-status {
     position: fixed;
-    bottom: $spacing-6;
-    right: $spacing-6;
-    z-index: $z-index-sticky;
+    bottom: tokens.$spacing-6;
+    right: tokens.$spacing-6;
+    z-index: tokens.$z-index-sticky;
 
     .el-tag {
-      padding: $spacing-2 $spacing-4;
-      font-weight: $font-weight-medium;
-      box-shadow: $shadow-lg;
-      border-radius: $radius-full;
+      padding: tokens.$spacing-2 tokens.$spacing-4;
+      font-weight: tokens.$font-weight-medium;
+      box-shadow: tokens.$shadow-lg;
+      border-radius: tokens.$radius-full;
       backdrop-filter: blur(10px);
     }
   }
@@ -1118,10 +1120,10 @@ onUnmounted(() => {
 // 状态指示器
 .status-indicator {
   display: inline-block;
-  margin-right: $spacing-1;
+  margin-right: tokens.$spacing-1;
 
   &.breathing {
-    @include breathing-animation;
+    @include tokens.breathing-animation;
   }
 }
 
@@ -1130,30 +1132,30 @@ onUnmounted(() => {
   .dashboard {
     .components-card {
       .el-card__header {
-        background: linear-gradient(135deg, var(--card-bg) 0%, rgba($brand-primary, 0.1) 100%);
+        background: linear-gradient(135deg, var(--card-bg) 0%, rgba(tokens.$brand-primary, 0.1) 100%);
       }
     }
 
     .ws-status {
       .el-tag {
-        @include dark-glassmorphism(0.8, 10px);
+        @include tokens.dark-glassmorphism(0.8, 10px);
       }
     }
   }
 }
 
 // 响应式
-@media (max-width: $breakpoint-md) {
+@media (max-width: tokens.$breakpoint-md) {
   .dashboard {
-    padding: $spacing-3;
+    padding: tokens.$spacing-3;
 
     .chart-container {
       height: 300px;
     }
 
     .ws-status {
-      bottom: $spacing-4;
-      right: $spacing-4;
+      bottom: tokens.$spacing-4;
+      right: tokens.$spacing-4;
     }
   }
 }
@@ -1162,12 +1164,12 @@ onUnmounted(() => {
 .status-cell {
   display: flex;
   align-items: center;
-  gap: $spacing-1;
+  gap: tokens.$spacing-1;
 
   .error-hint {
-    font-size: $font-size-xs;
+    font-size: tokens.$font-size-xs;
     color: var(--text-secondary);
-    @include truncate;
+    @include tokens.truncate;
     max-width: 200px;
   }
 }

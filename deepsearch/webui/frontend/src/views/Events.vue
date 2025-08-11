@@ -284,10 +284,10 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
-@import '@/assets/styles/design-tokens.scss';
+@use '@/assets/styles/design-tokens.scss' as tokens;
 
 .events-view {
-  padding: $spacing-6;
+  padding: tokens.$spacing-6;
   background: var(--bg-color);
   min-height: 100vh;
 }
@@ -296,31 +296,31 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: $spacing-6;
-  padding: $spacing-6;
+  margin-bottom: tokens.$spacing-6;
+  padding: tokens.$spacing-6;
   background: var(--card-bg);
-  border-radius: $radius-xl;
-  box-shadow: $shadow-sm;
+  border-radius: tokens.$radius-xl;
+  box-shadow: tokens.$shadow-sm;
 
   .header-content {
     .page-title {
-      margin: 0 0 $spacing-2 0;
-      font-size: $font-size-3xl;
-      font-weight: $font-weight-bold;
+      margin: 0 0 tokens.$spacing-2 0;
+      font-size: tokens.$font-size-3xl;
+      font-weight: tokens.$font-weight-bold;
       color: var(--text-primary);
       display: flex;
       align-items: center;
-      gap: $spacing-3;
+      gap: tokens.$spacing-3;
 
       .title-icon {
         font-size: 36px;
-        @include gradient-text($brand-primary, $brand-secondary);
+        @include tokens.gradient-text(tokens.$brand-primary, tokens.$brand-secondary);
       }
     }
 
     .page-subtitle {
       margin: 0;
-      font-size: $font-size-base;
+      font-size: tokens.$font-size-base;
       color: var(--text-secondary);
       padding-left: 48px;
     }
@@ -328,28 +328,28 @@ onUnmounted(() => {
 
   .header-actions {
     display: flex;
-    gap: $spacing-3;
+    gap: tokens.$spacing-3;
 
     .el-button {
-      padding: $spacing-2 $spacing-4;
+      padding: tokens.$spacing-2 tokens.$spacing-4;
       height: 40px;
 
       .el-icon {
-        margin-right: $spacing-1;
+        margin-right: tokens.$spacing-1;
       }
     }
   }
 }
 
 .filter-card {
-  margin-bottom: $spacing-5;
-  border-radius: $radius-lg;
-  box-shadow: $shadow-sm;
+  margin-bottom: tokens.$spacing-5;
+  border-radius: tokens.$radius-lg;
+  box-shadow: tokens.$shadow-sm;
 
   .filters {
     display: flex;
     align-items: center;
-    gap: $spacing-4;
+    gap: tokens.$spacing-4;
     flex-wrap: wrap;
 
     .search-input {
@@ -357,11 +357,11 @@ onUnmounted(() => {
       min-width: 300px;
 
       :deep(.el-input__wrapper) {
-        border-radius: $radius-base;
-        transition: all $duration-fast;
+        border-radius: tokens.$radius-base;
+        transition: all tokens.$duration-fast;
 
         &:hover {
-          box-shadow: $shadow-sm;
+          box-shadow: tokens.$shadow-sm;
         }
       }
     }
@@ -372,7 +372,7 @@ onUnmounted(() => {
       .option-label {
         display: flex;
         align-items: center;
-        gap: $spacing-2;
+        gap: tokens.$spacing-2;
 
         .el-icon {
           font-size: 16px;
@@ -382,16 +382,16 @@ onUnmounted(() => {
 
     .filter-stats {
       display: flex;
-      gap: $spacing-2;
+      gap: tokens.$spacing-2;
       margin-left: auto;
 
       .el-tag {
-        border-radius: $radius-full;
-        padding: $spacing-1 $spacing-3;
-        font-weight: $font-weight-medium;
+        border-radius: tokens.$radius-full;
+        padding: tokens.$spacing-1 tokens.$spacing-3;
+        font-weight: tokens.$font-weight-medium;
 
         .el-icon {
-          margin-right: $spacing-1;
+          margin-right: tokens.$spacing-1;
         }
       }
     }
@@ -399,31 +399,31 @@ onUnmounted(() => {
 }
 
 .events-card {
-  border-radius: $radius-lg;
-  box-shadow: $shadow-sm;
+  border-radius: tokens.$radius-lg;
+  box-shadow: tokens.$shadow-sm;
   overflow: hidden;
 
   .events-table {
     :deep(.el-table__header) {
       th {
         background: var(--bg-color);
-        font-weight: $font-weight-semibold;
+        font-weight: tokens.$font-weight-semibold;
         color: var(--text-primary);
       }
     }
 
     :deep(.el-table__row) {
-      transition: all $duration-base;
+      transition: all tokens.$duration-base;
 
       &:hover {
-        background: rgba($brand-primary, 0.02);
+        background: rgba(tokens.$brand-primary, 0.02);
       }
     }
 
     .time-cell {
       display: flex;
       align-items: center;
-      gap: $spacing-2;
+      gap: tokens.$spacing-2;
 
       .time-icon {
         color: var(--text-secondary);
@@ -431,53 +431,53 @@ onUnmounted(() => {
       }
 
       .time-text {
-        font-family: $font-mono;
-        font-size: $font-size-sm;
+        font-family: tokens.$font-mono;
+        font-size: tokens.$font-size-sm;
         color: var(--text-regular);
       }
     }
 
     .type-tag {
-      border-radius: $radius-full;
-      padding: $spacing-1 $spacing-3;
-      font-weight: $font-weight-medium;
+      border-radius: tokens.$radius-full;
+      padding: tokens.$spacing-1 tokens.$spacing-3;
+      font-weight: tokens.$font-weight-medium;
 
       .el-icon {
-        margin-right: $spacing-1;
+        margin-right: tokens.$spacing-1;
       }
     }
 
     .data-cell {
       .data-content {
         margin: 0;
-        padding: $spacing-2;
+        padding: tokens.$spacing-2;
         background: var(--bg-color);
-        border-radius: $radius-base;
-        font-family: $font-mono;
-        font-size: $font-size-xs;
+        border-radius: tokens.$radius-base;
+        font-family: tokens.$font-mono;
+        font-size: tokens.$font-size-xs;
         color: var(--text-regular);
         max-height: 100px;
         overflow-y: auto;
-        @include custom-scrollbar(6px, var(--bg-color), var(--border-color));
+        @include tokens.custom-scrollbar(6px, var(--bg-color), var(--border-color));
       }
     }
   }
 }
 
 /* 响应式 */
-@media (max-width: $breakpoint-md) {
+@media (max-width: tokens.$breakpoint-md) {
   .events-view {
-    padding: $spacing-4;
+    padding: tokens.$spacing-4;
   }
 
   .page-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: $spacing-4;
+    gap: tokens.$spacing-4;
 
     .header-content {
       .page-title {
-        font-size: $font-size-2xl;
+        font-size: tokens.$font-size-2xl;
       }
     }
   }
@@ -500,13 +500,13 @@ onUnmounted(() => {
 .dark {
   .filter-card,
   .events-card {
-    @include dark-glassmorphism(0.95, 5px);
+    @include tokens.dark-glassmorphism(0.95, 5px);
   }
 
   .events-table {
     .data-cell {
       .data-content {
-        background: $dark-bg-tertiary;
+        background: tokens.$dark-bg-tertiary;
       }
     }
   }
@@ -516,14 +516,14 @@ onUnmounted(() => {
 :global(.event-detail-dialog) {
   .el-message-box__content {
     pre {
-      font-family: $font-mono;
-      font-size: $font-size-sm;
+      font-family: tokens.$font-mono;
+      font-size: tokens.$font-size-sm;
       background: var(--bg-color);
-      padding: $spacing-4;
-      border-radius: $radius-base;
+      padding: tokens.$spacing-4;
+      border-radius: tokens.$radius-base;
       overflow: auto;
       max-height: 60vh;
-      @include custom-scrollbar(8px, var(--bg-color), var(--border-color));
+      @include tokens.custom-scrollbar(8px, var(--bg-color), var(--border-color));
     }
   }
 }
