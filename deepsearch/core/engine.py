@@ -28,13 +28,8 @@ from .unified_components import (
     CacheComponent, GatewayComponent, WebUIComponent
 )
 
-try:
-    from deepsearch.cloudflare import CloudflareTunnelComponent
 
-    TUNNEL_AVAILABLE = True
-except ImportError:
-    CloudflareTunnelComponent = None
-    TUNNEL_AVAILABLE = False
+# Cloudflare Tunnel 组件已移除（使用 Workers 代理方案）
 
 
 class MainEngine:
@@ -107,10 +102,7 @@ class MainEngine:
         container.register_singleton(DatabaseComponent)
         container.register_singleton(CacheComponent)
 
-        # 注释掉 Cloudflare Tunnel 组件注册，因为不需要映射 webui 3000 端口
-        # 保留代码以备将来使用
-        # if TUNNEL_AVAILABLE and CloudflareTunnelComponent:
-        #     container.register_singleton(CloudflareTunnelComponent)
+        # Cloudflare Tunnel 组件已移除（使用 Workers 代理方案）
 
         # 注册支持组件 - 暂时不注册 MonitorComponent，因为它依赖 EventEngine
         # MonitorComponent 需要在 EventEngine 初始化后手动设置
@@ -182,10 +174,7 @@ class MainEngine:
             WebUIComponent
         ]
 
-        # 注释掉 Cloudflare Tunnel 组件，因为不需要自动加载
-        # 保留代码以备将来使用
-        # if TUNNEL_AVAILABLE and CloudflareTunnelComponent:
-        #     component_types.append(CloudflareTunnelComponent)
+        # Cloudflare Tunnel 组件已移除（使用 Workers 代理方案）
 
         for component_type in component_types:
             try:

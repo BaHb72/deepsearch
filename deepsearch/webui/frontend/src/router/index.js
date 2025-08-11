@@ -109,20 +109,6 @@ const router = createRouter({
             }
         },
         {
-            path: '/cloudflare-tunnel',
-            name: 'cloudflareTunnel',
-            component: () => {
-                debugLog('ROUTE_LOAD', '开始加载CloudflareTunnel组件')
-                return import('@/views/CloudflareTunnel.vue').then(module => {
-                    debugLog('ROUTE_LOAD', 'CloudflareTunnel组件加载成功')
-                    return module
-                }).catch(err => {
-                    debugLog('ROUTE_ERROR', 'CloudflareTunnel组件加载失败', {error: err.message})
-                    throw err
-                })
-            }
-        },
-        {
             path: '/workers-proxy',
             name: 'workersProxy',
             component: () => {

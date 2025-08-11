@@ -432,7 +432,7 @@ def create_app() -> FastAPI:
     app.include_router(market.router, tags=["Market"])  # 市场数据路由，已包含 /api/market 前缀
     app.include_router(chart.router, tags=["Chart"])  # 图表数据路由，已包含 /api/chart 前缀
     # 注释掉 Cloudflare Tunnel API，因为不需要映射 webui 端口
-    # app.include_router(tunnel.router, tags=["Cloudflare Tunnel"])  # 已包含 /api/tunnel 前缀
+    # Cloudflare Tunnel 已移除（使用 Workers 代理方案）
 
     return app
 

@@ -15,16 +15,13 @@ class WorkerNode(BaseModel):
 
 
 class CloudflareConfig(BaseModel):
-    """Cloudflare 配置"""
+    """Cloudflare Workers 配置"""
     api_key: str = Field(default="", description="API 密钥")
     secret_key: str = Field(default="", description="签名密钥")
     workers: List[str] = Field(default_factory=lambda: [
         "https://wandering-sea-d394.934073514.workers.dev"
     ], description="Worker 节点列表")
     worker_url: Optional[str] = Field(default=None, description="单个 Worker URL（向后兼容）")
-    tunnel_id: Optional[str] = Field(default=None, description="Tunnel ID")
-    zone_id: Optional[str] = Field(default=None, description="Zone ID")
-    api_token: Optional[str] = Field(default=None, description="API Token")
 
 
 class DataSourceConfig(BaseModel):

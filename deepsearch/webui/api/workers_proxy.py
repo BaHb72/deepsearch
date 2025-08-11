@@ -104,17 +104,38 @@ async def update_config(config: WorkersConfig):
         manager = await get_proxy_manager()
         manager.update_config(config)
 
-        # 保存到配置文件
+        # 使用 ConfigManager 持久化配置
+        from pathlib import Path
+        from deepsearch.config import settings
+        from deepsearch.config.manager import ConfigManager
+
+        # 更新运行时配置
+        settings.cloudflare_workers = config.dict()
+
+        # 持久化到配置文件
         try:
-            from deepsearch.config import settings
-            settings.cloudflare_workers = config.dict()
-            # TODO: 持久化配置到文件
-        except:
-            pass
+            config_manager = ConfigManager()
+
+            # 获取当前环境的配置文件路径
+            env = settings.app.env
+            config_path = Path(f"deepsearch/config/settings.{env}.yaml")
+
+            # 加载现有配置
+            config_manager.load(config_path)
+
+            # 更新 cloudflare_workers 配置
+            config_manager.set("cloudflare_workers", config.dict())
+
+            # 保存配置
+            config_manager.save(config_path)
+
+            logger.info(f"Workers configuration persisted to {config_path}")
+        except Exception as e:
+            logger.warning(f"Failed to persist config: {e}, config is only updated in memory")
 
         return {
             "success": True,
-            "message": "Configuration updated"
+            "message": "Configuration updated and persisted"
         }
 
     except Exception as e:
