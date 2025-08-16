@@ -22,12 +22,14 @@ from .models import (
     MessageBusConfig,
     MonitoringConfig,
     PerformanceConfig,
+    QmtConfig,
     SecurityConfig,
     WebUIConfig,
     ZeroMQConfig,
     HealthCheckConfig,
+    CloudflareWorkersConfig,
 )
-from .models.data_source import CloudflareConfig, DataProviderSettings
+from .models.datafeed import CloudflareConfig, DataFeedConfig
 
 
 class Settings(BaseSettings):
@@ -42,9 +44,11 @@ class Settings(BaseSettings):
     performance: Optional[PerformanceConfig] = None
     debug: Optional[DebugConfig] = None
     health_check: HealthCheckConfig = Field(default_factory=HealthCheckConfig)
+    qmt: Optional[QmtConfig] = None  # QMT集成配置
+    miniqmt: Optional[Dict[str, Any]] = None  # MiniQMT配置
     cloudflare: Optional[CloudflareConfig] = None
-    cloudflare_workers: Optional[Dict[str, Any]] = None  # Workers 代理配置
-    data_providers: Optional[DataProviderSettings] = None
+    cloudflare_workers: Optional[CloudflareWorkersConfig] = None  # Workers 代理配置
+    data_providers: Optional[DataFeedConfig] = None
 
     @property
     def zeromq(self) -> ZeroMQConfig:

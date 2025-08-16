@@ -137,15 +137,29 @@ const router = createRouter({
             }
         },
         {
-            path: '/chart',
-            name: 'chart',
+            path: '/pro-trading',
+            name: 'marketQuote',
             component: () => {
-                debugLog('ROUTE_LOAD', '开始加载SymbolChart组件')
-                return import('@/views/SymbolChart.vue').then(module => {
-                    debugLog('ROUTE_LOAD', 'SymbolChart组件加载成功')
+                debugLog('ROUTE_LOAD', '开始加载市场行情组件')
+                return import('@/views/ProfessionalTradingView.vue').then(module => {
+                    debugLog('ROUTE_LOAD', '市场行情组件加载成功')
                     return module
                 }).catch(err => {
-                    debugLog('ROUTE_ERROR', 'SymbolChart组件加载失败', {error: err.message})
+                    debugLog('ROUTE_ERROR', '市场行情组件加载失败', {error: err.message})
+                    throw err
+                })
+            }
+        },
+        {
+            path: '/quant-trading',
+            name: 'quantTrading',
+            component: () => {
+                debugLog('ROUTE_LOAD', '开始加载量化交易组件')
+                return import('@/views/QuantTradingView.vue').then(module => {
+                    debugLog('ROUTE_LOAD', '量化交易组件加载成功')
+                    return module
+                }).catch(err => {
+                    debugLog('ROUTE_ERROR', '量化交易组件加载失败', {error: err.message})
                     throw err
                 })
             }

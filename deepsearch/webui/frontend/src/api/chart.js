@@ -12,7 +12,8 @@ export function getSeries(params) {
             end: params.end,
             limit: params.limit || 500,
             adjust: params.adjust || 'none',
-            session_split: params.session_split !== false
+            session_split: params.session_split !== false,
+            provider: params.provider
         }
     })
 }
@@ -48,6 +49,54 @@ export function getSnapshot(symbol) {
     })
 }
 
+// 获取股票信息
+export function getStockInfo(symbol) {
+    return request({
+        url: '/chart/stock-info',
+        method: 'get',
+        params: {symbol}
+    })
+}
+
+// 获取股票列表
+export function getStockList(keyword) {
+    return request({
+        url: '/chart/stock-list',
+        method: 'get',
+        params: keyword ? {keyword} : {}
+    })
+}
+
+// 获取可用的数据提供者列表
+export function getProviders() {
+    return request({
+        url: '/chart/providers',
+        method: 'get'
+    })
+}
+
+// 获取筹码分布数据
+export function getChipDistribution(symbol, lookbackDays = 120, priceBins = 100) {
+    return request({
+        url: '/chart/chip-distribution',
+        method: 'get',
+        params: {
+            symbol,
+            lookback_days: lookbackDays,
+            price_bins: priceBins
+        }
+    })
+}
+
+// 获取信号检测
+export function getSignals(symbol, timeframe = '1d') {
+    return request({
+        url: '/chart/signals',
+        method: 'get',
+        params: {symbol, timeframe}
+    })
+}
+
 // 获取图表服务统计
 export function getChartStats() {
     return request({
@@ -57,7 +106,7 @@ export function getChartStats() {
 }
 
 // 订阅实时数据（REST方式，用于测试）
-export function subscribe(symbol, timeframe = '1m') {
+export function subscribeData(symbol, timeframe = '1m') {
     return request({
         url: '/chart/subscribe',
         method: 'post',
@@ -66,11 +115,27 @@ export function subscribe(symbol, timeframe = '1m') {
 }
 
 // 取消订阅
-export function unsubscribe(subscriptionId) {
+export function unsubscribeData(subscriptionId) {
     return request({
         url: `/chart/subscribe/${subscriptionId}`,
         method: 'delete'
     })
+}
+
+// 导出chart API对象
+export const chartApi = {
+    getSeries,
+    calculateIndicators,
+    getIndicatorList,
+    getSnapshot,
+    getStockInfo,
+    getStockList,
+    getProviders,
+    getChipDistribution,
+    getSignals,
+    getChartStats,
+    subscribeData,
+    unsubscribeData
 }
 
 // WebSocket管理类

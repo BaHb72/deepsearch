@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.data_providers.akshare_proxy_provider import AkShareProxyProvider
+from deepsearch.data_providers.akshare import AkShareProxyProvider
 
 router = APIRouter(prefix="/api/data-source", tags=["数据源"])
 

@@ -733,6 +733,253 @@ class GatewayComponent(AsyncComponent[Gateway]):
         return True
 
 
+class QMTGatewayComponent(AsyncComponent):
+    """QMT网关组件 - 处理QMT数据接收和转发"""
+
+    def __init__(self):
+        super().__init__("qmt_gateway", ComponentType.BUSINESS, "QMT网关")
+        self._gateway = None
+        self._event_engine = None
+        self._message_bus = None
+        self._config = None
+
+    async def _initialize(self) -> None:
+        """初始化QMT网关"""
+        with error_context(self.name, "initialize"):
+            # 从配置获取QMT设置
+            if hasattr(settings, 'qmt'):
+                # 将配置对象转换为字典
+                if hasattr(settings.qmt, 'model_dump'):
+                    self._config = settings.qmt.model_dump()
+                elif hasattr(settings.qmt, 'dict'):
+                    self._config = settings.qmt.dict()
+                else:
+                    # 手动构建配置字典
+                    self._config = {
+                        'enabled': getattr(settings.qmt, 'enabled', True),
+                        'receiver': {
+                            'host': getattr(settings.qmt.receiver, 'host', '0.0.0.0'),
+                            'tcp_port': getattr(settings.qmt.receiver, 'tcp_port', 9999),
+                            'websocket_port': getattr(settings.qmt.receiver, 'websocket_port', 9998)
+                        },
+                        'security': {
+                            'enable_auth': getattr(settings.qmt.security, 'enable_auth', False),
+                            'token': getattr(settings.qmt.security, 'token', '')
+                        },
+                        'data': {
+                            'batch_size': getattr(settings.qmt.data, 'batch_size', 100),
+                            'flush_interval': getattr(settings.qmt.data, 'flush_interval', 0.1),
+                            'cache_ttl': getattr(settings.qmt.data, 'cache_ttl', 60)
+                        }
+                    }
+            else:
+                self._config = {
+                    'enabled': False,
+                    'receiver': {
+                        'host': '0.0.0.0',
+                        'tcp_port': 9999
+                    }
+                }
+
+            if not self._config.get('enabled', False):
+                self._logger.info("QMT网关已禁用")
+                # 设置 _instance 为 self，让组件管理器知道组件已初始化
+                self._instance = self
+                return
+
+            self._logger.info("QMT网关配置已加载，等待依赖注入...")
+            # 设置 _instance 为 self，让组件管理器知道组件已初始化
+            self._instance = self
+
+    def set_dependencies(self, event_engine, message_bus):
+        """设置依赖（由容器在初始化后调用）"""
+        self._event_engine = event_engine
+        self._message_bus = message_bus
+        self._logger.info("QMT网关依赖已设置")
+
+        # 现在创建网关实例
+        if self._config and self._config.get('enabled', False):
+            # 使用优化版的 QMTGatewayComponent
+            from deepsearch.core.components.qmt_gateway_component import QMTGatewayComponent as OptimizedQMTGateway
+
+            # 创建优化版网关实例
+            self._gateway = OptimizedQMTGateway(event_engine, message_bus, self._config)
+            self._logger.info("QMT网关实例已创建")
+
+    async def _start(self) -> None:
+        """启动QMT网关"""
+        with error_context(self.name, "start"):
+            if not self._config or not self._config.get('enabled', False):
+                self._logger.info("QMT网关未启用，跳过启动")
+                return
+
+            # 如果依赖还没设置，等待一下
+            if not self._gateway and (self._event_engine or self._message_bus):
+                self._logger.warning("QMT网关尚未创建，可能依赖未设置")
+                # 尝试手动创建
+                if self._event_engine and self._message_bus:
+                    self.set_dependencies(self._event_engine, self._message_bus)
+
+            if self._gateway:
+                # 先初始化网关
+                if hasattr(self._gateway, 'initialize'):
+                    await self._gateway.initialize()
+
+                # 然后启动网关
+                await self._gateway.start()
+                self._logger.info(f"QMT网关已启动，监听端口: {self._config.get('receiver', {}).get('tcp_port', 9999)}")
+            else:
+                self._logger.error("QMT网关实例未创建，无法启动")
+
+    async def _stop(self) -> None:
+        """停止QMT网关"""
+        with error_context(self.name, "stop"):
+            if self._gateway:
+                await self._gateway.stop()
+                self._logger.info("QMT网关已停止")
+
+    def _get_extra_status_info(self) -> Dict[str, Any]:
+        """提供额外的状态信息"""
+        if self._gateway and hasattr(self._gateway, 'get_status'):
+            return self._gateway.get_status()
+
+        return {
+            "enabled": self._config.get('enabled', False) if self._config else False,
+            "tcp_port": self._config.get('receiver', {}).get('tcp_port', 9999) if self._config else 9999,
+            "connected": False
+        }
+
+    def _health_check(self) -> bool:
+        """检查QMT网关健康状态"""
+        if not self._config or not self._config.get('enabled', False):
+            return True  # 禁用状态下认为是健康的
+
+        if not self._gateway:
+            return False
+
+        # 检查网关运行状态
+        if hasattr(self._gateway, 'is_running'):
+            return self._gateway.is_running()
+
+        return True
+
+    def get_instance(self):
+        """获取网关实例（供API使用）"""
+        return self._gateway
+
+
+class AnalyticsComponent(AsyncComponent):
+    """分析组件 - DuckDB数据分析"""
+
+    def __init__(self):
+        super().__init__("analytics", ComponentType.INFRASTRUCTURE, "数据分析")
+        self._analytics_db = None
+        self._sync_service = None
+        self._database_component = None
+        self._config = None
+
+    async def _initialize(self) -> None:
+        """初始化分析组件"""
+        from deepsearch.storage.duckdb_analytics import get_analytics_db
+        from deepsearch.services.data_sync_service import get_sync_service
+
+        with error_context(self.name, "initialize"):
+            # 获取配置
+            analytics_config = settings.database.analytics
+            self._config = analytics_config
+
+            if not analytics_config.enabled:
+                self._logger.info("分析数据库已禁用")
+                return
+
+            # 初始化 DuckDB
+            self._analytics_db = get_analytics_db(
+                db_path=analytics_config.path,
+                memory_limit=analytics_config.memory_limit,
+                threads=analytics_config.threads
+            )
+
+            # 初始化表结构
+            await self._analytics_db.init_tables()
+
+            # 初始化同步服务
+            if analytics_config.auto_sync and self._database_component:
+                self._sync_service = get_sync_service(self._database_component)
+                self._sync_service.sync_interval = analytics_config.sync_interval
+                await self._sync_service.start()
+                self._logger.info(f"数据同步服务已启动，同步间隔: {analytics_config.sync_interval}秒")
+
+            self._instance = self
+            self._logger.info("分析组件初始化完成")
+
+    def set_database_component(self, database_component):
+        """设置数据库组件（用于数据同步）"""
+        self._database_component = database_component
+
+    async def _start(self) -> None:
+        """启动分析组件"""
+        with error_context(self.name, "start"):
+            if not self._config or not self._config.enabled:
+                return
+            self._logger.info("分析组件已启动")
+
+    async def _stop(self) -> None:
+        """停止分析组件"""
+        with error_context(self.name, "stop"):
+            # 停止同步服务
+            if self._sync_service:
+                await self._sync_service.stop()
+
+            # 关闭 DuckDB 连接
+            if self._analytics_db:
+                await self._analytics_db.close()
+
+            self._logger.info("分析组件已停止")
+
+    def _health_check(self) -> bool:
+        """检查分析组件健康状态"""
+        if not self._config or not self._config.enabled:
+            return True  # 禁用状态下认为是健康的
+
+        return self._analytics_db is not None
+
+    def _get_extra_status_info(self) -> Dict[str, Any]:
+        """提供额外的状态信息"""
+        if not self._config:
+            return {"enabled": False}
+
+        info = {
+            "enabled": self._config.enabled,
+            "path": self._config.path,
+            "memory_limit": self._config.memory_limit,
+            "threads": self._config.threads,
+            "auto_sync": self._config.auto_sync
+        }
+
+        if self._sync_service:
+            info["sync_interval"] = self._config.sync_interval
+            info["sync_running"] = getattr(self._sync_service, '_running', False)
+
+        return info
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """获取统计信息"""
+        if self._analytics_db and hasattr(self._analytics_db, 'get_statistics'):
+            import asyncio
+            try:
+                # 尝试获取当前事件循环
+                loop = asyncio.get_running_loop()
+                # 在异步环境中，使用线程池避免阻塞
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self._analytics_db.get_statistics())
+                    return future.result()
+            except RuntimeError:
+                # 不在异步环境中，直接运行
+                return asyncio.run(self._analytics_db.get_statistics())
+        return {}
+
+
 class WebUIComponent(AsyncComponent):
     """WebUI组件 - Web管理界面"""
 

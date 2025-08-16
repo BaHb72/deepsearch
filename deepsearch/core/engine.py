@@ -18,14 +18,17 @@ from deepsearch.constants import EVENT_SYSTEM_READY, EVENT_SYSTEM_EXIT
 from deepsearch.event.engine import Event
 from deepsearch.observability.logger import logger_manager
 from deepsearch.utils.port_checker import PortChecker
+from .component_manager import ComponentManager
 from .container import AsyncContainer, ServiceProvider
+from .context import get_context
 from .exceptions import error_context
 from .health.manager import HealthCheckManager
 from .interfaces import Component, ComponentStatus
 from .ipc import EngineIPCServer
 from .unified_components import (
     EventEngineComponent, MessageBusComponent, DatabaseComponent,
-    CacheComponent, GatewayComponent, WebUIComponent
+    CacheComponent, GatewayComponent, WebUIComponent, QMTGatewayComponent,
+    AnalyticsComponent
 )
 
 
@@ -101,6 +104,7 @@ class MainEngine:
         container.register_singleton(MessageBusComponent)
         container.register_singleton(DatabaseComponent)
         container.register_singleton(CacheComponent)
+        container.register_singleton(AnalyticsComponent)  # 注册分析组件
 
         # Cloudflare Tunnel 组件已移除（使用 Workers 代理方案）
 
@@ -111,6 +115,7 @@ class MainEngine:
         if self._should_load_business_components():
             # 暂时简化注册
             container.register_singleton(GatewayComponent)
+            container.register_singleton(QMTGatewayComponent)
 
         # 注册界面组件
         if self._should_load_interface_components():
@@ -164,13 +169,21 @@ class MainEngine:
 
     def _load_components(self) -> None:
         """从容器加载所有组件"""
+        # 创建并注册组件管理器到应用上下文
+        context = get_context()
+        component_manager = ComponentManager()
+        context.set_component_manager(component_manager)
+        context.set_engine(self)  # 设置引擎引用
+        
         # 直接加载已知的组件类型
         component_types = [
             EventEngineComponent,
             MessageBusComponent,
             DatabaseComponent,
             CacheComponent,
+            AnalyticsComponent,  # 添加分析组件
             GatewayComponent,
+            QMTGatewayComponent,
             WebUIComponent
         ]
 
@@ -181,7 +194,15 @@ class MainEngine:
                 component = self._provider.get_service(component_type)
                 if component:
                     self._components[component.name] = component
-                    self._logger.debug(f"Loaded component: {component.name}")
+                    # 注册到组件管理器
+                    component_manager.register_component(
+                        component=component,
+                        display_name=component.name,
+                        description=f"{component_type.__name__} component",
+                        dependencies=set(),
+                        config={}
+                    )
+                    self._logger.debug(f"Loaded and registered component: {component.name}")
             except Exception as e:
                 self._logger.debug(f"Component {component_type.__name__} not registered or failed to load: {e}")
 
@@ -198,6 +219,27 @@ class MainEngine:
         try:
             # 使用容器的异步初始化功能
             await self._container.initialize_async_services(self._provider)
+
+            # 设置QMT网关的依赖
+            qmt_gateway = self._components.get('qmt_gateway')
+            if qmt_gateway and hasattr(qmt_gateway, 'set_dependencies'):
+                event_engine = self._components.get('event_engine')
+                message_bus = self._components.get('message_bus')
+                if event_engine and message_bus:
+                    # 获取实际的实例
+                    event_engine_instance = event_engine._instance if hasattr(event_engine, '_instance') else None
+                    message_bus_instance = message_bus._instance if hasattr(message_bus, '_instance') else None
+                    if event_engine_instance and message_bus_instance:
+                        qmt_gateway.set_dependencies(event_engine_instance, message_bus_instance)
+                        self._logger.debug("QMT网关依赖已设置")
+
+            # 设置分析组件的数据库依赖
+            analytics_component = self._components.get('analytics')
+            if analytics_component and hasattr(analytics_component, 'set_database_component'):
+                database_component = self._components.get('database')
+                if database_component:
+                    analytics_component.set_database_component(database_component)
+                    self._logger.debug("分析组件数据库依赖已设置")
 
             # 记录初始化成功的组件
             for name, component in self._components.items():
@@ -442,7 +484,7 @@ class MainEngine:
         except asyncio.TimeoutError:
             self._logger.warning("IPC server shutdown timed out")
         except Exception as e:
-            self._logger.error(f"Error stopping IPC server: {e}")
+            self._logger.error(f"Error stopping IPC server: {repr(e)}")
 
     async def _shutdown_phase_components(self, timeout: float) -> None:
         """关闭阶段5: 停止所有组件"""
@@ -470,10 +512,13 @@ class MainEngine:
 
         # 等待所有任务完成，设置超时以避免永久等待
         try:
-            results = await asyncio.wait_for(
-                asyncio.gather(*self._tasks, return_exceptions=True),
-                timeout=5.0
-            )
+            # 过滤掉已完成的任务
+            pending_tasks = [t for t in self._tasks if not t.done()]
+            if pending_tasks:
+                results = await asyncio.wait_for(
+                    asyncio.gather(*pending_tasks, return_exceptions=True),
+                    timeout=5.0
+                )
             # 记录任何错误
             for i, result in enumerate(results):
                 if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
@@ -567,34 +612,36 @@ class MainEngine:
             # 监控初始化已移到 FastAPI startup 事件中
             # 这里只负责设置引擎实例
 
-            # 检查端口是否可用，如果不可用则自动寻找可用端口
+            # 使用配置的固定端口
             port = config.webui.backend_port
-            original_port = port
+            self._actual_webui_port = port
 
+            # 检查端口是否可用
             if not PortChecker.is_port_available(port, host="127.0.0.1"):
-                self._logger.warning(f"Port {port} is already in use, searching for available port...")
+                self._logger.error(f"端口 {port} 已被占用，无法启动 WebUI 服务器")
 
-                # 尝试获取可用端口
-                new_port = PortChecker.get_available_port(start_port=port + 1, max_attempts=50)
+                # 尝试获取占用进程信息
+                try:
+                    import psutil
+                    for conn in psutil.net_connections():
+                        if hasattr(conn, 'laddr') and conn.laddr.port == port and conn.status == 'LISTEN':
+                            try:
+                                proc = psutil.Process(conn.pid)
+                                self._logger.error(f"占用进程: {proc.name()} (PID: {conn.pid})")
+                            except:
+                                self._logger.error(f"占用进程 PID: {conn.pid}")
+                            break
+                except:
+                    pass
 
-                if new_port:
-                    self._logger.info(f"Found available port {new_port}, using it instead of {original_port}")
-                    port = new_port
+                raise RuntimeError(
+                    f"端口 {port} 已被占用。请执行以下操作之一：\n"
+                    f"  1. 运行 'python -m deepsearch cleanup' 清理端口\n"
+                    f"  2. 停止占用端口的进程\n"
+                    f"  3. 修改配置文件中的 webui.backend_port"
+                )
 
-                    # 通知前端实际使用的端口（可以通过 WebSocket 或状态 API）
-                    # 这里可以将实际端口存储在引擎状态中
-                    self._actual_webui_port = port
-                else:
-                    # 如果找不到可用端口，仍然尝试使用原端口，让错误明确报告
-                    self._logger.error(
-                        f"Could not find any available port after checking 50 ports starting from {port + 1}")
-                    self._logger.warning(f"Attempting to use original port {original_port} anyway...")
-                    port = original_port
-            else:
-                self._logger.info(f"Port {port} is available")
-                self._actual_webui_port = port
-
-            self._logger.info(f"Starting WebUI server on port {port}...")
+            self._logger.info(f"端口 {port} 可用，启动 WebUI 服务器...")
 
             # 配置并启动服务器
             server_config = uvicorn.Config(
@@ -801,7 +848,7 @@ class MainEngine:
         components_to_start = infrastructure_components.copy()
 
         if include_business:
-            components_to_start.extend(['monitor', 'gateway'])
+            components_to_start.extend(['monitor', 'gateway', 'qmt_gateway'])
 
         # 启动非 WebUI 组件
         for name, component in self._components.items():

@@ -71,6 +71,16 @@
       </el-col>
     </el-row>
 
+    <!-- 数据源和缓存状态 -->
+    <el-row :gutter="24" class="status-cards" style="margin-top: 24px;">
+      <el-col :md="12" :sm="24">
+        <DataSourceCard/>
+      </el-col>
+      <el-col :md="12" :sm="24">
+        <CacheStatusCard/>
+      </el-col>
+    </el-row>
+
     <!-- 系统组件管理 -->
     <el-card class="components-card" shadow="hover">
       <template #header>
@@ -232,7 +242,7 @@
 </template>
 
 <script setup>
-import {nextTick, onMounted, onUnmounted, ref, watch} from 'vue'
+import {onMounted, onUnmounted, ref, watch} from 'vue'
 import {ElLoading, ElMessage, ElMessageBox} from 'element-plus'
 import {useRouter} from 'vue-router'
 import {
@@ -254,6 +264,8 @@ import {wsManager} from '@/utils/websocket'
 import {useSystemStore} from '@/stores/system'
 import SystemAlerts from '@/components/SystemAlerts.vue'
 import StatusCard from '@/components/StatusCard.vue'
+import DataSourceCard from '@/components/DataSourceCard.vue'
+import CacheStatusCard from '@/components/CacheStatusCard.vue'
 
 // 定义组件名称
 defineOptions({
@@ -281,6 +293,8 @@ const componentLoading = ref(false)
 // 图表实例
 let trendChartInstance = null
 let pieChartInstance = null
+let resizeObserver = null
+let windowResizeHandler = null
 
 // 图表容器引用
 const trendChart = ref(null)
@@ -323,8 +337,17 @@ const setupWebSocket = () => {
 // 初始化图表
 const initCharts = () => {
   // 趋势图
-  if (trendChart.value) {
+  if (trendChart.value && !trendChartInstance) {
     trendChartInstance = echarts.init(trendChart.value)
+
+    // 使用ResizeObserver监听容器大小变化
+    if (window.ResizeObserver && !resizeObserver) {
+      resizeObserver = new ResizeObserver(() => {
+        if (trendChartInstance) trendChartInstance.resize()
+        if (pieChartInstance) pieChartInstance.resize()
+      })
+      resizeObserver.observe(trendChart.value)
+    }
     trendChartInstance.setOption({
       tooltip: {
         trigger: 'axis',
@@ -385,7 +408,7 @@ const initCharts = () => {
   }
 
   // 饼图
-  if (pieChart.value) {
+  if (pieChart.value && !pieChartInstance) {
     pieChartInstance = echarts.init(pieChart.value)
     pieChartInstance.setOption({
       tooltip: {
@@ -942,15 +965,23 @@ let refreshTimer = null
 
 onMounted(async () => {
   await fetchInitialData()
-  await nextTick()
-  initCharts()
+
+  // 延迟初始化图表，确保DOM完全渲染
+  setTimeout(() => {
+    initCharts()
+  }, 300)
 
   // 只有在引擎运行时才连接 WebSocket
   if (systemStore.isRunning) {
     setupWebSocket()
   }
-  
-  window.addEventListener('resize', handleResize)
+
+  // 添加窗口resize监听
+  windowResizeHandler = () => {
+    if (trendChartInstance) trendChartInstance.resize()
+    if (pieChartInstance) pieChartInstance.resize()
+  }
+  window.addEventListener('resize', windowResizeHandler)
 
   // 设置定时刷新（每30秒刷新一次组件状态）
   refreshTimer = setInterval(async () => {
@@ -974,10 +1005,24 @@ onUnmounted(() => {
     clearInterval(refreshTimer)
     refreshTimer = null
   }
-  
+
+  // 清理ResizeObserver
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
+
+  // 移除窗口resize监听
+  if (windowResizeHandler) {
+    window.removeEventListener('resize', windowResizeHandler)
+  }
+
+  // 兼容旧的handleResize
+  window.removeEventListener('resize', handleResize)
+
+  // 清理图表实例
   trendChartInstance?.dispose()
   pieChartInstance?.dispose()
-  window.removeEventListener('resize', handleResize)
 })
 </script>
 

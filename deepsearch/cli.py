@@ -3,6 +3,7 @@ DeepSearch 命令行接口
 
 提供统一的命令行工具来管理和运行 DeepSearch 系统。
 """
+import sys
 import time
 from datetime import datetime
 
@@ -36,6 +37,7 @@ def run(mode, config, log_level, no_frontend, open_browser):
     from deepsearch.observability.logger import logger_manager
     from deepsearch.core.async_runner import run_async_engine
     from deepsearch.config import get_config
+    from deepsearch.utils.port_checker import PortChecker
 
     # 设置日志级别
     logger_manager.set_level(log_level)
@@ -45,6 +47,15 @@ def run(mode, config, log_level, no_frontend, open_browser):
     if config:
         from deepsearch.config import config_manager
         config_manager.load(config)
+
+    # 验证端口配置
+    click.echo("检查端口配置...")
+    if not PortChecker.validate_ports():
+        click.echo("\n[ERROR] 无法启动系统：端口冲突")
+        click.echo("请解决端口冲突后再启动服务。")
+        sys.exit(1)
+
+    click.echo("[OK] 端口检查通过\n")
 
     # 使用上下文管理器管理引擎生命周期
     if mode == 'webui':

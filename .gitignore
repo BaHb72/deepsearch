@@ -85,3 +85,7 @@ SYSTEM_*.md
 WEBUI_*.md
 /examples/
 /cloudflare-worker/
+
+# Frontend build outputs
+/deepsearch/webui/static/assets/
+/deepsearch/webui/static/index.html

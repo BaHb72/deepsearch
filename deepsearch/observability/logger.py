@@ -144,24 +144,30 @@ class SensitiveFilter:
 @dataclass
 class LoggerConfig:
     """日志配置数据类"""
-    app_name: str = settings.app.name
-    app_author: str = settings.app.author
-    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = settings.log.level
-    active: bool = settings.log.active
+    app_name: str = field(default_factory=lambda: settings.app.name if settings and settings.app else "DeepSearch")
+    app_author: str = field(default_factory=lambda: settings.app.author if settings and settings.app else "BaHb")
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = field(
+        default_factory=lambda: settings.log.level if settings and settings.log else "INFO"
+    )
+    active: bool = field(default_factory=lambda: settings.log.active if settings and settings.log else True)
     # 输出端
     console: bool = True
     file_plain: bool = True
-    file_json: bool = settings.log.enable_json
+    file_json: bool = field(default_factory=lambda: settings.log.enable_json if settings and settings.log else False)
     # 轮转与保留策略
-    rotation_plain: str = settings.log.rotation
-    rotation_error: str = settings.log.rotation
-    rotation_json: str = settings.log.rotation
+    rotation_plain: str = field(default_factory=lambda: settings.log.rotation if settings and settings.log else "00:00")
+    rotation_error: str = field(default_factory=lambda: settings.log.rotation if settings and settings.log else "00:00")
+    rotation_json: str = field(default_factory=lambda: settings.log.rotation if settings and settings.log else "00:00")
     # 始终使用经过 Pydantic 校验后的正整数
-    retention_plain: str = f"{settings.log.retention_days} days"
-    retention_error: str = f"{settings.log.retention_days * ERROR_RETENTION_MULTIPLIER} days"
-    retention_json: str = f"{settings.log.retention_days} days"
+    retention_plain: str = field(
+        default_factory=lambda: f"{settings.log.retention_days if settings and settings.log else 7} days")
+    retention_error: str = field(
+        default_factory=lambda: f"{(settings.log.retention_days if settings and settings.log else 7) * ERROR_RETENTION_MULTIPLIER} days")
+    retention_json: str = field(
+        default_factory=lambda: f"{settings.log.retention_days if settings and settings.log else 7} days")
     # 业务日志特殊配置
-    retention_business: str = f"{settings.log.retention_days * 2} days"  # 业务日志保留更长时间
+    retention_business: str = field(
+        default_factory=lambda: f"{(settings.log.retention_days if settings and settings.log else 7) * 2} days")  # 业务日志保留更长时间
     diagnose: Optional[bool] = None
     compress: str = "zip"
     log_dir: Path = field(init=False)

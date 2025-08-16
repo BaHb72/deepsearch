@@ -43,10 +43,12 @@
     <!-- 市场宽度 -->
     <div class="breadth-section">
       <el-card>
-        <div slot="header" class="breadth-header">
-          <span>市场宽度</span>
-          <span class="breadth-total">总计: {{ breadth.total || 0 }} 只</span>
-        </div>
+        <template #header>
+          <div class="breadth-header">
+            <span>市场宽度</span>
+            <span class="breadth-total">总计: {{ breadth.total || 0 }} 只</span>
+          </div>
+        </template>
         <el-row :gutter="20">
           <el-col :span="12">
             <div class="breadth-item">
@@ -89,19 +91,21 @@
         <!-- 行业板块 -->
         <el-col :span="12">
           <el-card>
-            <div slot="header" class="sector-header">
-              <span>行业板块</span>
-              <el-button-group size="small">
-                <el-button
-                    v-for="sort in sortOptions"
-                    :key="sort.value"
-                    :type="industrySortBy === sort.value ? 'primary' : ''"
-                    @click="changeSectorSort('industry', sort.value)"
-                >
-                  {{ sort.label }}
-                </el-button>
-              </el-button-group>
-            </div>
+            <template #header>
+              <div class="sector-header">
+                <span>行业板块</span>
+                <el-button-group size="small">
+                  <el-button
+                      v-for="sort in sortOptions"
+                      :key="sort.value"
+                      :type="industrySortBy === sort.value ? 'primary' : ''"
+                      @click="changeSectorSort('industry', sort.value)"
+                  >
+                    {{ sort.label }}
+                  </el-button>
+                </el-button-group>
+              </div>
+            </template>
             <div v-loading="loading.sectors" class="sector-list">
               <div
                   v-for="(sector, index) in industrySectors"
@@ -124,19 +128,21 @@
         <!-- 概念板块 -->
         <el-col :span="12">
           <el-card>
-            <div slot="header" class="sector-header">
-              <span>概念板块</span>
-              <el-button-group size="small">
-                <el-button
-                    v-for="sort in sortOptions"
-                    :key="sort.value"
-                    :type="conceptSortBy === sort.value ? 'primary' : ''"
-                    @click="changeSectorSort('concept', sort.value)"
-                >
-                  {{ sort.label }}
-                </el-button>
-              </el-button-group>
-            </div>
+            <template #header>
+              <div class="sector-header">
+                <span>概念板块</span>
+                <el-button-group size="small">
+                  <el-button
+                      v-for="sort in sortOptions"
+                      :key="sort.value"
+                      :type="conceptSortBy === sort.value ? 'primary' : ''"
+                      @click="changeSectorSort('concept', sort.value)"
+                  >
+                    {{ sort.label }}
+                  </el-button>
+                </el-button-group>
+              </div>
+            </template>
             <div v-loading="loading.sectors" class="sector-list">
               <div
                   v-for="(sector, index) in conceptSectors"
@@ -161,16 +167,18 @@
     <!-- 异动监控 -->
     <div class="anomalies-section">
       <el-card>
-        <div slot="header" class="anomalies-header">
-          <span>异动监控</span>
-          <el-radio-group v-model="anomalyType" size="small" @change="fetchAnomalies">
-            <el-radio-button label="all">全部</el-radio-button>
-            <el-radio-button label="limit_up">涨停</el-radio-button>
-            <el-radio-button label="limit_down">跌停</el-radio-button>
-            <el-radio-button label="price_surge">急拉</el-radio-button>
-            <el-radio-button label="volume_spike">放量</el-radio-button>
-          </el-radio-group>
-        </div>
+        <template #header>
+          <div class="anomalies-header">
+            <span>异动监控</span>
+            <el-radio-group v-model="anomalyType" size="small" @change="fetchAnomalies">
+              <el-radio-button label="all">全部</el-radio-button>
+              <el-radio-button label="limit_up">涨停</el-radio-button>
+              <el-radio-button label="limit_down">跌停</el-radio-button>
+              <el-radio-button label="price_surge">急拉</el-radio-button>
+              <el-radio-button label="volume_spike">放量</el-radio-button>
+            </el-radio-group>
+          </div>
+        </template>
         <el-table
             v-loading="loading.anomalies"
             :data="anomalies"
@@ -180,31 +188,31 @@
           <el-table-column label="代码" prop="symbol" width="80"/>
           <el-table-column label="名称" prop="name" width="100"/>
           <el-table-column label="现价" prop="price" width="80">
-            <template slot-scope="scope">
+            <template #default="scope">
               {{ formatNumber(scope.row.price) }}
             </template>
           </el-table-column>
           <el-table-column label="涨跌幅" prop="change_pct" width="100">
-            <template slot-scope="scope">
+            <template #default="scope">
               <span :class="getChangeClass(scope.row.change_pct)">
                 {{ scope.row.change_pct > 0 ? '+' : '' }}{{ scope.row.change_pct.toFixed(2) }}%
               </span>
             </template>
           </el-table-column>
           <el-table-column label="成交额" prop="amount" width="120">
-            <template slot-scope="scope">
+            <template #default="scope">
               {{ formatAmount(scope.row.amount) }}
             </template>
           </el-table-column>
           <el-table-column label="异动原因" prop="reason" width="100">
-            <template slot-scope="scope">
+            <template #default="scope">
               <el-tag :type="getAnomalyTagType(scope.row.reason)" size="small">
                 {{ scope.row.reason }}
               </el-tag>
             </template>
           </el-table-column>
           <el-table-column label="时间" prop="timestamp">
-            <template slot-scope="scope">
+            <template #default="scope">
               {{ formatTime(scope.row.timestamp) }}
             </template>
           </el-table-column>
@@ -443,7 +451,7 @@ export default {
 <style scoped>
 .market-container {
   padding: 20px;
-  background: #f5f6fa;
+  background: #0a0e1a;
   min-height: calc(100vh - 60px);
 }
 
@@ -457,7 +465,7 @@ export default {
 .page-header h2 {
   margin: 0;
   font-size: 24px;
-  color: #303133;
+  color: #c9d1d9;
 }
 
 .header-actions {
@@ -467,7 +475,7 @@ export default {
 }
 
 .update-time {
-  color: #909399;
+  color: #8b949e;
   font-size: 14px;
 }
 
@@ -477,12 +485,19 @@ export default {
 }
 
 .index-card {
-  background: white;
+  background: #161b22 !important;
+  border: 1px solid #30363d !important;
   transition: transform 0.3s;
 }
 
 .index-card:hover {
   transform: translateY(-5px);
+  background: #1c2128 !important;
+}
+
+.index-card :deep(.el-card__body) {
+  background: transparent;
+  color: #c9d1d9;
 }
 
 .index-header {
@@ -493,18 +508,18 @@ export default {
 
 .index-name {
   font-weight: bold;
-  color: #303133;
+  color: #c9d1d9;
 }
 
 .index-code {
-  color: #909399;
+  color: #8b949e;
   font-size: 12px;
 }
 
 .index-price {
   font-size: 28px;
   font-weight: bold;
-  color: #303133;
+  color: #c9d1d9;
   margin-bottom: 8px;
 }
 
@@ -516,7 +531,7 @@ export default {
 
 .index-volume {
   font-size: 12px;
-  color: #909399;
+  color: #8b949e;
 }
 
 /* 市场宽度 */
@@ -531,7 +546,7 @@ export default {
 }
 
 .breadth-total {
-  color: #909399;
+  color: #8b949e;
   font-size: 14px;
 }
 
@@ -541,7 +556,7 @@ export default {
 
 .breadth-label {
   font-size: 14px;
-  color: #606266;
+  color: #8b949e;
   margin-bottom: 15px;
 }
 
@@ -569,7 +584,7 @@ export default {
 
 .limit-label {
   display: block;
-  color: #909399;
+  color: #8b949e;
   font-size: 14px;
   margin-bottom: 8px;
 }
@@ -599,25 +614,25 @@ export default {
   display: flex;
   align-items: center;
   padding: 10px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #30363d;
   transition: background 0.3s;
 }
 
 .sector-item:hover {
-  background: #f5f7fa;
+  background: #1c2128;
 }
 
 .sector-rank {
   width: 30px;
   text-align: center;
-  color: #909399;
+  color: #8b949e;
   font-size: 14px;
 }
 
 .sector-name {
   flex: 1;
   margin-left: 10px;
-  color: #303133;
+  color: #c9d1d9;
 }
 
 .sector-change {
@@ -629,7 +644,7 @@ export default {
 .sector-leader {
   width: 100px;
   margin-left: 10px;
-  color: #909399;
+  color: #8b949e;
   font-size: 12px;
   text-align: right;
 }
@@ -664,5 +679,98 @@ export default {
     width: 100%;
     margin-bottom: 20px;
   }
+}
+
+/* 全局卡片深色主题 */
+.market-container :deep(.el-card) {
+  background: #161b22 !important;
+  border: 1px solid #30363d !important;
+  color: #c9d1d9;
+}
+
+.market-container :deep(.el-card__header) {
+  background: #0d1117;
+  border-bottom: 1px solid #30363d;
+  color: #c9d1d9;
+}
+
+.market-container :deep(.el-card__body) {
+  background: transparent;
+  color: #c9d1d9;
+}
+
+/* 表格深色主题 */
+.market-container :deep(.el-table) {
+  background: transparent;
+  color: #c9d1d9;
+}
+
+.market-container :deep(.el-table th),
+.market-container :deep(.el-table tr) {
+  background: #161b22;
+  color: #c9d1d9;
+}
+
+.market-container :deep(.el-table td),
+.market-container :deep(.el-table th.is-leaf) {
+  border-bottom: 1px solid #30363d;
+}
+
+.market-container :deep(.el-table--enable-row-hover .el-table__body tr:hover > td) {
+  background: #1c2128;
+}
+
+/* 按钮深色主题 */
+.market-container :deep(.el-button) {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+}
+
+.market-container :deep(.el-button:hover) {
+  background: #30363d;
+  border-color: #484f58;
+  color: #ffffff;
+}
+
+/* 按钮组深色主题 */
+.market-container :deep(.el-button-group .el-button) {
+  background: #21262d;
+  border-color: #30363d;
+  color: #8b949e;
+}
+
+.market-container :deep(.el-button-group .el-button.is-active) {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #ffffff;
+}
+
+/* 标签深色主题 */
+.market-container :deep(.el-tag) {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+}
+
+/* 进度条深色主题 */
+.market-container :deep(.el-progress__text) {
+  color: #c9d1d9;
+}
+
+/* 修改涨跌颜色为更鲜明的红绿 */
+.rise {
+  color: #f85149 !important; /* 更鲜明的红色 */
+  background: rgba(248, 81, 73, 0.1);
+}
+
+.fall {
+  color: #3fb950 !important; /* 更鲜明的绿色 */
+  background: rgba(63, 185, 80, 0.1);
+}
+
+.flat {
+  color: #8b949e !important;
+  background: rgba(139, 148, 158, 0.1);
 }
 </style>

@@ -8,14 +8,18 @@
 """
 
 # from .timeseries import RedisTimeSeriesStorage  # 暂时禁用，待修复兼容性问题
-from .models.base import Base, BaseModel, TimeSeriesBase, TimestampMixin
-from .models.market import (
-    MarketTick, Market1Min, Market5Min, MarketDaily, MarketSnapshot
-)
-from .models.trading import (
-    Order, Position, Trade, Account, DailySettlement,
-    OrderSide, OrderType, OrderStatus
-)
+try:
+    from .models_dir.base import Base, BaseModel, TimeSeriesBase, TimestampMixin
+    from .models_dir.market import (
+        MarketTick, Market1Min, Market5Min, MarketDaily, MarketSnapshot
+    )
+    from .models_dir.trading import (
+        Order, Position, Trade, Account, DailySettlement,
+        OrderSide, OrderType, OrderStatus
+    )
+except ImportError:
+    # 如果models_dir不存在，使用models.py
+    from .models import Base, StockInfo
 
 __all__ = [
     # "RedisTimeSeriesStorage",  # 暂时禁用

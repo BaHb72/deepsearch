@@ -3,23 +3,21 @@
 """
 from typing import Dict, Any, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
-
-from deepsearch.webui.server import app_state
 
 router = APIRouter()
 
 
 @router.get("/dashboard")
-async def get_dashboard() -> Dict[str, Any]:
+async def get_dashboard(request: Request) -> Dict[str, Any]:
     """
     获取仪表板数据。
     
     Returns:
         包含当前状态、趋势和告警的仪表板数据
     """
-    monitor_api = app_state.monitor_api
+    monitor_api = request.app.state.app_state.monitor_api
     if not monitor_api:
         # 返回默认数据而不是错误
         logger.warning("监控系统未就绪，返回默认数据")
@@ -62,6 +60,7 @@ async def get_dashboard() -> Dict[str, Any]:
 
 @router.get("/metrics/realtime")
 async def get_realtime_metrics(
+        request: Request,
         event_types: Optional[str] = Query(None, description="事件类型列表，逗号分隔")
 ) -> Dict[str, Any]:
     """
@@ -73,7 +72,7 @@ async def get_realtime_metrics(
     Returns:
         时间序列格式的指标数据
     """
-    monitor_api = app_state.monitor_api
+    monitor_api = request.app.state.app_state.monitor_api
     if not monitor_api:
         # 返回空数据
         return {
@@ -90,13 +89,14 @@ async def get_realtime_metrics(
 
 
 @router.get("/health")
-async def get_health_status() -> Dict[str, Any]:
+async def get_health_status(request: Request) -> Dict[str, Any]:
     """
     获取健康状态详情。
     
     Returns:
         系统健康状态和各项检查结果
     """
+    monitor_api = request.app.state.app_state.monitor_api
     if not monitor_api:
         return {"status": "unknown", "checks": {}}
 
@@ -120,7 +120,7 @@ async def get_slow_events(
     Returns:
         慢事件详细信息列表
     """
-    monitor_api = app_state.monitor_api
+    monitor_api = request.app.state.app_state.monitor_api
     if not monitor_api:
         raise HTTPException(status_code=503, detail="监控系统未就绪")
 
@@ -133,6 +133,7 @@ async def get_slow_events(
 
 @router.get("/history")
 async def get_historical_data(
+        request: Request,
         hours: int = Query(24, ge=1, le=168, description="历史数据时长（小时）")
 ) -> Dict[str, Any]:
     """
@@ -144,7 +145,7 @@ async def get_historical_data(
     Returns:
         指定时间范围的历史数据
     """
-    monitor_api = app_state.monitor_api
+    monitor_api = request.app.state.app_state.monitor_api
     if not monitor_api:
         raise HTTPException(status_code=503, detail="监控系统未就绪")
 
@@ -156,14 +157,14 @@ async def get_historical_data(
 
 
 @router.get("/events/summary")
-async def get_events_summary() -> Dict[str, Any]:
+async def get_events_summary(request: Request) -> Dict[str, Any]:
     """
     获取事件汇总统计。
     
     Returns:
         各类事件的统计信息
     """
-    monitor_api = app_state.monitor_api
+    monitor_api = request.app.state.app_state.monitor_api
     if not monitor_api:
         raise HTTPException(status_code=503, detail="监控系统未就绪")
 

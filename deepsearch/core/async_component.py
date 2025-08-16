@@ -192,7 +192,7 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
             # 从统计收集器注销
             get_statistics_collector().unregister_provider(self._name)
         except Exception as e:
-            self._logger.error(f"Error stopping {self._name}: {e}")
+            self._logger.error(f"Error stopping {self._name}: {repr(e)}")
             # 即使出错也标记为已停止
             self._status = ComponentStatus.STOPPED
             raise ComponentLifecycleError(

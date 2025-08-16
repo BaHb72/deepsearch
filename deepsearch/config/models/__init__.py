@@ -6,13 +6,15 @@ DeepSearch 的配置模型定义。
 
 from .app import AppConfig, AppEnvironment
 from .bus import BusInstanceConfig, MessageBusConfig, RouteConfig
+from .cache import RedisConfig
+from .cloudflare_workers import CloudflareWorkersConfig
 from .database import DatabaseConfig, MainDatabaseConfig, CacheDatabaseConfig
 from .debug import DebugConfig
 from .health import HealthCheckConfig
 from .log import LogConfig, LogLevel
 from .monitoring import MonitoringConfig
 from .performance import PerformanceConfig
-from .redis import RedisConfig
+from .qmt import QmtConfig
 from .security import SecurityConfig
 from .webui import WebUIConfig
 from .zeromq import ZeroMQConfig
@@ -38,6 +40,8 @@ __all__ = [
     "MonitoringConfig",
     # 性能
     "PerformanceConfig",
+    # QMT
+    "QmtConfig",
     # Redis
     "RedisConfig",
     # 安全
@@ -48,4 +52,6 @@ __all__ = [
     "ZeroMQConfig",
     # 健康检查
     "HealthCheckConfig",
+    # Cloudflare Workers
+    "CloudflareWorkersConfig",
 ]

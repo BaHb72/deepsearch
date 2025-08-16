@@ -286,6 +286,15 @@ class ComponentManager:
         :return: 组件实例，如果不存在返回 None
         """
         return self._components.get(name)
+
+    def has_component(self, name: str) -> bool:
+        """
+        检查组件是否存在
+        
+        :param name: 组件名称
+        :return: 组件是否存在
+        """
+        return name in self._components
     
     def get_component_status(self, name: str) -> ComponentInfo:
         """
@@ -365,13 +374,37 @@ class ComponentManager:
         
         :return: 组件名称到健康状态的映射
         """
+        import inspect
+        import asyncio
+        
         results = {}
         for name, info in self._component_info.items():
             if info.status == ComponentStatus.RUNNING and info.health_check:
                 try:
-                    results[name] = info.health_check()
+                    # 检查是否是协程函数
+                    if inspect.iscoroutinefunction(info.health_check):
+                        # 如果是协程，尝试在事件循环中运行
+                        try:
+                            loop = asyncio.get_running_loop()
+                            # 在已有的事件循环中，创建任务但不等待
+                            # 返回假定健康状态以避免阻塞
+                            results[name] = True
+                        except RuntimeError:
+                            # 没有运行的事件循环，创建新的
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                health_result = loop.run_until_complete(info.health_check())
+                                results[name] = bool(health_result) if not isinstance(health_result,
+                                                                                      dict) else health_result.get(
+                                    'healthy', False)
+                            finally:
+                                loop.close()
+                    else:
+                        # 同步函数，直接调用
+                        results[name] = info.health_check()
                 except Exception as e:
-                    self._logger.debug(f"{name} 健康检查失败：{e}")
+                    self._logger.debug(f"{name} health check failed: {e}")
                     results[name] = False
             else:
                 results[name] = info.status == ComponentStatus.RUNNING

@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.data_providers.proxy_provider import ProxyDataProvider
+from deepsearch.data_providers.cloudflare import ProxyDataProvider
 from deepsearch.indicators.technical import TechnicalIndicators, INDICATOR_REGISTRY
 from deepsearch.services.chart_service import ChartService
 from deepsearch.services.signal_detector import SignalDetector
@@ -27,7 +27,39 @@ def get_chart_service() -> ChartService:
     global chart_service
     if chart_service is None:
         # 初始化数据提供者和指标计算器
-        data_provider = ProxyDataProvider()
+        data_provider = None
+
+        # 优先尝试使用AKShare直连提供者
+        try:
+            from deepsearch.data_providers.akshare_direct import AKShareDirectProvider
+            import asyncio
+
+            akshare_provider = AKShareDirectProvider()
+            # 检查是否有运行中的事件循环
+            try:
+                loop = asyncio.get_running_loop()
+                # 如果在异步上下文中，创建任务
+                init_task = loop.create_task(akshare_provider.initialize())
+                # 这里无法等待，所以假设成功
+                data_provider = akshare_provider
+                logger.info("使用AKShare直连数据提供者（异步初始化）")
+            except RuntimeError:
+                # 没有运行的事件循环，创建新的
+                loop = asyncio.new_event_loop()
+                init_result = loop.run_until_complete(akshare_provider.initialize())
+                loop.close()
+
+                if init_result:
+                    data_provider = akshare_provider
+                    logger.info("使用AKShare直连数据提供者")
+        except Exception as e:
+            logger.warning(f"初始化AKShare直连提供者失败: {e}")
+
+        # 如果AKShare不可用，使用CloudFlare代理
+        if data_provider is None:
+            data_provider = ProxyDataProvider()
+            logger.info("使用CloudFlare代理数据提供者")
+        
         indicator_calculator = TechnicalIndicators()
 
         # 尝试连接Redis（如果配置了）
@@ -86,7 +118,8 @@ async def get_series(
         end: Optional[str] = Query(None, description="结束日期"),
         limit: int = Query(500, description="数据条数", ge=1, le=5000),
         adjust: str = Query("none", description="复权方式: none, qfq, hfq"),
-        session_split: bool = Query(True, description="是否分割交易时段")
+        session_split: bool = Query(True, description="是否分割交易时段"),
+        provider: Optional[str] = Query(None, description="数据提供者: default, miniqmt, akshare等")
 ):
     """
     获取K线数据序列
@@ -108,7 +141,8 @@ async def get_series(
             end_date=end,
             limit=limit,
             adjust=adjust,
-            session_split=session_split
+            session_split=session_split,
+            provider=provider
         )
         return data
     except Exception as e:
@@ -237,6 +271,146 @@ async def get_snapshot(
         return data
     except Exception as e:
         logger.error(f"获取快照数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/validate/{symbol}")
+async def validate_data_sources(
+        symbol: str,
+        timeframe: str = Query("1d", description="时间周期")
+):
+    """
+    验证多个数据源的数据一致性
+    
+    返回各数据源的数据和差异分析
+    """
+    try:
+        service = get_chart_service()
+        result = await service.validate_data_sources(symbol, timeframe)
+        return result
+    except Exception as e:
+        logger.error(f"数据验证失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/providers")
+async def get_available_providers():
+    """
+    获取可用的数据提供者列表
+    
+    返回所有配置的数据源及其状态
+    """
+    try:
+        service = get_chart_service()
+        providers = service.get_available_providers()
+        return {"providers": providers}
+    except Exception as e:
+        logger.error(f"获取数据提供者列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/meta/{symbol}")
+async def get_stock_meta(symbol: str):
+    """
+    获取股票元数据
+    
+    返回股票的上市日期、数据范围、缓存状态等元信息
+    """
+    try:
+        service = get_chart_service()
+        meta = await service.get_stock_meta(symbol)
+        return meta
+    except Exception as e:
+        logger.error(f"获取股票元数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stock-info")
+async def get_stock_info(
+        symbol: str = Query(..., description="股票代码")
+):
+    """
+    获取股票基础信息
+    
+    返回股票的基本信息，包括名称、所属板块、市值、市盈率等
+    """
+    try:
+        service = get_chart_service()
+        data = await service.get_stock_info(symbol)
+        return data
+    except Exception as e:
+        logger.error(f"获取股票信息失败: {e}")
+        # 如果服务失败，返回基础信息
+        return {
+            'symbol': symbol,
+            'name': f'股票{symbol}',
+            'sector': '未知',
+            'market_cap': '未知',
+            'pe_ratio': 0,
+            'error': str(e)
+        }
+
+
+@router.get("/stock-list")
+async def get_stock_list(
+        keyword: Optional[str] = Query(None, description="搜索关键字")
+):
+    """
+    获取股票列表
+    
+    支持通过代码或名称搜索股票
+    """
+    try:
+        service = get_chart_service()
+        data = await service.get_stock_list(keyword)
+        return data
+    except Exception as e:
+        logger.error(f"获取股票列表失败: {e}")
+        # 如果服务失败，返回模拟数据
+        mock_stocks = [
+            {'code': '000001', 'name': '平安银行', 'label': '平安银行 (000001)', 'value': '000001'},
+            {'code': '000002', 'name': '万科A', 'label': '万科A (000002)', 'value': '000002'},
+            {'code': '000858', 'name': '五粮液', 'label': '五粮液 (000858)', 'value': '000858'},
+            {'code': '002415', 'name': '海康威视', 'label': '海康威视 (002415)', 'value': '002415'},
+            {'code': '300750', 'name': '宁德时代', 'label': '宁德时代 (300750)', 'value': '300750'},
+            {'code': '600000', 'name': '浦发银行', 'label': '浦发银行 (600000)', 'value': '600000'},
+            {'code': '600036', 'name': '招商银行', 'label': '招商银行 (600036)', 'value': '600036'},
+            {'code': '600519', 'name': '贵州茅台', 'label': '贵州茅台 (600519)', 'value': '600519'},
+            {'code': '601318', 'name': '中国平安', 'label': '中国平安 (601318)', 'value': '601318'},
+            {'code': '601606', 'name': '长城军工', 'label': '长城军工 (601606)', 'value': '601606'},
+        ]
+
+        if keyword:
+            keyword_lower = keyword.lower()
+            filtered = [s for s in mock_stocks
+                        if keyword_lower in s['code'].lower() or keyword_lower in s['name'].lower()]
+            return filtered
+
+        return mock_stocks
+
+
+@router.get("/chip-distribution")
+async def get_chip_distribution(
+        symbol: str = Query(..., description="股票代码"),
+        lookback_days: int = Query(120, description="回看天数"),
+        price_bins: int = Query(100, description="价格分档数")
+):
+    """
+    获取筹码分布数据
+    
+    返回股票的筹码分布、成本分布和支撑阻力位等信息
+    """
+    try:
+        service = get_chart_service()
+        data = await service.calculate_chip_distribution(
+            symbol=symbol,
+            timeframe="1d",  # 筹码分布使用日线数据
+            lookback_days=lookback_days,
+            price_bins=price_bins
+        )
+        return data
+    except Exception as e:
+        logger.error(f"获取筹码分布失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

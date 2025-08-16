@@ -4,6 +4,7 @@
 提供统一的数据源接入框架，支持多数据源管理和代理池功能。
 """
 
+from .akshare import AkShareProxyProvider
 from .base import (
     DataProvider,
     DataProviderConfig,
@@ -12,6 +13,7 @@ from .base import (
     DataProviderError,
     ProxyConfig
 )
+from .cloudflare import ProxyDataProvider
 from .manager import DataProviderManager
 
 __all__ = [
@@ -21,5 +23,7 @@ __all__ = [
     'DataResponse',
     'DataProviderError',
     'ProxyConfig',
-    'DataProviderManager'
+    'DataProviderManager',
+    'AkShareProxyProvider',
+    'ProxyDataProvider'
 ]

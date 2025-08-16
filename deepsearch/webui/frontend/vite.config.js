@@ -48,7 +48,15 @@ export default defineConfig({
             // 代理 API 请求到后端
             '/api': {
                 target: 'http://localhost:8000',
-                changeOrigin: true
+                changeOrigin: true,
+                configure: (proxy, options) => {
+                    proxy.on('error', (err, req, res) => {
+                        console.log('proxy error', err);
+                    });
+                    proxy.on('proxyReq', (proxyReq, req, res) => {
+                        console.log('Sending Request to the Target:', req.url);
+                    });
+                }
             },
             // 代理监控WebSocket
             '/ws': {

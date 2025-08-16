@@ -5,7 +5,7 @@
 import hashlib
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 from loguru import logger
@@ -34,10 +34,10 @@ class MarketService:
         # 内存缓存
         self._cache = {}
         self._cache_ttl = {
-            "overview": 5,  # 大盘概览 5 秒
-            "sectors": 60,  # 板块数据 60 秒
-            "anomalies": 20,  # 异动数据 20 秒
-            "intraday": 30,  # 分时数据 30 秒
+            "overview": 30,  # 大盘概览 30 秒（优化后）
+            "sectors": 120,  # 板块数据 120 秒
+            "anomalies": 30,  # 异动数据 30 秒
+            "intraday": 60,  # 分时数据 60 秒
         }
 
         # 异动去重集合（避免重复推送）
@@ -110,14 +110,34 @@ class MarketService:
             return cached
 
         try:
-            # 获取指数数据
-            indices = await self._fetch_indices()
+            import asyncio
 
-            # 获取市场宽度
-            breadth = await self._fetch_market_breadth()
+            # 并行获取所有数据（优化性能）
+            indices_task = self._fetch_indices()
+            breadth_task = self._fetch_market_breadth()
+            capital_task = self._fetch_capital_flow()
 
-            # 获取资金流向（暂时模拟）
-            capital = await self._fetch_capital_flow()
+            # 设置合理的超时时间
+            results = await asyncio.wait_for(
+                asyncio.gather(
+                    indices_task,
+                    breadth_task,
+                    capital_task,
+                    return_exceptions=True
+                ),
+                timeout=10.0  # 10秒总超时
+            )
+
+            # 处理结果
+            indices = results[0] if not isinstance(results[0], Exception) else []
+            breadth = results[1] if not isinstance(results[1], Exception) else {}
+            capital = results[2] if not isinstance(results[2], Exception) else {}
+
+            # 记录错误但不中断
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    task_names = ["indices", "breadth", "capital"]
+                    logger.warning(f"获取{task_names[i]}数据失败: {result}")
 
             result = {
                 "indices": indices,
@@ -133,6 +153,25 @@ class MarketService:
 
             return result
 
+        except asyncio.TimeoutError:
+            logger.error("获取市场概览超时")
+            self.stats["api_errors"] += 1
+
+            # 返回缓存数据（如果有）
+            cached = self._get_from_cache("overview", ignore_ttl=True)
+            if cached:
+                cached["stale"] = True
+                return cached
+
+            # 返回空数据结构
+            return {
+                "indices": [],
+                "breadth": {},
+                "capital": {},
+                "timestamp": datetime.now().isoformat(),
+                "stale": True,
+                "error": "Request timeout"
+            }
         except Exception as e:
             logger.error(f"获取市场概览失败: {e}")
             self.stats["api_errors"] += 1
@@ -143,7 +182,7 @@ class MarketService:
                 cached["stale"] = True
                 return cached
 
-            # 返回空数据
+            # 返回空数据结构
             return {
                 "indices": [],
                 "breadth": {},
@@ -193,22 +232,9 @@ class MarketService:
             except Exception as e:
                 logger.error(f"获取指数数据失败: {e}")
 
-        # 如果没有数据，返回模拟数据
+        # 如果没有数据，返回空列表（不使用模拟数据）
         if not indices_data:
-            import random
-            for idx_cfg in indices_config:
-                base_price = {"000001": 3000, "399001": 10000, "399006": 2000, "899050": 1000}
-                price = base_price.get(idx_cfg["code"], 1000) + random.uniform(-50, 50)
-                change_pct = random.uniform(-2, 2)
-                indices_data.append({
-                    "code": idx_cfg["code"],
-                    "name": idx_cfg["name"],
-                    "price": round(price, 2),
-                    "change": round(price * change_pct / 100, 2),
-                    "change_pct": round(change_pct, 2),
-                    "volume": random.randint(1000000, 10000000),
-                    "amount": random.randint(10000000, 100000000)
-                })
+            logger.warning("未能获取指数数据")
 
         return indices_data
 
@@ -247,29 +273,54 @@ class MarketService:
             except Exception as e:
                 logger.error(f"获取市场宽度失败: {e}")
 
-        # 如果没有数据，返回模拟数据
+        # 如果没有数据，保持空值（不使用模拟数据）
         if breadth["total"] == 0:
-            import random
-            breadth = {
-                "advancers": random.randint(1500, 2500),
-                "decliners": random.randint(1500, 2500),
-                "unchanged": random.randint(50, 150),
-                "limit_up": random.randint(20, 80),
-                "limit_down": random.randint(5, 30),
-                "total": 5000
-            }
+            logger.warning("未能获取市场宽度数据")
 
         return breadth
 
     async def _fetch_capital_flow(self) -> Dict:
         """获取资金流向数据"""
-        # 暂时返回模拟数据
-        import random
-        return {
-            "north_net_flow": random.uniform(-5000000000, 5000000000),  # 北向资金净流入
-            "turnover": random.uniform(500000000000, 1000000000000),  # 总成交额
-            "active_ratio": random.uniform(0.3, 0.7)  # 活跃度
+        capital = {
+            "north_net_flow": None,  # 北向资金净流入
+            "turnover": None,  # 总成交额
+            "active_ratio": None  # 活跃度
         }
+
+        if self.data_provider:
+            try:
+                # 尝试获取北向资金数据
+                response = await self.data_provider._fetch_with_fallback(
+                    "stock_em_hsgt_north_net_flow_in",
+                    {}
+                )
+
+                if response and "data" in response:
+                    df = pd.DataFrame(response["data"])
+                    if not df.empty:
+                        # 获取最新一条数据
+                        latest = df.iloc[-1]
+                        capital["north_net_flow"] = float(latest.get("北向资金净流入", 0)) * 100000000  # 亿元转元
+
+                # 获取市场成交额
+                response = await self.data_provider._fetch_with_fallback(
+                    "stock_zh_a_spot_em",
+                    {}
+                )
+
+                if response and "data" in response:
+                    df = pd.DataFrame(response["data"])
+                    if not df.empty:
+                        capital["turnover"] = df["成交额"].sum()
+                        # 计算活跃度（成交额超过平均值的股票占比）
+                        mean_amount = df["成交额"].mean()
+                        active_count = len(df[df["成交额"] > mean_amount])
+                        capital["active_ratio"] = active_count / len(df) if len(df) > 0 else 0
+
+            except Exception as e:
+                logger.error(f"获取资金流向失败: {e}")
+
+        return capital
 
     async def get_sectors(self, sector_type: str = "industry", limit: int = 20, sort_by: str = "change_pct") -> List[
         Dict]:
@@ -323,23 +374,9 @@ class MarketService:
                             }
                         })
 
-            # 如果没有数据，返回模拟数据
+            # 如果没有数据，返回空列表
             if not sectors_data:
-                import random
-                sector_names = ["新能源", "半导体", "人工智能", "医药", "金融", "消费", "军工", "汽车", "房地产",
-                                "有色金属"]
-                for i, name in enumerate(sector_names[:limit]):
-                    sectors_data.append({
-                        "code": f"BK{1000 + i}",
-                        "name": name,
-                        "change_pct": round(random.uniform(-3, 3), 2),
-                        "amount": random.randint(1000000000, 10000000000),
-                        "leader": {
-                            "symbol": f"{600000 + i}",
-                            "name": f"{name}龙头",
-                            "change_pct": round(random.uniform(-5, 5), 2)
-                        }
-                    })
+                logger.warning(f"未能获取{sector_type}板块数据")
 
             # 排序
             if sort_by == "change_pct":
@@ -419,21 +456,9 @@ class MarketService:
                                 "extra": {"封板时间": row.get("跌停时间", "")}
                             })
 
-            # 如果没有数据，返回模拟数据
+            # 如果没有数据，返回空列表
             if not anomalies:
-                import random
-                reasons = ["涨停", "跌停", "急速拉升", "大单买入", "放量突破"]
-                for i in range(10):
-                    anomalies.append({
-                        "symbol": f"{600000 + i:06d}",
-                        "name": f"异动股{i + 1}",
-                        "price": round(random.uniform(5, 50), 2),
-                        "change_pct": round(random.uniform(-10, 10), 2),
-                        "amount": random.randint(100000000, 1000000000),
-                        "reason": random.choice(reasons),
-                        "timestamp": current_time.isoformat(),
-                        "extra": {}
-                    })
+                logger.warning(f"未能获取{kind}异动数据")
 
             # 去重处理
             anomalies = self._deduplicate_anomalies(anomalies)
@@ -497,20 +522,32 @@ class MarketService:
         try:
             intraday_data = []
 
-            # 这里暂时返回模拟数据
-            # 实际应该调用 stock_zh_a_hist_min_em 等接口
-            import random
-            base_price = 10
-            current_time = datetime.now()
+            # 尝试获取分时数据
+            if self.data_provider:
+                try:
+                    # 调用 stock_zh_a_hist_min_em 接口
+                    response = await self.data_provider._fetch_with_fallback(
+                        "stock_zh_a_hist_min_em",
+                        {
+                            "symbol": symbol,
+                            "period": str(period),
+                            "adjust": "qfq"
+                        }
+                    )
 
-            for i in range(limit):
-                time_point = current_time - timedelta(minutes=period * (limit - i - 1))
-                price = base_price + random.uniform(-0.5, 0.5)
-                intraday_data.append({
-                    "time": time_point.strftime("%H:%M"),
-                    "price": round(price, 2),
-                    "volume": random.randint(1000, 10000)
-                })
+                    if response and "data" in response:
+                        df = pd.DataFrame(response["data"])
+                        if not df.empty:
+                            # 获取最新的limit条数据
+                            df = df.tail(limit)
+                            for _, row in df.iterrows():
+                                intraday_data.append({
+                                    "time": str(row.get("时间", "")),
+                                    "price": float(row.get("收盘", 0)),
+                                    "volume": float(row.get("成交量", 0))
+                                })
+                except Exception as e:
+                    logger.error(f"获取分时数据失败: {e}")
 
             # 缓存结果
             self._set_cache("intraday", intraday_data, symbol=symbol, period=period, limit=limit)

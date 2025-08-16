@@ -15,7 +15,11 @@ from .base import (
     DataResponse,
     DataProviderError
 )
-from .cloudflare_proxy import CloudflareProxyProvider, CloudflareConfig
+from .capabilities import (
+    DataCapability,
+    get_capable_providers,
+    check_provider_capability
+)
 
 
 class DataProviderManager:
@@ -34,15 +38,14 @@ class DataProviderManager:
         """初始化管理器"""
         self._providers: Dict[str, DataProvider] = {}
         self._provider_priority: Dict[str, int] = {
-            "cloudflare_proxy": 1,  # Cloudflare Worker 优先级最高
-            "tushare": 2,
-            "akshare": 3,
-            "eastmoney": 4,
-            "sina": 5,
-            "custom": 6
+            "qmt": 1,  # QMT 优先级最高（本地实时数据）
+            "miniqmt": 2,  # MiniQMT 次优先（本地量化终端）
+            "akshare": 3,  # AkShare 第三优先（可通过Cloudflare代理）
         }
         self._initialized = False
-        self._cloudflare_provider = None
+        self._akshare_provider = None
+        self._miniqmt_provider = None
+        self._qmt_provider = None
 
     async def initialize(self) -> None:
         """初始化所有数据提供者"""
@@ -51,24 +54,31 @@ class DataProviderManager:
 
         logger.info("初始化数据提供者管理器...")
 
-        # 初始化 Cloudflare Worker 提供者
+        # 初始化 MiniQMT 提供者
         try:
             from deepsearch.config import settings
-            cloudflare_config = settings.data_providers.get("cloudflare_proxy", {})
 
-            if cloudflare_config.get("enabled", False):
-                config = CloudflareConfig(
-                    worker_url=cloudflare_config.get("worker_url"),
-                    timeout=cloudflare_config.get("timeout", 30),
-                    retry_count=cloudflare_config.get("retry_count", 3),
-                    cache_ttl=cloudflare_config.get("cache_ttl", 60)
-                )
-                self._cloudflare_provider = CloudflareProxyProvider(config)
-                await self._cloudflare_provider.initialize()
-                self._providers["cloudflare_proxy"] = self._cloudflare_provider
-                logger.info("Cloudflare Worker 提供者初始化成功")
+            if hasattr(settings, 'miniqmt') and settings.miniqmt.enabled:
+                from .miniqmt import MiniQMTProvider
+
+                self._miniqmt_provider = MiniQMTProvider()
+                await self._miniqmt_provider.initialize_async()
+                self._providers["miniqmt"] = self._miniqmt_provider
+                logger.info("MiniQMT 提供者初始化成功")
         except Exception as e:
-            logger.error(f"Cloudflare Worker 提供者初始化失败: {e}")
+            logger.error(f"MiniQMT 提供者初始化失败: {e}")
+
+        # 初始化 AkShare 提供者（可能使用Cloudflare代理）
+        try:
+            from deepsearch.config import settings
+            from deepsearch.data_providers.akshare import AkShareProxyProvider
+
+            self._akshare_provider = AkShareProxyProvider()
+            await self._akshare_provider.initialize()
+            self._providers["akshare"] = self._akshare_provider
+            logger.info("AkShare 提供者初始化成功")
+        except Exception as e:
+            logger.error(f"AkShare 提供者初始化失败: {e}")
 
         # 初始化其他已注册的提供者
         init_tasks = []
@@ -356,3 +366,101 @@ class DataProviderManager:
             stats["providers"][name] = provider.get_statistics()
 
         return stats
+
+    async def get_data_with_capability(
+            self,
+            capability: DataCapability,
+            request: DataRequest
+    ) -> DataResponse:
+        """
+        根据能力选择合适的数据源获取数据
+        
+        Args:
+            capability: 所需的数据能力
+            request: 数据请求
+            
+        Returns:
+            数据响应
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        # 获取支持该能力的数据源列表（按优先级排序）
+        capable_providers = get_capable_providers(capability)
+
+        if not capable_providers:
+            return DataResponse(
+                success=False,
+                error=f"没有数据源支持能力: {capability.value}"
+            )
+
+        # 按优先级尝试每个数据源
+        last_error = None
+        for provider_name in capable_providers:
+            # 检查数据源是否可用
+            provider = self._providers.get(provider_name)
+            if not provider:
+                logger.debug(f"数据源 {provider_name} 未初始化")
+                continue
+
+            # 检查健康状态
+            if hasattr(provider, 'is_healthy'):
+                if not provider.is_healthy():
+                    logger.debug(f"数据源 {provider_name} 不健康")
+                    continue
+            elif hasattr(provider, 'status'):
+                if provider.status.value != "running":
+                    logger.debug(f"数据源 {provider_name} 未运行")
+                    continue
+
+            try:
+                logger.info(f"尝试从 {provider_name} 获取 {capability.value} 数据")
+
+                # 针对AkShare特殊处理
+                if provider_name == "akshare" and hasattr(provider, '_fetch_with_fallback'):
+                    from .capabilities import get_akshare_api
+                    api_name = get_akshare_api(capability)
+                    if api_name:
+                        response = await provider._fetch_with_fallback(
+                            api_name,
+                            request.extra_params
+                        )
+                        return DataResponse(
+                            success=True,
+                            data=response.get("data") if response else None,
+                            metadata={"source": provider_name, "capability": capability.value}
+                        )
+                # 标准DataProvider接口
+                elif hasattr(provider, 'get_data'):
+                    response = await provider.get_data(request)
+                    if response.success:
+                        response.metadata["capability"] = capability.value
+                        return response
+                    else:
+                        last_error = response.error
+
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"{provider_name} 获取 {capability.value} 失败: {e}")
+                continue
+
+        # 所有数据源都失败
+        return DataResponse(
+            success=False,
+            error=f"所有数据源获取 {capability.value} 失败: {last_error}"
+        )
+
+    def check_capability_support(self, capability: DataCapability) -> Dict[str, bool]:
+        """
+        检查各数据源对指定能力的支持情况
+        
+        Args:
+            capability: 数据能力
+            
+        Returns:
+            各数据源的支持情况
+        """
+        support = {}
+        for provider_name in self._provider_priority.keys():
+            support[provider_name] = check_provider_capability(provider_name, capability)
+        return support
