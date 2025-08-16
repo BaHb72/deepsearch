@@ -66,6 +66,20 @@ class TechnicalIndicators:
         result = talib.SMA(prices, timeperiod=period)
         return pd.Series(result, index=df.index, name=f'SMA_{period}')
 
+    # 添加 ma 作为 sma 的别名，提供更好的兼容性
+    def ma(self, df: pd.DataFrame, period: int = 20, price_col: str = 'close') -> pd.Series:
+        """移动平均线 (MA) - SMA的别名
+        
+        Args:
+            df: K线数据
+            period: 周期
+            price_col: 价格列
+            
+        Returns:
+            MA 序列
+        """
+        return self.sma(df, period, price_col)
+
     def ema(self, df: pd.DataFrame, period: int = 20, price_col: str = 'close') -> pd.Series:
         """指数移动平均线 (EMA)
         
@@ -158,6 +172,11 @@ class TechnicalIndicators:
             'BB_Lower': lower
         }, index=df.index)
 
+    # 添加 boll 作为 bollinger_bands 的别名
+    def boll(self, df: pd.DataFrame, period: int = 20, nbdev: float = 2.0, price_col: str = 'close') -> pd.DataFrame:
+        """布林带 (BOLL) - bollinger_bands的别名"""
+        return self.bollinger_bands(df, period, nbdev, price_col)
+
     def atr(self, df: pd.DataFrame, period: int = 14) -> pd.Series:
         """平均真实波动范围 (ATR)"""
         self._check_talib()
@@ -173,6 +192,19 @@ class TechnicalIndicators:
         return pd.Series(result, index=df.index, name=f'ATR_{period}')
 
     # ==================== 成交量指标 ====================
+
+    def volume(self, df: pd.DataFrame) -> pd.Series:
+        """成交量
+        
+        Args:
+            df: K线数据
+            
+        Returns:
+            成交量序列
+        """
+        if 'volume' not in df.columns:
+            raise ValueError("列 volume 不存在")
+        return pd.Series(df['volume'].values, index=df.index, name='Volume')
 
     def obv(self, df: pd.DataFrame) -> pd.Series:
         """能量潮 (OBV)"""
@@ -740,7 +772,7 @@ INDICATOR_REGISTRY = {
         "pane": "main",
         "params": {
             "period": {"type": "number", "default": 20, "min": 5, "max": 100},
-            "std_dev": {"type": "number", "default": 2, "min": 1, "max": 5}
+            "nbdev": {"type": "number", "default": 2, "min": 1, "max": 5}
         }
     },
     "VWAP": {
@@ -791,6 +823,13 @@ INDICATOR_REGISTRY = {
         "params": {
             "period": {"type": "number", "default": 14, "min": 1, "max": 100}
         }
+    },
+    "VOLUME": {
+        "func": "volume",
+        "label": "成交量",
+        "category": "volume",
+        "pane": "sub",
+        "params": {}
     },
     "OBV": {
         "func": "obv",

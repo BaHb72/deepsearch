@@ -65,10 +65,9 @@ class HealthCheckConfig(BaseModel):
         description="自定义健康检查器配置"
     )
 
-    class Config:
-        """Pydantic 配置"""
-        schema_extra = {
-            "example": {
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{
                 "enabled": True,
                 "interval": 30.0,
                 "timeout": 5.0,
@@ -83,5 +82,6 @@ class HealthCheckConfig(BaseModel):
                 "history_size": 100,
                 "alert_enabled": False,
                 "alert_threshold": 3
-            }
+            }]
         }
+    }

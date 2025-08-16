@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel, Field, field_validator
 
 from deepsearch.messaging.types import BusName
-from .redis import RedisConfig
+from .cache import RedisConfig
 
 
 class RouteConfig(BaseModel):

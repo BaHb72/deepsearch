@@ -22,6 +22,22 @@ except ImportError:
     pd = None
 
 try:
+    from deepsearch.indicators.chip_distribution import ChipDistribution
+
+    HAS_CHIP = True
+except ImportError:
+    HAS_CHIP = False
+    ChipDistribution = None
+
+try:
+    from deepsearch.services.kline_cache import KlineCache
+
+    HAS_KLINE_CACHE = True
+except ImportError:
+    HAS_KLINE_CACHE = False
+    KlineCache = None
+
+try:
     import redis.asyncio as aioredis
 
     HAS_REDIS = True
@@ -52,23 +68,43 @@ class ChartService:
         "1mo": "monthly"
     }
 
-    def __init__(self, data_provider=None, indicator_calculator=None, redis_url: Optional[str] = None):
+    def __init__(self, data_provider=None, indicator_calculator=None, redis_url: Optional[str] = None,
+                 provider_manager=None, use_unified_manager: bool = True):
         """
         初始化图表服务
         
         Args:
-            data_provider: 数据提供者（如 AkShareProxyProvider）
+            data_provider: 默认数据提供者（如 AkShareProxyProvider）
             indicator_calculator: 指标计算器（如 TechnicalIndicators）
             redis_url: Redis连接URL（可选）
+            provider_manager: 数据提供者管理器（可选）
+            use_unified_manager: 是否使用统一数据管理器
         """
         self.data_provider = data_provider
+        self.default_provider = data_provider
         self.indicator_calculator = indicator_calculator
+        self.provider_manager = provider_manager
+        self._current_provider = None
+        self.use_unified_manager = use_unified_manager
+        self._unified_manager = None
 
         # Redis缓存配置
         self.redis_client = None
         self.redis_enabled = False
         if redis_url and HAS_REDIS:
             self._init_redis(redis_url)
+
+        # 分层缓存管理器
+        self.kline_cache = None
+        if HAS_KLINE_CACHE:
+            try:
+                self.kline_cache = KlineCache(
+                    redis_client=self.redis_client,
+                    db_path="./data/kline_cache.db"
+                )
+                logger.info("分层缓存管理器初始化成功")
+            except Exception as e:
+                logger.warning(f"分层缓存管理器初始化失败: {e}")
 
         # 本地缓存配置（作为后备）
         self._cache = {}
@@ -89,7 +125,8 @@ class ChartService:
             "cache_hits": 0,
             "cache_misses": 0,
             "api_errors": 0,
-            "last_update": None
+            "last_update": None,
+            "current_provider": None
         }
 
         # 实时数据订阅管理
@@ -112,7 +149,35 @@ class ChartService:
             return [self._clean_nan_values(item) for item in data]
         elif HAS_PANDAS and isinstance(data, pd.DataFrame):
             # DataFrame转换为dict时自动处理NaN
-            return data.fillna(0).replace([np.inf, -np.inf], 0).to_dict(orient="records")
+            df_clean = data.fillna(0).replace([np.inf, -np.inf], 0)
+
+            # 处理时间字段 - 将ts重命名为time供前端使用
+            if 'ts' in df_clean.columns:
+                df_clean = df_clean.copy()
+                # 格式化时间字段
+                if pd.api.types.is_datetime64_any_dtype(df_clean['ts']):
+                    # 根据数据频率决定时间格式
+                    if len(df_clean) > 0:
+                        # 检查是否为日线数据（时间间隔大于1天）
+                        time_diff = df_clean['ts'].iloc[-1] - df_clean['ts'].iloc[0] if len(
+                            df_clean) > 1 else pd.Timedelta(days=0)
+                        if time_diff.days > 0 and len(df_clean) < 500:  # 日线数据
+                            df_clean['time'] = df_clean['ts'].dt.strftime('%Y-%m-%d')
+                        else:  # 分钟线数据
+                            df_clean['time'] = df_clean['ts'].dt.strftime('%Y-%m-%d %H:%M')
+                    else:
+                        df_clean['time'] = df_clean['ts'].dt.strftime('%Y-%m-%d %H:%M')
+                else:
+                    # 如果不是datetime类型，尝试转换
+                    try:
+                        df_clean['time'] = pd.to_datetime(df_clean['ts']).dt.strftime('%Y-%m-%d %H:%M')
+                    except:
+                        df_clean['time'] = df_clean['ts'].astype(str)
+
+                # 删除原始ts列，避免混淆
+                df_clean = df_clean.drop(columns=['ts'])
+
+            return df_clean.to_dict(orient="records")
         elif HAS_PANDAS and isinstance(data, pd.Series):
             return data.fillna(0).replace([np.inf, -np.inf], 0).tolist()
         elif isinstance(data, (np.floating, np.integer)):
@@ -237,7 +302,8 @@ class ChartService:
             end_date: Optional[str] = None,
             limit: int = 500,
             adjust: str = "none",
-            session_split: bool = True
+            session_split: bool = True,
+            provider: Optional[str] = None
     ) -> Dict:
         """
         获取K线数据序列
@@ -256,7 +322,35 @@ class ChartService:
         """
         self.stats["total_requests"] += 1
 
-        # 尝试从缓存获取
+        # 如果启用了分层缓存，优先使用
+        if self.kline_cache:
+            try:
+                bars, source = await self.kline_cache.get_data(
+                    symbol, timeframe, start_date, end_date, limit
+                )
+                if bars is not None and not bars.empty:
+                    logger.info(f"从分层缓存获取数据成功，来源: {source}")
+                    # 处理数据格式
+                    bars = self._standardize_columns(bars)
+                    if session_split and timeframe in ["1m", "3m", "5m", "15m", "30m", "60m"]:
+                        bars = self._add_session_info(bars)
+                    bars = self._calculate_basic_metrics(bars)
+
+                    meta = await self._get_meta_info(symbol, bars)
+                    meta["data_source"] = source
+                    meta["cached"] = True
+
+                    result = {
+                        "meta": self._clean_nan_values(meta),
+                        "bars": self._clean_nan_values(bars),
+                        "timestamp": datetime.now().isoformat(),
+                        "source": source
+                    }
+                    return result
+            except Exception as e:
+                logger.warning(f"分层缓存获取失败: {e}，回退到普通缓存")
+
+        # 尝试从普通缓存获取
         cached = await self._get_from_cache(
             symbol, timeframe,
             start_date=start_date, end_date=end_date,
@@ -267,7 +361,11 @@ class ChartService:
 
         try:
             # 获取原始数据
-            bars = await self._fetch_bars(symbol, timeframe, start_date, end_date, limit, adjust)
+            bars = await self._fetch_bars(symbol, timeframe, start_date, end_date, limit, adjust, provider)
+
+            # 标准化列名（中文转英文）
+            if HAS_PANDAS and isinstance(bars, pd.DataFrame):
+                bars = self._standardize_columns(bars)
 
             # 处理会话信息
             if session_split and timeframe in ["1m", "3m", "5m", "15m", "30m", "60m"]:
@@ -279,6 +377,10 @@ class ChartService:
             # 获取元数据
             meta = await self._get_meta_info(symbol, bars)
 
+            # 添加数据源信息到元数据
+            meta["data_source"] = self.stats.get("current_provider", "unknown")
+            meta["data_validated"] = False  # 标记是否经过多源验证
+
             # 清理NaN值
             if HAS_PANDAS and isinstance(bars, pd.DataFrame):
                 bars_data = self._clean_nan_values(bars)
@@ -288,13 +390,25 @@ class ChartService:
             result = {
                 "meta": self._clean_nan_values(meta),
                 "bars": bars_data,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "source": self.stats.get("current_provider", "unknown")
             }
 
             # 缓存结果
             await self._set_cache(symbol, timeframe, result,
                                   start_date=start_date, end_date=end_date,
                                   limit=limit, adjust=adjust)
+
+            # 保存到分层缓存
+            if self.kline_cache and bars_data:
+                try:
+                    if isinstance(bars_data, list):
+                        bars_df = pd.DataFrame(bars_data)
+                    else:
+                        bars_df = bars_data
+                    await self.kline_cache.save_data(symbol, timeframe, bars_df)
+                except Exception as e:
+                    logger.warning(f"保存到分层缓存失败: {e}")
 
             self.stats["last_update"] = datetime.now()
             return result
@@ -326,6 +440,85 @@ class ChartService:
                 "timestamp": datetime.now().isoformat()
             }
 
+    async def _get_unified_manager(self):
+        """获取统一数据管理器实例"""
+        if self._unified_manager is None and self.use_unified_manager:
+            try:
+                from deepsearch.services.unified_data_manager import get_unified_data_manager
+                self._unified_manager = await get_unified_data_manager()
+                logger.info("已启用统一数据管理器")
+            except Exception as e:
+                logger.error(f"初始化统一数据管理器失败: {e}")
+                self.use_unified_manager = False
+        return self._unified_manager
+
+    def _timeframe_to_period(self, timeframe: str) -> str:
+        """将 timeframe 转换为 period 格式"""
+        # 映射关系
+        period_map = {
+            "1m": "1",
+            "3m": "3",
+            "5m": "5",
+            "15m": "15",
+            "30m": "30",
+            "60m": "60",
+            "1d": "daily",
+            "1w": "weekly",
+            "1mo": "monthly"
+        }
+        return period_map.get(timeframe, "daily")
+
+    def _standardize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """标准化DataFrame列名（中文转英文）"""
+        if not HAS_PANDAS or df is None or df.empty:
+            return df
+
+        # 列名映射表
+        column_mapping = {
+            '日期': 'date',
+            '时间': 'time',
+            '开盘': 'open',
+            '收盘': 'close',
+            '最高': 'high',
+            '最低': 'low',
+            '成交量': 'volume',
+            '成交额': 'amount',
+            '涨跌幅': 'pct_change',
+            '涨跌额': 'change',
+            '振幅': 'amplitude',
+            '换手率': 'turnover_rate'
+        }
+
+        # 重命名列
+        df = df.rename(columns=column_mapping)
+
+        # 确保必要的列存在
+        required_columns = ['open', 'high', 'low', 'close', 'volume']
+        for col in required_columns:
+            if col not in df.columns:
+                logger.warning(f"Missing required column: {col}")
+
+        return df
+
+    def get_current_provider(self, provider_name: Optional[str] = None):
+        """获取当前使用的数据提供者"""
+        if provider_name and self.provider_manager:
+            # 尝试获取指定的提供者
+            provider = self.provider_manager.get_provider(provider_name)
+            if provider:
+                self._current_provider = provider
+                self.stats["current_provider"] = provider_name
+                return provider
+            else:
+                logger.warning(f"Provider {provider_name} not found, using default")
+
+        # 使用默认提供者
+        if self.default_provider:
+            self.stats["current_provider"] = "default"
+            return self.default_provider
+
+        return None
+
     async def _fetch_bars(
             self,
             symbol: str,
@@ -333,11 +526,56 @@ class ChartService:
             start_date: Optional[str],
             end_date: Optional[str],
             limit: int,
-            adjust: str
+            adjust: str,
+            provider_name: Optional[str] = None
     ) -> pd.DataFrame:
         """从数据源获取K线数据"""
 
-        if not self.data_provider:
+        # 优先使用统一数据管理器
+        unified_manager = await self._get_unified_manager()
+        if unified_manager and self.use_unified_manager:
+            try:
+                # 将 provider_name 转换为 DataSourceType
+                from deepsearch.services.unified_data_manager import DataSourceType
+                preferred_source = None
+                if provider_name:
+                    source_map = {
+                        "qmt": DataSourceType.QMT,
+                        "cloudflare": DataSourceType.CLOUDFLARE,
+                        "akshare": DataSourceType.AKSHARE,
+                        "direct": DataSourceType.DIRECT_API
+                    }
+                    preferred_source = source_map.get(provider_name.lower())
+
+                # 调用统一管理器获取数据
+                result = await unified_manager.get_stock_hist(
+                    symbol=symbol,
+                    period=self._timeframe_to_period(timeframe),
+                    start_date=start_date,
+                    end_date=end_date,
+                    adjust=adjust,
+                    preferred_source=preferred_source
+                )
+
+                if result and "data" in result:
+                    # 转换为 DataFrame
+                    if HAS_PANDAS:
+                        df = pd.DataFrame(result["data"])
+                        if not df.empty:
+                            # 记录数据源
+                            self.stats["current_provider"] = result.get("source", "unified")
+                            logger.info(f"从 {result.get('source', 'unified')} 获取到 {len(df)} 条数据")
+                            return df
+                    else:
+                        return result["data"]
+
+            except Exception as e:
+                logger.warning(f"统一数据管理器获取数据失败: {e}，回退到直接提供者")
+
+        # 回退到原有逻辑
+        provider = self.get_current_provider(provider_name)
+
+        if not provider:
             # 返回空数据
             logger.error(f"No data provider available for {symbol} {timeframe}")
             return pd.DataFrame() if HAS_PANDAS else []
@@ -356,12 +594,16 @@ class ChartService:
 
             # 调用 stock_zh_a_hist_min_em
             try:
-                response = await self.data_provider._fetch_with_fallback(
+                # 默认获取最近两个月的数据
+                from datetime import timedelta
+                default_start = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d 09:30:00")
+
+                response = await provider._fetch_with_fallback(
                     "stock_zh_a_hist_min_em",
                     {
                         "symbol": symbol,
                         "period": period_map[timeframe],
-                        "start_date": start_date or "2020-01-01 09:30:00",
+                        "start_date": start_date or default_start,
                         "end_date": end_date or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "adjust": adjust if adjust != "none" else ""
                     }
@@ -441,12 +683,16 @@ class ChartService:
 
             # 调用 stock_zh_a_hist
             try:
-                response = await self.data_provider._fetch_with_fallback(
+                # 默认获取最近两年的数据（约730天）
+                from datetime import timedelta
+                default_start = (datetime.now() - timedelta(days=730)).strftime("%Y%m%d")
+
+                response = await provider._fetch_with_fallback(
                     "stock_zh_a_hist",
                     {
                         "symbol": symbol,
                         "period": period_map[timeframe],
-                        "start_date": start_date or "20200101",
+                        "start_date": start_date or default_start,
                         "end_date": end_date or datetime.now().strftime("%Y%m%d"),
                         "adjust": adjust if adjust != "none" else ""
                     }
@@ -470,7 +716,9 @@ class ChartService:
                     if isinstance(data_list, list):
                         logger.debug(f"Response data length for {symbol}: {len(data_list)}")
                         if data_list and len(data_list) > 0:
-                            logger.debug(f"First item in data_list: {data_list[0]}")
+                            # 使用json.dumps()避免中文键导致的格式化错误
+                            import json
+                            logger.debug(f"First item in data_list: {json.dumps(data_list[0], ensure_ascii=False)}")
 
                     if isinstance(data_list, dict):
                         # 如果是字典，可能是错误响应或单条数据，需要生成模拟数据
@@ -733,6 +981,12 @@ class ChartService:
             logger.warning("Indicator calculator not configured; returning empty results (no mock indicators)")
             return {}
 
+        # 导入指标注册表
+        try:
+            from deepsearch.indicators.technical import INDICATOR_REGISTRY
+        except ImportError:
+            INDICATOR_REGISTRY = {}
+
         # 使用指标计算器计算
         for indicator in indicators:
             name = indicator["name"]
@@ -740,9 +994,16 @@ class ChartService:
             pane = indicator.get("pane", "main")
 
             try:
+                # 首先从注册表查找真实的函数名
+                method_name = name.lower()
+                if name.upper() in INDICATOR_REGISTRY:
+                    registry_info = INDICATOR_REGISTRY[name.upper()]
+                    method_name = registry_info.get("func", name.lower())
+                    logger.debug(f"Using registered method '{method_name}' for indicator '{name}'")
+                
                 # 调用对应的指标计算方法
-                if hasattr(self.indicator_calculator, name.lower()):
-                    method = getattr(self.indicator_calculator, name.lower())
+                if hasattr(self.indicator_calculator, method_name):
+                    method = getattr(self.indicator_calculator, method_name)
                     result = method(bars_data, **params)
 
                     # 格式化输出
@@ -776,7 +1037,7 @@ class ChartService:
                     }
                 else:
                     # 指标不存在，返回空数据
-                    logger.warning(f"Indicator {name} not found, returning empty data")
+                    logger.warning(f"Indicator method '{method_name}' not found for '{name}', returning empty data")
                     results[name] = {
                         "pane": pane,
                         "series": {},
@@ -909,6 +1170,120 @@ class ChartService:
 
         return indicators
 
+    async def validate_data_sources(self, symbol: str, timeframe: str = "1d") -> Dict:
+        """
+        验证多个数据源的数据一致性
+        
+        Args:
+            symbol: 股票代码
+            timeframe: 时间周期
+            
+        Returns:
+            包含各数据源数据和差异分析的字典
+        """
+        unified_manager = await self._get_unified_manager()
+        if not unified_manager:
+            return {"error": "统一数据管理器未启用"}
+
+        from deepsearch.services.unified_data_manager import DataSourceType
+
+        results = {}
+        data_points = []
+
+        # 从所有可用数据源获取数据
+        for source_type in DataSourceType:
+            try:
+                result = await unified_manager.get_stock_hist(
+                    symbol=symbol,
+                    period=self._timeframe_to_period(timeframe),
+                    limit=1,  # 只获取最新的一条数据用于比较
+                    preferred_source=source_type
+                )
+
+                if result and "data" in result and result["data"]:
+                    latest = result["data"][-1] if isinstance(result["data"], list) else result["data"]
+                    results[source_type.value] = {
+                        "data": latest,
+                        "source": result.get("source"),
+                        "latency": result.get("latency")
+                    }
+
+                    # 收集关键数据点用于比较
+                    if isinstance(latest, dict):
+                        data_points.append({
+                            "source": source_type.value,
+                            "close": latest.get("收盘", latest.get("close", 0)),
+                            "volume": latest.get("成交量", latest.get("volume", 0)),
+                            "high": latest.get("最高", latest.get("high", 0)),
+                            "low": latest.get("最低", latest.get("low", 0))
+                        })
+
+            except Exception as e:
+                results[source_type.value] = {"error": str(e)}
+
+        # 分析数据差异
+        if len(data_points) > 1:
+            # 计算价格差异
+            closes = [p["close"] for p in data_points if p["close"] > 0]
+            if closes:
+                max_close = max(closes)
+                min_close = min(closes)
+                avg_close = sum(closes) / len(closes)
+                price_variance = (max_close - min_close) / avg_close * 100 if avg_close > 0 else 0
+
+                results["analysis"] = {
+                    "price_variance_pct": round(price_variance, 2),
+                    "sources_count": len(data_points),
+                    "consensus_price": round(avg_close, 2),
+                    "max_price": max_close,
+                    "min_price": min_close,
+                    "reliable": price_variance < 0.5  # 价格差异小于0.5%认为可靠
+                }
+            else:
+                results["analysis"] = {"error": "无有效价格数据"}
+        else:
+            results["analysis"] = {"error": "数据源不足，无法比较"}
+
+        return results
+
+    def _get_trading_session(self) -> str:
+        """
+        获取当前交易时段
+        
+        Returns:
+            交易时段: pre_market, trading, after_hours, closed
+        """
+        from datetime import datetime, time
+        import pytz
+
+        # 使用上海时区
+        tz = pytz.timezone('Asia/Shanghai')
+        now = datetime.now(tz)
+        current_time = now.time()
+        weekday = now.weekday()  # 0=周一, 6=周日
+
+        # 周末休市
+        if weekday >= 5:  # 周六或周日
+            return "closed"
+
+        # 交易时段定义
+        pre_market_start = time(9, 15)
+        pre_market_end = time(9, 30)
+        morning_start = time(9, 30)
+        morning_end = time(11, 30)
+        afternoon_start = time(13, 0)
+        afternoon_end = time(15, 0)
+
+        # 判断时段
+        if pre_market_start <= current_time < pre_market_end:
+            return "pre_market"
+        elif (morning_start <= current_time <= morning_end) or (afternoon_start <= current_time <= afternoon_end):
+            return "trading"
+        elif time(15, 0) < current_time <= time(15, 30):
+            return "after_hours"
+        else:
+            return "closed"
+    
     async def get_snapshot(self, symbol: str) -> Dict:
         """
         获取实时快照数据
@@ -919,34 +1294,376 @@ class ChartService:
         Returns:
             实时行情快照
         """
-        # 这里应该调用实时行情接口
-        # 暂时返回模拟数据
-        import random
+        try:
+            # 优先从数据提供者获取实时行情
+            if self.data_provider and hasattr(self.data_provider, 'get_realtime_quote'):
+                quote_data = await self.data_provider.get_realtime_quote(symbol)
 
-        price = round(10 + random.uniform(-1, 1), 2)
-        prev_close = 10
-        change = round(price - prev_close, 2)
-        change_pct = round((change / prev_close) * 100, 2)
+                if quote_data and not quote_data.get("error"):
+                    # 计算涨跌幅相关数据
+                    price = quote_data.get("current", 0)
+                    prev_close = quote_data.get("prev_close", price)
+                    change = price - prev_close
+                    change_pct = (change / prev_close * 100) if prev_close else 0
 
+                    # 计算涨跌停价格
+                    # 创业板(300开头)涨跌幅限制为20%，其他为10%
+                    limit_ratio = 0.2 if symbol.startswith("300") or symbol.startswith("688") else 0.1
+                    upper_limit = round(prev_close * (1 + limit_ratio), 2)
+                    lower_limit = round(prev_close * (1 - limit_ratio), 2)
+
+                    return {
+                        "symbol": symbol,
+                        "name": quote_data.get("name", f"股票{symbol}"),
+                        "price": price,
+                        "prev_close": prev_close,
+                        "change": round(change, 2),
+                        "change_pct": round(change_pct, 2),
+                        "open": quote_data.get("open", 0),
+                        "high": quote_data.get("high", 0),
+                        "low": quote_data.get("low", 0),
+                        "volume": quote_data.get("volume", 0),
+                        "amount": quote_data.get("amount", 0),
+                        "turnover_rate": quote_data.get("turnover_rate", 0),
+                        "upper_limit": upper_limit,
+                        "lower_limit": lower_limit,
+                        "vwap": quote_data.get("vwap", price),
+                        "session": self._get_trading_session(),
+                        "timestamp": datetime.now().isoformat()
+                    }
+
+            # 如果没有数据提供者或获取失败，尝试从统一数据管理器获取
+            unified_manager = await self._get_unified_manager()
+            if unified_manager:
+                quote_result = await unified_manager.get_realtime_quote(symbol)
+                if quote_result and quote_result.get("data"):
+                    quote_data = quote_result["data"]
+                    price = quote_data.get("current", 0)
+                    prev_close = quote_data.get("prev_close", price)
+                    change = price - prev_close
+                    change_pct = (change / prev_close * 100) if prev_close else 0
+
+                    limit_ratio = 0.2 if symbol.startswith("300") or symbol.startswith("688") else 0.1
+                    upper_limit = round(prev_close * (1 + limit_ratio), 2)
+                    lower_limit = round(prev_close * (1 - limit_ratio), 2)
+
+                    return {
+                        "symbol": symbol,
+                        "name": quote_data.get("name", f"股票{symbol}"),
+                        "price": price,
+                        "prev_close": prev_close,
+                        "change": round(change, 2),
+                        "change_pct": round(change_pct, 2),
+                        "open": quote_data.get("open", 0),
+                        "high": quote_data.get("high", 0),
+                        "low": quote_data.get("low", 0),
+                        "volume": quote_data.get("volume", 0),
+                        "amount": quote_data.get("amount", 0),
+                        "turnover_rate": quote_data.get("turnover_rate", 0),
+                        "upper_limit": upper_limit,
+                        "lower_limit": lower_limit,
+                        "vwap": quote_data.get("vwap", price),
+                        "session": self._get_trading_session(),
+                        "timestamp": datetime.now().isoformat()
+                    }
+
+        except Exception as e:
+            logger.error(f"获取股票 {symbol} 快照失败: {e}")
+
+        # 如果都失败了，返回空数据
         return {
             "symbol": symbol,
             "name": f"股票{symbol}",
-            "price": price,
-            "prev_close": prev_close,
-            "change": change,
-            "change_pct": change_pct,
-            "open": round(10 + random.uniform(-0.5, 0.5), 2),
-            "high": round(price + random.uniform(0, 0.5), 2),
-            "low": round(price - random.uniform(0, 0.5), 2),
-            "volume": random.randint(1000000, 10000000),
-            "amount": random.randint(10000000, 100000000),
-            "turnover_rate": round(random.uniform(0.5, 5), 2),
-            "upper_limit": round(prev_close * 1.1, 2),
-            "lower_limit": round(prev_close * 0.9, 2),
-            "vwap": round(price + random.uniform(-0.1, 0.1), 2),
-            "session": "trading",  # pre_market, trading, after_hours, closed
-            "timestamp": datetime.now().isoformat()
+            "price": 0,
+            "prev_close": 0,
+            "change": 0,
+            "change_pct": 0,
+            "open": 0,
+            "high": 0,
+            "low": 0,
+            "volume": 0,
+            "amount": 0,
+            "turnover_rate": 0,
+            "upper_limit": 0,
+            "lower_limit": 0,
+            "vwap": 0,
+            "session": "closed",
+            "timestamp": datetime.now().isoformat(),
+            "error": "无法获取实时数据"
         }
+
+    def get_available_providers(self) -> List[Dict[str, Any]]:
+        """获取所有可用的数据提供者列表"""
+        providers = []
+
+        # 添加默认提供者
+        if self.default_provider:
+            providers.append({
+                "name": "default",
+                "label": "Cloudflare代理",
+                "type": "proxy",
+                "enabled": True,
+                "status": "running"
+            })
+
+        # 添加管理器中的提供者
+        if self.provider_manager:
+            for name in self.provider_manager.get_available_providers():
+                provider = self.provider_manager.get_provider(name)
+                if provider:
+                    label_map = {
+                        "miniqmt": "MiniQMT本地",
+                        "qmt": "QMT实时",
+                        "akshare": "AkShare",
+                        "cloudflare_proxy": "Cloudflare代理"
+                    }
+                    providers.append({
+                        "name": name,
+                        "label": label_map.get(name, name),
+                        "type": getattr(provider, "provider_type", "unknown"),
+                        "enabled": True,
+                        "status": "running"
+                    })
+
+        return providers
+
+    async def get_stock_list(self, keyword: str = None) -> List[Dict]:
+        """
+        获取股票列表，支持关键字搜索
+        
+        Args:
+            keyword: 搜索关键字（可选）
+            
+        Returns:
+            股票列表
+        """
+        try:
+            # 尝试从data_provider获取股票列表
+            stock_list = []
+            if self.data_provider and hasattr(self.data_provider, 'fetch_stock_list'):
+                try:
+                    stock_list = await self.data_provider.fetch_stock_list()
+                except Exception as e:
+                    logger.warning(f"从数据提供者获取股票列表失败: {e}")
+                    stock_list = []
+
+            # 如果获取成功且有数据
+            if stock_list:
+                # 如果有关键字，进行过滤
+                if keyword:
+                    keyword_lower = keyword.lower()
+                    filtered = []
+                    for stock in stock_list:
+                        code = str(stock.get('代码', stock.get('code', '')))
+                        name = stock.get('名称', stock.get('name', ''))
+                        # 匹配代码或名称
+                        if keyword_lower in code.lower() or keyword_lower in name.lower():
+                            filtered.append({
+                                'code': code,
+                                'name': name,
+                                'label': f"{name} ({code})",
+                                'value': code
+                            })
+                    return filtered[:20]  # 限制返回20条
+                else:
+                    # 返回全部，格式化
+                    return [{
+                        'code': str(stock.get('代码', stock.get('code', ''))),
+                        'name': stock.get('名称', stock.get('name', '')),
+                        'label': f"{stock.get('名称', stock.get('name', ''))} ({stock.get('代码', stock.get('code', ''))})",
+                        'value': str(stock.get('代码', stock.get('code', '')))
+                    } for stock in stock_list[:100]]  # 限制100条
+
+            # 返回模拟数据
+            mock_stocks = [
+                {'code': '000001', 'name': '平安银行', 'label': '平安银行 (000001)', 'value': '000001'},
+                {'code': '000002', 'name': '万科A', 'label': '万科A (000002)', 'value': '000002'},
+                {'code': '600000', 'name': '浦发银行', 'label': '浦发银行 (600000)', 'value': '600000'},
+                {'code': '600036', 'name': '招商银行', 'label': '招商银行 (600036)', 'value': '600036'},
+                {'code': '601606', 'name': '长城军工', 'label': '长城军工 (601606)', 'value': '601606'},
+            ]
+
+            if keyword:
+                keyword_lower = keyword.lower()
+                return [s for s in mock_stocks if
+                        keyword_lower in s['code'].lower() or keyword_lower in s['name'].lower()]
+            return mock_stocks
+
+        except Exception as e:
+            logger.error(f"获取股票列表失败: {e}")
+            return []
+
+    async def get_stock_info(self, symbol: str) -> Dict:
+        """
+        获取股票基础信息
+        
+        Args:
+            symbol: 股票代码
+            
+        Returns:
+            股票基础信息
+        """
+        try:
+            # 如果data_provider支持获取股票信息，则调用
+            if self.data_provider and hasattr(self.data_provider, 'fetch_stock_info'):
+                info = await self.data_provider.fetch_stock_info(symbol)
+                if info:
+                    # 处理返回的数据格式
+                    result = {
+                        "symbol": symbol,
+                        "name": info.get('股票简称', info.get('name', f'股票{symbol}')),
+                        "full_name": info.get('公司名称', info.get('full_name', '')),
+                        "market": info.get('市场', info.get('market', '主板')),
+                        "industry": info.get('行业', info.get('industry', '')),
+                        "sector": info.get('细分行业', info.get('sector', '')),
+                        "listed_date": info.get('上市日期', info.get('listed_date', '')),
+                        "total_shares": info.get('总股本', info.get('total_shares', 0)),
+                        "float_shares": info.get('流通股本', info.get('float_shares', 0)),
+                        "market_cap": info.get('总市值', info.get('market_cap', 0)),
+                        "float_market_cap": info.get('流通市值', info.get('float_market_cap', 0)),
+                        "pe_ratio": info.get('市盈率', info.get('pe_ratio', 0)),
+                        "pb_ratio": info.get('市净率', info.get('pb_ratio', 0)),
+                        "ps_ratio": info.get('市销率', info.get('ps_ratio', 0)),
+                        "roe": info.get('ROE', info.get('roe', 0)),
+                        "eps": info.get('每股收益', info.get('eps', 0)),
+                        "bvps": info.get('每股净资产', info.get('bvps', 0)),
+                        "main_business": info.get('主营业务', info.get('main_business', '')),
+                        "business_scope": info.get('经营范围', info.get('business_scope', '')),
+                        "website": info.get('公司网站', info.get('website', '')),
+                        "area": info.get('所在地区', info.get('area', '')),
+                        "employees": info.get('员工人数', info.get('employees', 0)),
+                        "update_time": datetime.now().isoformat()
+                    }
+                    return self._clean_nan_values(result)
+
+            # 否则返回模拟数据
+            import random
+
+            return {
+                "symbol": symbol,
+                "name": f"股票{symbol}",
+                "full_name": f"某某科技股份有限公司",
+                "market": "主板",
+                "industry": "信息技术",
+                "sector": "软件服务",
+                "listed_date": "2010-01-01",
+                "total_shares": random.randint(1000000000, 5000000000),  # 总股本
+                "float_shares": random.randint(500000000, 2000000000),  # 流通股本
+                "market_cap": random.randint(10000000000, 100000000000),  # 总市值
+                "float_market_cap": random.randint(5000000000, 50000000000),  # 流通市值
+                "pe_ratio": round(random.uniform(10, 50), 2),  # 市盈率
+                "pb_ratio": round(random.uniform(1, 5), 2),  # 市净率
+                "ps_ratio": round(random.uniform(1, 10), 2),  # 市销率
+                "roe": round(random.uniform(5, 25), 2),  # 净资产收益率
+                "eps": round(random.uniform(0.1, 2), 2),  # 每股收益
+                "bvps": round(random.uniform(1, 10), 2),  # 每股净资产
+                "main_business": "计算机软件开发、技术服务、系统集成",
+                "business_scope": "从事计算机软件、硬件的技术开发、技术转让、技术咨询、技术服务；计算机系统集成；数据处理；基础软件服务；应用软件服务",
+                "website": f"http://www.{symbol}.com",
+                "area": "北京市",
+                "employees": random.randint(1000, 10000),
+                "update_time": datetime.now().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"获取股票信息失败: {e}")
+            # 返回基础信息
+            return {
+                "symbol": symbol,
+                "name": f"股票{symbol}",
+                "error": str(e)
+            }
+
+    async def calculate_chip_distribution(
+            self,
+            symbol: str,
+            timeframe: str = "1d",
+            lookback_days: int = 120,
+            price_bins: int = 100
+    ) -> Dict:
+        """
+        计算筹码分布
+        
+        Args:
+            symbol: 股票代码
+            timeframe: 时间周期（建议使用日线）
+            lookback_days: 回看天数
+            price_bins: 价格分档数量
+            
+        Returns:
+            筹码分布数据
+        """
+        try:
+            if not HAS_CHIP:
+                return {
+                    "error": "ChipDistribution module not available",
+                    "price_levels": [],
+                    "distribution": []
+                }
+
+            # 获取K线数据
+            series_data = await self.get_series(
+                symbol=symbol,
+                timeframe=timeframe,
+                limit=lookback_days + 50  # 多获取一些数据以确保足够
+            )
+
+            if not series_data.get("bars"):
+                return {
+                    "error": "No data available",
+                    "price_levels": [],
+                    "distribution": []
+                }
+
+            # 转换为DataFrame
+            bars_df = pd.DataFrame(series_data["bars"])
+
+            # 确保有必要的字段
+            required_fields = ['open', 'high', 'low', 'close', 'volume']
+            if not all(field in bars_df.columns for field in required_fields):
+                return {
+                    "error": "Missing required fields",
+                    "price_levels": [],
+                    "distribution": []
+                }
+
+            # 计算换手率（如果没有的话，使用成交量估算）
+            if 'turnover_rate' not in bars_df.columns:
+                # 简单估算：使用成交量的相对值
+                avg_volume = bars_df['volume'].rolling(20, min_periods=1).mean()
+                bars_df['turnover_rate'] = (bars_df['volume'] / avg_volume) * 2  # 粗略估算
+
+            # 初始化筹码分布计算器
+            chip_calculator = ChipDistribution(decay_days=120)
+
+            # 计算筹码分布
+            chip_data = chip_calculator.calculate_distribution(
+                bars=bars_df,
+                price_bins=price_bins,
+                lookback_days=lookback_days
+            )
+
+            # 计算支撑阻力位
+            if chip_data.get('price_levels') and chip_data.get('distribution'):
+                support_resistance = chip_calculator.calculate_support_resistance(
+                    price_levels=np.array(chip_data['price_levels']),
+                    distribution=np.array(chip_data['distribution']),
+                    current_price=chip_data.get('current_price', bars_df.iloc[-1]['close'])
+                )
+                chip_data['support_resistance'] = support_resistance
+
+            # 清理NaN值
+            chip_data = self._clean_nan_values(chip_data)
+
+            return chip_data
+
+        except Exception as e:
+            logger.error(f"计算筹码分布失败: {e}")
+            return {
+                "error": str(e),
+                "price_levels": [],
+                "distribution": []
+            }
 
     def subscribe(self, symbol: str, timeframe: str, callback=None) -> str:
         """
@@ -1029,6 +1746,44 @@ class ChartService:
                 logger.error(f"订阅循环错误 {subscription_id}: {e}")
                 await asyncio.sleep(interval)
 
+    async def get_stock_meta(self, symbol: str) -> Dict:
+        """
+        获取股票元数据
+        
+        Returns:
+            包含上市日期、数据范围等信息
+        """
+        if self.kline_cache:
+            meta = await self.kline_cache.get_stock_meta(symbol)
+
+            # 如果没有缓存，尝试获取基本信息
+            if not meta.get("has_cache"):
+                try:
+                    # 获取最新的一条数据来确定最新日期
+                    recent_data = await self.get_series(symbol, "1d", limit=1)
+                    if recent_data and recent_data.get("bars"):
+                        bars = recent_data["bars"]
+                        if bars:
+                            latest_bar = bars[-1] if isinstance(bars, list) else bars.iloc[-1]
+                            meta["latest_date"] = latest_bar.get("date", latest_bar.get("time"))
+
+                    # TODO: 从股票信息API获取上市日期
+                    meta["listing_date"] = "2010-01-01"  # 默认值
+
+                except Exception as e:
+                    logger.warning(f"获取股票元数据失败: {e}")
+
+            return meta
+
+        # 返回默认元数据
+        return {
+            "symbol": symbol,
+            "name": f"股票{symbol}",
+            "listing_date": "2010-01-01",
+            "total_bars": 0,
+            "has_cache": False
+        }
+    
     async def get_statistics(self) -> Dict:
         """获取服务统计信息"""
         cache_hit_rate = 0
@@ -1049,7 +1804,7 @@ class ChartService:
             except:
                 redis_info = {"connected": False}
 
-        return {
+        result = {
             "total_requests": self.stats["total_requests"],
             "cache_hits": self.stats["cache_hits"],
             "cache_misses": self.stats["cache_misses"],
@@ -1060,3 +1815,9 @@ class ChartService:
             "active_subscriptions": len(self._subscriptions),
             "last_update": self.stats["last_update"].isoformat() if self.stats["last_update"] else None
         }
+
+        # 添加分层缓存统计
+        if self.kline_cache:
+            result["kline_cache_stats"] = self.kline_cache.get_cache_stats()
+
+        return result

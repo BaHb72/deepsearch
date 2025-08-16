@@ -11,7 +11,7 @@ except ImportError:
     pd = None  # type: ignore
 
 from deepsearch.datafeed.base import IDataFeed, KlineParams
-from deepsearch.data_providers.akshare_proxy_provider import AkShareProxyProvider
+from deepsearch.data_providers.akshare import AkShareProxyProvider
 
 
 class AkShareDataFeed(IDataFeed):

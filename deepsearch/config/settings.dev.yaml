@@ -16,6 +16,14 @@ database:
     db: 0
     poolSize: 10
     pool_size: 10
+  analytics: # DuckDB 分析数据库
+    enabled: true
+    path: ./data/analytics/market.duckdb
+    memory_limit: 4GB
+    threads: 4
+    temp_directory: ./data/analytics/temp
+    auto_sync: true
+    sync_interval: 3600
 
 message_bus:
   buses:
@@ -46,3 +54,79 @@ health_check:
   history_size: 100               # 保留的历史记录数量
   alert_enabled: false            # 是否启用健康状态告警
   alert_threshold: 3              # 连续失败多少次后触发告警
+
+# QMT集成配置
+qmt:
+  enabled: true
+  receiver:
+    tcp_port: 9999
+    websocket_port: 9998
+    host: "0.0.0.0"
+  security:
+    enable_auth: false  # 开发环境关闭认证
+    token: "dev-token-123456"
+  data:
+    batch_size: 100
+    flush_interval: 0.1
+    cache_ttl: 60  # 数据缓存时间（秒）
+  monitoring:
+    enabled: true
+    report_interval: 30  # 状态报告间隔（秒）
+
+# Cloudflare Workers 代理配置
+cloudflare_workers:
+  url: ""  # Worker URL，例如: your-worker.workers.dev
+  api_key: ""  # 可选，与 Worker 的 API_KEY 一致
+  fallback_to_direct: true  # Worker 不可用时是否回退到直连
+
+# MiniQMT集成配置
+miniqmt:
+  enabled: true
+  connection:
+    host: "127.0.0.1"
+    port: 7777
+    username: ""
+    password: ""
+    timeout: 10
+  data:
+    symbols: [ ]  # 默认订阅的股票列表
+    period: "1d"
+    cache_ttl: 60
+    batch_size: 100
+  monitoring:
+    enabled: true
+    heartbeat_interval: 30
+    report_interval: 60
+
+# 数据提供者配置
+data_providers:
+  # 设置默认数据源
+  default: "qmt"
+  
+  # 只使用QMT模式（用于测试）
+  qmt_only: true
+  
+  # QMT数据源
+  qmt:
+    enabled: true
+    priority: 1  # 最高优先级
+  
+  # Cloudflare代理（禁用）
+  cloudflare_proxy:
+    enabled: false
+    priority: 10
+  
+  # AkShare直连（禁用）
+  akshare_proxy:
+    enabled: false
+    priority: 20
+  
+  # UnifiedDataManager（禁用）
+  unified:
+    enabled: false
+    priority: 15
+  
+  # 直连API（禁用）  
+  direct_api:
+    enabled: false
+    priority: 30

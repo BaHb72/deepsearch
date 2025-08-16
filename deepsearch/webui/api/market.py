@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.data_providers.akshare_proxy_provider import AkShareProxyProvider
+from deepsearch.data_providers.akshare import AkShareProxyProvider
 from deepsearch.services.market_service import MarketService
 
 router = APIRouter(prefix="/api/market", tags=["市场数据"])
@@ -35,6 +35,7 @@ class MarketOverviewResponse(BaseModel):
     capital: dict  # 资金流向
     timestamp: str  # 时间戳
     stale: bool  # 是否为缓存数据
+    data_source: str = "unknown"  # 数据源
 
 
 class SectorResponse(BaseModel):
@@ -58,6 +59,16 @@ class AnomalyResponse(BaseModel):
     extra: dict
 
 
+class DataSourceStatus(BaseModel):
+    """数据源状态响应"""
+    source: str  # 当前数据源
+    mode: str  # 模式: workers/direct/cache
+    worker_url: str = ""  # Worker URL(如果使用)
+    healthy: bool = True  # 是否健康
+    latency: float = 0  # 平均延迟
+    statistics: dict = {}  # 统计信息
+
+
 @router.get("/overview", response_model=MarketOverviewResponse)
 async def get_market_overview():
     """
@@ -71,6 +82,23 @@ async def get_market_overview():
     try:
         service = get_market_service()
         data = await service.get_market_overview()
+
+        # 获取数据源信息
+        if hasattr(service, 'data_provider') and service.data_provider:
+            provider = service.data_provider
+            # 获取最近成功的Worker或模式
+            if hasattr(provider, '_last_successful_worker') and provider._last_successful_worker:
+                data['data_source'] = f"workers:{provider._last_successful_worker}"
+            elif hasattr(provider, 'worker_urls') and provider.worker_urls:
+                # 检查是否有健康的Worker
+                healthy_workers = [url for url in provider.worker_urls if provider.worker_health.get(url, False)]
+                if healthy_workers:
+                    data['data_source'] = f"workers:{healthy_workers[0]}"
+                else:
+                    data['data_source'] = "direct:akshare"
+            else:
+                data['data_source'] = "unknown"
+        
         return data
     except Exception as e:
         logger.error(f"获取市场概览失败: {e}")
@@ -165,6 +193,91 @@ async def get_stock_intraday(
     except Exception as e:
         logger.error(f"获取分时数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/data-source", response_model=DataSourceStatus)
+async def get_data_source_status():
+    """
+    获取当前数据源状态
+    
+    返回：
+    - 当前数据源类型（Workers代理/直连/缓存）
+    - Worker节点信息（如果使用代理）
+    - 健康状态和性能统计
+    """
+    try:
+        service = get_market_service()
+
+        if not hasattr(service, 'data_provider') or not service.data_provider:
+            return DataSourceStatus(
+                source="unknown",
+                mode="unknown",
+                healthy=False
+            )
+
+        provider = service.data_provider
+
+        # 获取统计信息
+        stats = provider.get_statistics() if hasattr(provider, 'get_statistics') else {}
+
+        # 判断当前模式
+        mode = "unknown"
+        worker_url = ""
+        source = "unknown"
+        healthy = True
+
+        if hasattr(provider, '_last_successful_worker') and provider._last_successful_worker:
+            # 使用Workers代理
+            mode = "workers"
+            worker_url = provider._last_successful_worker
+            source = f"workers:{worker_url}"
+            # 检查Worker健康状态
+            if hasattr(provider, 'worker_health'):
+                healthy = provider.worker_health.get(worker_url, False)
+        elif hasattr(provider, 'worker_urls') and provider.worker_urls:
+            # 检查是否有健康的Worker
+            healthy_workers = [
+                url for url in provider.worker_urls
+                if provider.worker_health.get(url, False)
+            ] if hasattr(provider, 'worker_health') else []
+
+            if healthy_workers:
+                mode = "workers"
+                worker_url = healthy_workers[0]
+                source = f"workers:{worker_url}"
+            else:
+                # 没有健康的Worker，可能回退到直连
+                mode = "direct"
+                source = "direct:akshare"
+                healthy = True  # 直连通常认为是健康的
+        else:
+            # 直连模式
+            mode = "direct"
+            source = "direct:akshare"
+
+        # 获取平均延迟
+        latency = 0
+        if hasattr(provider, 'worker_stats') and worker_url:
+            worker_stat = provider.worker_stats.get(worker_url, {})
+            latency = worker_stat.get('avg_latency', 0)
+
+        return DataSourceStatus(
+            source=source,
+            mode=mode,
+            worker_url=worker_url,
+            healthy=healthy,
+            latency=latency,
+            statistics=stats
+        )
+
+    except Exception as e:
+        logger.error(f"获取数据源状态失败: {e}")
+        return DataSourceStatus(
+            source="error",
+            mode="error",
+            healthy=False,
+            statistics={"error": str(e)}
+        )
 
 
 @router.get("/stats")

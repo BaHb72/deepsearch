@@ -190,7 +190,8 @@ class EngineIPCServer:
     async def start_async(self) -> None:
         """启动 IPC 服务器"""
         # 启动状态更新任务
-        self._status_update_task = asyncio.create_task(self._update_status_loop())
+        loop = asyncio.get_running_loop()
+        self._status_update_task = loop.create_task(self._update_status_loop())
         logger.info("Engine IPC Server started")
 
     async def stop_async(self) -> None:

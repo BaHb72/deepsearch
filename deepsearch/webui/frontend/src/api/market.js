@@ -46,6 +46,14 @@ export function getStockIntraday(symbol, params = {}) {
     })
 }
 
+// 获取数据源状态
+export function getDataSourceStatus() {
+    return request({
+        url: '/market/data-source',
+        method: 'get'
+    })
+}
+
 // 获取市场服务统计信息
 export function getMarketStats() {
     return request({

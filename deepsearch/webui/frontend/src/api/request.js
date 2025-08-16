@@ -2,6 +2,7 @@ import axios from 'axios'
 import {ElMessage} from 'element-plus'
 import {logApiError} from '@/utils/errorTracker'
 import backendStatus from '@/utils/backendStatus'
+import {clearPortCache, getBackendUrl} from '@/utils/portDetector'
 
 // 调试日志工具
 const debugLog = (stage, message, data = null) => {
@@ -10,22 +11,37 @@ const debugLog = (stage, message, data = null) => {
     console.log('%c' + logEntry, 'color: #e6a23c; font-weight: bold;', data)
 }
 
-// 创建 axios 实例
-debugLog('INIT', '创建axios实例', {baseURL: '/api', timeout: 30000})
+// 创建 axios 实例（初始不设置baseURL，由动态端口决定）
+debugLog('INIT', '创建axios实例', {timeout: 30000})
 const request = axios.create({
-    baseURL: '/api',
     timeout: 30000,
     headers: {
         'Content-Type': 'application/json'
     }
 })
 
+// 初始化动态baseURL
+let currentBackendUrl = null
+
+// 异步设置baseURL
+async function ensureBackendUrl() {
+    if (!currentBackendUrl) {
+        currentBackendUrl = await getBackendUrl()
+        request.defaults.baseURL = currentBackendUrl + '/api'
+        debugLog('BACKEND_URL', `设置后端URL: ${currentBackendUrl}`)
+    }
+    return currentBackendUrl
+}
+
 // 请求计数器
 let requestCounter = 0
 
 // 请求拦截器
 request.interceptors.request.use(
-    config => {
+    async config => {
+        // 确保设置了后端URL
+        await ensureBackendUrl()
+        
         const requestId = ++requestCounter
         config.requestId = requestId
         config.requestStartTime = Date.now()
@@ -139,6 +155,13 @@ request.interceptors.response.use(
             // 更新后端状态
             if (error.config?.url === '/system/status') {
                 backendStatus.setAvailable(false)
+            }
+
+            // 如果连接失败，清除端口缓存，下次请求会重新探测
+            if (error.code === 'ECONNREFUSED' || error.code === 'ECONNABORTED') {
+                debugLog('PORT_RESET', '连接失败，清除端口缓存')
+                clearPortCache()
+                currentBackendUrl = null
             }
             
             // 对于某些周期性请求（如状态轮询），不显示错误

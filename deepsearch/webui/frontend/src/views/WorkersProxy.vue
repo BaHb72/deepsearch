@@ -316,7 +316,7 @@ export default {
       // 配置
       config: {
         enabled: false,
-        workers: ['wandering-sea-d394.934073514.workers.dev'],  // 改为数组
+        workers: ['akshare-proxy.934073514.workers.dev'],  // 改为数组
         api_key: '',
         timeout: 30,
         retry_count: 3,
@@ -400,7 +400,7 @@ export default {
             this.config.workers = [data.config.url]
           } else {
             // 默认值
-            this.config.workers = ['wandering-sea-d394.934073514.workers.dev']
+            this.config.workers = ['akshare-proxy.934073514.workers.dev']
           }
 
           // 如果服务器返回的是掩码值，保留本地输入的 API 密钥

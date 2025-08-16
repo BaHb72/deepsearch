@@ -208,16 +208,36 @@ class WebUIRunner:
     async def _run_backend_server(self):
         """运行后端服务器"""
         try:
-            # 检查端口是否已经被占用（可能被引擎的WebUI服务器占用）
+            # 检查端口是否已经被占用
             import socket
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             result = sock.connect_ex(('localhost', self.backend_port))
             sock.close()
 
             if result == 0:
-                # 端口已经被占用，假设是引擎的WebUI服务器
-                print(f"[INFO] Backend port {self.backend_port} already in use (probably by engine's WebUI)")
-                print(f"[OK] Backend service available at: http://localhost:{self.backend_port}")
+                # 端口已经被占用，报错退出
+                self.logger.error(f"端口 {self.backend_port} 已被占用")
+
+                # 尝试获取占用进程信息
+                try:
+                    import psutil
+                    for conn in psutil.net_connections():
+                        if hasattr(conn, 'laddr') and conn.laddr.port == self.backend_port and conn.status == 'LISTEN':
+                            try:
+                                proc = psutil.Process(conn.pid)
+                                self.logger.error(f"占用进程: {proc.name()} (PID: {conn.pid})")
+                            except:
+                                self.logger.error(f"占用进程 PID: {conn.pid}")
+                            break
+                except:
+                    pass
+
+                raise RuntimeError(
+                    f"端口 {self.backend_port} 已被占用。请执行以下操作之一：\n"
+                    f"  1. 运行 'python -m deepsearch cleanup' 清理端口\n"
+                    f"  2. 停止占用端口的进程\n"
+                    f"  3. 修改配置文件中的 webui.backend_port"
+                )
             else:
                 # 端口未被占用，启动服务器
                 server = await self.server_manager.start_server(
@@ -227,8 +247,7 @@ class WebUIRunner:
                     port=self.backend_port,
                     log_level="info"
                 )
-
-            print(f"[OK] Backend service started: http://localhost:{self.backend_port}")
+                print(f"[OK] Backend service started: http://localhost:{self.backend_port}")
 
             # 自动打开浏览器
             if self.auto_open_browser:

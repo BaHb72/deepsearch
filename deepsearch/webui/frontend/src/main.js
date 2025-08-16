@@ -15,6 +15,10 @@ import './assets/styles/global.scss'
 // 导入错误追踪器
 import {errorTracker} from './utils/errorTracker'
 
+// 导入端口探测器
+import {configureAxiosWithDynamicPort, detectBackendPort} from './utils/portDetector'
+import axios from 'axios'
+
 // 调试日志工具
 const debugLog = (stage, message, data = null) => {
     const timestamp = new Date().toISOString()
@@ -24,11 +28,21 @@ const debugLog = (stage, message, data = null) => {
 
 debugLog('START', '开始初始化Vue应用')
 
-// 创建应用
-debugLog('APP', '创建Vue应用实例')
-const appStartTime = Date.now()
+// 创建应用（包装成异步函数）
+async function initApp() {
+    debugLog('APP', '创建Vue应用实例')
+    const appStartTime = Date.now()
 
-try {
+    try {
+        // 在创建应用前，先探测后端端口
+        debugLog('BACKEND', '开始探测后端服务端口...')
+        const backendPort = await detectBackendPort()
+        debugLog('BACKEND', `后端服务运行在端口: ${backendPort}`)
+
+        // 配置全局axios实例
+        await configureAxiosWithDynamicPort(axios)
+        debugLog('BACKEND', 'Axios已配置动态端口')
+    
     const app = createApp(App)
     // const app = createApp(TestApp)
     debugLog('APP', 'Vue应用实例创建成功', {duration: `${Date.now() - appStartTime}ms`})
@@ -113,4 +127,17 @@ try {
             <p>请查看控制台获取详细信息</p>
         </div>
     `
+    }
 }
+
+// 启动应用
+initApp().catch(error => {
+    console.error('应用启动失败:', error)
+    document.getElementById('app').innerHTML = `
+        <div style="text-align: center; padding: 50px; color: #f56c6c;">
+            <h1>应用启动失败</h1>
+            <p>${error.message}</p>
+            <p>请确保后端服务已启动</p>
+        </div>
+    `
+})

@@ -100,9 +100,12 @@ class CacheDatabaseConfig(BaseModel):
 class AnalyticsDatabaseConfig(BaseModel):
     """分析数据库配置（DuckDB）。"""
     enabled: bool = Field(default=True, description="是否启用分析数据库")
-    path: str = Field(default="./data/analytics.duckdb", description="DuckDB数据库文件路径")
+    path: str = Field(default="./data/analytics/market.duckdb", description="DuckDB数据库文件路径")
     memory_limit: str = Field(default="4GB", description="内存限制")
     threads: int = Field(default=4, description="线程数")
+    temp_directory: str = Field(default="./data/analytics/temp", description="临时文件目录")
+    auto_sync: bool = Field(default=True, description="自动同步数据")
+    sync_interval: int = Field(default=3600, description="同步间隔（秒）")
 
 
 class DatabaseConfig(BaseModel):

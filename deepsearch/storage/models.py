@@ -3,10 +3,8 @@
 
 定义 PostgreSQL 中的数据表结构
 """
-from datetime import datetime
-from decimal import Decimal
 
-from sqlalchemy import Column, DateTime, Numeric, String, Integer, BigInteger, Index
+from sqlalchemy import Column, DateTime, Numeric, String, Integer, BigInteger, Index, func
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -92,6 +90,27 @@ class TradingSignal(Base):
     __table_args__ = (
         Index("idx_trading_signal_symbol_datetime", "symbol", "datetime"),
         Index("idx_trading_signal_strategy_datetime", "strategy_id", "datetime"),
+    )
+
+
+class StockInfo(Base):
+    """股票基础信息表"""
+    __tablename__ = "stock_info"
+
+    symbol = Column(String(20), primary_key=True, comment="股票代码")
+    name = Column(String(50), nullable=False, comment="股票名称")
+    industry = Column(String(50), comment="所属行业")
+    sector = Column(String(50), comment="所属板块")
+    market = Column(String(20), comment="交易市场")
+    listed_date = Column(DateTime, comment="上市日期")
+    total_shares = Column(BigInteger, comment="总股本")
+    float_shares = Column(BigInteger, comment="流通股本")
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
+
+    # 创建索引
+    __table_args__ = (
+        Index("idx_stock_info_name", "name"),
+        Index("idx_stock_info_updated", "updated_at"),
     )
 
 

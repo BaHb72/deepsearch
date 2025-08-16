@@ -412,9 +412,10 @@ def create_app() -> FastAPI:
 
     # 导入并注册所有路由
     from deepsearch.webui.api import (
-        database, cache, system, health, frontend_errors,
-        monitor, config, logs, data, data_source, workers_proxy_simple as workers_proxy,
-        system_info, market, chart
+        database, cache, system, health, errors,
+        monitor, config, logs, data, data_source, proxy,
+        system_info, market, chart, qmt, data_unified, analytics,
+        qmt_subscription
     )
 
     app.include_router(monitor.router, prefix="/api/monitor", tags=["Monitor"])
@@ -427,10 +428,29 @@ def create_app() -> FastAPI:
     app.include_router(database.router, prefix="/api/database", tags=["Database"])
     app.include_router(cache.router, prefix="/api/cache", tags=["Cache"])
     app.include_router(health.router, prefix="/api/health", tags=["Health"])
-    app.include_router(frontend_errors.router, prefix="/api/frontend", tags=["Frontend Errors"])
-    app.include_router(workers_proxy.router, tags=["Workers Proxy"])  # 已包含 /api/workers 前缀
+    app.include_router(errors.router, prefix="/api/frontend", tags=["Frontend Errors"])
+    app.include_router(proxy.router, tags=["Workers Proxy"])  # 已包含 /api/workers 前缀
     app.include_router(market.router, tags=["Market"])  # 市场数据路由，已包含 /api/market 前缀
     app.include_router(chart.router, tags=["Chart"])  # 图表数据路由，已包含 /api/chart 前缀
+    app.include_router(qmt.router, tags=["QMT"])  # QMT数据路由，已包含 /api/qmt 前缀
+    app.include_router(qmt_subscription.router, tags=["QMT Subscription"])  # QMT订阅管理路由
+    app.include_router(data_unified.router, tags=["UnifiedData"])  # 统一数据API，已包含 /api/data 前缀
+    app.include_router(analytics.router, tags=["Analytics"])  # 分析API，已包含 /api/analytics 前缀
+
+    # 数据源状态管理API
+    try:
+        from deepsearch.webui.api import data_source_status
+        app.include_router(data_source_status.router, tags=["DataSource"])  # 数据源管理API
+        logger.info("数据源状态API已注册")
+    except ImportError as e:
+        logger.warning(f"数据源状态API模块加载失败: {e}")
+
+    # MiniQMT API
+    try:
+        from deepsearch.webui.api import miniqmt
+        app.include_router(miniqmt.router, tags=["MiniQMT"])  # MiniQMT数据路由，已包含 /api/miniqmt 前缀
+    except ImportError:
+        logger.warning("MiniQMT API 模块未找到，跳过注册")
     # 注释掉 Cloudflare Tunnel API，因为不需要映射 webui 端口
     # Cloudflare Tunnel 已移除（使用 Workers 代理方案）
 

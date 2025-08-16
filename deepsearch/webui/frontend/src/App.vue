@@ -63,11 +63,11 @@
               </el-icon>
               <span>市场数据</span>
             </el-menu-item>
-            <el-menu-item index="/chart">
+            <el-menu-item index="/pro-trading">
               <el-icon>
                 <DataLine/>
               </el-icon>
-              <span>K线图表</span>
+              <span>市场行情</span>
             </el-menu-item>
             <el-menu-item index="/workers-proxy">
               <el-icon>
@@ -197,7 +197,12 @@ const pageTitle = computed(() => {
     '/events': '事件监控',
     '/config': '系统配置',
     '/logs': '日志查看',
-    '/trading': '交易监控'
+    '/trading': '交易监控',
+    '/pro-trading': '市场行情',
+    '/market': '市场数据',
+    '/data': '数据管理',
+    '/data-source': '数据源监控',
+    '/workers-proxy': 'Workers 代理'
   }
   return titles[route.path] || 'DeepSearch'
 })
