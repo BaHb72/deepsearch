@@ -48,6 +48,23 @@ Thumbs.db
 config/settings.local.yaml
 settings.local.yaml
 settings.*.local.yaml
+.venv/
+data/monitoring/*.json
+data/cache/
+
+# Cloudflare deployment configs (contain sensitive info)
+cloudflare-deploy/*.toml
+wrangler.toml
+wrangler-*.toml
+
+# Test files
+test_*.html
+test_*.py
+nul
+
+# System error files
+D:*
+*qmt_config.json
 *.db
 *.sqlite
 config/.crypto_key
@@ -89,3 +106,4 @@ WEBUI_*.md
 # Frontend build outputs
 /deepsearch/webui/static/assets/
 /deepsearch/webui/static/index.html
+/data/

@@ -45,6 +45,14 @@ except ImportError:
     HAS_REDIS = False
     aioredis = None
 
+try:
+    from deepsearch.services.adjust_service import get_adjust_service
+
+    HAS_ADJUST = True
+except ImportError:
+    HAS_ADJUST = False
+    get_adjust_service = None
+
 
 class ChartService:
     """图表数据服务"""
@@ -378,6 +386,15 @@ class ChartService:
             # 标准化列名（中文转英文）
             if HAS_PANDAS and isinstance(bars, pd.DataFrame):
                 bars = self._standardize_columns(bars)
+
+            # 应用复权处理
+            if HAS_ADJUST and adjust != "none" and HAS_PANDAS and isinstance(bars, pd.DataFrame):
+                try:
+                    adjust_service = get_adjust_service()
+                    bars = await adjust_service.get_adjusted_kline(symbol, bars, adjust)
+                    logger.debug(f"已应用{adjust}复权处理")
+                except Exception as e:
+                    logger.warning(f"应用复权处理失败: {e}")
 
             # 处理会话信息
             if session_split and timeframe in ["1m", "3m", "5m", "15m", "30m", "60m"]:
@@ -1585,6 +1602,126 @@ class ChartService:
                 "name": f"股票{symbol}",
                 "error": str(e)
             }
+
+    async def calculate_chip_distribution_by_date(
+            self,
+            symbol: str,
+            target_date: str,
+            price_bins: int = 100
+    ) -> Dict:
+        """
+        计算指定日期的筹码分布（用于随鼠标移动的筹码峰）
+        
+        Args:
+            symbol: 股票代码
+            target_date: 目标日期 (YYYY-MM-DD)
+            price_bins: 价格分档数量
+            
+        Returns:
+            指定日期的筹码分布数据
+        """
+        try:
+            # 尝试使用AkShare的筹码分布API (stock_cyq_em)
+            try:
+                import akshare as ak
+                # AkShare的筹码分布数据
+                cyq_df = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    ak.stock_cyq_em,
+                    symbol
+                )
+
+                if cyq_df is not None and not cyq_df.empty:
+                    # 筛选目标日期的数据
+                    if 'date' in cyq_df.columns:
+                        target_data = cyq_df[cyq_df['date'] == target_date]
+                        if not target_data.empty:
+                            # 转换为标准格式
+                            price_levels = []
+                            distribution = []
+                            for _, row in target_data.iterrows():
+                                if 'price' in row and 'ratio' in row:
+                                    price_levels.append(float(row['price']))
+                                    distribution.append(float(row['ratio']))
+
+                            return {
+                                "date": target_date,
+                                "price_levels": price_levels,
+                                "distribution": distribution,
+                                "source": "akshare_cyq"
+                            }
+            except Exception as e:
+                logger.debug(f"AkShare筹码分布获取失败，使用备用方法: {e}")
+
+            # 备用方法：基于历史成交计算
+            return await self._calculate_chip_distribution_fallback(
+                symbol, target_date, price_bins
+            )
+
+        except Exception as e:
+            logger.error(f"计算指定日期筹码分布失败: {e}")
+            return {
+                "error": str(e),
+                "date": target_date,
+                "price_levels": [],
+                "distribution": []
+            }
+
+    async def _calculate_chip_distribution_fallback(
+            self,
+            symbol: str,
+            target_date: str,
+            price_bins: int = 100
+    ) -> Dict:
+        """备用筹码分布计算方法"""
+        # 获取目标日期之前的历史数据
+        series_data = await self.get_series(
+            symbol=symbol,
+            timeframe="1d",
+            end_date=target_date,
+            limit=120
+        )
+
+        if not series_data.get("bars"):
+            return {
+                "date": target_date,
+                "price_levels": [],
+                "distribution": [],
+                "source": "fallback"
+            }
+
+        bars_df = pd.DataFrame(series_data["bars"])
+
+        # 简单的筹码分布计算：基于成交量加权
+        price_min = bars_df['low'].min()
+        price_max = bars_df['high'].max()
+        price_levels = np.linspace(price_min, price_max, price_bins)
+
+        distribution = []
+        for price in price_levels:
+            # 计算该价位的筹码量（简化算法）
+            volume_at_price = 0
+            for _, bar in bars_df.iterrows():
+                if bar['low'] <= price <= bar['high']:
+                    # 该K线包含此价位，按比例分配成交量
+                    price_range = bar['high'] - bar['low']
+                    if price_range > 0:
+                        volume_at_price += bar['volume'] / price_range
+                    else:
+                        volume_at_price += bar['volume']
+            distribution.append(volume_at_price)
+
+        # 归一化
+        total = sum(distribution)
+        if total > 0:
+            distribution = [d / total * 100 for d in distribution]
+
+        return {
+            "date": target_date,
+            "price_levels": price_levels.tolist(),
+            "distribution": distribution,
+            "source": "fallback"
+        }
 
     async def calculate_chip_distribution(
             self,

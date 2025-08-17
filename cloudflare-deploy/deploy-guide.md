@@ -1,8 +1,21 @@
-# Cloudflare Worker 部署指南
+# Cloudflare Worker 详细部署指南
+
+## 架构说明
+
+DeepSearch 使用 Cloudflare Worker 作为纯 HTTP 代理，主要目的：
+
+- 隐藏真实服务器 IP，防止被数据源封禁
+- 利用 Cloudflare 的全球网络加速访问
+- 提供智能缓存，减少重复请求
+- 无需修改 akshare 库代码
 
 ## 快速部署步骤
 
-### 1. Wrangler CLI 已安装 ✅
+### 1. 安装 Wrangler CLI
+
+```bash
+npm install -g wrangler
+```
 
 ### 2. 登录 Cloudflare 账户
 

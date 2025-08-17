@@ -393,21 +393,32 @@ async def get_stock_list(
 async def get_chip_distribution(
         symbol: str = Query(..., description="股票代码"),
         lookback_days: int = Query(120, description="回看天数"),
-        price_bins: int = Query(100, description="价格分档数")
+        price_bins: int = Query(100, description="价格分档数"),
+        target_date: Optional[str] = Query(None, description="指定日期 (YYYY-MM-DD)")
 ):
     """
     获取筹码分布数据
     
     返回股票的筹码分布、成本分布和支撑阻力位等信息
+    支持指定日期的筹码分布计算
     """
     try:
         service = get_chart_service()
-        data = await service.calculate_chip_distribution(
-            symbol=symbol,
-            timeframe="1d",  # 筹码分布使用日线数据
-            lookback_days=lookback_days,
-            price_bins=price_bins
-        )
+
+        # 如果指定了日期，获取该日期的筹码分布
+        if target_date:
+            data = await service.calculate_chip_distribution_by_date(
+                symbol=symbol,
+                target_date=target_date,
+                price_bins=price_bins
+            )
+        else:
+            data = await service.calculate_chip_distribution(
+                symbol=symbol,
+                timeframe="1d",  # 筹码分布使用日线数据
+                lookback_days=lookback_days,
+                price_bins=price_bins
+            )
         return data
     except Exception as e:
         logger.error(f"获取筹码分布失败: {e}")

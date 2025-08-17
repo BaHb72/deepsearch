@@ -131,6 +131,16 @@
         </el-option>
       </el-select>
 
+      <!-- K线样式切换 -->
+      <el-switch
+          v-model="isHollowCandle"
+          active-text="空心K"
+          inactive-text="实心K"
+          size="small"
+          style="margin: 0 10px"
+          @change="updateMainChart"
+      />
+
       <!-- 主图指标选择 -->
       <el-select v-model="mainIndicator" size="small" style="width: 120px" @change="changeMainIndicator">
         <el-option label="不显示指标" value="none"/>
@@ -206,7 +216,8 @@
                   <!-- 卖盘 -->
                   <div class="sell-orders">
                     <div v-if="sellOrders.length > 0">
-                      <div v-for="(order, index) in sellOrders" :key="'sell' + index" class="order-item sell">
+                      <div v-for="(order, index) in sellOrders" :key="order.id || `sell_${index}`"
+                           class="order-item sell">
                         <span class="order-label">卖{{ 5 - index }}</span>
                         <span class="order-price">{{ formatNumber(order.price) }}</span>
                         <span class="order-volume">{{ formatVolume(order.volume) }}</span>
@@ -230,7 +241,7 @@
                   <!-- 买盘 -->
                   <div class="buy-orders">
                     <div v-if="buyOrders.length > 0">
-                      <div v-for="(order, index) in buyOrders" :key="'buy' + index" class="order-item buy">
+                      <div v-for="(order, index) in buyOrders" :key="order.id || `buy_${index}`" class="order-item buy">
                         <span class="order-label">买{{ index + 1 }}</span>
                         <span class="order-price">{{ formatNumber(order.price) }}</span>
                         <span class="order-volume">{{ formatVolume(order.volume) }}</span>
@@ -298,14 +309,45 @@
 
             <!-- 技术指标区域 -->
             <div class="indicator-charts">
-              <div v-for="(indicator, index) in activeIndicators" :key="indicator.name" class="indicator-chart">
+              <!-- 成交量图表（始终显示） -->
+              <div class="indicator-chart">
                 <div class="indicator-header">
-                  <span class="indicator-name">{{ indicator.label }}</span>
-                  <el-icon class="close-btn" @click="removeIndicator(index)">
+                  <span class="indicator-name">成交量</span>
+                </div>
+                <div class="volume-chart indicator-chart-container"></div>
+              </div>
+
+              <!-- MACD指标 -->
+              <div v-if="selectedIndicators.some(i => i.name === 'MACD')" class="indicator-chart">
+                <div class="indicator-header">
+                  <span class="indicator-name">MACD</span>
+                  <el-icon class="close-btn" @click="removeIndicatorByName('MACD')">
                     <Close/>
                   </el-icon>
                 </div>
-                <div :ref="`indicatorChart${index}`" class="indicator-chart-container"></div>
+                <div class="macd-chart indicator-chart-container"></div>
+              </div>
+
+              <!-- RSI指标 -->
+              <div v-if="selectedIndicators.some(i => i.name === 'RSI')" class="indicator-chart">
+                <div class="indicator-header">
+                  <span class="indicator-name">RSI</span>
+                  <el-icon class="close-btn" @click="removeIndicatorByName('RSI')">
+                    <Close/>
+                  </el-icon>
+                </div>
+                <div class="rsi-chart indicator-chart-container"></div>
+              </div>
+
+              <!-- KDJ指标 -->
+              <div v-if="selectedIndicators.some(i => i.name === 'KDJ')" class="indicator-chart">
+                <div class="indicator-header">
+                  <span class="indicator-name">KDJ</span>
+                  <el-icon class="close-btn" @click="removeIndicatorByName('KDJ')">
+                    <Close/>
+                  </el-icon>
+                </div>
+                <div class="kdj-chart indicator-chart-container"></div>
               </div>
             </div>
           </div>
@@ -559,6 +601,9 @@ const indicatorData = ref({})
 const buyOrders = ref([])
 const sellOrders = ref([])
 
+// K线样式控制
+const isHollowCandle = ref(false)  // K线空心/实心切换
+
 // 交易明细
 const tradeDetails = ref([])
 
@@ -657,6 +702,34 @@ let ws = null
 const connectionStatus = ref('未连接')
 const lastUpdateTime = ref('')
 
+// RAF批处理相关变量
+let orderbookUpdateQueue = []
+let rafId = null
+
+// 防抖函数
+function debounce(func, wait) {
+  let timeout
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout)
+      func(...args)
+    }
+    clearTimeout(timeout)
+    timeout = setTimeout(later, wait)
+  }
+}
+
+// 防抖的resize处理
+const debouncedResize = debounce(() => {
+  requestAnimationFrame(() => {
+    if (mainChartInstance) mainChartInstance.resize()
+    if (chipChartInstance) chipChartInstance.resize()
+    indicatorChartInstances.forEach(chart => {
+      if (chart) chart.resize()
+    })
+  })
+}, 100)
+
 // 初始化
 onMounted(() => {
   loadProviders()
@@ -669,14 +742,8 @@ onMounted(() => {
     initCharts()
   }, 300)
 
-  // 添加窗口resize监听
-  windowResizeHandler = () => {
-    if (mainChartInstance) mainChartInstance.resize()
-    if (chipChartInstance) chipChartInstance.resize()
-    indicatorChartInstances.forEach(chart => {
-      if (chart) chart.resize()
-    })
-  }
+  // 添加窗口resize监听（使用防抖）
+  windowResizeHandler = debouncedResize
   window.addEventListener('resize', windowResizeHandler)
 
   // 定时更新实时数据
@@ -935,14 +1002,17 @@ function initCharts() {
 
     // 使用ResizeObserver监听容器大小变化
     if (window.ResizeObserver && !resizeObserver) {
-      resizeObserver = new ResizeObserver((entries) => {
-        // 当容器大小改变时，调整所有图表
-        if (mainChartInstance) mainChartInstance.resize()
-        if (chipChartInstance) chipChartInstance.resize()
-        indicatorChartInstances.forEach(chart => {
-          if (chart) chart.resize()
+      resizeObserver = new ResizeObserver(debounce((entries) => {
+        // 使用RAF确保在下一帧处理
+        requestAnimationFrame(() => {
+          // 当容器大小改变时，调整所有图表
+          if (mainChartInstance) mainChartInstance.resize()
+          if (chipChartInstance) chipChartInstance.resize()
+          indicatorChartInstances.forEach(chart => {
+            if (chart) chart.resize()
+          })
         })
-      })
+      }, 100))
       resizeObserver.observe(mainChart.value)
     }
   }
@@ -985,9 +1055,10 @@ function updateMainChart() {
     if (!timeValue) {
       return ''  // 如果都没有，返回空字符串
     }
-    // 如果是日K线，只显示日期部分
-    if (activeTimeframe.value === '1d' && timeValue.includes(' ')) {
-      return timeValue.split(' ')[0]
+    // 如果是日K线，只显示日期部分，移除时间和T
+    if (activeTimeframe.value === '1d') {
+      // 处理ISO格式 (2025-08-17T00:00:00) 或普通格式 (2025-08-17 00:00:00)
+      return timeValue.split(/[T ]/)[0]
     }
     return timeValue
   })
@@ -1115,9 +1186,12 @@ function updateMainChart() {
         name: 'MA5',
         type: 'line',
         data: calculateMA(data, 5),
-        smooth: true,
+        smooth: false,  // 金融线不平滑以避免误导
+        showSymbol: false,  // 不显示每个点的圆点
+        symbol: 'none',  // 确保不显示任何符号
         lineStyle: {
-          opacity: 0.5
+          opacity: 0.8,
+          width: 1.5
         }
       },
       // MA10
@@ -1125,9 +1199,12 @@ function updateMainChart() {
         name: 'MA10',
         type: 'line',
         data: calculateMA(data, 10),
-        smooth: true,
+        smooth: false,
+        showSymbol: false,
+        symbol: 'none',
         lineStyle: {
-          opacity: 0.5
+          opacity: 0.8,
+          width: 1.5
         }
       },
       // MA20
@@ -1135,19 +1212,65 @@ function updateMainChart() {
         name: 'MA20',
         type: 'line',
         data: calculateMA(data, 20),
-        smooth: true,
+        smooth: false,
+        showSymbol: false,
+        symbol: 'none',
         lineStyle: {
-          opacity: 0.5
+          opacity: 0.8,
+          width: 1.5
         }
       }
     ]
   }
 
   mainChartInstance.setOption(option)
+
+  // 添加十字光标事件监听，用于更新筹码分布
+  mainChartInstance.off('datazoom')  // 先移除旧的监听器
+  mainChartInstance.off('updateAxisPointer')
+
+  mainChartInstance.on('updateAxisPointer', async function (params) {
+    if (params.axesInfo && params.axesInfo[0]) {
+      const axisInfo = params.axesInfo[0]
+      const dataIndex = axisInfo.value
+
+      if (dataIndex >= 0 && dataIndex < data.length) {
+        const targetDate = timeAxisData[dataIndex]
+
+        // 如果日期改变了，更新筹码分布
+        if (targetDate && targetDate !== lastChipDate) {
+          lastChipDate = targetDate
+          // 防抖处理
+          clearTimeout(chipUpdateTimer)
+          chipUpdateTimer = setTimeout(async () => {
+            await updateChipDistributionByDate(targetDate)
+          }, 100)
+        }
+      }
+    }
+  })
+  
   // 设置选项后立即调整大小
   nextTick(() => {
     if (mainChartInstance) mainChartInstance.resize()
   })
+}
+
+// 用于筹码分布更新的变量
+let lastChipDate = null
+let chipUpdateTimer = null
+
+// 根据日期更新筹码分布
+async function updateChipDistributionByDate(targetDate) {
+  try {
+    const response = await chartApi.getChipDistribution(symbol.value, 120, 100, targetDate)
+    if (response && !response.error) {
+      chipData.value = response
+      updateChipChart()
+    }
+  } catch (error) {
+    console.error('更新筹码分布失败:', error)
+  }
 }
 
 // 更新筹码图
@@ -1197,6 +1320,23 @@ function updateChipChart() {
     return
   }
 
+  // 获取主图的价格范围以对齐Y轴
+  let priceMin = Math.min(...priceData.map(p => parseFloat(p)))
+  let priceMax = Math.max(...priceData.map(p => parseFloat(p)))
+
+  // 如果主图存在，尝试获取其价格范围
+  if (mainChartInstance && chartData.value && chartData.value.bars) {
+    const bars = chartData.value.bars
+    const lowPrices = bars.map(b => b.low)
+    const highPrices = bars.map(b => b.high)
+    const mainMin = Math.min(...lowPrices)
+    const mainMax = Math.max(...highPrices)
+
+    // 使用主图的价格范围
+    priceMin = mainMin
+    priceMax = mainMax
+  }
+
   const option = {
     animation: false,
     tooltip: {
@@ -1227,9 +1367,10 @@ function updateChipChart() {
       }
     },
     yAxis: {
-      type: 'category',
-      data: priceData,
-      inverse: true,
+      type: 'value',  // 改为value类型以支持连续刻度
+      min: priceMin,
+      max: priceMax,
+      inverse: false,  // 价格从低到高
       name: '价格',
       nameTextStyle: {
         color: '#c9d1d9'
@@ -1241,10 +1382,11 @@ function updateChipChart() {
     series: [
       {
         type: 'bar',
-        data: distributionData,
+        data: priceData.map((price, index) => [distributionData[index], parseFloat(price)]),  // [value, price]
+        barWidth: 2,  // 细条形图
         itemStyle: {
           color: function (params) {
-            const priceValue = parseFloat(priceData[params.dataIndex])
+            const priceValue = params.value[1]  // 价格在第二个位置
             const currentPrice = chipData.value.current_price || snapshot.value?.price || 0
             return priceValue < currentPrice ? '#ef232a' : '#14b143'
           }
@@ -1262,7 +1404,357 @@ function updateChipChart() {
 
 // 更新指标图表
 function updateIndicatorCharts() {
-  // 实现指标图表更新逻辑
+  if (!chartData.value || !chartData.value.bars) return
+
+  const data = chartData.value.bars || []
+  const timeAxisData = data.map(item => {
+    const timeValue = item.time || item.date || item.ts || item.datetime
+    if (!timeValue) return ''
+    if (activeTimeframe.value === '1d') {
+      return timeValue.split(/[T ]/)[0]
+    }
+    return timeValue
+  })
+
+  // 清理旧的指标图表实例
+  indicatorChartInstances.forEach(chart => {
+    if (chart) chart.dispose()
+  })
+  indicatorChartInstances = []
+
+  // 创建成交量图表
+  const volumeContainer = document.querySelector('.volume-chart')
+  if (volumeContainer) {
+    const volumeChart = echarts.init(volumeContainer)
+    indicatorChartInstances.push(volumeChart)
+
+    const volumeOption = {
+      animation: false,
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'cross'
+        }
+      },
+      grid: {
+        left: '10%',
+        right: '10%',
+        top: '10%',
+        bottom: '10%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: timeAxisData,
+        axisLine: {onZero: false},
+        splitLine: {show: false},
+        axisLabel: {show: false}  // 隐藏X轴标签，与主图共享
+      },
+      yAxis: {
+        type: 'value',
+        name: '成交量',
+        nameTextStyle: {color: '#c9d1d9'},
+        axisLabel: {
+          color: '#8b949e',
+          formatter: function (value) {
+            if (value >= 100000000) {
+              return (value / 100000000).toFixed(1) + '亿'
+            } else if (value >= 10000) {
+              return (value / 10000).toFixed(1) + '万'
+            }
+            return value
+          }
+        }
+      },
+      dataZoom: [
+        {
+          type: 'inside',
+          xAxisIndex: 0,
+          start: 70,
+          end: 100
+        }
+      ],
+      series: [{
+        name: '成交量',
+        type: 'bar',
+        data: data.map((item, index) => ({
+          value: item.volume,
+          itemStyle: {
+            color: item.close >= item.open ? '#ef232a' : '#14b143'
+          }
+        })),
+        barWidth: '60%'
+      }]
+    }
+
+    volumeChart.setOption(volumeOption)
+
+    // 联动主图的缩放
+    if (mainChartInstance) {
+      echarts.connect([mainChartInstance, volumeChart])
+    }
+  }
+
+  // 创建MACD指标图表
+  if (indicatorData.value && indicatorData.value.MACD) {
+    const macdContainer = document.querySelector('.macd-chart')
+    if (macdContainer) {
+      const macdChart = echarts.init(macdContainer)
+      indicatorChartInstances.push(macdChart)
+
+      const macdData = indicatorData.value.MACD
+      const macdOption = {
+        animation: false,
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+            type: 'cross'
+          }
+        },
+        legend: {
+          data: ['DIF', 'DEA', 'MACD'],
+          top: 10,
+          textStyle: {color: '#c9d1d9'}
+        },
+        grid: {
+          left: '10%',
+          right: '10%',
+          top: '15%',
+          bottom: '10%',
+          containLabel: true
+        },
+        xAxis: {
+          type: 'category',
+          data: timeAxisData,
+          axisLine: {onZero: false},
+          splitLine: {show: false},
+          axisLabel: {show: false}
+        },
+        yAxis: {
+          type: 'value',
+          name: 'MACD',
+          nameTextStyle: {color: '#c9d1d9'},
+          axisLabel: {color: '#8b949e'}
+        },
+        dataZoom: [
+          {
+            type: 'inside',
+            xAxisIndex: 0,
+            start: 70,
+            end: 100
+          }
+        ],
+        series: [
+          {
+            name: 'DIF',
+            type: 'line',
+            data: macdData.series?.dif || [],
+            showSymbol: false,
+            lineStyle: {width: 1.5}
+          },
+          {
+            name: 'DEA',
+            type: 'line',
+            data: macdData.series?.dea || [],
+            showSymbol: false,
+            lineStyle: {width: 1.5}
+          },
+          {
+            name: 'MACD',
+            type: 'bar',
+            data: macdData.series?.macd?.map(v => ({
+              value: v,
+              itemStyle: {
+                color: v >= 0 ? '#ef232a' : '#14b143'
+              }
+            })) || [],
+            barWidth: '30%'
+          }
+        ]
+      }
+
+      macdChart.setOption(macdOption)
+
+      // 联动主图
+      if (mainChartInstance) {
+        echarts.connect([mainChartInstance, macdChart])
+      }
+    }
+  }
+
+  // 创建RSI指标图表
+  if (indicatorData.value && indicatorData.value.RSI) {
+    const rsiContainer = document.querySelector('.rsi-chart')
+    if (rsiContainer) {
+      const rsiChart = echarts.init(rsiContainer)
+      indicatorChartInstances.push(rsiChart)
+
+      const rsiData = indicatorData.value.RSI
+      const rsiOption = {
+        animation: false,
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+            type: 'cross'
+          }
+        },
+        legend: {
+          data: ['RSI'],
+          top: 10,
+          textStyle: {color: '#c9d1d9'}
+        },
+        grid: {
+          left: '10%',
+          right: '10%',
+          top: '15%',
+          bottom: '10%',
+          containLabel: true
+        },
+        xAxis: {
+          type: 'category',
+          data: timeAxisData,
+          axisLine: {onZero: false},
+          splitLine: {show: false},
+          axisLabel: {show: false}
+        },
+        yAxis: {
+          type: 'value',
+          name: 'RSI',
+          min: 0,
+          max: 100,
+          nameTextStyle: {color: '#c9d1d9'},
+          axisLabel: {color: '#8b949e'},
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: '#30363d',
+              type: 'dashed'
+            }
+          }
+        },
+        dataZoom: [
+          {
+            type: 'inside',
+            xAxisIndex: 0,
+            start: 70,
+            end: 100
+          }
+        ],
+        series: [
+          {
+            name: 'RSI',
+            type: 'line',
+            data: rsiData.series?.rsi || [],
+            showSymbol: false,
+            lineStyle: {width: 1.5},
+            markLine: {
+              data: [
+                {yAxis: 30, lineStyle: {color: '#14b143', type: 'dashed'}},
+                {yAxis: 70, lineStyle: {color: '#ef232a', type: 'dashed'}}
+              ]
+            }
+          }
+        ]
+      }
+
+      rsiChart.setOption(rsiOption)
+
+      // 联动主图
+      if (mainChartInstance) {
+        echarts.connect([mainChartInstance, rsiChart])
+      }
+    }
+  }
+
+  // 创建KDJ指标图表
+  if (indicatorData.value && indicatorData.value.KDJ) {
+    const kdjContainer = document.querySelector('.kdj-chart')
+    if (kdjContainer) {
+      const kdjChart = echarts.init(kdjContainer)
+      indicatorChartInstances.push(kdjChart)
+
+      const kdjData = indicatorData.value.KDJ
+      const kdjOption = {
+        animation: false,
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+            type: 'cross'
+          }
+        },
+        legend: {
+          data: ['K', 'D', 'J'],
+          top: 10,
+          textStyle: {color: '#c9d1d9'}
+        },
+        grid: {
+          left: '10%',
+          right: '10%',
+          top: '15%',
+          bottom: '10%',
+          containLabel: true
+        },
+        xAxis: {
+          type: 'category',
+          data: timeAxisData,
+          axisLine: {onZero: false},
+          splitLine: {show: false},
+          axisLabel: {show: true}  // KDJ显示X轴标签
+        },
+        yAxis: {
+          type: 'value',
+          name: 'KDJ',
+          nameTextStyle: {color: '#c9d1d9'},
+          axisLabel: {color: '#8b949e'}
+        },
+        dataZoom: [
+          {
+            type: 'inside',
+            xAxisIndex: 0,
+            start: 70,
+            end: 100
+          }
+        ],
+        series: [
+          {
+            name: 'K',
+            type: 'line',
+            data: kdjData.series?.k || [],
+            showSymbol: false,
+            lineStyle: {width: 1.5, color: '#f5c542'}
+          },
+          {
+            name: 'D',
+            type: 'line',
+            data: kdjData.series?.d || [],
+            showSymbol: false,
+            lineStyle: {width: 1.5, color: '#42b5f5'}
+          },
+          {
+            name: 'J',
+            type: 'line',
+            data: kdjData.series?.j || [],
+            showSymbol: false,
+            lineStyle: {width: 1.5, color: '#f542b1'}
+          }
+        ]
+      }
+
+      kdjChart.setOption(kdjOption)
+
+      // 联动主图
+      if (mainChartInstance) {
+        echarts.connect([mainChartInstance, kdjChart])
+      }
+    }
+  }
+
+  // 确保所有图表正确调整大小
+  nextTick(() => {
+    indicatorChartInstances.forEach(chart => {
+      if (chart) chart.resize()
+    })
+  })
 }
 
 // 获取买卖盘数据
@@ -1564,23 +2056,42 @@ function handleRealtimeTick(tickData) {
   lastUpdateTime.value = new Date().toLocaleTimeString()
 }
 
+// 使用requestAnimationFrame批处理盘口更新
+function scheduleOrderbookUpdate() {
+  if (rafId != null) return
+  rafId = requestAnimationFrame(() => {
+    // 处理队列中的最新数据（只保留最新的）
+    if (orderbookUpdateQueue.length > 0) {
+      const latestData = orderbookUpdateQueue[orderbookUpdateQueue.length - 1]
+      orderbookUpdateQueue = []  // 清空队列
+
+      // 更新买盘
+      buyOrders.value = latestData.bid_levels?.slice(0, 10).map((level, index) => ({
+        price: level.price,
+        volume: level.volume,
+        level: index + 1,
+        id: `buy_${level.price}_${index}`  // 添加稳定的key
+      })) || []
+
+      // 更新卖盘
+      sellOrders.value = latestData.ask_levels?.slice(0, 10).map((level, index) => ({
+        price: level.price,
+        volume: level.volume,
+        level: index + 1,
+        id: `sell_${level.price}_${index}`  // 添加稳定的key
+      })) || []
+    }
+    rafId = null
+  })
+}
+
 // 处理实时盘口数据
 function handleRealtimeOrderbook(orderbookData) {
   if (!orderbookData || orderbookData.symbol !== symbol.value) return
 
-  // 更新买盘
-  buyOrders.value = orderbookData.bid_levels?.slice(0, 10).map((level, index) => ({
-    price: level.price,
-    volume: level.volume,
-    level: index + 1
-  })) || []
-
-  // 更新卖盘
-  sellOrders.value = orderbookData.ask_levels?.slice(0, 10).map((level, index) => ({
-    price: level.price,
-    volume: level.volume,
-    level: index + 1
-  })) || []
+  // 加入队列并调度更新
+  orderbookUpdateQueue.push(orderbookData)
+  scheduleOrderbookUpdate()
 }
 
 // 处理实时成交数据
@@ -1682,6 +2193,15 @@ function removeIndicator(index) {
   updateIndicatorCharts()
 }
 
+// 根据名称移除指标
+function removeIndicatorByName(name) {
+  const index = selectedIndicators.value.findIndex(i => i.name === name)
+  if (index >= 0) {
+    selectedIndicators.value.splice(index, 1)
+    updateIndicatorCharts()
+  }
+}
+
 // 设置画线工具
 function setDrawingTool(tool) {
   ElMessage.info(`画线工具: ${tool}`)
@@ -1715,15 +2235,8 @@ function toggleFullscreen() {
 
 // 窗口大小变化处理
 function handleResize() {
-  if (mainChartInstance) {
-    mainChartInstance.resize()
-  }
-  if (chipChartInstance) {
-    chipChartInstance.resize()
-  }
-  indicatorChartInstances.forEach(chart => {
-    if (chart) chart.resize()
-  })
+  // 使用已定义的防抖处理
+  debouncedResize()
 }
 
 // 价格样式类

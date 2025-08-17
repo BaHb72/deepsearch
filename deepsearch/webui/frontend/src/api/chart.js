@@ -76,15 +76,22 @@ export function getProviders() {
 }
 
 // 获取筹码分布数据
-export function getChipDistribution(symbol, lookbackDays = 120, priceBins = 100) {
+export function getChipDistribution(symbol, lookbackDays = 120, priceBins = 100, targetDate = null) {
+    const params = {
+        symbol,
+        lookback_days: lookbackDays,
+        price_bins: priceBins
+    }
+
+    // 如果指定了日期，添加到参数中
+    if (targetDate) {
+        params.target_date = targetDate
+    }
+
     return request({
         url: '/chart/chip-distribution',
         method: 'get',
-        params: {
-            symbol,
-            lookback_days: lookbackDays,
-            price_bins: priceBins
-        }
+        params
     })
 }
 
