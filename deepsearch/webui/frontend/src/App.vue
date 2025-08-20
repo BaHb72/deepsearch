@@ -45,6 +45,12 @@
               </el-icon>
               <span>交易监控</span>
             </el-menu-item>
+            <el-menu-item index="/strategy">
+              <el-icon>
+                <Aim/>
+              </el-icon>
+              <span>策略管理</span>
+            </el-menu-item>
             <el-menu-item index="/data">
               <el-icon>
                 <DataAnalysis/>
@@ -160,6 +166,7 @@ import {computed, onBeforeMount, onMounted, onUnmounted, ref} from 'vue'
 import {useRoute} from 'vue-router'
 import {ElLoading, ElMessage, ElMessageBox} from 'element-plus'
 import {
+  Aim,
   Connection,
   DataAnalysis,
   DataLine,

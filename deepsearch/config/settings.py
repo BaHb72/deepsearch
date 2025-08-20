@@ -15,6 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from deepsearch.constants import LOG_DIR
 from .loader import load_yaml_config
 from .models import (
+    AmazingDataConfig,
     AppConfig,
     DatabaseConfig,
     DebugConfig,
@@ -46,6 +47,7 @@ class Settings(BaseSettings):
     health_check: HealthCheckConfig = Field(default_factory=HealthCheckConfig)
     qmt: Optional[QmtConfig] = None  # QMT集成配置
     miniqmt: Optional[Dict[str, Any]] = None  # MiniQMT配置
+    amazingdata: Optional[AmazingDataConfig] = None  # AmazingData配置
     cloudflare: Optional[CloudflareConfig] = None
     cloudflare_workers: Optional[CloudflareWorkersConfig] = None  # Workers 代理配置
     data_providers: Optional[DataFeedConfig] = None

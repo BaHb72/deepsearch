@@ -146,9 +146,30 @@ class BaseGateway(ABC):
         if self._shutdown:
             return
 
+        # 检查消息总线是否已启动
+        if not self.message_bus or not hasattr(self.message_bus, 'is_running'):
+            self.logger.debug(f"消息总线未就绪，跳过发布事件 {etype}")
+            return
+
+        # 检查消息总线运行状态
+        try:
+            if not self.message_bus.is_running():
+                self.logger.debug(f"消息总线未运行，跳过发布事件 {etype}")
+                return
+        except Exception:
+            # 如果检查状态失败，说明消息总线可能未完全初始化
+            self.logger.debug(f"无法检查消息总线状态，跳过发布事件 {etype}")
+            return
+
         try:
             event = Event(etype, data)
             self.message_bus.publish(etype, event)
+        except RuntimeError as e:
+            # 专门处理消息总线未运行的错误
+            if "not running" in str(e):
+                self.logger.debug(f"消息总线未运行: {e}")
+            else:
+                self.logger.debug(f"发布事件 {etype} 失败：{e}")
         except Exception as e:
             self.logger.debug(f"发布事件 {etype} 失败：{e}")
 

@@ -21,6 +21,7 @@ def cli():
 
 
 @cli.command()
+@click.argument('env', type=click.Choice(['dev', 'prod']), required=False, default='prod')
 @click.option('--mode', type=click.Choice(['full', 'engine', 'webui']),
               default='full', help='运行模式')
 @click.option('--config', type=click.Path(exists=True),
@@ -31,13 +32,29 @@ def cli():
               help='不启动前端（仅在full模式下有效）')
 @click.option('--open-browser', is_flag=True,
               help='自动打开浏览器')
-def run(mode, config, log_level, no_frontend, open_browser):
-    """运行 DeepSearch 系统"""
+def run(env, mode, config, log_level, no_frontend, open_browser):
+    """运行 DeepSearch 系统
+    
+    ENV: 环境模式 (dev/prod)，默认为 prod
+    
+    示例:
+      deepsearch run          # 生产模式
+      deepsearch run dev      # 开发模式
+      deepsearch run prod     # 生产模式（明确指定）
+    """
+    # 设置环境变量
+    import os
+    os.environ['APP__ENV'] = env
+    
     # 延迟导入
     from deepsearch.observability.logger import logger_manager
     from deepsearch.core.async_runner import run_async_engine
     from deepsearch.config import get_config
     from deepsearch.utils.port_checker import PortChecker
+
+    # 显示当前环境
+    click.echo(f"启动环境: {env.upper()} (使用配置: settings.{env}.yaml)")
+    click.echo("")
 
     # 设置日志级别
     logger_manager.set_level(log_level)
@@ -76,6 +93,14 @@ def run(mode, config, log_level, no_frontend, open_browser):
         if mode == 'full':
             app_config = get_config()
             click.echo(f"WebUI API: http://localhost:{app_config.webui.backend_port}")
+
+            # 如果是开发环境，显示 AmazingData 配置信息
+            if env == 'dev' and hasattr(app_config, 'amazingdata') and app_config.amazingdata:
+                ad = app_config.amazingdata
+                if ad.enabled:
+                    click.echo(
+                        f"AmazingData: {ad.connection.host}:{ad.connection.port} (User: {ad.connection.username})")
+            
             if no_frontend:
                 click.echo(
                     "Note: Frontend needs to be started separately - cd deepsearch/webui/frontend && npm run dev")

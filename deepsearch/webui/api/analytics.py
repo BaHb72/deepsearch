@@ -12,6 +12,7 @@ from loguru import logger
 
 from deepsearch.services.data_sync_service import get_sync_service
 from deepsearch.storage.duckdb_analytics import get_analytics_db
+from deepsearch.webui.api.utils import sanitize_for_json
 from deepsearch.webui.auth import optional_auth
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -57,14 +58,14 @@ async def calculate_indicators(
             raise HTTPException(status_code=404, detail=f"没有找到 {symbol} 的数据")
 
         # 转换为响应格式
-        return {
+        return sanitize_for_json({
             "symbol": symbol,
             "period": period,
             "start_date": start_date,
             "end_date": end_date,
             "indicators": indicator_list,
             "data": df.to_dict(orient="records")
-        }
+        })
 
     except Exception as e:
         logger.error(f"计算指标失败: {e}")
@@ -96,12 +97,12 @@ async def get_aggregates(
             symbol, source_period, target_period, start_date, end_date
         )
 
-        return {
+        return sanitize_for_json({
             "symbol": symbol,
             "source_period": source_period,
             "target_period": target_period,
             "data": df.to_dict(orient="records")
-        }
+        })
 
     except Exception as e:
         logger.error(f"聚合数据失败: {e}")
@@ -312,11 +313,11 @@ async def custom_query(
 
         df = await analytics_db.query(sql, tuple(params) if params else None)
 
-        return {
+        return sanitize_for_json({
             "query": sql,
             "rows": len(df),
             "data": df.to_dict(orient="records")
-        }
+        })
 
     except Exception as e:
         logger.error(f"查询失败: {e}")

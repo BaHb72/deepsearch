@@ -215,15 +215,16 @@ class QMTReceiver:
             return None
 
     async def _send_message(self, writer: asyncio.StreamWriter, msg: Dict):
-        """发送消息到客户端"""
+        """发送消息到客户端（使用文本格式，换行符分隔）"""
         try:
-            # 序列化消息
-            data = json.dumps(msg).encode('utf-8')
+            # 序列化消息为JSON，添加换行符
+            data = json.dumps(msg, ensure_ascii=False) + '\n'
 
-            # 发送长度和内容
-            length = struct.pack('!I', len(data))
-            writer.write(length + data)
+            # 发送文本消息（不使用长度前缀）
+            writer.write(data.encode('utf-8'))
             await writer.drain()
+
+            logger.debug(f"发送消息: {msg.get('type', 'UNKNOWN')}")
 
         except Exception as e:
             logger.error(f"发送消息失败: {e}")
@@ -231,6 +232,17 @@ class QMTReceiver:
     async def _process_message(self, client_id: str, msg: Dict):
         """处理接收到的消息"""
         msg_type = msg.get('type', 'UNKNOWN')
+
+        # 对于LEVEL2数据，记录更详细的信息
+        if msg_type == 'LEVEL2':
+            data = msg.get('data', {})
+            symbol = data.get('symbol', 'UNKNOWN')
+            bid_count = len(data.get('bid_price', []))
+            ask_count = len(data.get('ask_price', []))
+            logger.info(
+                f"[RECEIVER] 收到LEVEL2消息: symbol={symbol}, bid_levels={bid_count}, ask_levels={ask_count}, from {client_id}")
+        else:
+            logger.info(f"[RECEIVER] 收到消息: {msg_type} from {client_id}")
 
         # 更新统计
         self.stats['message_types'][msg_type] += 1
@@ -249,15 +261,46 @@ class QMTReceiver:
             else:
                 await self._disconnect_client(client_id)
                 return
+        elif not self.auth_enabled and msg_type == 'AUTH':
+            # 即使认证关闭，也要处理AUTH消息，以便注册客户端
+            logger.info(f"处理AUTH消息（认证已关闭）: {client_id}")
+
+            # 保存writer以便后续推送
+            writer = self.clients[client_id]['writer']
+            self.client_writers[client_id] = writer
+
+            # 检查是否支持动态订阅
+            capabilities = msg.get('capabilities', [])
+            supports_dynamic = 'dynamic_subscription' in capabilities
+
+            # 记录客户端信息
+            self.clients[client_id]['supports_dynamic'] = supports_dynamic
+            self.clients[client_id]['client_type'] = msg.get('client', 'Unknown')
+            self.clients[client_id]['authenticated'] = True
+
+            # 发送认证成功响应
+            await self._send_message(writer, {
+                'type': 'AUTH_RESPONSE',
+                'status': 'OK',
+                'message': 'Authentication successful (auth disabled)',
+                'client_id': client_id
+            })
+
+            # 如果支持动态订阅，注册到订阅管理器
+            if supports_dynamic:
+                await self._register_dynamic_client(client_id, msg)
+
+            return  # AUTH消息处理完毕，不需要继续
 
         # 分发消息到处理器
         if msg_type in self.data_handlers:
             try:
                 # 异步执行处理器
                 handler = self.data_handlers[msg_type]
-                await asyncio.create_task(handler(client_id, msg))
+                asyncio.create_task(handler(client_id, msg))
+                logger.info(f"[RECEIVER] 已分发 {msg_type} 消息到处理器")
             except Exception as e:
-                logger.error(f"处理消息失败 {msg_type}: {e}")
+                logger.error(f"[RECEIVER] 处理消息失败 {msg_type}: {e}")
 
         # 处理特殊消息类型
         if msg_type == 'HEARTBEAT':
@@ -428,17 +471,25 @@ class QMTReceiver:
             symbols = subscription_manager.get_client_symbols(client_id)
             writer = self.client_writers.get(client_id)
 
-            if writer and symbols:
-                # 发送订阅列表
-                await self._send_message(writer, {
-                    'type': 'SUBSCRIPTION_LIST',
-                    'symbols': symbols,
-                    'timestamp': time.time()
-                })
-                logger.info(f"注册动态订阅客户端 {client_id}，发送初始订阅 {len(symbols)} 只股票: {symbols}")
+            if writer:
+                if symbols:
+                    # 发送订阅列表
+                    await self._send_message(writer, {
+                        'type': 'SUBSCRIPTION_LIST',
+                        'symbols': symbols,
+                        'timestamp': time.time()
+                    })
+                    logger.info(f"注册动态订阅客户端 {client_id}，发送初始订阅 {len(symbols)} 只股票: {symbols}")
+                else:
+                    # 即使没有股票也发送空列表，让客户端知道状态
+                    await self._send_message(writer, {
+                        'type': 'SUBSCRIPTION_LIST',
+                        'symbols': [],
+                        'timestamp': time.time()
+                    })
+                    logger.info(f"注册动态订阅客户端 {client_id}，当前无订阅")
             else:
-                logger.warning(
-                    f"客户端 {client_id} 注册成功但无法发送订阅列表 - writer: {writer is not None}, symbols: {len(symbols) if symbols else 0}")
+                logger.warning(f"客户端 {client_id} 注册成功但无法发送订阅列表 - writer不存在")
 
         except Exception as e:
             logger.error(f"注册动态客户端失败: {e}", exc_info=True)

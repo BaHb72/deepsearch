@@ -12,6 +12,7 @@ from deepsearch.services.unified_data_manager import (
     get_unified_data_manager,
     DataSourceType
 )
+from deepsearch.webui.api.utils import sanitize_for_json
 
 router = APIRouter(prefix="/api/data", tags=["unified_data"])
 
@@ -52,7 +53,8 @@ async def get_stock_history(
             preferred_source=preferred_source
         )
 
-        return result
+        # 清理 NaN 值
+        return sanitize_for_json(result)
 
     except Exception as e:
         logger.error(f"获取历史数据失败: {e}")
@@ -83,7 +85,8 @@ async def get_stock_quote(
             preferred_source=preferred_source
         )
 
-        return result
+        # 清理 NaN 值
+        return sanitize_for_json(result)
 
     except Exception as e:
         logger.error(f"获取实时行情失败: {e}")
@@ -124,9 +127,9 @@ async def get_stock_info(
                         preferred_source=source_type
                     )
                     if alt_result.get("name") and not alt_result["name"].startswith("股票"):
-                        return alt_result
+                        return sanitize_for_json(alt_result)
 
-        return result
+        return sanitize_for_json(result)
 
     except Exception as e:
         logger.error(f"获取股票信息失败: {e}")
@@ -152,11 +155,11 @@ async def get_stock_list(
                 try:
                     stocks = await provider.fetch_stock_list()
                     if stocks:
-                        return {
+                        return sanitize_for_json({
                             "data": stocks,
                             "source": source_type.value,
                             "count": len(stocks)
-                        }
+                        })
                 except Exception as e:
                     logger.debug(f"{source_type.value} 获取股票列表失败: {e}")
 
@@ -245,11 +248,11 @@ async def compare_data_sources(
             except Exception as e:
                 results[source_type.value] = {"error": str(e)}
 
-        return {
+        return sanitize_for_json({
             "symbol": symbol,
             "data_type": data_type,
             "sources": results
-        }
+        })
 
     except Exception as e:
         logger.error(f"数据比较失败: {e}")

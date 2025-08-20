@@ -51,6 +51,42 @@ class AKShareDirectProvider:
         self.initialized = True
         return True
 
+    def _safe_float(self, value: Any, default: float = 0.0) -> float:
+        """
+        安全地将值转换为浮点数
+        
+        Args:
+            value: 要转换的值
+            default: 转换失败时的默认值
+            
+        Returns:
+            转换后的浮点数
+        """
+        if value is None:
+            return default
+
+        # 处理字符串
+        if isinstance(value, str):
+            # 处理空字符串或特殊字符
+            if value in ['', '-', '--', 'N/A', 'null', 'None']:
+                return default
+
+            # 移除可能的千分位分隔符和百分号
+            value = value.replace(',', '').replace('%', '')
+
+            try:
+                return float(value)
+            except (ValueError, TypeError) as e:
+                logger.debug(f"无法转换为浮点数: {value}, 错误: {e}")
+                return default
+
+        # 处理数字类型
+        try:
+            return float(value)
+        except (ValueError, TypeError) as e:
+            logger.debug(f"无法转换为浮点数: {value}, 错误: {e}")
+            return default
+
     async def get_realtime_quote(self, symbol: str) -> Dict[str, Any]:
         """
         获取实时行情
@@ -108,15 +144,15 @@ class AKShareDirectProvider:
                     return {
                         "symbol": symbol,
                         "name": info_dict.get('股票简称', ''),
-                        "current": float(info_dict.get('最新', 0)),
-                        "prev_close": float(info_dict.get('昨收', 0)),
-                        "open": float(info_dict.get('今开', 0)),
-                        "high": float(info_dict.get('最高', 0)),
-                        "low": float(info_dict.get('最低', 0)),
-                        "volume": float(info_dict.get('成交量', 0)),
-                        "amount": float(info_dict.get('成交额', 0)),
-                        "change": float(info_dict.get('涨跌', 0)),
-                        "change_pct": float(info_dict.get('涨跌幅', 0)),
+                        "current": self._safe_float(info_dict.get('最新', 0)),
+                        "prev_close": self._safe_float(info_dict.get('昨收', 0)),
+                        "open": self._safe_float(info_dict.get('今开', 0)),
+                        "high": self._safe_float(info_dict.get('最高', 0)),
+                        "low": self._safe_float(info_dict.get('最低', 0)),
+                        "volume": self._safe_float(info_dict.get('成交量', 0)),
+                        "amount": self._safe_float(info_dict.get('成交额', 0)),
+                        "change": self._safe_float(info_dict.get('涨跌', 0)),
+                        "change_pct": self._safe_float(info_dict.get('涨跌幅', 0)),
                         "source": "akshare_direct_individual"
                     }
             except Exception as e:
@@ -137,21 +173,21 @@ class AKShareDirectProvider:
             return {
                 "symbol": symbol,
                 "name": row.get('名称', ''),
-                "current": float(row.get('最新价', 0)),
-                "prev_close": float(row.get('昨收', 0)),
-                "open": float(row.get('今开', 0)),
-                "high": float(row.get('最高', 0)),
-                "low": float(row.get('最低', 0)),
-                "volume": float(row.get('成交量', 0)),
-                "amount": float(row.get('成交额', 0)),
-                "change": float(row.get('涨跌额', 0)),
-                "change_pct": float(row.get('涨跌幅', 0)),
-                "amplitude": float(row.get('振幅', 0)),
-                "turnover_rate": float(row.get('换手率', 0)),
-                "pe_ratio": float(row.get('市盈率-动态', 0)),
-                "pb_ratio": float(row.get('市净率', 0)),
-                "market_cap": float(row.get('总市值', 0)),
-                "float_market_cap": float(row.get('流通市值', 0)),
+                "current": self._safe_float(row.get('最新价', 0)),
+                "prev_close": self._safe_float(row.get('昨收', 0)),
+                "open": self._safe_float(row.get('今开', 0)),
+                "high": self._safe_float(row.get('最高', 0)),
+                "low": self._safe_float(row.get('最低', 0)),
+                "volume": self._safe_float(row.get('成交量', 0)),
+                "amount": self._safe_float(row.get('成交额', 0)),
+                "change": self._safe_float(row.get('涨跌额', 0)),
+                "change_pct": self._safe_float(row.get('涨跌幅', 0)),
+                "amplitude": self._safe_float(row.get('振幅', 0)),
+                "turnover_rate": self._safe_float(row.get('换手率', 0)),
+                "pe_ratio": self._safe_float(row.get('市盈率-动态', 0)),
+                "pb_ratio": self._safe_float(row.get('市净率', 0)),
+                "market_cap": self._safe_float(row.get('总市值', 0)),
+                "float_market_cap": self._safe_float(row.get('流通市值', 0)),
                 "source": "akshare_direct"
             }
 

@@ -1,3 +1,16 @@
+# 应用配置
+app:
+  name: DeepSearch
+  env: dev
+  debug: true
+
+# 日志配置
+log:
+  level: DEBUG
+  format: verbose
+  toFile: true
+  toConsole: true
+
 database:
   main:
     enabled: true  # 设置为 false 可以禁用数据库
@@ -101,15 +114,20 @@ miniqmt:
 # 数据提供者配置
 data_providers:
   # 设置默认数据源
-  default: "qmt"
+  default: "amazingdata"
   
   # 只使用QMT模式（用于测试）
-  qmt_only: true
+  qmt_only: false
+  
+  # AmazingData数据源（最高优先级）
+  amazingdata:
+    enabled: true
+    priority: 1  # 最高优先级
   
   # QMT数据源
   qmt:
     enabled: true
-    priority: 1  # 最高优先级
+    priority: 2  # 第二优先级
   
   # Cloudflare代理（禁用）
   cloudflare_proxy:
@@ -130,3 +148,57 @@ data_providers:
   direct_api:
     enabled: false
     priority: 30
+
+# AmazingData配置
+amazingdata:
+  enabled: true
+  priority: 1  # 最高优先级
+  
+  # 连接配置
+  connection:
+    username: "212200038719"  # AmazingData用户名
+    password: "21220003871920250820"  # AmazingData密码（建议使用encrypted:格式）
+    host: "120.86.124.106"  # AmazingData服务器地址
+    port: 8600  # AmazingData服务端口
+    timeout: 10  # 连接超时（秒）
+    max_retries: 3  # 最大重试次数
+    heartbeat_interval: 30  # 心跳间隔（秒）
+    auto_reconnect: true  # 自动重连
+  
+  # 缓存配置
+  cache:
+    enabled: true
+    ttl: 300  # 缓存过期时间（秒）
+    max_size: 10000  # 最大缓存条目数
+    clear_on_disconnect: false  # 断连时是否清除缓存
+  
+  # 订阅配置
+  subscription:
+    enabled: true
+    batch_size: 100  # 批量订阅大小
+    heartbeat_interval: 30  # 订阅心跳间隔（秒）
+    max_symbols: 500  # 最大订阅股票数
+    auto_resubscribe: true  # 断线后自动重新订阅
+  
+  # 数据质量配置
+  data_quality:
+    check_enabled: true  # 启用数据质量检查
+    min_completeness: 0.95  # 最小完整性要求
+    alert_on_error: true  # 错误时告警
+    validate_timestamps: true  # 验证时间戳
+  
+  # 性能配置
+  performance:
+    batch_requests: true  # 启用批量请求
+    max_concurrent_requests: 10  # 最大并发请求数
+    request_queue_size: 1000  # 请求队列大小
+    use_connection_pool: true  # 使用连接池
+    pool_size: 5  # 连接池大小
+  
+  # 监控配置
+  monitoring:
+    enabled: true
+    report_interval: 60  # 状态报告间隔（秒）
+    metrics_enabled: true  # 启用指标收集
+    log_slow_requests: true  # 记录慢请求
+    slow_request_threshold: 1000  # 慢请求阈值（毫秒）

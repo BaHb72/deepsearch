@@ -73,8 +73,8 @@ class AdjustFactorService:
 
         # 备用方案：从QMT获取
         try:
-            from deepsearch.datafeed.qmt import QmtDatafeed
-            qmt = QmtDatafeed()
+            from deepsearch.datafeed.qmt import QMTDataFeed
+            qmt = QMTDataFeed()
 
             if hasattr(qmt, 'get_adjust_factor'):
                 factors = qmt.get_adjust_factor(symbol, start_date, end_date)

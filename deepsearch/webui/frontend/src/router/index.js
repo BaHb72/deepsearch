@@ -81,6 +81,20 @@ const router = createRouter({
             }
         },
         {
+            path: '/strategy',
+            name: 'strategy',
+            component: () => {
+                debugLog('ROUTE_LOAD', '开始加载StrategyManagement组件')
+                return import('@/views/StrategyManagement.vue').then(module => {
+                    debugLog('ROUTE_LOAD', 'StrategyManagement组件加载成功')
+                    return module
+                }).catch(err => {
+                    debugLog('ROUTE_ERROR', 'StrategyManagement组件加载失败', {error: err.message})
+                    throw err
+                })
+            }
+        },
+        {
             path: '/data',
             name: 'data',
             component: () => {

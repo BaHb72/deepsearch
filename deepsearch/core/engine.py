@@ -28,7 +28,7 @@ from .ipc import EngineIPCServer
 from .unified_components import (
     EventEngineComponent, MessageBusComponent, DatabaseComponent,
     CacheComponent, GatewayComponent, WebUIComponent, QMTGatewayComponent,
-    AnalyticsComponent
+    AnalyticsComponent, BacktestComponent
 )
 
 
@@ -116,6 +116,7 @@ class MainEngine:
             # 暂时简化注册
             container.register_singleton(GatewayComponent)
             container.register_singleton(QMTGatewayComponent)
+            container.register_singleton(BacktestComponent)
 
         # 注册界面组件
         if self._should_load_interface_components():
@@ -184,6 +185,7 @@ class MainEngine:
             AnalyticsComponent,  # 添加分析组件
             GatewayComponent,
             QMTGatewayComponent,
+            BacktestComponent,  # 添加回测组件
             WebUIComponent
         ]
 
@@ -240,6 +242,16 @@ class MainEngine:
                 if database_component:
                     analytics_component.set_database_component(database_component)
                     self._logger.debug("分析组件数据库依赖已设置")
+
+            # 设置回测组件的依赖
+            backtest_component = self._components.get('backtest')
+            if backtest_component and hasattr(backtest_component, 'set_dependencies'):
+                event_engine = self._components.get('event_engine')
+                message_bus = self._components.get('message_bus')
+                # TODO: 获取数据提供者实例
+                if event_engine and message_bus:
+                    backtest_component.set_dependencies(event_engine, message_bus, None)
+                    self._logger.debug("回测组件依赖已设置")
 
             # 记录初始化成功的组件
             for name, component in self._components.items():

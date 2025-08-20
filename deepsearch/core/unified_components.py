@@ -1017,3 +1017,72 @@ class WebUIComponent(AsyncComponent):
             "backend_url": f"http://localhost:{self._backend_port}",
             "frontend_url": f"http://localhost:{self._frontend_port}"
         }
+
+
+class BacktestComponent(AsyncComponent):
+    """回测组件 - 策略回测引擎"""
+
+    def __init__(self):
+        super().__init__("backtest", ComponentType.BUSINESS, "回测引擎")
+        self._backtest_instance = None
+        self._event_engine = None
+        self._message_bus = None
+        self._data_provider = None
+
+    def set_dependencies(self, event_engine=None, message_bus=None, data_provider=None):
+        """设置组件依赖"""
+        self._event_engine = event_engine
+        self._message_bus = message_bus
+        self._data_provider = data_provider
+
+    async def _initialize(self) -> None:
+        """初始化回测组件"""
+        with error_context(self.name, "initialize"):
+            # 延迟导入，避免循环依赖
+            from deepsearch.backtest.component import BacktestComponent as BacktestCore
+
+            # 创建回测组件实例
+            self._backtest_instance = BacktestCore()
+
+            # 设置依赖
+            if self._event_engine or self._message_bus or self._data_provider:
+                # 获取实际的实例
+                event_engine_instance = self._event_engine._instance if self._event_engine and hasattr(
+                    self._event_engine, '_instance') else None
+                message_bus_instance = self._message_bus._instance if self._message_bus and hasattr(self._message_bus,
+                                                                                                    '_instance') else None
+
+                self._backtest_instance.set_dependencies(
+                    event_engine_instance,
+                    message_bus_instance,
+                    self._data_provider
+                )
+
+            # 初始化回测组件
+            await self._backtest_instance._initialize()
+            self._instance = self._backtest_instance
+            self._logger.info("回测组件初始化完成")
+
+    async def _start(self) -> None:
+        """启动回测组件"""
+        with error_context(self.name, "start"):
+            if self._backtest_instance:
+                await self._backtest_instance._start()
+                self._logger.info("回测组件已启动")
+
+    async def _stop(self) -> None:
+        """停止回测组件"""
+        with error_context(self.name, "stop"):
+            if self._backtest_instance:
+                await self._backtest_instance._stop()
+                self._logger.info("回测组件已停止")
+
+    def _health_check(self) -> bool:
+        """健康检查"""
+        return self._backtest_instance and self._backtest_instance._health_check()
+
+    def _get_extra_status_info(self) -> Dict[str, Any]:
+        """获取额外状态信息"""
+        if self._backtest_instance:
+            return self._backtest_instance._get_extra_status_info()
+        return {}

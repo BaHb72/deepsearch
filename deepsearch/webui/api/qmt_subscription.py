@@ -45,15 +45,8 @@ class SubscriptionManager:
         self.subscriptions: Dict[str, Set[str]] = {}  # client_id -> set of symbols
         self.global_symbols: Set[str] = set()  # 全局订阅列表
 
-        # 默认订阅列表
-        self.default_symbols = [
-            '000001.SZ',  # 平安银行
-            '000002.SZ',  # 万科A
-            '600000.SH',  # 浦发银行
-            '600036.SH',  # 招商银行
-            '000858.SZ',  # 五粮液
-            '600519.SH',  # 贵州茅台
-        ]
+        # 默认订阅列表（空列表，完全由服务器端控制）
+        self.default_symbols = []
 
         # 连接的QMT客户端
         self.connected_clients: Dict[str, Dict] = {}  # client_id -> client_info
@@ -159,6 +152,15 @@ class SubscriptionManager:
 
             affected_clients = list(self.subscriptions.keys())
 
+            # 重要：全局更新时，也要为所有已连接的客户端创建更新
+            # 即使他们不在subscriptions中
+            for cid in self.connected_clients.keys():
+                if cid not in affected_clients:
+                    affected_clients.append(cid)
+                    # 确保客户端有订阅列表
+                    if cid not in self.subscriptions:
+                        self.subscriptions[cid] = symbols_set.copy()
+
         # 创建更新消息
         update_msg = {
             'type': 'SUBSCRIPTION_UPDATE',
@@ -197,10 +199,14 @@ class SubscriptionManager:
         """
         # 如果客户端不存在，先添加到订阅列表
         if client_id not in self.subscriptions:
-            self.subscriptions[client_id] = set(self.default_symbols)
-            logger.info(f"为新客户端 {client_id} 设置默认订阅: {self.default_symbols}")
+            # 使用全局订阅作为初始订阅
+            self.subscriptions[client_id] = self.global_symbols.copy()
+            logger.info(f"为新客户端 {client_id} 设置初始订阅: {list(self.global_symbols)}")
 
-        return list(self.subscriptions[client_id])
+        # 返回全局订阅和客户端特定订阅的并集
+        client_symbols = self.subscriptions.get(client_id, set())
+        combined_symbols = self.global_symbols | client_symbols
+        return list(combined_symbols)
 
     def get_pending_updates(self, client_id: str) -> List[Dict]:
         """

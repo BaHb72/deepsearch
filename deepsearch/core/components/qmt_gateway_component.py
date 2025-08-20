@@ -245,7 +245,7 @@ class QMTGatewayComponent(Component):
             data = msg.get('data', {})
             symbol = data.get('symbol', '')
 
-            logger.debug(f"处理Level2数据: {symbol} from {client_id}")
+            logger.info(f"处理Level2数据: {symbol} from {client_id}")
 
             # 创建OrderBook对象
             orderbook = OrderBook(
@@ -273,12 +273,18 @@ class QMTGatewayComponent(Component):
                 if p > 0
             ]
 
-            # 更新缓存
+            # 更新缓存 - 使用多个键确保兼容性
             self._orderbook_cache[orderbook.symbol] = orderbook
             self._cache_timestamps[f"orderbook_{orderbook.symbol}"] = time.time()
 
+            # 如果symbol包含后缀，也存储不带后缀的版本以支持多种查询格式
+            if '.' in orderbook.symbol:
+                pure_code = orderbook.symbol.split('.')[0]
+                self._orderbook_cache[pure_code] = orderbook
+                logger.debug(f"同时缓存纯代码版本: {pure_code}")
+
             logger.info(
-                f"更新盘口缓存: {orderbook.symbol}, 买一={bid_prices[0] if bid_prices else 0}, 卖一={ask_prices[0] if ask_prices else 0}")
+                f"更新盘口缓存: {orderbook.symbol}, 买一={bid_prices[0] if bid_prices else 0}, 卖一={ask_prices[0] if ask_prices else 0}, 缓存键数量={len(self._orderbook_cache)}")
 
             # 添加到批量缓冲
             self._batch_buffer.append(('orderbook', orderbook))
@@ -513,15 +519,39 @@ class QMTGatewayComponent(Component):
 
     def get_latest_tick(self, symbol: str) -> Optional[Dict]:
         """获取最新的Tick数据"""
+        # 先尝试直接查找
         tick = self._tick_cache.get(symbol)
+
+        # 如果没找到，尝试添加交易所后缀
+        if not tick and '.' not in symbol:
+            # 尝试上海和深圳的后缀
+            for suffix in ['.SH', '.SZ']:
+                test_symbol = symbol + suffix
+                tick = self._tick_cache.get(test_symbol)
+                if tick:
+                    logger.info(f"通过添加后缀找到Tick数据: {symbol} -> {test_symbol}")
+                    break
+        
         return tick.to_dict() if tick else None
 
     def get_latest_orderbook(self, symbol: str) -> Optional[Dict]:
         """获取最新的盘口数据"""
+        # 先尝试直接查找
         orderbook = self._orderbook_cache.get(symbol)
+
+        # 如果没找到，尝试添加交易所后缀
+        if not orderbook and '.' not in symbol:
+            # 尝试上海和深圳的后缀
+            for suffix in ['.SH', '.SZ']:
+                test_symbol = symbol + suffix
+                orderbook = self._orderbook_cache.get(test_symbol)
+                if orderbook:
+                    logger.info(f"通过添加后缀找到盘口数据: {symbol} -> {test_symbol}")
+                    break
+
         if orderbook:
-            logger.debug(f"从缓存获取盘口数据: {symbol}, 缓存中有 {len(self._orderbook_cache)} 个股票")
+            logger.info(f"从缓存获取盘口数据: {symbol}, 缓存中有 {len(self._orderbook_cache)} 个股票")
             return self._orderbook_to_dict(orderbook)
         else:
-            logger.debug(f"缓存中没有 {symbol} 的盘口数据, 缓存股票: {list(self._orderbook_cache.keys())}")
+            logger.info(f"缓存中没有 {symbol} 的盘口数据, 缓存股票: {list(self._orderbook_cache.keys())}")
             return None

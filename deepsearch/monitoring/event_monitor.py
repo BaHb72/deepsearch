@@ -10,6 +10,7 @@ import json
 import logging
 import threading
 import time
+import traceback
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -559,53 +560,267 @@ class EventSystemMonitor:
 
     def _export_loop(self) -> None:
         """Export metrics periodically"""
+        # 初始化延迟，避免启动时的竞争条件
+        time.sleep(5)
+        
         while self._monitoring:
-            self._export_metrics()
-            time.sleep(METRICS_EXPORT_INTERVAL)
+            try:
+                self._export_metrics()
+            except Exception:
+                # 忽略导出错误，继续循环
+                pass
 
-    def _export_metrics(self) -> None:
-        """Export metrics (placeholder for actual export)"""
+            # 使用可中断的 sleep
+            for _ in range(int(METRICS_EXPORT_INTERVAL)):
+                if not self._monitoring:
+                    break
+                time.sleep(1)
+
+    def _safe_json_serialize(self, obj: Any) -> str:
+        """安全的JSON序列化方法"""
+        seen = set()  # 防止循环引用
+
+        def clean_for_json(item, depth=0):
+            """递归清理对象以便 JSON 序列化"""
+            # 限制递归深度
+            if depth > 10:
+                return "<max depth>"
+
+            # 处理基本类型
+            if item is None:
+                return None
+            elif isinstance(item, (str, int, float, bool)):
+                return item
+            elif isinstance(item, datetime):
+                return item.isoformat()
+            elif isinstance(item, Enum):
+                return item.value
+            elif isinstance(item, dict):
+                # 处理字典
+                try:
+                    return {str(k): clean_for_json(v, depth + 1) for k, v in item.items()}
+                except Exception as e:
+                    logger.debug(f"Error processing dict: {repr(e)}")
+                    return str(item)
+            elif isinstance(item, (list, tuple, set)):
+                # 处理列表、元组、集合
+                try:
+                    return [clean_for_json(i, depth + 1) for i in item]
+                except Exception as e:
+                    logger.debug(f"Error processing iterable: {repr(e)}")
+                    return str(item)
+            else:
+                # 处理自定义对象
+                # 首先检查是否是循环引用
+                obj_id = id(item)
+                if obj_id in seen:
+                    return "<circular reference>"
+                seen.add(obj_id)
+
+                # 尝试不同的方法获取对象属性
+                try:
+                    # 方法1: 使用 vars() - 更安全
+                    attrs = vars(item)
+                    if isinstance(attrs, dict):
+                        result = {str(k): clean_for_json(v, depth + 1) for k, v in attrs.items()}
+                        seen.discard(obj_id)
+                        return result
+                except Exception:
+                    pass
+
+                try:
+                    # 方法2: 使用 __dict__ 属性
+                    if hasattr(item, '__dict__'):
+                        d = getattr(item, '__dict__', None)
+                        if isinstance(d, dict):
+                            result = {str(k): clean_for_json(v, depth + 1) for k, v in d.items()}
+                            seen.discard(obj_id)
+                            return result
+                except Exception:
+                    pass
+
+                # 如果以上方法都失败，转为字符串
+                seen.discard(obj_id)
+                try:
+                    return str(item)
+                except Exception:
+                    return f"<{type(item).__name__} object>"
+
         try:
-            metrics = self.get_summary()
-            # 这里可以添加导出逻辑，比如写入文件或发送到监控系统
-            logger.debug(f"Exported metrics: {json.dumps(metrics, indent=2)}")
+            cleaned_obj = clean_for_json(obj)
+            return json.dumps(cleaned_obj, indent=2, ensure_ascii=False)
         except Exception as e:
-            logger.error(f"Failed to export metrics: {e}")
+            # 如果仍然失败，记录错误并使用最保守的方法
+            logger.debug(f"JSON serialization failed: {repr(e)}")
+            return json.dumps({"error": "Unable to serialize metrics"}, indent=2)
+    
+    def _export_metrics(self) -> None:
+        """导出指标（占位符，用于实际导出逻辑）"""
+        # 使用线程锁保护
+        if not hasattr(self, '_export_lock'):
+            self._export_lock = threading.Lock()
+
+        with self._export_lock:
+            try:
+                # 获取指标摘要
+                logger.debug("_export_metrics: Getting summary")
+                metrics = self.get_summary()
+                logger.debug(
+                    f"_export_metrics: Got summary with keys: {list(metrics.keys()) if isinstance(metrics, dict) else 'not a dict'}")
+
+                # 使用安全的序列化方法
+                logger.debug("_export_metrics: Starting serialization")
+                json_str = self._safe_json_serialize(metrics)
+                logger.debug(f"_export_metrics: Serialization completed, length={len(json_str)}")
+
+                # 记录导出成功状态
+                # 注意：loguru 无法正确处理包含大括号的 JSON 内容
+                # 因此我们只记录摘要信息，不记录实际的 JSON 内容
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Metrics exported successfully (size: %d bytes)", len(json_str))
+
+                    # 如果需要调试 JSON 内容，可以通过环境变量启用文件输出
+                    # import os
+                    # if os.environ.get('DEBUG_EXPORT_METRICS'):
+                    #     with open('debug_metrics.json', 'w', encoding='utf-8') as f:
+                    #         f.write(json_str)
+                    #     logger.debug("Debug metrics written to debug_metrics.json")
+
+            except Exception as e:
+                # 捕获所有异常，避免线程崩溃
+                # 安全地获取异常信息
+                try:
+                    error_type = type(e).__name__
+                    # 使用 repr 而不是 str，避免异常的 __str__ 方法出问题
+                    error_msg = repr(e)
+
+                    # 如果是 KeyError，特别记录键的值
+                    if isinstance(e, KeyError):
+                        if e.args:
+                            key_repr = repr(e.args[0])
+                            logger.error(f"KeyError in export_metrics: missing key = {key_repr}")
+                            # 添加更多调试信息
+                            logger.debug("KeyError details: args=%s", e.args)
+                            logger.debug("KeyError type: %s", type(e))
+                            # 使用安全的方式记录 __dict__，避免其内容导致格式化错误
+                            try:
+                                dict_info = repr(getattr(e, '__dict__', 'no __dict__'))
+                                logger.debug("KeyError __dict__: %s", dict_info)
+                            except:
+                                logger.debug("KeyError __dict__: <unable to retrieve>")
+                        else:
+                            logger.error(f"KeyError in export_metrics: {error_msg}")
+                    else:
+                        logger.error(f"Failed to export metrics: {error_type}: {error_msg}")
+
+                except Exception as inner_e:
+                    # 如果连获取异常信息都失败了
+                    logger.error(f"Failed to export metrics and also failed to log error: {repr(inner_e)}")
+
+                # 总是记录完整的堆栈跟踪以便调试
+                try:
+                    tb = traceback.format_exc()
+                    logger.debug("Export metrics traceback:\n%s", tb)
+                except:
+                    pass  # 忽略日志错误
 
     def get_summary(self) -> Dict[str, Any]:
         """Get monitoring summary"""
-        health_status, health_details = self._health_monitor.get_status()
-        event_metrics = self._collector.get_metrics()
-        handler_metrics = self._collector.get_handler_metrics()
-        slow_events = self._collector.get_slow_events(limit=10)
+        # 添加调试日志
+        logger.debug("Starting get_summary")
 
-        return {
-            "timestamp": datetime.now().isoformat(),
-            "health": {
-                "status": health_status.value,
+        try:
+            health_status, health_details = self._health_monitor.get_status()
+            logger.debug(f"Got health status: {health_status}")
+        except Exception as e:
+            logger.error(f"Error getting health status: {repr(e)}")
+            health_status = HealthStatus.UNHEALTHY
+            health_details = {"error": "Failed to get health status"}
+
+        try:
+            event_metrics = self._collector.get_metrics()
+            logger.debug(f"Got event metrics: {len(event_metrics)} events")
+        except Exception as e:
+            logger.error(f"Error getting event metrics: {repr(e)}")
+            event_metrics = {}
+
+        try:
+            handler_metrics = self._collector.get_handler_metrics()
+            logger.debug(f"Got handler metrics: {len(handler_metrics)} handlers")
+        except Exception as e:
+            logger.error(f"Error getting handler metrics: {repr(e)}")
+            handler_metrics = {}
+
+        try:
+            slow_events = self._collector.get_slow_events(limit=10)
+            logger.debug(f"Got slow events: {len(slow_events)} events")
+        except Exception as e:
+            logger.error(f"Error getting slow events: {repr(e)}")
+            slow_events = []
+
+        # 构建返回的字典，每一步都进行错误处理
+        result = {}
+
+        try:
+            result["timestamp"] = datetime.now().isoformat()
+        except Exception as e:
+            logger.error(f"Error setting timestamp: {repr(e)}")
+            result["timestamp"] = "error"
+
+        try:
+            result["health"] = {
+                "status": health_status.value if hasattr(health_status, 'value') else str(health_status),
                 "checks": health_details
-            },
-            "events": {
-                event_type: {
-                    "total": metrics.total_count,
-                    "success_rate": metrics.success_rate,
-                    "avg_processing_time": metrics.average_processing_time,
-                    "min_processing_time": metrics.min_processing_time,
-                    "max_processing_time": metrics.max_processing_time
-                }
-                for event_type, metrics in event_metrics.items()
-            },
-            "handlers": handler_metrics,
-            "slow_events": [
-                {
-                    "event_type": e.event_type,
-                    "processing_time": e.processing_time,
-                    "handler": e.handler_name,
-                    "timestamp": datetime.fromtimestamp(e.timestamp).isoformat()
-                }
-                for e in slow_events
-            ]
-        }
+            }
+        except Exception as e:
+            logger.error(f"Error setting health: {repr(e)}")
+            result["health"] = {"status": "error", "checks": {}}
+
+        try:
+            events_dict = {}
+            for event_type, metrics in event_metrics.items():
+                try:
+                    events_dict[event_type] = {
+                        "total": metrics.total_count,
+                        "success_rate": metrics.success_rate,
+                        "avg_processing_time": metrics.average_processing_time,
+                        "min_processing_time": metrics.min_processing_time if metrics.min_processing_time != float(
+                            'inf') else 0,
+                        "max_processing_time": metrics.max_processing_time
+                    }
+                except Exception as e:
+                    logger.error(f"Error processing event metrics for {event_type}: {repr(e)}")
+                    events_dict[event_type] = {"error": "Failed to process metrics"}
+            result["events"] = events_dict
+        except Exception as e:
+            logger.error(f"Error setting events: {repr(e)}")
+            result["events"] = {}
+
+        try:
+            result["handlers"] = handler_metrics
+        except Exception as e:
+            logger.error(f"Error setting handlers: {repr(e)}")
+            result["handlers"] = {}
+
+        try:
+            slow_events_list = []
+            for e in slow_events:
+                try:
+                    slow_events_list.append({
+                        "event_type": e.event_type,
+                        "processing_time": e.processing_time,
+                        "handler": e.handler_name,
+                        "timestamp": datetime.fromtimestamp(e.timestamp).isoformat()
+                    })
+                except Exception as ex:
+                    logger.error(f"Error processing slow event: {repr(ex)}")
+            result["slow_events"] = slow_events_list
+        except Exception as e:
+            logger.error(f"Error setting slow_events: {repr(e)}")
+            result["slow_events"] = []
+
+        logger.debug("Completed get_summary")
+        return result
 
     def get_metrics_collector(self) -> MetricsCollector:
         """Get the metrics collector instance"""

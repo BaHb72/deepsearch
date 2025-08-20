@@ -4,6 +4,7 @@ DeepSearch 的配置模型定义。
 本包包含按功能组织的所有配置模型类。
 """
 
+from .amazingdata import AmazingDataConfig
 from .app import AppConfig, AppEnvironment
 from .bus import BusInstanceConfig, MessageBusConfig, RouteConfig
 from .cache import RedisConfig
@@ -20,6 +21,8 @@ from .webui import WebUIConfig
 from .zeromq import ZeroMQConfig
 
 __all__ = [
+    # AmazingData
+    "AmazingDataConfig",
     # 应用
     "AppConfig",
     "AppEnvironment",

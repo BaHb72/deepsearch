@@ -107,3 +107,4 @@ WEBUI_*.md
 /deepsearch/webui/static/assets/
 /deepsearch/webui/static/index.html
 /data/
+/installer/

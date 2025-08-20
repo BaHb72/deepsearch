@@ -9,6 +9,7 @@ QMT (迅投) 量化交易终端集成模块
 - 交易指令执行
 """
 
+from .datafeed import QMTDataFeed
 from .models.tick import TickData, OrderBook
 from .models.trade import TradeData, OrderData
 
@@ -17,6 +18,7 @@ __all__ = [
     'OrderBook',
     'TradeData',
     'OrderData',
+    'QMTDataFeed',
 ]
 
 __version__ = '1.0.0'

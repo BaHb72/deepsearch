@@ -1,7 +1,7 @@
 """
 QMT数据提供者
 
-通过QMT网关获取市场数据，实现IDataProvider接口
+通过QMT网关获取市场数据
 """
 import asyncio
 import time
@@ -10,10 +10,8 @@ from typing import Dict, Any, List, Optional
 
 from loguru import logger
 
-from deepsearch.data_providers.base import IDataProvider
 
-
-class QMTDataProvider(IDataProvider):
+class QMTDataProvider:
     """QMT数据提供者 - 实现统一数据接口"""
 
     def __init__(self):
@@ -34,12 +32,13 @@ class QMTDataProvider(IDataProvider):
         """初始化QMT连接"""
         try:
             # 获取QMT网关实例
-            from deepsearch.core.container import get_container
-            container = get_container()
-
-            # 尝试获取QMT网关组件
+            # 通过全局上下文获取主引擎，然后获取组件
+            from deepsearch.core.context import get_context
             from deepsearch.core.unified_components import QMTGatewayComponent
-            self.gateway = container.resolve(QMTGatewayComponent)
+
+            context = get_context()
+            engine = context.get_engine()
+            self.gateway = engine.get_component(QMTGatewayComponent)
 
             if self.gateway:
                 # 尝试获取内部网关实例

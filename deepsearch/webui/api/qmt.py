@@ -139,13 +139,58 @@ async def subscribe_symbols(symbols: List[str]):
         raise HTTPException(status_code=503, detail="QMT网关未启动")
 
     try:
-        gateway.subscribe(symbols)
+        # 智能添加交易所后缀
+        def add_exchange_suffix(code: str) -> str:
+            """根据股票代码自动添加交易所后缀"""
+            if '.' in code:
+                return code  # 已有后缀，直接返回
+
+            # 根据股票代码判断交易所
+            if code.startswith('6'):
+                return f"{code}.SH"  # 上海证券交易所
+            elif code.startswith(('0', '3')):
+                return f"{code}.SZ"  # 深圳证券交易所
+            else:
+                return code
+
+        # 转换所有股票代码格式
+        formatted_symbols = [add_exchange_suffix(s) for s in symbols]
+        if formatted_symbols != symbols:
+            logger.info(f"股票代码格式转换: {symbols} -> {formatted_symbols}")
+
+        # 先更新订阅管理器（这是真正的订阅源）
+        from deepsearch.webui.api.qmt_subscription import subscription_manager
+        result = subscription_manager.update_subscription(formatted_symbols, action="add")
+        logger.info(f"更新订阅管理器: {result}")
+
+        # 然后更新gateway（用于内存缓存）
+        gateway.subscribe(formatted_symbols)
+
+        # 立即触发推送更新到所有客户端
+        try:
+            # 获取receiver组件并触发推送
+            from deepsearch.core.context import get_context
+            context = get_context()
+            if hasattr(context, '_component_manager'):
+                manager = context._component_manager
+                receiver_comp = manager.get_component("qmt_receiver")
+                if receiver_comp and hasattr(receiver_comp, 'receiver'):
+                    receiver = receiver_comp.receiver
+                    # 手动触发一次推送
+                    import asyncio
+                    asyncio.create_task(receiver.push_subscription_updates())
+                    logger.info(f"触发订阅更新推送: {symbols}")
+        except Exception as e:
+            logger.warning(f"无法触发即时推送: {e}")
+        
         return {
             "status": "success",
             "message": f"已订阅 {len(symbols)} 只股票",
             "data": {
                 "symbols": symbols,
-                "total": len(gateway.subscribed_symbols)
+                "total": len(gateway.subscribed_symbols),
+                "affected_clients": result.get('affected_clients', []),
+                "global_subscribed": len(subscription_manager.global_symbols)
             }
         }
     except Exception as e:
@@ -167,13 +212,21 @@ async def unsubscribe_symbols(symbols: List[str]):
         raise HTTPException(status_code=503, detail="QMT网关未启动")
 
     try:
+        # 更新gateway订阅列表
         gateway.unsubscribe(symbols)
+
+        # 同步更新subscription_manager
+        from deepsearch.webui.api.qmt_subscription import subscription_manager
+        result = subscription_manager.update_subscription(symbols, action="remove")
+        logger.info(f"同步更新订阅管理器（取消订阅）: {result}")
+        
         return {
             "status": "success",
             "message": f"已取消订阅 {len(symbols)} 只股票",
             "data": {
                 "symbols": symbols,
-                "total": len(gateway.subscribed_symbols)
+                "total": len(gateway.subscribed_symbols),
+                "affected_clients": result.get('affected_clients', [])
             }
         }
     except Exception as e:
@@ -308,118 +361,40 @@ async def get_latest_orderbook(symbol: str):
     
     Args:
         symbol: 股票代码
+    
+    注意：此接口专门用于QMT数据，不处理其他数据源
     """
-    logger.info(f"API收到获取盘口数据请求: {symbol}")
+    logger.info(f"QMT API收到获取盘口数据请求: {symbol}")
 
-    # 使用新的数据源管理器
-    from deepsearch.data_providers.data_source_manager import (
-        get_data_source_manager
-    )
-    from deepsearch.config import get_config
+    # 智能添加交易所后缀
+    def add_exchange_suffix(code: str) -> str:
+        """根据股票代码自动添加交易所后缀"""
+        if '.' in code:
+            return code  # 已有后缀，直接返回
 
-    config = get_config()
-    manager = get_data_source_manager()
-
-    # 首先检查QMT是否启用
-    if config.qmt and config.qmt.enabled:
-        gateway = get_qmt_gateway()
-        logger.debug(f"获取到的网关类型: {type(gateway).__name__ if gateway else 'None'}")
-
-        # 尝试从QMT获取数据
-        if gateway:
-            try:
-                # 检查是否已订阅该股票
-                if hasattr(gateway, 'subscribed_symbols') and symbol not in gateway.subscribed_symbols:
-                    logger.info(f"股票 {symbol} 未订阅，自动订阅...")
-                    if hasattr(gateway, 'subscribe'):
-                        gateway.subscribe([symbol])
-                        # 等待数据到达（最多等待2秒）
-                        for i in range(20):  # 20次，每次100ms
-                            await asyncio.sleep(0.1)
-                            if hasattr(gateway, 'get_latest_orderbook'):
-                                orderbook = gateway.get_latest_orderbook(symbol)
-                                if orderbook:
-                                    logger.info(f"成功获取 {symbol} 的QMT盘口数据")
-                                    return {
-                                        "status": "success",
-                                        "source": "qmt",
-                                        "data": orderbook
-                                    }
-                else:
-                    # 已订阅，直接获取
-                    if hasattr(gateway, 'get_latest_orderbook'):
-                        logger.debug(f"调用 gateway.get_latest_orderbook({symbol})")
-                        orderbook = gateway.get_latest_orderbook(symbol)
-                        if orderbook:
-                            logger.info(f"成功获取QMT盘口数据: {symbol}")
-                            return {
-                                "status": "success",
-                                "source": "qmt",
-                                "data": orderbook
-                            }
-                        else:
-                            logger.debug(f"gateway.get_latest_orderbook({symbol}) 返回 None")
-            except Exception as e:
-                logger.warning(f"从QMT获取盘口数据失败: {e}")
-
-    # 检查配置以决定是否使用备用数据源
-    use_fallback = False
-
-    # 如果是QMT Only模式，不使用备用源
-    if QMT_ONLY_MODE:
-        logger.info(f"QMT Only Mode - 不尝试备用数据源，返回空盘口")
-        return {
-            "status": "success",
-            "source": "qmt",
-            "message": "QMT数据源未返回盘口数据",
-            "data": {
-                "symbol": symbol,
-                "timestamp": int(time.time()),
-                "bid_levels": [],
-                "ask_levels": []
-            }
-        }
-
-    # 检查配置中是否允许回退
-    if config.data_providers:
-        # 检查是否有配置启用的备用数据源
-        providers_config = config.data_providers
-
-        # 检查各数据源是否启用
-        if hasattr(providers_config, '__dict__'):
-            # 如果是对象，转换为字典
-            providers_dict = providers_config.__dict__
+        # 根据股票代码判断交易所
+        if code.startswith('6'):
+            return f"{code}.SH"  # 上海证券交易所
+        elif code.startswith(('0', '3')):
+            return f"{code}.SZ"  # 深圳证券交易所
         else:
-            providers_dict = providers_config
+            # 对于其他代码，返回原始代码
+            return code
 
-        akshare_enabled = False
-        cloudflare_enabled = False
+    # 转换股票代码格式
+    formatted_symbol = add_exchange_suffix(symbol)
+    if formatted_symbol != symbol:
+        logger.info(f"股票代码格式转换: {symbol} -> {formatted_symbol}")
 
-        # 检查 akshare_proxy
-        if 'akshare_proxy' in providers_dict:
-            akshare_cfg = providers_dict['akshare_proxy']
-            if isinstance(akshare_cfg, dict):
-                akshare_enabled = akshare_cfg.get('enabled', False)
-            elif hasattr(akshare_cfg, 'enabled'):
-                akshare_enabled = akshare_cfg.enabled
+    gateway = get_qmt_gateway()
 
-        # 检查 cloudflare_proxy  
-        if 'cloudflare_proxy' in providers_dict:
-            cloudflare_cfg = providers_dict['cloudflare_proxy']
-            if isinstance(cloudflare_cfg, dict):
-                cloudflare_enabled = cloudflare_cfg.get('enabled', False)
-            elif hasattr(cloudflare_cfg, 'enabled'):
-                cloudflare_enabled = cloudflare_cfg.enabled
-
-        use_fallback = akshare_enabled or cloudflare_enabled
-        logger.debug(f"数据源状态 - AkShare: {akshare_enabled}, CloudFlare: {cloudflare_enabled}")
-
-    if not use_fallback:
-        logger.info("没有配置启用的备用数据源，返回空盘口")
+    # 如果QMT网关未启动
+    if not gateway:
+        logger.warning("QMT网关未启动")
         return {
-            "status": "warning",
-            "source": "none",
-            "message": "无可用数据源",
+            "status": "error",
+            "source": "qmt",
+            "message": "QMT网关未启动",
             "data": {
                 "symbol": symbol,
                 "timestamp": int(time.time()),
@@ -427,38 +402,72 @@ async def get_latest_orderbook(symbol: str):
                 "ask_levels": []
             }
         }
-
-    # 使用新的数据源管理器获取数据
-    logger.info(f"QMT无盘口数据，使用配置的备用数据源...")
 
     try:
-        # 初始化管理器
-        if not manager.initialized:
-            await manager.initialize()
+        # 检查是否已订阅该股票（使用格式化后的代码）
+        if hasattr(gateway, 'subscribed_symbols'):
+            # 同时检查原始代码和格式化代码
+            if formatted_symbol not in gateway.subscribed_symbols and symbol not in gateway.subscribed_symbols:
+                logger.info(f"股票 {formatted_symbol} 未订阅，自动订阅...")
+                if hasattr(gateway, 'subscribe'):
+                    gateway.subscribe([formatted_symbol])
+                    # 等待数据到达（最多等待2秒）
+                    for i in range(20):  # 20次，每次100ms
+                        await asyncio.sleep(0.1)
+                        if hasattr(gateway, 'get_latest_orderbook'):
+                            # 尝试使用格式化代码获取
+                            orderbook = gateway.get_latest_orderbook(formatted_symbol)
+                            if not orderbook and formatted_symbol != symbol:
+                                # 如果失败，尝试原始代码
+                                orderbook = gateway.get_latest_orderbook(symbol)
 
-        # 获取数据（管理器会根据配置选择合适的数据源）
-        result = await manager.get_data(
-            data_type="orderbook",
-            symbol=symbol
-        )
+                            if orderbook:
+                                logger.info(f"成功获取 {formatted_symbol} 的QMT盘口数据")
+                                return {
+                                    "status": "success",
+                                    "source": "qmt",
+                                    "data": orderbook
+                                }
 
-        if result:
-            logger.info(f"从 {result.get('source')} 获取盘口数据成功")
-            return {
-                "status": "success",
-                "source": result.get('source', 'unknown'),
-                "message": "使用备用数据源",
-                "data": result
-            }
+        # 直接获取盘口数据（先尝试格式化代码，再尝试原始代码）
+        if hasattr(gateway, 'get_latest_orderbook'):
+            logger.debug(f"调用 gateway.get_latest_orderbook({formatted_symbol})")
+            orderbook = gateway.get_latest_orderbook(formatted_symbol)
+
+            # 如果格式化代码失败，尝试原始代码
+            if not orderbook and formatted_symbol != symbol:
+                logger.debug(f"格式化代码无数据，尝试原始代码: {symbol}")
+                orderbook = gateway.get_latest_orderbook(symbol)
+
+            if orderbook:
+                logger.info(f"成功获取QMT盘口数据: {formatted_symbol}")
+                return {
+                    "status": "success",
+                    "source": "qmt",
+                    "data": orderbook
+                }
+            else:
+                logger.debug(f"QMT暂无 {formatted_symbol} 的盘口数据")
+
     except Exception as e:
-        logger.warning(f"从数据源管理器获取数据失败: {e}")
+        logger.error(f"从QMT获取盘口数据异常: {e}")
+        return {
+            "status": "error",
+            "source": "qmt",
+            "message": str(e),
+            "data": {
+                "symbol": symbol,
+                "timestamp": int(time.time()),
+                "bid_levels": [],
+                "ask_levels": []
+            }
+        }
 
-    # 所有配置的数据源都失败，返回空盘口
-    logger.warning(f"所有数据源都无法获取 {symbol} 的盘口数据")
+    # QMT没有数据（正常情况，可能未收到推送）
     return {
         "status": "warning",
-        "source": "none",
-        "message": "暂无可用数据源",
+        "source": "qmt",
+        "message": "暂无数据（等待QMT推送）",
         "data": {
             "symbol": symbol,
             "timestamp": int(time.time()),

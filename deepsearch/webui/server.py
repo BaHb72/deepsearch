@@ -451,6 +451,14 @@ def create_app() -> FastAPI:
         app.include_router(miniqmt.router, tags=["MiniQMT"])  # MiniQMT数据路由，已包含 /api/miniqmt 前缀
     except ImportError:
         logger.warning("MiniQMT API 模块未找到，跳过注册")
+
+    # Strategy API
+    try:
+        from deepsearch.webui.api import strategy_api
+        app.include_router(strategy_api.router, tags=["Strategy"])  # 策略管理API，已包含 /api/strategy 前缀
+        logger.info("策略管理API已注册")
+    except ImportError as e:
+        logger.warning(f"策略管理API模块加载失败: {e}")
     # 注释掉 Cloudflare Tunnel API，因为不需要映射 webui 端口
     # Cloudflare Tunnel 已移除（使用 Workers 代理方案）
 

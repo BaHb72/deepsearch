@@ -27,6 +27,24 @@ EVENT_ERROR: str = "ERROR"  # 错误信息
 EVENT_LOG: str = "LOG"  # 日志事件
 
 # ==============================================================================
+# Strategy Event Types
+# ==============================================================================
+
+# Strategy lifecycle events
+EVENT_STRATEGY_STARTED: str = "STRATEGY_STARTED"  # 策略启动
+EVENT_STRATEGY_STOPPED: str = "STRATEGY_STOPPED"  # 策略停止
+EVENT_STRATEGY_PAUSED: str = "STRATEGY_PAUSED"  # 策略暂停
+EVENT_STRATEGY_RESUMED: str = "STRATEGY_RESUMED"  # 策略恢复
+
+# Strategy signal events
+EVENT_STRATEGY_SIGNAL: str = "STRATEGY_SIGNAL"  # 策略信号
+EVENT_STRATEGY_ORDER_SUBMIT: str = "STRATEGY_ORDER_SUBMIT"  # 策略提交订单
+EVENT_STRATEGY_ORDER_CANCEL: str = "STRATEGY_ORDER_CANCEL"  # 策略取消订单
+
+# Strategy performance events
+EVENT_STRATEGY_PERFORMANCE: str = "STRATEGY_PERFORMANCE"  # 策略性能更新
+
+# ==============================================================================
 # Reserved Event Types (Not Yet Implemented)
 # ==============================================================================
 

@@ -192,10 +192,13 @@ class QMTGateway(Component):
         """处理Level2十档盘口数据"""
         try:
             data = msg.get('data', {})
+            symbol = data.get('symbol', '')
+
+            logger.info(f"[LEVEL2] 收到盘口数据: symbol={symbol}, client={client_id}, data_keys={list(data.keys())}")
 
             # 创建OrderBook对象
             orderbook = OrderBook(
-                symbol=data.get('symbol', ''),
+                symbol=symbol,
                 timestamp=data.get('timestamp', time.time())
             )
 
@@ -223,8 +226,17 @@ class QMTGateway(Component):
                         volume=ask_volumes[i]
                     ))
 
-            # 更新缓存
+            # 更新缓存 - 存储多个键以支持不同格式的查询
             self.latest_orderbooks[orderbook.symbol] = orderbook
+
+            # 如果包含后缀，也存储不带后缀的版本
+            if '.' in orderbook.symbol:
+                pure_code = orderbook.symbol.split('.')[0]
+                self.latest_orderbooks[pure_code] = orderbook
+                logger.debug(f"同时缓存纯代码: {pure_code}")
+
+            logger.info(
+                f"[LEVEL2] 缓存更新成功: {orderbook.symbol}, 买档数={len(orderbook.bid_levels)}, 卖档数={len(orderbook.ask_levels)}, 缓存总数={len(self.latest_orderbooks)}")
 
             # 发布事件
             self._publish_orderbook_event(orderbook)
@@ -344,17 +356,72 @@ class QMTGateway(Component):
         self.event_engine.put(event)
 
     def subscribe(self, symbols: List[str]):
-        """订阅股票（记录订阅信息）"""
+        """订阅股票并通知采集器"""
+        import uuid
+
+        # 添加到本地订阅列表
         for symbol in symbols:
             self.subscribed_symbols.add(symbol)
-        logger.info(f"订阅股票: {symbols}")
+            logger.debug(f"添加到订阅列表: {symbol}")
 
+        # 向所有连接的采集器发送订阅请求
+        if self.receiver and hasattr(self.receiver, 'client_writers'):
+            request_id = f"req_{uuid.uuid4().hex[:8]}"
+            subscribe_msg = {
+                'type': 'SUBSCRIBE',
+                'symbols': symbols,
+                'data_types': ['TICK', 'LEVEL2'],
+                'request_id': request_id
+            }
+
+            # 发送给所有客户端
+            asyncio.create_task(self._broadcast_to_collectors(subscribe_msg))
+            logger.info(
+                f"发送订阅请求到采集器: {symbols}, request_id: {request_id}, 客户端数量: {len(self.receiver.client_writers)}")
+        else:
+            logger.warning(f"无法发送订阅请求，接收器未就绪或无客户端连接")
+
+        logger.info(f"订阅股票完成: {symbols}, 当前订阅总数: {len(self.subscribed_symbols)}")
+
+    async def _broadcast_to_collectors(self, message: Dict):
+        """向所有采集器广播消息"""
+        if not self.receiver:
+            return
+
+        try:
+            # 获取所有客户端writer
+            for client_id, writer in self.receiver.client_writers.items():
+                try:
+                    await self.receiver._send_message(writer, message)
+                    logger.debug(f"发送消息到采集器 {client_id}: {message.get('type')}")
+                except Exception as e:
+                    logger.error(f"发送消息到 {client_id} 失败: {e}")
+        except Exception as e:
+            logger.error(f"广播消息失败: {e}")
+    
     def unsubscribe(self, symbols: List[str]):
-        """取消订阅股票"""
+        """取消订阅股票并通知采集器"""
+        import uuid
+
+        # 从本地订阅列表移除
         for symbol in symbols:
             self.subscribed_symbols.discard(symbol)
             self.latest_ticks.pop(symbol, None)
             self.latest_orderbooks.pop(symbol, None)
+
+        # 向所有连接的采集器发送取消订阅请求
+        if self.receiver and hasattr(self.receiver, 'client_writers'):
+            request_id = f"req_{uuid.uuid4().hex[:8]}"
+            unsubscribe_msg = {
+                'type': 'UNSUBSCRIBE',
+                'symbols': symbols,
+                'request_id': request_id
+            }
+
+            # 发送给所有客户端
+            asyncio.create_task(self._broadcast_to_collectors(unsubscribe_msg))
+            logger.info(f"发送取消订阅请求到采集器: {symbols}, request_id: {request_id}")
+        
         logger.info(f"取消订阅股票: {symbols}")
 
     def get_latest_tick(self, symbol: str) -> Optional[Dict]:
