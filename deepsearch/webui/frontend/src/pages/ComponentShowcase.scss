@@ -1,0 +1,225 @@
+// Component Showcase Page Styles
+
+@import '../styles/variables.css';
+
+.component-showcase {
+  min-height: 100vh;
+  background: var(--bg-secondary);
+  padding: var(--spacing-2xl) var(--spacing-lg);
+  
+  .showcase-header {
+    text-align: center;
+    margin-bottom: var(--spacing-2xl);
+    padding: var(--spacing-2xl);
+    background: var(--bg-primary);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--card-shadow);
+    
+    h1 {
+      font-size: var(--font-size-3xl);
+      font-weight: var(--font-weight-bold);
+      color: var(--text-primary);
+      margin: 0 0 var(--spacing-md) 0;
+    }
+    
+    p {
+      font-size: var(--font-size-lg);
+      color: var(--text-secondary);
+      margin: 0 0 var(--spacing-lg) 0;
+    }
+  }
+  
+  .showcase-section {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    margin-bottom: var(--spacing-xl);
+    box-shadow: var(--card-shadow);
+    
+    h2 {
+      font-size: var(--font-size-2xl);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-primary);
+      margin: 0 0 var(--spacing-xl) 0;
+      padding-bottom: var(--spacing-md);
+      border-bottom: 2px solid var(--border-light);
+    }
+  }
+  
+  .showcase-group {
+    margin-bottom: var(--spacing-xl);
+    
+    &:last-child {
+      margin-bottom: 0;
+    }
+    
+    h3 {
+      font-size: var(--font-size-lg);
+      font-weight: var(--font-weight-medium);
+      color: var(--text-primary);
+      margin: 0 0 var(--spacing-md) 0;
+    }
+  }
+  
+  .showcase-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+    align-items: center;
+  }
+  
+  .showcase-column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    max-width: 600px;
+  }
+  
+  // Financial stats styling
+  .financial-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-md);
+    
+    .stat-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: var(--spacing-sm) 0;
+      border-bottom: 1px solid var(--border-light);
+      
+      .stat-label {
+        font-size: var(--font-size-sm);
+        color: var(--text-secondary);
+      }
+      
+      .stat-value {
+        font-size: var(--font-size-base);
+        font-weight: var(--font-weight-semibold);
+        color: var(--text-primary);
+      }
+    }
+  }
+  
+  // Color palette preview
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--spacing-xl);
+    
+    .color-group {
+      h4 {
+        font-size: var(--font-size-base);
+        font-weight: var(--font-weight-medium);
+        color: var(--text-secondary);
+        margin: 0 0 var(--spacing-sm) 0;
+      }
+      
+      .color-swatches {
+        display: flex;
+        gap: var(--spacing-sm);
+        
+        .color-swatch {
+          flex: 1;
+          height: 80px;
+          border-radius: var(--radius-md);
+          display: flex;
+          align-items: flex-end;
+          padding: var(--spacing-sm);
+          position: relative;
+          overflow: hidden;
+          transition: transform var(--duration-fast) var(--easing-base);
+          
+          &:hover {
+            transform: translateY(-2px);
+          }
+          
+          span {
+            font-size: var(--font-size-xs);
+            font-weight: var(--font-weight-medium);
+            color: white;
+            background: rgba(0, 0, 0, 0.3);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border-radius: var(--radius-sm);
+            backdrop-filter: blur(4px);
+          }
+        }
+      }
+    }
+  }
+  
+  // Typography samples
+  .typography-samples {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    
+    > div {
+      color: var(--text-primary);
+      line-height: var(--line-height-base);
+      padding: var(--spacing-sm) 0;
+      border-bottom: 1px solid var(--border-light);
+      
+      &:last-child {
+        border-bottom: none;
+      }
+    }
+  }
+  
+  // Responsive design
+  @media (max-width: 768px) {
+    padding: var(--spacing-lg) var(--spacing-md);
+    
+    .showcase-header {
+      padding: var(--spacing-lg);
+      
+      h1 {
+        font-size: var(--font-size-2xl);
+      }
+      
+      p {
+        font-size: var(--font-size-base);
+      }
+    }
+    
+    .showcase-section {
+      padding: var(--spacing-lg);
+      
+      h2 {
+        font-size: var(--font-size-xl);
+      }
+    }
+    
+    .financial-stats {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  @media (max-width: 576px) {
+    padding: var(--spacing-md);
+    
+    .showcase-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    
+    .color-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+// Dark theme specific adjustments
+[data-theme="dark"] {
+  .component-showcase {
+    .showcase-header,
+    .showcase-section {
+      background: var(--bg-primary);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    
+    .color-swatch span {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  }
+}

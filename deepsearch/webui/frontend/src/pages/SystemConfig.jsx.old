@@ -1,0 +1,1325 @@
+import React, { useState, useEffect } from 'react'
+import {
+  Card,
+  Tabs,
+  Form,
+  Input,
+  Button,
+  Table,
+  Space,
+  Switch,
+  Select,
+  Modal,
+  message,
+  Tag,
+  Badge,
+  Alert,
+  Row,
+  Col,
+  Divider,
+  Typography,
+  Tooltip,
+  Popconfirm,
+  InputNumber,
+  Drawer,
+  Descriptions,
+  Timeline,
+  Progress,
+  Checkbox,
+  Radio,
+  Statistic
+} from 'antd'
+import { ProCard, ProTable, ProForm, ProFormText, ProFormSelect, ProFormDigit, ProFormSwitch } from '@ant-design/pro-components'
+import {
+  DatabaseOutlined,
+  ApiOutlined,
+  AppstoreOutlined,
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  SyncOutlined,
+  ReloadOutlined,
+  SettingOutlined,
+  LinkOutlined,
+  CloudOutlined,
+  ThunderboltOutlined,
+  SaveOutlined,
+  ExportOutlined,
+  ImportOutlined,
+  WarningOutlined,
+  InfoCircleOutlined,
+  KeyOutlined,
+  LockOutlined,
+  UnlockOutlined,
+  PoweroffOutlined,
+  PlayCircleOutlined,
+  PauseCircleOutlined,
+  CheckOutlined,
+  CloseOutlined
+} from '@ant-design/icons'
+
+const { Title, Text, Paragraph } = Typography
+const { Option } = Select
+
+const SystemConfig = () => {
+  const [activeTab, setActiveTab] = useState('database')
+  const [dbModalVisible, setDbModalVisible] = useState(false)
+  const [dataSourceModalVisible, setDataSourceModalVisible] = useState(false)
+  const [moduleDrawerVisible, setModuleDrawerVisible] = useState(false)
+  const [editingDb, setEditingDb] = useState(null)
+  const [editingDataSource, setEditingDataSource] = useState(null)
+  const [selectedModule, setSelectedModule] = useState(null)
+  const [testingConnection, setTestingConnection] = useState(false)
+  
+  // Database connections state
+  const [dbConnections, setDbConnections] = useState([
+    {
+      id: 1,
+      name: 'Main PostgreSQL',
+      type: 'postgresql',
+      host: '192.168.1.100',
+      port: 5432,
+      database: 'deepsearch',
+      username: 'admin',
+      status: 'connected',
+      poolSize: 20,
+      activeConnections: 5,
+      isDefault: true,
+      ssl: true
+    },
+    {
+      id: 2,
+      name: 'Analytics DuckDB',
+      type: 'duckdb',
+      path: '/data/analytics/market.duckdb',
+      status: 'connected',
+      isDefault: false,
+      readonly: false
+    },
+    {
+      id: 3,
+      name: 'Cache Redis',
+      type: 'redis',
+      host: '192.168.1.101',
+      port: 6379,
+      database: 0,
+      status: 'connected',
+      isDefault: false,
+      password: '******'
+    }
+  ])
+
+  // Data sources state
+  const [dataSources, setDataSources] = useState([
+    {
+      id: 1,
+      name: 'AmazingData',
+      type: 'amazingdata',
+      url: 'https://api.amazingdata.com/v1',
+      apiKey: 'ak_********************************',
+      enabled: true,
+      priority: 1,
+      rateLimit: 100,
+      timeout: 5000,
+      retries: 3,
+      status: 'healthy',
+      lastCheck: '2025-01-20 10:30:00'
+    },
+    {
+      id: 2,
+      name: 'CloudFlare Workers',
+      type: 'cloudflare',
+      url: 'https://workers.cloudflare.com/api',
+      token: 'cf_********************************',
+      enabled: true,
+      priority: 2,
+      rateLimit: 50,
+      timeout: 10000,
+      retries: 2,
+      status: 'healthy',
+      lastCheck: '2025-01-20 10:29:00'
+    },
+    {
+      id: 3,
+      name: 'QMT Gateway',
+      type: 'qmt',
+      url: 'tcp://127.0.0.1:8888',
+      username: 'qmt_user',
+      password: '******',
+      enabled: false,
+      priority: 3,
+      timeout: 3000,
+      retries: 1,
+      status: 'offline',
+      lastCheck: '2025-01-20 10:25:00'
+    },
+    {
+      id: 4,
+      name: 'AKShare Direct',
+      type: 'akshare',
+      url: 'direct',
+      enabled: true,
+      priority: 4,
+      rateLimit: 10,
+      timeout: 30000,
+      retries: 1,
+      status: 'warning',
+      lastCheck: '2025-01-20 10:28:00'
+    }
+  ])
+
+  // System modules state
+  const [systemModules, setSystemModules] = useState([
+    {
+      id: 'event_engine',
+      name: '事件引擎',
+      description: '核心事件处理引擎',
+      version: '2.0.1',
+      status: 'running',
+      enabled: true,
+      memory: 256,
+      cpu: 12.5,
+      uptime: 86400,
+      autoStart: true,
+      critical: true,
+      dependencies: ['message_bus', 'cache_system']
+    },
+    {
+      id: 'message_bus',
+      name: '消息总线',
+      description: 'ZeroMQ消息分发',
+      version: '1.5.0',
+      status: 'running',
+      enabled: true,
+      memory: 128,
+      cpu: 5.2,
+      uptime: 86400,
+      autoStart: true,
+      critical: true,
+      dependencies: []
+    },
+    {
+      id: 'cache_system',
+      name: '缓存系统',
+      description: '多层缓存层',
+      version: '1.2.3',
+      status: 'running',
+      enabled: true,
+      memory: 512,
+      cpu: 8.3,
+      uptime: 86400,
+      autoStart: true,
+      critical: false,
+      dependencies: ['redis']
+    },
+    {
+      id: 'analytics_engine',
+      name: '分析引擎',
+      description: '实时数据分析',
+      version: '3.1.0',
+      status: 'stopped',
+      enabled: false,
+      memory: 0,
+      cpu: 0,
+      uptime: 0,
+      autoStart: false,
+      critical: false,
+      dependencies: ['event_engine', 'cache_system']
+    },
+    {
+      id: 'backtest_engine',
+      name: '回测引擎',
+      description: '策略回测模块',
+      version: '1.8.5',
+      status: 'running',
+      enabled: true,
+      memory: 384,
+      cpu: 15.7,
+      uptime: 43200,
+      autoStart: false,
+      critical: false,
+      dependencies: ['event_engine', 'data_providers']
+    },
+    {
+      id: 'data_providers',
+      name: '数据提供器',
+      description: '统一数据提供器接口',
+      version: '2.5.0',
+      status: 'running',
+      enabled: true,
+      memory: 192,
+      cpu: 6.8,
+      uptime: 86400,
+      autoStart: true,
+      critical: true,
+      dependencies: ['cache_system']
+    }
+  ])
+
+  // Database connection form
+  const DatabaseForm = ({ initialValues, onSubmit }) => {
+    const [form] = Form.useForm()
+    const [dbType, setDbType] = useState(initialValues?.type || 'postgresql')
+    
+    return (
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={initialValues}
+        onFinish={onSubmit}
+      >
+        <Form.Item
+          name="name"
+          label="连接名称"
+          rules={[{ required: true, message: '请输入连接名称' }]}
+        >
+          <Input placeholder="例如：主数据库" />
+        </Form.Item>
+        
+        <Form.Item
+          name="type"
+          label="数据库类型"
+          rules={[{ required: true, message: '请选择数据库类型' }]}
+        >
+          <Select onChange={setDbType}>
+            <Option value="postgresql">PostgreSQL</Option>
+            <Option value="mysql">MySQL</Option>
+            <Option value="duckdb">DuckDB</Option>
+            <Option value="redis">Redis</Option>
+            <Option value="mongodb">MongoDB</Option>
+          </Select>
+        </Form.Item>
+        
+        {dbType !== 'duckdb' && (
+          <Row gutter={16}>
+            <Col span={16}>
+              <Form.Item
+                name="host"
+                label="主机地址"
+                rules={[{ required: true, message: '请输入主机地址' }]}
+              >
+                <Input placeholder="例如：localhost 或 192.168.1.100" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="port"
+                label="端口"
+                rules={[{ required: true, message: '请输入端口' }]}
+              >
+                <InputNumber min={1} max={65535} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+        )}
+        
+        {dbType === 'duckdb' ? (
+          <Form.Item
+            name="path"
+            label="数据库文件路径"
+            rules={[{ required: true, message: '请输入数据库文件路径' }]}
+          >
+            <Input placeholder="例如：/data/analytics/market.duckdb" />
+          </Form.Item>
+        ) : (
+          <Form.Item
+            name="database"
+            label={dbType === 'redis' ? '数据库索引' : '数据库名称'}
+            rules={[{ required: dbType !== 'redis', message: '请输入数据库名称' }]}
+          >
+            {dbType === 'redis' ? (
+              <InputNumber min={0} max={15} defaultValue={0} style={{ width: '100%' }} placeholder="默认为0" />
+            ) : (
+              <Input placeholder="例如：deepsearch" />
+            )}
+          </Form.Item>
+        )}
+        
+        {dbType !== 'duckdb' && (
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="username"
+                label="用户名"
+                rules={[{ required: dbType !== 'redis', message: '请输入用户名' }]}
+              >
+                <Input placeholder={dbType === 'redis' ? '可选' : '数据库用户名'} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="password"
+                label="密码"
+                rules={[{ required: false }]}
+              >
+                <Input.Password placeholder={dbType === 'redis' ? 'Redis密码（可选）' : '数据库密码'} />
+              </Form.Item>
+            </Col>
+          </Row>
+        )}
+        
+        <Row gutter={16}>
+          {dbType !== 'redis' && dbType !== 'duckdb' && (
+            <Col span={8}>
+              <Form.Item
+                name="poolSize"
+                label="连接池大小"
+              >
+                <InputNumber min={1} max={100} defaultValue={10} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          )}
+          {dbType !== 'redis' && dbType !== 'duckdb' && (
+            <Col span={8}>
+              <Form.Item
+                name="ssl"
+                label="SSL加密"
+                valuePropName="checked"
+              >
+                <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+              </Form.Item>
+            </Col>
+          )}
+          <Col span={dbType === 'redis' || dbType === 'duckdb' ? 24 : 8}>
+            <Form.Item
+              name="isDefault"
+              label="默认连接"
+              valuePropName="checked"
+            >
+              <Switch checkedChildren="是" unCheckedChildren="否" />
+            </Form.Item>
+          </Col>
+        </Row>
+        
+        <Form.Item>
+          <Space>
+            <Button
+              type="primary"
+              htmlType="submit"
+              icon={<SaveOutlined />}
+            >
+              保存连接
+            </Button>
+            <Button
+              icon={<LinkOutlined />}
+              onClick={() => testConnection(form.getFieldsValue())}
+              loading={testingConnection}
+            >
+              测试连接
+            </Button>
+          </Space>
+        </Form.Item>
+      </Form>
+    )
+  }
+
+  // Data source form
+  const DataSourceForm = ({ initialValues, onSubmit }) => {
+    const [form] = Form.useForm()
+    
+    return (
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={initialValues}
+        onFinish={onSubmit}
+      >
+        <Form.Item
+          name="name"
+          label="数据源名称"
+          rules={[{ required: true, message: '请输入数据源名称' }]}
+        >
+          <Input placeholder="例如：AmazingData API" />
+        </Form.Item>
+        
+        <Form.Item
+          name="type"
+          label="数据源类型"
+          rules={[{ required: true, message: '请选择数据源类型' }]}
+        >
+          <Select>
+            <Option value="amazingdata">AmazingData</Option>
+            <Option value="cloudflare">CloudFlare Workers</Option>
+            <Option value="qmt">QMT Gateway</Option>
+            <Option value="akshare">AKShare</Option>
+            <Option value="custom">自定义API</Option>
+          </Select>
+        </Form.Item>
+        
+        <Form.Item
+          name="url"
+          label="API地址"
+          rules={[{ required: true, message: '请输入API地址' }]}
+        >
+          <Input placeholder="https://api.example.com/v1" />
+        </Form.Item>
+        
+        <Form.Item
+          name="apiKey"
+          label="API密钥/令牌"
+        >
+          <Input.Password placeholder="您的API密钥或令牌" />
+        </Form.Item>
+        
+        <Row gutter={16}>
+          <Col span={8}>
+            <Form.Item
+              name="priority"
+              label="优先级"
+              tooltip="数字越小优先级越高"
+            >
+              <InputNumber min={1} max={10} defaultValue={5} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item
+              name="rateLimit"
+              label="速率限制(请求/秒)"
+            >
+              <InputNumber min={1} max={1000} defaultValue={10} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item
+              name="timeout"
+              label="超时时间(毫秒)"
+            >
+              <InputNumber min={100} max={60000} defaultValue={5000} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+        </Row>
+        
+        <Row gutter={16}>
+          <Col span={8}>
+            <Form.Item
+              name="retries"
+              label="最大重试次数"
+            >
+              <InputNumber min={0} max={10} defaultValue={3} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item
+              name="enabled"
+              label="状态"
+              valuePropName="checked"
+            >
+              <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+            </Form.Item>
+          </Col>
+        </Row>
+        
+        <Form.Item
+          name="headers"
+          label="自定义请求头(JSON格式)"
+        >
+          <Input.TextArea
+            rows={3}
+            placeholder='{"Authorization": "Bearer token", "X-Custom": "value"}'
+          />
+        </Form.Item>
+        
+        <Form.Item>
+          <Space>
+            <Button
+              type="primary"
+              htmlType="submit"
+              icon={<SaveOutlined />}
+            >
+              保存数据源
+            </Button>
+            <Button
+              icon={<LinkOutlined />}
+              onClick={() => testDataSource(form.getFieldsValue())}
+            >
+              测试连接
+            </Button>
+          </Space>
+        </Form.Item>
+      </Form>
+    )
+  }
+
+  // Test database connection
+  const testConnection = async (values) => {
+    setTestingConnection(true)
+    // Simulate API call
+    setTimeout(() => {
+      message.success('连接成功！')
+      setTestingConnection(false)
+    }, 2000)
+  }
+
+  // Test data source
+  const testDataSource = async (values) => {
+    message.loading('正在测试数据源连接...')
+    setTimeout(() => {
+      message.success('数据源可以访问！')
+    }, 1500)
+  }
+
+  // Handle module toggle
+  const handleModuleToggle = (moduleId, enabled) => {
+    Modal.confirm({
+      title: `${enabled ? '启用' : '禁用'}模块`,
+      content: `您确定要${enabled ? '启用' : '禁用'}此模块吗？`,
+      onOk: () => {
+        setSystemModules(prev => prev.map(m => 
+          m.id === moduleId ? { ...m, enabled, status: enabled ? 'starting' : 'stopping' } : m
+        ))
+        
+        setTimeout(() => {
+          setSystemModules(prev => prev.map(m => 
+            m.id === moduleId ? { ...m, status: enabled ? 'running' : 'stopped' } : m
+          ))
+          message.success(`模块${enabled ? '启用' : '禁用'}成功`)
+        }, 2000)
+      }
+    })
+  }
+
+  // Database connections columns
+  const dbColumns = [
+    {
+      title: '名称',
+      dataIndex: 'name',
+      key: 'name',
+      render: (text, record) => (
+        <Space>
+          <DatabaseOutlined />
+          <span>{text}</span>
+          {record.isDefault && <Tag color="blue">默认</Tag>}
+        </Space>
+      )
+    },
+    {
+      title: '类型',
+      dataIndex: 'type',
+      key: 'type',
+      render: (type) => (
+        <Tag color="geekblue">{type.toUpperCase()}</Tag>
+      )
+    },
+    {
+      title: '主机',
+      dataIndex: 'host',
+      key: 'host',
+      render: (host, record) => record.path || `${host}:${record.port}`
+    },
+    {
+      title: '数据库',
+      dataIndex: 'database',
+      key: 'database'
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status) => (
+        <Badge
+          status={status === 'connected' ? 'success' : 'error'}
+          text={status === 'connected' ? '已连接' : '未连接'}
+        />
+      )
+    },
+    {
+      title: '连接池',
+      key: 'pool',
+      render: (_, record) => record.poolSize ? `${record.activeConnections || 0}/${record.poolSize}` : 'N/A'
+    },
+    {
+      title: 'SSL加密',
+      dataIndex: 'ssl',
+      key: 'ssl',
+      render: (ssl) => ssl ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : <CloseCircleOutlined style={{ color: '#ccc' }} />
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      render: (_, record) => (
+        <Space>
+          <Button
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => {
+              setEditingDb(record)
+              setDbModalVisible(true)
+            }}
+          >
+            编辑
+          </Button>
+          <Popconfirm
+            title="删除此连接？"
+            onConfirm={() => handleDeleteDb(record.id)}
+          >
+            <Button size="small" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      )
+    }
+  ]
+
+  // Data sources columns
+  const dataSourceColumns = [
+    {
+      title: '名称',
+      dataIndex: 'name',
+      key: 'name',
+      render: (text, record) => (
+        <Space>
+          <ApiOutlined />
+          <span>{text}</span>
+        </Space>
+      )
+    },
+    {
+      title: 'Type',
+      dataIndex: 'type',
+      key: 'type',
+      render: (type) => {
+        const colors = {
+          amazingdata: 'gold',
+          cloudflare: 'blue',
+          qmt: 'green',
+          akshare: 'orange'
+        }
+        return <Tag color={colors[type] || 'default'}>{type.toUpperCase()}</Tag>
+      }
+    },
+    {
+      title: '地址',
+      dataIndex: 'url',
+      key: 'url',
+      ellipsis: true
+    },
+    {
+      title: '优先级',
+      dataIndex: 'priority',
+      key: 'priority',
+      sorter: (a, b) => a.priority - b.priority,
+      render: (priority) => <Tag>{priority}</Tag>
+    },
+    {
+      title: 'Status',
+      key: 'status',
+      render: (_, record) => (
+        <Space>
+          <Switch
+            checked={record.enabled}
+            onChange={(checked) => handleDataSourceToggle(record.id, checked)}
+            checkedChildren="开"
+            unCheckedChildren="关"
+          />
+          {record.status === 'healthy' && <CheckCircleOutlined style={{ color: '#52c41a' }} />}
+          {record.status === 'warning' && <WarningOutlined style={{ color: '#faad14' }} />}
+          {record.status === 'offline' && <CloseCircleOutlined style={{ color: '#f5222d' }} />}
+        </Space>
+      )
+    },
+    {
+      title: '速率限制',
+      dataIndex: 'rateLimit',
+      key: 'rateLimit',
+      render: (limit) => `${limit} 请求/秒`
+    },
+    {
+      title: '最后检查',
+      dataIndex: 'lastCheck',
+      key: 'lastCheck'
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_, record) => (
+        <Space>
+          <Button
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => {
+              setEditingDataSource(record)
+              setDataSourceModalVisible(true)
+            }}
+          >
+            编辑
+          </Button>
+          <Button
+            size="small"
+            icon={<SyncOutlined />}
+            onClick={() => handleTestDataSource(record)}
+          >
+            测试
+          </Button>
+          <Popconfirm
+            title="删除此数据源？"
+            onConfirm={() => handleDeleteDataSource(record.id)}
+          >
+            <Button size="small" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      )
+    }
+  ]
+
+  // System modules columns
+  const moduleColumns = [
+    {
+      title: '模块',
+      key: 'module',
+      render: (_, record) => (
+        <Space>
+          <AppstoreOutlined />
+          <div>
+            <div><strong>{record.name}</strong></div>
+            <div style={{ fontSize: 12, color: '#999' }}>{record.description}</div>
+          </div>
+        </Space>
+      )
+    },
+    {
+      title: '版本',
+      dataIndex: 'version',
+      key: 'version',
+      render: (version) => <Tag color="blue">v{version}</Tag>
+    },
+    {
+      title: 'Status',
+      key: 'status',
+      render: (_, record) => {
+        const statusConfig = {
+          running: { color: 'success', icon: <PlayCircleOutlined />, text: '运行中' },
+          stopped: { color: 'default', icon: <PauseCircleOutlined />, text: '已停止' },
+          starting: { color: 'processing', icon: <SyncOutlined spin />, text: '启动中' },
+          stopping: { color: 'warning', icon: <SyncOutlined spin />, text: '停止中' }
+        }
+        const config = statusConfig[record.status]
+        return (
+          <Badge
+            status={config.color}
+            text={
+              <Space>
+                {config.icon}
+                {config.text}
+              </Space>
+            }
+          />
+        )
+      }
+    },
+    {
+      title: '资源',
+      key: 'resources',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <div>
+            <Text type="secondary">CPU:</Text> {record.cpu.toFixed(1)}%
+          </div>
+          <div>
+            <Text type="secondary">内存:</Text> {record.memory} MB
+          </div>
+        </Space>
+      )
+    },
+    {
+      title: '运行时间',
+      dataIndex: 'uptime',
+      key: 'uptime',
+      render: (uptime) => {
+        if (uptime === 0) return '-'
+        const hours = Math.floor(uptime / 3600)
+        const days = Math.floor(hours / 24)
+        if (days > 0) return `${days}天 ${hours % 24}小时`
+        return `${hours}小时`
+      }
+    },
+    {
+      title: '自动启动',
+      dataIndex: 'autoStart',
+      key: 'autoStart',
+      render: (autoStart, record) => (
+        <Switch
+          checked={autoStart}
+          checkedChildren="是"
+          unCheckedChildren="否"
+          onChange={(checked) => handleAutoStartChange(record.id, checked)}
+        />
+      )
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_, record) => (
+        <Space>
+          <Switch
+            checked={record.enabled}
+            onChange={(checked) => handleModuleToggle(record.id, checked)}
+            checkedChildren={<CheckOutlined />}
+            unCheckedChildren={<CloseOutlined />}
+            disabled={record.critical && record.enabled}
+          />
+          <Button
+            size="small"
+            icon={<SettingOutlined />}
+            onClick={() => {
+              setSelectedModule(record)
+              setModuleDrawerVisible(true)
+            }}
+          >
+            配置
+          </Button>
+          {record.status === 'running' && (
+            <Button
+              size="small"
+              icon={<ReloadOutlined />}
+              onClick={() => handleRestartModule(record.id)}
+            >
+              重启
+            </Button>
+          )}
+        </Space>
+      )
+    }
+  ]
+
+  // Handlers
+  const handleDeleteDb = (id) => {
+    setDbConnections(prev => prev.filter(db => db.id !== id))
+    message.success('数据库连接已删除')
+  }
+
+  const handleDeleteDataSource = (id) => {
+    setDataSources(prev => prev.filter(ds => ds.id !== id))
+    message.success('数据源已删除')
+  }
+
+  const handleDataSourceToggle = (id, enabled) => {
+    setDataSources(prev => prev.map(ds => 
+      ds.id === id ? { ...ds, enabled } : ds
+    ))
+    message.success(`数据源${enabled ? '已启用' : '已禁用'}`)
+  }
+
+  const handleTestDataSource = (dataSource) => {
+    message.loading(`正在测试 ${dataSource.name}...`)
+    setTimeout(() => {
+      message.success(`${dataSource.name} 可以访问`)
+    }, 1500)
+  }
+
+  const handleAutoStartChange = (moduleId, autoStart) => {
+    setSystemModules(prev => prev.map(m => 
+      m.id === moduleId ? { ...m, autoStart } : m
+    ))
+    message.success('自动启动设置已更新')
+  }
+
+  const handleRestartModule = (moduleId) => {
+    message.loading('正在重启模块...')
+    setSystemModules(prev => prev.map(m => 
+      m.id === moduleId ? { ...m, status: 'stopping' } : m
+    ))
+    
+    setTimeout(() => {
+      setSystemModules(prev => prev.map(m => 
+        m.id === moduleId ? { ...m, status: 'starting' } : m
+      ))
+    }, 1000)
+    
+    setTimeout(() => {
+      setSystemModules(prev => prev.map(m => 
+        m.id === moduleId ? { ...m, status: 'running' } : m
+      ))
+      message.success('模块重启成功')
+    }, 2500)
+  }
+
+  return (
+    <div>
+      <ProCard>
+        <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+          <Col>
+            <Space size="large">
+              <Title level={4} style={{ margin: 0 }}>
+                <SettingOutlined /> 系统配置
+              </Title>
+            </Space>
+          </Col>
+          <Col>
+            <Space>
+              <Button icon={<ExportOutlined />}>导出配置</Button>
+              <Button icon={<ImportOutlined />}>导入配置</Button>
+              <Button type="primary" icon={<SaveOutlined />}>保存全部</Button>
+            </Space>
+          </Col>
+        </Row>
+
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'database',
+              label: (
+                <span>
+                  <DatabaseOutlined /> 数据库连接
+                </span>
+              ),
+              children: (
+                <Card>
+                  <Space direction="vertical" style={{ width: '100%' }} size="large">
+                    <Row justify="space-between">
+                      <Col>
+                        <Space>
+                          <Text strong>管理数据库连接</Text>
+                          <Badge count={dbConnections.length} showZero style={{ backgroundColor: '#52c41a' }} />
+                        </Space>
+                      </Col>
+                      <Col>
+                        <Button
+                          type="primary"
+                          icon={<PlusOutlined />}
+                          onClick={() => {
+                            setEditingDb(null)
+                            setDbModalVisible(true)
+                          }}
+                        >
+                          添加连接
+                        </Button>
+                      </Col>
+                    </Row>
+                    
+                    <Table
+                      columns={dbColumns}
+                      dataSource={dbConnections}
+                      rowKey="id"
+                      pagination={false}
+                    />
+                    
+                    <Alert
+                      message="连接池信息"
+                      description="活动连接会自动管理。请根据您的工作负载调整连接池大小。"
+                      type="info"
+                      showIcon
+                    />
+                  </Space>
+                </Card>
+              )
+            },
+            {
+              key: 'datasource',
+              label: (
+                <span>
+                  <ApiOutlined /> 数据源
+                </span>
+              ),
+              children: (
+                <Card>
+                  <Space direction="vertical" style={{ width: '100%' }} size="large">
+                    <Row justify="space-between">
+                      <Col>
+                        <Space>
+                          <Text strong>配置数据源</Text>
+                          <Badge count={dataSources.filter(ds => ds.enabled).length} style={{ backgroundColor: '#52c41a' }} />
+                          <Badge count={dataSources.filter(ds => !ds.enabled).length} style={{ backgroundColor: '#d9d9d9' }} />
+                        </Space>
+                      </Col>
+                      <Col>
+                        <Space>
+                          <Button icon={<SyncOutlined />} onClick={() => message.info('正在刷新所有数据源...')}>
+                            全部刷新
+                          </Button>
+                          <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={() => {
+                              setEditingDataSource(null)
+                              setDataSourceModalVisible(true)
+                            }}
+                          >
+                            添加数据源
+                          </Button>
+                        </Space>
+                      </Col>
+                    </Row>
+                    
+                    <Table
+                      columns={dataSourceColumns}
+                      dataSource={dataSources}
+                      rowKey="id"
+                      pagination={false}
+                    />
+                    
+                    <Alert
+                      message="数据源优先级"
+                      description="数字越小优先级越高。当数据源不可用时，系统会自动切换到下一个优先级。"
+                      type="info"
+                      showIcon
+                    />
+                  </Space>
+                </Card>
+              )
+            },
+            {
+              key: 'modules',
+              label: (
+                <span>
+                  <AppstoreOutlined /> 系统模块
+                </span>
+              ),
+              children: (
+                <Card>
+                  <Space direction="vertical" style={{ width: '100%' }} size="large">
+                    <Row justify="space-between">
+                      <Col>
+                        <Space>
+                          <Text strong>热插拔系统模块</Text>
+                          <Badge count={systemModules.filter(m => m.status === 'running').length} style={{ backgroundColor: '#52c41a' }} />
+                          <Badge count={systemModules.filter(m => m.status === 'stopped').length} style={{ backgroundColor: '#d9d9d9' }} />
+                        </Space>
+                      </Col>
+                      <Col>
+                        <Space>
+                          <Button icon={<PoweroffOutlined />} danger>
+                            全部停止
+                          </Button>
+                          <Button icon={<PlayCircleOutlined />} type="primary">
+                            全部启动
+                          </Button>
+                        </Space>
+                      </Col>
+                    </Row>
+                    
+                    <Row gutter={16} style={{ marginBottom: 16 }}>
+                      <Col span={6}>
+                        <Card size="small">
+                          <Statistic
+                            title="总CPU使用率"
+                            value={systemModules.reduce((sum, m) => sum + m.cpu, 0).toFixed(1)}
+                            suffix="%"
+                            prefix={<ThunderboltOutlined />}
+                          />
+                        </Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small">
+                          <Statistic
+                            title="总内存"
+                            value={systemModules.reduce((sum, m) => sum + m.memory, 0)}
+                            suffix="MB"
+                            prefix={<CloudOutlined />}
+                          />
+                        </Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small">
+                          <Statistic
+                            title="运行中模块"
+                            value={systemModules.filter(m => m.status === 'running').length}
+                            suffix={`/ ${systemModules.length}`}
+                            valueStyle={{ color: '#52c41a' }}
+                          />
+                        </Card>
+                      </Col>
+                      <Col span={6}>
+                        <Card size="small">
+                          <Statistic
+                            title="关键模块"
+                            value={systemModules.filter(m => m.critical && m.status === 'running').length}
+                            suffix={`/ ${systemModules.filter(m => m.critical).length}`}
+                            valueStyle={{ color: '#1890ff' }}
+                          />
+                        </Card>
+                      </Col>
+                    </Row>
+                    
+                    <Table
+                      columns={moduleColumns}
+                      dataSource={systemModules}
+                      rowKey="id"
+                      pagination={false}
+                      expandable={{
+                        expandedRowRender: (record) => (
+                          <div style={{ padding: 16 }}>
+                            <Descriptions size="small" column={3}>
+                              <Descriptions.Item label="模块ID">{record.id}</Descriptions.Item>
+                              <Descriptions.Item label="关键模块">
+                                {record.critical ? <Tag color="red">是</Tag> : <Tag>否</Tag>}
+                              </Descriptions.Item>
+                              <Descriptions.Item label="依赖项">
+                                {record.dependencies.length > 0 ? (
+                                  <Space>
+                                    {record.dependencies.map(dep => (
+                                      <Tag key={dep}>{dep}</Tag>
+                                    ))}
+                                  </Space>
+                                ) : '无'}
+                              </Descriptions.Item>
+                            </Descriptions>
+                          </div>
+                        )
+                      }}
+                    />
+                    
+                    <Alert
+                      message="模块依赖"
+                      description="系统运行时关键模块不能被禁用。有依赖关系的模块会自动启动/停止其依赖项。"
+                      type="warning"
+                      showIcon
+                    />
+                  </Space>
+                </Card>
+              )
+            }
+          ]}
+        />
+      </ProCard>
+
+      {/* Database Connection Modal */}
+      <Modal
+        title={editingDb ? '编辑数据库连接' : '添加数据库连接'}
+        visible={dbModalVisible}
+        onCancel={() => {
+          setDbModalVisible(false)
+          setEditingDb(null)
+        }}
+        footer={null}
+        width={600}
+      >
+        <DatabaseForm
+          initialValues={editingDb}
+          onSubmit={(values) => {
+            if (editingDb) {
+              setDbConnections(prev => prev.map(db => 
+                db.id === editingDb.id ? { ...db, ...values } : db
+              ))
+              message.success('数据库连接已更新')
+            } else {
+              setDbConnections(prev => [...prev, { 
+                ...values, 
+                id: Date.now(),
+                status: 'disconnected',
+                activeConnections: 0
+              }])
+              message.success('数据库连接已添加')
+            }
+            setDbModalVisible(false)
+            setEditingDb(null)
+          }}
+        />
+      </Modal>
+
+      {/* Data Source Modal */}
+      <Modal
+        title={editingDataSource ? '编辑数据源' : '添加数据源'}
+        visible={dataSourceModalVisible}
+        onCancel={() => {
+          setDataSourceModalVisible(false)
+          setEditingDataSource(null)
+        }}
+        footer={null}
+        width={600}
+      >
+        <DataSourceForm
+          initialValues={editingDataSource}
+          onSubmit={(values) => {
+            if (editingDataSource) {
+              setDataSources(prev => prev.map(ds => 
+                ds.id === editingDataSource.id ? { ...ds, ...values } : ds
+              ))
+              message.success('数据源已更新')
+            } else {
+              setDataSources(prev => [...prev, { 
+                ...values, 
+                id: Date.now(),
+                status: 'unknown',
+                lastCheck: new Date().toISOString()
+              }])
+              message.success('数据源已添加')
+            }
+            setDataSourceModalVisible(false)
+            setEditingDataSource(null)
+          }}
+        />
+      </Modal>
+
+      {/* Module Configuration Drawer */}
+      <Drawer
+        title={`配置模块: ${selectedModule?.name}`}
+        placement="right"
+        width={500}
+        visible={moduleDrawerVisible}
+        onClose={() => {
+          setModuleDrawerVisible(false)
+          setSelectedModule(null)
+        }}
+      >
+        {selectedModule && (
+          <Space direction="vertical" style={{ width: '100%' }} size="large">
+            <Descriptions column={1} bordered>
+              <Descriptions.Item label="模块ID">{selectedModule.id}</Descriptions.Item>
+              <Descriptions.Item label="版本">{selectedModule.version}</Descriptions.Item>
+              <Descriptions.Item label="状态">
+                <Badge
+                  status={selectedModule.status === 'running' ? 'success' : 'default'}
+                  text={selectedModule.status}
+                />
+              </Descriptions.Item>
+              <Descriptions.Item label="自动启动">
+                <Switch
+                  checked={selectedModule.autoStart}
+                  checkedChildren="是"
+                  unCheckedChildren="否"
+                />
+              </Descriptions.Item>
+              <Descriptions.Item label="关键模块">
+                {selectedModule.critical ? <Tag color="red">是</Tag> : <Tag>否</Tag>}
+              </Descriptions.Item>
+            </Descriptions>
+            
+            <Card title="资源限制" size="small">
+              <Form layout="vertical">
+                <Form.Item label="最大CPU (%)">
+                  <InputNumber min={1} max={100} defaultValue={50} style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item label="最大内存 (MB)">
+                  <InputNumber min={128} max={8192} defaultValue={1024} style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item label="优先级">
+                  <Select defaultValue="normal">
+                    <Option value="low">低</Option>
+                    <Option value="normal">普通</Option>
+                    <Option value="high">高</Option>
+                    <Option value="critical">关键</Option>
+                  </Select>
+                </Form.Item>
+              </Form>
+            </Card>
+            
+            <Card title="模块日志" size="small">
+              <Timeline>
+                <Timeline.Item color="green">模块已启动 - 10:30:00</Timeline.Item>
+                <Timeline.Item color="blue">配置已更新 - 10:25:00</Timeline.Item>
+                <Timeline.Item color="red">错误: 连接超时 - 10:20:00</Timeline.Item>
+                <Timeline.Item>模块已初始化 - 10:15:00</Timeline.Item>
+              </Timeline>
+            </Card>
+            
+            <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+              <Button>重置为默认</Button>
+              <Button type="primary" icon={<SaveOutlined />}>
+                保存配置
+              </Button>
+            </Space>
+          </Space>
+        )}
+      </Drawer>
+    </div>
+  )
+}
+
+export default SystemConfig

@@ -5,13 +5,27 @@
 
 class BackendStatusManager {
     constructor() {
-        this.isAvailable = false
+        this.isAvailable = true  // 默认假设后端可用，避免一开始就阻止所有请求
         this.lastCheckTime = 0
         this.checkInterval = 10000 // 10秒检查一次
         this.listeners = new Set()
         this.isChecking = false
         this.consecutiveFailures = 0
         this.maxConsecutiveFailures = 3
+        
+        // 新增：恢复机制相关
+        this.recoveryAttempts = 0
+        this.maxRecoveryAttempts = 5
+        this.recoveryInterval = 5000 // 5秒尝试恢复一次
+        this.recoveryTimer = null
+        
+        // 新增：请求成功计数（用于自动恢复）
+        this.successfulRequests = 0
+        this.failedRequests = 0
+        
+        // 新增：状态历史记录
+        this.statusHistory = []
+        this.maxHistoryLength = 10
     }
 
     /**
@@ -65,15 +79,106 @@ class BackendStatusManager {
      * 设置可用性状态
      */
     setAvailable(available) {
+        const previousState = this.isAvailable
+        
         if (this.isAvailable !== available) {
             this.isAvailable = available
+            
+            // 记录状态历史
+            this.recordStatusHistory(available)
+            
+            // 通知监听器
             this.notifyListeners(available)
 
             if (!available) {
                 console.warn('后端服务不可用')
+                // 启动恢复机制
+                this.startRecoveryProcess()
             } else {
                 console.info('后端服务已恢复')
+                // 停止恢复机制
+                this.stopRecoveryProcess()
+                // 重置计数器
+                this.consecutiveFailures = 0
+                this.recoveryAttempts = 0
             }
+        }
+        
+        // 即使状态没变化，如果是从失败恢复，也要重置失败计数
+        if (available && this.consecutiveFailures > 0) {
+            this.consecutiveFailures = 0
+        }
+    }
+    
+    /**
+     * 记录状态历史
+     */
+    recordStatusHistory(available) {
+        this.statusHistory.push({
+            timestamp: Date.now(),
+            available: available
+        })
+        
+        // 限制历史记录长度
+        if (this.statusHistory.length > this.maxHistoryLength) {
+            this.statusHistory.shift()
+        }
+    }
+    
+    /**
+     * 启动恢复进程
+     */
+    startRecoveryProcess() {
+        // 如果已经在恢复中，不重复启动
+        if (this.recoveryTimer) {
+            return
+        }
+        
+        console.log('启动后端恢复进程...')
+        this.recoveryAttempts = 0
+        
+        this.recoveryTimer = setInterval(async () => {
+            this.recoveryAttempts++
+            console.log(`尝试恢复后端连接 (${this.recoveryAttempts}/${this.maxRecoveryAttempts})`)
+            
+            try {
+                const response = await fetch('/api/system/status', {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(3000) // 恢复时使用更短的超时
+                })
+                
+                if (response.ok) {
+                    console.log('后端恢复成功！')
+                    this.setAvailable(true)
+                    this.stopRecoveryProcess()
+                }
+            } catch (error) {
+                // 恢复失败，继续尝试
+                console.debug('恢复尝试失败，将继续尝试...')
+            }
+            
+            // 达到最大尝试次数后，延长检查间隔
+            if (this.recoveryAttempts >= this.maxRecoveryAttempts) {
+                console.log('达到最大恢复尝试次数，延长检查间隔')
+                this.stopRecoveryProcess()
+                // 30秒后再次尝试
+                setTimeout(() => {
+                    if (!this.isAvailable) {
+                        this.startRecoveryProcess()
+                    }
+                }, 30000)
+            }
+        }, this.recoveryInterval)
+    }
+    
+    /**
+     * 停止恢复进程
+     */
+    stopRecoveryProcess() {
+        if (this.recoveryTimer) {
+            clearInterval(this.recoveryTimer)
+            this.recoveryTimer = null
+            console.log('停止后端恢复进程')
         }
     }
 
@@ -105,12 +210,109 @@ class BackendStatusManager {
     }
 
     /**
+     * 记录请求成功
+     * 由request.js在响应成功时调用
+     */
+    recordSuccess() {
+        this.successfulRequests++
+        this.failedRequests = Math.max(0, this.failedRequests - 1) // 成功时减少失败计数
+        
+        // 如果后端被标记为不可用，但有请求成功，可能后端已恢复
+        if (!this.isAvailable && this.successfulRequests > 2) {
+            console.log('检测到请求成功，尝试恢复后端状态')
+            this.setAvailable(true) // 直接设置为可用，不需要再次检查
+            this.successfulRequests = 0 // 重置计数
+        }
+        
+        // 重置连续失败计数
+        if (this.consecutiveFailures > 0) {
+            this.consecutiveFailures = 0
+        }
+    }
+    
+    /**
+     * 记录请求失败
+     * 由request.js在响应失败时调用
+     */
+    recordFailure() {
+        this.failedRequests++
+        this.successfulRequests = Math.max(0, this.successfulRequests - 1) // 失败时减少成功计数
+        
+        // 不要因为单个请求失败就标记后端不可用
+        // 只有在明显失败多于成功时才检查状态
+        const netFailures = this.failedRequests - this.successfulRequests
+        if (this.isAvailable && netFailures > 5) {
+            console.log(`检测到净失败数过多(${netFailures})，检查后端状态`)
+            this.checkStatus()
+        }
+    }
+    
+    /**
+     * 获取状态统计信息
+     */
+    getStatistics() {
+        return {
+            isAvailable: this.isAvailable,
+            consecutiveFailures: this.consecutiveFailures,
+            successfulRequests: this.successfulRequests,
+            failedRequests: this.failedRequests,
+            recoveryAttempts: this.recoveryAttempts,
+            statusHistory: this.statusHistory
+        }
+    }
+    
+    /**
+     * 手动触发恢复尝试
+     * 可以由用户界面或其他组件调用
+     */
+    async manualRecovery() {
+        console.log('手动触发后端恢复尝试')
+        this.consecutiveFailures = 0
+        this.failedRequests = 0
+        this.successfulRequests = 0
+        this.recoveryAttempts = 0
+        
+        // 直接尝试检查状态
+        const wasAvailable = this.isAvailable
+        await this.checkStatus()
+        
+        if (!this.isAvailable && wasAvailable) {
+            // 如果检查后仍然不可用，启动恢复进程
+            this.startRecoveryProcess()
+        }
+        
+        return this.isAvailable
+    }
+    
+    /**
+     * 重置所有计数器
+     */
+    resetCounters() {
+        this.consecutiveFailures = 0
+        this.successfulRequests = 0
+        this.failedRequests = 0
+        this.recoveryAttempts = 0
+        console.log('重置所有计数器')
+    }
+    
+    /**
      * 启动定期检查
      */
     startPeriodicCheck() {
-        this.checkStatus()
+        // 初始检查
+        setTimeout(() => this.checkStatus(), 1000) // 延迟1秒后首次检查
+        
         setInterval(() => {
-            this.checkStatus()
+            // 只有在必要时才检查，避免频繁检查
+            const netFailures = this.failedRequests - this.successfulRequests
+            const shouldCheck = 
+                !this.isAvailable || // 后端不可用时需要检查
+                (Date.now() - this.lastCheckTime > this.checkInterval * 2) || // 超过2倍检查间隔
+                (netFailures > 3) // 净失败数超过阈值
+            
+            if (shouldCheck) {
+                this.checkStatus()
+            }
         }, this.checkInterval)
     }
 }

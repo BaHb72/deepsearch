@@ -241,9 +241,9 @@ export function getPriceColorClass(value) {
  * @returns {string} 颜色值
  */
 export function getPriceColor(value) {
-    if (value > 0) return '#ef232a'  // 红色（涨）
-    if (value < 0) return '#14b143'  // 绿色（跌）
-    return '#999999'  // 灰色（平）
+    if (value > 0) return '#f5222d'  // 红色（涨）- 中国市场标准
+    if (value < 0) return '#52c41a'  // 绿色（跌）- 中国市场标准
+    return '#8c8c8c'  // 灰色（平）
 }
 
 // 导出所有函数

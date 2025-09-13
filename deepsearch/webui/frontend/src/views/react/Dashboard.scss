@@ -1,0 +1,230 @@
+// Dashboard 组件样式
+.dashboard-container {
+  padding: 24px;
+  background: var(--ant-body-background);
+  min-height: calc(100vh - 64px);
+
+  .dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    
+    h2 {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      
+      .anticon {
+        font-size: 28px;
+        color: var(--ant-primary-color);
+      }
+    }
+  }
+
+  // 统计卡片动画
+  .ant-pro-card {
+    transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+    
+    &:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+    }
+  }
+
+  // 统计数字动画
+  .ant-statistic-content-value {
+    animation: fadeInUp 0.5s ease-out;
+  }
+
+  // 图表容器
+  .chart-container {
+    padding: 16px;
+    background: var(--ant-component-background);
+    border-radius: 8px;
+    
+    canvas {
+      max-width: 100% !important;
+      height: auto !important;
+    }
+  }
+
+  // 表格样式增强
+  .ant-pro-table {
+    .ant-table-thead > tr > th {
+      background: linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%);
+      font-weight: 600;
+      border-bottom: 2px solid var(--ant-primary-color);
+    }
+
+    .ant-table-tbody > tr {
+      transition: all 0.3s;
+      
+      &:hover {
+        background: rgba(24, 144, 255, 0.05);
+        transform: scale(1.01);
+      }
+      
+      &:nth-child(even) {
+        background: rgba(0, 0, 0, 0.02);
+      }
+    }
+  }
+
+  // 时间线样式
+  .ant-timeline-item-content {
+    .ant-tag {
+      animation: pulse 2s infinite;
+      
+      &.ant-tag-success {
+        animation: pulse-success 2s infinite;
+      }
+    }
+  }
+
+  // CheckCard 样式
+  .ant-pro-checkcard {
+    transition: all 0.3s;
+    
+    &:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+      
+      .anticon {
+        transform: scale(1.2);
+        color: var(--ant-primary-color);
+      }
+    }
+    
+    .anticon {
+      transition: all 0.3s;
+    }
+  }
+
+  // Alert 动画
+  .ant-alert {
+    animation: slideDown 0.3s ease-out;
+  }
+
+  // Badge 呼吸灯效果
+  .ant-badge-status-processing {
+    &::after {
+      animation: antStatusProcessing 1.2s infinite ease-in-out;
+    }
+  }
+}
+
+// 动画定义
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes pulse-success {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(82, 196, 26, 0);
+  }
+}
+
+@keyframes antStatusProcessing {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+// 响应式布局
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 16px;
+    
+    .dashboard-header {
+      flex-direction: column;
+      gap: 16px;
+      
+      h2 {
+        font-size: 20px;
+      }
+    }
+    
+    .ant-pro-card {
+      margin-bottom: 16px;
+    }
+  }
+}
+
+// 暗色主题适配
+.dark .dashboard-container {
+  background: #000000;
+  
+  .ant-card {
+    background: #141414;
+    border-color: #434343;
+  }
+  
+  .ant-pro-card {
+    background: #141414;
+  }
+  
+  .ant-statistic-title {
+    color: rgba(255, 255, 255, 0.65);
+  }
+  
+  .ant-statistic-content {
+    color: rgba(255, 255, 255, 0.85);
+  }
+  
+  .ant-table {
+    background: #141414;
+    
+    .ant-table-thead > tr > th {
+      background: #1f1f1f;
+      color: rgba(255, 255, 255, 0.85);
+      border-bottom-color: var(--ant-primary-color);
+    }
+    
+    .ant-table-tbody > tr {
+      &:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      
+      &:nth-child(even) {
+        background: rgba(255, 255, 255, 0.02);
+      }
+    }
+  }
+}
