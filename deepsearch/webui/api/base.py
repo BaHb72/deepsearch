@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from deepsearch.core import MainEngine
-from deepsearch.core.interfaces import Component, ComponentStatus
+from deepsearch.core.interfaces.component import Component, ComponentStatus
 from deepsearch.webui.server import app_state
 
 # 类型变量

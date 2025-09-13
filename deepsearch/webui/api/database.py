@@ -8,7 +8,7 @@ from typing import Dict, Any
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
-from deepsearch.core.component_manager import ComponentStatus
+from deepsearch.core.managers.component_manager import ComponentStatus
 
 router = APIRouter()
 

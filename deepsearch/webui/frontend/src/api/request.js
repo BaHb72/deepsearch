@@ -1,8 +1,9 @@
 import axios from 'axios'
-import {ElMessage} from 'element-plus'
+import messageManager from '@/utils/messageManager'
 import {logApiError} from '@/utils/errorTracker'
 import backendStatus from '@/utils/backendStatus'
 import {clearPortCache, getBackendUrl} from '@/utils/portDetector'
+import { debugAxiosInstance } from '@/utils/debugApi'
 
 // 调试日志工具
 const debugLog = (stage, message, data = null) => {
@@ -14,23 +15,75 @@ const debugLog = (stage, message, data = null) => {
 // 创建 axios 实例（初始不设置baseURL，由动态端口决定）
 debugLog('INIT', '创建axios实例', {timeout: 30000})
 const request = axios.create({
-    timeout: 30000,
+    timeout: 30000,  // 增加到30秒，适应后端优化后的响应时间
     headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'  // 明确要求JSON响应
     }
 })
+
+// 启用调试
+debugAxiosInstance(request)
+
+// 立即设置默认的baseURL（不等待异步检测）
+request.defaults.baseURL = '/api'
+debugLog('INIT', `设置默认baseURL: ${request.defaults.baseURL}`)
 
 // 初始化动态baseURL
 let currentBackendUrl = null
 
-// 异步设置baseURL
+// 异步设置baseURL（可选的后续更新）
 async function ensureBackendUrl() {
-    if (!currentBackendUrl) {
+    // 如果已经设置了baseURL，直接返回
+    if (request.defaults.baseURL) {
+        return currentBackendUrl
+    }
+    
+    if (currentBackendUrl === null) {  // 使用严格等于null检查
         currentBackendUrl = await getBackendUrl()
-        request.defaults.baseURL = currentBackendUrl + '/api'
-        debugLog('BACKEND_URL', `设置后端URL: ${currentBackendUrl}`)
+        // 如果返回空字符串（使用代理），baseURL应该设置为/api
+        if (currentBackendUrl === '') {
+            request.defaults.baseURL = '/api'
+        } else {
+            request.defaults.baseURL = currentBackendUrl + '/api'
+        }
+        debugLog('BACKEND_URL', `更新后端URL: ${request.defaults.baseURL}`)
     }
     return currentBackendUrl
+}
+
+// 导出初始化函数，用于应用启动时的端口探测
+export async function setupRequest() {
+    try {
+        debugLog('SETUP', '开始初始化 axios 实例')
+        
+        // 尝试检测后端端口
+        const ports = [8000, 8001, 8002, 8080]
+        for (const port of ports) {
+            try {
+                const response = await axios.get(`http://localhost:${port}/api/health`, {
+                    timeout: 1000
+                })
+                if (response.status === 200) {
+                    request.defaults.baseURL = `http://localhost:${port}/api`
+                    debugLog('SETUP', `后端服务运行在端口: ${port}`)
+                    return port
+                }
+            } catch (e) {
+                // 继续尝试下一个端口
+            }
+        }
+        
+        // 使用默认的代理路径
+        request.defaults.baseURL = '/api'
+        debugLog('SETUP', '使用默认配置: 通过 Vite 代理')
+        return null
+    } catch (error) {
+        debugLog('SETUP_ERROR', '初始化失败', error)
+        // 即使失败也使用默认配置
+        request.defaults.baseURL = '/api'
+        return null
+    }
 }
 
 // 请求计数器
@@ -101,6 +154,9 @@ request.interceptors.response.use(
             data: response.data
         })
         
+        // 记录请求成功，用于智能恢复机制
+        backendStatus.recordSuccess()
+        
         const res = response.data
         return res
     },
@@ -122,37 +178,42 @@ request.interceptors.response.use(
             stack: error.stack
         })
         
-        let message = '请求失败'
+        let errorMessage = '请求失败'
         let showError = true
         
         if (error.response) {
             switch (error.response.status) {
                 case 400:
-                    message = '请求参数错误'
+                    errorMessage = '请求参数错误'
                     break
                 case 401:
-                    message = '未授权，请登录'
+                    errorMessage = '未授权，请登录'
                     break
                 case 403:
-                    message = '拒绝访问'
+                    errorMessage = '拒绝访问'
                     break
                 case 404:
-                    message = '请求地址不存在'
+                    errorMessage = '请求地址不存在'
                     break
                 case 500:
-                    message = '服务器内部错误'
+                    errorMessage = '服务器内部错误'
                     break
                 case 503:
-                    message = '服务不可用'
+                    errorMessage = '服务不可用'
                     break
                 default:
-                    message = error.response.data?.detail || error.response.data?.message || '请求失败'
+                    errorMessage = error.response.data?.detail || error.response.data?.message || '请求失败'
             }
+            // 记录HTTP错误也算失败
+            backendStatus.recordFailure()
         } else if (error.request) {
             // 网络错误（包括后端未启动）
-            message = '无法连接到后端服务，请确保后端已启动'
+            errorMessage = '无法连接到后端服务，请确保后端已启动'
 
-            // 更新后端状态
+            // 记录请求失败，用于智能恢复机制
+            backendStatus.recordFailure()
+
+            // 更新后端状态（仅对状态检查请求）
             if (error.config?.url === '/system/status') {
                 backendStatus.setAvailable(false)
             }
@@ -175,7 +236,7 @@ request.interceptors.response.use(
             }
         } else if (error.code === 'BACKEND_UNAVAILABLE') {
             // 后端不可用错误
-            message = '后端服务不可用'
+            errorMessage = '后端服务不可用'
             showError = false // 不显示错误，因为用户已经知道
         }
 
@@ -190,12 +251,8 @@ request.interceptors.response.use(
         }
 
         if (showError) {
-            debugLog('USER_NOTIFICATION', `#${requestId} 显示错误消息: ${message}`)
-            ElMessage.error({
-                message,
-                duration: 3000,
-                showClose: true
-            })
+            debugLog('USER_NOTIFICATION', `#${requestId} 显示错误消息: ${errorMessage}`)
+            messageManager.error(errorMessage, 3)
         }
         
         return Promise.reject(error)

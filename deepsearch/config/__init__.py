@@ -4,6 +4,7 @@ DeepSearch 配置管理
 本模块为应用程序提供配置加载和管理功能。
 """
 import sys
+import threading
 
 from pydantic import ValidationError
 
@@ -12,47 +13,43 @@ from .manager import ConfigManager, config_manager, get_config as get_config_val
 # 保留原有的 settings 以保持向后兼容
 from .settings import Settings
 
-# 创建单例配置实例
-try:
-    settings = Settings()
-except (ValidationError, FileNotFoundError, ValueError) as e:
-    print(f"[错误] 配置加载失败：{e}", file=sys.stderr)
-    # 创建一个具有默认值的配置实例
-    try:
-        # 使用默认工厂创建最小配置
-        from .models import AppConfig, LogConfig, DatabaseConfig, MessageBusConfig, WebUIConfig
-
-        settings = Settings(
-            app=AppConfig(),
-            log=LogConfig(),
-            database=DatabaseConfig(),
-            message_bus=MessageBusConfig(),
-            webui=WebUIConfig()
-        )
-        print("[警告] 使用默认配置运行", file=sys.stderr)
-    except Exception as e2:
-        print(f"[错误] 无法创建默认配置：{e2}", file=sys.stderr)
-        settings = None
+# 延迟加载配置实例
+settings = None
+_settings_lock = threading.Lock()
 
 
 def get_config() -> Settings:
-    """获取全局配置对象"""
+    """获取全局配置对象（线程安全）"""
     global settings
+    
+    # 双重检查锁定模式
     if settings is None:
-        # 尝试再次加载配置
-        try:
-            settings = Settings()
-        except Exception as e:
-            # 如果仍然失败，使用默认配置
-            from .models import AppConfig, LogConfig, DatabaseConfig, MessageBusConfig, WebUIConfig
-            settings = Settings(
-                app=AppConfig(),
-                log=LogConfig(),
-                database=DatabaseConfig(),
-                message_bus=MessageBusConfig(),
-                webui=WebUIConfig()
-            )
+        with _settings_lock:
+            if settings is None:
+                # 尝试加载配置
+                try:
+                    settings = Settings()
+                except (ValidationError, FileNotFoundError, ValueError) as e:
+                    print(f"[错误] 配置加载失败：{e}", file=sys.stderr)
+                    # 如果失败，使用默认配置
+                    from .models import AppConfig, LogConfig, DatabaseConfig, MessageBusConfig, WebUIConfig
+                    settings = Settings(
+                        app=AppConfig(),
+                        log=LogConfig(),
+                        database=DatabaseConfig(),
+                        message_bus=MessageBusConfig(),
+                        webui=WebUIConfig()
+                    )
+                    print("[警告] 使用默认配置运行", file=sys.stderr)
     return settings
+
+
+def reload_config() -> Settings:
+    """重新加载配置（线程安全）"""
+    global settings
+    with _settings_lock:
+        settings = None  # 清除缓存
+    return get_config()
 
 __all__ = [
     "settings",
@@ -61,5 +58,6 @@ __all__ = [
     "config_manager",
     "get_config",
     "get_config_value",
-    "set_config"
+    "set_config",
+    "reload_config"
 ]

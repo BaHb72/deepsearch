@@ -7,11 +7,12 @@ from datetime import datetime
 from typing import List
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.config import settings
+from deepsearch.config import get_config
+from deepsearch.webui.api.providers import get_akshare_provider
 
 # 创建路由
 router = APIRouter(prefix="/api/workers", tags=["Workers Proxy"])
@@ -33,11 +34,8 @@ class WorkersConfigRequest(BaseModel):
 async def get_status():
     """获取 Workers 代理状态和配置"""
     try:
-        # 获取provider实例以获取实时状态
-        from deepsearch.data_providers.akshare import AkShareProxyProvider
-
-        # 创建临时实例来获取状态
-        provider = AkShareProxyProvider()
+        # 使用单例provider实例
+        provider = await get_akshare_provider()
 
         # 从 settings 读取配置
         config = {
@@ -52,8 +50,9 @@ async def get_status():
         }
 
         # 读取 Cloudflare 配置
-        if hasattr(settings, 'cloudflare') and settings.cloudflare:
-            cloudflare = settings.cloudflare
+        config_obj = get_config()
+        if config_obj and hasattr(config_obj, 'cloudflare') and config_obj.cloudflare:
+            cloudflare = config_obj.cloudflare
 
             # 优先读取 workers 列表
             if hasattr(cloudflare, 'workers') and cloudflare.workers:
@@ -236,7 +235,7 @@ async def reset_statistics():
 async def list_workers():
     """列出所有Worker及其状态"""
     try:
-        from deepsearch.data_providers.akshare import AkShareProxyProvider
+        from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
         provider = AkShareProxyProvider()
 
         workers = []
@@ -273,7 +272,7 @@ async def list_workers():
 async def test_worker(worker_id: str):
     """测试特定Worker"""
     try:
-        from deepsearch.data_providers.akshare import AkShareProxyProvider
+        from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
         provider = AkShareProxyProvider()
 
         # 将ID转换回URL
@@ -305,7 +304,7 @@ async def test_worker(worker_id: str):
 async def reset_worker(worker_id: str):
     """重置Worker为半开状态进行探测"""
     try:
-        from deepsearch.data_providers.akshare import AkShareProxyProvider
+        from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
         provider = AkShareProxyProvider()
 
         # 将ID转换回URL
@@ -337,7 +336,7 @@ async def reset_worker(worker_id: str):
 async def get_strategy():
     """获取当前选路策略"""
     try:
-        from deepsearch.data_providers.akshare import AkShareProxyProvider
+        from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
         provider = AkShareProxyProvider()
 
         return {

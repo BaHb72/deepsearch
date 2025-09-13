@@ -9,8 +9,8 @@ from deepsearch.core.component import Component
 from loguru import logger
 
 from deepsearch.config import get_config
-from deepsearch.services.data_sync_service import DataSyncService, get_sync_service
-from deepsearch.storage.duckdb_analytics import DuckDBAnalytics, get_analytics_db
+from deepsearch.services.data.data_sync_service import DataSyncService, get_sync_service
+from deepsearch.storage.databases.duckdb_analytics import DuckDBAnalytics, get_analytics_db
 
 
 class AnalyticsComponent(Component):

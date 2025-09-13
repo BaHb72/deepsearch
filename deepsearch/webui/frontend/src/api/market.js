@@ -4,7 +4,8 @@ import request from './request'
 export function getMarketOverview() {
     return request({
         url: '/market/overview',
-        method: 'get'
+        method: 'get',
+        timeout: 20000  // 市场概览包含多个数据源，需要更多时间
     })
 }
 
@@ -16,8 +17,10 @@ export function getSectors(params) {
         params: {
             type: params.type || 'industry',
             limit: params.limit || 20,
-            sort: params.sort || 'change_pct'
-        }
+            sort: params.sort || 'change_pct',
+            level: params.level || 'sw1'  // 申万级别（仅对行业板块有效）
+        },
+        timeout: 15000  // 板块数据需要聚合计算，给予15秒超时
     })
 }
 
@@ -59,6 +62,39 @@ export function getMarketStats() {
     return request({
         url: '/market/stats',
         method: 'get'
+    })
+}
+
+// 获取赚钱效应分析数据
+export function getMarketActivity() {
+    return request({
+        url: '/market/activity',
+        method: 'get',
+        timeout: 10000
+    })
+}
+
+// 获取盘口异动数据
+export function getStockChanges(changeType = '大笔买入') {
+    return request({
+        url: '/market/stock-changes',
+        method: 'get',
+        params: {
+            change_type: changeType
+        },
+        timeout: 10000
+    })
+}
+
+// 获取涨停股池数据
+export function getZTPool(date) {
+    return request({
+        url: '/market/zt-pool',
+        method: 'get',
+        params: {
+            date
+        },
+        timeout: 10000
     })
 }
 

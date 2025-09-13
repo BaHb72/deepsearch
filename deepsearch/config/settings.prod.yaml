@@ -84,12 +84,32 @@ qmt:
   retry_count: 3
 
 # ========================================
-# Cloudflare Workers 代理配置
+# CloudFlare Workers 配置 - 用于 AkShare API 代理
 # ========================================
 cloudflare_workers:
-  url: ""  # Worker URL，例如: your-worker.workers.dev
-  api_key: ""  # 可选，与 Worker 的 API_KEY 一致
-  fallback_to_direct: true  # Worker 不可用时是否回退到直连
+  url: "https://akshare-proxy.934073514.workers.dev"  # CloudFlare Worker URL，已包含 https://
+  api_key: ""  # API密钥（如果Worker需要认证）
+  fallback_to_direct: true  # Worker不可用时回退到直连
+  timeout: 30  # 请求超时（秒）
+  retry_count: 3  # 重试次数
+  cache_enabled: true  # 启用本地缓存
+  cache_ttl: 300  # 缓存过期时间（秒）
+
+# ========================================
+# AmazingData 配置（银河证券数据接口）
+# ========================================
+amazingdata:
+  enabled: false  # 是否启用（需要有效的许可证）
+  api_key: ""  # API密钥
+  api_secret: ""  # API密钥
+
+# ========================================
+# QMT 配置（迅投QMT终端）
+# ========================================
+qmt:
+  enabled: false  # 是否启用（需要安装QMT终端）
+  host: "localhost"  # QMT服务地址
+  port: 8888  # QMT服务端口
 
 # ========================================
 # MiniQMT集成配置
@@ -111,37 +131,6 @@ miniqmt:
     enabled: true
     heartbeat_interval: 30
     report_interval: 60
-
-# ========================================
-# Cloudflare Workers 代理配置
-# ========================================
-cloudflare_workers:
-  # 是否启用 Workers 代理
-  enabled: false
-  
-  # Workers 域名
-  url: "akshare-proxy.934073514.workers.dev"
-  
-  # 请求超时时间（秒）
-  timeout: 30
-  
-  # 重试次数
-  retry_count: 3
-  
-  # 重试延迟（秒）
-  retry_delay: 1
-  
-  # API 密钥（可选）
-  api_key: ""
-  
-  # Workers 失败时是否自动切换到直连
-  # 启用直连作为备用方案
-  fallback_to_direct: true
-  
-  # 缓存配置
-  cache_enabled: true
-  cache_ttl: 300  # 缓存过期时间（秒）
-  secret_key: "${CLOUDFLARE_SECRET_KEY:}"
 
 # ========================================
 # 数据提供者配置
@@ -201,10 +190,10 @@ amazingdata:
   
   # 连接配置
   connection:
-    username: "your_username"  # 请替换为实际的用户名
-    password: "your_password"  # 请替换为实际的密码（建议使用encrypted:格式）
-    host: "192.168.1.100"  # 请替换为实际的服务器地址
-    port: 8888  # 请替换为实际的服务端口
+    username: "212200038719"  # 请替换为实际的用户名
+    password: "21220003871920250820"  # 请替换为实际的密码（建议使用encrypted:格式）
+    host: "120.86.124.106"  # 请替换为实际的服务器地址
+    port: 8600  # 请替换为实际的服务端口
     timeout: 10  # 连接超时（秒）
     max_retries: 3  # 最大重试次数
     heartbeat_interval: 30  # 心跳间隔（秒）

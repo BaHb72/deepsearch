@@ -16,7 +16,7 @@ from deepsearch.constants import (
     EVENT_ERROR,
     EVENT_LOG,
 )
-from deepsearch.event.engine import Event
+from deepsearch.event.engine.engine import Event
 from deepsearch.messaging.bus import CompositeMessageBus
 
 # ==============================================================================

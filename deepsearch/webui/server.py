@@ -7,20 +7,26 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import sys
 import threading
+import zlib
+import time
+from collections import deque
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from deepsearch.core import MainEngine
-from deepsearch.diagnostics import diagnostic_logger, log_diagnostic
-from deepsearch.monitoring import EventSystemMonitor, MonitorAPI
+from deepsearch.debug.diagnostics import diagnostic_logger, log_diagnostic
+from deepsearch.observability.monitoring.event_monitor import EventSystemMonitor
+from deepsearch.observability.monitoring.monitor_api import MonitorAPI
 
 # Windows 兼容性：psycopg3 需要 SelectorEventLoop
 if sys.platform == "win32":
@@ -33,10 +39,93 @@ log_diagnostic("MODULE_IMPORT", "server.py", {
 })
 
 
-class WebSocketManager:
-    """WebSocket 连接管理器"""
+def safe_json_encoder(obj):
+    """
+    Custom JSON encoder that handles NaN, infinity, and other non-JSON-compliant values
+    """
+    if isinstance(obj, float):
+        if math.isnan(obj):
+            return None  # Convert NaN to null
+        elif math.isinf(obj):
+            if obj > 0:
+                return 999999.99  # Convert positive infinity to large finite number
+            else:
+                return -999999.99  # Convert negative infinity to large negative number
+    return jsonable_encoder(obj)
 
-    def __init__(self):
+
+def sanitize_data(data):
+    """
+    Recursively sanitize data to handle NaN and infinity values
+    """
+    if isinstance(data, dict):
+        return {k: sanitize_data(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [sanitize_data(item) for item in data]
+    elif isinstance(data, float):
+        if math.isnan(data):
+            return None
+        elif math.isinf(data):
+            return 999999.99 if data > 0 else -999999.99
+        return data
+    return data
+
+
+class SafeJSONResponse(JSONResponse):
+    """
+    Custom JSON response that safely handles NaN and infinity values
+    """
+    def render(self, content) -> bytes:
+        # Sanitize the content before rendering
+        safe_content = sanitize_data(content)
+        return super().render(safe_content)
+
+
+class MessageBatcher:
+    """消息批处理器"""
+    
+    def __init__(self, batch_size: int = 50, batch_timeout: float = 0.1):
+        self.batch_size = batch_size
+        self.batch_timeout = batch_timeout
+        self.message_queue = deque()
+        self.last_flush_time = time.time()
+        self.lock = asyncio.Lock()
+    
+    async def add_message(self, message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+        """
+        添加消息到批处理队列
+        
+        Returns:
+            如果需要发送，返回消息列表；否则返回None
+        """
+        async with self.lock:
+            self.message_queue.append(message)
+            
+            # 检查是否需要发送
+            current_time = time.time()
+            if (len(self.message_queue) >= self.batch_size or 
+                current_time - self.last_flush_time >= self.batch_timeout):
+                
+                messages = list(self.message_queue)
+                self.message_queue.clear()
+                self.last_flush_time = current_time
+                return messages
+        
+        return None
+    
+    async def flush(self) -> List[Dict[str, Any]]:
+        """强制发送所有待发送消息"""
+        async with self.lock:
+            messages = list(self.message_queue)
+            self.message_queue.clear()
+            self.last_flush_time = time.time()
+            return messages
+
+
+class WebSocketManager:
+    """WebSocket 连接管理器（支持批处理和压缩）"""
+
+    def __init__(self, enable_compression: bool = True, enable_batching: bool = True):
         self._connections: list[WebSocket] = []
         self._connections_lock = asyncio.Lock()  # 添加异步锁保护连接列表
         self._broadcast_task: Optional[asyncio.Task] = None
@@ -46,6 +135,22 @@ class WebSocketManager:
         self._last_data_hash: Optional[int] = None  # 用于检测数据变化
         self._slow_connections_count: int = 0  # 慢连接计数
         self._send_timeout: float = 0.5  # 单连接发送超时（500ms）
+        
+        # 批处理和压缩配置
+        self.enable_compression = enable_compression
+        self.enable_batching = enable_batching
+        self.message_batcher = MessageBatcher() if enable_batching else None
+        self.compression_threshold = 1024  # 压缩阈值（1KB）
+        
+        # 统计信息
+        self.stats = {
+            'messages_sent': 0,
+            'messages_compressed': 0,
+            'bytes_sent': 0,
+            'bytes_saved': 0,
+            'batches_sent': 0,
+            'connection_errors': 0
+        }
 
     async def accept_connection(self, websocket: WebSocket) -> None:
         """接受新的 WebSocket 连接"""
@@ -64,14 +169,55 @@ class WebSocketManager:
                 logger.debug(f"WebSocket 连接已断开（连接数：{connection_count}）")
 
     async def broadcast_message(self, message: dict) -> None:
-        """向所有客户端广播消息"""
+        """向所有客户端广播消息（支持批处理和压缩）"""
+        # 批处理逻辑
+        if self.enable_batching and self.message_batcher:
+            messages = await self.message_batcher.add_message(message)
+            if messages is None:
+                # 消息已加入队列，等待批处理
+                return
+            # 批量发送
+            message_to_send = {
+                'type': 'batch',
+                'messages': messages,
+                'count': len(messages)
+            }
+            self.stats['batches_sent'] += 1
+        else:
+            message_to_send = message
+        
         # 获取连接副本，避免长时间持有锁
         async with self._connections_lock:
             if not self._connections:
                 return
             connections_copy = self._connections.copy()
-
-        message_text = json.dumps(message, ensure_ascii=False)
+        
+        # 序列化消息
+        message_text = json.dumps(message_to_send, ensure_ascii=False)
+        original_size = len(message_text.encode('utf-8'))
+        
+        # 压缩消息（如果启用且超过阈值）
+        is_compressed = False
+        if self.enable_compression and original_size > self.compression_threshold:
+            compressed_data = zlib.compress(message_text.encode('utf-8'), level=1)
+            if len(compressed_data) < original_size:
+                # 构建压缩消息
+                compressed_message = {
+                    'type': 'compressed',
+                    'data': compressed_data.hex(),  # 转换为十六进制字符串
+                    'original_size': original_size,
+                    'compressed_size': len(compressed_data)
+                }
+                message_text = json.dumps(compressed_message)
+                is_compressed = True
+                
+                # 更新统计
+                self.stats['messages_compressed'] += 1
+                self.stats['bytes_saved'] += original_size - len(compressed_data)
+        
+        self.stats['messages_sent'] += 1
+        self.stats['bytes_sent'] += len(message_text.encode('utf-8'))
+        
         failed_connections = []
 
         # 并发发送消息
@@ -84,6 +230,7 @@ class WebSocketManager:
         # 清理失败的连接
         for conn in failed_connections:
             await self.remove_connection(conn)
+            self.stats['connection_errors'] += 1
 
     async def _send_to_connection(self, conn: WebSocket, message: str, failed_list: list) -> None:
         """发送消息到单个连接（带超时控制）"""
@@ -100,6 +247,17 @@ class WebSocketManager:
         except Exception as e:
             logger.debug(f"消息发送失败: {e}")
             failed_list.append(conn)
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """获取WebSocket统计信息"""
+        return {
+            **self.stats,
+            'active_connections': len(self._connections),
+            'slow_connections': self._slow_connections_count,
+            'compression_enabled': self.enable_compression,
+            'batching_enabled': self.enable_batching,
+            'broadcast_interval': self._broadcast_interval
+        }
 
     async def start_monitoring_broadcast(self, monitor_api: MonitorAPI) -> None:
         """启动监控数据广播"""
@@ -109,6 +267,17 @@ class WebSocketManager:
 
     async def stop_monitoring_broadcast(self) -> None:
         """停止监控数据广播"""
+        # 发送所有待发送消息
+        if self.message_batcher:
+            messages = await self.message_batcher.flush()
+            if messages:
+                batch_message = {
+                    'type': 'batch',
+                    'messages': messages,
+                    'count': len(messages)
+                }
+                await self.broadcast_message(batch_message)
+        
         if self._broadcast_task and not self._broadcast_task.done():
             self._broadcast_task.cancel()
             try:
@@ -250,7 +419,7 @@ class AppState:
         })
 
         # 同时注册到应用上下文
-        from deepsearch.core.context import get_context
+        from deepsearch.core.runtime.context import get_context
         context = get_context()
         context.set_engine(engine)
 
@@ -372,11 +541,48 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="DeepSearch Web UI",
         description="DeepSearch 量化交易系统 Web 界面",
-        version="0.1.0"
+        version="0.1.0",
+        default_response_class=SafeJSONResponse
     )
 
     # 存储全局应用状态
     app.state.app_state = app_state
+
+    # 设置全局异常处理器
+    try:
+        from deepsearch.webui.api.exception_handlers import setup_global_exception_handlers
+        setup_global_exception_handlers(app)
+        logger.info("全局异常处理器已配置")
+    except ImportError as e:
+        logger.warning(f"无法导入异常处理器: {e}")
+    
+    # 添加请求限流和去重中间件
+    try:
+        from deepsearch.webui.api.middleware import RateLimitMiddleware, DeduplicationMiddleware
+        
+        # 添加去重中间件（先去重，再限流）
+        app.add_middleware(
+            DeduplicationMiddleware,
+            ttl=5,  # 5秒内的相同请求会被合并
+            include_paths={
+                "/api/qmt/orderbook",
+                "/api/chart/series",
+                "/api/data/realtime",
+                "/api/market"
+            }
+        )
+        
+        # 添加限流中间件
+        app.add_middleware(
+            RateLimitMiddleware,
+            requests_per_second=20,  # 每秒最多20个请求
+            burst_size=50,  # 突发最多50个请求
+            exclude_paths={"/docs", "/openapi.json", "/api/health"}
+        )
+        
+        logger.info("请求限流和去重中间件已配置")
+    except ImportError as e:
+        logger.warning(f"无法导入中间件: {e}")
 
     # 设置启动和关闭处理
     app.add_event_handler("startup", create_startup_handler(app_state))
@@ -391,8 +597,18 @@ def create_app() -> FastAPI:
         # 开发环境允许所有来源
         cors_origins = ["*"]
     else:
-        # 生产环境使用配置的白名单
-        cors_origins = getattr(config.webui, "cors_origins", ["http://localhost:3000"])
+        # 生产环境使用配置的白名单，包括常用的开发端口
+        default_origins = [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:3002",
+            "http://localhost:3003",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://127.0.0.1:3002",
+            "http://127.0.0.1:3003"
+        ]
+        cors_origins = getattr(config.webui, "cors_origins", default_origins)
         if isinstance(cors_origins, str):
             cors_origins = [cors_origins]
     
@@ -411,54 +627,134 @@ def create_app() -> FastAPI:
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     # 导入并注册所有路由
-    from deepsearch.webui.api import (
-        database, cache, system, health, errors,
-        monitor, config, logs, data, data_source, proxy,
-        system_info, market, chart, qmt, data_unified, analytics,
-        qmt_subscription
-    )
+    from deepsearch.webui.api.database import router as database
+    from deepsearch.webui.api.endpoints.monitoring.cache_api import router as cache_api
+    from deepsearch.webui.api.endpoints.system.system import router as system
+    from deepsearch.webui.api.endpoints.system.health import router as health
+    from deepsearch.webui.api.errors import router as errors
+    from deepsearch.webui.api.endpoints.monitoring.monitor_api import router as monitor_api
+    from deepsearch.webui.api.endpoints.system.config import router as config
+    from deepsearch.webui.api.endpoints.system.logs import router as logs
+    from deepsearch.webui.api.endpoints.data.data import router as data
+    from deepsearch.webui.api.endpoints.data.data_source import router as data_source
+    from deepsearch.webui.api.proxy import router as proxy
+    from deepsearch.webui.api.endpoints.system.system_info import router as system_info
+    from deepsearch.webui.api.endpoints.trading.market import router as market
+    from deepsearch.webui.api.endpoints.trading.chart import router as chart
+    from deepsearch.webui.api.endpoints.qmt.qmt import router as qmt
+    from deepsearch.webui.api.endpoints.data.data_unified import router as data_unified
+    from deepsearch.webui.api.endpoints.monitoring.analytics import router as analytics
+    from deepsearch.webui.api.endpoints.qmt.qmt_subscription import router as qmt_subscription
+    from deepsearch.webui.api.endpoints.trading.market_overview import router as market_overview
+    from deepsearch.webui.api.stock_comment import router as stock_comment
+    from deepsearch.webui.api.endpoints.data.akshare_apis import router as akshare_apis
 
-    app.include_router(monitor.router, prefix="/api/monitor", tags=["Monitor"])
-    app.include_router(config.router, prefix="/api/config", tags=["Config"])
-    app.include_router(system.router, prefix="/api/system", tags=["System"])
-    app.include_router(system_info.router)  # 系统信息路由
-    app.include_router(logs.router, prefix="/api/logs", tags=["Logs"])
-    app.include_router(data.router, prefix="/api/data", tags=["Data"])
-    app.include_router(data_source.router, tags=["DataSource"])  # 已包含 /api/data-source 前缀
-    app.include_router(database.router, prefix="/api/database", tags=["Database"])
-    app.include_router(cache.router, prefix="/api/cache", tags=["Cache"])
-    app.include_router(health.router, prefix="/api/health", tags=["Health"])
-    app.include_router(errors.router, prefix="/api/frontend", tags=["Frontend Errors"])
-    app.include_router(proxy.router, tags=["Workers Proxy"])  # 已包含 /api/workers 前缀
-    app.include_router(market.router, tags=["Market"])  # 市场数据路由，已包含 /api/market 前缀
-    app.include_router(chart.router, tags=["Chart"])  # 图表数据路由，已包含 /api/chart 前缀
-    app.include_router(qmt.router, tags=["QMT"])  # QMT数据路由，已包含 /api/qmt 前缀
-    app.include_router(qmt_subscription.router, tags=["QMT Subscription"])  # QMT订阅管理路由
-    app.include_router(data_unified.router, tags=["UnifiedData"])  # 统一数据API，已包含 /api/data 前缀
-    app.include_router(analytics.router, tags=["Analytics"])  # 分析API，已包含 /api/analytics 前缀
+    app.include_router(monitor_api, prefix="/api/monitor", tags=["Monitor"])
+    app.include_router(config, prefix="/api/system/config", tags=["Config"])
+    app.include_router(system, prefix="/api/system", tags=["System"])
+    app.include_router(system_info)  # 系统信息路由
+    app.include_router(logs, prefix="/api/system/logs", tags=["Logs"])
+    app.include_router(data, prefix="/api/data", tags=["Data"])
+    app.include_router(data_source, tags=["DataSource"])  # 已包含 /api/data-source 前缀
+    app.include_router(database, prefix="/api/database", tags=["Database"])
+    app.include_router(cache_api, prefix="/api/cache", tags=["Cache"])
+    app.include_router(health, prefix="/api/health", tags=["Health"])
+    app.include_router(errors, prefix="/api/frontend", tags=["Frontend Errors"])
+    app.include_router(proxy, tags=["Workers Proxy"])  # 已包含 /api/workers 前缀
+    app.include_router(market, tags=["Market"])  # 市场数据路由，已包含 /api/market 前缀
+    app.include_router(chart, tags=["Chart"])  # 图表数据路由，已包含 /api/chart 前缀
+    app.include_router(qmt, tags=["QMT"])  # QMT数据路由，已包含 /api/qmt 前缀
+    app.include_router(qmt_subscription, tags=["QMT Subscription"])  # QMT订阅管理路由
+    app.include_router(data_unified, tags=["UnifiedData"])  # 统一数据API，已包含 /api/data 前缀
+    app.include_router(analytics, tags=["Analytics"])  # 分析API，已包含 /api/analytics 前缀
+    app.include_router(market_overview, tags=["MarketOverview"])  # 市场总貌API
+    app.include_router(stock_comment, tags=["StockComment"])  # 千股千评API
+    app.include_router(akshare_apis, tags=["AkShareAPIs"])  # AkShare API列表
 
     # 数据源状态管理API
     try:
-        from deepsearch.webui.api import data_source_status
-        app.include_router(data_source_status.router, tags=["DataSource"])  # 数据源管理API
+        from deepsearch.webui.api.endpoints.data.data_source_status import router as data_source_status
+        app.include_router(data_source_status, tags=["DataSource"])  # 数据源管理API
         logger.info("数据源状态API已注册")
     except ImportError as e:
         logger.warning(f"数据源状态API模块加载失败: {e}")
+    
+    # 数据源监控API
+    try:
+        from deepsearch.webui.api.endpoints.data.data_source_monitor_api import router as data_source_monitor_api
+        app.include_router(data_source_monitor_api, tags=["DataSourceMonitor"])  # 数据源监控API
+        logger.info("数据源监控API已注册")
+    except ImportError as e:
+        logger.warning(f"数据源监控API模块加载失败: {e}")
+    
+    # 数据源能力对比API
+    try:
+        from deepsearch.webui.api.endpoints.data.data_source_capability_api import router as data_source_capability_api
+        app.include_router(data_source_capability_api, tags=["DataSourceCapability"])  # 数据源能力API
+        logger.info("数据源能力对比API已注册")
+    except ImportError as e:
+        logger.warning(f"数据源能力API模块加载失败: {e}")
+    
+    # 数据源配置管理API
+    try:
+        from deepsearch.webui.api.endpoints.data.data_source_config_api import router as data_source_config_api
+        app.include_router(data_source_config_api, tags=["DataSourceConfig"])  # 数据源配置API
+        # data_source_config_api.setup_callbacks()  # 设置配置回调 - router对象没有这个方法
+        logger.info("数据源配置API已注册")
+    except ImportError as e:
+        logger.warning(f"数据源配置API模块加载失败: {e}")
 
     # MiniQMT API
     try:
-        from deepsearch.webui.api import miniqmt
-        app.include_router(miniqmt.router, tags=["MiniQMT"])  # MiniQMT数据路由，已包含 /api/miniqmt 前缀
+        from deepsearch.webui.api.endpoints.qmt.miniqmt import router as miniqmt
+        app.include_router(miniqmt, tags=["MiniQMT"])  # MiniQMT数据路由，已包含 /api/miniqmt 前缀
     except ImportError:
         logger.warning("MiniQMT API 模块未找到，跳过注册")
 
-    # Strategy API
+    # 数据库连接管理API
     try:
-        from deepsearch.webui.api import strategy_api
-        app.include_router(strategy_api.router, tags=["Strategy"])  # 策略管理API，已包含 /api/strategy 前缀
-        logger.info("策略管理API已注册")
+        from deepsearch.webui.api.endpoints.system.database_manager import router as database_manager
+        app.include_router(database_manager, prefix="/api/system/database", tags=["Database Management"])
+        logger.info("数据库连接管理API已注册")
     except ImportError as e:
-        logger.warning(f"策略管理API模块加载失败: {e}")
+        logger.warning(f"数据库连接管理API模块加载失败: {e}")
+    
+    # 数据源CRUD管理API
+    try:
+        from deepsearch.webui.api.endpoints.datasources.datasource_manager import (
+            router as datasource_manager,
+            data_source_router
+        )
+        app.include_router(datasource_manager, tags=["DataSource Management"])
+        app.include_router(data_source_router, tags=["DataSource Compatibility"])
+        logger.info("数据源CRUD管理API已注册")
+    except ImportError as e:
+        logger.warning(f"数据源CRUD管理API模块加载失败: {e}")
+    
+    # AKShare数据源集成API
+    try:
+        from deepsearch.webui.api.endpoints.datasources.akshare_integration import router as akshare_api
+        app.include_router(akshare_api, tags=["AKShare Integration"])
+        logger.info("AKShare数据源API已注册")
+    except ImportError as e:
+        logger.warning(f"AKShare数据源API模块加载失败: {e}")
+    
+    # Backtest API
+    try:
+        from deepsearch.webui.api.endpoints.trading.backtest_api import router as backtest_api
+        app.include_router(backtest_api, tags=["Backtest"])  # 回测API，已包含 /api/backtest 前缀
+        logger.info("回测API已注册")
+    except ImportError as e:
+        logger.warning(f"回测API模块加载失败: {e}")
+    
+    # Data Source Monitor API
+    try:
+        from deepsearch.webui.api.monitor.data_source_api import router as data_source_api
+        app.include_router(data_source_api, tags=["DataSourceMonitor"])  # 数据源监控API
+        logger.info("数据源监控API已注册")
+    except ImportError as e:
+        logger.warning(f"数据源监控API模块加载失败: {e}")
+    
     # 注释掉 Cloudflare Tunnel API，因为不需要映射 webui 端口
     # Cloudflare Tunnel 已移除（使用 Workers 代理方案）
 
@@ -473,11 +769,24 @@ app = create_app()
 
 @app.get("/")
 async def root():
-    """根路径，返回前端页面。"""
-    index_file = static_dir / "index.html"
-    if index_file.exists():
-        return FileResponse(str(index_file))
-    return {"message": "DeepSearch Web UI", "version": "0.1.0"}
+    """根路径，返回前端页面或API信息。"""
+    try:
+        # 检查是否定义了static_dir
+        if 'static_dir' in globals():
+            index_file = static_dir / "index.html"
+            if index_file.exists():
+                return FileResponse(str(index_file))
+    except Exception as e:
+        logger.debug(f"无法加载静态文件: {e}")
+    
+    # 返回API信息而不是错误
+    return JSONResponse({
+        "message": "DeepSearch Web UI Backend",
+        "version": "0.1.0",
+        "api_docs": "/docs",
+        "health_check": "/api/health",
+        "note": "Frontend is running separately on port 3000"
+    })
 
 
 @app.websocket("/ws/monitor")

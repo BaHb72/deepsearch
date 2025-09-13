@@ -10,16 +10,16 @@ from typing import Dict, Optional, List
 
 from loguru import logger
 
-from deepsearch.core.interfaces import Component
-from deepsearch.datafeed.qmt.gateway import (
+from deepsearch.core.interfaces.component import Component
+from deepsearch.data_providers.datafeed.qmt.gateway import (
     EVENT_QMT_TICK,
     EVENT_QMT_ORDERBOOK,
     EVENT_QMT_TRADE,
     EVENT_QMT_CONNECTION
 )
-from deepsearch.datafeed.qmt.models import TickData, OrderBook, TradeData
-from deepsearch.datafeed.qmt.receiver import QMTReceiver
-from deepsearch.event.engine import EventEngine
+from deepsearch.data_providers.datafeed.qmt.models import TickData, OrderBook, TradeData
+from deepsearch.data_providers.datafeed.qmt.receiver import QMTReceiver
+from deepsearch.event.engine.engine import EventEngine
 from deepsearch.event.schema import Event
 from deepsearch.messaging.bus import MessageBus
 
@@ -32,6 +32,9 @@ class QMTGatewayComponent(Component):
         self.event_engine = event_engine
         self.message_bus = message_bus
         self.config = config
+        
+        # 从配置读取优先级，而不是硬编码
+        self.priority = config.get('priority', 1)
 
         # 接收器
         self.receiver: Optional[QMTReceiver] = None
@@ -184,33 +187,53 @@ class QMTGatewayComponent(Component):
         }
 
     async def _handle_tick_batch(self, client_id: str, msg: Dict):
-        """批量处理Tick数据"""
+        """批量处理Tick数据（增强错误处理）"""
         start_time = time.time()
 
         try:
             data = msg.get('data', {})
+            
+            # 数据验证
+            symbol = data.get('symbol', '')
+            if not symbol:
+                logger.warning(f"收到无效的Tick数据（缺少symbol）: {data}")
+                self.stats['error_count'] += 1
+                return
+            
+            # 安全地获取数值，提供默认值
+            def safe_float(value, default=0.0):
+                try:
+                    return float(value) if value is not None else default
+                except (ValueError, TypeError):
+                    return default
+            
+            def safe_int(value, default=0):
+                try:
+                    return int(value) if value is not None else default
+                except (ValueError, TypeError):
+                    return default
 
-            # 创建TickData对象
+            # 创建TickData对象（安全处理）
             tick = TickData(
-                symbol=data.get('symbol', ''),
+                symbol=symbol,
                 name=data.get('name', ''),
                 exchange=data.get('exchange', ''),
-                timestamp=data.get('timestamp', time.time()),
-                datetime=datetime.fromtimestamp(data.get('timestamp', time.time())),
-                last_price=data.get('last_price', 0),
-                pre_close=data.get('pre_close', 0),
-                open_price=data.get('open', 0),
-                high_price=data.get('high', 0),
-                low_price=data.get('low', 0),
-                volume=data.get('volume', 0),
-                amount=data.get('amount', 0),
-                trades_count=data.get('trades_count', 0),
-                change=data.get('change', 0),
-                pct_change=data.get('pct_change', 0),
-                bid_price=data.get('bid_price', []),
-                ask_price=data.get('ask_price', []),
-                bid_volume=data.get('bid_volume', []),
-                ask_volume=data.get('ask_volume', [])
+                timestamp=safe_float(data.get('timestamp', time.time())),
+                datetime=datetime.fromtimestamp(safe_float(data.get('timestamp', time.time()))),
+                last_price=safe_float(data.get('last_price')),
+                pre_close=safe_float(data.get('pre_close')),
+                open_price=safe_float(data.get('open')),
+                high_price=safe_float(data.get('high')),
+                low_price=safe_float(data.get('low')),
+                volume=safe_int(data.get('volume')),
+                amount=safe_float(data.get('amount')),
+                trades_count=safe_int(data.get('trades_count')),
+                change=safe_float(data.get('change')),
+                pct_change=safe_float(data.get('pct_change')),
+                bid_price=data.get('bid_price', []) or [],
+                ask_price=data.get('ask_price', []) or [],
+                bid_volume=data.get('bid_volume', []) or [],
+                ask_volume=data.get('ask_volume', []) or []
             )
 
             # 更新缓存
@@ -228,14 +251,21 @@ class QMTGatewayComponent(Component):
             # 记录处理时间
             processing_time = time.time() - start_time
             self.stats['processing_times'].append(processing_time)
+            
+            # 限制处理时间记录数量，避免内存增长
+            if len(self.stats['processing_times']) > 1000:
+                self.stats['processing_times'] = self.stats['processing_times'][-1000:]
 
             # 检查是否需要立即刷新
             if len(self._batch_buffer) >= self._batch_size:
                 await self._flush_batch()
 
         except Exception as e:
-            logger.error(f"处理Tick数据失败: {e}")
+            logger.error(f"处理Tick数据失败: {e}", exc_info=True)
             self.stats['error_count'] += 1
+            
+            # 记录详细错误信息用于调试
+            logger.debug(f"错误数据内容: {msg}")
 
     async def _handle_level2_batch(self, client_id: str, msg: Dict):
         """批量处理Level2数据"""
@@ -260,7 +290,7 @@ class QMTGatewayComponent(Component):
             ask_volumes = data.get('ask_volume', [])
 
             # 使用列表推导式优化
-            from deepsearch.datafeed.qmt.models import OrderBookLevel
+            from deepsearch.data_providers.datafeed.qmt.models import OrderBookLevel
             orderbook.bid_levels = [
                 OrderBookLevel(price=p, volume=v)
                 for p, v in zip(bid_prices, bid_volumes)
@@ -311,7 +341,7 @@ class QMTGatewayComponent(Component):
             data = msg.get('data', {})
 
             # 创建TradeData对象
-            from deepsearch.datafeed.qmt.models import OrderSide
+            from deepsearch.data_providers.datafeed.qmt.models import OrderSide
             trade = TradeData(
                 symbol=data.get('symbol', ''),
                 exchange=data.get('exchange', ''),
@@ -555,3 +585,18 @@ class QMTGatewayComponent(Component):
         else:
             logger.info(f"缓存中没有 {symbol} 的盘口数据, 缓存股票: {list(self._orderbook_cache.keys())}")
             return None
+    
+    def is_qmt_connected(self) -> bool:
+        """检查QMT采集器是否真正连接"""
+        # 检查是否有最近的数据更新（30秒内）
+        if self._cache_timestamps:
+            latest_update = max(self._cache_timestamps.values())
+            if time.time() - latest_update < 30:
+                return True
+        
+        # 检查是否有接收到消息
+        if hasattr(self, 'receiver') and self.receiver:
+            # 这里可以添加更多的连接检查逻辑
+            return self.receiver.is_connected() if hasattr(self.receiver, 'is_connected') else False
+        
+        return False

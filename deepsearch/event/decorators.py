@@ -12,9 +12,9 @@ import threading
 import time
 from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union
 
-from deepsearch.event.engine import Event, EventEngine, Handler
+from deepsearch.event.engine.engine import Event, EventEngine, Handler
 from deepsearch.event.schema import BaseEventSchema
-from deepsearch.monitoring.metrics import MetricsCollector
+from deepsearch.observability.metrics.metrics import MetricsCollector
 
 # ==============================================================================
 # Constants

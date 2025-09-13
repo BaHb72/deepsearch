@@ -44,67 +44,192 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Project specific
+# ==================== Project Configuration ====================
 config/settings.local.yaml
 settings.local.yaml
 settings.*.local.yaml
-.venv/
-data/monitoring/*.json
-data/cache/
-
-# Cloudflare deployment configs (contain sensitive info)
-cloudflare-deploy/*.toml
-wrangler.toml
-wrangler-*.toml
-
-# Test files
-test_*.html
-test_*.py
-nul
-
-# System error files
-D:*
-*qmt_config.json
-*.db
-*.sqlite
 config/.crypto_key
 .crypto_key
-uv.lock
-/.claude/
-*_old.py
-*.bak
-/temp/
-/tmp/
+
+# ==================== Build Artifacts ====================
+# Frontend build outputs
+/deepsearch/webui/static/assets/
+/deepsearch/webui/static/index.html
+/deepsearch/webui/frontend/dist/
+/deepsearch/webui/frontend/.vite/
 /deepsearch/webui/frontend/node_modules/
 /deepsearch/webui/frontend/package-lock.json
-/.venv/
-/tests/
+/deepsearch/webui/frontend/src/.trash/
 
-# Data files
-data/monitoring/*.json
-deepsearch/data/monitoring/*.json
-diagnostic_log.json
+# Python build artifacts
+uv.lock
+*.db
+*.sqlite
+*.duckdb.wal
 
-# Temporary test scripts
+# ==================== Test Scripts ====================
+# Test files (all patterns)
 test_*.py
 *_test.py
+tests_*.py
+*_tests.py
+test_*.html
 check_*.py
 force_*.py
 quick_*.py
 simple_*.py
 run_tests.py
 safe_start.py
+diagnose_*.py
+validate_*.py
+benchmark_*.py
+analyze_*.py
 
-# Temporary documentation
+# Test directories
+/tests/
+/test/
+
+# ==================== Documentation (Build-time) ====================
+# Temporary/generated documentation
 README_NEW.md
+README_*.md
 REFACTORING_*.md
 SYSTEM_*.md
 WEBUI_*.md
+DESIGN_*.md
+MIGRATION_*.md
+*_REPORT.md
+*_GUIDE.md
+*_ANALYSIS.md
+*_SUMMARY.md
+*_TRACKER.md
+*_LOG.md
+CODE_ISSUES_*.md
+DATA_*.md
+REACT_*.md
+TYPESCRIPT_*.md
+API_*.md
+FRONTEND_*.md
+DEPLOYMENT_*.md
+CLEANUP_*.md
+BEST_PRACTICES_*.md
+ERROR_*.md
+ISSUES_*.md
+
+# Documentation directories (generated/temporary)
+/docs/api-guides/
+/docs/api/
+/docs/architecture/
+/docs/archive/
+/docs/development/
+/docs/migration/
+/docs/operations/
+/docs/solutions/
+
+# ==================== Data Files ====================
+/data/
+data/monitoring/*.json
+data/cache/
+data/analytics/*.duckdb
+data/analytics/*.duckdb.wal
+deepsearch/data/monitoring/*.json
+diagnostic_log.json
+
+# ==================== Deployment ====================
+# Cloudflare deployment configs (contain sensitive info)
+cloudflare-deploy/*.toml
+cloudflare-deploy/*.min.js
+wrangler.toml
+wrangler-*.toml
+
+# Installer files
+/installer/
+
+# ==================== Development Tools ====================
+/.claude/
+/.venv/
+.venv/
+
+# Batch/Shell scripts for development
+*.bat
+*.ps1
+*.sh
+
+# ==================== Temporary Files ====================
+*_old.py
+*.bak
+*.backup
+/temp/
+/tmp/
 /examples/
 /cloudflare-worker/
+nul
 
-# Frontend build outputs
-/deepsearch/webui/static/assets/
-/deepsearch/webui/static/index.html
-/data/
-/installer/
+# System error files
+D:*
+*qmt_config.json
+
+# Archive/Trash directories
+/.archive/
+/.trash/
+*/.trash/
+*/cleanup-duplicates.md
+
+# Backup directories
+*backup*/
+*jsx-backup*/
+*.backup-cleanup/
+
+# ==================== Frontend Development ====================
+# React/TypeScript config files (development only)
+/deepsearch/webui/frontend/.env.*
+/deepsearch/webui/frontend/.eslintrc.*
+/deepsearch/webui/frontend/.prettierrc
+/deepsearch/webui/frontend/.lintstagedrc.*
+/deepsearch/webui/frontend/babel.config.*
+/deepsearch/webui/frontend/commitlint.config.*
+/deepsearch/webui/frontend/jest.config.*
+/deepsearch/webui/frontend/tsconfig.*
+/deepsearch/webui/frontend/vite.config.*
+/deepsearch/webui/frontend/__mocks__/
+/deepsearch/webui/frontend/.husky/
+/deepsearch/webui/frontend/index-react.html
+
+# ==================== Miscellaneous ====================
+# Editor/IDE specific files  
+*~
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+logs/
+
+# Coverage reports
+.coverage
+.pytest_cache/
+htmlcov/
+
+# ==================== Temporary Files ====================
+# Temporary thinking/notes files
+2025-*.txt
+*-think.txt
+
+# Cleanup scripts
+cleanup_*.py
+cleanup_*.bat
+final_*.py
+
+# Example files
+*_example.py
+*_example.js
+
+# Temporary diagnosis files
+diagnose_*.py
+diagnostic_*.json

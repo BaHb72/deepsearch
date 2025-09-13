@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional, Union
 import yaml
 from loguru import logger
 
-from deepsearch.utils.singleton import Singleton
+from deepsearch.utils.system.singleton import Singleton
 
 
 class ConfigManager(metaclass=Singleton):

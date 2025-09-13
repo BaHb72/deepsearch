@@ -8,7 +8,7 @@ __author__ = APP_AUTHOR
 __email__ = "bahb@example.com"
 
 # 导出主要组件
-from .event.engine import Event, EventEngine
+from .event.engine.engine import Event, EventEngine
 from .gateway.gateway import BaseGateway, Gateway
 from .messaging import InMemoryMessageBus, ZeroMQMessageBus
 from .messaging.bus import CompositeMessageBus

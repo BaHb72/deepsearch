@@ -6,52 +6,87 @@
 
 ```
 deepsearch/
-├── configs/               # 配置文件目录
-├── deepsearch/            # 源代码
+├── deepsearch/                    # 源代码
 │   ├── __init__.py
-│   ├── __main__.py        # CLI 入口
-│   ├── cli.py             # 命令行界面
-│   ├── config/            # 配置管理
-│   │   ├── models/        # 配置模型
-│   │   ├── manager.py     # 配置管理器
-│   │   └── settings.py    # 配置设置
-│   ├── constants/         # 常量定义
-│   ├── core/              # 核心组件
-│   │   ├── engine.py      # 主引擎
-│   │   ├── component_manager.py  # 组件管理
-│   │   └── interfaces.py  # 接口定义
-│   ├── datafeed/          # 数据源
-│   │   ├── qmt/           # QMT数据源
-│   │   └── akshare/       # AkShare数据源
-│   ├── event/             # 事件系统
-│   ├── gateway/           # 交易网关
-│   ├── messaging/         # 消息系统
-│   ├── monitoring/        # 监控系统
-│   ├── observability/     # 日志监控
-│   ├── services/          # 业务服务
+│   ├── __main__.py                # CLI 入口
+│   ├── cli.py                     # 命令行界面
+│   ├── config/                    # 配置管理
+│   │   ├── models/                # 配置模型
+│   │   ├── manager.py             # 配置管理器
+│   │   ├── settings.py            # 配置设置
+│   │   ├── settings.dev.yaml      # 开发环境配置
+│   │   └── settings.prod.yaml     # 生产环境配置
+│   ├── constants/                 # 常量定义
+│   ├── core/                      # 核心组件
+│   │   ├── engine.py              # 主引擎（事件循环、组件管理）
+│   │   ├── component_manager.py   # 组件生命周期管理
+│   │   ├── unified_components.py  # 统一组件接口
+│   │   └── interfaces.py          # 接口定义
+│   ├── database/                  # 数据库层
+│   │   ├── pool.py                # 连接池管理
+│   │   ├── duckdb_manager.py      # DuckDB分析数据库
+│   │   └── cache_manager.py       # 多级缓存管理
+│   ├── data_providers/            # 数据提供者
+│   │   ├── amazingdata.py         # 银河证券数据API（最高优先级）
+│   │   ├── amazingdata_types.py   # AmazingData类型定义
+│   │   ├── cloudflare_proxy.py    # CloudFlare Workers代理
+│   │   ├── akshare_direct.py      # AkShare直连（备用）
+│   │   ├── qmt_provider.py        # QMT实时数据
+│   │   ├── capabilities.py        # 数据源能力矩阵
+│   │   └── interfaces.py          # 统一接口定义
+│   ├── datafeed/                  # 数据源集成
+│   │   ├── qmt/                   # QMT数据源
+│   │   │   └── scripts/           # QMT脚本（GBK编码）
+│   │   └── akshare/                # AkShare数据源
+│   ├── event/                     # 事件系统
+│   │   ├── engine.py              # 事件引擎
+│   │   ├── handler.py             # 事件处理器
+│   │   └── schemas.py             # 事件模式定义
+│   ├── gateway/                   # 交易网关
+│   ├── messaging/                 # 消息系统
+│   │   ├── bus.py                 # 消息总线
+│   │   ├── zeromq_bus.py          # ZeroMQ实现
+│   │   └── redis_bus.py           # Redis实现
+│   ├── monitoring/                # 监控系统
+│   │   └── data_source_monitor.py # 数据源监控
+│   ├── observability/             # 日志监控
+│   │   ├── logger.py              # 结构化日志
+│   │   └── structured_logger.py   # 日志增强
+│   ├── services/                  # 业务服务
+│   │   ├── data_source_manager.py # 数据源统一管理（新增）
+│   │   ├── kline_cache.py         # K线数据缓存（优化）
 │   │   ├── chart_service.py       # 图表数据服务
-│   │   ├── stock_info_service.py  # 股票信息服务
+│   │   ├── market_service.py      # 市场数据服务
 │   │   ├── adjust_service.py      # 复权因子服务
-│   │   ├── data_source_interface.py    # 数据源接口
-│   │   ├── data_source_adapter.py      # 数据源适配器
-│   │   └── aggregated_data_source.py   # 聚合数据源
-│   ├── storage/           # 数据存储
-│   ├── trader/            # 交易逻辑
-│   ├── utils/             # 工具类
-│   └── webui/             # Web UI
-│       ├── api/           # FastAPI 后端
-│       ├── frontend/      # Vue 前端
-│       └── server.py      # 服务器入口
-├── docs/                  # 文档
-├── examples/              # 示例代码
-├── scripts/               # 脚本文件
-│   └── start.bat          # 启动脚本
-├── tests/                 # 测试
-├── tools/                 # 工具脚本
-├── main.py                # 主入口
-├── pyproject.toml         # 项目配置
-├── requirements.txt       # 依赖
-└── README.md              # 本文件
+│   │   └── stock_info_service.py  # 股票信息服务
+│   ├── storage/                   # 数据存储
+│   ├── trader/                    # 交易逻辑
+│   ├── utils/                     # 工具类
+│   └── webui/                     # Web UI
+│       ├── api/                   # FastAPI 后端
+│       │   ├── middleware.py      # 请求中间件（新增）
+│       │   ├── chart.py           # 图表API
+│       │   ├── qmt.py             # QMT API
+│       │   └── market.py          # 市场数据API
+│       ├── frontend/              # Vue 前端
+│       │   ├── src/
+│       │   │   ├── components/    # 组件
+│       │   │   ├── stores/        # 状态管理
+│       │   │   └── utils/         # 工具函数
+│       │   └── package.json
+│       └── server.py              # 服务器入口
+├── docs/                          # 文档
+│   ├── AMAZINGDATA_*.md           # AmazingData相关文档
+│   ├── QMT_*.md                   # QMT相关文档
+│   ├── DATA_PROVIDER_DESIGN.md    # 数据提供者设计
+│   └── STRATEGY_ARCHITECTURE.md   # 策略架构
+├── tests/                         # 测试
+├── installer/                     # 安装包
+│   └── AmazingData-*.whl          # AmazingData SDK
+├── pyproject.toml                 # UV项目配置
+├── uv.lock                        # UV锁文件
+├── CLAUDE.md                      # Claude Code指南
+└── README.md                      # 本文件
 ```
 
 ## 核心功能
@@ -67,10 +102,11 @@ deepsearch/
 
 ### 2. 数据源架构
 
-- **依赖倒置原则**: 数据源作为黑盒，支持热切换
-- **适配器模式**: 统一不同数据源接口
-- **断路器模式**: 故障隔离和自动恢复
-- **聚合数据源**: 智能路由和负载均衡
+- **统一数据源管理**: DataSourceManager提供单一入口，自动选择最优数据源
+- **优先级机制**: AmazingData > CloudFlare Proxy > QMT > AkShare Direct
+- **断路器模式**: 故障隔离和自动恢复，避免级联失败
+- **多级缓存**: L1内存 → L2 Redis → L3 DuckDB/PostgreSQL
+- **请求优化**: 速率限制、请求去重、批处理
 
 ### 3. 事件驱动系统
 
@@ -86,20 +122,26 @@ deepsearch/
 
 ## 安装
 
+本项目使用 UV 作为包管理工具，提供更快的依赖安装和更好的依赖解析。
+
 ```bash
 # 克隆项目
 git clone https://github.com/your-repo/deepsearch.git
 cd deepsearch
 
-# 创建虚拟环境
-python -m venv .venv
+# 安装 UV（如果未安装）
+pip install uv
+
+# 创建虚拟环境（使用Python 3.13）
+uv venv --python 3.13
+
+# 激活虚拟环境
 source .venv/bin/activate  # Linux/Mac
 # 或
 .venv\Scripts\activate  # Windows
 
-# 安装依赖
-pip install -r requirements.txt
-pip install -r requirements-dev.txt  # 开发依赖
+# 安装所有依赖（包括开发依赖）
+uv sync --all-extras
 
 # 安装前端依赖
 cd deepsearch/webui/frontend
@@ -112,16 +154,19 @@ cd ../../..
 ### 启动系统
 
 ```bash
-# 启动后端系统（不含前端）
-python -m deepsearch run
+# 使用UV启动后端系统（不含前端）
+uv run python -m deepsearch run
 
 # 单独启动前端（另一个终端）
 cd deepsearch/webui/frontend
 npm run dev
 
-# 或使用脚本启动所有服务
-./scripts/start.bat  # Windows
-./scripts/start.sh   # Linux/Mac
+# 运行特定模式
+uv run python -m deepsearch run --mode engine  # 仅引擎
+uv run python -m deepsearch run --mode webui   # 仅WebUI
+
+# 检查端口配置
+uv run python -m deepsearch check-ports
 ```
 
 ### 访问界面
@@ -134,14 +179,23 @@ npm run dev
 
 ```bash
 # 查看帮助
-python -m deepsearch --help
+uv run python -m deepsearch --help
 
 # 检查端口
-python -m deepsearch check-ports
+uv run python -m deepsearch check-ports
 
 # 运行特定模式
-python -m deepsearch run --mode engine  # 仅引擎
-python -m deepsearch run --mode webui   # 仅WebUI
+uv run python -m deepsearch run --mode engine  # 仅引擎
+uv run python -m deepsearch run --mode webui   # 仅WebUI
+
+# 添加新依赖
+uv add package-name
+
+# 添加开发依赖
+uv add --group dev package-name
+
+# 更新依赖
+uv lock --update
 ```
 
 ## 配置
@@ -191,11 +245,14 @@ npm run build
 
 ### 后端
 
-- Python 3.10+
-- FastAPI - Web框架
+- Python 3.13 - 主要开发语言
+- UV - 现代Python包管理器
+- FastAPI - 高性能Web框架
 - AsyncIO - 异步编程
-- Pydantic - 数据验证
+- Pydantic - 数据验证和设置管理
 - SQLAlchemy - ORM
+- DuckDB - 分析型数据库
+- PostgreSQL - 事务型数据库
 - Redis - 缓存和消息队列
 - ZeroMQ - 高性能消息传输
 
@@ -203,14 +260,16 @@ npm run build
 
 - Vue 3 - 前端框架
 - Element Plus - UI组件库
-- ECharts - 图表库
+- ECharts - 专业图表库
 - Vite - 构建工具
 - TypeScript - 类型支持
 
 ### 数据源
 
+- AmazingData - 银河证券专业数据（最高优先级）
+- CloudFlare Workers - AkShare API代理
 - AkShare - A股数据
-- QMT - 迅投量化数据
+- QMT - 迅投量化实时数据
 - 支持自定义数据源扩展
 
 ## 性能优化

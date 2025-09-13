@@ -53,6 +53,10 @@ dependencies = [
     "click>=8.2.1",
     "scipy>=1.16.1",
     "ta-lib>=0.6.5",
+    "xxhash>=3.5.0",
+    "pandas-stubs==2.3.0.250703",
+    "react>=4.3.0",
+    "vite>=1.5.2",
 ]
 
 [project.optional-dependencies]

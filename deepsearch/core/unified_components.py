@@ -10,14 +10,14 @@ from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from deepsearch.config import settings
-from deepsearch.event.engine import EventEngine
+from deepsearch.config import get_config
+from deepsearch.event.engine.engine import EventEngine
 from deepsearch.gateway.gateway import Gateway
 from deepsearch.messaging.bus import CompositeMessageBus, RouteConfig
 from deepsearch.messaging.factory import MessageBusFactory
-from deepsearch.monitoring import EventSystemMonitor
+# 延迟导入EventSystemMonitor以避免循环导入
 from .async_component import AsyncComponent, SimpleAsyncComponent
-from .exceptions import error_context, ComponentLifecycleError
+from .utils.exceptions import error_context, ComponentLifecycleError
 from .interfaces import ComponentType
 
 
@@ -99,8 +99,9 @@ class MessageBusComponent(AsyncComponent[CompositeMessageBus]):
             routes = []
 
             # 检查是否有消息总线配置
-            if hasattr(settings, 'message_bus'):
-                msg_bus_config = settings.message_bus
+            config = get_config()
+            if config and hasattr(config, 'message_bus'):
+                msg_bus_config = config.message_bus
 
                 # 创建各个总线实例
                 if hasattr(msg_bus_config, 'buses'):
@@ -194,42 +195,25 @@ class DatabaseComponent(AsyncComponent[Any]):
     async def _initialize(self) -> None:
         """初始化数据库连接"""
         with error_context(self.name, "initialize"):
-            db_config = settings.database
+            config = get_config()
+            db_config = config.database if config else None
 
             # 检查是否应该自动连接
             if not db_config.main.auto_connect:
                 self._logger.info("数据库组件已初始化（未连接）- auto_connect=false")
+                # 设置实例为self以满足基类要求
+                self._instance = self
                 return
 
-            # 获取数据库URL
-            db_url = db_config.main.get_url()
-            if not db_url:
-                raise RuntimeError("数据库 URL 未配置")
-
-            # 创建异步引擎
-            if db_url.startswith("postgresql://"):
-                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-
-            self._engine = create_async_engine(
-                db_url,
-                echo=(settings.app.env == "dev"),
-                pool_size=20,
-                max_overflow=10,
-                pool_pre_ping=True,
-                pool_recycle=3600,
-            )
-
-            # 创建会话工厂
-            self._session_factory = sessionmaker(
-                self._engine,
-                class_=AsyncSession,
-                expire_on_commit=False
-            )
-
-            # 设置实例为self以满足基类要求
-            self._instance = self
-
-            self._logger.info("[OK] 数据库组件初始化成功")
+            # 使用 connect_async 方法来建立连接
+            try:
+                await self.connect_async()
+                self._logger.info("[OK] 数据库组件初始化成功")
+            except Exception as e:
+                # 自动连接失败时允许组件继续运行（可以稍后手动连接）
+                self._logger.warning(f"数据库自动连接失败: {e}")
+                # 设置实例为self以满足基类要求
+                self._instance = self
 
     async def _start(self) -> None:
         """启动数据库服务"""
@@ -298,6 +282,96 @@ class DatabaseComponent(AsyncComponent[Any]):
             "overflow": pool.overflow() if hasattr(pool, 'overflow') else 0,
             "total": pool.total() if hasattr(pool, 'total') else 0
         }
+    
+    async def connect_async(self) -> None:
+        """
+        手动连接到数据库
+        
+        用于在 auto_connect=false 或需要重新连接时手动建立连接
+        """
+        if self._engine is not None:
+            # 已经连接
+            self._logger.info("数据库已经连接")
+            return
+            
+        # 获取配置
+        config = get_config()
+        db_config = config.database if config else None
+        
+        if not db_config or not db_config.main.enabled:
+            raise RuntimeError("数据库功能未启用")
+        
+        # 获取数据库URL
+        db_url = db_config.main.get_url()
+        if not db_url:
+            raise RuntimeError("数据库 URL 未配置")
+        
+        # 创建异步引擎
+        if db_url.startswith("postgresql://"):
+            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+        
+        self._engine = create_async_engine(
+            db_url,
+            echo=(config.app.env == "dev"),
+            pool_size=20,
+            max_overflow=10,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+        )
+        
+        # 创建会话工厂
+        self._session_factory = sessionmaker(
+            self._engine,
+            class_=AsyncSession,
+            expire_on_commit=False
+        )
+        
+        # 测试连接
+        try:
+            from sqlalchemy import text
+            async with self._engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+                self._logger.info("数据库连接成功")
+        except Exception as e:
+            # 连接失败，清理资源
+            if self._engine:
+                await self._engine.dispose()
+            self._engine = None
+            self._session_factory = None
+            raise RuntimeError(f"数据库连接失败: {e}")
+        
+        # 设置实例为self以满足基类要求
+        self._instance = self
+    
+    async def disconnect_async(self) -> None:
+        """
+        断开数据库连接
+        """
+        if self._engine:
+            await self._engine.dispose()
+            self._engine = None
+            self._session_factory = None
+            self._logger.info("数据库连接已断开")
+    
+    def get_status_info(self) -> Dict[str, Any]:
+        """获取详细状态信息"""
+        info = super().get_status_info()
+        
+        # 添加数据库连接信息
+        if self._engine:
+            info['connection_status'] = 'connected'
+            config = get_config()
+            if config and config.database:
+                info['connection_info'] = {
+                    'type': config.database.main.type,
+                    'host': config.database.main.host,
+                    'port': config.database.main.port,
+                    'database': config.database.main.database,
+                }
+        else:
+            info['connection_status'] = 'disconnected'
+            
+        return info
 
 
 class CacheComponent(AsyncComponent[Any]):
@@ -315,7 +389,8 @@ class CacheComponent(AsyncComponent[Any]):
         """初始化缓存连接"""
         with error_context(self.name, "initialize"):
             # 检查缓存配置
-            cache_config = settings.database.cache
+            config = get_config()
+            cache_config = config.database.cache if config and config.database else None
 
             # 检查是否启用
             if not cache_config.enabled:
@@ -421,7 +496,7 @@ class CacheComponent(AsyncComponent[Any]):
             config_info['password'] = '***' if config_info['password'] else None
 
         return {
-            "enabled": settings.database.cache.enabled if hasattr(settings.database, 'cache') else False,
+            "enabled": get_config().database.cache.enabled if get_config() and hasattr(get_config().database, 'cache') else False,
             "connected": self._connected,
             "config": config_info,
             "error": self._connection_error,
@@ -431,7 +506,8 @@ class CacheComponent(AsyncComponent[Any]):
     def _health_check(self) -> bool:
         """检查缓存健康状态"""
         # 如果禁用了缓存，认为是健康的
-        if hasattr(settings.database, 'cache') and not settings.database.cache.enabled:
+        config = get_config()
+        if config and hasattr(config.database, 'cache') and not config.database.cache.enabled:
             return True
 
         # 检查是否已连接
@@ -607,7 +683,7 @@ class CacheComponent(AsyncComponent[Any]):
         return self._redis_client
 
 
-class MonitorComponent(AsyncComponent[EventSystemMonitor]):
+class MonitorComponent(AsyncComponent):
     """监控组件 - 系统监控和指标收集"""
 
     def __init__(self):
@@ -627,6 +703,8 @@ class MonitorComponent(AsyncComponent[EventSystemMonitor]):
                     "Event engine not provided"
                 )
 
+            # 延迟导入以避免循环导入
+            from deepsearch.observability.monitoring.event_monitor import EventSystemMonitor
             self._instance = EventSystemMonitor(self._event_engine)
 
     async def _start(self) -> None:
@@ -683,8 +761,9 @@ class GatewayComponent(AsyncComponent[Gateway]):
         with error_context(self.name, "initialize"):
             # 从配置获取网关配置
             # 检查是否有 gateway 配置
-            if hasattr(settings, 'gateway'):
-                self._config = getattr(settings.gateway, self._gateway_type, {})
+            config = get_config()
+            if config and hasattr(config, 'gateway'):
+                self._config = getattr(config.gateway, self._gateway_type, {})
             else:
                 # 使用默认的模拟网关配置
                 self._config = {'type': 'simulation'}
@@ -747,29 +826,30 @@ class QMTGatewayComponent(AsyncComponent):
         """初始化QMT网关"""
         with error_context(self.name, "initialize"):
             # 从配置获取QMT设置
-            if hasattr(settings, 'qmt'):
+            config = get_config()
+            if config and hasattr(config, 'qmt'):
                 # 将配置对象转换为字典
-                if hasattr(settings.qmt, 'model_dump'):
-                    self._config = settings.qmt.model_dump()
-                elif hasattr(settings.qmt, 'dict'):
-                    self._config = settings.qmt.dict()
+                if config and hasattr(config.qmt, 'model_dump'):
+                    self._config = config.qmt.model_dump()
+                elif config and hasattr(config.qmt, 'dict'):
+                    self._config = config.qmt.dict()
                 else:
                     # 手动构建配置字典
                     self._config = {
-                        'enabled': getattr(settings.qmt, 'enabled', True),
+                        'enabled': getattr(config.qmt, 'enabled', True) if config else True,
                         'receiver': {
-                            'host': getattr(settings.qmt.receiver, 'host', '0.0.0.0'),
-                            'tcp_port': getattr(settings.qmt.receiver, 'tcp_port', 9999),
-                            'websocket_port': getattr(settings.qmt.receiver, 'websocket_port', 9998)
+                            'host': getattr(config.qmt.receiver, 'host', '0.0.0.0') if config and hasattr(config.qmt, 'receiver') else '0.0.0.0',
+                            'tcp_port': getattr(config.qmt.receiver, 'tcp_port', 9999) if config and hasattr(config.qmt, 'receiver') else 9999,
+                            'websocket_port': getattr(config.qmt.receiver, 'websocket_port', 9998) if config and hasattr(config.qmt, 'receiver') else 9998
                         },
                         'security': {
-                            'enable_auth': getattr(settings.qmt.security, 'enable_auth', False),
-                            'token': getattr(settings.qmt.security, 'token', '')
+                            'enable_auth': getattr(config.qmt.security, 'enable_auth', False) if config and hasattr(config.qmt, 'security') else False,
+                            'token': getattr(config.qmt.security, 'token', '') if config and hasattr(config.qmt, 'security') else ''
                         },
                         'data': {
-                            'batch_size': getattr(settings.qmt.data, 'batch_size', 100),
-                            'flush_interval': getattr(settings.qmt.data, 'flush_interval', 0.1),
-                            'cache_ttl': getattr(settings.qmt.data, 'cache_ttl', 60)
+                            'batch_size': getattr(config.qmt.data, 'batch_size', 100) if config and hasattr(config.qmt, 'data') else 100,
+                            'flush_interval': getattr(config.qmt.data, 'flush_interval', 0.1) if config and hasattr(config.qmt, 'data') else 0.1,
+                            'cache_ttl': getattr(config.qmt.data, 'cache_ttl', 60) if config and hasattr(config.qmt, 'data') else 60
                         }
                     }
             else:
@@ -880,12 +960,13 @@ class AnalyticsComponent(AsyncComponent):
 
     async def _initialize(self) -> None:
         """初始化分析组件"""
-        from deepsearch.storage.duckdb_analytics import get_analytics_db
-        from deepsearch.services.data_sync_service import get_sync_service
+        from deepsearch.storage.databases.duckdb_analytics import get_analytics_db
+        from deepsearch.services.data.data_sync_service import get_sync_service
 
         with error_context(self.name, "initialize"):
             # 获取配置
-            analytics_config = settings.database.analytics
+            config = get_config()
+            analytics_config = config.database.analytics if config and config.database else None
             self._config = analytics_config
 
             if not analytics_config.enabled:
@@ -987,8 +1068,9 @@ class WebUIComponent(AsyncComponent):
         super().__init__("webui", ComponentType.INTERFACE, "Web界面")
         self._server = None
         self._frontend_process = None
-        self._backend_port = settings.webui.backend_port
-        self._frontend_port = settings.webui.frontend_port
+        config = get_config()
+        self._backend_port = config.webui.backend_port if config and config.webui else 8000
+        self._frontend_port = config.webui.frontend_port if config and config.webui else 3000
 
     async def _initialize(self) -> None:
         """初始化WebUI"""
@@ -1039,7 +1121,7 @@ class BacktestComponent(AsyncComponent):
         """初始化回测组件"""
         with error_context(self.name, "initialize"):
             # 延迟导入，避免循环依赖
-            from deepsearch.backtest.component import BacktestComponent as BacktestCore
+            from deepsearch.backtest.components.component import BacktestComponent as BacktestCore
 
             # 创建回测组件实例
             self._backtest_instance = BacktestCore()

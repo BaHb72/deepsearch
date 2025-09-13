@@ -6,9 +6,9 @@ FastAPI 依赖注入
 from fastapi import Depends, HTTPException, status
 
 from deepsearch.core import MainEngine
-from deepsearch.core.component_manager import ComponentManager
-from deepsearch.core.context import get_context, ApplicationContext
-from deepsearch.core.interfaces import Component, ComponentStatus
+from deepsearch.core.managers.component_manager import ComponentManager
+from deepsearch.core.runtime.context import get_context, ApplicationContext
+from deepsearch.core.interfaces.component import Component, ComponentStatus
 
 
 def get_app_context() -> ApplicationContext:

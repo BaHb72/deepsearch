@@ -18,9 +18,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional, Dict, Any, TypeVar, Generic, Callable
 
-from .exceptions import ComponentLifecycleError
+from .utils.exceptions import ComponentLifecycleError
 from .interfaces import Component, ComponentStatus, ComponentType
-from .statistics import StatisticsProvider, get_statistics_collector
+from .utils.statistics import StatisticsProvider, get_statistics_collector
 
 T = TypeVar('T')
 

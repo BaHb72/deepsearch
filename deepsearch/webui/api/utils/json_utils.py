@@ -78,6 +78,19 @@ def sanitize_for_json(data: Any) -> Any:
     return data
 
 
+def sanitize_data(data: Any) -> Any:
+    """
+    清理数据中的 NaN 和 Infinity 值（别名函数，用于向后兼容）
+    
+    Args:
+        data: 需要清理的数据
+        
+    Returns:
+        清理后的数据，NaN/Infinity 替换为 None
+    """
+    return sanitize_for_json(data)
+
+
 def clean_dataframe_for_json(df: "pd.DataFrame", orient: str = "records") -> Union[List[Dict], Dict]:
     """
     清理 DataFrame 并转换为 JSON 兼容格式

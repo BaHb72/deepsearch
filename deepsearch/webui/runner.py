@@ -76,7 +76,7 @@ class WebUIRunner:
             return False
 
         try:
-            from deepsearch.core.engine_context import EngineContext
+            from deepsearch.core.runtime.engine_context import EngineContext
 
             # 创建引擎上下文
             self._engine_context = EngineContext(
@@ -161,7 +161,7 @@ class WebUIRunner:
                 )
 
             # 注册到 ProcessManager
-            from deepsearch.core.process_manager import process_manager
+            from deepsearch.core.managers.process_manager import process_manager
             process_manager.register_process(
                 self.frontend_process,
                 name="WebUI-Frontend-Dev"
@@ -305,7 +305,7 @@ class WebUIRunner:
             self._stop_frontend_server()
 
         # 使用 ProcessManager 进行全面清理
-        from deepsearch.core.process_manager import process_manager
+        from deepsearch.core.managers.process_manager import process_manager
         process_manager.shutdown(timeout=10.0, force=sys.platform == "win32")
 
         print("系统已关闭")

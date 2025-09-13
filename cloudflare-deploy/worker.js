@@ -20,6 +20,7 @@ const ALLOWED_HOSTS = [
     'hq.sinajs.cn',
     'stock.finance.sina.com.cn',
     'vip.stock.finance.sina.com.cn',
+    'money.finance.sina.com.cn',
 
     // 网易财经
     'quotes.money.163.com',
@@ -29,16 +30,22 @@ const ALLOWED_HOSTS = [
     'qt.gtimg.cn',
     'stock.gtimg.cn',
 
-    // 东方财富
+    // 东方财富（支持所有数字子域名如 17.push2, 79.push2, 82.push2 等）
     'push2.eastmoney.com',
     'push2his.eastmoney.com',
+    'push2ex.eastmoney.com',  // 新增：涨停跌停池数据
     'datacenter.eastmoney.com',
     'datacenter-web.eastmoney.com',
+    'np-anotice-stock.eastmoney.com',  // 新增：公告数据
+    'np-listnotice.eastmoney.com',  // 新增：公告列表
+    // 东方财富数字子域名（用于不同的数据分片）
+    '17.push2.eastmoney.com',  // 实时行情数据分片
+    '79.push2.eastmoney.com',  // 实时行情数据分片
+    '82.push2.eastmoney.com',  // 实时行情数据分片
 
     // 同花顺
     'data.10jqka.com.cn',
     'basic.10jqka.com.cn',
-
     // 交易所
     'www.sse.com.cn',
     'query.sse.com.cn',
@@ -54,11 +61,33 @@ const ALLOWED_HOSTS = [
     'dc.cls.cn'
 ];
 
-// User-Agent池
+// User-Agent池（2025年最新版本）
 const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    // Windows Chrome
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    
+    // Windows Firefox
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0',
+    
+    // Windows Edge
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0',
+    
+    // Mac Chrome
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+    
+    // Mac Firefox
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:129.0) Gecko/20100101 Firefox/129.0',
+    
+    // Linux Chrome
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    
+    // Mobile（少量，模拟部分移动访问）
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36'
 ];
 
 // ============ 主处理器 ============
@@ -151,10 +180,23 @@ async function handleProxy(request, env, ctx) {
         const randomUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
         headers.set('User-Agent', randomUA);
 
-        // 设置必要的请求头
+        // 设置必要的请求头（模拟真实浏览器）
         headers.set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8');
         headers.set('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8');
         headers.set('Accept-Encoding', 'gzip, deflate, br');
+        
+        // 添加更多浏览器特征头
+        headers.set('Cache-Control', 'no-cache');
+        headers.set('Pragma', 'no-cache');
+        headers.set('Sec-Ch-Ua', '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"');
+        headers.set('Sec-Ch-Ua-Mobile', '?0');
+        headers.set('Sec-Ch-Ua-Platform', '"Windows"');
+        headers.set('Sec-Fetch-Dest', 'document');
+        headers.set('Sec-Fetch-Mode', 'navigate');
+        headers.set('Sec-Fetch-Site', 'none');
+        headers.set('Sec-Fetch-User', '?1');
+        headers.set('Upgrade-Insecure-Requests', '1');
+        headers.set('Dnt', '1');
 
         // 设置 Referer（根据目标站点）
         const refererMap = {
@@ -193,8 +235,6 @@ async function handleProxy(request, env, ctx) {
                     status: cached.status,
                     headers: {
                         ...Object.fromEntries(cached.headers),
-                        'X-Cache': 'HIT',
-                        'X-Proxy-By': 'Cloudflare-Worker',
                         ...getCORSHeaders()
                     }
                 });
@@ -214,12 +254,15 @@ async function handleProxy(request, env, ctx) {
             requestOptions.body = await request.arrayBuffer();
         }
 
-        // 执行请求（带重试）
-        const response = await fetchWithRetry(targetUrl, requestOptions);
-
-        if (!response) {
+        // 执行请求（单次，不重试）
+        let response;
+        try {
+            response = await fetch(targetUrl, requestOptions);
+        } catch (error) {
+            console.error('Fetch error:', error);
             return jsonResponse({
-                error: 'Failed to fetch after retries',
+                error: 'Failed to fetch',
+                message: error.message,
                 target: targetUrl
             }, 502);
         }
@@ -227,9 +270,11 @@ async function handleProxy(request, env, ctx) {
         // 构建响应头
         const responseHeaders = new Headers();
 
-        // 复制响应头（排除敏感信息）
+        // 复制响应头（排除敏感信息和CloudFlare特征）
         const blockedResponseHeaders = [
-            'set-cookie', 'cf-ray', 'cf-cache-status'
+            'set-cookie', 'cf-ray', 'cf-cache-status',
+            'cf-request-id', 'cf-connecting-ip', 'cf-ipcountry',
+            'x-forwarded-for', 'x-real-ip', 'via', 'server'
         ];
 
         for (const [key, value] of response.headers.entries()) {
@@ -239,12 +284,10 @@ async function handleProxy(request, env, ctx) {
             }
         }
 
-        // 添加CORS和代理标识
+        // 仅添加必要的CORS头（不暴露代理身份）
         responseHeaders.set('Access-Control-Allow-Origin', '*');
         responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
         responseHeaders.set('Access-Control-Allow-Headers', '*');
-        responseHeaders.set('X-Proxy-By', 'Cloudflare-Worker');
-        responseHeaders.set('X-Cache', 'MISS');
 
         // 获取响应体
         const responseBody = await response.arrayBuffer();
@@ -256,11 +299,11 @@ async function handleProxy(request, env, ctx) {
             headers: responseHeaders
         });
 
-        // 缓存成功的GET响应
+        // 缓存成功的GET响应（不添加缓存头暴露身份）
         if (request.method === 'GET' && response.ok) {
             const cacheTime = getCacheTime(targetUrlObj.pathname, targetHost);
             if (cacheTime > 0) {
-                responseHeaders.set('Cache-Control', `public, max-age=${cacheTime}`);
+                // 内部缓存，不暴露给外部
                 const cacheResponse = result.clone();
                 ctx.waitUntil(cache.put(cacheKey, cacheResponse));
             }
@@ -277,33 +320,8 @@ async function handleProxy(request, env, ctx) {
     }
 }
 
-// ============ 重试机制 ============
-async function fetchWithRetry(url, options, maxRetries = 3) {
-    let lastError;
-    const retryDelays = [1000, 2000, 3000];
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-        try {
-            const response = await fetch(url, options);
-
-            // 如果是429或503，继续重试
-            if ((response.status === 429 || response.status === 503) && attempt < maxRetries - 1) {
-                await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
-                continue;
-            }
-
-            return response;
-        } catch (error) {
-            lastError = error;
-            if (attempt < maxRetries - 1) {
-                await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
-            }
-        }
-    }
-
-    console.error('All retry attempts failed:', lastError);
-    return null;
-}
+// ============ 请求处理 ============
+// Worker 只做单次请求，重试逻辑由 DeepSearch 控制
 
 // ============ 缓存时间策略 ============
 function getCacheTime(pathname, host) {
@@ -348,7 +366,7 @@ function handleHealthCheck(env) {
             whitelist: true,
             retry: true
         },
-        allowed_hosts_count: ALLOWED_HOSTS.length,
+        allowed_hosts_count: ALLOWED_HOSTS.length,  // 现在是27个域名
         auth_enabled: config.AUTH_ENABLED
     });
 }
