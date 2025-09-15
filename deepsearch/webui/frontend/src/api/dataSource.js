@@ -1,7 +1,17 @@
 /**
  * 数据源相关API
  */
-import request from '@/utils/request'
+import request from './request'
+
+/**
+ * 获取所有数据源状态列表
+ */
+export function fetchDataSourceList() {
+  return request({
+    url: '/data-sources/status',
+    method: 'get'
+  })
+}
 
 /**
  * 获取数据源能力矩阵

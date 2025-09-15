@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { message } from 'antd'
+import backendStatus from '@/utils/backendStatus'
 
 /**
  * 异步数据状态
@@ -102,6 +103,7 @@ export const useAsyncData = <T = any>(
   const pollingTimerRef = useRef<NodeJS.Timeout>()
   const retryCountRef = useRef(0)
   const lastArgsRef = useRef<any[]>([])
+  const abortControllerRef = useRef<AbortController>()
 
   /**
    * 执行异步函数
@@ -110,15 +112,27 @@ export const useAsyncData = <T = any>(
     // 保存参数供 refresh 使用
     lastArgsRef.current = args
 
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+
+    // 创建新的 AbortController
+    abortControllerRef.current = new AbortController()
+    const currentController = abortControllerRef.current
+
     // 设置加载状态
     setState(prev => ({ ...prev, loading: true, error: null }))
 
     try {
       const result = await asyncFunction(...args)
 
-      if (!mountedRef.current) return null
+      // 检查请求是否被取消
+      if (currentController.signal.aborted) {
+        return null
+      }
 
-      // 更新状态
+      // 更新状态 - 移除 mountedRef 检查，让状态总是更新
       setState({
         data: result,
         loading: false,
@@ -142,7 +156,10 @@ export const useAsyncData = <T = any>(
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
 
-      if (!mountedRef.current) return null
+      // 检查请求是否被取消
+      if (currentController.signal.aborted) {
+        return null
+      }
 
       // 更新错误状态
       setState(prev => ({
@@ -215,7 +232,7 @@ export const useAsyncData = <T = any>(
       execute()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [immediate]) // 只依赖 immediate，避免循环
+  }, []) // 空依赖数组，只在组件挂载时执行一次
 
   // 轮询
   useEffect(() => {
@@ -232,10 +249,42 @@ export const useAsyncData = <T = any>(
     }
   }, [pollingInterval, state.initialized, state.error, refresh])
 
+  // 监听后端状态变化
+  useEffect(() => {
+    const handleBackendStatusChange = (available: boolean) => {
+      // 后端恢复且之前是因为后端不可用失败，自动重试
+      if (available && state.error) {
+        // 检查错误是否是后端不可用
+        const errorMessage = state.error.message || ''
+        const isBackendError = errorMessage.includes('后端服务不可用') ||
+                              errorMessage.includes('BACKEND_UNAVAILABLE') ||
+                              (state.error as any).code === 'BACKEND_UNAVAILABLE'
+
+        if (isBackendError) {
+          console.log('[useAsyncData] 后端已恢复，自动重试...')
+          refresh()
+        }
+      }
+    }
+
+    // 添加监听器
+    backendStatus.addListener(handleBackendStatusChange)
+
+    // 清理监听器
+    return () => {
+      backendStatus.removeListener(handleBackendStatusChange)
+    }
+  }, [state.error, refresh])
+
   // 清理
   useEffect(() => {
     return () => {
       mountedRef.current = false
+      // 取消正在进行的请求
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      // 清理轮询定时器
       if (pollingTimerRef.current) {
         clearInterval(pollingTimerRef.current)
       }
