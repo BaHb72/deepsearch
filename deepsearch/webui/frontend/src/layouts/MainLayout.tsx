@@ -16,7 +16,14 @@ import {
   BarChartOutlined,
   SyncOutlined,
   UserOutlined,
-  GithubOutlined
+  GithubOutlined,
+  MonitorOutlined,
+  CloudServerOutlined,
+  AlertOutlined,
+  AppstoreOutlined,
+  CodeOutlined,
+  BugOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons'
 
 // 路由配置
@@ -37,66 +44,95 @@ const routes = {
       path: '/market',
       name: '市场数据',
       icon: <FundOutlined />,
-      routes: [
-        {
-          path: '/market/overview',
-          name: '市场总览',
-          icon: <AreaChartOutlined />,
-        },
-        {
-          path: '/market/realtime',
-          name: '实时行情',
-          icon: <BarChartOutlined />,
-        },
-        {
-          path: '/market/analysis',
-          name: '技术分析',
-          icon: <LineChartOutlined />,
-        },
-      ],
+      // TODO: 实现以下子菜单功能
+      // routes: [
+      //   {
+      //     path: '/market/overview',
+      //     name: '市场总览',
+      //     icon: <AreaChartOutlined />,
+      //   },
+      //   {
+      //     path: '/market/realtime',
+      //     name: '实时行情',
+      //     icon: <BarChartOutlined />,
+      //   },
+      //   {
+      //     path: '/market/analysis',
+      //     name: '技术分析',
+      //     icon: <LineChartOutlined />,
+      //   },
+      // ],
     },
+    // TODO: 实现交易管理功能
+    // {
+    //   path: '/trading',
+    //   name: '交易管理',
+    //   icon: <LineChartOutlined />,
+    //   routes: [
+    //     {
+    //       path: '/trading/strategies',
+    //       name: '策略管理',
+    //     },
+    //     {
+    //       path: '/trading/backtest',
+    //       name: '策略回测',
+    //     },
+    //     {
+    //       path: '/trading/positions',
+    //       name: '持仓管理',
+    //     },
+    //     {
+    //       path: '/trading/orders',
+    //       name: '订单管理',
+    //     },
+    //   ],
+    // },
     {
-      path: '/trading',
-      name: '交易管理',
-      icon: <LineChartOutlined />,
+      path: '/monitor',
+      name: '监控管理',
+      icon: <MonitorOutlined />,
       routes: [
         {
-          path: '/trading/strategies',
-          name: '策略管理',
-        },
-        {
-          path: '/trading/backtest',
-          name: '策略回测',
-        },
-        {
-          path: '/trading/positions',
-          name: '持仓管理',
-        },
-        {
-          path: '/trading/orders',
-          name: '订单管理',
-        },
-      ],
-    },
-    {
-      path: '/data',
-      name: '数据管理',
-      icon: <DatabaseOutlined />,
-      routes: [
-        {
-          path: '/data-source',
-          name: '数据源配置',
-          icon: <ApiOutlined />,
-        },
-        {
-          path: '/data-source-monitor',
+          path: '/monitor/datasource',
           name: '数据源监控',
-          icon: <EyeOutlined />,
+          icon: <CloudServerOutlined />,
         },
         {
-          path: '/data/sync',
-          name: '数据同步',
-          icon: <SyncOutlined />,
+          path: '/monitor/cache',
+          name: '缓存系统',
+          icon: <DatabaseOutlined />,
+        },
+        {
+          path: '/monitor/performance',
+          name: '性能分析',
+          icon: <ThunderboltOutlined />,
+        },
+        {
+          path: '/monitor/alert',
+          name: '告警管理',
+          icon: <AlertOutlined />,
+        },
+        {
+          path: '/monitor/component',
+          name: '组件管理',
+          icon: <AppstoreOutlined />,
+        },
+      ],
+    },
+    {
+      path: '/dev',
+      name: '开发者工具',
+      icon: <CodeOutlined />,
+      routes: [
+        {
+          path: '/dev/components',
+          name: '组件展示',
+          icon: <AppstoreOutlined />,
+        },
+        {
+          path: '/dev/api-debug',
+          name: 'API调试',
+          icon: <BugOutlined />,
         },
       ],
     },
@@ -114,11 +150,12 @@ const routes = {
           name: '系统日志',
           icon: <FileTextOutlined />,
         },
-        {
-          path: '/system/users',
-          name: '用户管理',
-          icon: <UserOutlined />,
-        },
+        // TODO: 实现用户管理功能
+        // {
+        //   path: '/system/users',
+        //   name: '用户管理',
+        //   icon: <UserOutlined />,
+        // },
       ],
     },
   ],

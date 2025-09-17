@@ -1,173 +1,144 @@
 """
-统一的API响应格式工具
+API响应格式化工具
 
-提供标准化的API响应格式，确保前后端接口一致性
+提供统一的API响应格式、错误代码定义和异常处理
 """
-from typing import Any, Dict, Optional, Union
-from datetime import datetime
-from fastapi import HTTPException
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from enum import IntEnum
+from typing import Any, Dict, Optional
+
+# 从exception_handlers导入APIException以便重新导出
+from deepsearch.webui.api.exception_handlers import APIException
 
 
-class ErrorDetail(BaseModel):
-    """错误详情模型"""
-    code: str
-    message: str
-    details: Optional[Dict[str, Any]] = None
+class ErrorCodes(IntEnum):
+    """错误代码枚举"""
+    # 通用错误
+    SUCCESS = 0
+    INTERNAL_ERROR = 500
+    INVALID_PARAMETERS = 400
+    UNAUTHORIZED = 401
+    FORBIDDEN = 403
+    NOT_FOUND = 404
+
+    # 数据库相关错误
+    DATABASE_NOT_FOUND = 4001
+    DATABASE_ALREADY_EXISTS = 4002
+    DATABASE_CONNECTION_FAILED = 4003
+    DATABASE_OPERATION_FAILED = 4004
+
+    # 数据源相关错误
+    DATA_SOURCE_ERROR = 5001
+    DATA_SOURCE_NOT_FOUND = 5002
+    DATA_SOURCE_UNAVAILABLE = 5003
+    DATA_SOURCE_TIMEOUT = 5004
+    DATASOURCE_NOT_FOUND = 5005
+    DATASOURCE_CONNECTION_FAILED = 5006
+    DATASOURCE_TEST_FAILED = 5007
+    DATASOURCE_NOT_ENABLED = 5008
+    DATASOURCE_NOT_ONLINE = 5009
+
+    # 业务逻辑错误
+    BUSINESS_ERROR = 6001
+    VALIDATION_ERROR = 6002
+    OPERATION_NOT_ALLOWED = 6003
 
 
 class APIResponse:
-    """统一API响应格式"""
-    
+    """统一的API响应格式类"""
+
     @staticmethod
-    def success(
-        data: Any = None,
-        message: str = "操作成功",
-        **kwargs
-    ) -> JSONResponse:
+    def success(data: Any = None, message: str = "Success") -> Dict[str, Any]:
         """
-        成功响应
-        
+        创建成功响应
+
         Args:
             data: 响应数据
             message: 成功消息
-            **kwargs: 额外的响应字段
-            
+
         Returns:
-            JSONResponse
+            格式化的成功响应字典
         """
-        response = {
-            "success": True,
+        return {
+            "code": ErrorCodes.SUCCESS,
+            "message": message,
             "data": data,
-            "message": message,
-            "timestamp": datetime.now().isoformat(),
-            **kwargs
+            "success": True
         }
-        return JSONResponse(content=response, status_code=200)
-    
+
     @staticmethod
-    def error(
-        code: str,
-        message: str,
-        details: Optional[Dict[str, Any]] = None,
-        status_code: int = 400,
-        **kwargs
-    ) -> JSONResponse:
+    def error(code: ErrorCodes = ErrorCodes.INTERNAL_ERROR,
+             message: str = "Error occurred",
+             data: Optional[Any] = None,
+             details: Optional[Any] = None,
+             status_code: int = 500) -> Dict[str, Any]:
         """
-        错误响应
-        
+        创建错误响应
+
         Args:
-            code: 错误代码
+            code: 错误代码（使用ErrorCodes枚举）
             message: 错误消息
-            details: 错误详情
-            status_code: HTTP状态码
-            **kwargs: 额外的响应字段
-            
+            data: 额外的错误详情
+            details: 详细错误信息（兼容旧版本）
+            status_code: HTTP状态码（用于FastAPI响应）
+
         Returns:
-            JSONResponse
+            格式化的错误响应字典
         """
         response = {
-            "success": False,
-            "error": {
-                "code": code,
-                "message": message,
-                "details": details or {}
-            },
-            "timestamp": datetime.now().isoformat(),
-            **kwargs
-        }
-        return JSONResponse(content=response, status_code=status_code)
-    
-    @staticmethod
-    def paginated(
-        data: list,
-        total: int,
-        page: int = 1,
-        page_size: int = 20,
-        message: str = "查询成功",
-        **kwargs
-    ) -> JSONResponse:
-        """
-        分页响应
-        
-        Args:
-            data: 数据列表
-            total: 总数
-            page: 当前页
-            page_size: 每页大小
-            message: 成功消息
-            **kwargs: 额外的响应字段
-            
-        Returns:
-            JSONResponse
-        """
-        response = {
-            "success": True,
-            "data": {
-                "items": data,
-                "total": total,
-                "page": page,
-                "page_size": page_size,
-                "total_pages": (total + page_size - 1) // page_size
-            },
+            "code": int(code),  # 转换为整数
             "message": message,
-            "timestamp": datetime.now().isoformat(),
-            **kwargs
+            "success": False,
+            "status_code": status_code  # 添加状态码
         }
-        return JSONResponse(content=response, status_code=200)
+        # 优先使用data，如果没有则使用details
+        if data is not None:
+            response["data"] = data
+        elif details is not None:
+            response["details"] = details
+        return response
 
 
-class APIException(HTTPException):
+def success_response(data: Any, message: str = "Success") -> Dict[str, Any]:
     """
-    统一的API异常类
+    格式化成功响应（兼容旧版本）
+
+    Args:
+        data: 响应数据
+        message: 成功消息
+
+    Returns:
+        格式化的响应字典
     """
-    
-    def __init__(
-        self,
-        code: str,
-        message: str,
-        details: Optional[Dict[str, Any]] = None,
-        status_code: int = 400
-    ):
-        self.code = code
-        self.message = message
-        self.details = details or {}
-        super().__init__(status_code=status_code, detail=message)
-    
-    def to_response(self) -> JSONResponse:
-        """转换为响应格式"""
-        return APIResponse.error(
-            code=self.code,
-            message=self.message,
-            details=self.details,
-            status_code=self.status_code
-        )
+    return APIResponse.success(data, message)
 
 
-# 预定义的错误代码
-class ErrorCodes:
-    """标准错误代码"""
-    
-    # 通用错误
-    INTERNAL_ERROR = "INTERNAL_ERROR"
-    VALIDATION_ERROR = "VALIDATION_ERROR"
-    NOT_FOUND = "NOT_FOUND"
-    UNAUTHORIZED = "UNAUTHORIZED"
-    FORBIDDEN = "FORBIDDEN"
-    
-    # 数据源相关
-    DATASOURCE_NOT_FOUND = "DATASOURCE_NOT_FOUND"
-    DATASOURCE_CONNECTION_FAILED = "DATASOURCE_CONNECTION_FAILED"
-    DATASOURCE_ALREADY_EXISTS = "DATASOURCE_ALREADY_EXISTS"
-    DATASOURCE_IN_USE = "DATASOURCE_IN_USE"
-    
-    # 数据库相关
-    DATABASE_NOT_FOUND = "DATABASE_NOT_FOUND"
-    DATABASE_CONNECTION_FAILED = "DATABASE_CONNECTION_FAILED"
-    DATABASE_ALREADY_EXISTS = "DATABASE_ALREADY_EXISTS"
-    DATABASE_IN_USE = "DATABASE_IN_USE"
-    
-    # 配置相关
-    CONFIG_INVALID = "CONFIG_INVALID"
-    CONFIG_NOT_FOUND = "CONFIG_NOT_FOUND"
+def error_response(message: str, code: int = 1, data: Optional[Any] = None) -> Dict[str, Any]:
+    """
+    格式化错误响应（兼容旧版本）
+
+    Args:
+        message: 错误消息
+        code: 错误代码
+        data: 额外的错误数据
+
+    Returns:
+        格式化的响应字典
+    """
+    # 将整数代码转换为ErrorCodes，如果不存在则使用INTERNAL_ERROR
+    error_code = ErrorCodes.INTERNAL_ERROR
+    for ec in ErrorCodes:
+        if int(ec) == code:
+            error_code = ec
+            break
+
+    return APIResponse.error(error_code, message, data)
+
+
+# 导出所有需要的类和函数
+__all__ = [
+    'APIResponse',
+    'APIException',
+    'ErrorCodes',
+    'success_response',
+    'error_response'
+]

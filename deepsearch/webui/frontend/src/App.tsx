@@ -6,16 +6,22 @@ import messageManager from './utils/messageManager'
 
 // 懒加载页面组件
 const Dashboard = lazy(() => import('./pages/Dashboard'))
-const DataSourceMonitor = lazy(() => import('./pages/DataSourceMonitor'))
 const EventSystem = lazy(() => import('./pages/EventSystem'))
 const MarketData = lazy(() => import('./pages/MarketData'))
-const CacheSystem = lazy(() => import('./pages/CacheSystem'))
-const PerformanceAnalytics = lazy(() => import('./pages/PerformanceAnalytics'))
-const ComponentManager = lazy(() => import('./pages/ComponentManager'))
 const LogCenter = lazy(() => import('./pages/LogCenter'))
-const AlertManager = lazy(() => import('./pages/AlertManager'))
 // const SystemConfig = lazy(() => import('./pages/SystemConfigEnhanced')) // 旧版本
 const SystemConfig = lazy(() => import('./pages/SystemConfig')) // 使用重构后的模块化版本
+
+// 监控管理页面
+const DataSourceMonitor = lazy(() => import('./pages/DataSourceMonitor'))
+const CacheSystem = lazy(() => import('./pages/CacheSystem'))
+const PerformanceAnalytics = lazy(() => import('./pages/PerformanceAnalytics'))
+const AlertManager = lazy(() => import('./pages/AlertManager'))
+const ComponentManager = lazy(() => import('./pages/ComponentManager'))
+
+// 开发者工具页面
+const ComponentShowcase = lazy(() => import('./pages/ComponentShowcase'))
+const ApiTroubleshooting = lazy(() => import('./pages/ApiTroubleshooting'))
 
 // 加载组件
 const Loading = () => (
@@ -48,10 +54,20 @@ function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/events" element={<EventSystem />} />
               <Route path="/market/*" element={<MarketData />} />
-              <Route path="/data-source" element={<DataSourceMonitor />} />
-              <Route path="/data-source-monitor" element={<DataSourceMonitor />} />
               <Route path="/system/logs" element={<LogCenter />} />
               <Route path="/system/config" element={<SystemConfig />} />
+
+              {/* 监控管理路由 */}
+              <Route path="/monitor/datasource" element={<DataSourceMonitor />} />
+              <Route path="/monitor/cache" element={<CacheSystem />} />
+              <Route path="/monitor/performance" element={<PerformanceAnalytics />} />
+              <Route path="/monitor/alert" element={<AlertManager />} />
+              <Route path="/monitor/component" element={<ComponentManager />} />
+
+              {/* 开发者工具路由 */}
+              <Route path="/dev/components" element={<ComponentShowcase />} />
+              <Route path="/dev/api-debug" element={<ApiTroubleshooting />} />
+
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </MainLayout>

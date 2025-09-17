@@ -105,7 +105,38 @@ class StatisticsCollector:
 
             for name, provider in self._providers.items():
                 try:
-                    stats["providers"][name] = provider.get_statistics()
+                    result = provider.get_statistics()
+                    # Check if result is a coroutine and handle it
+                    import asyncio
+                    import inspect
+                    if inspect.iscoroutine(result):
+                        # Check if we're in an existing event loop
+                        try:
+                            loop = asyncio.get_running_loop()
+                            # We're in an async context, can't use run_until_complete
+                            # Convert to sync by scheduling and waiting
+                            import concurrent.futures
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                future = executor.submit(asyncio.run, result)
+                                stats["providers"][name] = future.result(timeout=5)
+                        except RuntimeError:
+                            # No running loop, we can create one
+                            try:
+                                loop = asyncio.get_event_loop()
+                                if loop.is_running():
+                                    # Loop is running, use thread executor
+                                    import concurrent.futures
+                                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                                        future = executor.submit(asyncio.run, result)
+                                        stats["providers"][name] = future.result(timeout=5)
+                                else:
+                                    stats["providers"][name] = loop.run_until_complete(result)
+                            except RuntimeError:
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                stats["providers"][name] = loop.run_until_complete(result)
+                    else:
+                        stats["providers"][name] = result
                 except Exception as e:
                     self._logger.error(f"Error collecting statistics from {name}: {e}")
                     stats["providers"][name] = {
@@ -122,10 +153,10 @@ class StatisticsCollector:
     def get_provider_statistics(self, name: str) -> Optional[Dict[str, Any]]:
         """
         获取特定提供者的统计数据
-        
+
         Args:
             name: 提供者名称
-            
+
         Returns:
             统计数据或None
         """
@@ -133,7 +164,20 @@ class StatisticsCollector:
             provider = self._providers.get(name)
             if provider:
                 try:
-                    return provider.get_statistics()
+                    result = provider.get_statistics()
+                    # Check if result is a coroutine and handle it
+                    import asyncio
+                    import inspect
+                    if inspect.iscoroutine(result):
+                        # Get or create event loop and run the coroutine
+                        try:
+                            loop = asyncio.get_event_loop()
+                        except RuntimeError:
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                        return loop.run_until_complete(result)
+                    else:
+                        return result
                 except Exception as e:
                     self._logger.error(f"Error getting statistics from {name}: {e}")
                     return {"error": str(e), "status": "error"}

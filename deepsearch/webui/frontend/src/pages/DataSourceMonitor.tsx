@@ -19,7 +19,8 @@ import {
   Tooltip,
   Switch,
   Select,
-  DatePicker
+  DatePicker,
+  message
 } from 'antd'
 import { ProCard, StatisticCard, ProTable } from '@ant-design/pro-components'
 import { Line, Column, Pie, Area, Gauge } from '@ant-design/charts'
@@ -40,6 +41,7 @@ import {
   FallOutlined,
   ReloadOutlined
 } from '@ant-design/icons'
+import { dataSourceAPI } from '../api/dataSource'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -148,29 +150,67 @@ const DataSourceMonitor = () => {
 
   // 自动刷新
   useEffect(() => {
+    // 初始加载数据
+    fetchMonitorData()
+
     if (!autoRefresh) return
-    
+
     const timer = setInterval(() => {
-      // 模拟数据更新
-      setMonitorData(prev => ({
-        ...prev,
-        overview: {
-          ...prev.overview,
-          totalRequests: prev.overview.totalRequests + Math.floor(Math.random() * 100),
-          avgLatency: 80 + Math.floor(Math.random() * 20),
-          successRate: 97 + Math.random() * 3
-        }
-      }))
+      fetchMonitorData()
     }, refreshInterval)
-    
+
     return () => clearInterval(timer)
   }, [autoRefresh, refreshInterval])
 
-  const handleRefresh = () => {
+  const fetchMonitorData = async () => {
+    try {
+      const response = await dataSourceAPI.getDataSourceMonitor()
+      const data = response.data || response
+
+      // 更新监控数据
+      setMonitorData({
+        overview: data.overview || {
+          totalRequests: 0,
+          avgLatency: 0,
+          successRate: 0,
+          errorRate: 0,
+          requestsPerMinute: 0,
+          bytesTransferred: 0,
+          cacheHitRate: 0,
+          activeConnections: 0
+        },
+        sources: data.sources || [],
+        timeline: data.timeline || [],
+        alerts: data.alerts || []
+      })
+    } catch (error) {
+      console.error('Failed to fetch monitor data:', error)
+      // 如果API失败，使用默认值以避免界面空白
+      if (!monitorData.overview.totalRequests) {
+        setMonitorData({
+          overview: {
+            totalRequests: 0,
+            avgLatency: 0,
+            successRate: 0,
+            errorRate: 0,
+            requestsPerMinute: 0,
+            bytesTransferred: 0,
+            cacheHitRate: 0,
+            activeConnections: 0
+          },
+          sources: [],
+          timeline: [],
+          alerts: []
+        })
+      }
+    }
+  }
+
+  const handleRefresh = async () => {
     setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
-    }, 1000)
+    await fetchMonitorData()
+    setLoading(false)
+    message.success('监控数据已刷新')
   }
 
   const getHealthIcon = (health) => {

@@ -18,7 +18,7 @@ import asyncio
 
 from loguru import logger
 
-from deepsearch.data_providers.interfaces.base import DataSourceType
+from deepsearch.infrastructure.providers.interfaces.base import DataSourceType
 
 
 class OperationType(Enum):

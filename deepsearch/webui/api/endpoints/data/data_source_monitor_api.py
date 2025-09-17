@@ -16,7 +16,7 @@ from deepsearch.observability.monitoring.data_source_monitor import (
     DataSourceType,
     DataAccessType
 )
-from deepsearch.data_providers.unified_proxy import get_data_proxy
+from deepsearch.infrastructure.providers.unified_proxy import get_data_proxy
 
 router = APIRouter(prefix="/api/monitor/datasource", tags=["data_source_monitor"])
 

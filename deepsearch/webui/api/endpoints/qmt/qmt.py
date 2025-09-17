@@ -13,7 +13,7 @@ from loguru import logger
 
 from deepsearch.config import get_config
 from deepsearch.core.runtime.context import get_context
-from deepsearch.data_providers.datafeed.qmt.gateway import QMTGateway
+from deepsearch.infrastructure.providers.datafeed.qmt.gateway import QMTGateway
 
 router = APIRouter(prefix="/api/qmt", tags=["qmt"])
 
@@ -36,6 +36,11 @@ try:
 except Exception as e:
     logger.warning(f"无法读取数据源配置: {e}")
     QMT_ONLY_MODE = False
+
+
+def get_qmt_service():
+    """获取QMT服务实例（用于测试兼容）"""
+    return get_qmt_gateway()
 
 
 def get_qmt_gateway() -> Optional[QMTGateway]:
@@ -320,9 +325,9 @@ async def get_latest_tick(symbol: str):
     logger.info(f"QMT无Tick数据，尝试从备用数据源获取 {symbol} 的实时数据...")
 
     try:
-        # 尝试从UnifiedDataManager获取
-        from deepsearch.services.data.unified_data_manager import UnifiedDataManager
-        manager = UnifiedDataManager()
+        # 尝试从DataSourceManager获取
+        from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceManager
+        manager = DataSourceManager()
 
         snapshot = await manager.get_realtime_quote(symbol)
 
@@ -367,7 +372,7 @@ async def get_latest_orderbook(symbol: str):
     logger.info(f"收到获取盘口数据请求: {symbol}")
     
     # 使用统一数据源管理器
-    from deepsearch.services.data.data_source_manager import get_data_source_manager
+    from deepsearch.infrastructure.providers.managers.data_source_manager import get_data_source_manager
     
     try:
         data_source_manager = await get_data_source_manager()
@@ -375,7 +380,7 @@ async def get_latest_orderbook(symbol: str):
         # 获取实时行情（包含盘口数据）
         result = await data_source_manager.get_realtime_quote(symbol)
         
-        if result and not result.get('error'):
+        if result is not None and not result.get('error'):
             # 格式化为盘口数据格式
             orderbook_data = {
                 "symbol": symbol,

@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     cloudflare: Optional[CloudflareConfig] = None
     cloudflare_workers: Optional[CloudflareWorkersConfig] = None  # Workers 代理配置
     data_providers: Optional[DataFeedConfig] = None
+    data_sources: Optional[Dict[str, Any]] = None  # 统一的数据源配置
 
     @property
     def zeromq(self) -> ZeroMQConfig:

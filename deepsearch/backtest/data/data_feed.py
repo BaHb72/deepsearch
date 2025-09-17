@@ -107,7 +107,7 @@ class DeepSearchDataFeed:
 
         # 处理 AkShareDataFeed
         if hasattr(self.data_provider, 'get_kline'):
-            from deepsearch.data_providers.datafeed.base import KlineParams
+            from deepsearch.infrastructure.providers.datafeed.base import KlineParams
             params = KlineParams(
                 symbol=symbol,
                 timeframe=timeframe,

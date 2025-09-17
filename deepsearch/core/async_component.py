@@ -202,6 +202,11 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
                 cause=e
             )
 
+    # 添加stop方法作为stop_async的别名，供向后兼容
+    async def stop(self) -> None:
+        """异步停止组件（别名）"""
+        await self.stop_async()
+
     # ==================== 抽象方法（子类必须实现） ====================
 
     @abstractmethod

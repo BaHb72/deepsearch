@@ -1,0 +1,1049 @@
+# encoding:utf-8
+"""
+AmazingData 数据提供者 - 优化版本
+解决了线程池阻塞、心跳开销、缓存效率、内存泄漏等关键问题
+Author: DeepSearch Team
+Version: 2.0.0
+"""
+
+import asyncio
+import concurrent.futures
+import gc
+import hashlib
+import json
+import os
+import random
+import statistics
+import time
+import uuid
+import weakref
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from functools import wraps
+from typing import Dict, List, Optional, Any, Callable, Union
+
+import numpy as np
+import pandas as pd
+from loguru import logger
+
+# AmazingData SDK
+try:
+    import AmazingData as ad
+    HAS_AMAZINGDATA = True
+except ImportError:
+    HAS_AMAZINGDATA = False
+    ad = None
+    logger.error("AmazingData SDK 未安装，请先安装: pip install AmazingData")
+
+from deepsearch.infrastructure.providers.interfaces.base import (
+    DataProvider,
+    DataProviderConfig,
+    DataProviderError
+)
+
+
+class ErrorCode(Enum):
+    """错误代码枚举"""
+    LOGIN_FAILED = "E001"
+    CONNECTION_LOST = "E002"
+    TIMEOUT = "E003"
+    RATE_LIMIT = "E004"
+    INVALID_PARAMS = "E005"
+    DATA_ERROR = "E006"
+    SUBSCRIPTION_FAILED = "E007"
+    UNKNOWN = "E999"
+
+
+@dataclass
+class ErrorContext:
+    """错误上下文"""
+    code: ErrorCode
+    message: str
+    details: Dict[str, Any]
+    timestamp: float
+    retry_count: int = 0
+    recoverable: bool = True
+    suggestion: Optional[str] = None
+
+
+@dataclass
+class PerformanceMetrics:
+    """性能指标"""
+    latencies: List[float] = field(default_factory=list)
+    timestamps: List[float] = field(default_factory=list)
+
+    def add_latency(self, latency: float):
+        """添加延迟数据"""
+        self.latencies.append(latency)
+        self.timestamps.append(time.time())
+
+        # 保留最近1000个数据点
+        if len(self.latencies) > 1000:
+            self.latencies = self.latencies[-1000:]
+            self.timestamps = self.timestamps[-1000:]
+
+    def get_statistics(self) -> dict:
+        """获取统计数据"""
+        if not self.latencies:
+            return {}
+
+        sorted_latencies = sorted(self.latencies)
+
+        return {
+            'count': len(self.latencies),
+            'mean': statistics.mean(self.latencies),
+            'median': statistics.median(self.latencies),
+            'p50': sorted_latencies[int(len(sorted_latencies) * 0.5)],
+            'p95': sorted_latencies[int(len(sorted_latencies) * 0.95)],
+            'p99': sorted_latencies[int(len(sorted_latencies) * 0.99)],
+            'min': min(self.latencies),
+            'max': max(self.latencies),
+            'qps': self._calculate_qps()
+        }
+
+    def _calculate_qps(self) -> float:
+        """计算 QPS"""
+        if len(self.timestamps) < 2:
+            return 0
+
+        time_range = self.timestamps[-1] - self.timestamps[0]
+        if time_range > 0:
+            return len(self.timestamps) / time_range
+
+        return 0
+
+
+class OptimizedThreadPoolManager:
+    """优化的线程池管理器"""
+
+    def __init__(self):
+        # 动态计算线程池大小
+        cpu_count = os.cpu_count() or 4
+        self.pool_size = min(max(cpu_count * 4, 32), 128)  # 32-128 线程
+
+        # 创建专用线程池
+        self.executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=self.pool_size,
+            thread_name_prefix="amazingdata-"
+        )
+
+        # 并发控制信号量
+        self.semaphore = asyncio.Semaphore(self.pool_size // 2)  # 限制并发数
+
+        # 监控指标
+        self.stats = {
+            'active_threads': 0,
+            'queued_tasks': 0,
+            'completed_tasks': 0,
+            'failed_tasks': 0
+        }
+
+    async def execute_async(self, func, *args, **kwargs):
+        """异步执行同步函数，带并发控制"""
+        async with self.semaphore:
+            self.stats['active_threads'] += 1
+            try:
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    self.executor, func, *args, **kwargs
+                )
+                self.stats['completed_tasks'] += 1
+                return result
+            except Exception as e:
+                self.stats['failed_tasks'] += 1
+                raise
+            finally:
+                self.stats['active_threads'] -= 1
+
+    def shutdown(self):
+        """优雅关闭线程池"""
+        # Python 3.9及更早版本不支持timeout参数
+        # 只使用wait参数
+        self.executor.shutdown(wait=True)
+
+
+class OptimizedHeartbeat:
+    """优化的心跳机制"""
+
+    def __init__(self, config):
+        self.config = config
+        self.base_interval = 60  # 基础间隔
+        self.current_interval = self.base_interval
+        self.consecutive_failures = 0
+        self.last_activity = time.time()
+
+        # 自适应参数
+        self.min_interval = 30
+        self.max_interval = 300
+        self.activity_threshold = 60  # 60秒无活动则降低频率
+
+        # 线程池（用于心跳）
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    async def send_heartbeat(self):
+        """发送优化的心跳"""
+        try:
+            # 使用轻量级查询作为心跳
+            loop = asyncio.get_event_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    self.executor,
+                    self._minimal_query
+                ),
+                timeout=3.0
+            )
+
+            self._on_success()
+            return True
+        except Exception as e:
+            self._on_failure(e)
+            return False
+
+    def _minimal_query(self):
+        """最小数据查询作为心跳"""
+        # 查询今天的交易日历（最小数据）
+        today = datetime.now().strftime('%Y%m%d')
+        return ad.BaseData.get_trading_calendar(today, today)
+
+    def _on_success(self):
+        """心跳成功处理"""
+        self.consecutive_failures = 0
+        self._adjust_interval()
+
+    def _on_failure(self, error):
+        """心跳失败处理"""
+        self.consecutive_failures += 1
+
+        # 指数退避
+        if self.consecutive_failures > 3:
+            self.current_interval = min(
+                self.current_interval * 1.5,
+                self.max_interval
+            )
+
+    def _adjust_interval(self):
+        """自适应调整心跳频率"""
+        current_time = time.time()
+        time_since_activity = current_time - self.last_activity
+
+        if time_since_activity > self.activity_threshold:
+            # 长时间无活动，降低频率
+            self.current_interval = min(
+                self.current_interval * 1.2,
+                self.max_interval
+            )
+        else:
+            # 有活动，恢复正常频率
+            self.current_interval = max(
+                self.current_interval * 0.9,
+                self.min_interval
+            )
+
+    async def heartbeat_loop(self):
+        """优化的心跳循环"""
+        heartbeat_count = 0
+
+        while True:
+            await asyncio.sleep(self.current_interval)
+
+            success = await self.send_heartbeat()
+            heartbeat_count += 1
+
+            # 日志优化：减少日志噪音
+            if success:
+                if heartbeat_count % 10 == 0:  # 每10次心跳记录一次
+                    logger.debug(f"Heartbeat OK (count={heartbeat_count}, interval={self.current_interval}s)")
+            else:
+                logger.warning(f"Heartbeat failed ({self.consecutive_failures})")
+
+    def update_activity(self):
+        """更新活动时间"""
+        self.last_activity = time.time()
+
+
+class OptimizedCacheManager:
+    """优化的缓存管理器"""
+
+    def __init__(self, ttl=300):
+        self.cache = {}
+        self.ttl = ttl
+        self.stats = {
+            'hits': 0,
+            'misses': 0,
+            'evictions': 0
+        }
+
+    def _normalize_params(self, **params) -> dict:
+        """参数标准化"""
+        normalized = {}
+
+        for key, value in params.items():
+            if key == 'start_date' or key == 'end_date':
+                # 统一日期格式
+                normalized[key] = self._normalize_date(value)
+            elif key == 'count':
+                # 统一 count 参数
+                normalized[key] = value if value and value > 0 else None
+            elif value is None or value == '':
+                # 忽略空值
+                continue
+            else:
+                normalized[key] = value
+
+        return normalized
+
+    def _normalize_date(self, date_str: Any) -> Optional[str]:
+        """日期格式标准化"""
+        if not date_str:
+            return None
+
+        # 移除所有分隔符
+        date_str = str(date_str).replace('-', '').replace('/', '')
+
+        # 确保8位格式
+        if len(date_str) == 8:
+            return date_str
+
+        return None
+
+    def generate_cache_key(self, **params) -> str:
+        """生成标准化缓存键"""
+        # 参数标准化
+        normalized = self._normalize_params(**params)
+
+        # 排序保证顺序一致
+        sorted_params = sorted(normalized.items())
+
+        # 生成哈希键
+        key_str = json.dumps(sorted_params, ensure_ascii=False)
+        hash_key = hashlib.md5(key_str.encode()).hexdigest()[:16]
+
+        # 添加可读前缀
+        prefix = f"{params.get('symbol', 'unknown')}:{params.get('period', 'unknown')}"
+
+        return f"{prefix}:{hash_key}"
+
+    def get(self, key: str) -> Optional[Any]:
+        """获取缓存"""
+        if key in self.cache:
+            entry = self.cache[key]
+
+            # 检查过期
+            if time.time() - entry['timestamp'] < self.ttl:
+                self.stats['hits'] += 1
+                entry['hits'] += 1  # 记录命中次数
+                return entry['data']
+            else:
+                # 过期清理
+                del self.cache[key]
+                self.stats['evictions'] += 1
+
+        self.stats['misses'] += 1
+        return None
+
+    def set(self, key: str, data: Any) -> None:
+        """设置缓存"""
+        self.cache[key] = {
+            'data': data,
+            'timestamp': time.time(),
+            'hits': 0
+        }
+
+    def get_stats(self) -> dict:
+        """获取缓存统计"""
+        total_requests = self.stats['hits'] + self.stats['misses']
+        hit_rate = self.stats['hits'] / total_requests if total_requests > 0 else 0
+
+        return {
+            'hit_rate': f"{hit_rate:.2%}",
+            'total_hits': self.stats['hits'],
+            'total_misses': self.stats['misses'],
+            'cache_size': len(self.cache),
+            'evictions': self.stats['evictions']
+        }
+
+
+class SubscriptionManager:
+    """订阅管理器，防止内存泄漏"""
+
+    def __init__(self):
+        # 使用弱引用存储回调
+        self._subscriptions = {}
+        self._weak_callbacks = weakref.WeakValueDictionary()
+        self._subscription_tasks = {}
+
+    def subscribe(self, symbol: str, callback: Callable) -> str:
+        """订阅股票，返回订阅ID"""
+        subscription_id = f"{symbol}_{id(callback)}"
+
+        if symbol not in self._subscriptions:
+            self._subscriptions[symbol] = {
+                'callbacks': [],
+                'active': False,
+                'data_queue': asyncio.Queue(maxsize=1000)
+            }
+
+        # 使用弱引用包装回调
+        callback_ref = weakref.ref(callback, self._cleanup_callback)
+        self._subscriptions[symbol]['callbacks'].append(callback_ref)
+        self._weak_callbacks[subscription_id] = callback
+
+        return subscription_id
+
+    def unsubscribe(self, subscription_id: str) -> bool:
+        """取消订阅"""
+        symbol = subscription_id.split('_')[0]
+
+        if symbol in self._subscriptions:
+            # 清理回调
+            callbacks = self._subscriptions[symbol]['callbacks']
+            self._subscriptions[symbol]['callbacks'] = [
+                cb for cb in callbacks if cb() is not None
+            ]
+
+            # 如果没有回调了，清理整个订阅
+            if not self._subscriptions[symbol]['callbacks']:
+                return self._cleanup_subscription(symbol)
+
+        # 从弱引用字典中移除
+        if subscription_id in self._weak_callbacks:
+            del self._weak_callbacks[subscription_id]
+
+        return True
+
+    def _cleanup_subscription(self, symbol: str) -> bool:
+        """完全清理订阅"""
+        if symbol in self._subscriptions:
+            # 取消任务
+            if symbol in self._subscription_tasks:
+                task = self._subscription_tasks[symbol]
+                if not task.done():
+                    task.cancel()
+                del self._subscription_tasks[symbol]
+
+            # 清理队列
+            queue = self._subscriptions[symbol].get('data_queue')
+            if queue:
+                # 清空队列
+                while not queue.empty():
+                    try:
+                        queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+
+            # 删除订阅
+            del self._subscriptions[symbol]
+
+            # 强制垃圾回收
+            gc.collect()
+
+            return True
+
+        return False
+
+    def _cleanup_callback(self, ref):
+        """回调被垃圾回收时的清理"""
+        # 遍历所有订阅，移除无效回调
+        for symbol, sub_info in self._subscriptions.items():
+            sub_info['callbacks'] = [
+                cb for cb in sub_info['callbacks'] if cb() is not None
+            ]
+
+    async def cleanup_all(self):
+        """清理所有订阅和资源"""
+        # 取消所有任务
+        tasks = list(self._subscription_tasks.values())
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+
+        # 等待任务完成
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 清理所有订阅
+        symbols = list(self._subscriptions.keys())
+        for symbol in symbols:
+            self._cleanup_subscription(symbol)
+
+        # 清空所有容器
+        self._subscriptions.clear()
+        self._weak_callbacks.clear()
+        self._subscription_tasks.clear()
+
+        # 强制垃圾回收
+        gc.collect()
+
+
+class OptimizedDataConverter:
+    """优化的数据转换器"""
+
+    # 预编译的列映射
+    COLUMN_MAPPING = {
+        'datetime': 'datetime',
+        'open': 'open',
+        'high': 'high',
+        'low': 'low',
+        'close': 'close',
+        'volume': 'volume',
+        'amount': 'amount',
+        'turnover_rate': 'turnover_rate',
+        'change': 'change',
+        'change_percent': 'change_percent'
+    }
+
+    # 数值列（提前定义）
+    NUMERIC_COLUMNS = ['open', 'high', 'low', 'close', 'volume', 'amount',
+                       'turnover_rate', 'change', 'change_percent']
+
+    @classmethod
+    def convert_kline_vectorized(cls, data: list) -> pd.DataFrame:
+        """向量化K线数据转换"""
+        if not data:
+            return pd.DataFrame()
+
+        try:
+            # 直接创建 DataFrame，避免多次复制
+            df = pd.DataFrame(data)
+
+            # 批量重命名列
+            df.columns = [cls.COLUMN_MAPPING.get(col, col) for col in df.columns]
+
+            # 向量化时间转换
+            if 'datetime' in df.columns:
+                df['datetime'] = pd.to_datetime(df['datetime'], format='%Y%m%d', errors='coerce')
+                df.set_index('datetime', inplace=True)
+
+            # 向量化数值转换（一次性处理所有数值列）
+            numeric_cols = df.columns.intersection(cls.NUMERIC_COLUMNS)
+            if len(numeric_cols) > 0:
+                df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
+
+            # 使用 numpy 排序（更快）
+            if not df.index.is_monotonic_increasing:
+                df.sort_index(inplace=True)
+
+            return df
+
+        except Exception as e:
+            logger.error(f"数据转换失败: {e}")
+            return pd.DataFrame()
+
+    @classmethod
+    def validate_and_clean(cls, df: pd.DataFrame) -> pd.DataFrame:
+        """数据验证和清理（向量化）"""
+        # 使用向量化操作进行数据验证
+        if 'high' in df.columns and 'low' in df.columns:
+            # 修正 high < low 的异常数据
+            mask = df['high'] < df['low']
+            if mask.any():
+                df.loc[mask, ['high', 'low']] = df.loc[mask, ['low', 'high']].values
+
+        # 移除负值（向量化）
+        if 'volume' in df.columns:
+            df.loc[df['volume'] < 0, 'volume'] = 0
+
+        # 限制涨跌幅（向量化）
+        if 'change_percent' in df.columns:
+            df['change_percent'] = df['change_percent'].clip(-20, 20)
+
+        return df
+
+
+class RateLimiter:
+    """令牌桶限流器"""
+
+    def __init__(self, rate=100, burst=20):
+        self.rate = rate  # 每秒令牌数
+        self.burst = burst  # 突发容量
+        self.tokens = burst
+        self.last_update = time.time()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self, tokens=1):
+        """获取令牌"""
+        async with self._lock:
+            # 补充令牌
+            now = time.time()
+            elapsed = now - self.last_update
+            self.tokens = min(
+                self.burst,
+                self.tokens + elapsed * self.rate
+            )
+            self.last_update = now
+
+            # 等待令牌
+            while self.tokens < tokens:
+                sleep_time = (tokens - self.tokens) / self.rate
+                await asyncio.sleep(sleep_time)
+
+                # 重新计算
+                now = time.time()
+                elapsed = now - self.last_update
+                self.tokens = min(
+                    self.burst,
+                    self.tokens + elapsed * self.rate
+                )
+                self.last_update = now
+
+            self.tokens -= tokens
+
+
+class CircuitBreaker:
+    """断路器实现"""
+
+    def __init__(self, failure_threshold=5, recovery_timeout=30, half_open_requests=3):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.half_open_requests = half_open_requests
+
+        self.failure_count = 0
+        self.last_failure_time = None
+        self.state = 'closed'  # closed, open, half_open
+        self.half_open_count = 0
+        self._lock = asyncio.Lock()
+
+    async def call(self, coro):
+        """通过断路器调用"""
+        async with self._lock:
+            # 检查状态
+            if self.state == 'open':
+                # 检查是否可以进入半开状态
+                if time.time() - self.last_failure_time > self.recovery_timeout:
+                    self.state = 'half_open'
+                    self.half_open_count = 0
+                else:
+                    raise RuntimeError("服务暂时不可用（断路器开启）")
+
+            if self.state == 'half_open':
+                # 半开状态，限制请求数
+                if self.half_open_count >= self.half_open_requests:
+                    # 等待结果
+                    await asyncio.sleep(1)
+
+        try:
+            result = await coro
+
+            # 成功，重置计数
+            async with self._lock:
+                if self.state == 'half_open':
+                    self.half_open_count += 1
+                    if self.half_open_count >= self.half_open_requests:
+                        # 恢复正常
+                        self.state = 'closed'
+                        self.failure_count = 0
+                elif self.state == 'closed':
+                    self.failure_count = 0
+
+            return result
+
+        except Exception as e:
+            # 失败，增加计数
+            async with self._lock:
+                self.failure_count += 1
+                self.last_failure_time = time.time()
+
+                if self.failure_count >= self.failure_threshold:
+                    self.state = 'open'
+                    logger.warning(f"断路器开启：连续失败 {self.failure_count} 次")
+
+            raise
+
+
+class MonitoringSystem:
+    """监控系统"""
+
+    def __init__(self):
+        self.metrics = {
+            'kline': PerformanceMetrics(),
+            'snapshot': PerformanceMetrics(),
+            'subscribe': PerformanceMetrics()
+        }
+
+        self.counters = {
+            'total_requests': 0,
+            'successful_requests': 0,
+            'failed_requests': 0,
+            'cache_hits': 0,
+            'cache_misses': 0
+        }
+
+        self.gauges = {
+            'active_connections': 0,
+            'active_subscriptions': 0,
+            'thread_pool_size': 0,
+            'memory_usage_mb': 0
+        }
+
+        self.events = deque(maxlen=1000)
+
+    def record_request(self, operation: str, latency: float, success: bool):
+        """记录请求"""
+        if operation in self.metrics:
+            self.metrics[operation].add_latency(latency)
+
+        self.counters['total_requests'] += 1
+
+        if success:
+            self.counters['successful_requests'] += 1
+        else:
+            self.counters['failed_requests'] += 1
+
+    def record_event(self, event_type: str, details: dict):
+        """记录事件"""
+        self.events.append({
+            'timestamp': time.time(),
+            'type': event_type,
+            'details': details
+        })
+
+    def get_health_status(self) -> dict:
+        """获取健康状态"""
+        total = self.counters['total_requests']
+        success = self.counters['successful_requests']
+
+        success_rate = success / total if total > 0 else 0
+
+        # 判断健康状态
+        if success_rate > 0.95:
+            status = 'healthy'
+        elif success_rate > 0.8:
+            status = 'degraded'
+        else:
+            status = 'unhealthy'
+
+        return {
+            'status': status,
+            'success_rate': f"{success_rate:.2%}",
+            'metrics': {
+                name: metrics.get_statistics()
+                for name, metrics in self.metrics.items()
+            },
+            'counters': self.counters,
+            'gauges': self.gauges
+        }
+
+
+class OptimizedAmazingDataProvider(DataProvider):
+    """优化后的 AmazingData 数据提供者"""
+
+    def __init__(self, config: DataProviderConfig):
+        super().__init__(config)
+
+        if not HAS_AMAZINGDATA:
+            raise ImportError("AmazingData SDK 未安装")
+
+        # 优化的组件
+        self.thread_pool = OptimizedThreadPoolManager()
+        self.cache = OptimizedCacheManager(ttl=300)
+        self.subscription_manager = SubscriptionManager()
+        self.heartbeat = OptimizedHeartbeat(config)
+
+        # 并发控制
+        self.rate_limiter = RateLimiter(rate=100, burst=20)
+        self.circuit_breaker = CircuitBreaker()
+
+        # 监控
+        self.monitoring = MonitoringSystem()
+
+        # 连接状态
+        self._connected = False
+        self._login_time = None
+
+        # 任务管理
+        self._heartbeat_task = None
+
+    async def connect(self) -> bool:
+        """连接到数据源"""
+        try:
+            # 登录
+            result = await self._login()
+            if result:
+                # 启动心跳
+                self._heartbeat_task = asyncio.create_task(self.heartbeat.heartbeat_loop())
+                logger.info("AmazingData 优化版本连接成功")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"连接失败: {e}")
+            return False
+
+    async def disconnect(self) -> None:
+        """断开连接"""
+        try:
+            # 取消心跳
+            if self._heartbeat_task:
+                self._heartbeat_task.cancel()
+                try:
+                    await self._heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+
+            # 清理订阅
+            await self.subscription_manager.cleanup_all()
+
+            # 登出
+            await self._logout()
+
+            # 关闭线程池
+            self.thread_pool.shutdown()
+
+            logger.info("AmazingData 优化版本已断开连接")
+        except Exception as e:
+            logger.error(f"断开连接失败: {e}")
+
+    async def _login(self) -> bool:
+        """登录 AmazingData"""
+        try:
+            logger.info(f"正在登录 AmazingData (优化版本)...")
+
+            # 使用优化的线程池执行登录
+            result = await asyncio.wait_for(
+                self.thread_pool.execute_async(
+                    ad.login,
+                    self.config.username,
+                    self.config.password,
+                    self.config.host,
+                    self.config.port
+                ),
+                timeout=5.0
+            )
+
+            if result == 0 or result is True:
+                self._connected = True
+                self._login_time = datetime.now()
+                logger.info("AmazingData 登录成功")
+                return True
+            else:
+                logger.error(f"AmazingData 登录失败，错误码: {result}")
+                return False
+
+        except asyncio.TimeoutError:
+            logger.error("登录超时")
+            return False
+        except Exception as e:
+            logger.error(f"登录异常: {e}")
+            return False
+
+    async def _logout(self) -> None:
+        """登出 AmazingData"""
+        try:
+            if self._connected:
+                await self.thread_pool.execute_async(ad.logout)
+                self._connected = False
+                logger.info("AmazingData 已登出")
+        except Exception as e:
+            logger.error(f"登出失败: {e}")
+
+    async def get_kline(
+        self,
+        symbol: str,
+        period: str,
+        start_date: str = None,
+        end_date: str = None,
+        count: int = None,
+        adjust: str = None
+    ) -> pd.DataFrame:
+        """获取K线数据（优化版）"""
+        start_time = time.time()
+
+        try:
+            # 更新活动时间
+            self.heartbeat.update_activity()
+
+            # 限流
+            await self.rate_limiter.acquire()
+
+            # 生成缓存键
+            cache_key = self.cache.generate_cache_key(
+                symbol=symbol,
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+                count=count,
+                adjust=adjust
+            )
+
+            # 查询缓存
+            cached_data = self.cache.get(cache_key)
+            if cached_data is not None:
+                self.monitoring.counters['cache_hits'] += 1
+                return cached_data
+
+            self.monitoring.counters['cache_misses'] += 1
+
+            # 通过断路器调用
+            async def fetch():
+                # 使用优化的线程池执行
+                result = await self.thread_pool.execute_async(
+                    ad.KLine.get_kline,
+                    symbol, period, start_date, end_date, count, adjust
+                )
+
+                # 数据转换（优化版）
+                df = OptimizedDataConverter.convert_kline_vectorized(result)
+
+                # 数据验证
+                df = OptimizedDataConverter.validate_and_clean(df)
+
+                # 缓存结果
+                self.cache.set(cache_key, df)
+
+                return df
+
+            # 执行
+            result = await self.circuit_breaker.call(fetch())
+
+            # 记录监控
+            latency = time.time() - start_time
+            self.monitoring.record_request('kline', latency, True)
+
+            return result
+
+        except Exception as e:
+            # 记录失败
+            latency = time.time() - start_time
+            self.monitoring.record_request('kline', latency, False)
+
+            logger.error(f"获取K线数据失败: {e}")
+            raise DataProviderError(f"获取K线数据失败: {e}")
+
+    async def subscribe(self, symbols: List[str], callback: Callable) -> List[str]:
+        """订阅实时数据（优化版）"""
+        subscription_ids = []
+
+        for symbol in symbols:
+            try:
+                # 通过订阅管理器订阅
+                sub_id = self.subscription_manager.subscribe(symbol, callback)
+                subscription_ids.append(sub_id)
+
+                # 记录监控
+                self.monitoring.gauges['active_subscriptions'] += 1
+
+            except Exception as e:
+                logger.error(f"订阅 {symbol} 失败: {e}")
+
+        return subscription_ids
+
+    async def unsubscribe(self, subscription_ids: List[str]):
+        """取消订阅（优化版）"""
+        for sub_id in subscription_ids:
+            try:
+                success = self.subscription_manager.unsubscribe(sub_id)
+                if success:
+                    self.monitoring.gauges['active_subscriptions'] -= 1
+
+            except Exception as e:
+                logger.error(f"取消订阅 {sub_id} 失败: {e}")
+
+    async def get_health_status(self) -> dict:
+        """获取健康状态"""
+        return {
+            'provider': 'amazingdata_optimized',
+            'status': self.monitoring.get_health_status(),
+            'cache': self.cache.get_stats(),
+            'circuit_breaker': self.circuit_breaker.state,
+            'thread_pool': {
+                'size': self.thread_pool.pool_size,
+                'active': self.thread_pool.stats['active_threads'],
+                'completed': self.thread_pool.stats['completed_tasks'],
+                'failed': self.thread_pool.stats['failed_tasks']
+            },
+            'heartbeat': {
+                'interval': self.heartbeat.current_interval,
+                'failures': self.heartbeat.consecutive_failures
+            }
+        }
+
+    def is_connected(self) -> bool:
+        """检查连接状态"""
+        return self._connected
+
+    async def initialize(self) -> bool:
+        """初始化数据源 - 实现抽象方法"""
+        return await self.connect()
+
+    async def get_stock_list(self, limit: Optional[int] = None, **kwargs) -> Optional[List[Dict[str, Any]]]:
+        """获取股票列表 - 实现抽象方法"""
+        try:
+            # 限流
+            await self.rate_limiter.acquire()
+
+            # 通过优化的线程池执行
+            result = await self.thread_pool.execute_async(
+                ad.BaseData.get_stock_list
+            )
+
+            if not result:
+                return None
+
+            # 转换为标准格式
+            stock_list = []
+            for item in result:
+                stock_info = {
+                    'symbol': item.get('code', ''),
+                    'name': item.get('name', ''),
+                    'exchange': item.get('exchange', ''),
+                    'list_date': item.get('list_date', ''),
+                    'status': item.get('status', 'active')
+                }
+                stock_list.append(stock_info)
+
+            # 如果有限制数量
+            if limit and limit > 0:
+                stock_list = stock_list[:limit]
+
+            return stock_list
+
+        except Exception as e:
+            logger.error(f"获取股票列表失败: {e}")
+            return None
+
+    async def get_kline_data(
+        self,
+        symbol: str,
+        period: str = '1d',
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: int = 100,
+        **kwargs
+    ) -> Optional[List[Dict[str, Any]]]:
+        """获取K线数据 - 实现抽象方法"""
+        try:
+            # 调用已有的get_kline方法
+            df = await self.get_kline(
+                symbol=symbol,
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+                count=limit,
+                adjust=kwargs.get('adjust')
+            )
+
+            if df.empty:
+                return None
+
+            # 转换为字典列表格式
+            df = df.reset_index()
+            kline_data = []
+
+            for _, row in df.iterrows():
+                kline_item = {
+                    'datetime': row.get('datetime', '').strftime('%Y-%m-%d %H:%M:%S') if pd.notnull(row.get('datetime')) else '',
+                    'open': float(row.get('open', 0)),
+                    'high': float(row.get('high', 0)),
+                    'low': float(row.get('low', 0)),
+                    'close': float(row.get('close', 0)),
+                    'volume': float(row.get('volume', 0)),
+                    'amount': float(row.get('amount', 0))
+                }
+                kline_data.append(kline_item)
+
+            return kline_data
+
+        except Exception as e:
+            logger.error(f"获取K线数据失败: {e}")
+            return None

@@ -8,6 +8,7 @@ from typing import Callable, Any
 import traceback
 
 from fastapi import HTTPException, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from loguru import logger
 
@@ -145,11 +146,34 @@ def handle_api_exceptions(func: Callable) -> Callable:
 def setup_global_exception_handlers(app):
     """
     设置全局异常处理器
-    
+
     Args:
         app: FastAPI应用实例
     """
-    
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request, exc: RequestValidationError):
+        """处理FastAPI的请求验证错误"""
+        errors = exc.errors()
+        # 格式化错误消息
+        error_messages = []
+        for error in errors:
+            loc = " -> ".join(str(l) for l in error.get("loc", []))
+            msg = error.get("msg", "验证错误")
+            error_messages.append(f"{loc}: {msg}")
+
+        error_detail = "; ".join(error_messages) if error_messages else "请求参数验证失败"
+
+        logger.warning(f"请求验证错误 [{request.url}]: {error_detail}")
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "error": "请求参数验证失败",
+                "detail": error_detail,
+                "validation_errors": errors
+            }
+        )
+
     @app.exception_handler(APIException)
     async def api_exception_handler(request, exc: APIException):
         """处理自定义API异常"""
@@ -162,7 +186,7 @@ def setup_global_exception_handlers(app):
                 "path": str(request.url)
             }
         )
-    
+
     @app.exception_handler(ValueError)
     async def value_error_handler(request, exc: ValueError):
         """处理值错误"""

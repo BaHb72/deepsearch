@@ -12,13 +12,13 @@ import {
   Select,
   Switch,
   InputNumber,
-  message,
   Popconfirm,
   Tooltip,
   Row,
   Col,
   Alert,
-  Slider
+  Slider,
+  App as AntApp
 } from 'antd'
 import {
   ApiOutlined,
@@ -56,7 +56,8 @@ const { Option } = Select
  * 数据源表单组件
  * @param {DataSourceFormProps} props
  */
-const DataSourceForm = ({ initialValues, onSubmit }) => {
+const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
+  const { message } = AntApp.useApp()
   const [form] = Form.useForm()
   const [sourceType, setSourceType] = React.useState(initialValues?.type || 'akshare')
   const [testing, setTesting] = React.useState(false)
@@ -66,10 +67,14 @@ const DataSourceForm = ({ initialValues, onSubmit }) => {
       setTesting(true)
       const values = form.getFieldsValue()
       const response = await testDataSource(values)
-      if (response?.data?.success) {
+      if (response?.success) {
         message.success('数据源连接成功！')
+        // 调用测试成功回调
+        if (onTestSuccess) {
+          onTestSuccess(response?.datasource)
+        }
       } else {
-        message.error('数据源连接失败')
+        message.error(response?.message || '数据源连接失败')
       }
     } catch (error) {
       message.error('测试失败: ' + error.message)
@@ -166,13 +171,48 @@ const DataSourceForm = ({ initialValues, onSubmit }) => {
       )}
 
       {sourceType === 'amazingdata' && (
-        <Form.Item
-          name={['config', 'apiKey']}
-          label="API Key"
-          rules={[{ required: true, message: '请输入 API Key' }]}
-        >
-          <Input.Password placeholder="银河证券 API Key" />
-        </Form.Item>
+        <>
+          <Row gutter={16}>
+            <Col span={16}>
+              <Form.Item
+                name={['config', 'host']}
+                label="服务器地址"
+                rules={[{ required: true, message: '请输入服务器地址' }]}
+              >
+                <Input placeholder="120.86.124.106 或 101.230.159.234" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name={['config', 'port']}
+                label="端口"
+                rules={[{ required: true, message: '请输入端口' }]}
+              >
+                <InputNumber placeholder="8600" min={1} max={65535} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name={['config', 'username']}
+                label="用户名"
+                rules={[{ required: true, message: '请输入用户名' }]}
+              >
+                <Input placeholder="请输入用户名" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name={['config', 'password']}
+                label="密码"
+                rules={[{ required: true, message: '请输入密码' }]}
+              >
+                <Input.Password placeholder="请输入密码" />
+              </Form.Item>
+            </Col>
+          </Row>
+        </>
       )}
 
       {sourceType === 'cloudflare' && (
@@ -237,6 +277,7 @@ const DataSourceForm = ({ initialValues, onSubmit }) => {
  * @param {{value: number, onChange: (value: number) => void}} props
  */
 const RateLimitEditor = ({ value, onChange }) => {
+  const { message } = AntApp.useApp()
   const [editing, setEditing] = React.useState(false)
   const [tempValue, setTempValue] = React.useState(value)
 
@@ -286,8 +327,10 @@ const RateLimitEditor = ({ value, onChange }) => {
  * 数据源配置管理组件
  */
 const DataSourceConfig = () => {
+  const { message } = AntApp.useApp()
   const editModal = useModal()
   const [globalRateLimit, setGlobalRateLimit] = React.useState(100)
+  const [toggleLoading, setToggleLoading] = React.useState({})
   
   // 添加调试日志
   React.useEffect(() => {
@@ -404,12 +447,71 @@ const DataSourceConfig = () => {
   }
 
   const handleToggle = async (id, enabled) => {
+    // 显示loading状态
+    const loadingKey = `toggle-${id}`
+
+    // 设置按钮loading状态
+    setToggleLoading(prev => ({ ...prev, [id]: true }))
+
+    if (enabled) {
+      message.loading({
+        content: '正在测试数据源连接...',
+        key: loadingKey,
+        duration: 0  // 不自动关闭
+      })
+    }
+
     try {
-      await toggleDataSource(id, enabled)
-      message.success(enabled ? '已启用' : '已禁用')
+      const response = await toggleDataSource(id, enabled)
+
+      // 检查响应结构
+      if (response?.data?.success || response?.success) {
+        message.success({
+          content: enabled ? '数据源已启用' : '数据源已禁用',
+          key: loadingKey
+        })
+      } else {
+        // 处理测试失败的情况
+        const errorMsg = response?.data?.message || response?.message || '操作失败'
+        const testDetails = response?.data?.data?.test_details || response?.data?.test_details
+
+        // 如果是启用失败，显示详细错误
+        if (enabled) {
+          message.error({
+            content: (
+              <div>
+                <div>{errorMsg}</div>
+                {testDetails && Object.keys(testDetails).length > 0 && (
+                  <div style={{ fontSize: '12px', marginTop: '4px', opacity: 0.8 }}>
+                    {testDetails.error ? `错误: ${testDetails.error}` : ''}
+                    {testDetails.note ? `提示: ${testDetails.note}` : ''}
+                  </div>
+                )}
+              </div>
+            ),
+            key: loadingKey,
+            duration: 8
+          })
+        } else {
+          message.error({
+            content: errorMsg,
+            key: loadingKey
+          })
+        }
+      }
+
+      // 无论成功失败都刷新列表
       refresh()
     } catch (error) {
-      message.error('操作失败: ' + error.message)
+      console.error('Toggle datasource error:', error)
+      message.error({
+        content: '操作失败: ' + (error.response?.data?.message || error.message),
+        key: loadingKey
+      })
+      refresh()
+    } finally {
+      // 清除loading状态
+      setToggleLoading(prev => ({ ...prev, [id]: false }))
     }
   }
 
@@ -491,14 +593,14 @@ const DataSourceConfig = () => {
       width: 150,
       render: (_, record) => (
         <Space size="small">
-          {record.successRate !== undefined && (
+          {record.successRate > 0 && (
             <Tooltip title="成功率">
               <Tag color={record.successRate >= 95 ? 'green' : record.successRate >= 80 ? 'orange' : 'red'}>
                 {record.successRate.toFixed(1)}%
               </Tag>
             </Tooltip>
           )}
-          {record.avgResponseTime !== undefined && (
+          {record.avgResponseTime > 0 && (
             <Tooltip title="平均响应时间">
               <Tag>{record.avgResponseTime}ms</Tag>
             </Tooltip>
@@ -514,9 +616,11 @@ const DataSourceConfig = () => {
       render: (enabled, record) => (
         <Switch
           checked={enabled}
+          loading={toggleLoading[record.id]}
           onChange={(checked) => handleToggle(record.id, checked)}
-          checkedChildren={<CheckCircleOutlined />}
-          unCheckedChildren={<CloseCircleOutlined />}
+          checkedChildren="启用"
+          unCheckedChildren="禁用"
+          disabled={toggleLoading[record.id]}
         />
       )
     },
@@ -527,12 +631,15 @@ const DataSourceConfig = () => {
       width: 100,
       render: (status) => {
         const statusMap = {
-          online: { status: 'success', text: '在线' },
-          offline: { status: 'error', text: '离线' },
+          online: { status: 'success', text: '已连接' },
+          offline: { status: 'error', text: '未连接' },
           error: { status: 'error', text: '错误' },
-          degraded: { status: 'warning', text: '降级' }
+          degraded: { status: 'warning', text: '降级' },
+          unknown: { status: 'default', text: '未知' },
+          untested: { status: 'default', text: '未测试' },
+          disabled: { status: 'default', text: '已禁用' }
         }
-        const config = statusMap[status] || { status: 'default', text: status }
+        const config = statusMap[status] || { status: 'default', text: '未知' }
         return <Badge status={config.status} text={config.text} />
       }
     },
@@ -661,6 +768,7 @@ const DataSourceConfig = () => {
         <DataSourceForm
           initialValues={editModal.data || undefined}
           onSubmit={editModal.data ? handleUpdate : handleCreate}
+          onTestSuccess={() => refresh()}
         />
       </Modal>
     </>

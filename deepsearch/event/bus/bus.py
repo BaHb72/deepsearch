@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 from deepsearch.messaging import ZeroMQMessageBus
 
 if TYPE_CHECKING:
-    from deepsearch.storage.databases.timeseries import RedisTimeSeriesStorage
+    from deepsearch.infrastructure.persistence.timeseries import RedisTimeSeriesStorage
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
     def _initialize_storage(self, storage_config: Dict[str, Any]) -> None:
         """初始化 RedisTimeSeries 存储"""
         try:
-            from deepsearch.storage.databases.timeseries import RedisTimeSeriesStorage
+            from deepsearch.infrastructure.persistence.timeseries import RedisTimeSeriesStorage
             self.storage = RedisTimeSeriesStorage(**storage_config)
             logger.info("RedisTimeSeries 存储初始化成功")
         except Exception as e:

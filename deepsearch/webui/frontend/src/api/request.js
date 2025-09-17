@@ -32,51 +32,30 @@ debugLog('INIT', `设置默认baseURL: ${request.defaults.baseURL}`)
 // 初始化动态baseURL
 let currentBackendUrl = null
 
-// 异步设置baseURL（可选的后续更新）
+// 异步设置baseURL（保持使用相对路径）
 async function ensureBackendUrl() {
-    // 如果已经设置了baseURL，直接返回
-    if (request.defaults.baseURL) {
-        return currentBackendUrl
+    // 始终使用相对路径，不进行动态更新
+    // 这样可以确保通过Vite代理工作，避免跨域问题
+    if (!request.defaults.baseURL) {
+        request.defaults.baseURL = '/api'
+        debugLog('BACKEND_URL', '确保使用相对路径: /api')
     }
-    
-    if (currentBackendUrl === null) {  // 使用严格等于null检查
-        currentBackendUrl = await getBackendUrl()
-        // 如果返回空字符串（使用代理），baseURL应该设置为/api
-        if (currentBackendUrl === '') {
-            request.defaults.baseURL = '/api'
-        } else {
-            request.defaults.baseURL = currentBackendUrl + '/api'
-        }
-        debugLog('BACKEND_URL', `更新后端URL: ${request.defaults.baseURL}`)
-    }
-    return currentBackendUrl
+    return ''  // 返回空字符串表示使用代理
 }
 
-// 导出初始化函数，用于应用启动时的端口探测
+// 导出初始化函数，用于应用启动时的配置
 export async function setupRequest() {
     try {
         debugLog('SETUP', '开始初始化 axios 实例')
-        
-        // 尝试检测后端端口
-        const ports = [8000, 8001, 8002, 8080]
-        for (const port of ports) {
-            try {
-                const response = await axios.get(`http://localhost:${port}/api/health`, {
-                    timeout: 1000
-                })
-                if (response.status === 200) {
-                    request.defaults.baseURL = `http://localhost:${port}/api`
-                    debugLog('SETUP', `后端服务运行在端口: ${port}`)
-                    return port
-                }
-            } catch (e) {
-                // 继续尝试下一个端口
-            }
-        }
-        
-        // 使用默认的代理路径
+
+        // 始终使用相对路径，通过 Vite 代理转发到后端
+        // 这样可以避免跨域问题
         request.defaults.baseURL = '/api'
-        debugLog('SETUP', '使用默认配置: 通过 Vite 代理')
+        debugLog('SETUP', '使用代理配置: /api -> http://localhost:8000')
+
+        // 不再进行端口探测，避免设置完整URL导致跨域
+        // 端口探测逻辑已被禁用
+
         return null
     } catch (error) {
         debugLog('SETUP_ERROR', '初始化失败', error)
@@ -195,6 +174,13 @@ request.interceptors.response.use(
                 case 404:
                     errorMessage = '请求地址不存在'
                     break
+                case 422:
+                    // FastAPI的ValidationError返回422状态码
+                    const validationDetail = error.response.data?.detail
+                    errorMessage = typeof validationDetail === 'string'
+                        ? validationDetail
+                        : '请求参数验证失败'
+                    break
                 case 500:
                     errorMessage = '服务器内部错误'
                     break
@@ -202,7 +188,36 @@ request.interceptors.response.use(
                     errorMessage = '服务不可用'
                     break
                 default:
-                    errorMessage = error.response.data?.detail || error.response.data?.message || '请求失败'
+                    // 处理可能是对象的detail字段（如FastAPI的ValidationError）
+                    const detail = error.response.data?.detail
+                    if (typeof detail === 'object' && detail !== null) {
+                        // 如果detail是对象，尝试提取有意义的错误信息
+                        if (Array.isArray(detail)) {
+                            // 如果是数组（多个验证错误）
+                            errorMessage = detail.map(item => {
+                                if (typeof item === 'string') {
+                                    return item
+                                } else if (item.msg) {
+                                    // FastAPI ValidationError格式
+                                    return item.msg
+                                } else {
+                                    return JSON.stringify(item)
+                                }
+                            }).join('; ')
+                        } else if (detail.msg) {
+                            // 单个ValidationError对象
+                            errorMessage = detail.msg
+                        } else if (detail.error) {
+                            // 自定义错误格式
+                            errorMessage = detail.error
+                        } else {
+                            // 未知格式，转换为字符串
+                            errorMessage = JSON.stringify(detail)
+                        }
+                    } else {
+                        // detail是字符串或不存在
+                        errorMessage = detail || error.response.data?.message || '请求失败'
+                    }
             }
             // 记录HTTP错误也算失败
             backendStatus.recordFailure()

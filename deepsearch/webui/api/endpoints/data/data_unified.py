@@ -8,8 +8,8 @@ from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 from loguru import logger
 
-from deepsearch.services.data.unified_data_manager import (
-    get_unified_data_manager,
+from deepsearch.infrastructure.providers.managers.data_source_manager import (
+    get_data_source_manager,
     DataSourceType
 )
 from deepsearch.webui.api.utils import sanitize_for_json
@@ -41,7 +41,7 @@ async def get_stock_history(
                 logger.warning(f"无效的数据源类型: {source}")
 
         # 获取管理器
-        manager = await get_unified_data_manager()
+        manager = get_data_source_manager()
 
         # 获取数据
         result = await manager.get_stock_hist(
@@ -79,7 +79,7 @@ async def get_stock_quote(
             except ValueError:
                 pass
 
-        manager = await get_unified_data_manager()
+        manager = get_data_source_manager()
         result = await manager.get_realtime_quote(
             symbol=symbol,
             preferred_source=preferred_source
@@ -111,7 +111,7 @@ async def get_stock_info(
             except ValueError:
                 pass
 
-        manager = await get_unified_data_manager()
+        manager = get_data_source_manager()
         result = await manager.fetch_stock_info(
             symbol=symbol,
             preferred_source=preferred_source
@@ -146,7 +146,7 @@ async def get_stock_list(
     返回所有可交易股票的代码和名称
     """
     try:
-        manager = await get_unified_data_manager()
+        manager = get_data_source_manager()
 
         # 优先从Cloudflare获取完整列表
         for source_type in [DataSourceType.CLOUDFLARE, DataSourceType.QMT]:
@@ -182,8 +182,32 @@ async def get_source_status():
     返回所有数据源的健康状态、延迟、成功率等信息
     """
     try:
-        manager = await get_unified_data_manager()
-        return manager.get_status_report()
+        manager = get_data_source_manager()
+        status = manager.get_status_report()
+
+        # 转换sources字典为列表格式
+        sources_list = []
+        for source_name, source_info in status.get("sources", {}).items():
+            sources_list.append({
+                "name": source_name,
+                "enabled": source_info.get("config", {}).get("enabled", False),
+                "status": "online" if source_info.get("available", False) else "offline",
+                "priority": source_info.get("config", {}).get("priority", 999),
+                "reason": source_info.get("reason", "")
+            })
+
+        # 构建响应数据
+        response_data = {
+            "initialized": status.get("initialized", False),
+            "sources": sources_list,
+            "available_count": status.get("available_count", 0)
+        }
+
+        return {
+            "code": 0,
+            "data": response_data,
+            "message": "success"
+        }
 
     except Exception as e:
         logger.error(f"获取数据源状态失败: {e}")
@@ -198,12 +222,16 @@ async def check_data_sources():
     检查所有数据源的可用性
     """
     try:
-        manager = await get_unified_data_manager()
+        manager = get_data_source_manager()
         await manager._check_all_sources()
         return {
-            "status": "success",
-            "message": "健康检查完成",
-            "result": manager.get_status_report()
+            "code": 0,
+            "data": {
+                "status": "success",
+                "message": "健康检查完成",
+                "result": manager.get_status_report()
+            },
+            "message": "success"
         }
 
     except Exception as e:
@@ -222,7 +250,7 @@ async def compare_data_sources(
     用于验证数据一致性
     """
     try:
-        manager = await get_unified_data_manager()
+        manager = get_data_source_manager()
         results = {}
 
         for source_type in DataSourceType:

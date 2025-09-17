@@ -34,205 +34,143 @@ database:
     poolSize: 10
     pool_size: 10
     has_saved_password: false
-  analytics: # DuckDB 分析数据库
+  analytics:
     enabled: false
     path: ./data/analytics/market.duckdb
-    memory_limit: 8GB  # 生产环境给更多内存
+    memory_limit: 8GB
     threads: 8
     temp_directory: ./data/analytics/temp
     auto_sync: true
-    sync_interval: 1800  # 30分钟同步一次
-
-# ========================================
-# Cloudflare 配置
-# ========================================
-cloudflare:
-  # 支持多个 Worker URLs（优先使用）
-  workers:
-    - "https://akshare-proxy.934073514.workers.dev"
-    # 可以添加更多 Worker 节点以实现负载均衡和故障转移
-    # - "https://backup-worker.workers.dev"
-  
-  # 单个 Worker URL（向后兼容）
-  worker_url: "https://akshare-proxy.934073514.workers.dev"
-
-# ========================================
-# QMT集成配置
-# ========================================
-qmt:
-  enabled: true
-  receiver:
-    tcp_port: 9999
-    websocket_port: 9998
-    host: "0.0.0.0"
-  security:
-    enable_auth: false  # 暂时禁用认证以便测试
-    token: "prod-secure-token-change-this"  # 请修改为安全的令牌
-  data:
-    batch_size: 100
-    flush_interval: 0.1
-    cache_ttl: 60  # 数据缓存时间（秒）
-  monitoring:
-    enabled: true
-    report_interval: 30  # 状态报告间隔（秒）
-  
-  # Tunnel 配置
-  tunnel_url: "${CLOUDFLARE_TUNNEL_URL:https://akshare-api.yourdomain.com}"
-  
-  # 通用配置
-  timeout: 30
-  retry_count: 3
-
-# ========================================
-# CloudFlare Workers 配置 - 用于 AkShare API 代理
-# ========================================
-cloudflare_workers:
-  url: "https://akshare-proxy.934073514.workers.dev"  # CloudFlare Worker URL，已包含 https://
-  api_key: ""  # API密钥（如果Worker需要认证）
-  fallback_to_direct: true  # Worker不可用时回退到直连
-  timeout: 30  # 请求超时（秒）
-  retry_count: 3  # 重试次数
-  cache_enabled: true  # 启用本地缓存
-  cache_ttl: 300  # 缓存过期时间（秒）
-
-# ========================================
-# AmazingData 配置（银河证券数据接口）
-# ========================================
-amazingdata:
-  enabled: false  # 是否启用（需要有效的许可证）
-  api_key: ""  # API密钥
-  api_secret: ""  # API密钥
-
-# ========================================
-# QMT 配置（迅投QMT终端）
-# ========================================
-qmt:
-  enabled: false  # 是否启用（需要安装QMT终端）
-  host: "localhost"  # QMT服务地址
-  port: 8888  # QMT服务端口
-
-# ========================================
-# MiniQMT集成配置
-# ========================================
-miniqmt:
-  enabled: true
-  connection:
-    host: "127.0.0.1"
-    port: 7777
-    username: ""
-    password: ""
-    timeout: 10
-  data:
-    symbols: [ ]  # 默认订阅的股票列表
-    period: "1d"
-    cache_ttl: 60
-    batch_size: 100
-  monitoring:
-    enabled: true
-    heartbeat_interval: 30
-    report_interval: 60
-
-# ========================================
-# 数据提供者配置
-# ========================================
+    sync_interval: 1800
 message_bus:
   buses:
     inmem:
       type: inmem
       enabled: true
-      config: { }
+      config: {}
   routes:
-    - match: "*"
-      buses: [ "inmem" ]
-
-# ========================================
-# 数据提供者配置
-# ========================================
-data_providers:
-  # 默认提供者
-  default: "amazingdata"
-  
-  # AmazingData 数据源（最高优先级）
-  amazingdata:
-    enabled: true
-    priority: 1  # 最高优先级
-  
-  # QMT 数据源
-  qmt:
-    enabled: true
-    priority: 2  # 第二优先级
-  
-  # Cloudflare Worker 代理
-  cloudflare_proxy:
-    enabled: false
-    worker_url: "https://akshare-proxy.934073514.workers.dev"
-    timeout: 30
-    retry_count: 3
-    cache_ttl: 60
-    priority: 10
-  
-  # AkShare 代理配置
-  akshare_proxy:
-    enabled: false
-    use_proxy: true
-    cache_ttl: 300  # 5分钟本地缓存
-    rate_limit:
-      max_requests: 100
-      time_window: 60
-    priority: 20
-
-# ========================================
-# AmazingData 配置
-# ========================================
+  - match: '*'
+    buses:
+    - inmem
+data_sources:
+  default: amazingdata
+  providers:
+    amazingdata:
+      enabled: true
+      priority: 1
+      type: amazingdata
+      config:
+        connection:
+          username: '212200038719'
+          password: '212200038719@2025'
+          host: 120.86.124.106
+          port: 8600
+          timeout: 10
+          max_retries: 3
+          heartbeat_interval: 30
+          auto_reconnect: true
+        cache:
+          enabled: true
+          ttl: 300
+          max_size: 10000
+          clear_on_disconnect: false
+        subscription:
+          enabled: true
+          batch_size: 100
+          heartbeat_interval: 30
+          max_symbols: 500
+          auto_resubscribe: true
+        data_quality:
+          check_enabled: true
+          min_completeness: 0.95
+          alert_on_error: true
+          validate_timestamps: true
+        performance:
+          batch_requests: true
+          max_concurrent_requests: 10
+          request_queue_size: 1000
+          use_connection_pool: true
+          pool_size: 5
+        monitoring:
+          enabled: true
+          report_interval: 60
+          metrics_enabled: true
+          log_slow_requests: true
+          slow_request_threshold: 1000
+        username: '212200038719'
+        password: 212200038719@2025
+        host: 101.230.159.234
+        port: 8600
+        timeout: 10
+        heartbeat_interval: 60
+        auto_reconnect: true
+        local_path: D://AmazingData_local_data//
+        use_local: true
+        max_retries: 2
+        network_provider: telecom
+    cloudflare:
+      enabled: true
+      priority: 2
+      type: cloudflare_proxy
+      config:
+        worker_url: https://akshare-proxy.934073514.workers.dev
+        workers:
+        - https://akshare-proxy.934073514.workers.dev
+        api_key: ''
+        fallback_to_direct: true
+        timeout: 30
+        retry_count: 3
+        cache_enabled: true
+        cache_ttl: 300
+    qmt:
+      enabled: true
+      priority: 3
+      type: qmt
+      config:
+        host: localhost
+        port: 8888
+    miniqmt:
+      enabled: true
+      priority: 4
+      type: miniqmt
+      config:
+        enabled: true
+        connection:
+          host: 127.0.0.1
+          port: 7777
+          username: ''
+          password: ''
+          timeout: 10
+        data:
+          symbols: []
+          period: 1d
+          cache_ttl: 60
+          batch_size: 100
+        monitoring:
+          enabled: true
+          heartbeat_interval: 30
+          report_interval: 60
+    akshare:
+      enabled: true
+      priority: 5
+      type: akshare
+      config:
+        timeout: 30
+        max_retries: 3
+        cache_ttl: 300
+        rate_limit:
+          max_requests: 100
+          time_window: 60
 amazingdata:
-  enabled: true
-  priority: 1  # 最高优先级
-  
-  # 连接配置
-  connection:
-    username: "212200038719"  # 请替换为实际的用户名
-    password: "21220003871920250820"  # 请替换为实际的密码（建议使用encrypted:格式）
-    host: "120.86.124.106"  # 请替换为实际的服务器地址
-    port: 8600  # 请替换为实际的服务端口
-    timeout: 10  # 连接超时（秒）
-    max_retries: 3  # 最大重试次数
-    heartbeat_interval: 30  # 心跳间隔（秒）
-    auto_reconnect: true  # 自动重连
-  
-  # 缓存配置
-  cache:
-    enabled: true
-    ttl: 300  # 缓存过期时间（秒）
-    max_size: 10000  # 最大缓存条目数
-    clear_on_disconnect: false  # 断连时是否清除缓存
-  
-  # 订阅配置
-  subscription:
-    enabled: true
-    batch_size: 100  # 批量订阅大小
-    heartbeat_interval: 30  # 订阅心跳间隔（秒）
-    max_symbols: 500  # 最大订阅股票数
-    auto_resubscribe: true  # 断线后自动重新订阅
-  
-  # 数据质量配置
-  data_quality:
-    check_enabled: true  # 启用数据质量检查
-    min_completeness: 0.95  # 最小完整性要求
-    alert_on_error: true  # 错误时告警
-    validate_timestamps: true  # 验证时间戳
-  
-  # 性能配置
-  performance:
-    batch_requests: true  # 启用批量请求
-    max_concurrent_requests: 10  # 最大并发请求数
-    request_queue_size: 1000  # 请求队列大小
-    use_connection_pool: true  # 使用连接池
-    pool_size: 5  # 连接池大小
-  
-  # 监控配置
-  monitoring:
-    enabled: true
-    report_interval: 60  # 状态报告间隔（秒）
-    metrics_enabled: true  # 启用指标收集
-    log_slow_requests: true  # 记录慢请求
-    slow_request_threshold: 1000  # 慢请求阈值（毫秒）
+  enabled: false
+  username: '212200038719'
+  password: 212200038719@2025
+  host: 101.230.159.234
+  port: 8600
+  timeout: 10
+  heartbeat_interval: 60
+  auto_reconnect: true
+  local_path: D://AmazingData_local_data//
+  use_local: true
+  max_retries: 2
+  network_provider: telecom

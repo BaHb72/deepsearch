@@ -241,7 +241,7 @@ class MainEngine:
             from deepsearch.core.utils.error_handler import error_handler
             from deepsearch.debug.performance_profiler import profiler
             from deepsearch.memory.smart_memory import memory_manager
-            from deepsearch.database.query_optimizer import query_optimizer, setup_query_monitoring
+            from deepsearch.infrastructure.persistence.query_optimizer import query_optimizer, setup_query_monitoring
             
             # 错误处理器已通过全局注入自动激活
             self._logger.debug("Enhanced error handler active")

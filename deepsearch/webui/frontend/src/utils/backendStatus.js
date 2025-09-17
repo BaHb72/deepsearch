@@ -45,6 +45,7 @@ class BackendStatusManager {
         this.lastCheckTime = now
 
         try {
+            // 使用 fetch 进行健康检查
             const response = await fetch('/api/system/status', {
                 method: 'GET',
                 signal: AbortSignal.timeout(5000) // 5秒超时
@@ -54,10 +55,26 @@ class BackendStatusManager {
                 this.setAvailable(true)
                 this.consecutiveFailures = 0
             } else {
-                this.handleFailure()
+                this.handleFailure('server_error')
             }
         } catch (error) {
-            this.handleFailure()
+            // 区分不同类型的错误
+            console.debug('[BackendStatus] 健康检查异常:', error.message)
+
+            // 模块导入错误 - 不算作后端不可用
+            if (error.message?.includes('import') || error.message?.includes('Cannot read')) {
+                console.debug('[BackendStatus] API模块尚未就绪，稍后重试')
+                // 不调用 handleFailure，保持当前状态
+            }
+            // 网络连接错误或服务器错误 - 真正的后端问题
+            else if (error.response?.status >= 500 || error.code === 'ECONNREFUSED' || error.message?.includes('503')) {
+                console.warn('[BackendStatus] 后端服务错误:', error.response?.status || error.code)
+                this.handleFailure('server_error')
+            }
+            // 其他错误 - 记录但不判定为不可用
+            else {
+                console.debug('[BackendStatus] 其他错误，不影响后端状态判断')
+            }
         } finally {
             this.isChecking = false
         }
@@ -67,11 +84,19 @@ class BackendStatusManager {
 
     /**
      * 处理检查失败
+     * @param {string} errorType - 错误类型：server_error, connection_failed, unknown
      */
-    handleFailure() {
-        this.consecutiveFailures++
-        if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
-            this.setAvailable(false)
+    handleFailure(errorType = 'unknown') {
+        // 只有真正的服务器错误才累计失败次数
+        if (errorType === 'server_error' || errorType === 'connection_failed') {
+            this.consecutiveFailures++
+            console.debug(`[BackendStatus] 服务器错误累计: ${this.consecutiveFailures}/${this.maxConsecutiveFailures}`)
+
+            if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+                this.setAvailable(false)
+            }
+        } else {
+            console.debug(`[BackendStatus] 错误类型 ${errorType} 不影响失败计数`)
         }
     }
 
@@ -91,11 +116,13 @@ class BackendStatusManager {
             this.notifyListeners(available)
 
             if (!available) {
-                console.warn('后端服务不可用')
-                // 启动恢复机制
-                this.startRecoveryProcess()
+                if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+                    console.error(`[BackendStatus] 后端服务确认不可用 (连续${this.consecutiveFailures}次失败)`)
+                    // 启动恢复机制
+                    this.startRecoveryProcess()
+                }
             } else {
-                console.info('后端服务已恢复')
+                console.info('[BackendStatus] ✅ 后端服务正常')
                 // 停止恢复机制
                 this.stopRecoveryProcess()
                 // 重置计数器

@@ -6,7 +6,8 @@ from loguru import logger
 
 from deepsearch.config import get_config
 from deepsearch.config.validator import validate_config
-from deepsearch.data_providers.managers.data_source_manager import get_data_source_manager
+from deepsearch.infrastructure.providers.managers.data_source_manager import get_data_source_manager
+from deepsearch.webui.api.common.response_format import APIResponse, ErrorCodes
 
 router = APIRouter(prefix="/api/data-sources", tags=["数据源管理"])
 
@@ -29,13 +30,14 @@ async def get_data_source_status():
         # 获取状态报告
         status = manager.get_status_report()
 
-        return {
-            "status": "success",
-            "data": status
-        }
+        return APIResponse.success(status)
     except Exception as e:
         logger.error(f"获取数据源状态失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return APIResponse.error(
+            code=ErrorCodes.DATA_SOURCE_ERROR,
+            message=f"获取数据源状态失败: {str(e)}",
+            status_code=500
+        )
 
 
 @router.get("/config/validate")
@@ -53,30 +55,33 @@ async def validate_configuration():
 
         # 如果有错误，返回400状态码
         if summary["has_errors"]:
-            return {
-                "status": "error",
-                "message": "配置验证发现错误",
-                "data": summary
-            }
+            return APIResponse.error(
+                code=ErrorCodes.VALIDATION_ERROR,
+                message="配置验证发现错误",
+                data=summary,
+                status_code=400
+            )
 
         # 如果有警告，返回200但标记warning
         if summary["warnings"] > 0:
-            return {
-                "status": "warning",
-                "message": "配置验证发现警告",
-                "data": summary
-            }
+            return APIResponse.success(
+                data=summary,
+                message="配置验证发现警告"
+            )
 
         # 一切正常
-        return {
-            "status": "success",
-            "message": "配置验证通过",
-            "data": summary
-        }
+        return APIResponse.success(
+            data=summary,
+            message="配置验证通过"
+        )
 
     except Exception as e:
         logger.error(f"配置验证失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return APIResponse.error(
+            code=ErrorCodes.INTERNAL_ERROR,
+            message=f"配置验证失败: {str(e)}",
+            status_code=500
+        )
 
 
 @router.post("/refresh")
@@ -95,14 +100,17 @@ async def refresh_data_sources():
         # 获取新状态
         status = manager.get_status_report()
 
-        return {
-            "status": "success",
-            "message": "数据源已刷新",
-            "data": status
-        }
+        return APIResponse.success(
+            data=status,
+            message="数据源已刷新"
+        )
     except Exception as e:
         logger.error(f"刷新数据源失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return APIResponse.error(
+            code=ErrorCodes.DATA_SOURCE_ERROR,
+            message=f"刷新数据源失败: {str(e)}",
+            status_code=500
+        )
 
 
 @router.get("/config/current")
@@ -149,14 +157,15 @@ async def get_current_config():
                     "worker_url": providers.cloudflare_proxy.get('worker_url', '')
                 }
 
-        return {
-            "status": "success",
-            "data": result
-        }
+        return APIResponse.success(result)
 
     except Exception as e:
         logger.error(f"获取配置失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return APIResponse.error(
+            code=ErrorCodes.INTERNAL_ERROR,
+            message=f"获取配置失败: {str(e)}",
+            status_code=500
+        )
 
 
 @router.get("/test/{symbol}")
@@ -169,7 +178,7 @@ async def test_data_source(symbol: str, source: str = None):
         source: 数据源名称（可选，不指定则测试所有）
     """
     try:
-        from deepsearch.data_providers.managers.data_source_manager import DataSourceType
+        from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceType
 
         manager = get_data_source_manager()
 
@@ -181,10 +190,11 @@ async def test_data_source(symbol: str, source: str = None):
             try:
                 source_type = DataSourceType(source)
             except ValueError:
-                return {
-                    "status": "error",
-                    "message": f"未知的数据源类型: {source}"
-                }
+                return APIResponse.error(
+                    code=ErrorCodes.DATASOURCE_NOT_FOUND,
+                    message=f"未知的数据源类型: {source}",
+                    status_code=404
+                )
 
             # 测试指定数据源
             result = await manager.get_data(
@@ -193,17 +203,17 @@ async def test_data_source(symbol: str, source: str = None):
                 preferred_source=source_type
             )
 
-            if result:
-                return {
-                    "status": "success",
-                    "message": f"数据源 {source} 测试成功",
-                    "data": result
-                }
+            if result is not None and not result.empty:
+                return APIResponse.success(
+                    data=result,
+                    message=f"数据源 {source} 测试成功"
+                )
             else:
-                return {
-                    "status": "error",
-                    "message": f"数据源 {source} 测试失败"
-                }
+                return APIResponse.error(
+                    code=ErrorCodes.DATASOURCE_TEST_FAILED,
+                    message=f"数据源 {source} 测试失败",
+                    status_code=500
+                )
 
         # 测试所有可用数据源
         results = {}
@@ -224,12 +234,15 @@ async def test_data_source(symbol: str, source: str = None):
                     "error": str(e)
                 }
 
-        return {
-            "status": "success",
-            "message": "数据源测试完成",
-            "data": results
-        }
+        return APIResponse.success(
+            data=results,
+            message="数据源测试完成"
+        )
 
     except Exception as e:
         logger.error(f"测试数据源失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return APIResponse.error(
+            code=ErrorCodes.DATA_SOURCE_ERROR,
+            message=f"测试数据源失败: {str(e)}",
+            status_code=500
+        )

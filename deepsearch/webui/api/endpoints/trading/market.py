@@ -181,7 +181,7 @@ async def get_ths_concept_list(service = Depends(get_market_service)):
     """
     try:
         # 使用直连方式获取同花顺数据
-        from deepsearch.data_providers.implementations.akshare.ths_direct import get_ths_provider
+        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import get_ths_provider
         provider = get_ths_provider()
         result = await provider.get_concept_list()
         if result["success"]:
@@ -189,7 +189,7 @@ async def get_ths_concept_list(service = Depends(get_market_service)):
         else:
             logger.error(f"获取失败: {result.get('error')}")
             # 尝试使用代理方式作为后备
-            from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
+            from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
             proxy_provider = AkShareProxyProvider()
             return await proxy_provider.call_api("stock_board_concept_name_ths", {})
     except Exception as e:
@@ -213,7 +213,7 @@ async def get_ths_concept_index(
     - end_date: 结束日期
     """
     try:
-        from deepsearch.data_providers.implementations.akshare.ths_direct import get_ths_provider
+        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import get_ths_provider
         provider = get_ths_provider()
         result = await provider.get_concept_index(concept, start_date, end_date)
         if result["success"]:
@@ -238,7 +238,7 @@ async def get_ths_concept_info(
     - concept: 概念名称（如：阿里巴巴概念）
     """
     try:
-        from deepsearch.data_providers.implementations.akshare.ths_direct import get_ths_provider
+        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import get_ths_provider
         provider = get_ths_provider()
         result = await provider.get_concept_info(concept)
         if result["success"]:
@@ -263,7 +263,7 @@ async def get_ths_concept_constituents(
     - concept: 概念名称（如：阿里巴巴概念）
     """
     try:
-        from deepsearch.data_providers.implementations.akshare.ths_direct import get_ths_provider
+        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import get_ths_provider
         provider = get_ths_provider()
         result = await provider.get_concept_constituents(concept)
         if result["success"]:
@@ -412,9 +412,10 @@ async def get_market_activity(service = Depends(get_market_service)):
             data = await service.get_market_activity()
         else:
             # 如果没有，尝试创建AkShareDirectService
-            from deepsearch.services.market.akshare_direct_service import AkShareDirectService
-            akshare_service = AkShareDirectService()
-            data = await akshare_service.get_market_activity()
+            # from deepsearch.application.services.market.akshare_direct_service import AkShareDirectService
+            # akshare_service = AkShareDirectService()
+            # data = await akshare_service.get_market_activity()
+            data = {'error': 'Service not available'}
         
         return data
     except Exception as e:
@@ -441,9 +442,10 @@ async def get_stock_changes(
             data = await service.get_stock_changes(change_type)
         else:
             # 如果没有，尝试创建AkShareDirectService
-            from deepsearch.services.market.akshare_direct_service import AkShareDirectService
-            akshare_service = AkShareDirectService()
-            data = await akshare_service.get_stock_changes(change_type)
+            # from deepsearch.application.services.market.akshare_direct_service import AkShareDirectService
+            # akshare_service = AkShareDirectService()
+            # data = await akshare_service.get_stock_changes(change_type)
+            data = {'error': 'Service not available'}
         
         return data
     except Exception as e:
@@ -468,9 +470,10 @@ async def get_zt_pool(
             data = await service.get_zt_pool(date)
         else:
             # 如果没有，尝试创建AkShareDirectService
-            from deepsearch.services.market.akshare_direct_service import AkShareDirectService
-            akshare_service = AkShareDirectService()
-            data = await akshare_service.get_zt_pool(date)
+            # from deepsearch.application.services.market.akshare_direct_service import AkShareDirectService
+            # akshare_service = AkShareDirectService()
+            # data = await akshare_service.get_zt_pool(date)
+            data = {'error': 'Service not available'}
         
         return data
     except Exception as e:

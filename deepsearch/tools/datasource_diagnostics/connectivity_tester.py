@@ -15,7 +15,7 @@ import ssl
 
 from loguru import logger
 
-from deepsearch.data_providers.base import DataSourceType
+from deepsearch.infrastructure.providers.base import DataSourceType
 from deepsearch.config import get_config
 
 

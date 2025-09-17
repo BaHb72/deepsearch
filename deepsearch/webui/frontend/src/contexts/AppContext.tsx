@@ -249,39 +249,39 @@ export const AppProvider = ({ children }) => {
     }, [state.settingsVisible]),
     
     // 通知相关
-    addNotification: useCallback((notification) => {
+    addNotification: useCallback((notificationData) => {
       const id = Date.now()
-      const notif = { id, timestamp: new Date().toISOString(), ...notification }
-      
+      const notif = { id, timestamp: new Date().toISOString(), ...notificationData }
+
       dispatch({ type: ActionTypes.ADD_NOTIFICATION, payload: notif })
-      
+
       // 显示系统通知
-      if (notification.type === 'error') {
+      if (notificationData.type === 'error') {
         notification.error({
-          message: notification.title,
-          description: notification.message,
+          message: notificationData.title,
+          description: notificationData.message,
           duration: 5,
         })
-      } else if (notification.type === 'warning') {
+      } else if (notificationData.type === 'warning') {
         notification.warning({
-          message: notification.title,
-          description: notification.message,
+          message: notificationData.title,
+          description: notificationData.message,
           duration: 4,
         })
-      } else if (notification.type === 'success') {
+      } else if (notificationData.type === 'success') {
         notification.success({
-          message: notification.title,
-          description: notification.message,
+          message: notificationData.title,
+          description: notificationData.message,
           duration: 3,
         })
       } else {
         notification.info({
-          message: notification.title,
-          description: notification.message,
+          message: notificationData.title,
+          description: notificationData.message,
           duration: 4,
         })
       }
-      
+
       return id
     }, []),
     

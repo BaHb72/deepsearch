@@ -188,7 +188,7 @@ class HandlerManager:
         self._lock = threading.RLock()
         self._monitoring_hooks: List['MonitoringHook'] = []
 
-    def register(self, *, event_type: str, handler: Handler, priority: int = DEFAULT_PRIORITY,
+    def register(self, event_type: str, handler: Handler, priority: int = DEFAULT_PRIORITY,
                  async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
         """
         注册特定类型的事件处理器。
@@ -205,7 +205,7 @@ class HandlerManager:
                 lst.append((priority, handler, async_flag))
                 lst.sort(key=lambda x: x[0], reverse=True)
 
-    def unregister(self, *, event_type: str, handler: Handler) -> None:
+    def unregister(self, event_type: str, handler: Handler) -> None:
         """
         注销特定类型的事件处理器。
         """
@@ -222,7 +222,7 @@ class HandlerManager:
             if not lst and event_type in self._handlers:
                 del self._handlers[event_type]
 
-    def register_general(self, *, handler: Handler, priority: int = DEFAULT_PRIORITY,
+    def register_general(self, handler: Handler, priority: int = DEFAULT_PRIORITY,
                          async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
         """
         注册通用事件处理器。
@@ -236,7 +236,7 @@ class HandlerManager:
                 self._general_handlers.append((priority, handler, async_flag))
                 self._general_handlers.sort(key=lambda x: x[0], reverse=True)
 
-    def unregister_general(self, *, handler: Handler) -> None:
+    def unregister_general(self, handler: Handler) -> None:
         """
         注销通用事件处理器。
         """
@@ -270,7 +270,7 @@ class HandlerManager:
                 "general_handlers": len(self._general_handlers),
             }
 
-    def register_batch_handler(self, *, event_types: List[str], handler: Handler,
+    def register_batch_handler(self, event_types: List[str], handler: Handler,
                                priority: int = DEFAULT_PRIORITY, async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
         """
         Register a handler for multiple event types at once.
@@ -286,7 +286,7 @@ class HandlerManager:
             raise TypeError("handler must be callable")
 
         for event_type in event_types:
-            self.register(event_type=event_type, handler=handler, priority=priority, async_flag=async_flag)
+            self.register(event_type, handler, priority, async_flag)
 
     def add_monitoring_hook(self, hook: 'MonitoringHook') -> None:
         """
@@ -534,7 +534,7 @@ class EventEngine:
     # ==========================================================================
     # Handler Registration
     # ==========================================================================
-    def register(self, *, event_type: str, handler: Handler, priority: int = DEFAULT_PRIORITY,
+    def register(self, event_type: str, handler: Handler, priority: int = DEFAULT_PRIORITY,
                  async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
         """
         注册事件处理器的方法，用于指定事件类型、处理器、优先级以及是否异步执行。注册的处理器会按优先级从高到低的顺序排列。
@@ -548,7 +548,7 @@ class EventEngine:
             self._handler_manager.register(event_type=event_type, handler=handler, priority=priority,
                                            async_flag=async_flag)
 
-    def unregister(self, *, event_type: str, handler: Handler) -> None:
+    def unregister(self, event_type: str, handler: Handler) -> None:
         """注销事件处理器"""
         if not event_type:
             raise ValueError("event_type cannot be empty")
@@ -558,7 +558,7 @@ class EventEngine:
         with self._handler_lock:
             self._handler_manager.unregister(event_type=event_type, handler=handler)
 
-    def register_general(self, *, handler: Handler, priority: int = DEFAULT_PRIORITY,
+    def register_general(self, handler: Handler, priority: int = DEFAULT_PRIORITY,
                          async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
         """注册通用事件处理器"""
         if not callable(handler):
@@ -567,7 +567,7 @@ class EventEngine:
         with self._handler_lock:
             self._handler_manager.register_general(handler=handler, priority=priority, async_flag=async_flag)
 
-    def unregister_general(self, *, handler: Handler) -> None:
+    def unregister_general(self, handler: Handler) -> None:
         """注销通用事件处理器"""
         if not callable(handler):
             raise TypeError("handler must be callable")
@@ -997,7 +997,7 @@ class EventEngine:
                     }
             else:
                 batch_info = {"enabled": False}
-                
+
             return {
                 "queue": self._queue.qsize(),
                 "handlers": handler_stats["specific_handlers"],
@@ -1005,6 +1005,75 @@ class EventEngine:
                 "scheduled": len(self._scheduler_heap),
                 "batch_processing": batch_info
             }
+
+    def is_active(self) -> bool:
+        """
+        检查事件引擎是否正在运行
+
+        :return: 如果引擎正在运行返回True，否则返回False
+        """
+        with self._lock:
+            return self._running
+
+    def schedule(self, *, event_type: str, delay: float, priority: int = DEFAULT_PRIORITY,
+                 data: Any = None) -> int:
+        """
+        调度一个单次延迟执行的事件
+
+        :param event_type: 事件类型
+        :param delay: 延迟时间（秒）
+        :param priority: 事件优先级
+        :param data: 事件数据
+        :return: 任务ID，用于取消
+        """
+        with self._lock:
+            if not self._running:
+                logger.debug("事件引擎未运行，无法调度任务")
+                return -1
+
+            # 生成任务ID
+            task_id = id(object())  # 使用对象ID作为唯一标识
+
+            # 创建调度任务
+            task = _ScheduledTask(
+                task_id=task_id,
+                event_type=event_type,
+                interval=0,  # 单次执行，interval为0
+                priority=priority,
+                data=data,
+                next_time=time.time() + delay
+            )
+
+            # 添加到调度器堆
+            heapq.heappush(self._scheduler_heap, task)
+
+            # 通知调度器线程
+            with self._cond:
+                self._cond.notify()
+
+            logger.debug(f"已调度单次任务: type={event_type}, delay={delay}s, id={task_id}")
+            return task_id
+
+    def cancel_scheduled_task(self, task_id: int) -> bool:
+        """
+        取消已调度的任务
+
+        :param task_id: 任务ID
+        :return: 如果成功取消返回True，否则返回False
+        """
+        with self._lock:
+            # 查找并移除任务
+            for i, task in enumerate(self._scheduler_heap):
+                if task.task_id == task_id:
+                    # 将任务标记为已取消（设置interval为-1）
+                    task.interval = -1
+                    # 重新构建堆
+                    heapq.heapify(self._scheduler_heap)
+                    logger.debug(f"已取消调度任务: id={task_id}")
+                    return True
+
+            logger.debug(f"未找到调度任务: id={task_id}")
+            return False
 
     def get_all_handlers(self) -> Dict[str, List[Any]]:
         """

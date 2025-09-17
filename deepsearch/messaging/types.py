@@ -44,7 +44,7 @@ Key Components:
 Usage:
     from deepsearch.event.bus.type import BusName
     from deepsearch.config.setting import MessageBusConfig
-    
+
     # Configure a ZeroMQ bus
     config = {
         "buses": {
@@ -56,3 +56,5 @@ Usage:
         }
     }
 """
+
+__all__ = ["BusName"]

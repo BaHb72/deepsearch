@@ -10,6 +10,7 @@ from typing import Protocol, Dict, Any, runtime_checkable
 class ComponentStatus(Enum):
     """组件状态枚举"""
     UNINITIALIZED = "uninitialized"
+    INITIALIZING = "initializing"  # 添加初始化中状态
     INITIALIZED = "initialized"
     STARTING = "starting"
     RUNNING = "running"

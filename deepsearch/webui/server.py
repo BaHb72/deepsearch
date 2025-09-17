@@ -704,6 +704,14 @@ def create_app() -> FastAPI:
     except ImportError as e:
         logger.warning(f"数据源配置API模块加载失败: {e}")
 
+    # 数据源测试API
+    try:
+        from deepsearch.webui.api.endpoints.data.test_data_source import router as test_data_source
+        app.include_router(test_data_source, tags=["DataSourceTest"])  # 数据源测试API，包含 /api/data-source 前缀
+        logger.info("数据源测试API已注册")
+    except ImportError as e:
+        logger.warning(f"数据源测试API模块加载失败: {e}")
+
     # MiniQMT API
     try:
         from deepsearch.webui.api.endpoints.qmt.miniqmt import router as miniqmt
@@ -754,7 +762,39 @@ def create_app() -> FastAPI:
         logger.info("数据源监控API已注册")
     except ImportError as e:
         logger.warning(f"数据源监控API模块加载失败: {e}")
-    
+
+    # Data Source Management API (新增)
+    try:
+        from deepsearch.webui.api.endpoints.datasources.datasource_management_api import router as datasource_management_api
+        app.include_router(datasource_management_api, tags=["DataSource Management V2"])
+        logger.info("数据源管理API V2已注册")
+    except ImportError as e:
+        logger.warning(f"数据源管理API V2模块加载失败: {e}")
+
+    # 注册市场数据API
+    try:
+        from deepsearch.webui.api.endpoints.data.market_data_api import router as market_data_api
+        app.include_router(market_data_api, tags=["Market Data"])
+        logger.info("市场数据API已注册")
+    except ImportError as e:
+        logger.warning(f"市场数据API模块加载失败: {e}")
+
+    # 注册市场概览和排行榜API
+    try:
+        from deepsearch.webui.api.endpoints.data.market_overview_api import router as market_overview_api
+        app.include_router(market_overview_api, tags=["Market Overview"])
+        logger.info("市场概览和排行榜API已注册")
+    except ImportError as e:
+        logger.warning(f"市场概览API模块加载失败: {e}")
+
+    # 注册监控指标API
+    try:
+        from deepsearch.webui.api.endpoints.monitoring.metrics_api import router as metrics_api
+        app.include_router(metrics_api, tags=["Metrics"])
+        logger.info("监控指标API已注册")
+    except ImportError as e:
+        logger.warning(f"监控指标API模块加载失败: {e}")
+
     # 注释掉 Cloudflare Tunnel API，因为不需要映射 webui 端口
     # Cloudflare Tunnel 已移除（使用 Workers 代理方案）
 
@@ -827,6 +867,15 @@ async def health_check():
             "details": health_status
         }
     return {"status": "starting", "details": {}}
+
+
+@app.post("/api/frontend/errors")
+async def report_frontend_error(error: dict):
+    """前端错误报告端点"""
+    # 只在开发环境记录详细错误
+    if get_config().env == "dev":
+        logger.warning(f"Frontend error: {error}")
+    return {"success": True, "message": "Error reported"}
 
 
 # 向后兼容的函数

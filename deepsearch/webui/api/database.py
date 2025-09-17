@@ -39,12 +39,53 @@ def get_database_component():
 async def get_database_status() -> Dict[str, Any]:
     """
     获取数据库详细状态
-    
+
     Returns:
         包含连接状态、配置信息、健康检查等详细信息
     """
     try:
-        db_component = get_database_component()
+        # 尝试获取数据库组件
+        try:
+            db_component = get_database_component()
+            has_component = True
+        except HTTPException as he:
+            # 如果系统未初始化或组件未找到，返回默认状态
+            if he.status_code in [503, 404]:
+                logger.warning(f"数据库组件不可用: {he.detail}")
+                has_component = False
+                db_component = None
+            else:
+                raise
+
+        # 获取配置信息
+        from deepsearch.config import get_config
+        config = get_config()
+        db_config = config.database.main
+
+        # 如果没有组件，返回未初始化状态
+        if not has_component or not db_component:
+            return {
+                "connected": False,
+                "status": "not_initialized",
+                "connection_status": "disconnected",
+                "config": {
+                    "type": db_config.type,
+                    "host": db_config.host,
+                    "port": db_config.port,
+                    "database": db_config.database,
+                    "username": db_config.username,
+                    "auto_connect": db_config.auto_connect,
+                    "enabled": db_config.enabled
+                },
+                "timescaledb_enabled": False,
+                "last_health_check": None,
+                "connection_pool": {},
+                "disconnect_reason": "系统未初始化",
+                "health": {
+                    "status": "unavailable",
+                    "message": "Database component not initialized"
+                }
+            }
 
         # 获取状态信息
         status_info = db_component.get_status_info()
@@ -52,11 +93,6 @@ async def get_database_status() -> Dict[str, Any]:
         # 确保status_info不为None
         if status_info is None:
             status_info = {}
-
-        # 添加额外的配置信息
-        from deepsearch.config import get_config
-        config = get_config()
-        db_config = config.database.main
 
         result = {
             "connected": db_component.is_connected(),
@@ -265,75 +301,92 @@ async def reconnect_database() -> Dict[str, Any]:
 
 
 @router.get("/tables")
-async def get_database_tables() -> Dict[str, Any]:
+async def get_database_tables(
+    limit: int = 200,
+    include_counts: bool = False,
+    fetch_columns: bool = False
+) -> Dict[str, Any]:
     """
-    获取数据库表列表
-    
+    获取数据库表列表（快速响应版）
+
+    Query Params:
+        - limit: 返回的表数量上限（默认 200）
+        - include_counts: 是否统计每张表的行数（默认 false，开启可能较慢，且最多统计 50 张）
+        - fetch_columns: 是否统计列数（默认 false）
+
     Returns:
-        数据库中的表信息
+        包含表清单、是否截断、连接状态等信息的字典
     """
     try:
         db_component = get_database_component()
 
-        # 检查连接状态
+        # 未连接时返回可消费的成功响应，避免前端一直 loading
         if not db_component.is_connected():
-            raise HTTPException(status_code=400, detail="数据库未连接")
+            return {
+                "success": True,
+                "connected": False,
+                "message": "数据库未连接",
+                "tables": [],
+                "total": 0
+            }
 
-        # 获取表列表
+        # 获取表列表（尽量轻量）
         from sqlalchemy import inspect, text
 
         async with db_component.engine.begin() as conn:
-            # 获取所有表名
             inspector = inspect(conn.sync_connection)
             tables = inspector.get_table_names()
 
-            # 获取每个表的基本信息
-            table_info = []
-            for table_name in tables:
-                try:
-                    # 获取列信息
-                    columns = inspector.get_columns(table_name)
+            # 控制返回数量，避免一次性处理过多表
+            has_more = False
+            if limit and len(tables) > limit:
+                has_more = True
+                tables = tables[:limit]
 
-                    # 获取行数（仅适用于小表）
-                    result = await conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
-                    row_count = result.scalar()
+            # 初始仅返回表名，默认不统计列与行，保证快速响应
+            table_info = [{"name": t, "columns": None, "rows": None, "type": "table"} for t in tables]
 
-                    table_info.append({
-                        "name": table_name,
-                        "columns": len(columns),
-                        "rows": row_count,
-                        "type": "table"
-                    })
-                except Exception as e:
-                    logger.warning(f"获取表 {table_name} 信息失败: {e}")
-                    table_info.append({
-                        "name": table_name,
-                        "columns": 0,
-                        "rows": 0,
-                        "type": "table",
-                        "error": str(e)
-                    })
+            # 可选：统计列数（可能较慢）
+            if fetch_columns:
+                for t in table_info:
+                    try:
+                        cols = inspector.get_columns(t["name"])
+                        t["columns"] = len(cols)
+                    except Exception as e:
+                        t["columns"] = None
+                        t["error_columns"] = str(e)
 
-            # 如果启用了 TimescaleDB，获取超表信息
-            if db_component.is_timescale_enabled:
+            # 可选：统计行数（较慢，且限制最多 50 张表以避免阻塞）
+            if include_counts:
+                max_count_tables = min(len(table_info), 50)
+                for i in range(max_count_tables):
+                    t = table_info[i]
+                    try:
+                        # 使用引号包裹表名以降低 SQL 注入/保留字风险（表名来自系统元数据，仍做基本保护）
+                        result = await conn.execute(text(f'SELECT COUNT(*) FROM "{t["name"]}"'))
+                        t["rows"] = result.scalar()
+                    except Exception as e:
+                        t["rows"] = None
+                        t["error_rows"] = str(e)
+
+            # 如果启用了 TimescaleDB，尝试标记超表（失败不影响主流程）
+            if getattr(db_component, "is_timescale_enabled", False):
                 try:
                     result = await conn.execute(text(
                         "SELECT hypertable_name FROM timescaledb_information.hypertables"
                     ))
                     hypertables = [row[0] for row in result]
-
-                    # 标记超表
-                    for table in table_info:
-                        if table["name"] in hypertables:
-                            table["type"] = "hypertable"
-
+                    for t in table_info:
+                        if t["name"] in hypertables:
+                            t["type"] = "hypertable"
                 except Exception as e:
                     logger.debug(f"获取超表信息失败: {e}")
 
         return {
             "success": True,
             "tables": table_info,
-            "total": len(table_info)
+            "total": len(table_info),
+            "has_more": has_more
         }
 
     except HTTPException:

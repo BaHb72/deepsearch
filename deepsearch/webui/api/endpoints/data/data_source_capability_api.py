@@ -9,15 +9,46 @@ from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-from deepsearch.data_providers.interfaces.capabilities import (
+from deepsearch.infrastructure.providers.interfaces.capabilities import (
     DataCapability,
-    DATA_SOURCE_CAPABILITIES,
     get_capable_providers,
     check_provider_capability
 )
+from deepsearch.infrastructure.providers.interfaces.base import DataSourceType
 
 router = APIRouter(prefix="/api/datasource", tags=["datasource_capability"])
 
+# 数据源能力映射
+DATA_SOURCE_CAPABILITIES = {
+    DataSourceType.AMAZINGDATA: {
+        DataCapability.STOCK_LIST,
+        DataCapability.REALTIME_QUOTE,
+        DataCapability.KLINE_DATA,
+        DataCapability.STOCK_INFO,
+        DataCapability.ORDER_BOOK,
+        DataCapability.TRADE_DETAIL,
+        DataCapability.FINANCIAL_DATA,
+        DataCapability.NEWS,
+        DataCapability.ANNOUNCEMENT
+    },
+    DataSourceType.AKSHARE: {
+        DataCapability.STOCK_LIST,
+        DataCapability.KLINE_DATA,
+        DataCapability.STOCK_INFO,
+        DataCapability.FINANCIAL_DATA
+    },
+    DataSourceType.QMT: {
+        DataCapability.REALTIME_QUOTE,
+        DataCapability.ORDER_BOOK,
+        DataCapability.TRADE_DETAIL,
+        DataCapability.KLINE_DATA
+    },
+    DataSourceType.CLOUDFLARE: {
+        DataCapability.STOCK_LIST,
+        DataCapability.KLINE_DATA,
+        DataCapability.STOCK_INFO
+    }
+}
 
 # 数据源元数据
 DATA_SOURCE_METADATA = {

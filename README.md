@@ -22,22 +22,10 @@ deepsearch/
 │   │   ├── component_manager.py   # 组件生命周期管理
 │   │   ├── unified_components.py  # 统一组件接口
 │   │   └── interfaces.py          # 接口定义
-│   ├── database/                  # 数据库层
-│   │   ├── pool.py                # 连接池管理
-│   │   ├── duckdb_manager.py      # DuckDB分析数据库
-│   │   └── cache_manager.py       # 多级缓存管理
-│   ├── data_providers/            # 数据提供者
-│   │   ├── amazingdata.py         # 银河证券数据API（最高优先级）
-│   │   ├── amazingdata_types.py   # AmazingData类型定义
-│   │   ├── cloudflare_proxy.py    # CloudFlare Workers代理
-│   │   ├── akshare_direct.py      # AkShare直连（备用）
-│   │   ├── qmt_provider.py        # QMT实时数据
-│   │   ├── capabilities.py        # 数据源能力矩阵
-│   │   └── interfaces.py          # 统一接口定义
-│   ├── datafeed/                  # 数据源集成
-│   │   ├── qmt/                   # QMT数据源
-│   │   │   └── scripts/           # QMT脚本（GBK编码）
-│   │   └── akshare/                # AkShare数据源
+│   ├── infrastructure/            # 基础设施层（新增）
+│   │   ├── database/              # 数据库管理
+│   │   ├── cache/                 # 缓存管理
+│   │   └── message_queue/         # 消息队列
 │   ├── event/                     # 事件系统
 │   │   ├── engine.py              # 事件引擎
 │   │   ├── handler.py             # 事件处理器
@@ -47,27 +35,22 @@ deepsearch/
 │   │   ├── bus.py                 # 消息总线
 │   │   ├── zeromq_bus.py          # ZeroMQ实现
 │   │   └── redis_bus.py           # Redis实现
-│   ├── monitoring/                # 监控系统
-│   │   └── data_source_monitor.py # 数据源监控
 │   ├── observability/             # 日志监控
 │   │   ├── logger.py              # 结构化日志
-│   │   └── structured_logger.py   # 日志增强
-│   ├── services/                  # 业务服务
-│   │   ├── data_source_manager.py # 数据源统一管理（新增）
-│   │   ├── kline_cache.py         # K线数据缓存（优化）
-│   │   ├── chart_service.py       # 图表数据服务
-│   │   ├── market_service.py      # 市场数据服务
-│   │   ├── adjust_service.py      # 复权因子服务
-│   │   └── stock_info_service.py  # 股票信息服务
-│   ├── storage/                   # 数据存储
-│   ├── trader/                    # 交易逻辑
+│   │   └── monitoring/            # 监控系统
+│   ├── strategies/                # 策略模块
+│   │   ├── interfaces/            # 策略接口
+│   │   ├── implementations/       # 策略实现
+│   │   └── managers/              # 策略管理
+│   ├── backtest/                  # 回测系统
+│   │   ├── engines/               # 回测引擎
+│   │   ├── data/                  # 数据管理
+│   │   └── utils/                 # 回测工具
 │   ├── utils/                     # 工具类
 │   └── webui/                     # Web UI
 │       ├── api/                   # FastAPI 后端
-│       │   ├── middleware.py      # 请求中间件（新增）
-│       │   ├── chart.py           # 图表API
-│       │   ├── qmt.py             # QMT API
-│       │   └── market.py          # 市场数据API
+│       │   ├── middleware/        # 请求中间件
+│       │   └── endpoints/         # API端点
 │       ├── frontend/              # Vue 前端
 │       │   ├── src/
 │       │   │   ├── components/    # 组件
@@ -75,16 +58,29 @@ deepsearch/
 │       │   │   └── utils/         # 工具函数
 │       │   └── package.json
 │       └── server.py              # 服务器入口
-├── docs/                          # 文档
-│   ├── AMAZINGDATA_*.md           # AmazingData相关文档
-│   ├── QMT_*.md                   # QMT相关文档
-│   ├── DATA_PROVIDER_DESIGN.md    # 数据提供者设计
-│   └── STRATEGY_ARCHITECTURE.md   # 策略架构
-├── tests/                         # 测试
-├── installer/                     # 安装包
-│   └── AmazingData-*.whl          # AmazingData SDK
+├── docs/                          # 文档中心
+│   ├── README.md                  # 文档目录
+│   ├── architecture/              # 架构文档
+│   ├── api-guides/                # API指南
+│   ├── development/               # 开发文档
+│   └── operations/                # 运维文档
+├── tests/                         # 测试套件
+│   ├── unit/                      # 单元测试
+│   ├── api/                       # API测试
+│   ├── integration/               # 集成测试
+│   └── performance/               # 性能测试
+├── scripts/                       # 自动化脚本
+│   ├── run_all_tests.py           # 一键测试运行器
+│   └── install_git_hooks.py       # Git Hooks安装器
+├── .github/                       # GitHub配置
+│   └── workflows/                 # CI/CD工作流
+│       └── automated_testing.yml  # 自动化测试流程
+├── .pre-commit-config.yaml        # Pre-commit配置
 ├── pyproject.toml                 # UV项目配置
-├── uv.lock                        # UV锁文件
+├── pytest.ini                     # Pytest配置
+├── .coveragerc                    # 覆盖率配置
+├── TESTING_GUIDE.md               # 测试使用指南
+├── AUTOMATED_TESTING_PLAN.md     # 自动化测试计划
 ├── CLAUDE.md                      # Claude Code指南
 └── README.md                      # 本文件
 ```
@@ -119,6 +115,14 @@ deepsearch/
 - **多后端支持**: ZeroMQ、Redis TimeSeries
 - **路由机制**: 基于主题的消息路由
 - **持久化**: 支持消息持久化和重放
+
+### 5. 自动化测试系统
+
+- **一键测试**: `python scripts/run_all_tests.py` 运行所有测试
+- **API测试覆盖**: 100%接口测试覆盖，20+测试场景
+- **质量门禁**: Git Hooks自动阻止错误代码提交
+- **CI/CD集成**: GitHub Actions自动化测试流程
+- **测试报告**: 自动生成覆盖率和性能报告
 
 ## 安装
 
@@ -217,6 +221,28 @@ export MESSAGE_BUS__BUSES__ZMQ__CONFIG__HOST=10.0.0.5
 
 ## 开发
 
+### 自动化测试
+
+```bash
+# 安装Git Hooks（防止错误代码提交）
+python scripts/install_git_hooks.py
+
+# 运行所有测试（一键测试）
+python scripts/run_all_tests.py
+
+# 快速测试模式
+python scripts/run_all_tests.py --quick
+
+# 运行特定类型测试
+pytest tests/unit        # 单元测试
+pytest tests/api         # API测试
+pytest tests/integration # 集成测试
+
+# 查看测试覆盖率
+pytest --cov=deepsearch --cov-report=html
+open htmlcov/index.html  # 查看HTML报告
+```
+
 ### 代码规范
 
 ```bash
@@ -224,12 +250,14 @@ export MESSAGE_BUS__BUSES__ZMQ__CONFIG__HOST=10.0.0.5
 black deepsearch tests
 isort deepsearch tests
 
+# 代码质量检查
+ruff check deepsearch
+
 # 类型检查
 mypy deepsearch
 
-# 运行测试
-pytest
-pytest tests/test_event.py -v
+# 安全扫描
+bandit -r deepsearch
 ```
 
 ### 构建前端

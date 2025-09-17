@@ -13,8 +13,8 @@ from deepsearch.core.managers.component_manager import ComponentManager
 from deepsearch.data.cleaner import DataCleaner
 from deepsearch.indicators.simple import SimpleIndicators
 from deepsearch.observability.logger import logger
-from deepsearch.storage.analytics import AnalyticsDB
-from deepsearch.storage.databases.database import DatabaseService
+from deepsearch.infrastructure.persistence.analytics import AnalyticsDB
+from deepsearch.infrastructure.persistence.database import DatabaseService
 
 router = APIRouter()
 
@@ -44,6 +44,13 @@ def get_analytics_db() -> AnalyticsDB:
         _analytics_db = AnalyticsDB()
         _analytics_db.connect()
     return _analytics_db
+
+
+def get_data_service():
+    """获取数据服务实例（用于测试兼容）"""
+    # 返回一个模拟服务对象
+    from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceManager
+    return DataSourceManager.get_instance()
 
 
 # ==================== 请求/响应模型 ====================
@@ -147,8 +154,8 @@ async def query_market_data(query: MarketDataQuery):
 
         else:
             # 从 PostgreSQL 查询分钟或 Tick 数据
-            from deepsearch.storage.databases.sync_database import get_db
-            from deepsearch.storage.models.legacy_models import MinuteKline, TickData
+            from deepsearch.infrastructure.persistence.sync_database import get_db
+            from deepsearch.infrastructure.providers.entities.legacy_models import MinuteKline, TickData
             from sqlalchemy.orm import Session
             from sqlalchemy import and_
 
@@ -382,8 +389,8 @@ async def clean_old_data(
 ):
     """清理旧数据"""
     try:
-        from deepsearch.storage.databases.database import get_db
-        from deepsearch.storage.models.legacy_models import DailyKline, MinuteKline, TickData
+        from deepsearch.infrastructure.persistence.database import get_db
+        from deepsearch.infrastructure.providers.entities.legacy_models import DailyKline, MinuteKline, TickData
         from sqlalchemy.orm import Session
 
         db: Session = next(get_db())
@@ -440,6 +447,64 @@ async def clean_old_data(
     except Exception as e:
         logger.error(f"清理数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stocks")
+async def get_stocks(
+    limit: int = Query(100, description="返回股票数量限制")
+) -> List[Dict[str, Any]]:
+    """
+    获取股票列表
+
+    Returns:
+        股票列表
+    """
+    try:
+        # 使用数据源管理器获取股票列表
+        data_service = get_data_service()
+        stocks = await data_service.get_stock_list(limit=limit)
+
+        if stocks is None:
+            return []
+
+        return stocks
+    except Exception as e:
+        logger.error(f"获取股票列表失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取股票列表失败: {str(e)}")
+
+
+@router.get("/kline")
+async def get_kline_data(
+    symbol: str = Query(..., description="股票代码"),
+    period: str = Query("1d", description="周期"),
+    start_date: Optional[str] = Query(None, description="开始日期"),
+    end_date: Optional[str] = Query(None, description="结束日期"),
+    limit: int = Query(100, description="数据条数限制")
+) -> List[Dict[str, Any]]:
+    """
+    获取K线数据
+
+    Returns:
+        K线数据列表
+    """
+    try:
+        # 使用数据源管理器获取K线数据
+        data_service = get_data_service()
+        kline_data = await data_service.get_kline_data(
+            symbol=symbol,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit
+        )
+
+        if kline_data is None:
+            return []
+
+        return kline_data
+    except Exception as e:
+        logger.error(f"获取K线数据失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取K线数据失败: {str(e)}")
 
 
 @router.get("/symbols")

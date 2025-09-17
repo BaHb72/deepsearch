@@ -16,7 +16,7 @@ import numpy as np
 
 from loguru import logger
 
-from deepsearch.data_providers.interfaces.base import DataSourceType
+from deepsearch.infrastructure.providers.interfaces.base import DataSourceType
 from deepsearch.observability.logging.monitoring_logger import (
     MonitoringRecord,
     OperationType,

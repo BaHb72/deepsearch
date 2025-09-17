@@ -10,8 +10,8 @@ import pandas as pd
 from fastapi import APIRouter, Query, HTTPException, Body, Depends
 from loguru import logger
 
-from deepsearch.services.data.data_sync_service import get_sync_service
-from deepsearch.storage.databases.duckdb_analytics import get_analytics_db
+from deepsearch.infrastructure.providers.managers.data_sync_service import get_sync_service
+from deepsearch.infrastructure.persistence.duckdb_analytics import get_analytics_db
 from deepsearch.webui.api.utils import sanitize_for_json
 from deepsearch.webui.auth import optional_auth
 

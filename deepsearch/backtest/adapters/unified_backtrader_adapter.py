@@ -21,7 +21,7 @@ except ImportError:
     HAS_BACKTRADER = False
     bt = None
 
-from deepsearch.data_providers.managers.enhanced_manager import get_data_manager
+from deepsearch.infrastructure.providers.managers.enhanced_manager import get_data_manager
 from ..data.data_bridge import DataBridge
 
 

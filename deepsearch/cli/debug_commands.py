@@ -33,7 +33,7 @@ def get_memory_manager():
     return memory_manager
 
 def get_query_optimizer():
-    from deepsearch.database.query_optimizer import query_optimizer
+    from deepsearch.infrastructure.persistence.query_optimizer import query_optimizer
     return query_optimizer
 
 

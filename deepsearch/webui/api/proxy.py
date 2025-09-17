@@ -235,7 +235,7 @@ async def reset_statistics():
 async def list_workers():
     """列出所有Worker及其状态"""
     try:
-        from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
+        from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
         provider = AkShareProxyProvider()
 
         workers = []
@@ -272,7 +272,7 @@ async def list_workers():
 async def test_worker(worker_id: str):
     """测试特定Worker"""
     try:
-        from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
+        from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
         provider = AkShareProxyProvider()
 
         # 将ID转换回URL
@@ -304,7 +304,7 @@ async def test_worker(worker_id: str):
 async def reset_worker(worker_id: str):
     """重置Worker为半开状态进行探测"""
     try:
-        from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
+        from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
         provider = AkShareProxyProvider()
 
         # 将ID转换回URL
@@ -336,7 +336,7 @@ async def reset_worker(worker_id: str):
 async def get_strategy():
     """获取当前选路策略"""
     try:
-        from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
+        from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
         provider = AkShareProxyProvider()
 
         return {

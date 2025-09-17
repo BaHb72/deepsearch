@@ -250,7 +250,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "message": f"Daily limit approaching ({usage_percent:.1f}%), {priority.name} requests temporarily disabled",
                     "daily_usage": f"{self.daily_requests}/{self.daily_limit}",
                     "retry_after": 60
-                }
+                },
+                headers={"retry_after": "60"}
             )
         
         # 检查每分钟限制
@@ -263,7 +264,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "error": "Rate limit exceeded",
                     "message": f"Minute limit exceeded ({self.minute_requests}/{self.minute_limit})",
                     "retry_after": 60
-                }
+                },
+                headers={"retry_after": "60"}
             )
         
         # 检查每秒限制
@@ -276,11 +278,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "error": "Rate limit exceeded",
                     "message": f"Request rate too high (max {self.requests_per_second}/s)",
                     "retry_after": 1
-                }
+                },
+                headers={"retry_after": "1"}
             )
         
         # 记录 CloudFlare 使用量（用于监控）
-        if is_cloudflare and self.daily_requests % 1000 == 0:
+        if is_cloudflare:
             usage_percent = (self.daily_requests / self.daily_limit) * 100
             logger.info(
                 f"CloudFlare 使用量: {self.daily_requests}/{self.daily_limit} "

@@ -50,10 +50,11 @@ async def get_health() -> Dict[str, Any]:
 
 
 @router.get("/status")
+@router.get("/detailed")  # 添加兼容路径
 async def get_health_summary() -> Dict[str, Any]:
     """
     获取健康状态摘要
-    
+
     Returns:
         简化的健康状态信息
     """

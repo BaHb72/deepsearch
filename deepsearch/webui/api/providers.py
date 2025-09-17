@@ -31,7 +31,7 @@ class DataProviderFactory:
         Args:
             provider_type: Type of provider to get
                 - "akshare": AkShareProxyProvider
-                - "unified": UnifiedDataManager
+                - "unified": DataSourceManager
                 - "market": MarketService
                 - "qmt": QMTDataProvider
                 
@@ -43,7 +43,7 @@ class DataProviderFactory:
                 logger.info(f"Creating singleton instance for {provider_type}")
                 
                 if provider_type == "akshare":
-                    from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
+                    from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
                     cls._instances[provider_type] = AkShareProxyProvider()
                     
                 elif provider_type == "unified":
@@ -52,14 +52,14 @@ class DataProviderFactory:
                     return None
                     
                 elif provider_type == "market":
-                    from deepsearch.services.market.market_service import MarketService
-                    from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
+                    # from deepsearch.application.services.market.market_service import MarketService
+                    from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
                     # Market service with a default AkShare provider
                     default_provider = AkShareProxyProvider()
                     cls._instances[provider_type] = MarketService(default_provider)
                     
                 elif provider_type == "qmt":
-                    from deepsearch.data_providers.implementations.qmt.miniqmt import MiniQMTDataProvider
+                    from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTDataProvider
                     cls._instances[provider_type] = MiniQMTDataProvider()
                     
                 else:
@@ -92,16 +92,16 @@ class DataProviderFactory:
             logger.info(f"Creating singleton instance for {provider_type} (async)")
             
             if provider_type == "akshare":
-                from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
+                from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
                 cls._instances[provider_type] = AkShareProxyProvider()
                 
             elif provider_type == "unified":
-                from deepsearch.services.data.unified_data_manager import get_unified_data_manager
-                cls._instances[provider_type] = await get_unified_data_manager()
+                from deepsearch.infrastructure.providers.managers.data_source_manager import get_data_source_manager
+                cls._instances[provider_type] = await get_data_source_manager()
                 
             elif provider_type == "market":
-                from deepsearch.services.market.market_service import MarketService
-                from deepsearch.data_providers.implementations.akshare.akshare import AkShareProxyProvider
+                # from deepsearch.application.services.market.market_service import MarketService
+                from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
                 # Try to get akshare provider if available, or create a new one
                 akshare_provider = None
                 if "akshare" in cls._instances:
@@ -111,9 +111,46 @@ class DataProviderFactory:
                 cls._instances[provider_type] = MarketService(akshare_provider)
                 
             elif provider_type == "qmt":
-                from deepsearch.data_providers.implementations.qmt.miniqmt import MiniQMTDataProvider
+                from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTDataProvider
                 cls._instances[provider_type] = MiniQMTDataProvider()
-                
+
+            elif provider_type == "amazingdata":
+                try:
+                    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+                        AmazingDataProvider, AmazingDataConfig
+                    )
+                    # 创建配置对象
+                    config = AmazingDataConfig(
+                        username="212200038719",
+                        password="212200038719@2025",
+                        host="101.230.159.234",
+                        port=8600,
+                        timeout=10,  # 秒，不是毫秒
+                        retry_count=2,
+                        heartbeat_interval=60,
+                        auto_reconnect=True
+                    )
+                    # 使用配置创建实例
+                    cls._instances[provider_type] = AmazingDataProvider(config)
+                    # 初始化
+                    await cls._instances[provider_type].initialize()
+                    logger.info("AmazingData provider initialized successfully")
+                except ImportError as e:
+                    logger.warning(f"AmazingData provider not available: {e}")
+
+                    # 降级到真实数据源
+                    logger.info("Falling back to AkShare real data source")
+                    from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
+                    cls._instances[provider_type] = AkShareProxyProvider()
+
+                except Exception as e:
+                    logger.error(f"Failed to initialize AmazingData provider: {e}")
+
+                    # 降级到真实数据源
+                    logger.info("Falling back to AkShare real data source")
+                    from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
+                    cls._instances[provider_type] = AkShareProxyProvider()
+
             else:
                 raise ValueError(f"Unknown provider type: {provider_type}")
                 
@@ -187,20 +224,20 @@ async def get_market_service():
     """FastAPI dependency for Market Service."""
     # 优先使用东方财富服务（最快）
     try:
-        from deepsearch.services.market.eastmoney_service import EastMoneyService
+        # from deepsearch.application.services.market.eastmoney_service import EastMoneyService
         logger.info("Using EastMoneyService for fast real market data")
         return EastMoneyService()
     except Exception as e1:
         logger.warning(f"EastMoneyService failed: {e1}, trying AkShareDirectService")
         # 备选：使用AkShare直接服务
         try:
-            from deepsearch.services.market.akshare_direct_service import AkShareDirectService
+            # from deepsearch.application.services.market.akshare_direct_service import AkShareDirectService
             logger.info("Using AkShareDirectService for real market data")
             return AkShareDirectService()
         except Exception as e2:
             logger.error(f"AkShareDirectService failed: {e2}")
             # 最后的后备：返回一个基础的MarketService
-            from deepsearch.services.market.market_service import MarketService
+            # from deepsearch.application.services.market.market_service import MarketService
             return MarketService(None)
 
 

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from deepsearch.constants import APP_AUTHOR, APP_NAME
 
-AppEnvironment = Literal["dev", "test", "prod"]
+AppEnvironment = Literal["dev", "prod"]
 
 
 class AppConfig(BaseModel):

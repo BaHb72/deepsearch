@@ -9,8 +9,8 @@ from deepsearch.core.component import Component
 from loguru import logger
 
 from deepsearch.config import get_config
-from deepsearch.services.data.data_sync_service import DataSyncService, get_sync_service
-from deepsearch.storage.databases.duckdb_analytics import DuckDBAnalytics, get_analytics_db
+from deepsearch.infrastructure.providers.managers.data_sync_service import DataSyncService, get_sync_service
+from deepsearch.infrastructure.persistence.duckdb_analytics import DuckDBAnalytics, get_analytics_db
 
 
 class AnalyticsComponent(Component):
@@ -55,9 +55,11 @@ class AnalyticsComponent(Component):
             await self.analytics_db.init_tables()
 
             # 初始化同步服务
-            if self.analytics_config.auto_sync and self.database_component:
+            if self.analytics_config.auto_sync:
                 self.sync_service = get_sync_service(self.database_component)
                 self.sync_service.sync_interval = self.analytics_config.sync_interval
+                # 设置DuckDB实例到同步服务
+                self.sync_service.set_analytics_db(self.analytics_db)
                 await self.sync_service.start()
                 logger.info(f"数据同步服务已启动，同步间隔: {self.analytics_config.sync_interval}秒")
 
@@ -152,18 +154,26 @@ class AnalyticsComponent(Component):
     async def optimize(self):
         """优化数据库"""
         if self.analytics_db:
-            await self.sync_service.optimize_tables()
+            # 执行VACUUM和ANALYZE操作
+            if hasattr(self.analytics_db, 'conn'):
+                self.analytics_db.conn.execute("PRAGMA optimize")
             logger.info("分析数据库优化完成")
 
     async def clean_old_data(self, days_to_keep: int = 365):
         """
         清理旧数据
-        
+
         Args:
             days_to_keep: 保留天数
         """
-        if self.sync_service:
-            await self.sync_service.clean_old_data(days_to_keep)
+        if self.analytics_db:
+            from datetime import datetime, timedelta
+            cutoff_date = (datetime.now() - timedelta(days=days_to_keep)).strftime("%Y-%m-%d")
+            # 清理K线历史数据
+            await self.analytics_db.query(
+                "DELETE FROM kline_history WHERE time < ?",
+                (cutoff_date,)
+            )
             logger.info(f"已清理 {days_to_keep} 天前的数据")
 
     def get_dependencies(self) -> list:

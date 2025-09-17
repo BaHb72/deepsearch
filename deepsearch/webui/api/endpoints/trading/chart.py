@@ -10,11 +10,20 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.data_providers.implementations.cloudflare.cloudflare import ProxyDataProvider
+from deepsearch.infrastructure.providers.implementations.cloudflare.cloudflare import ProxyDataProvider
 from deepsearch.webui.api.providers import DataProviderFactory
 from deepsearch.indicators.technical import TechnicalIndicators, INDICATOR_REGISTRY
-from deepsearch.services.market.chart_service import ChartService
-from deepsearch.services.market.signal_detector import SignalDetector
+# from deepsearch.application.services.market.chart_service import ChartService
+# from deepsearch.application.services.market.signal_detector import SignalDetector
+
+# 临时的服务类
+class ChartService:
+    def __init__(self):
+        pass
+
+class SignalDetector:
+    def __init__(self):
+        pass
 from deepsearch.webui.api.exception_handlers import handle_api_exceptions, DataProviderError, InvalidParameterError
 
 router = APIRouter(prefix="/api/chart", tags=["图表数据"])

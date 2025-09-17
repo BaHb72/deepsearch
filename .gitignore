@@ -173,6 +173,8 @@ D:*
 /.archive/
 /.trash/
 */.trash/
+**/.trash/
+.trash/
 */cleanup-duplicates.md
 
 # Backup directories

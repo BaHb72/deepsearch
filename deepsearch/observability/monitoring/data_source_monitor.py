@@ -32,6 +32,7 @@ class DataSourceType(Enum):
     UNIFIED = "unified"
     DIRECT_API = "direct_api"
     DATABASE = "database"
+    DEFAULT = "default"
     CUSTOM = "custom"
 
 
@@ -95,13 +96,28 @@ class SourceMetrics:
     
     @property
     def recent_error_rate(self) -> float:
-        """计算最近的错误率（最近1分钟）"""
+        """计算最近的错误率（最近5分钟）"""
         if not self.error_timestamps:
             return 0.0
-        
+
         current_time = time.time()
-        recent_errors = sum(1 for t in self.error_timestamps if current_time - t < 60)
-        return recent_errors / min(len(self.error_timestamps), 60)
+        time_window = 300  # 5分钟窗口
+        recent_errors = sum(1 for t in self.error_timestamps if current_time - t < time_window)
+
+        # 如果最近5分钟没有任何错误，返回0
+        if recent_errors == 0:
+            return 0.0
+
+        # 计算最近5分钟的总请求数（假设错误率不超过100%）
+        # 使用最近的错误数和成功率来估算
+        if self.total_requests > 0:
+            # 基于历史成功率估算最近的请求数
+            historical_error_rate = self.error_count / self.total_requests
+            estimated_recent_requests = recent_errors / max(historical_error_rate, 0.01)
+            return min(recent_errors / max(estimated_recent_requests, 1), 1.0)
+        else:
+            # 如果没有历史数据，假设错误率为100%
+            return 1.0 if recent_errors > 0 else 0.0
     
     @property
     def p95_latency(self) -> float:
@@ -257,11 +273,14 @@ class DataSourceMonitor:
     
     def _check_alerts(self, source: DataSourceType, metrics: SourceMetrics):
         """检查是否需要发出告警"""
-        # 检查连续错误
-        if metrics.recent_error_rate > 0.5:  # 最近错误率超过50%
-            logger.error(f"数据源 {source.value} 错误率过高: {metrics.recent_error_rate:.1%}")
-            self.source_health[source] = False
-        
+        # 检查连续错误 - 降低阈值到20%，并且需要至少有10次请求才判断
+        if metrics.total_requests >= 10 and metrics.recent_error_rate > 0.2:  # 最近错误率超过20%
+            logger.warning(f"数据源 {source.value} 错误率较高: {metrics.recent_error_rate:.1%}")
+            # 只有当错误率非常高时才标记为不健康
+            if metrics.recent_error_rate > 0.8:  # 错误率超过80%才标记为不健康
+                self.source_health[source] = False
+                logger.error(f"数据源 {source.value} 错误率过高，标记为不健康: {metrics.recent_error_rate:.1%}")
+
         # 检查延迟
         if metrics.p95_latency > self.alert_latency_threshold:
             logger.warning(
@@ -436,7 +455,7 @@ class DataSourceMonitor:
     def reset_metrics(self, source: Optional[DataSourceType] = None):
         """
         重置指标
-        
+
         Args:
             source: 数据源类型，如果为None则重置所有
         """
@@ -454,6 +473,35 @@ class DataSourceMonitor:
                 self.hot_symbols.clear()
                 self.module_stats.clear()
                 logger.info("重置所有监控指标")
+
+    def update_health_status(self, source: DataSourceType, is_healthy: bool,
+                           reset_metrics_if_healthy: bool = True):
+        """
+        强制更新数据源健康状态
+
+        Args:
+            source: 数据源类型
+            is_healthy: 是否健康
+            reset_metrics_if_healthy: 健康时是否重置错误指标
+        """
+        with self._metrics_lock:
+            self.source_health[source] = is_healthy
+
+            if is_healthy and reset_metrics_if_healthy:
+                # 健康时重置错误相关指标
+                metrics = self.source_metrics[source]
+                # 创建一个新的错误时间戳队列，清空历史错误
+                metrics.error_timestamps = deque(maxlen=100)
+                metrics.last_error = None
+                # 如果没有历史成功记录，添加一次成功记录
+                if metrics.success_count == 0:
+                    metrics.success_count = 1
+                    metrics.total_requests = 1
+                    metrics.total_latency_ms = 50
+                    metrics.latency_history.append(50)
+                logger.info(f"强制更新数据源 {source.value} 为健康状态并重置错误指标")
+            else:
+                logger.info(f"强制更新数据源 {source.value} 健康状态为: {is_healthy}")
     
     def export_metrics(self) -> Dict[str, Any]:
         """

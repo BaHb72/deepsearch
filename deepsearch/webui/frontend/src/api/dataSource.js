@@ -14,6 +14,54 @@ export function fetchDataSourceList() {
 }
 
 /**
+ * 创建数据源
+ * @param {object} dataSource - 数据源对象
+ */
+export function createDataSource(dataSource) {
+  return request({
+    url: '/data-sources/create',
+    method: 'post',
+    data: dataSource
+  })
+}
+
+/**
+ * 更新数据源
+ * @param {string} id - 数据源ID
+ * @param {object} dataSource - 数据源对象
+ */
+export function updateDataSource(id, dataSource) {
+  return request({
+    url: `/data-sources/${id}/update`,
+    method: 'put',
+    data: dataSource
+  })
+}
+
+/**
+ * 删除数据源
+ * @param {string} id - 数据源ID
+ */
+export function deleteDataSource(id) {
+  return request({
+    url: `/data-sources/${id}/delete`,
+    method: 'delete'
+  })
+}
+
+/**
+ * 测试数据源连接（新版）
+ * @param {object} config - 测试配置
+ */
+export function testDataSource(config) {
+  return request({
+    url: '/data-sources/test',
+    method: 'post',
+    data: config
+  })
+}
+
+/**
  * 获取数据源能力矩阵
  */
 export function fetchDataSourceCapabilities() {

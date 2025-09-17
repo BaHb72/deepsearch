@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react'
-import { 
-  Card, 
-  Row, 
-  Col, 
-  Statistic, 
-  Progress, 
-  Button, 
-  Space, 
+import {
+  Card,
+  Row,
+  Col,
+  Statistic,
+  Progress,
+  Button,
+  Space,
   Tag,
   Alert,
   Tooltip,
   Spin,
   Badge,
-  Table
+  Table,
+  message
 } from 'antd'
 import {
   ArrowUpOutlined,
@@ -25,25 +26,23 @@ import {
   CloudServerOutlined,
   ApiOutlined
 } from '@ant-design/icons'
+import { systemAPI } from '../api/system'
+import { dataSourceAPI } from '../api/dataSource'
 
 const Dashboard = () => {
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [systemInfo, setSystemInfo] = useState({
-    cpu_usage: 45.2,
-    memory_usage: 62.8,
-    disk_usage: 35.5,
-    network_in: 1024,
-    network_out: 512,
-    uptime: 86400,
-    status: 'running'
+    cpu_usage: 0,
+    memory_usage: 0,
+    disk_usage: 0,
+    network_in: 0,
+    network_out: 0,
+    uptime: 0,
+    status: 'loading'
   })
 
-  const [dataSourceStatus, setDataSourceStatus] = useState([
-    { name: 'AmazingData', status: 'online', latency: 12 },
-    { name: 'CloudFlare', status: 'online', latency: 45 },
-    { name: 'QMT', status: 'offline', latency: 0 },
-    { name: 'AKShare', status: 'online', latency: 78 }
-  ])
+  const [dataSourceStatus, setDataSourceStatus] = useState([])
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     fetchSystemInfo()
@@ -52,22 +51,58 @@ const Dashboard = () => {
   }, [])
 
   const fetchSystemInfo = async () => {
-    // Mock data for now
-    setSystemInfo(prev => ({
-      ...prev,
-      cpu_usage: Math.random() * 100,
-      memory_usage: Math.random() * 100,
-      network_in: Math.random() * 2048,
-      network_out: Math.random() * 1024
-    }))
+    try {
+      // 获取系统状态
+      const response = await systemAPI.getSystemStatus()
+      const data = response.data || response
+
+      setSystemInfo({
+        cpu_usage: data.cpu_usage || 0,
+        memory_usage: data.memory_usage || 0,
+        disk_usage: data.disk_usage || 0,
+        network_in: data.network_in || 0,
+        network_out: data.network_out || 0,
+        uptime: data.uptime || 0,
+        status: 'running'
+      })
+
+      // 获取数据源状态
+      const sourceStatusResponse = await dataSourceAPI.getDataSourceStatus()
+      const statusData = sourceStatusResponse.data || sourceStatusResponse
+
+      // 转换数据格式
+      const sources = Object.entries(statusData).map(([name, status]) => ({
+        name,
+        status: status === 'online' ? 'online' : 'offline',
+        latency: status === 'online' ? Math.floor(Math.random() * 100) : 0 // 临时使用随机延迟，后续从真实API获取
+      }))
+
+      setDataSourceStatus(sources)
+      setError(null)
+    } catch (err) {
+      console.error('Failed to fetch system info:', err)
+      setError('Failed to fetch system information')
+      // 使用默认值避免界面空白
+      if (!systemInfo.cpu_usage) {
+        setSystemInfo({
+          cpu_usage: 0,
+          memory_usage: 0,
+          disk_usage: 0,
+          network_in: 0,
+          network_out: 0,
+          uptime: 0,
+          status: 'error'
+        })
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setLoading(true)
-    setTimeout(() => {
-      fetchSystemInfo()
-      setLoading(false)
-    }, 1000)
+    await fetchSystemInfo()
+    message.success('数据已刷新')
   }
 
   const columns = [

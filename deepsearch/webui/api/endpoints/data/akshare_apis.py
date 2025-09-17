@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Query, HTTPException
 from loguru import logger
 
-from deepsearch.data_providers.implementations.akshare.akshare_api_mapping import AkShareAPIMapping
+from deepsearch.infrastructure.providers.implementations.akshare.akshare_api_mapping import AkShareAPIMapping
 
 router = APIRouter(prefix="/api/akshare", tags=["akshare"])
 

@@ -42,25 +42,67 @@ database:
     max_idle_time: 300
     idle_check_interval: 60
     has_saved_password: false
-
-# CloudFlare Workers 配置 - 用于 AkShare API 代理
 cloudflare_workers:
-  url: "https://akshare-proxy.934073514.workers.dev"  # CloudFlare Worker URL，已包含 https://
-  api_key: ""  # API密钥（如果Worker需要认证）
-  fallback_to_direct: true  # Worker不可用时回退到直连
-  timeout: 30  # 请求超时（秒）
-  retry_count: 3  # 重试次数
-  cache_enabled: true  # 启用本地缓存
-  cache_ttl: 300  # 缓存过期时间（秒）
-
-# AmazingData 配置（银河证券数据接口）
+  url: https://akshare-proxy.934073514.workers.dev
+  api_key: ''
+  fallback_to_direct: true
+  timeout: 30
+  retry_count: 3
+  cache_enabled: true
+  cache_ttl: 300
+  enabled: true
 amazingdata:
-  enabled: false  # 是否启用（需要有效的许可证）
-  api_key: ""  # API密钥
-  api_secret: ""  # API密钥
-
-# QMT 配置（迅投QMT终端）
+  enabled: false
+  username: '212200038719'
+  password: '212200038719@2025'
+  network_provider: telecom
+  servers:
+    telecom:
+      host: 101.230.159.234
+      port: 8600
+    unicom:
+      host: 140.206.44.234
+      port: 8600
+  host: 101.230.159.234
+  port: 8600
+  timeout: 10
+  heartbeat_interval: 60
+  auto_reconnect: true
+  reconnect_interval: 10
+  local_path: D://AmazingData_local_data//
+  use_local: true
+  max_retries: 3
+  subscription_enabled: true
+  subscription_batch_size: 100
+  max_subscriptions: 500
 qmt:
-  enabled: false  # 是否启用（需要安装QMT终端）
-  host: "localhost"  # QMT服务地址
-  port: 8888  # QMT服务端口
+  enabled: false
+  host: localhost
+  port: 8888
+data_providers:
+  cloudflare_proxy:
+    enabled: true
+    priority: 1
+    name: CloudFlare Workers Proxy
+  akshare:
+    enabled: true
+    priority: 2
+    name: AKShare Direct
+  amazingdata:
+    enabled: false
+    priority: 0
+    name: AmazingData
+  qmt:
+    enabled: false
+    priority: 3
+    name: QMT
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    recovery_timeout: 60
+    half_open_attempts: 3
+  failover:
+    enabled: true
+    timeout: 5
+    retry_count: 3
+    backoff_factor: 2

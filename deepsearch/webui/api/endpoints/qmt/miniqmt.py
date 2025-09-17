@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.data_providers.implementations.qmt.miniqmt import MiniQMTProvider
+from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTProvider
 
 # 创建 API 路由
 router = APIRouter(prefix="/api/miniqmt", tags=["MiniQMT"])
@@ -186,7 +186,7 @@ async def get_realtime_data(
             raise HTTPException(status_code=400, detail="请提供股票代码")
 
         # 创建数据请求
-        from deepsearch.data_providers.interfaces.base import DataRequest
+        from deepsearch.infrastructure.providers.interfaces.base import DataRequest
         request = DataRequest(
             symbols=symbol_list,
             period="tick"
@@ -241,7 +241,7 @@ async def get_history_data(
         provider = get_miniqmt_provider()
 
         # 创建数据请求
-        from deepsearch.data_providers.interfaces.base import DataRequest
+        from deepsearch.infrastructure.providers.interfaces.base import DataRequest
         request = DataRequest(
             symbol=symbol,
             start_date=start_date,
@@ -298,7 +298,7 @@ async def get_minute_data(
         provider = get_miniqmt_provider()
 
         # 创建数据请求
-        from deepsearch.data_providers.interfaces.base import DataRequest
+        from deepsearch.infrastructure.providers.interfaces.base import DataRequest
         request = DataRequest(
             symbol=symbol,
             start_date=date,

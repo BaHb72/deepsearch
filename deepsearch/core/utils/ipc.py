@@ -213,7 +213,7 @@ class EngineIPCServer:
                 await self.cache.set(
                     "engine:status",
                     json.dumps(status),
-                    expire=60  # 60秒过期
+                    ttl=60  # 60秒过期
                 )
 
                 # 发布状态更新事件

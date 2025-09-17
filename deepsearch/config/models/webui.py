@@ -11,6 +11,12 @@ from pydantic import BaseModel, Field
 class WebUIConfig(BaseModel):
     """WebUI 配置。"""
 
+    # 组件启用状态
+    enabled: bool = Field(
+        default=True,
+        description="是否启用WebUI组件"
+    )
+
     # 后端 API 服务配置
     backend_host: str = Field(
         default="0.0.0.0",

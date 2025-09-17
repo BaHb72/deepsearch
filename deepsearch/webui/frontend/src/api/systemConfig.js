@@ -165,10 +165,44 @@ export function deleteDataSource(id) {
  * @param {object} dataSource - 数据源配置
  */
 export function testDataSource(dataSource) {
+  // 转换数据格式以匹配后端期望的结构
+  const testRequest = {
+    source: dataSource.type || 'amazingdata',  // 将type字段映射为source，默认为amazingdata
+    symbol: "000001",                          // 使用默认测试股票（平安银行）
+    test_type: "realtime"                      // 使用默认测试类型
+  }
+
+  console.log('[systemConfig.js] 测试数据源:', testRequest)
+
   return request({
     url: '/data-source/test',
     method: 'post',
-    data: dataSource
+    data: testRequest
+  }).then(res => {
+    console.log('[systemConfig.js] 测试结果:', res)
+    // 处理响应格式
+    if (res && typeof res === 'object') {
+      // 如果响应已经是预期格式，直接返回
+      if ('success' in res) {
+        return res
+      }
+      // 否则尝试提取data字段
+      if (res.data) {
+        return res.data
+      }
+    }
+    return res
+  }).catch(err => {
+    console.error('[systemConfig.js] 测试数据源失败:', err)
+    // 构造标准错误响应
+    return {
+      success: false,
+      source: testRequest.source,
+      message: "测试失败",
+      error: err.message || '网络错误',
+      latency_ms: 0,
+      data_size: 0
+    }
   })
 }
 
@@ -210,6 +244,21 @@ export function refreshDataSources() {
   return request({
     url: '/data-sources/refresh',
     method: 'post'
+  })
+}
+
+/**
+ * 更新数据源全局配置
+ * @param {object} config - 配置对象
+ */
+export function updateDataSourceConfig(config) {
+  console.log('[systemConfig.js] 调用 updateDataSourceConfig API')
+  console.log('  URL: /data-sources/config')
+  console.log('  数据:', config)
+  return request({
+    url: '/data-sources/config',
+    method: 'put',
+    data: config
   })
 }
 
@@ -375,10 +424,10 @@ export function fetchDataSourceConfig() {
 }
 
 /**
- * 更新数据源配置（使用现有API）
+ * 更新数据源配置（备用API）
  * @param {object} config - 配置对象
  */
-export function updateDataSourceConfig(config) {
+export function updateDataSourceConfigAlt(config) {
   return request({
     url: '/data-source-config/update',
     method: 'post',

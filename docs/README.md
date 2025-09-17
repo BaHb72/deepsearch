@@ -2,6 +2,13 @@
 
 ## 📚 文档组织结构
 
+### 📋 核心文档（根目录）
+- [自动化测试计划](../AUTOMATED_TESTING_PLAN.md) - 完整的自动化测试体系建设计划 **[已完成]**
+- [测试使用指南](../TESTING_GUIDE.md) - 自动化测试系统使用手册 **[活跃]**
+- [架构优化策略](./ARCHITECTURE_OPTIMIZATION_STRATEGY.md) - 架构优化策略和ROI分析
+- [数据层架构](./DATA_INTERFACE_LAYER.md) - 数据层接口设计
+- [数据源管理](./DATA_SOURCE_MANAGEMENT.md) - 数据源统一管理方案
+
 ### 🏗️ [架构文档](./architecture/)
 - [系统架构](./architecture/SYSTEM_ARCHITECTURE.md) - DeepSearch 整体系统架构
 - [配置架构最佳实践](./architecture/CONFIG_ARCHITECTURE_BEST_PRACTICES.md) - 配置系统设计
@@ -70,9 +77,10 @@
 
 ## 📅 文档维护
 
-- **最后更新**: 2025-08-28
+- **最后更新**: 2025-09-16（更新自动化测试系统文档）
 - **维护者**: DeepSearch Team
-- **版本**: v2.0
+- **版本**: v2.2
+- **文档状态**: 已完成架构重构和自动化测试体系建设
 
 ## 🔍 文档搜索
 

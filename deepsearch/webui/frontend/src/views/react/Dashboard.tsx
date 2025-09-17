@@ -46,24 +46,14 @@ import {
 } from '@ant-design/icons'
 import { useSystemStore } from '@/stores/systemStore'
 import { useMarketStore } from '@/stores/marketStore'
+import { marketAPI } from '@/api/market'
+import { systemAPI } from '@/api/system'
 import './Dashboard.scss'
 
 const { Title, Text, Paragraph } = Typography
 const { Ribbon } = Badge
 
-// 模拟数据
-const mockMarketData = [
-  { time: '09:30', value: 3420, volume: 1200 },
-  { time: '10:00', value: 3435, volume: 1500 },
-  { time: '10:30', value: 3450, volume: 1800 },
-  { time: '11:00', value: 3445, volume: 1600 },
-  { time: '11:30', value: 3460, volume: 2000 },
-  { time: '13:00', value: 3455, volume: 1900 },
-  { time: '13:30', value: 3470, volume: 2200 },
-  { time: '14:00', value: 3465, volume: 2100 },
-  { time: '14:30', value: 3480, volume: 2400 },
-  { time: '15:00', value: 3475, volume: 2300 },
-]
+// 默认板块数据（后续从API获取）
 
 const sectorData = [
   { type: '科技', value: 27, change: 2.5 },
@@ -80,20 +70,64 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState('overview')
   const [selectedTimeRange, setSelectedTimeRange] = useState('1d')
+  const [marketData, setMarketData] = useState([])
+  const [stockData, setStockData] = useState([])
 
   useEffect(() => {
-    // 模拟数据加载
-    setTimeout(() => {
-      setLoading(false)
-    }, 1000)
-
-    // 获取系统状态
-    systemStore.fetchStatus().catch(console.error)
+    fetchDashboardData()
   }, [])
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true)
+
+      // 并行获取数据
+      const [marketResponse, stockResponse] = await Promise.all([
+        marketAPI.getTimelineData('000001.SH'), // 获取上证指数分时数据
+        marketAPI.getStockList({ limit: 10 }) // 获取前10只股票
+      ])
+
+      // 处理市场数据
+      if (marketResponse.data) {
+        const timelineData = marketResponse.data
+        // 转换为图表需要的格式
+        const formattedMarketData = timelineData.map(item => ({
+          time: item.time,
+          value: item.price || item.close || 0,
+          volume: item.volume || 0
+        }))
+        setMarketData(formattedMarketData)
+      }
+
+      // 处理股票列表数据
+      if (stockResponse.data) {
+        const formattedStockData = stockResponse.data.map((stock, index) => ({
+          key: String(index + 1),
+          code: stock.symbol || stock.code,
+          name: stock.name,
+          price: stock.price || 0,
+          change: stock.changePercent || 0,
+          volume: stock.volume || 0,
+          amount: stock.amount || 0
+        }))
+        setStockData(formattedStockData)
+      }
+
+      // 获取系统状态
+      systemStore.fetchStatus().catch(console.error)
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error)
+      // 使用默认空数据
+      setMarketData([])
+      setStockData([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // 图表配置
   const lineConfig = {
-    data: mockMarketData,
+    data: marketData,
     xField: 'time',
     yField: 'value',
     smooth: true,
@@ -132,7 +166,7 @@ const Dashboard = () => {
   }
 
   const columnConfig = {
-    data: mockMarketData,
+    data: marketData,
     xField: 'time',
     yField: 'volume',
     label: {
@@ -238,13 +272,7 @@ const Dashboard = () => {
     },
   ]
 
-  const mockStockData = [
-    { key: '1', code: '000001', name: '平安银行', price: 12.56, change: 2.34, volume: 125634, amount: 1580000000 },
-    { key: '2', code: '000002', name: '万科A', price: 15.89, change: -1.23, volume: 89234, amount: 1420000000 },
-    { key: '3', code: '000858', name: '五粮液', price: 168.90, change: 3.45, volume: 45678, amount: 7720000000 },
-    { key: '4', code: '002415', name: '海康威视', price: 35.67, change: -0.89, volume: 67890, amount: 2420000000 },
-    { key: '5', code: '300750', name: '宁德时代', price: 189.50, change: 4.56, volume: 34567, amount: 6550000000 },
-  ]
+  // 股票数据从API获取，不再使用mock数据
 
   if (loading) {
     return (
@@ -424,7 +452,7 @@ const Dashboard = () => {
       >
         <ProTable
           columns={columns}
-          dataSource={mockStockData}
+          dataSource={stockData}
           rowKey="key"
           pagination={false}
           search={false}

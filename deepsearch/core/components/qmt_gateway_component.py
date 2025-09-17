@@ -11,14 +11,14 @@ from typing import Dict, Optional, List
 from loguru import logger
 
 from deepsearch.core.interfaces.component import Component
-from deepsearch.data_providers.datafeed.qmt.gateway import (
+from deepsearch.infrastructure.providers.datafeed.qmt.gateway import (
     EVENT_QMT_TICK,
     EVENT_QMT_ORDERBOOK,
     EVENT_QMT_TRADE,
     EVENT_QMT_CONNECTION
 )
-from deepsearch.data_providers.datafeed.qmt.models import TickData, OrderBook, TradeData
-from deepsearch.data_providers.datafeed.qmt.receiver import QMTReceiver
+from deepsearch.infrastructure.providers.datafeed.qmt.models import TickData, OrderBook, TradeData
+from deepsearch.infrastructure.providers.datafeed.qmt.receiver import QMTReceiver
 from deepsearch.event.engine.engine import EventEngine
 from deepsearch.event.schema import Event
 from deepsearch.messaging.bus import MessageBus
@@ -290,7 +290,7 @@ class QMTGatewayComponent(Component):
             ask_volumes = data.get('ask_volume', [])
 
             # 使用列表推导式优化
-            from deepsearch.data_providers.datafeed.qmt.models import OrderBookLevel
+            from deepsearch.infrastructure.providers.datafeed.qmt.models import OrderBookLevel
             orderbook.bid_levels = [
                 OrderBookLevel(price=p, volume=v)
                 for p, v in zip(bid_prices, bid_volumes)
@@ -341,7 +341,7 @@ class QMTGatewayComponent(Component):
             data = msg.get('data', {})
 
             # 创建TradeData对象
-            from deepsearch.data_providers.datafeed.qmt.models import OrderSide
+            from deepsearch.infrastructure.providers.datafeed.qmt.models import OrderSide
             trade = TradeData(
                 symbol=data.get('symbol', ''),
                 exchange=data.get('exchange', ''),

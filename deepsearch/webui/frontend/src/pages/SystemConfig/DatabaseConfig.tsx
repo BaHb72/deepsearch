@@ -20,7 +20,8 @@ import {
   Row,
   Col,
   message,
-  Popconfirm
+  Popconfirm,
+  Spin
 } from 'antd'
 import {
   DatabaseOutlined,
@@ -29,7 +30,8 @@ import {
   DeleteOutlined,
   SyncOutlined,
   CheckCircleOutlined,
-  CloseCircleOutlined
+  CloseCircleOutlined,
+  LoadingOutlined
 } from '@ant-design/icons'
 import { useModal, useAsyncData } from '@/hooks'
 import {
@@ -408,11 +410,25 @@ const DatabaseConfig = () => {
       >
         {error ? (
           <div style={{ textAlign: 'center', padding: '50px' }}>
-            <p style={{ color: '#ff4d4f' }}>
-              {error.message?.includes('503') || error.message?.includes('系统未初始化') 
-                ? '后端服务未就绪' 
-                : '加载失败: ' + error.message}
-            </p>
+            {error.message?.includes('后端服务不可用') ? (
+              <>
+                <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
+                <p style={{ color: '#1890ff', marginTop: '16px' }}>
+                  正在等待后端服务恢复...
+                </p>
+                <p style={{ color: '#999', fontSize: '12px', marginTop: '8px' }}>
+                  系统将在后端恢复后自动刷新
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ color: '#ff4d4f' }}>
+                  {error.message?.includes('503') || error.message?.includes('系统未初始化')
+                    ? '后端服务未就绪'
+                    : '加载失败: ' + error.message}
+                </p>
+              </>
+            )}
             {(error.message?.includes('503') || error.message?.includes('系统未初始化')) && (
               <div style={{ marginTop: '16px', padding: '16px', background: '#f0f0f0', borderRadius: '4px' }}>
                 <p style={{ marginBottom: '8px' }}>请确保后端服务已启动：</p>
@@ -430,7 +446,7 @@ const DatabaseConfig = () => {
           <Table
             columns={columns}
             dataSource={connections || []}
-            loading={loading && !(connections && connections.length > 0)}
+            loading={loading}
             rowKey="id"
             pagination={false}
             locale={{
