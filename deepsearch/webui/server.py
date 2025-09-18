@@ -776,6 +776,22 @@ def create_app() -> FastAPI:
     except ImportError as e:
         logger.warning(f"数据源管理API V2模块加载失败: {e}")
 
+    # 注册缓存管理API (P2级新增真实实现)
+    try:
+        from deepsearch.webui.api.endpoints.cache import router as cache_api
+        app.include_router(cache_api, prefix="/api", tags=["Cache Management"])
+        logger.info("缓存管理API已注册（真实实现）")
+    except ImportError as e:
+        logger.warning(f"缓存管理API模块加载失败: {e}")
+
+    # 注册图表数据API (P2级新增真实实现)
+    try:
+        from deepsearch.webui.api.endpoints.chart import router as chart_api_v2
+        app.include_router(chart_api_v2, prefix="/api", tags=["Chart Data V2"])
+        logger.info("图表数据API V2已注册（真实实现）")
+    except ImportError as e:
+        logger.warning(f"图表数据API V2模块加载失败: {e}")
+
     # 注册市场数据API
     try:
         from deepsearch.webui.api.endpoints.data.market_data_api import router as market_data_api

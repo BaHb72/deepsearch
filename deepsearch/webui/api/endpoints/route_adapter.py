@@ -15,109 +15,11 @@ from loguru import logger
 router = APIRouter(prefix="/api")
 
 
-# Cache模块适配器 (前端5个接口，后端0个实现)
-@router.get("/cache/status")
-async def cache_status_adapter(request: Request):
-    """适配cache状态查询"""
-    logger.warning("调用未实现的接口: /cache/status，返回默认响应")
-    return JSONResponse({
-        "status": "not_implemented",
-        "message": "Cache模块正在开发中",
-        "connected": False,
-        "type": "redis",
-        "memory_usage": 0
-    })
+# Cache模块已实现真实API (cache_api.py)
+# 前端5个接口已全部实现，不再需要适配器
 
-
-@router.post("/cache/connect")
-async def cache_connect_adapter(request: Request):
-    """适配cache连接"""
-    return JSONResponse({
-        "success": False,
-        "message": "Cache连接功能正在开发中",
-        "error": "NOT_IMPLEMENTED"
-    })
-
-
-@router.post("/cache/disconnect")
-async def cache_disconnect_adapter(request: Request):
-    """适配cache断开"""
-    return JSONResponse({
-        "success": True,
-        "message": "Cache已断开（模拟）"
-    })
-
-
-@router.post("/cache/reconnect")
-async def cache_reconnect_adapter(request: Request):
-    """适配cache重连"""
-    return JSONResponse({
-        "success": False,
-        "message": "Cache重连功能正在开发中",
-        "error": "NOT_IMPLEMENTED"
-    })
-
-
-@router.get("/cache/info")
-async def cache_info_adapter(request: Request):
-    """适配cache信息查询"""
-    return JSONResponse({
-        "version": "6.0.0",
-        "memory_usage": "0MB",
-        "keys": 0,
-        "connected_clients": 0,
-        "status": "not_implemented"
-    })
-
-
-# Chart模块适配器 (前端12个接口，后端部分实现)
-@router.get("/chart/series")
-async def chart_series_adapter(
-    symbol: str = "000001",
-    period: str = "1d",
-    adjust: str = "qfq"
-):
-    """适配图表序列数据获取"""
-    logger.info(f"请求图表数据: symbol={symbol}, period={period}, adjust={adjust}")
-    # 这里应该调用实际的后端服务
-    return JSONResponse({
-        "success": True,
-        "data": {
-            "symbol": symbol,
-            "period": period,
-            "series": [],
-            "message": "Chart数据接口正在集成中"
-        }
-    })
-
-
-@router.post("/chart/indicators")
-async def chart_indicators_adapter(request: Request):
-    """适配技术指标计算"""
-    body = await request.json()
-    return JSONResponse({
-        "success": True,
-        "data": {
-            "indicators": {},
-            "message": "技术指标计算功能正在开发中"
-        }
-    })
-
-
-@router.get("/chart/indicator-list")
-async def chart_indicator_list_adapter():
-    """适配指标列表获取"""
-    return JSONResponse({
-        "success": True,
-        "data": [
-            {"name": "MA", "label": "移动平均线"},
-            {"name": "MACD", "label": "MACD"},
-            {"name": "RSI", "label": "相对强弱指标"},
-            {"name": "KDJ", "label": "KDJ指标"},
-            {"name": "BOLL", "label": "布林线"}
-        ]
-    })
-
+# Chart模块已实现真实API (chart_api.py)
+# 前端图表接口已实现，包括K线、技术指标、筹码分布等
 
 # Data模块适配器
 @router.get("/data/stats")
