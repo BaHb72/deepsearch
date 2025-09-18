@@ -262,11 +262,11 @@ class RequestHandler:
         priority = self._determine_priority(api_name)
 
         # 添加到优化器队列
-        return await self.request_optimizer.add_request(
+        return await self.request_optimizer.submit(
             api_name,
             params,
             priority,
-            lambda: self._fetch_with_fallback(api_name, params)
+            use_cache=True
         )
 
     def _determine_priority(self, api_name: str) -> RequestPriority:

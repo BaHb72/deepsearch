@@ -62,7 +62,7 @@ data_sources:
       config:
         connection:
           username: '212200038719'
-          password: '212200038719@2025'
+          password: 212200038719@2025
           host: 120.86.124.106
           port: 8600
           timeout: 10
@@ -174,3 +174,7 @@ amazingdata:
   use_local: true
   max_retries: 2
   network_provider: telecom
+qmt:
+  enabled: false
+  host: localhost
+  port: 5556

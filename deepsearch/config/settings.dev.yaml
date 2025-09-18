@@ -51,6 +51,11 @@ cloudflare_workers:
   cache_enabled: true
   cache_ttl: 300
   enabled: true
+
+# AmazingData数据源配置
+# 重要说明: 本项目只使用AmazingData (银河证券星耀数智) API接口
+# 不使用TGW接口，TGW库仅作为备用保留，未集成到系统中
+# AmazingData是项目的主要数据源，请勿与TGW混淆
 amazingdata:
   enabled: false
   username: '212200038719'

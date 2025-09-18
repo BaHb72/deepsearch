@@ -2,6 +2,13 @@
 """
 AmazingData 数据提供者
 提供 AmazingData SDK 的完整功能接入
+
+重要说明：
+- 本项目只使用 AmazingData (银河证券星耀数智) API接口
+- 不使用 TGW 接口，请勿混淆两者
+- AmazingData 是项目的主要数据源
+- TGW 库仅作为备用保留，未集成到系统中
+
 Author: DeepSearch Team
 Version: 1.0.0
 """
@@ -260,49 +267,141 @@ class AmazingDataProvider(DataProvider):
     
     async def _login(self) -> bool:
         """
-        登录 AmazingData
-        
+        安全的登录方法，隔离SDK的SystemExit
+
         Returns:
             是否登录成功
-        """
-        try:
-            logger.info(f"正在登录 AmazingData (host={self.config.host}:{self.config.port})...")
 
-            # 在线程池中执行同步登录，添加超时控制
-            loop = asyncio.get_event_loop()
-            
-            # 使用 wait_for 添加超时控制
-            try:
-                result = await asyncio.wait_for(
-                    loop.run_in_executor(
-                        None,
-                        ad.login,
+        Raises:
+            DataProviderError: 包含详细错误信息
+        """
+        def safe_login():
+            """
+            包装的登录函数，捕获所有异常包括SystemExit
+            使用线程执行，避免signal在非主线程中的限制
+
+            错误码定义：
+            -999: SDK调用了exit()
+            -998: 其他未知异常
+            -997: 网络连接失败
+            """
+            import threading
+            import traceback
+
+            # 用于存储登录结果
+            result_holder = {'result': None, 'exception': None}
+
+            def login_in_thread():
+                """在独立线程中执行登录"""
+                try:
+                    result = ad.login(
                         self.config.username,
                         self.config.password,
                         self.config.host,
                         self.config.port
-                    ),
-                    timeout=5.0  # 5秒超时
+                    )
+                    result_holder['result'] = result
+
+                except SystemExit as e:
+                    # SDK尝试退出程序
+                    logger.critical(f"CRITICAL: AmazingData SDK attempted system exit with code: {e.code}")
+                    logger.critical(f"Stack trace: {traceback.format_exc()}")
+                    result_holder['result'] = -999
+                    result_holder['exception'] = e
+
+                except ConnectionError as e:
+                    logger.error(f"Network connection failed: {e}")
+                    result_holder['result'] = -997
+                    result_holder['exception'] = e
+
+                except Exception as e:
+                    logger.error(f"Unexpected error in SDK login: {e}")
+                    logger.error(f"Exception type: {type(e).__name__}")
+                    result_holder['result'] = -998
+                    result_holder['exception'] = e
+
+            # 创建并启动线程
+            thread = threading.Thread(target=login_in_thread, daemon=True)
+            thread.start()
+
+            # 等待线程完成，最多等待30秒
+            thread.join(timeout=30)
+
+            # 检查线程是否仍在运行（超时情况）
+            if thread.is_alive():
+                logger.error("Login thread timeout after 30 seconds")
+                # 注意：线程可能仍在后台运行
+                return -998  # 返回未知错误码
+
+            # 返回结果
+            if result_holder['result'] is None:
+                logger.error("Login thread did not produce a result")
+                return -998
+
+            return result_holder['result']
+
+        try:
+            logger.info(f"Attempting safe login to AmazingData (host={self.config.host}:{self.config.port})")
+
+            loop = asyncio.get_event_loop()
+
+            # 在线程池中执行包装的登录函数
+            try:
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(None, safe_login),
+                    timeout=self.config.timeout or 5.0
                 )
             except asyncio.TimeoutError:
-                logger.error(f"AmazingData 登录超时（5秒）")
-                raise DataProviderError("登录超时，服务器可能不可达")
+                logger.error(f"Login timeout after {self.config.timeout or 5}s")
+                raise DataProviderError(
+                    "AmazingData登录超时，可能的原因：\n"
+                    "1. 网络连接问题\n"
+                    "2. 服务器地址错误\n"
+                    "3. 防火墙阻止连接"
+                )
 
-            if result == 0 or result is True:  # 登录成功返回 0 或 True
+            # 处理返回结果
+            if result == -999:
+                # SDK强制退出 - 严重错误
+                error_msg = (
+                    "AmazingData SDK尝试强制退出程序（SystemExit）。\n"
+                    "这通常由以下原因导致：\n"
+                    "1. TGW初始化失败：检查网络模式配置\n"
+                    "2. 推送服务器连接失败：检查8600端口是否可访问\n"
+                    "3. 认证Token无效：检查用户名密码\n"
+                    "建议：系统将自动降级到备用数据源"
+                )
+                logger.critical(error_msg)
+
+                # 触发监控告警
+                await self._trigger_alert("SDK_EXIT", error_msg)
+
+                raise DataProviderError(error_msg)
+
+            elif result == -997:
+                raise DataProviderError("网络连接失败，请检查网络设置")
+
+            elif result == -998:
+                raise DataProviderError("SDK内部错误，请查看日志")
+
+            elif result == 0 or result is True:
+                # 登录成功
                 self._connected = True
                 self._login_time = datetime.now()
-                logger.info("AmazingData 登录成功")
+                logger.info("AmazingData login successful")
                 return True
+
             else:
-                error_msg = f"AmazingData 登录失败，错误码: {result}"
+                # 其他错误码
+                error_msg = f"AmazingData登录失败，错误码: {result}"
                 logger.error(error_msg)
                 raise DataProviderError(error_msg)
 
         except DataProviderError:
-            raise  # 重新抛出登录失败错误
+            raise
         except Exception as e:
-            logger.error(f"AmazingData 登录异常: {e}")
-            raise DataProviderError(f"登录异常: {e}")
+            logger.error(f"Unexpected error during login process: {e}")
+            raise DataProviderError(f"登录过程异常: {e}")
 
     async def _logout(self) -> None:
         """登出 AmazingData"""
@@ -408,6 +507,36 @@ class AmazingDataProvider(DataProvider):
         for symbol, info in self._subscriptions.items():
             # 重新订阅每个符号
             pass  # TODO: 实现订阅恢复
+
+    async def _trigger_alert(self, alert_type: str, message: str) -> None:
+        """
+        触发监控告警
+
+        Args:
+            alert_type: 告警类型（如 SDK_EXIT, CONNECTION_LOST等）
+            message: 告警消息
+        """
+        try:
+            # 记录到日志
+            logger.critical(f"[ALERT][{alert_type}] {message}")
+
+            # 更新统计信息
+            if alert_type not in self._stats:
+                self._stats[alert_type] = []
+
+            self._stats[alert_type].append({
+                'timestamp': datetime.now().isoformat(),
+                'message': message
+            })
+
+            # 保留最近的10条告警记录
+            if len(self._stats[alert_type]) > 10:
+                self._stats[alert_type] = self._stats[alert_type][-10:]
+
+            # TODO: 未来可以集成外部告警系统（邮件、微信、钉钉等）
+
+        except Exception as e:
+            logger.error(f"Failed to trigger alert: {e}")
 
     # ==================== 数据查询接口 ====================
 

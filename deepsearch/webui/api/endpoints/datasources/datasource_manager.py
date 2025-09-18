@@ -664,6 +664,14 @@ async def update_global_config(config: dict):
         )
 
 
+# 导入测试辅助模块
+try:
+    from .amazingdata_test_helper import test_amazingdata_connection, create_test_result
+except ImportError:
+    logger.warning("amazingdata_test_helper模块未找到，使用内置测试逻辑")
+    test_amazingdata_connection = None
+    create_test_result = None
+
 async def test_datasource_enhanced(request: TestDataSourceRequest, symbol: str = "000001", test_type: str = "realtime"):
     """
     增强版数据源测试，包含实际数据获取测试
@@ -677,6 +685,10 @@ async def test_datasource_enhanced(request: TestDataSourceRequest, symbol: str =
         测试结果，包含连接状态和数据获取能力验证
     """
     try:
+        # 添加详细的请求日志
+        logger.info(f"[TEST] 开始测试数据源: type={request.type}, symbol={symbol}, test_type={test_type}")
+        logger.info(f"[TEST] 请求配置: {request.config.model_dump() if hasattr(request.config, 'model_dump') else request.config}")
+
         test_result = {
             "success": False,
             "source": request.type,
@@ -690,8 +702,56 @@ async def test_datasource_enhanced(request: TestDataSourceRequest, symbol: str =
         start_time = time.time()
 
         if request.type == "amazingdata":
-            # 测试银河证券API
-            if not request.config.username or not request.config.password:
+            # 使用辅助模块测试（如果可用）
+            if test_amazingdata_connection:
+                logger.info("[TEST] 使用辅助模块进行测试")
+
+                # 获取服务器配置
+                host = request.config.host
+                port = request.config.port or 8600
+
+                # 根据网络运营商选择服务器
+                if request.config.networkProvider == "telecom":
+                    host = "101.230.159.234"
+                    port = 8600
+                elif request.config.networkProvider == "unicom":
+                    host = "140.206.44.234"
+                    port = 8600
+                elif not host:
+                    host = "101.230.159.234"
+                    port = 8600
+
+                # 调用辅助函数，添加异常保护
+                try:
+                    test_result = test_amazingdata_connection(
+                        username=request.config.username,
+                        password=request.config.password,
+                        host=host,
+                        port=port,
+                        test_type=test_type
+                    )
+                except Exception as helper_error:
+                    logger.error(f"[TEST] 辅助模块执行失败: {helper_error}")
+                    test_result = {
+                        "success": False,
+                        "source": request.type,
+                        "message": "测试失败",
+                        "error": f"测试模块异常: {str(helper_error)}",
+                        "latency_ms": (time.time() - start_time) * 1000,
+                        "data_size": 0
+                    }
+
+                # 确保返回正确的source字段
+                test_result["source"] = request.type
+
+                # 记录结果
+                logger.info(f"[TEST] 辅助模块测试完成: {test_result}")
+
+                # 更新延迟时间（如果需要）
+                if "latency_ms" not in test_result:
+                    test_result["latency_ms"] = (time.time() - start_time) * 1000
+
+            elif not request.config.username or not request.config.password:
                 test_result["message"] = "测试失败"
                 test_result["error"] = "需要提供用户名和密码"
             else:
@@ -711,14 +771,20 @@ async def test_datasource_enhanced(request: TestDataSourceRequest, symbol: str =
                     port = 8600
 
                 try:
+                    logger.info(f"[TEST] 尝试导入AmazingData SDK...")
                     import AmazingData as ad
+                    logger.info(f"[TEST] AmazingData SDK导入成功")
+
                     # 实际连接测试
+                    logger.info(f"[TEST] 开始登录: username={request.config.username}, host={host}, port={port}")
                     login_result = ad.login(
                         username=request.config.username,
                         password=request.config.password,
                         host=host,
                         port=port
                     )
+                    logger.info(f"[TEST] 登录结果: {login_result}")
+
                     if login_result == 0 or login_result is True:
                         # 登录成功，尝试获取数据
                         try:
@@ -734,22 +800,39 @@ async def test_datasource_enhanced(request: TestDataSourceRequest, symbol: str =
                                         formatted_symbol = f"SZ.{symbol}"
 
                                 # 尝试获取实时行情数据
+                                # 注意：AmazingData实时数据需要通过订阅模式（onSnapshot）获取
+                                # 这里使用基础数据API测试连接
                                 try:
-                                    # 使用AmazingData获取实时行情
-                                    realtime_data = ad.get_market_realtime([formatted_symbol])
+                                    # 创建基础数据对象
+                                    logger.info(f"[TEST] 创建BaseData对象...")
+                                    base_data = ad.BaseData()
+                                    logger.info(f"[TEST] BaseData对象创建成功")
 
-                                    if realtime_data is not None and len(realtime_data) > 0:
+                                    # 获取证券信息验证连接
+                                    logger.info(f"[TEST] 调用get_code_info('EXTRA_STOCK_A')...")
+                                    code_info = base_data.get_code_info('EXTRA_STOCK_A')
+                                    logger.info(f"[TEST] get_code_info返回: {type(code_info)}, 数量: {len(code_info) if code_info is not None else 0}")
+
+                                    if code_info is not None and len(code_info) > 0:
+                                        # 尝试获取交易日历作为额外验证
+                                        calendar = base_data.get_calendar()
+
                                         test_result["success"] = True
                                         test_result["message"] = "测试成功"
-                                        test_result["data_size"] = len(realtime_data)
+                                        test_result["data_size"] = len(code_info)
                                         test_result["details"]["symbol"] = formatted_symbol
-                                        test_result["details"]["data_type"] = "realtime"
+                                        test_result["details"]["data_type"] = "基础数据"
                                         test_result["details"]["server"] = f"{host}:{port}"
-                                        test_result["details"]["status"] = "已连接并获取到数据"
+                                        test_result["details"]["status"] = "已连接并获取到基础数据"
+                                        test_result["details"]["code_count"] = len(code_info)
+                                        test_result["details"]["trading_days"] = len(calendar) if calendar else 0
+                                        test_result["details"]["note"] = "实时行情需通过订阅接口(onSnapshot)获取"
                                     else:
                                         test_result["message"] = "测试失败"
-                                        test_result["error"] = f"No data for symbol: {formatted_symbol}"
+                                        test_result["error"] = "无法获取证券基础信息"
                                 except Exception as data_error:
+                                    logger.error(f"[TEST] 获取数据时发生异常: {type(data_error).__name__}: {str(data_error)}")
+                                    logger.exception("[TEST] 详细异常信息:")
                                     test_result["message"] = "测试失败"
                                     test_result["error"] = f"获取数据失败: {str(data_error)}"
                             else:
@@ -761,15 +844,19 @@ async def test_datasource_enhanced(request: TestDataSourceRequest, symbol: str =
                             # 登出
                             ad.logout(request.config.username)
                     else:
+                        logger.error(f"[TEST] 登录失败，返回值: {login_result}")
                         test_result["message"] = "测试失败"
                         test_result["error"] = f"登录失败，错误码: {login_result}"
 
-                except ImportError:
+                except ImportError as ie:
+                    logger.error(f"[TEST] 导入AmazingData SDK失败: {str(ie)}")
                     test_result["success"] = False
                     test_result["message"] = "测试失败"
                     test_result["error"] = "AmazingData SDK未安装"
                     test_result["details"]["note"] = "需要安装installer目录下的AmazingData-1.0.9-cp313-none-any.whl"
                 except Exception as e:
+                    logger.error(f"[TEST] 测试过程发生未知异常: {type(e).__name__}: {str(e)}")
+                    logger.exception("[TEST] 详细异常信息:")
                     test_result["message"] = "测试失败"
                     test_result["error"] = str(e)
 
@@ -780,6 +867,10 @@ async def test_datasource_enhanced(request: TestDataSourceRequest, symbol: str =
 
         # 计算延迟
         test_result["latency_ms"] = (time.time() - start_time) * 1000
+
+        # 记录最终结果
+        logger.info(f"[TEST] 测试完成: success={test_result['success']}, message={test_result['message']}, error={test_result.get('error')}")
+        logger.info(f"[TEST] 返回结果: {test_result}")
 
         # 更新数据源状态
         if test_result["success"]:
@@ -1453,6 +1544,8 @@ async def toggle_data_source(id: str, request: dict):
 async def test_data_source(request: dict):
     """测试数据源（兼容路径，支持多种请求格式）"""
 
+    logger.info(f"[API] /data-source/test 收到请求: {request}")
+
     # 检查请求格式，支持前端的格式 {source, symbol, test_type}
     if "source" in request and "symbol" in request:
         # 前端格式：转换为标准格式
@@ -1460,9 +1553,12 @@ async def test_data_source(request: dict):
         symbol = request.get("symbol", "000001")
         test_type = request.get("test_type", "realtime")
 
+        logger.info(f"[API] 解析前端请求: source={source_type}, symbol={symbol}, test_type={test_type}")
+
         # 获取对应数据源的配置
         datasource = data_sources.get(source_type)
         if not datasource:
+            logger.error(f"[API] 数据源 '{source_type}' 未找到")
             return APIResponse.error(
                 code=ErrorCodes.DATASOURCE_NOT_FOUND,
                 message=f"数据源 '{source_type}' 未找到",
@@ -1475,8 +1571,23 @@ async def test_data_source(request: dict):
             config=datasource.config
         )
 
+        logger.info(f"[API] 调用test_datasource_enhanced...")
         # 执行测试（增强版，包含实际数据测试）
-        return await test_datasource_enhanced(test_request, symbol, test_type)
+        result = await test_datasource_enhanced(test_request, symbol, test_type)
+
+        # 检查并修正错误信息
+        if isinstance(result, dict):
+            if result.get("error") == "AmazingData provider does not support realtime data":
+                logger.warning("[API] 检测到历史错误信息，替换为正确的错误描述")
+                result["error"] = "AmazingData SDK未正确初始化或无法连接到服务器"
+                result["message"] = "测试失败"
+                result["details"] = {
+                    "note": "请检查AmazingData SDK是否已安装，以及用户名密码是否正确",
+                    "suggestion": "运行 pip install installer/AmazingData-1.0.9-cp313-none-any.whl 安装SDK"
+                }
+
+        logger.info(f"[API] 返回结果: success={result.get('success')}, error={result.get('error')}")
+        return result
 
     elif "type" in request and "config" in request:
         # 标准格式：直接转换

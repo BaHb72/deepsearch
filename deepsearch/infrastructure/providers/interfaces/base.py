@@ -63,6 +63,14 @@ class DataProviderError(Exception):
 class DataProvider(ABC):
     """数据提供者基类"""
 
+    def __init__(self, config: DataProviderConfig):
+        """初始化数据提供者
+
+        Args:
+            config: 数据提供者配置
+        """
+        self.config = config
+
     @abstractmethod
     async def initialize(self) -> bool:
         """初始化数据源"""

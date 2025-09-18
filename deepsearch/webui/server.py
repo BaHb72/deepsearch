@@ -648,6 +648,7 @@ def create_app() -> FastAPI:
     from deepsearch.webui.api.endpoints.trading.market_overview import router as market_overview
     from deepsearch.webui.api.stock_comment import router as stock_comment
     from deepsearch.webui.api.endpoints.data.akshare_apis import router as akshare_apis
+    from deepsearch.webui.api.endpoints.amazingdata import router as amazingdata_api
 
     app.include_router(monitor_api, prefix="/api/monitor", tags=["Monitor"])
     app.include_router(config, prefix="/api/system/config", tags=["Config"])
@@ -670,6 +671,7 @@ def create_app() -> FastAPI:
     app.include_router(market_overview, tags=["MarketOverview"])  # 市场总貌API
     app.include_router(stock_comment, tags=["StockComment"])  # 千股千评API
     app.include_router(akshare_apis, tags=["AkShareAPIs"])  # AkShare API列表
+    app.include_router(amazingdata_api, tags=["AmazingData"])  # AmazingData全部35个API接口
 
     # 数据源状态管理API
     try:
@@ -705,12 +707,14 @@ def create_app() -> FastAPI:
         logger.warning(f"数据源配置API模块加载失败: {e}")
 
     # 数据源测试API
-    try:
-        from deepsearch.webui.api.endpoints.data.test_data_source import router as test_data_source
-        app.include_router(test_data_source, tags=["DataSourceTest"])  # 数据源测试API，包含 /api/data-source 前缀
-        logger.info("数据源测试API已注册")
-    except ImportError as e:
-        logger.warning(f"数据源测试API模块加载失败: {e}")
+    # 注意：已禁用旧的test_data_source路由，避免与datasource_manager中的新路由冲突 (2025-09-18)
+    # 新的测试端点在datasource_manager中实现，包含了更好的错误处理和AmazingData支持
+    # try:
+    #     from deepsearch.webui.api.endpoints.data.test_data_source import router as test_data_source
+    #     app.include_router(test_data_source, tags=["DataSourceTest"])  # 数据源测试API，包含 /api/data-source 前缀
+    #     logger.info("数据源测试API已注册")
+    # except ImportError as e:
+    #     logger.warning(f"数据源测试API模块加载失败: {e}")
 
     # MiniQMT API
     try:
