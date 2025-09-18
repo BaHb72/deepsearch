@@ -649,6 +649,7 @@ def create_app() -> FastAPI:
     from deepsearch.webui.api.stock_comment import router as stock_comment
     from deepsearch.webui.api.endpoints.data.akshare_apis import router as akshare_apis
     from deepsearch.webui.api.endpoints.amazingdata import router as amazingdata_api
+    from deepsearch.webui.api.endpoints.route_adapter import router as route_adapter
 
     app.include_router(monitor_api, prefix="/api/monitor", tags=["Monitor"])
     app.include_router(config, prefix="/api/system/config", tags=["Config"])
@@ -801,6 +802,10 @@ def create_app() -> FastAPI:
 
     # 注释掉 Cloudflare Tunnel API，因为不需要映射 webui 端口
     # Cloudflare Tunnel 已移除（使用 Workers 代理方案）
+
+    # 注册路由适配器（必须放在最后，作为catch-all路由）
+    app.include_router(route_adapter, tags=["RouteAdapter"])
+    logger.info("API路由适配器已注册，处理前后端API不匹配问题")
 
     return app
 
