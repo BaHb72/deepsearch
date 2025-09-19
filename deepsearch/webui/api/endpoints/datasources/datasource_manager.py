@@ -1439,8 +1439,8 @@ async def switch_primary_source(source_name: str):
         datasource.priority = 1
         datasource.updated_at = datetime.now()
 
-        # TODO: 这里应该保存到配置文件或数据库
-        # save_datasource_priority(datasource_id, 1)
+        # 保存优先级配置到配置文件
+        _save_datasource_priority(datasource_id, datasource.priority, source_name)
 
         logger.info(f"已切换主数据源为 {source_name}，优先级设置为1")
 
@@ -1600,3 +1600,44 @@ async def test_data_source(request: dict):
             message="无效的请求格式",
             status_code=400
         )
+
+
+def _save_datasource_priority(datasource_id: str, priority: int, source_name: str) -> None:
+    """
+    保存数据源优先级配置到配置文件
+
+    Args:
+        datasource_id: 数据源ID
+        priority: 优先级值
+        source_name: 数据源名称
+    """
+    try:
+        config = get_config()
+        config_dir = Path(config.app.data_dir) / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+
+        # 优先级配置文件路径
+        priority_file = config_dir / "datasource_priorities.yaml"
+
+        # 读取现有配置
+        priorities = {}
+        if priority_file.exists():
+            with open(priority_file, 'r', encoding='utf-8') as f:
+                priorities = yaml.safe_load(f) or {}
+
+        # 更新优先级配置
+        priorities[datasource_id] = {
+            "name": source_name,
+            "priority": priority,
+            "updated_at": datetime.now().isoformat()
+        }
+
+        # 保存到文件
+        with open(priority_file, 'w', encoding='utf-8') as f:
+            yaml.dump(priorities, f, allow_unicode=True, default_flow_style=False)
+
+        logger.info(f"已保存数据源 {source_name} 的优先级配置: priority={priority}")
+
+    except Exception as e:
+        logger.error(f"保存数据源优先级配置失败: {e}")
+        # 不抛出异常，避免影响主流程

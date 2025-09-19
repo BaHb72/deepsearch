@@ -632,7 +632,7 @@ def create_app() -> FastAPI:
     from deepsearch.webui.api.endpoints.system.system import router as system
     from deepsearch.webui.api.endpoints.system.health import router as health
     from deepsearch.webui.api.errors import router as errors
-    from deepsearch.webui.api.endpoints.monitoring.monitor_api import router as monitor_api
+    from deepsearch.webui.api.endpoints.monitor.monitor_api import router as monitor_api
     from deepsearch.webui.api.endpoints.system.config import router as config
     from deepsearch.webui.api.endpoints.system.logs import router as logs
     from deepsearch.webui.api.endpoints.data.data import router as data
