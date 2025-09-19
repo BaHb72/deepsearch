@@ -648,7 +648,8 @@ def create_app() -> FastAPI:
     from deepsearch.webui.api.endpoints.trading.market_overview import router as market_overview
     from deepsearch.webui.api.stock_comment import router as stock_comment
     from deepsearch.webui.api.endpoints.data.akshare_apis import router as akshare_apis
-    from deepsearch.webui.api.endpoints.amazingdata import router as amazingdata_api
+    # AmazingData API已移动到第819行单独注册，避免重复注册
+    # from deepsearch.webui.api.endpoints.amazingdata import router as amazingdata_api
     from deepsearch.webui.api.endpoints.route_adapter import router as route_adapter
 
     app.include_router(monitor_api, prefix="/api/monitor", tags=["Monitor"])
@@ -672,7 +673,7 @@ def create_app() -> FastAPI:
     app.include_router(market_overview, tags=["MarketOverview"])  # 市场总貌API
     app.include_router(stock_comment, tags=["StockComment"])  # 千股千评API
     app.include_router(akshare_apis, tags=["AkShareAPIs"])  # AkShare API列表
-    app.include_router(amazingdata_api, tags=["AmazingData"])  # AmazingData全部35个API接口
+    # AmazingData API已移至第819行使用模块化版本注册
 
     # 数据源状态管理API
     try:

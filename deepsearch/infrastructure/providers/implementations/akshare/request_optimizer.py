@@ -316,35 +316,351 @@ class RequestOptimizer:
     def _merge_params(self, api_name: str, params_list: List[Dict]) -> Dict:
         """
         合并请求参数
-        TODO: 根据不同API实现具体的合并逻辑
+        根据不同API的特点实现智能参数合并
         """
         if not params_list:
             return {}
-        
-        # 对于股票列表类API，可以合并代码列表
-        if "stock" in api_name and "codes" in params_list[0]:
-            merged_codes = set()
-            for params in params_list:
-                if "codes" in params:
-                    codes = params["codes"]
-                    if isinstance(codes, list):
-                        merged_codes.update(codes)
+
+        # 获取第一个参数作为基础
+        base_params = params_list[0].copy()
+
+        # 1. 股票代码列表合并
+        if any(key in api_name.lower() for key in ["stock", "realtime", "quote", "kline"]):
+            # 处理代码参数（codes, symbol, code等）
+            code_keys = ["codes", "code", "symbol", "stock_code", "ts_code"]
+            for key in code_keys:
+                if key in base_params:
+                    merged_codes = set()
+                    for params in params_list:
+                        if key in params:
+                            codes = params[key]
+                            if isinstance(codes, list):
+                                merged_codes.update(codes)
+                            elif isinstance(codes, str):
+                                # 处理逗号分隔的字符串
+                                if "," in codes:
+                                    merged_codes.update(codes.split(","))
+                                else:
+                                    merged_codes.add(codes)
+
+                    # 转换回适当的格式
+                    if isinstance(params_list[0][key], list):
+                        base_params[key] = list(merged_codes)
                     else:
-                        merged_codes.add(codes)
-            return {**params_list[0], "codes": list(merged_codes)}
-        
-        # 默认返回第一个参数
-        return params_list[0]
+                        base_params[key] = ",".join(sorted(merged_codes))
+                    break
+
+        # 2. 日期范围合并（取最大范围）
+        date_keys = {
+            "start": ["start_date", "start_time", "begin_date", "from_date"],
+            "end": ["end_date", "end_time", "finish_date", "to_date"]
+        }
+
+        for date_type, keys in date_keys.items():
+            for key in keys:
+                if key in base_params:
+                    dates = [p.get(key) for p in params_list if p.get(key)]
+                    if dates:
+                        if date_type == "start":
+                            # 取最早的开始日期
+                            base_params[key] = min(dates)
+                        else:
+                            # 取最晚的结束日期
+                            base_params[key] = max(dates)
+
+        # 3. 指标列表合并
+        if "indicator" in api_name.lower() or "factor" in api_name.lower():
+            indicator_keys = ["indicators", "fields", "metrics", "factors"]
+            for key in indicator_keys:
+                if key in base_params:
+                    merged_indicators = set()
+                    for params in params_list:
+                        if key in params:
+                            indicators = params[key]
+                            if isinstance(indicators, list):
+                                merged_indicators.update(indicators)
+                            elif isinstance(indicators, str):
+                                if "," in indicators:
+                                    merged_indicators.update(indicators.split(","))
+                                else:
+                                    merged_indicators.add(indicators)
+
+                    if isinstance(params_list[0][key], list):
+                        base_params[key] = list(merged_indicators)
+                    else:
+                        base_params[key] = ",".join(sorted(merged_indicators))
+
+        # 4. 分页参数处理（合并为批量请求）
+        if "limit" in base_params or "page_size" in base_params:
+            # 汇总所有请求的数量需求
+            total_limit = 0
+            limit_keys = ["limit", "page_size", "count", "num"]
+            for key in limit_keys:
+                if key in base_params:
+                    total_limit = sum(p.get(key, 0) for p in params_list)
+                    if total_limit > 0:
+                        base_params[key] = min(total_limit, 5000)  # 设置上限
+                    break
+
+        # 5. 市场参数合并
+        if "market" in base_params:
+            markets = set()
+            for params in params_list:
+                if "market" in params:
+                    market = params["market"]
+                    if isinstance(market, list):
+                        markets.update(market)
+                    else:
+                        markets.add(market)
+
+            if len(markets) > 1:
+                # 多个市场，可能需要分别请求
+                base_params["market"] = list(markets)
+            elif markets:
+                base_params["market"] = markets.pop()
+
+        # 6. 周期参数统一
+        period_keys = ["period", "freq", "kline_type", "interval"]
+        for key in period_keys:
+            if key in base_params:
+                # 取最小的周期（获取更详细的数据）
+                periods = [p.get(key) for p in params_list if p.get(key)]
+                if periods:
+                    # 周期优先级：1min < 5min < 15min < 30min < 60min < daily < weekly < monthly
+                    period_priority = {
+                        "1": 1, "1min": 1, "1分钟": 1,
+                        "5": 2, "5min": 2, "5分钟": 2,
+                        "15": 3, "15min": 3, "15分钟": 3,
+                        "30": 4, "30min": 4, "30分钟": 4,
+                        "60": 5, "60min": 5, "60分钟": 5,
+                        "daily": 6, "day": 6, "日线": 6,
+                        "weekly": 7, "week": 7, "周线": 7,
+                        "monthly": 8, "month": 8, "月线": 8
+                    }
+
+                    sorted_periods = sorted(
+                        periods,
+                        key=lambda x: period_priority.get(str(x).lower(), 99)
+                    )
+                    base_params[key] = sorted_periods[0]
+
+        return base_params
     
     def _distribute_batch_results(self, tasks: List[RequestTask], result: Any):
         """
         分发批处理结果
-        TODO: 根据不同API实现具体的分发逻辑
+        根据不同的数据结构和请求参数智能分发结果
         """
-        # 简单分发：所有任务获得相同结果
-        for task in tasks:
-            if not task.future.done():
-                task.future.set_result(result)
+        if not tasks:
+            return
+
+        # 如果结果为空或错误，所有任务都获得相同结果
+        if result is None or isinstance(result, Exception):
+            for task in tasks:
+                if not task.future.done():
+                    if isinstance(result, Exception):
+                        task.future.set_exception(result)
+                    else:
+                        task.future.set_result(result)
+            return
+
+        # 根据结果类型进行智能分发
+        try:
+            # 1. DataFrame类型结果
+            if hasattr(result, 'shape') and hasattr(result, 'loc'):  # pandas DataFrame
+                self._distribute_dataframe_results(tasks, result)
+
+            # 2. 字典类型结果
+            elif isinstance(result, dict):
+                self._distribute_dict_results(tasks, result)
+
+            # 3. 列表类型结果
+            elif isinstance(result, list):
+                self._distribute_list_results(tasks, result)
+
+            # 4. 其他类型，简单分发
+            else:
+                for task in tasks:
+                    if not task.future.done():
+                        task.future.set_result(result)
+
+        except Exception as e:
+            logger.error(f"分发批处理结果失败: {e}")
+            # 分发失败时，所有任务获得原始结果
+            for task in tasks:
+                if not task.future.done():
+                    task.future.set_result(result)
+
+    def _distribute_dataframe_results(self, tasks: List[RequestTask], df):
+        """分发DataFrame类型的结果"""
+        # 检查是否有代码列
+        code_columns = ['code', 'symbol', 'stock_code', 'ts_code', '代码', '股票代码']
+        code_col = None
+        for col in code_columns:
+            if col in df.columns:
+                code_col = col
+                break
+
+        if code_col:
+            # 按股票代码分发
+            for task in tasks:
+                # 获取任务请求的代码
+                requested_codes = self._extract_codes_from_params(task.params)
+
+                if requested_codes:
+                    # 筛选出对应的数据
+                    if isinstance(requested_codes, list):
+                        task_result = df[df[code_col].isin(requested_codes)]
+                    else:
+                        task_result = df[df[code_col] == requested_codes]
+
+                    if not task.future.done():
+                        # 如果筛选后为空，返回空DataFrame而不是None
+                        if task_result.empty:
+                            task.future.set_result(df.iloc[0:0])  # 返回同结构的空DataFrame
+                        else:
+                            task.future.set_result(task_result.copy())
+                else:
+                    # 没有指定代码，返回全部数据
+                    if not task.future.done():
+                        task.future.set_result(df.copy())
+        else:
+            # 没有代码列，检查是否可以按其他维度分发
+            # 比如日期范围
+            date_columns = ['date', 'trade_date', 'datetime', '日期', '交易日期']
+            date_col = None
+            for col in date_columns:
+                if col in df.columns:
+                    date_col = col
+                    break
+
+            if date_col:
+                for task in tasks:
+                    # 按日期范围筛选
+                    start_date = task.params.get('start_date') or task.params.get('start_time')
+                    end_date = task.params.get('end_date') or task.params.get('end_time')
+
+                    if start_date or end_date:
+                        task_result = df.copy()
+                        if start_date:
+                            task_result = task_result[task_result[date_col] >= start_date]
+                        if end_date:
+                            task_result = task_result[task_result[date_col] <= end_date]
+
+                        if not task.future.done():
+                            task.future.set_result(task_result)
+                    else:
+                        if not task.future.done():
+                            task.future.set_result(df.copy())
+            else:
+                # 无法智能分发，所有任务获得完整数据副本
+                for task in tasks:
+                    if not task.future.done():
+                        task.future.set_result(df.copy())
+
+    def _distribute_dict_results(self, tasks: List[RequestTask], result_dict: dict):
+        """分发字典类型的结果"""
+        # 检查是否是按代码组织的字典
+        if result_dict:
+            first_key = next(iter(result_dict))
+            # 判断是否是股票代码作为key
+            if isinstance(first_key, str) and (
+                len(first_key) == 6 or  # 纯代码
+                '.' in first_key or  # 带市场后缀
+                first_key.startswith(('SH', 'SZ', 'sh', 'sz'))  # 带市场前缀
+            ):
+                # 按代码分发
+                for task in tasks:
+                    requested_codes = self._extract_codes_from_params(task.params)
+                    if requested_codes:
+                        task_result = {}
+                        if isinstance(requested_codes, list):
+                            for code in requested_codes:
+                                if code in result_dict:
+                                    task_result[code] = result_dict[code]
+                        else:
+                            if requested_codes in result_dict:
+                                task_result = {requested_codes: result_dict[requested_codes]}
+
+                        if not task.future.done():
+                            task.future.set_result(task_result)
+                    else:
+                        if not task.future.done():
+                            task.future.set_result(result_dict.copy())
+            else:
+                # 不是按代码组织，所有任务获得完整副本
+                for task in tasks:
+                    if not task.future.done():
+                        task.future.set_result(result_dict.copy())
+        else:
+            # 空字典
+            for task in tasks:
+                if not task.future.done():
+                    task.future.set_result({})
+
+    def _distribute_list_results(self, tasks: List[RequestTask], result_list: list):
+        """分发列表类型的结果"""
+        if not result_list:
+            # 空列表
+            for task in tasks:
+                if not task.future.done():
+                    task.future.set_result([])
+            return
+
+        # 检查列表元素类型
+        first_item = result_list[0]
+
+        if isinstance(first_item, dict):
+            # 列表中是字典，可能是股票数据
+            code_keys = ['code', 'symbol', 'stock_code', 'ts_code']
+            code_key = None
+            for key in code_keys:
+                if key in first_item:
+                    code_key = key
+                    break
+
+            if code_key:
+                # 按代码筛选
+                for task in tasks:
+                    requested_codes = self._extract_codes_from_params(task.params)
+                    if requested_codes:
+                        if isinstance(requested_codes, list):
+                            task_result = [
+                                item for item in result_list
+                                if item.get(code_key) in requested_codes
+                            ]
+                        else:
+                            task_result = [
+                                item for item in result_list
+                                if item.get(code_key) == requested_codes
+                            ]
+
+                        if not task.future.done():
+                            task.future.set_result(task_result)
+                    else:
+                        if not task.future.done():
+                            task.future.set_result(result_list.copy())
+            else:
+                # 无法按代码筛选，返回完整列表
+                for task in tasks:
+                    if not task.future.done():
+                        task.future.set_result(result_list.copy())
+        else:
+            # 简单列表，所有任务获得副本
+            for task in tasks:
+                if not task.future.done():
+                    task.future.set_result(result_list.copy())
+
+    def _extract_codes_from_params(self, params: dict):
+        """从参数中提取股票代码"""
+        code_keys = ['codes', 'code', 'symbol', 'stock_code', 'ts_code']
+        for key in code_keys:
+            if key in params:
+                codes = params[key]
+                if isinstance(codes, str) and ',' in codes:
+                    return codes.split(',')
+                return codes
+        return None
     
     async def _cleanup_cache(self):
         """定期清理过期缓存"""
