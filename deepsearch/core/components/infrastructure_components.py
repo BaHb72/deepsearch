@@ -8,7 +8,7 @@ from deepsearch.config import get_config
 from deepsearch.event.engine.engine import EventEngine
 from deepsearch.messaging.bus import CompositeMessageBus, RouteConfig
 from deepsearch.messaging.factory import MessageBusFactory
-from deepsearch.core.async_component_v2 import AsyncComponent, SimpleAsyncComponent
+from deepsearch.core.async_component import AsyncComponent, SimpleAsyncComponent
 from deepsearch.core.utils.exceptions import error_context
 from deepsearch.core.interfaces import ComponentType
 

@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-from deepsearch.core.async_component_v2 import AsyncComponent
+from deepsearch.core.async_component import AsyncComponent
 from deepsearch.core.utils.exceptions import error_context
 from deepsearch.core.interfaces.component import ComponentType, ComponentStatus
 from deepsearch.event.engine.engine import Event

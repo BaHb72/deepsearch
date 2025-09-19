@@ -8,8 +8,7 @@ import asyncio
 from typing import Optional, Dict, Any
 
 from deepsearch.config import get_config
-from ..async_component_v2 import AsyncComponent
-from typing import Optional
+from ..async_component import AsyncComponent
 from ..utils.exceptions import error_context, ComponentLifecycleError
 from ..interfaces import ComponentType
 from ..utils.timeout_config import TimeoutManager, TimeoutCategory

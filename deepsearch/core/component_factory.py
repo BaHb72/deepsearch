@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import logging
 
 from .interfaces import Component, ComponentType
-from .async_component_v2 import AsyncComponentV2
+from .async_component import AsyncComponent
 
 T = TypeVar('T', bound=Component)
 
