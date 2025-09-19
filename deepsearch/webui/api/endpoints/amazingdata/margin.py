@@ -8,7 +8,15 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 
-from .base import get_provider, handle_amazingdata_error, create_response
+from .base import get_amazingdata_provider as get_provider, handle_api_error, format_response as create_response
+
+# 定义handle_amazingdata_error为兼容函数
+async def handle_amazingdata_error(func_call):
+    """包装AmazingData API调用的错误处理"""
+    try:
+        return await func_call if hasattr(func_call, '__await__') else func_call
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 router = APIRouter()
 
