@@ -376,3 +376,104 @@ class AsyncComponentV2(Component, StatisticsProvider, ABC, Generic[T]):
     def update_config(self, config: Any):
         """更新配置"""
         self._config = config
+
+
+class SimpleAsyncComponentV2(AsyncComponentV2[T]):
+    """
+    简单异步组件V2 - 用于管理单个实例的组件
+
+    适用于大多数只需要创建和管理单个实例的组件
+    移除了self._instance自引用，使用状态管理器管理资源
+    """
+
+    def __init__(
+        self,
+        name: str,
+        component_type: ComponentType,
+        instance_factory: Callable[..., T],
+        display_name: Optional[str] = None,
+        **factory_kwargs
+    ):
+        super().__init__(name, component_type, display_name)
+        self._instance_factory = instance_factory
+        self._factory_kwargs = factory_kwargs
+        self._start_method: Optional[str] = None
+        self._stop_method: Optional[str] = None
+
+        # 自动检测启动和停止方法
+        self._detect_lifecycle_methods()
+
+    def _detect_lifecycle_methods(self):
+        """自动检测实例的启动和停止方法"""
+        # 常见的启动方法名
+        self._potential_start_methods = ['start', 'run', 'connect', 'open']
+        self._potential_stop_methods = ['stop', 'close', 'disconnect', 'shutdown']
+
+    async def _do_initialize(self) -> Optional[T]:
+        """创建实例"""
+        # 如果工厂是异步的
+        if asyncio.iscoroutinefunction(self._instance_factory):
+            instance = await self._instance_factory(**self._factory_kwargs)
+        else:
+            instance = self._instance_factory(**self._factory_kwargs)
+
+        # 检测实际的启动和停止方法
+        for method_name in self._potential_start_methods:
+            if hasattr(instance, method_name):
+                self._start_method = method_name
+                break
+
+        for method_name in self._potential_stop_methods:
+            if hasattr(instance, method_name):
+                self._stop_method = method_name
+                break
+
+        return instance  # 返回实例，由状态管理器管理
+
+    async def _do_start(self) -> None:
+        """启动实例"""
+        instance = self.get_resource()
+        if instance and self._start_method:
+            start_func = getattr(instance, self._start_method)
+            if asyncio.iscoroutinefunction(start_func):
+                await start_func()
+            else:
+                start_func()
+
+    async def _do_stop(self) -> None:
+        """停止实例"""
+        instance = self.get_resource()
+        if instance and self._stop_method:
+            stop_func = getattr(instance, self._stop_method)
+            if asyncio.iscoroutinefunction(stop_func):
+                await stop_func()
+            else:
+                stop_func()
+
+    async def _do_cleanup_resource(self) -> None:
+        """清理资源"""
+        # SimpleAsyncComponent通常不需要特殊清理
+        pass
+
+    @property
+    def _instance(self):
+        """兼容性属性：获取管理的实例"""
+        return self.get_resource()
+
+    def _health_check(self) -> bool:
+        """健康检查（同步版本，兼容旧代码）"""
+        instance = self.get_resource()
+        if not instance:
+            return False
+        # 如果实例有健康检查方法，调用它
+        if hasattr(instance, 'health_check'):
+            return instance.health_check()
+        if hasattr(instance, 'is_healthy'):
+            return instance.is_healthy()
+        # 默认认为如果实例存在就是健康的
+        return True
+
+
+# 导出别名，用于兼容性
+AsyncComponent = AsyncComponentV2
+SimpleAsyncComponent = SimpleAsyncComponentV2

@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
 
 from deepsearch.config import get_config
-from deepsearch.core.async_component import AsyncComponent
+from deepsearch.core.async_component_v2 import AsyncComponent
 from deepsearch.core.utils.exceptions import error_context, ComponentLifecycleError
 from deepsearch.core.interfaces import ComponentType
 from deepsearch.core.utils.timeout_config import get_timeout_manager, TimeoutCategory

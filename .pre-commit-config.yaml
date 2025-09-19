@@ -1,202 +1,97 @@
-# Pre-commit hooks配置
-# 用于在提交代码前自动检查代码质量，防止问题代码进入仓库
+# Pre-commit hooks for Git
+# 安装: pip install pre-commit && pre-commit install
+# 手动运行: pre-commit run --all-files
+# 跳过: git commit --no-verify
 
-# 配置选项
-default_language_version:
-  python: python3.13
-
-# 跳过的文件
-exclude: |
-  (?x)^(
-    .*\.min\.js|
-    .*\.min\.css|
-    node_modules/.*|
-    deepsearch/webui/frontend/dist/.*|
-    htmlcov/.*|
-    \.pytest_cache/.*|
-    \.git/.*|
-    \.venv/.*|
-    build/.*|
-    dist/.*|
-    .*\.egg-info/.*
-  )$
-
-# Hook仓库配置
 repos:
-  # 基础检查
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
-    hooks:
-      - id: trailing-whitespace
-        name: 移除行尾空格
-      - id: end-of-file-fixer
-        name: 文件末尾换行符
-      - id: check-yaml
-        name: 检查YAML语法
-      - id: check-json
-        name: 检查JSON语法
-      - id: check-toml
-        name: 检查TOML语法
-      - id: check-added-large-files
-        name: 检查大文件
-        args: ['--maxkb=1000']
-      - id: check-merge-conflict
-        name: 检查合并冲突标记
-      - id: check-case-conflict
-        name: 检查文件名大小写冲突
-      - id: detect-private-key
-        name: 检测私钥文件
-      - id: mixed-line-ending
-        name: 检查混合行尾
-        args: ['--fix=lf']
-
-  # Python代码格式化 - Black
+  # Python代码格式化
   - repo: https://github.com/psf/black
-    rev: 24.3.0
+    rev: 24.10.0
     hooks:
       - id: black
-        name: Black代码格式化
         language_version: python3.13
-        args: ['--line-length=100', '--target-version=py313']
+        args: [--line-length=100]
 
-  # 导入排序 - isort
+  # Import排序
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
       - id: isort
-        name: isort导入排序
-        args: ['--profile=black', '--line-length=100']
+        args: [--profile=black, --line-length=100]
 
-  # 代码质量检查 - Ruff (更快的替代flake8)
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.3.0
+  # Python代码检查
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.1
     hooks:
-      - id: ruff
-        name: Ruff代码检查
-        args: ['--fix', '--exit-non-zero-on-fix']
-      - id: ruff-format
-        name: Ruff格式检查
+      - id: flake8
+        args: [--max-line-length=100, --ignore=E203,W503]
+        additional_dependencies: [flake8-docstrings]
 
-  # 类型检查 - MyPy
+  # 类型检查
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.9.0
+    rev: v1.13.0
     hooks:
       - id: mypy
-        name: MyPy类型检查
-        additional_dependencies:
-          - types-requests
-          - types-PyYAML
-          - types-redis
-          - types-aiofiles
-          - types-tabulate
-        args: [
-          '--ignore-missing-imports',
-          '--no-implicit-optional',
-          '--warn-redundant-casts',
-          '--warn-unused-ignores'
-        ]
-        exclude: 'tests/.*'
+        additional_dependencies: [types-all]
+        exclude: ^(tests|docs)/
 
-  # 安全检查 - Bandit
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.8
+  # 通用文件格式检查
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
     hooks:
-      - id: bandit
-        name: Bandit安全扫描
-        args: ['-r', 'deepsearch', '--skip', 'B101,B601']
-        exclude: 'tests/.*'
+      - id: trailing-whitespace  # 删除尾部空格
+      - id: end-of-file-fixer   # 文件末尾换行符
+      - id: check-yaml          # YAML语法检查
+      - id: check-json          # JSON语法检查
+      - id: check-toml          # TOML语法检查
+      - id: check-added-large-files  # 防止添加大文件
+        args: [--maxkb=5000]
+      - id: check-merge-conflict     # 检查合并冲突标记
+      - id: debug-statements         # 检查调试语句
+      - id: mixed-line-ending       # 统一行结束符
+        args: [--fix=lf]
 
-  # 文档字符串检查
-  - repo: https://github.com/pycqa/pydocstyle
-    rev: 6.3.0
+  # Markdown格式化
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.43.0
     hooks:
-      - id: pydocstyle
-        name: 文档字符串检查
-        args: ['--convention=google']
-        exclude: 'tests/.*|migrations/.*'
+      - id: markdownlint
+        args: [--fix]
 
-  # SQL注入检查
-  - repo: https://github.com/ecugol/pre-commit-hooks-django
-    rev: v0.4.0
+  # 提交信息检查
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.30.1
     hooks:
-      - id: check-sql-migrations
-        name: SQL注入检查
+      - id: commitizen
+        stages: [commit-msg]
 
-  # 自定义本地hooks
-  - repo: local
+  # 安全检查
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
     hooks:
-      # 检查Python文件编码
-      - id: check-encoding
-        name: 检查QMT脚本编码
-        entry: python scripts/check_qmt_encoding.py
-        language: python
-        files: 'deepsearch/datafeed/qmt/scripts/.*\.py$'
-        pass_filenames: true
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: .*\.(lock|yaml|yml)$
 
-      # 更新API文档
-      - id: update-api-docs
-        name: 更新API文档
-        entry: python tools/generate_api_documentation.py --check
-        language: python
-        pass_filenames: false
-        files: 'deepsearch/webui/api/.*\.py$'
+# 全局配置
+default_language_version:
+  python: python3.13
 
-      # 运行快速测试
-      - id: quick-tests
-        name: 运行快速测试
-        entry: pytest tests/unit -x --tb=short -q -m "not slow"
-        language: system
-        pass_filenames: false
-        stages: [push]
+exclude: |
+  (?x)^(
+    .*\.(pyc|pyo|egg-info)/|
+    __pycache__/|
+    .git/|
+    .venv/|
+    venv/|
+    build/|
+    dist/|
+    node_modules/|
+    deepsearch/webui/frontend/|
+    .*\.min\.(js|css)|
+    .*\.bundle\.(js|css)
+  )
 
-      # 检查依赖安全性
-      - id: check-dependencies
-        name: 检查依赖安全性
-        entry: python -m pip_audit --desc
-        language: system
-        pass_filenames: false
-        stages: [push]
-
-      # 检查代码复杂度
-      - id: check-complexity
-        name: 检查代码复杂度
-        entry: python -m mccabe --min 10 deepsearch
-        language: system
-        pass_filenames: false
-
-      # 防止提交调试代码
-      - id: no-debug-statements
-        name: 检查调试语句
-        entry: '(?i)(import pdb|pdb\.set_trace|breakpoint|console\.log|debugger)'
-        language: pygrep
-        types: [python, javascript, typescript]
-
-      # 检查TODO标记
-      - id: check-todos
-        name: 检查TODO标记
-        entry: '(?i)(TODO|FIXME|HACK|XXX|BUG):'
-        language: pygrep
-        types: [python]
-        args: ['--multiline']
-
-      # 验证配置文件
-      - id: validate-config
-        name: 验证配置文件
-        entry: python scripts/validate_config.py
-        language: python
-        files: 'deepsearch/config/settings.*\.yaml$'
-        pass_filenames: true
-
-# CI跳过配置
 ci:
   autofix_prs: true
-  autofix_commit_msg: |
-    [pre-commit.ci] 自动修复格式问题
-
   autoupdate_schedule: weekly
-  autoupdate_commit_msg: '[pre-commit.ci] 更新hook版本'
-
-  skip: [
-    mypy,  # CI环境中跳过类型检查
-    quick-tests,  # CI有专门的测试流程
-  ]

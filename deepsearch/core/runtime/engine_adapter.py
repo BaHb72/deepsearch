@@ -210,7 +210,7 @@ class MainEngine:
         """初始化引擎组件"""
         try:
             # 延迟导入，避免循环依赖
-            from ..unified_components import (
+            from ..components import (
                 EventEngineComponent,
                 MessageBusComponent,
                 DatabaseComponent,
@@ -229,7 +229,7 @@ class MainEngine:
     def _init_webui_components(self):
         """初始化WebUI组件"""
         try:
-            from ..unified_components import WebUIComponent
+            from ..components import WebUIComponent
             self._register_legacy_component("webui", WebUIComponent())
         except ImportError as e:
             self.logger_adapter.warning(f"Could not import WebUI component: {e}")
@@ -320,7 +320,7 @@ def EventEngine():
 def MessageBusComponent():
     """创建消息总线组件（兼容性）"""
     try:
-        from ..unified_components import MessageBusComponent as _MessageBusComponent
+        from ..components import MessageBusComponent as _MessageBusComponent
         return _MessageBusComponent()
     except ImportError:
         from unittest.mock import Mock

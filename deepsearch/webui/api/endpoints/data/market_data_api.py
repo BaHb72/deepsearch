@@ -50,9 +50,56 @@ async def update_source_config(config: SourceConfigRequest):
         # 获取数据源管理器
         manager = get_data_source_manager()
 
-        # TODO: 实现数据源配置更新逻辑
-        # 目前返回未实现错误
-        return error_response("数据源配置更新功能尚未实现")
+        # 验证数据源存在
+        provider_info = manager.get_provider_info(config.source)
+        if not provider_info:
+            return error_response(f"数据源 {config.source} 不存在")
+
+        # 更新数据源配置
+        update_result = {}
+
+        # 更新启用状态
+        if config.enabled is not None:
+            if config.enabled:
+                manager.enable_provider(config.source)
+                update_result["enabled"] = True
+            else:
+                manager.disable_provider(config.source)
+                update_result["enabled"] = False
+
+        # 更新优先级
+        if config.priority is not None:
+            manager.set_provider_priority(config.source, config.priority)
+            update_result["priority"] = config.priority
+
+        # 更新额外配置
+        if config.config:
+            # 获取当前配置并合并新配置
+            current_config = provider_info.get("config", {})
+            updated_config = {**current_config, **config.config}
+
+            # 保存更新后的配置
+            from deepsearch.config import get_config
+            from pathlib import Path
+            import yaml
+
+            app_config = get_config()
+            config_dir = Path(app_config.app.data_dir) / "config"
+            config_dir.mkdir(parents=True, exist_ok=True)
+
+            config_file = config_dir / f"{config.source}_config.yaml"
+            with open(config_file, 'w', encoding='utf-8') as f:
+                yaml.dump(updated_config, f, allow_unicode=True, default_flow_style=False)
+
+            update_result["config"] = updated_config
+
+        logger.info(f"数据源 {config.source} 配置更新成功: {update_result}")
+        return success_response({
+            "source": config.source,
+            "updated": update_result,
+            "message": f"数据源 {config.source} 配置已更新"
+        })
+
     except Exception as e:
         logger.error(f"更新数据源配置失败: {e}")
         return error_response(str(e))

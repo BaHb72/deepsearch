@@ -26,7 +26,7 @@ from ..utils.exceptions import error_context
 from ..health.manager import HealthCheckManager
 from ..interfaces import Component, ComponentStatus
 from ..utils.ipc import EngineIPCServer
-from ..unified_components import (
+from ..components import (
     EventEngineComponent, MessageBusComponent, DatabaseComponent,
     CacheComponent, GatewayComponent, WebUIComponent, QMTGatewayComponent,
     AnalyticsComponent, BacktestComponent
@@ -311,9 +311,21 @@ class MainEngine:
             if backtest_component and hasattr(backtest_component, 'set_dependencies'):
                 event_engine = self._components.get('event_engine')
                 message_bus = self._components.get('message_bus')
-                # TODO: 获取数据提供者实例
+
+                # 获取数据提供者实例
+                data_provider = None
+                try:
+                    from deepsearch.infrastructure.providers.factory import get_factory
+                    factory = get_factory()
+                    # 异步获取提供者，需要在异步上下文中运行
+                    data_provider = await factory.get_provider()
+                    if data_provider:
+                        self._logger.debug(f"成功获取数据提供者: {type(data_provider).__name__}")
+                except Exception as e:
+                    self._logger.warning(f"获取数据提供者失败: {e}，回测将在无数据源模式下运行")
+
                 if event_engine and message_bus:
-                    backtest_component.set_dependencies(event_engine, message_bus, None)
+                    backtest_component.set_dependencies(event_engine, message_bus, data_provider)
                     self._logger.debug("回测组件依赖已设置")
 
             # 记录初始化成功的组件

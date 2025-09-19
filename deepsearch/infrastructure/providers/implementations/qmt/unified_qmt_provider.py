@@ -578,18 +578,68 @@ class StandardQMTBackend(QMTBackend):
             return False
 
         try:
+            # 初始化回调存储
+            if not hasattr(self, '_callbacks'):
+                self._callbacks = {}
+                self._callback_thread = None
+
+            # 存储回调函数
+            for symbol in symbols:
+                if symbol not in self._callbacks:
+                    self._callbacks[symbol] = []
+                if callback and callback not in self._callbacks[symbol]:
+                    self._callbacks[symbol].append(callback)
+
+            # 发送订阅请求
             request = {
                 'type': 'SUBSCRIBE',
-                'symbols': symbols
+                'symbols': symbols,
+                'callback_id': id(callback) if callback else None
             }
             self._send_message(request)
 
-            # TODO: 设置回调处理
+            # 启动回调处理（如果需要）
+            if callback and not self._callback_thread:
+                import threading
+                self._callback_thread = threading.Thread(
+                    target=self._process_callbacks,
+                    daemon=True,
+                    name="QMT-Callback-Processor"
+                )
+                self._callback_thread.start()
+                logger.debug(f"Started callback processor for {len(symbols)} symbols")
+
+            logger.info(f"QMT subscribed {len(symbols)} symbols with callback")
             return True
 
         except Exception as e:
             logger.error(f"标准QMT订阅失败: {e}")
             return False
+
+    def _process_callbacks(self):
+        """处理回调的后台线程"""
+        import time
+        while self.connected:
+            try:
+                # 检查是否有新数据
+                if hasattr(self, '_data_queue'):
+                    # 从数据队列获取数据
+                    while not self._data_queue.empty():
+                        data = self._data_queue.get_nowait()
+                        if data and 'symbol' in data:
+                            symbol = data['symbol']
+                            if symbol in self._callbacks:
+                                # 异步调用所有回调
+                                for callback in self._callbacks[symbol]:
+                                    try:
+                                        callback(data)
+                                    except Exception as e:
+                                        logger.error(f"Callback error for {symbol}: {e}")
+                time.sleep(0.01)  # 短暂休眠避免CPU占用
+            except Exception as e:
+                if self.connected:
+                    logger.debug(f"Callback processor: {e}")
+                time.sleep(0.1)
 
     async def get_special_data(self, data_type: str, **kwargs) -> Any:
         """获取特殊数据"""

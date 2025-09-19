@@ -433,7 +433,7 @@ class AppState:
             self.monitor = self.engine._monitor
         else:
             # 从引擎获取事件引擎组件
-            from deepsearch.core.unified_components import EventEngineComponent
+            from deepsearch.core.components import EventEngineComponent
             event_engine_component = self.engine.get_component(EventEngineComponent)
             if event_engine_component:
                 event_engine = event_engine_component.get_instance()
@@ -632,7 +632,7 @@ def create_app() -> FastAPI:
     from deepsearch.webui.api.endpoints.system.system import router as system
     from deepsearch.webui.api.endpoints.system.health import router as health
     from deepsearch.webui.api.errors import router as errors
-    from deepsearch.webui.api.endpoints.monitoring.monitor_api import router as monitor_api
+    from deepsearch.webui.api.endpoints.monitor.monitor_api import router as monitor_api
     from deepsearch.webui.api.endpoints.system.config import router as config
     from deepsearch.webui.api.endpoints.system.logs import router as logs
     from deepsearch.webui.api.endpoints.data.data import router as data
@@ -648,6 +648,8 @@ def create_app() -> FastAPI:
     from deepsearch.webui.api.endpoints.trading.market_overview import router as market_overview
     from deepsearch.webui.api.stock_comment import router as stock_comment
     from deepsearch.webui.api.endpoints.data.akshare_apis import router as akshare_apis
+    from deepsearch.webui.api.endpoints.amazingdata import router as amazingdata_api
+    from deepsearch.webui.api.endpoints.route_adapter import router as route_adapter
 
     app.include_router(monitor_api, prefix="/api/monitor", tags=["Monitor"])
     app.include_router(config, prefix="/api/system/config", tags=["Config"])
@@ -670,6 +672,7 @@ def create_app() -> FastAPI:
     app.include_router(market_overview, tags=["MarketOverview"])  # 市场总貌API
     app.include_router(stock_comment, tags=["StockComment"])  # 千股千评API
     app.include_router(akshare_apis, tags=["AkShareAPIs"])  # AkShare API列表
+    app.include_router(amazingdata_api, tags=["AmazingData"])  # AmazingData全部35个API接口
 
     # 数据源状态管理API
     try:
@@ -705,12 +708,14 @@ def create_app() -> FastAPI:
         logger.warning(f"数据源配置API模块加载失败: {e}")
 
     # 数据源测试API
-    try:
-        from deepsearch.webui.api.endpoints.data.test_data_source import router as test_data_source
-        app.include_router(test_data_source, tags=["DataSourceTest"])  # 数据源测试API，包含 /api/data-source 前缀
-        logger.info("数据源测试API已注册")
-    except ImportError as e:
-        logger.warning(f"数据源测试API模块加载失败: {e}")
+    # 注意：已禁用旧的test_data_source路由，避免与datasource_manager中的新路由冲突 (2025-09-18)
+    # 新的测试端点在datasource_manager中实现，包含了更好的错误处理和AmazingData支持
+    # try:
+    #     from deepsearch.webui.api.endpoints.data.test_data_source import router as test_data_source
+    #     app.include_router(test_data_source, tags=["DataSourceTest"])  # 数据源测试API，包含 /api/data-source 前缀
+    #     logger.info("数据源测试API已注册")
+    # except ImportError as e:
+    #     logger.warning(f"数据源测试API模块加载失败: {e}")
 
     # MiniQMT API
     try:
@@ -771,6 +776,30 @@ def create_app() -> FastAPI:
     except ImportError as e:
         logger.warning(f"数据源管理API V2模块加载失败: {e}")
 
+    # 注册缓存管理API (P2级新增真实实现)
+    try:
+        from deepsearch.webui.api.endpoints.cache import router as cache_api
+        app.include_router(cache_api, prefix="/api", tags=["Cache Management"])
+        logger.info("缓存管理API已注册（真实实现）")
+    except ImportError as e:
+        logger.warning(f"缓存管理API模块加载失败: {e}")
+
+    # 注册图表数据API (P2级新增真实实现)
+    try:
+        from deepsearch.webui.api.endpoints.chart import router as chart_api_v2
+        app.include_router(chart_api_v2, prefix="/api", tags=["Chart Data V2"])
+        logger.info("图表数据API V2已注册（真实实现）")
+    except ImportError as e:
+        logger.warning(f"图表数据API V2模块加载失败: {e}")
+
+    # 注册市场分析API (P2级新增真实实现)
+    try:
+        from deepsearch.webui.api.endpoints.market import router as market_api_v2
+        app.include_router(market_api_v2, prefix="/api", tags=["Market Analysis V2"])
+        logger.info("市场分析API V2已注册（真实实现）")
+    except ImportError as e:
+        logger.warning(f"市场分析API V2模块加载失败: {e}")
+
     # 注册市场数据API
     try:
         from deepsearch.webui.api.endpoints.data.market_data_api import router as market_data_api
@@ -787,6 +816,14 @@ def create_app() -> FastAPI:
     except ImportError as e:
         logger.warning(f"市场概览API模块加载失败: {e}")
 
+    # 注册AmazingData API (P4级新增)
+    try:
+        from deepsearch.webui.api.endpoints.amazingdata import main_router as amazingdata_router
+        app.include_router(amazingdata_router, tags=["AmazingData"])
+        logger.info("AmazingData API已注册（37个接口）")
+    except ImportError as e:
+        logger.warning(f"AmazingData API模块加载失败: {e}")
+
     # 注册监控指标API
     try:
         from deepsearch.webui.api.endpoints.monitoring.metrics_api import router as metrics_api
@@ -797,6 +834,10 @@ def create_app() -> FastAPI:
 
     # 注释掉 Cloudflare Tunnel API，因为不需要映射 webui 端口
     # Cloudflare Tunnel 已移除（使用 Workers 代理方案）
+
+    # 注册路由适配器（必须放在最后，作为catch-all路由）
+    app.include_router(route_adapter, tags=["RouteAdapter"])
+    logger.info("API路由适配器已注册，处理前后端API不匹配问题")
 
     return app
 

@@ -34,7 +34,7 @@ class QMTDataProvider:
             # 获取QMT网关实例
             # 通过全局上下文获取主引擎，然后获取组件
             from deepsearch.core.runtime.context import get_context
-            from deepsearch.core.unified_components import QMTGatewayComponent
+            from deepsearch.core.components import QMTGatewayComponent
 
             context = get_context()
             engine = context.get_engine()

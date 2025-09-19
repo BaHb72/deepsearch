@@ -364,6 +364,148 @@ class MultiSourceData:
                     'params': source.params._getkwargs()
                 }
 
-        # TODO: 实现更详细的数据对比
+        # 实现更详细的数据对比
+        if len(source_names) >= 2:
+            # 获取第一个数据源作为基准
+            base_name = source_names[0]
+            base_source = self.sources.get(base_name)
+
+            if base_source and hasattr(base_source, 'data'):
+                base_data = base_source.data
+
+                # 对比每个数据源与基准数据源
+                for name in source_names[1:]:
+                    if name in self.sources:
+                        compare_source = self.sources[name]
+
+                        if hasattr(compare_source, 'data'):
+                            compare_data = compare_source.data
+
+                            # 对比数据差异
+                            diff = self._calculate_data_differences(
+                                base_name, base_data,
+                                name, compare_data
+                            )
+
+                            if diff:
+                                comparison['differences'].append(diff)
+
+            # 添加统计信息
+            comparison['statistics'] = self._calculate_comparison_stats(source_names)
 
         return comparison
+
+    def _calculate_data_differences(self, base_name: str, base_data,
+                                   compare_name: str, compare_data) -> Dict[str, Any]:
+        """
+        计算两个数据源之间的差异
+
+        Args:
+            base_name: 基准数据源名称
+            base_data: 基准数据
+            compare_name: 对比数据源名称
+            compare_data: 对比数据
+
+        Returns:
+            差异信息
+        """
+        diff_info = {
+            'base_source': base_name,
+            'compare_source': compare_name,
+            'differences': []
+        }
+
+        try:
+            # 对比数据长度
+            base_len = len(base_data) if hasattr(base_data, '__len__') else 0
+            compare_len = len(compare_data) if hasattr(compare_data, '__len__') else 0
+
+            if base_len != compare_len:
+                diff_info['differences'].append({
+                    'type': 'length',
+                    'base_length': base_len,
+                    'compare_length': compare_len,
+                    'diff': compare_len - base_len
+                })
+
+            # 如果都有数据，对比具体值
+            if base_len > 0 and compare_len > 0:
+                # 对比前几条数据
+                sample_size = min(5, base_len, compare_len)
+
+                for i in range(sample_size):
+                    base_item = base_data[i]
+                    compare_item = compare_data[i] if i < compare_len else None
+
+                    if compare_item and hasattr(base_item, 'close') and hasattr(compare_item, 'close'):
+                        # 对比收盘价
+                        if abs(base_item.close[0] - compare_item.close[0]) > 0.01:
+                            diff_info['differences'].append({
+                                'type': 'value',
+                                'index': i,
+                                'field': 'close',
+                                'base_value': float(base_item.close[0]),
+                                'compare_value': float(compare_item.close[0]),
+                                'diff': float(compare_item.close[0] - base_item.close[0])
+                            })
+
+                    if compare_item and hasattr(base_item, 'datetime') and hasattr(compare_item, 'datetime'):
+                        # 对比时间戳
+                        base_dt = base_item.datetime.datetime(0)
+                        compare_dt = compare_item.datetime.datetime(0)
+
+                        if base_dt != compare_dt:
+                            diff_info['differences'].append({
+                                'type': 'timestamp',
+                                'index': i,
+                                'base_time': base_dt.isoformat(),
+                                'compare_time': compare_dt.isoformat()
+                            })
+
+            # 统计差异数量
+            diff_info['diff_count'] = len(diff_info['differences'])
+            diff_info['has_differences'] = diff_info['diff_count'] > 0
+
+        except Exception as e:
+            logger.error(f"计算数据差异失败: {e}")
+            diff_info['error'] = str(e)
+
+        return diff_info
+
+    def _calculate_comparison_stats(self, source_names: list) -> Dict[str, Any]:
+        """
+        计算对比统计信息
+
+        Args:
+            source_names: 数据源名称列表
+
+        Returns:
+            统计信息
+        """
+        stats = {
+            'total_sources': len(source_names),
+            'available_sources': 0,
+            'data_ranges': {}
+        }
+
+        for name in source_names:
+            if name in self.sources:
+                source = self.sources[name]
+                stats['available_sources'] += 1
+
+                # 获取数据范围
+                if hasattr(source, 'data') and len(source.data) > 0:
+                    try:
+                        first_data = source.data[0]
+                        last_data = source.data[-1]
+
+                        if hasattr(first_data, 'datetime') and hasattr(last_data, 'datetime'):
+                            stats['data_ranges'][name] = {
+                                'start': first_data.datetime.datetime(0).isoformat(),
+                                'end': last_data.datetime.datetime(0).isoformat(),
+                                'count': len(source.data)
+                            }
+                    except Exception as e:
+                        logger.debug(f"获取数据范围失败: {e}")
+
+        return stats

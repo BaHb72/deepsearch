@@ -199,10 +199,15 @@ def cache_invalidate(
             # Invalidate cache
             if cache_manager and pattern:
                 try:
-                    # For now, just clear all cache
-                    # TODO: Implement pattern-based invalidation
-                    await cache_manager.clear()
-                    logger.debug(f"Cache invalidated for pattern: {pattern}")
+                    # Implement pattern-based invalidation
+                    if hasattr(cache_manager, 'clear_pattern'):
+                        # Use pattern-based clearing if available
+                        cleared_count = await cache_manager.clear_pattern(pattern)
+                        logger.debug(f"Cache invalidated for pattern: {pattern}, cleared {cleared_count} entries")
+                    else:
+                        # Fallback to clearing all cache if pattern clearing not supported
+                        await cache_manager.clear()
+                        logger.debug(f"Cache invalidated (all cleared) for pattern: {pattern}")
                 except Exception as e:
                     logger.warning(f"Error invalidating cache: {e}")
             
@@ -218,8 +223,14 @@ def cache_invalidate(
                 try:
                     import asyncio
                     loop = asyncio.get_event_loop()
-                    loop.run_until_complete(cache_manager.clear())
-                    logger.debug(f"Cache invalidated for pattern: {pattern}")
+                    if hasattr(cache_manager, 'clear_pattern'):
+                        # Use pattern-based clearing if available
+                        cleared_count = loop.run_until_complete(cache_manager.clear_pattern(pattern))
+                        logger.debug(f"Cache invalidated for pattern: {pattern}, cleared {cleared_count} entries")
+                    else:
+                        # Fallback to clearing all cache if pattern clearing not supported
+                        loop.run_until_complete(cache_manager.clear())
+                        logger.debug(f"Cache invalidated (all cleared) for pattern: {pattern}")
                 except Exception as e:
                     logger.warning(f"Error invalidating cache: {e}")
             

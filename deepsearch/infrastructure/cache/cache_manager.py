@@ -138,18 +138,67 @@ class CacheManager:
     async def clear(self, tier: Optional[str] = None) -> None:
         """
         Clear cache.
-        
+
         Args:
             tier: Specific tier to clear ('l1', 'l2') or None for all
         """
         if tier is None or tier == 'l1':
             await self.l1_cache.clear()
-        
+
         if (tier is None or tier == 'l2') and self.l2_cache:
             try:
                 await self.l2_cache.clear()
             except Exception as e:
                 logger.warning(f"Failed to clear L2 cache: {e}")
+
+    async def clear_pattern(self, pattern: str) -> int:
+        """
+        Clear cache entries matching a pattern.
+
+        Supports wildcards:
+        - '*' matches any sequence of characters
+        - '?' matches a single character
+
+        Args:
+            pattern: Pattern to match (e.g., "stock:*", "user:?:*")
+
+        Returns:
+            Number of entries cleared
+        """
+        import re
+
+        # Convert pattern to regex
+        # Replace wildcards with regex equivalents
+        regex_pattern = pattern.replace('*', '.*').replace('?', '.')
+        regex_pattern = '^' + regex_pattern + '$'
+        compiled_pattern = re.compile(regex_pattern)
+
+        cleared_count = 0
+
+        # Clear from L1 cache (memory cache)
+        if hasattr(self.l1_cache, 'cache') and isinstance(self.l1_cache.cache, dict):
+            keys_to_delete = []
+            for key in list(self.l1_cache.cache.keys()):
+                if compiled_pattern.match(key):
+                    keys_to_delete.append(key)
+
+            for key in keys_to_delete:
+                await self.l1_cache.delete(key)
+                cleared_count += 1
+                logger.debug(f"Cleared L1 cache key: {key}")
+
+        # Clear from L2 cache if available
+        if self.l2_cache:
+            try:
+                # For Redis-like caches, use SCAN and DEL commands
+                # This is a simplified implementation
+                # Real implementation would depend on the L2 cache type
+                pass  # L2 implementation depends on cache provider
+            except Exception as e:
+                logger.warning(f"Failed to clear L2 cache pattern: {e}")
+
+        logger.info(f"Cleared {cleared_count} cache entries matching pattern: {pattern}")
+        return cleared_count
     
     async def warm_cache(self, keys: List[str], loader_func) -> None:
         """
