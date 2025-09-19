@@ -504,9 +504,49 @@ class AmazingDataProvider(DataProvider):
     async def _restore_subscriptions(self) -> None:
         """恢复订阅"""
         logger.debug("Restoring subscriptions | count={}".format(len(self._subscriptions)))
-        for symbol, info in self._subscriptions.items():
-            # 重新订阅每个符号
-            pass  # TODO: 实现订阅恢复
+
+        if not self._subscriptions:
+            logger.debug("No subscriptions to restore")
+            return
+
+        # 保存当前订阅信息的副本
+        subscriptions_copy = dict(self._subscriptions)
+        self._subscriptions.clear()
+
+        # 重新初始化订阅管理器
+        if not self._subscription_data:
+            self._init_subscription_manager()
+
+        # 恢复每个订阅
+        for symbol, info in subscriptions_copy.items():
+            try:
+                callbacks = info.get('callbacks', [])
+                data_type = info.get('data_type', 'quote')
+
+                logger.debug(f"Restoring subscription for {symbol} | type={data_type} | callbacks={len(callbacks)}")
+
+                # 重新订阅
+                if callbacks:
+                    # 按数据类型分组重新订阅
+                    await self.subscribe_quote(
+                        symbols=[symbol],
+                        callback=callbacks[0] if callbacks else None,
+                        data_type=data_type
+                    )
+
+                    # 添加其他回调
+                    for callback in callbacks[1:]:
+                        if symbol not in self._subscriptions:
+                            self._subscriptions[symbol] = {'callbacks': [], 'data_type': data_type}
+                        self._subscriptions[symbol]['callbacks'].append(callback)
+
+                    logger.info(f"Successfully restored subscription for {symbol}")
+
+            except Exception as e:
+                logger.error(f"Failed to restore subscription for {symbol}: {e}")
+                # 继续恢复其他订阅，不中断整个过程
+
+        logger.info(f"Subscription restoration complete | restored={len(self._subscriptions)}/{len(subscriptions_copy)}")
 
     async def _trigger_alert(self, alert_type: str, message: str) -> None:
         """
