@@ -61,32 +61,8 @@ async def database_status_redirect():
     })
 
 
-# Market模块适配器
-@router.get("/market/overview")
-async def market_overview_adapter():
-    """适配市场总览"""
-    return JSONResponse({
-        "success": True,
-        "data": {
-            "total_stocks": 5000,
-            "trading_stocks": 4500,
-            "rising": 2000,
-            "falling": 2000,
-            "flat": 500,
-            "message": "市场数据正在更新中"
-        }
-    })
-
-
-@router.get("/market/sectors")
-async def market_sectors_adapter():
-    """适配板块数据"""
-    return JSONResponse({
-        "success": True,
-        "data": [],
-        "message": "板块数据正在集成中"
-    })
-
+# Market模块已实现真实API (market_api.py)
+# 前端市场分析接口已实现，包括市场概览、板块分析、排行榜等
 
 # QMT模块适配器
 @router.get("/qmt/status")

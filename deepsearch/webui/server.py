@@ -792,6 +792,14 @@ def create_app() -> FastAPI:
     except ImportError as e:
         logger.warning(f"图表数据API V2模块加载失败: {e}")
 
+    # 注册市场分析API (P2级新增真实实现)
+    try:
+        from deepsearch.webui.api.endpoints.market import router as market_api_v2
+        app.include_router(market_api_v2, prefix="/api", tags=["Market Analysis V2"])
+        logger.info("市场分析API V2已注册（真实实现）")
+    except ImportError as e:
+        logger.warning(f"市场分析API V2模块加载失败: {e}")
+
     # 注册市场数据API
     try:
         from deepsearch.webui.api.endpoints.data.market_data_api import router as market_data_api

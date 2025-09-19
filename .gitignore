@@ -127,12 +127,23 @@ ISSUES_*.md
 /docs/solutions/
 
 # ==================== Data Files ====================
-/data/
-data/monitoring/*.json
-data/cache/
-data/analytics/*.duckdb
-data/analytics/*.duckdb.wal
-deepsearch/data/monitoring/*.json
+# Data directory - only keep structure, ignore data files
+/data/**/*.db
+/data/**/*.duckdb
+/data/**/*.duckdb.wal
+/data/**/*.parquet
+/data/**/*.log
+/data/**/*.json
+/data/cache/
+/data/temp/
+/data/logs/
+/data/monitoring/
+/data/analytics/
+/data/datasourceapi/
+# Keep directory structure
+!/data/**/.gitkeep
+# Legacy data paths
+deepsearch/data/
 diagnostic_log.json
 
 # ==================== Deployment ====================
