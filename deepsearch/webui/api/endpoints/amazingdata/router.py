@@ -11,6 +11,8 @@ from .basic_data import router as basic_data_router
 from .realtime import router as realtime_router
 from .history import router as history_router
 from .financial import router as financial_router
+from .margin import router as margin_router
+from .shareholder import router as shareholder_router
 
 # 创建主路由器
 router = APIRouter(prefix="/api/amazingdata", tags=["AmazingData"])
@@ -20,6 +22,8 @@ router.include_router(basic_data_router, prefix="/basic")
 router.include_router(realtime_router, prefix="/realtime")
 router.include_router(history_router, prefix="/history")
 router.include_router(financial_router, prefix="/financial")
+router.include_router(margin_router, prefix="/margin")
+router.include_router(shareholder_router, prefix="/shareholder")
 
 # 添加根路径信息接口
 @router.get("/", summary="AmazingData API信息")
@@ -32,7 +36,7 @@ async def get_api_info():
     """
     return {
         "name": "AmazingData Web API",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "description": "AmazingData SDK的RESTful API封装",
         "modules": {
             "basic_data": {
@@ -54,9 +58,19 @@ async def get_api_info():
                 "path": "/api/amazingdata/financial",
                 "description": "财务数据接口",
                 "endpoints": 6
+            },
+            "margin": {
+                "path": "/api/amazingdata/margin",
+                "description": "融资融券和龙虎榜接口",
+                "endpoints": 3
+            },
+            "shareholder": {
+                "path": "/api/amazingdata/shareholder",
+                "description": "股东股本和分红配股接口",
+                "endpoints": 7
             }
         },
-        "total_endpoints": 28,
+        "total_endpoints": 38,
         "features": [
             "模块化设计",
             "统一错误处理",
