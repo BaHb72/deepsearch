@@ -179,6 +179,19 @@ class AsyncComponentV2(Component, StatisticsProvider, ABC, Generic[T]):
             self._logger.error(f"组件 {self._name} 启动失败: {e}")
             raise ComponentLifecycleError(self._name, "start", str(e))
 
+    # 向后兼容的别名方法
+    async def initialize_async(self) -> None:
+        """初始化组件（向后兼容别名）"""
+        await self.initialize()
+
+    async def start_async(self) -> None:
+        """启动组件（向后兼容别名）"""
+        await self.start()
+
+    async def stop_async(self) -> None:
+        """停止组件（向后兼容别名）"""
+        await self.stop()
+
     async def stop(self) -> None:
         """
         停止组件（公共接口）

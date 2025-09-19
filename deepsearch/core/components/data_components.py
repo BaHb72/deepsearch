@@ -40,7 +40,7 @@ class DatabaseComponent(AsyncComponent[Any]):
         pattern = r'^[a-zA-Z_][a-zA-Z0-9_]*$'
         return bool(re.match(pattern, table_name))
 
-    async def _initialize(self) -> None:
+    async def _do_initialize(self) -> Optional[Any]:
         """初始化数据库连接"""
         with error_context(self.name, "initialize"):
             config = get_config()
@@ -49,26 +49,24 @@ class DatabaseComponent(AsyncComponent[Any]):
             # 检查是否应该自动连接
             if not db_config.main.auto_connect:
                 self._logger.info("数据库组件已初始化（未连接）- auto_connect=false")
-                # 设置实例为self以满足基类要求
-                self._instance = self
-                return
+                return None  # 返回None表示没有资源
 
             # 使用 connect_async 方法来建立连接
             try:
                 await self.connect_async()
                 self._logger.info("[OK] 数据库组件初始化成功")
+                return self  # 返回self作为资源对象
             except Exception as e:
                 # 自动连接失败时允许组件继续运行（可以稍后手动连接）
                 self._logger.warning(f"数据库自动连接失败: {e}")
-                # 设置实例为self以满足基类要求
-                self._instance = self
+                return None  # 返回None表示连接失败
 
-    async def _start(self) -> None:
+    async def _do_start(self) -> None:
         """启动数据库服务"""
         # 数据库通常不需要显式启动
         pass
 
-    async def _stop(self) -> None:
+    async def _do_stop(self) -> None:
         """停止数据库服务"""
         with error_context(self.name, "stop"):
             if self._engine:
@@ -228,8 +226,7 @@ class DatabaseComponent(AsyncComponent[Any]):
             self._session_factory = None
             raise RuntimeError(f"数据库连接失败: {e}")
 
-        # 设置实例为self以满足基类要求
-        self._instance = self
+        # 不需要设置_instance，基类会管理资源
 
     async def disconnect_async(self) -> None:
         """
@@ -274,7 +271,7 @@ class CacheComponent(AsyncComponent[Any]):
         self._connection_error = None
         self._timeout_manager = get_timeout_manager()
 
-    async def _initialize(self) -> None:
+    async def _do_initialize(self) -> Optional[Any]:
         """初始化缓存连接"""
         with error_context(self.name, "initialize"):
             # 检查缓存配置
@@ -284,8 +281,7 @@ class CacheComponent(AsyncComponent[Any]):
             # 检查是否启用
             if not cache_config.enabled:
                 self._logger.info("Redis 缓存功能已禁用")
-                self._instance = self
-                return
+                return None  # 返回None表示没有资源
 
             # 获取Redis配置
             redis_config = cache_config.model_dump()
@@ -304,9 +300,9 @@ class CacheComponent(AsyncComponent[Any]):
                 self._connected = False
                 self._connection_error = str(e)
 
-            # 设置实例为self以满足基类要求
-            self._instance = self
+            # 返回self作为资源对象
             self._logger.info("缓存组件初始化完成")
+            return self
 
     async def _connect_to_redis(self) -> None:
         """建立Redis连接（带超时保护）"""
@@ -360,7 +356,7 @@ class CacheComponent(AsyncComponent[Any]):
             self._logger.error(f"Redis 连接失败: {e}")
             raise
 
-    async def _start(self) -> None:
+    async def _do_start(self) -> None:
         """启动缓存服务"""
         # 如果连接已断开，尝试重新连接
         if not self._connected and self._redis_config:
@@ -369,7 +365,7 @@ class CacheComponent(AsyncComponent[Any]):
             except Exception as e:
                 self._logger.error(f"启动时重新连接 Redis 失败: {e}")
 
-    async def _stop(self) -> None:
+    async def _do_stop(self) -> None:
         """停止缓存服务"""
         if self._redis_client:
             try:

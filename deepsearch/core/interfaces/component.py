@@ -17,6 +17,7 @@ class ComponentStatus(Enum):
     STOPPING = "stopping"
     STOPPED = "stopped"
     ERROR = "error"
+    UNKNOWN = "unknown"  # 未知状态
 
 
 class ComponentType(Enum):

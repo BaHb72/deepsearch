@@ -8,7 +8,8 @@ import asyncio
 from typing import Optional, Dict, Any
 
 from deepsearch.config import get_config
-from ..async_component import AsyncComponent
+from ..async_component_v2 import AsyncComponent
+from typing import Optional
 from ..utils.exceptions import error_context, ComponentLifecycleError
 from ..interfaces import ComponentType
 from ..utils.timeout_config import TimeoutManager, TimeoutCategory
@@ -35,13 +36,12 @@ class BacktestComponent(AsyncComponent):
         self._message_bus = message_bus
         self._data_provider = data_provider
 
-    async def _initialize(self) -> None:
+    async def _do_initialize(self) -> Optional[Any]:
         """初始化回测组件"""
         with error_context(self.name, "initialize"):
             if not self._enabled:
                 self._logger.info("回测组件已禁用")
-                self._instance = self
-                return
+                return None  # 返回None表示没有资源
 
             # 使用超时控制进行初始化
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_INIT)
@@ -69,8 +69,8 @@ class BacktestComponent(AsyncComponent):
 
                     # 初始化回测组件
                     await self._backtest_instance._initialize()
-                    self._instance = self._backtest_instance
                     self._logger.info("回测组件初始化完成")
+                    return self._backtest_instance  # 返回回测实例作为资源
 
                 await asyncio.wait_for(_init_backtest(), timeout=timeout)
             except asyncio.TimeoutError:
@@ -79,7 +79,7 @@ class BacktestComponent(AsyncComponent):
                     f"Backtest initialization timeout after {timeout} seconds"
                 )
 
-    async def _start(self) -> None:
+    async def _do_start(self) -> None:
         """启动回测组件"""
         with error_context(self.name, "start"):
             if not self._enabled:
@@ -97,7 +97,7 @@ class BacktestComponent(AsyncComponent):
                         f"Backtest start timeout after {timeout} seconds"
                     )
 
-    async def _stop(self) -> None:
+    async def _do_stop(self) -> None:
         """停止回测组件"""
         with error_context(self.name, "stop"):
             if not self._enabled:

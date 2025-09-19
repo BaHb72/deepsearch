@@ -2,7 +2,7 @@
 基础设施组件
 包含事件引擎和消息总线等核心基础设施组件
 """
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from deepsearch.config import get_config
 from deepsearch.event.engine.engine import EventEngine
@@ -18,16 +18,14 @@ class EventEngineComponent(SimpleAsyncComponent[EventEngine]):
 
     def __init__(self, queue_size: int = 10000, max_workers: int = 32,
                  batch_size: int = 100):
+        # 传递给EventEngine的参数通过factory_kwargs传递
         super().__init__(
             name="event_engine",
             component_type=ComponentType.INFRASTRUCTURE,
             instance_factory=EventEngine,
             display_name="事件引擎",
             queue_size=queue_size,
-            max_workers=max_workers,
-            enable_batch_processing=True,
-            batch_size=batch_size,
-            batch_timeout=0.1
+            max_workers=max_workers
         )
         self.queue_size = queue_size
         self.max_workers = max_workers
@@ -83,7 +81,7 @@ class MessageBusComponent(AsyncComponent[CompositeMessageBus]):
     def __init__(self):
         super().__init__("message_bus", ComponentType.INFRASTRUCTURE, "消息总线")
 
-    async def _initialize(self) -> None:
+    async def _do_initialize(self) -> Optional[CompositeMessageBus]:
         """初始化消息总线"""
         with error_context(self.name, "initialize"):
             # 从配置创建消息总线
@@ -133,28 +131,33 @@ class MessageBusComponent(AsyncComponent[CompositeMessageBus]):
                 buses['inmem'] = MessageBusFactory.create('inmem', {})
                 routes.append(RouteConfig(match='*', buses=['inmem']))
 
-            # 创建CompositeMessageBus实例
-            self._instance = CompositeMessageBus(buses=buses, routes=routes)
+            # 创建CompositeMessageBus实例并返回
+            instance = CompositeMessageBus(buses=buses, routes=routes)
             self._logger.info(f"消息总线初始化完成: {len(buses)} 个总线, {len(routes)} 条路由")
+            return instance  # 返回实例，由状态管理器管理
 
-    async def _start(self) -> None:
+    async def _do_start(self) -> None:
         """启动消息总线"""
         with error_context(self.name, "start"):
-            if self._instance:
-                self._instance.start()  # start 是同步方法
+            instance = self.resource
+            if instance:
+                instance.start()  # start 是同步方法
 
-    async def _stop(self) -> None:
+    async def _do_stop(self) -> None:
         """停止消息总线"""
         with error_context(self.name, "stop"):
-            if self._instance:
-                self._instance.stop()  # stop 是同步方法
+            instance = self.resource
+            if instance:
+                instance.stop()  # stop 是同步方法
 
     def _health_check(self) -> bool:
         """检查消息总线健康状态"""
-        return self._instance and self._instance.is_running()
+        instance = self.resource
+        return instance and instance.is_running() if instance else False
 
     def get_statistics(self) -> Dict[str, Any]:
         """获取消息总线统计信息"""
-        if self._instance:
-            return self._instance.get_statistics()
+        instance = self.resource
+        if instance:
+            return instance.get_statistics()
         return {}
