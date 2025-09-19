@@ -81,13 +81,16 @@ class ApiDocumentGenerator:
     def scan_backend(self):
         """扫描后端 API 路由"""
         logger.info("扫描后端 API 路由...")
-        
+
         # 扫描所有 Python 文件
         for py_file in BACKEND_DIR.rglob("*.py"):
             if "__pycache__" in str(py_file):
                 continue
-            
+
             self._parse_python_file(py_file)
+
+        # 递归扫描include_router引用的模块
+        self._scan_included_routers()
     
     def _parse_python_file(self, file_path: Path):
         """解析 Python 文件中的路由定义"""
@@ -177,8 +180,9 @@ class ApiDocumentGenerator:
     def _extract_category(self, file_path: Path) -> str:
         """根据文件路径提取分类"""
         path_str = str(file_path)
-        
+
         categories = {
+            "amazingdata": "AmazingData",
             "system": "系统管理",
             "database": "数据库",
             "market": "市场数据",
@@ -190,12 +194,142 @@ class ApiDocumentGenerator:
             "strategy": "策略",
             "backtest": "回测"
         }
-        
+
         for key, value in categories.items():
             if key in path_str.lower():
                 return value
-        
+
         return "其他"
+
+    def _scan_included_routers(self):
+        """递归扫描include_router引用的模块"""
+        logger.info("扫描嵌套路由器...")
+
+        # 查找所有include_router调用
+        router_imports = {}
+        for py_file in BACKEND_DIR.rglob("*.py"):
+            if "__pycache__" in str(py_file):
+                continue
+
+            try:
+                with open(py_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+
+                # 查找include_router调用
+                include_patterns = [
+                    r'app\.include_router\s*\(\s*([^,\)]+)',
+                    r'router\.include_router\s*\(\s*([^,\)]+)'
+                ]
+
+                for pattern in include_patterns:
+                    matches = re.findall(pattern, content)
+                    for match in matches:
+                        router_var = match.strip()
+                        # 查找对应的import语句
+                        import_pattern = rf'from\s+([^\s]+)\s+import\s+.*\s+as\s+{router_var}|from\s+([^\s]+)\s+import\s+{router_var}'
+                        import_match = re.search(import_pattern, content)
+                        if import_match:
+                            module_path = import_match.group(1) or import_match.group(2)
+                            # 处理相对导入
+                            if module_path.startswith('.'):
+                                base_path = py_file.parent
+                                module_file = self._resolve_module_path(base_path, module_path)
+                                if module_file and module_file.exists():
+                                    self._parse_router_module(module_file, router_var)
+
+            except Exception as e:
+                logger.error(f"扫描include_router失败 {py_file}: {e}")
+
+    def _resolve_module_path(self, base_path: Path, module_path: str) -> Optional[Path]:
+        """解析模块路径"""
+        # 处理相对导入路径
+        parts = module_path.split('.')
+        resolved_path = base_path
+
+        for i, part in enumerate(parts):
+            if part == '':  # 相对导入的点
+                resolved_path = resolved_path.parent if i > 0 else resolved_path
+            else:
+                resolved_path = resolved_path / part
+
+        # 尝试不同的文件扩展名
+        for ext in ['.py', '/__init__.py']:
+            file_path = Path(str(resolved_path) + ext)
+            if file_path.exists():
+                return file_path
+
+        return None
+
+    def _parse_router_module(self, file_path: Path, router_name: str, prefix: str = ""):
+        """解析路由器模块"""
+        logger.debug(f"解析路由器模块: {file_path}, router={router_name}, prefix={prefix}")
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                lines = content.split("\n")
+
+            # 查找路由器定义的前缀
+            prefix_pattern = rf'{router_name}\s*=\s*APIRouter\s*\(\s*prefix\s*=\s*["\']([^"\']+)["\']'
+            prefix_match = re.search(prefix_pattern, content)
+            if prefix_match:
+                current_prefix = prefix + prefix_match.group(1)
+            else:
+                current_prefix = prefix
+
+            # 查找该模块中的路由定义
+            router_patterns = [
+                rf'@{router_name}\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
+                r'@router\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
+            ]
+
+            for i, line in enumerate(lines):
+                for pattern in router_patterns:
+                    match = re.search(pattern, line)
+                    if match:
+                        # 添加前缀到路径
+                        full_path = current_prefix + match.group(2)
+                        endpoint = self._extract_endpoint_info(
+                            lines, i, match.group(1), full_path, file_path
+                        )
+                        if endpoint:
+                            # 避免重复添加
+                            endpoint_key = f"{endpoint.method}:{endpoint.path}"
+                            if endpoint_key not in self.backend_routes:
+                                self.endpoints.append(endpoint)
+                                self.backend_routes[endpoint_key] = endpoint
+                                logger.debug(f"发现API端点: {endpoint.method} {endpoint.path}")
+
+            # 递归查找该模块的include_router
+            include_patterns = [
+                rf'{router_name}\.include_router\s*\(\s*([^,\)]+)\s*,\s*prefix\s*=\s*["\']([^"\']+)["\']',
+                rf'{router_name}\.include_router\s*\(\s*([^,\)]+)'
+            ]
+
+            for pattern in include_patterns:
+                matches = re.findall(pattern, content)
+                for match in matches:
+                    if isinstance(match, tuple):
+                        sub_router = match[0].strip()
+                        sub_prefix = current_prefix + (match[1] if len(match) > 1 else "")
+                    else:
+                        sub_router = match.strip()
+                        sub_prefix = current_prefix
+
+                    # 查找子路由器的导入
+                    import_pattern = rf'from\s+([^\s]+)\s+import\s+.*\s+as\s+{sub_router}|from\s+([^\s]+)\s+import\s+{sub_router}'
+                    import_match = re.search(import_pattern, content)
+                    if import_match:
+                        module_path = import_match.group(1) or import_match.group(2)
+                        if module_path.startswith('.'):
+                            base_path = file_path.parent
+                            sub_module_file = self._resolve_module_path(base_path, module_path)
+                            if sub_module_file and sub_module_file.exists():
+                                # 递归解析子模块
+                                self._parse_router_module(sub_module_file, "router", sub_prefix)
+
+        except Exception as e:
+            logger.error(f"解析路由器模块失败 {file_path}: {e}")
     
     def scan_frontend(self):
         """扫描前端 API 调用"""
