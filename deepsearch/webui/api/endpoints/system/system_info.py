@@ -101,7 +101,7 @@ async def notify_port_change(
     """
     try:
         # 通过消息总线发布端口变更事件
-        from deepsearch.core.unified_components import MessageBusComponent
+        from deepsearch.core.components import MessageBusComponent
         message_bus_component = engine.get_component(MessageBusComponent)
 
         if message_bus_component:

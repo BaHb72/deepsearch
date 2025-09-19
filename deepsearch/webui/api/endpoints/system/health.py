@@ -34,7 +34,7 @@ async def get_health() -> Dict[str, Any]:
 
         # 增强：添加MessageBus健康状态
         try:
-            from deepsearch.core.unified_components import MessageBusComponent
+            from deepsearch.core.components import MessageBusComponent
             message_bus_component = engine.get_component(MessageBusComponent)
             if message_bus_component and message_bus_component.status.value == "running":
                 bus = message_bus_component.get_instance()

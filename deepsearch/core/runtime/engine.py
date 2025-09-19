@@ -26,7 +26,7 @@ from ..utils.exceptions import error_context
 from ..health.manager import HealthCheckManager
 from ..interfaces import Component, ComponentStatus
 from ..utils.ipc import EngineIPCServer
-from ..unified_components import (
+from ..components import (
     EventEngineComponent, MessageBusComponent, DatabaseComponent,
     CacheComponent, GatewayComponent, WebUIComponent, QMTGatewayComponent,
     AnalyticsComponent, BacktestComponent

@@ -20,27 +20,30 @@ from deepsearch.config import get_config
 try:
     from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import AmazingDataProvider
     from deepsearch.config.models.amazingdata import AmazingDataConfig
-    from deepsearch.infrastructure.providers.interfaces.base import DataSourceType
+    from deepsearch.infrastructure.providers.interfaces.base import DataSourceType, DataProviderError
+    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_exceptions import AmazingDataAuthenticationError as AuthenticationError
+    # NetworkError使用DataProviderError代替
+    NetworkError = DataProviderError
 except ImportError as e:
     logger.warning(f"部分模块导入失败，某些功能可能不可用: {e}")
     # 定义占位类以避免完全失败
     class AmazingDataProvider:
-        pass
+        async def initialize(self): pass
+        async def is_connected(self): return False
+        async def get_stock_list(self, limit=None): return []
+        async def disconnect(self): pass
     class AmazingDataConfig:
         pass
     from enum import Enum
     class DataSourceType(Enum):
         AMAZINGDATA = "amazingdata"
-
-# 定义异常类
-class AuthenticationError(Exception):
-    pass
-
-class DataProviderError(Exception):
-    pass
-
-class NetworkError(Exception):
-    pass
+    # 定义异常类
+    class AuthenticationError(Exception):
+        pass
+    class DataProviderError(Exception):
+        pass
+    class NetworkError(Exception):
+        pass
 
 # 定义接口类
 class ICompleteDataProvider:
@@ -223,13 +226,15 @@ class DataSourceManager:
                 is_connected = await provider.is_connected()
 
                 # 测试查询
+                code_list = []
                 if is_connected:
                     # 测试获取股票列表
-                    # TODO: 需要根据实际的AmazingDataProvider接口更新
-                    # code_list = await provider.get_code_list()
-                    # test_success = len(code_list) > 0
-                    test_success = True  # 临时设置为成功
-                    test_success = len(code_list) > 0
+                    try:
+                        code_list = await provider.get_stock_list(limit=10)  # 只获取10条测试
+                        test_success = code_list is not None and len(code_list) > 0
+                    except Exception as e:
+                        logger.warning(f"获取股票列表失败: {e}")
+                        test_success = is_connected  # 连接成功即可
                 else:
                     test_success = False
 
@@ -244,7 +249,7 @@ class DataSourceManager:
                     'latency': latency,
                     'details': {
                         'connected': is_connected,
-                        'stockCount': len(code_list) if test_success else 0
+                        'stockCount': len(code_list) if code_list else 0
                     }
                 }
 

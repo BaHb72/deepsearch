@@ -573,7 +573,20 @@ class AmazingDataProvider(DataProvider):
             if len(self._stats[alert_type]) > 10:
                 self._stats[alert_type] = self._stats[alert_type][-10:]
 
-            # TODO: 未来可以集成外部告警系统（邮件、微信、钉钉等）
+            # 集成告警系统
+            # 使用全局的ProviderHealthMonitor发送告警
+            from deepsearch.infrastructure.monitoring.provider_health import get_monitor
+            monitor = get_monitor()
+
+            # 记录错误或触发告警
+            if alert_type == "error":
+                monitor.record_error("amazingdata", alert_type, message)
+
+            # 触发监控系统的告警
+            monitor._trigger_alert("ERROR" if severity == "high" else "WARNING",
+                                 "amazingdata",
+                                 message,
+                                 alert_type)
 
         except Exception as e:
             logger.error(f"Failed to trigger alert: {e}")
@@ -1245,13 +1258,100 @@ class AmazingDataProvider(DataProvider):
             logger.error(f"处理订阅数据失败: {e}")
 
     def _convert_subscription_data(self, data: Any, period: int) -> Dict:
-        """转换订阅数据格式"""
-        # TODO: 根据数据类型进行格式转换
-        return {
-            'data': data,
-            'period': period,
-            'timestamp': datetime.now()
-        }
+        """
+        转换订阅数据格式
+
+        将AmazingData SDK的数据格式转换为统一的字典格式
+        """
+        try:
+            # 获取当前时间戳
+            timestamp = datetime.now()
+
+            # 基础数据结构
+            result = {
+                'period': period,
+                'timestamp': timestamp,
+                'raw_data': data
+            }
+
+            # 根据数据类型进行不同的转换
+            if hasattr(data, '__dict__'):
+                # 将SDK对象转换为字典
+                data_dict = {}
+
+                # 常见的快照数据字段
+                common_fields = [
+                    'code', 'name', 'time', 'price', 'open', 'high', 'low', 'close',
+                    'volume', 'amount', 'bid', 'ask', 'bid_volume', 'ask_volume',
+                    'pre_close', 'change', 'change_rate', 'turnover_rate',
+                    'pe', 'pb', 'market_cap', 'circulation_market_cap'
+                ]
+
+                # 提取存在的字段
+                for field in common_fields:
+                    if hasattr(data, field):
+                        value = getattr(data, field)
+                        # 处理特殊类型
+                        if hasattr(value, 'isoformat'):  # datetime类型
+                            data_dict[field] = value.isoformat()
+                        elif isinstance(value, (list, tuple)) and len(value) > 0:
+                            # 处理买卖盘数据
+                            if field in ['bid', 'ask', 'bid_volume', 'ask_volume']:
+                                data_dict[field] = list(value)[:5]  # 只取5档
+                            else:
+                                data_dict[field] = list(value)
+                        else:
+                            data_dict[field] = value
+
+                # 添加额外的字段（如果有）
+                for attr in dir(data):
+                    if not attr.startswith('_') and attr not in common_fields:
+                        try:
+                            value = getattr(data, attr)
+                            if not callable(value):
+                                data_dict[attr] = value
+                        except:
+                            pass
+
+                result['data'] = data_dict
+                result['data_type'] = type(data).__name__
+
+            elif isinstance(data, dict):
+                # 已经是字典格式
+                result['data'] = data
+                result['data_type'] = 'dict'
+
+            elif isinstance(data, (list, tuple)):
+                # 列表或元组数据
+                result['data'] = list(data)
+                result['data_type'] = 'list'
+
+            else:
+                # 其他类型直接保存
+                result['data'] = data
+                result['data_type'] = type(data).__name__
+
+            # 添加统计信息
+            if 'data' in result and isinstance(result['data'], dict):
+                # 计算涨跌幅
+                if 'change_rate' in result['data']:
+                    result['change_direction'] = 'up' if result['data']['change_rate'] > 0 else 'down'
+
+                # 添加数据完整性标记
+                required_fields = ['code', 'price', 'volume']
+                result['is_complete'] = all(f in result['data'] for f in required_fields)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"转换订阅数据格式失败: {e}")
+            # 返回原始数据
+            return {
+                'data': data,
+                'period': period,
+                'timestamp': datetime.now(),
+                'error': str(e)
+            }
 
     async def unsubscribe_quote(self, symbols: List[str]) -> bool:
         """

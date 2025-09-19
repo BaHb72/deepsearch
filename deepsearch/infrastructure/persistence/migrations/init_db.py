@@ -4,7 +4,7 @@
 """
 import asyncio
 
-from deepsearch.core.unified_components import DatabaseComponent
+from deepsearch.core.components import DatabaseComponent
 from deepsearch.observability.logger import logger
 from deepsearch.infrastructure.persistence.database import DatabaseService
 

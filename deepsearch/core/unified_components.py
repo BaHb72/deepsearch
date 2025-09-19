@@ -54,5 +54,5 @@ def _show_deprecation_warning():
         stacklevel=2
     )
 
-# 在模块导入时显示警告（可选，根据需要启用）
-# _show_deprecation_warning()
+# 在模块导入时显示警告
+_show_deprecation_warning()

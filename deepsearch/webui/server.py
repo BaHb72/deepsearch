@@ -433,7 +433,7 @@ class AppState:
             self.monitor = self.engine._monitor
         else:
             # 从引擎获取事件引擎组件
-            from deepsearch.core.unified_components import EventEngineComponent
+            from deepsearch.core.components import EventEngineComponent
             event_engine_component = self.engine.get_component(EventEngineComponent)
             if event_engine_component:
                 event_engine = event_engine_component.get_instance()
@@ -815,6 +815,14 @@ def create_app() -> FastAPI:
         logger.info("市场概览和排行榜API已注册")
     except ImportError as e:
         logger.warning(f"市场概览API模块加载失败: {e}")
+
+    # 注册AmazingData API (P4级新增)
+    try:
+        from deepsearch.webui.api.endpoints.amazingdata import main_router as amazingdata_router
+        app.include_router(amazingdata_router, tags=["AmazingData"])
+        logger.info("AmazingData API已注册（37个接口）")
+    except ImportError as e:
+        logger.warning(f"AmazingData API模块加载失败: {e}")
 
     # 注册监控指标API
     try:

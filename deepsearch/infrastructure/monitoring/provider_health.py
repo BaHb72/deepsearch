@@ -298,7 +298,101 @@ class ProviderHealthMonitor:
         log_func = getattr(logger, level.lower(), logger.info)
         log_func(f"[ALERT][{alert_type}] {provider}: {message}")
 
-        # TODO: 集成外部告警系统（邮件、微信、钉钉等）
+        # 集成告警系统
+        self._send_alert_notification_sync(alert)
+
+    def _send_alert_notification_sync(self, alert: Dict[str, Any]):
+        """
+        同步发送告警通知到各种渠道
+
+        Args:
+            alert: 告警信息字典
+        """
+        try:
+            # 1. WebSocket推送（如果有连接的客户端）
+            # 这里需要WebSocket管理器的集成
+            # 示例: websocket_manager.broadcast_alert(alert)
+
+            # 2. 写入告警日志文件（可被外部系统监控）
+            alert_log_file = Path("logs/alerts.jsonl")
+            alert_log_file.parent.mkdir(parents=True, exist_ok=True)
+
+            import json
+            with open(alert_log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(alert, ensure_ascii=False) + "\n")
+
+            # 3. 发送到监控队列（如果配置了）
+            # 可以使用Redis Pub/Sub或其他消息队列
+            # 示例: redis_client.publish("alerts", json.dumps(alert))
+
+            # 4. 调用Webhook（如果配置了）
+            webhook_urls = self._config.get("alert_webhooks", [])
+            if webhook_urls:
+                import requests
+                for url in webhook_urls:
+                    try:
+                        requests.post(url, json=alert, timeout=5)
+                    except Exception as e:
+                        logger.warning(f"Failed to send alert to webhook {url}: {e}")
+
+            # 5. 未来扩展点：
+            # - 邮件通知（通过SMTP或API）
+            # - 微信企业号/钉钉机器人
+            # - Telegram Bot
+            # - PagerDuty/Opsgenie等专业告警平台
+
+            logger.debug(f"Alert notification sent: {alert['type']}")
+
+        except Exception as e:
+            logger.error(f"Failed to send alert notification: {e}")
+            # 告警发送失败不应影响主流程
+
+    async def _send_alert_notification(self, alert: Dict[str, Any]):
+        """
+        发送告警通知到各种渠道
+
+        Args:
+            alert: 告警信息字典
+        """
+        try:
+            # 1. WebSocket推送（如果有连接的客户端）
+            # 这里需要WebSocket管理器的集成
+            # 示例: await websocket_manager.broadcast_alert(alert)
+
+            # 2. 写入告警日志文件（可被外部系统监控）
+            alert_log_file = Path("logs/alerts.jsonl")
+            alert_log_file.parent.mkdir(parents=True, exist_ok=True)
+
+            import json
+            with open(alert_log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(alert, ensure_ascii=False) + "\n")
+
+            # 3. 发送到监控队列（如果配置了）
+            # 可以使用Redis Pub/Sub或其他消息队列
+            # 示例: await redis_client.publish("alerts", json.dumps(alert))
+
+            # 4. 调用Webhook（如果配置了）
+            webhook_urls = self._config.get("alert_webhooks", [])
+            if webhook_urls:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    for url in webhook_urls:
+                        try:
+                            await session.post(url, json=alert, timeout=5)
+                        except Exception as e:
+                            logger.warning(f"Failed to send alert to webhook {url}: {e}")
+
+            # 5. 未来扩展点：
+            # - 邮件通知（通过SMTP或API）
+            # - 微信企业号/钉钉机器人
+            # - Telegram Bot
+            # - PagerDuty/Opsgenie等专业告警平台
+
+            logger.debug(f"Alert notification sent: {alert['type']}")
+
+        except Exception as e:
+            logger.error(f"Failed to send alert notification: {e}")
+            # 告警发送失败不应影响主流程
 
     async def _evaluate_recovery(self):
         """评估是否可以尝试恢复失败的提供者"""
