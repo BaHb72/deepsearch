@@ -110,8 +110,16 @@ async def login(request: LoginRequest):
     """
     try:
         # 这里应该实现真实的认证逻辑
-        # 目前使用简单的硬编码验证作为示例
-        if request.username == "admin" and request.password == "admin123":
+        # TODO: 实现基于数据库或配置文件的认证
+        # 临时使用环境变量或配置文件中的默认凭据
+        from deepsearch.config import get_config
+        config = get_config()
+
+        # 从配置文件获取管理员凭据，如果没有配置则使用默认值（仅用于开发环境）
+        admin_user = config.get('auth', {}).get('admin_user', 'admin')
+        admin_pass = config.get('auth', {}).get('admin_password', 'admin123')
+
+        if request.username == admin_user and request.password == admin_pass:
             # 生成token（实际应使用JWT）
             import hashlib
             import time

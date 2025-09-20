@@ -141,12 +141,20 @@ class DataProviderFactory:
                     from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
                         AmazingDataProvider, AmazingDataConfig
                     )
+                    from deepsearch.config import get_config
+
+                    # 从配置文件读取凭据
+                    app_config = get_config()
+                    amazingdata_config = app_config.get('amazingdata', {})
+                    network_provider = amazingdata_config.get('network_provider', 'telecom')
+                    server_config = amazingdata_config.get('servers', {}).get(network_provider, {})
+
                     # 创建配置对象
                     config = AmazingDataConfig(
-                        username="212200038719",
-                        password="212200038719@2025",
-                        host="101.230.159.234",
-                        port=8600,
+                        username=amazingdata_config.get('username', ''),
+                        password=amazingdata_config.get('password', ''),
+                        host=server_config.get('host', '101.230.159.234'),
+                        port=server_config.get('port', 8600),
                         timeout=10,  # 秒，不是毫秒
                         retry_count=2,
                         heartbeat_interval=60,

@@ -48,6 +48,13 @@ Thumbs.db
 config/settings.local.yaml
 settings.local.yaml
 settings.*.local.yaml
+
+# IMPORTANT: Never commit real configuration files with passwords!
+deepsearch/config/settings.dev.yaml
+deepsearch/config/settings.local.yaml
+# Keep only template/example files
+!deepsearch/config/settings.template.yaml
+!deepsearch/config/settings.dev.yaml.example
 config/.crypto_key
 .crypto_key
 
@@ -68,6 +75,9 @@ uv.lock
 *.duckdb.wal
 
 # ==================== Test Scripts ====================
+# Test reports with sensitive data
+amazingdata_test_report.txt
+*_test_report.txt
 # Test files (all patterns)
 test_*.py
 *_test.py
@@ -128,18 +138,18 @@ ISSUES_*.md
 
 # ==================== Data Files ====================
 # Data directory - only keep structure, ignore data files
-/data/**/*.db
-/data/**/*.duckdb
-/data/**/*.duckdb.wal
-/data/**/*.parquet
-/data/**/*.log
-/data/**/*.json
-/data/cache/
-/data/temp/
-/data/logs/
-/data/monitoring/
-/data/analytics/
-/data/datasourceapi/
+data/**/*.db
+data/**/*.duckdb
+data/**/*.duckdb.wal
+data/**/*.parquet
+data/**/*.log
+data/**/*.json
+data/cache/
+data/temp/
+data/logs/
+data/monitoring/
+data/analytics/
+data/datasourceapi/
 # Keep directory structure
 !/data/**/.gitkeep
 # Legacy data paths

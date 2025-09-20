@@ -54,8 +54,7 @@ echo 前端地址: http://localhost:3000
 echo.
 if "%ENV_NAME%"=="DEV" (
     echo AmazingData配置 (开发环境):
-    echo - 用户名: 212200038719
-    echo - 服务器: 120.86.124.106:8600
+    echo - 请确保在settings.dev.yaml中配置正确的凭据
     echo.
 )
 echo 如果Loading界面卡住，请：
