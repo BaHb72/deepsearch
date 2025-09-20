@@ -178,6 +178,31 @@ def test_with_mock_provider(mock_data_provider):
 - ✅ Local file caching
 - ✅ Memory optimization techniques
 
+## ⚠️ CRITICAL: Configuration File Management
+
+### 配置文件安全规范
+**永远不要提交包含真实密码的配置文件！**
+
+1. **配置文件处理流程**：
+   - 真实配置文件（如 `settings.dev.yaml`）必须加入 `.gitignore`
+   - 每次修改配置结构后，创建脱敏的 example 文件（如 `settings.dev.yaml.example`）
+   - 只提交 example 文件到Git仓库
+   - example 文件中的密码字段使用占位符，如：`your_database_password`
+
+2. **开发者使用流程**：
+   - 克隆仓库后，复制 `settings.dev.yaml.example` 为 `settings.dev.yaml`
+   - 在本地 `settings.dev.yaml` 中填写真实凭据
+   - 本地配置文件永远不会被提交
+
+3. **配置文件命名规范**：
+   - 模板文件：`settings.template.yaml` - 包含所有配置项的完整模板
+   - 示例文件：`settings.{env}.yaml.example` - 特定环境的示例配置
+   - 实际文件：`settings.{env}.yaml` - 包含真实凭据的本地配置（不提交）
+
+4. **敏感信息检查**：
+   - 提交前必须执行：`git grep -i "password\|secret\|token" -- ':(exclude)*.example'`
+   - 确保没有真实密码被跟踪
+
 ## ⚠️ CRITICAL: QMT Scripts Encoding Requirement
 
 **ALL Python scripts in `deepsearch/infrastructure/providers/datafeed/qmt/scripts/` MUST use GBK encoding!**
@@ -192,257 +217,18 @@ When modifying QMT scripts:
 
 ## Recent Updates (2025-01-21)
 
-### AmazingData性能列显示修复 (14:58)
-- **问题**: 启用amazingdata数据源后页面性能列不显示
-- **原因**: toggle_datasource函数未设置successRate和avgResponseTime字段
-- **解决方案**:
-  - 启用成功后设置初始性能指标（successRate=100.0, avgResponseTime=0）
-  - 响应数据包含性能字段供前端显示
-- **影响**: 性能列立即可见，提升用户体验
+### 配置文件安全管理 (Current)
+- **实施内容**：
+  - 从Git移除所有包含真实密码的配置文件
+  - 创建脱敏的 example 配置文件供开发者参考
+  - 更新 .gitignore 确保敏感配置不被跟踪
+  - 修改代码从配置文件动态读取凭据，移除硬编码密码
 
-### AmazingData logout参数修复 (14:45)
-- **问题**: `logout() missing 1 required positional argument: 'username'`
-- **解决方案**:
-  - worker进程保存登录用户名
-  - 进程代理添加last_login_username属性
-  - stop方法在logout请求中传递用户名
-- **影响**: logout正确执行，进程安全终止
+### AmazingData SDK进程隔离架构 (已完成)
+- **核心改进**：通过进程池隔离SDK，防止其崩溃影响主服务
+- **技术文档**：`docs/DATASOURCE_PROCESS_POOL_ARCHITECTURE.md`
+- **关键特性**：30秒进程复用窗口，智能故障恢复，健康检查API
 
-### 数据源专属进程池架构实施完成 (14:30)
-- **问题**: AmazingData SDK第一次测试成功但第二次测试失败，SDK不支持重复登录
-- **根本原因**:
-  - 全局单例进程代理导致SDK状态残留
-  - SDK在已登录状态下再次login会卡死
-  - 由于logout会崩溃，系统无法清理SDK状态
-- **实施方案**:
-  - 完善进程池管理器，支持安全logout机制
-  - 实现连续测试的智能进程复用（30秒时间窗口）
-  - 改进进程停止流程，先尝试logout再终止进程
-  - 添加进程监控和健康检查API端点
-- **关键改进**:
-  - `amazingdata_process_proxy.py`: 改进logout处理，先发送响应再执行logout
-  - `amazingdata_process_pool.py`: 新增get_test_process方法，支持进程复用
-  - `amazingdata_safe_wrapper.py`: 添加test_connection_with_reuse函数
-  - `datasource_manager.py`: 更新测试和toggle端点，支持新的复用机制
-- **新增API端点**:
-  - `/api/data-source/process-status`: 获取进程池状态
-  - `/api/data-source/process/{process_id}/restart`: 重启指定进程
-- **测试结果**: 支持无限次连续测试，30秒内复用进程，性能大幅提升
-- **影响**: 彻底解决SDK状态残留问题，提供稳定可靠的数据源管理
-
-### 数据源专属进程池架构设计完成 (10:30)
-- **技术文档**: `docs/DATASOURCE_PROCESS_POOL_ARCHITECTURE.md` - 完整的架构设计和实施方案
-
-## Recent Updates (2025-09-20)
-
-### Toggle端点错误信息传递修复 (19:00)
-- **问题**: toggle端点返回模糊的"测试失败"错误，没有具体原因
-- **根本原因**:
-  - test_datasource错误响应使用details字段，toggle_datasource只读取data字段
-  - 进程代理可能因Windows权限限制未能启动
-  - 错误处理链条中缺少详细诊断信息
-- **解决方案**:
-  - 修改toggle_datasource同时检查data和details字段
-  - 统一test_datasource使用data字段返回错误信息
-  - 增强进程代理启动诊断，提供Windows特定错误提示
-  - 改进safe_wrapper在代理未启动时的错误处理
-  - 添加详细的调试日志跟踪执行流程
-- **关键改进**:
-  - 错误信息现在能正确传递到前端
-  - Windows进程启动失败时提供具体解决建议
-  - 完整的日志链路便于问题诊断
-- **修改文件**:
-  - `datasource_manager.py`: 第586-601、1136-1141、994-1036行
-  - `amazingdata_process_proxy.py`: 第124-149行
-  - `amazingdata_safe_wrapper.py`: 第88-106行
-- **测试结果**: 语法检查通过，错误信息传递链路完整
-- **影响**: 用户现在能看到具体的错误原因，便于问题排查
-
-### TGW/AmazingData登录崩溃完全修复 (18:30)
-- **问题**: datasource_manager.py中直接调用AmazingData SDK导致SystemExit崩溃
-- **根本原因**:
-  - AmazingData SDK内部实际使用TGW库（login\tgw_login.pyc）
-  - TGW在登录失败时调用SystemExit(0)终止进程
-  - datasource_manager.py未使用已实现的进程隔离方案
-- **解决方案**:
-  - 修改datasource_manager.py使用AmazingDataSafeWrapper
-  - 替换所有直接SDK调用为进程隔离调用
-  - test_datasource和test_datasource_enhanced函数都已更新
-  - 不再调用ad.logout()避免段错误
-- **关键改进**:
-  - 所有AmazingData/TGW调用现在都在独立进程中执行
-  - SDK崩溃不再影响主FastAPI服务
-  - 支持自动重试和优雅的错误处理
-  - 提供明确的错误信息而非服务崩溃
-- **修改文件**:
-  - `webui/api/endpoints/datasources/datasource_manager.py`: 第22、782-850、1001-1040行
-- **测试结果**: Python语法检查通过，SDK崩溃被成功隔离
-- **影响**: 彻底解决了数据源测试和切换时的服务崩溃问题
-
-### AmazingData SDK进程隔离方案实施 (17:50)
-- **问题**: AmazingData SDK在login失败时调用SystemExit导致整个服务崩溃
-- **根本原因**:
-  - SDK设计缺陷：login失败时调用exit(0)终止进程
-  - logout操作导致段错误（SIGSEGV/0xC0000005）
-  - 线程隔离和try/except无法阻止SystemExit传播
-- **综合解决方案**:
-  - 创建进程隔离代理：`amazingdata_process_proxy.py`
-  - 实现安全包装器：`amazingdata_safe_wrapper.py`
-  - SDK在独立进程中运行，通过Queue进行IPC通信
-  - 主进程与SDK完全隔离，SDK崩溃不影响服务
-- **关键特性**:
-  - 自动检测工作进程崩溃并重启
-  - 请求超时控制和重试机制
-  - 完整的错误处理和降级支持
-  - 统计信息和健康检查
-- **关键文件**:
-  - `infrastructure/providers/implementations/amazingdata/amazingdata_process_proxy.py`
-  - `infrastructure/providers/implementations/amazingdata/amazingdata_safe_wrapper.py`
-  - `webui/api/endpoints/datasources/amazingdata_test_helper.py`（已更新）
-- **测试结果**: SDK崩溃被成功隔离，主进程保持稳定
-- **影响**: 彻底解决了AmazingData SDK导致的系统崩溃问题
-
-### datetime作用域冲突修复 (17:45)
-- **问题**: toggle端点调用test_datasource函数时报错"cannot access local variable 'datetime' where it is not associated with a value"
-- **根本原因**:
-  - Python作用域规则：函数内部的import会创建局部变量，覆盖全局导入
-  - datasource_manager.py的test_datasource函数内有条件块导入datetime
-  - 当条件不满足时，局部datetime变量未赋值，导致UnboundLocalError
-- **调试过程**:
-  - 发现/test端点(test_datasource_enhanced函数)正常，/toggle端点(test_datasource函数)失败
-  - 定位到第934行和第1216行有局部import datetime语句
-  - 确认是Python作用域冲突导致的典型问题
-- **解决方案**:
-  - 在文件开头第9行添加timedelta导入：`from datetime import datetime, timedelta`
-  - 删除第934行的局部导入：`from datetime import datetime, timedelta`
-  - 删除第1216行的局部导入：`from datetime import datetime`
-- **关键文件修改**:
-  - `datasource_manager.py`: 第9、934、1216行，统一使用全局导入
-- **测试结果**: Python语法检查通过，代码结构正确
-- **影响**: 解决了数据源启用/禁用功能的错误，恢复toggle端点正常工作
-
-### AmazingData SDK logout崩溃问题修复 (15:45)
-- **问题**: AmazingData SDK的logout操作导致进程崩溃（0xC0000005访问违规/SIGSEGV段错误）
-- **根本原因**:
-  - SDK的logout方法会调用SystemExit或执行不安全的内存操作
-  - 即使在独立线程中执行logout也会影响主进程
-  - SDK存在设计缺陷：不logout会导致第二次login卡住
-- **调试过程**:
-  - 初次尝试：直接调用`ad.logout(username)`导致立即崩溃
-  - 二次尝试：创建safe_logout使用线程隔离，仍然崩溃（退出代码139）
-  - 最终方案：完全跳过logout操作
-- **解决方案**:
-  - 在测试连接后跳过logout操作
-  - 添加注释说明SDK崩溃问题
-  - 连接会在进程结束时自动清理
-- **关键文件修改**:
-  - `amazingdata_test_helper.py`: 第162-165行，跳过logout并记录原因
-- **测试结果**: 第一次测试成功，但第二次测试会卡在login阶段
-- **遗留问题**: SDK保持登录状态，第二次login会无响应（需要重启进程）
-- **影响**: 避免了进程崩溃，但限制了连续测试能力
-
-## Recent Updates (2025-09-18)
-
-### AmazingData大数据量崩溃修复 (23:50)
-- **问题**: AmazingData测试时调用`get_code_info('EXTRA_STOCK_A')`导致进程崩溃（0xC0000005）
-- **根本原因**:
-  - `get_code_info('EXTRA_STOCK_A')`会返回所有A股股票信息（5000+条）
-  - 数据量巨大（几十MB），导致内存访问冲突或传输超时
-  - 连接测试不需要获取如此大量的数据
-- **调试过程**:
-  - 通过断点确定崩溃发生在第110行`get_code_info`调用时
-  - BaseData对象创建成功，但数据获取失败
-  - 确认是数据量过大而非API本身的问题
-- **解决方案**:
-  - 采用方案3：只验证登录成功，跳过数据获取测试
-  - 登录成功即表示配置正确、网络通畅
-  - 实际数据获取应在具体业务API中按需进行
-- **关键文件修改**:
-  - `amazingdata_test_helper.py`: 第104-130行，登录成功后直接返回，跳过BaseData测试
-- **测试结果**: 登录验证正常，不再崩溃，前端按钮正常响应
-- **影响**: 大幅提升测试稳定性和速度，避免不必要的大数据传输
-
-### DataFrame判断错误修复 (23:30)
-- **问题**: AmazingData测试时服务器崩溃，错误信息"The truth value of a DataFrame is ambiguous"
-- **根本原因**:
-  - `amazingdata_test_helper.py`第112行使用了`if code_info and len(code_info) > 0:`
-  - pandas DataFrame不能直接用于布尔判断，导致TypeError
-  - 异常未被捕获，导致服务器进程崩溃
-- **解决方案**:
-  - 修改DataFrame判断逻辑，使用`if code_info is not None`先检查
-  - 在try-except块中安全获取DataFrame长度
-  - 在调用辅助函数的地方添加额外的异常保护
-- **关键文件修改**:
-  - `amazingdata_test_helper.py`: 第112-124行，修复DataFrame判断逻辑
-  - `datasource_manager.py`: 第725-742行，添加异常保护
-- **测试结果**: AmazingData登录成功，获取基础数据正常，服务器不再崩溃
-- **影响**: 提升了系统稳定性，防止DataFrame操作导致的服务器崩溃
-
-### API路由冲突修复 (23:15)
-- **问题**: `/api/data-source/test`端点存在路由冲突，导致错误信息"AmazingData provider does not support realtime data"持续出现
-- **根本原因**:
-  - 系统中两个不同模块都注册了相同路径的API端点
-  - 旧端点(`test_data_source.py`)先注册，优先级更高
-  - 旧端点硬编码了错误的错误信息，新端点的错误拦截器无法生效
-- **解决方案**:
-  - 在`server.py`第710-717行禁用了旧的test_data_source路由注册
-  - 更新了旧端点的硬编码错误信息为更准确的描述（以防后续启用）
-  - 确保新端点(`datasource_manager.py`)的错误拦截器正常工作
-- **关键文件修改**:
-  - `webui/server.py`: 注释掉第711-715行的路由注册
-  - `webui/api/endpoints/data/test_data_source.py`: 更新第104、112行的错误信息
-- **测试结果**: 新端点现在能正确处理AmazingData测试请求，返回准确的错误描述
-- **影响**: 解决了错误信息不准确的问题，提升了调试效率
-
-### AmazingData SDK线程兼容性问题修复 (21:33)
-- **问题**: AmazingData SDK 在FastAPI工作线程中调用signal模块导致"signal only works in main thread"错误
-- **解决方案**: 修改`amazingdata.py`的`safe_login`方法，使用threading替代signal实现超时机制
-- **关键改进**:
-  - 使用`threading.Thread`在独立线程中执行SDK登录
-  - 通过`thread.join(timeout=30)`实现超时控制
-  - 成功捕获并处理SystemExit异常，防止进程崩溃
-- **测试结果**: AmazingData登录功能正常，可在FastAPI环境中正常使用
-- **影响**: 解决了AmazingData无法在Web服务中使用的关键问题
-
-### AmazingData测试连接幽灵错误修复 (2025-09-18 22:00)
-- **问题**: 测试连接返回"AmazingData provider does not support realtime data"错误，但该错误信息在代码中不存在
-- **原因分析**:
-  - 这是一个历史错误，已在文档中标记为已解决
-  - 可能是Python AttributeError被错误转换或缓存的旧错误响应
-- **解决方案**:
-  - 创建`amazingdata_test_helper.py`辅助模块，提供标准化测试功能
-  - 在`datasource_manager.py`中添加详细日志记录
-  - 在API端点中添加错误拦截器，自动修正历史错误信息
-  - 使用辅助模块处理AmazingData测试，确保返回正确的错误描述
-- **关键文件**:
-  - `webui/api/endpoints/datasources/amazingdata_test_helper.py` - 测试辅助模块
-  - `webui/api/endpoints/datasources/datasource_manager.py` - 改进的测试逻辑
-- **测试方法**: 通过`/api/data-source/test`端点测试，查看日志了解详细执行过程
-
-### AmazingData SDK隔离机制实施完成
-- **核心问题解决**: 成功隔离AmazingData SDK的SystemExit调用，防止进程崩溃
-- **实施内容**:
-  - 实现safe_login包装函数，捕获SystemExit异常
-  - 添加三级降级链：AmazingData -> AkShare -> ErrorProvider
-  - 创建健康监控系统ProviderHealthMonitor
-  - 编写完整的测试用例验证隔离机制
-- **关键改进**:
-  - `amazingdata.py`: 添加safe_login方法和_trigger_alert告警机制
-  - `providers.py`: 实现多级降级链和健康状态跟踪
-  - `error_provider.py`: 创建错误处理兜底提供者
-  - `provider_health.py`: 实现提供者健康监控系统
-- **详细文档**:
-  - 技术设计：`docs/AMAZINGDATA_SDK_ISOLATION_TECHNICAL_DESIGN.md`
-  - 实施进度：`docs/AMAZINGDATA_IMPLEMENTATION_PROGRESS.md`
-  - 执行摘要：`docs/AMAZINGDATA_ISOLATION_EXECUTIVE_SUMMARY.md`
-
-### Vue依赖清理完成
-- **前端框架统一**: 完成Vue到React的完全迁移，清理所有Vue相关配置
-- **清理内容**:
-  - 移除package.json中ESLint的.vue文件检查
-  - 清理vite.config.ts中Vue相关注释
-- **清理报告**: 详细清理记录见 `docs/VUE_CLEANUP_REPORT.md`
-- **备份位置**: 原始文件备份至 `backup_vue_cleanup_2025-09-18_002944/`
 
 ## Recent Updates (2025-09-17)
 
