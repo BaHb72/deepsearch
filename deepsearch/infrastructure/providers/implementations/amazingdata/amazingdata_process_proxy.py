@@ -96,6 +96,9 @@ class AmazingDataProcessProxy:
         # 请求跟踪
         self.pending_requests = {}
 
+        # 保存最后登录的用户名，用于logout
+        self.last_login_username = None
+
     def start(self) -> bool:
         """
         启动工作进程
@@ -172,11 +175,18 @@ class AmazingDataProcessProxy:
             # 如果需要logout，先发送logout请求
             if with_logout:
                 logger.info("Sending logout request before stopping...")
+
+                # 构建logout请求，包含用户名参数
+                logout_args = ()
+                if self.last_login_username:
+                    logout_args = (self.last_login_username,)
+                    logger.info(f"Including username in logout request: {self.last_login_username}")
+
                 logout_request = ProxyRequest(
                     request_id="logout_before_stop",
                     request_type=RequestType.LOGOUT,
                     method="logout",
-                    args=(),
+                    args=logout_args,
                     kwargs={}
                 )
                 self.request_queue.put(pickle.dumps(logout_request))
@@ -304,6 +314,12 @@ class AmazingDataProcessProxy:
                     if response.request_id == request_id:
                         if response.success:
                             self.stats["requests_completed"] += 1
+
+                            # 如果是登录成功，保存用户名
+                            if request_type == RequestType.LOGIN and args and len(args) > 0:
+                                self.last_login_username = args[0]
+                                logger.info(f"[Proxy] Saved login username: {self.last_login_username}")
+
                         else:
                             self.stats["requests_failed"] += 1
                         return response
@@ -383,6 +399,9 @@ class AmazingDataProcessProxy:
         # SDK实例缓存
         sdk_instances = {}
 
+        # 保存登录的用户名，用于logout
+        logged_in_username = None
+
         while True:
             try:
                 # 获取请求
@@ -429,6 +448,11 @@ class AmazingDataProcessProxy:
 
                         # 判断登录结果
                         if result == 0 or result is True:
+                            # 登录成功，保存用户名（第一个参数）
+                            if request.args and len(request.args) > 0:
+                                logged_in_username = request.args[0]
+                                logger.info(f"Login successful, saved username: {logged_in_username}")
+
                             response = ProxyResponse(
                                 request_id=request.request_id,
                                 success=True,
@@ -460,10 +484,23 @@ class AmazingDataProcessProxy:
                             # 尝试执行logout（可能导致进程退出）
                             logger.info("Executing logout, process may terminate...")
                             if hasattr(ad, 'logout'):
-                                ad.logout(*request.args, **request.kwargs)
+                                # 使用保存的用户名，如果没有则尝试从请求中获取
+                                username_to_logout = logged_in_username
+
+                                # 如果没有保存的用户名，尝试从请求参数中获取
+                                if not username_to_logout and request.args and len(request.args) > 0:
+                                    username_to_logout = request.args[0]
+
+                                if username_to_logout:
+                                    logger.info(f"Logging out user: {username_to_logout}")
+                                    ad.logout(username_to_logout)
+                                else:
+                                    logger.warning("No username available for logout, skipping")
 
                             # 如果执行到这里，说明logout没有崩溃
                             logger.info("Logout completed without crash")
+                            # 清除保存的用户名
+                            logged_in_username = None
                             # 主动退出进程，确保状态清理
                             break
 
