@@ -4,6 +4,20 @@ app:
   debug: true
   name: DeepSearch
   author: BaHb
+data_sources:
+  providers:
+    amazingdata:
+      enabled: false
+      priority: 1
+    cloudflare:
+      enabled: true
+      priority: 2
+    akshare:
+      enabled: true
+      priority: 3
+    qmt:
+      enabled: false
+      priority: 4
 log:
   level: INFO
   format: verbose

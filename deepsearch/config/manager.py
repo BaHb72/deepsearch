@@ -17,6 +17,11 @@ from loguru import logger
 from deepsearch.utils.system.singleton import Singleton
 
 
+class ConfigurationError(Exception):
+    """配置错误异常类"""
+    pass
+
+
 class ConfigManager(metaclass=Singleton):
     """配置管理器（单例）"""
 
@@ -192,7 +197,7 @@ class ConfigManager(metaclass=Singleton):
     def set(self, key: str, value: Any) -> None:
         """
         设置配置值
-        
+
         Args:
             key: 配置键，支持点号分隔的嵌套键
             value: 配置值
@@ -200,12 +205,19 @@ class ConfigManager(metaclass=Singleton):
         keys = key.split('.')
         config = self._config
 
+        # 创建嵌套路径
         for k in keys[:-1]:
             if k not in config:
                 config[k] = {}
+            elif not isinstance(config[k], dict):
+                # 如果存在但不是字典，转换为字典
+                logger.warning(f"配置键 '{k}' 不是字典类型，将被覆盖")
+                config[k] = {}
             config = config[k]
 
+        # 设置最终值
         config[keys[-1]] = value
+        logger.debug(f"配置已更新: {key} = {value}")
 
     def save(self, path: Optional[Union[str, Path]] = None) -> None:
         """

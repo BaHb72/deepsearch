@@ -17,7 +17,7 @@ import time
 
 from deepsearch.webui.api.common.response_format import APIResponse, APIException, ErrorCodes
 from deepsearch.config import get_config
-from deepsearch.config.manager import ConfigManager
+from deepsearch.config.manager import config_manager  # 使用全局实例
 from deepsearch.infrastructure.cache.cache_manager import CacheManager
 # 导入进程隔离的安全包装器
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import AmazingDataSafeWrapper
@@ -31,9 +31,6 @@ cache_manager = CacheManager(
     l1_max_size=10000,  # L1缓存最大条目数
     l1_ttl=300  # 默认TTL 5分钟
 )
-
-# 创建配置管理器实例（延迟加载）
-config_manager = ConfigManager()
 
 
 # 数据模型

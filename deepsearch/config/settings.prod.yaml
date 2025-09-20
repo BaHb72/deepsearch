@@ -1,180 +1,48 @@
 app:
-  appName: DeepSearch
-  env: prod
-  debug: true
-  name: DeepSearch
   author: BaHb
-log:
-  level: INFO
-  format: verbose
-  toFile: true
-  toConsole: true
-  active: true
-  rotation: 00:00
-  retention_days: 7
-  enable_json: false
-database:
-  main:
-    type: postgresql
-    host: localhost
-    port: 5432
-    database: deepsearch
-    username: bahb
-    password: '123456'
-    path: ./data/deepsearch.db
-    auto_connect: true
-    enabled: true
-    has_saved_password: false
-  cache:
-    enabled: true
-    host: localhost
-    port: 6379
-    password: ''
-    db: 0
-    poolSize: 10
-    pool_size: 10
-    has_saved_password: false
-  analytics:
-    enabled: false
-    path: ./data/analytics/market.duckdb
-    memory_limit: 8GB
-    threads: 8
-    temp_directory: ./data/analytics/temp
-    auto_sync: true
-    sync_interval: 1800
-message_bus:
-  buses:
-    inmem:
-      type: inmem
-      enabled: true
-      config: {}
-  routes:
-  - match: '*'
-    buses:
-    - inmem
+  debug: false
+  env: prod
+  name: DeepSearch
 data_sources:
-  default: amazingdata
   providers:
-    amazingdata:
+    akshare:
       enabled: true
+      priority: 3
+    amazingdata:
+      enabled: false
       priority: 1
-      type: amazingdata
-      config:
-        connection:
-          username: '212200038719'
-          password: 212200038719@2025
-          host: 120.86.124.106
-          port: 8600
-          timeout: 10
-          max_retries: 3
-          heartbeat_interval: 30
-          auto_reconnect: true
-        cache:
-          enabled: true
-          ttl: 300
-          max_size: 10000
-          clear_on_disconnect: false
-        subscription:
-          enabled: true
-          batch_size: 100
-          heartbeat_interval: 30
-          max_symbols: 500
-          auto_resubscribe: true
-        data_quality:
-          check_enabled: true
-          min_completeness: 0.95
-          alert_on_error: true
-          validate_timestamps: true
-        performance:
-          batch_requests: true
-          max_concurrent_requests: 10
-          request_queue_size: 1000
-          use_connection_pool: true
-          pool_size: 5
-        monitoring:
-          enabled: true
-          report_interval: 60
-          metrics_enabled: true
-          log_slow_requests: true
-          slow_request_threshold: 1000
-        username: '212200038719'
-        password: 212200038719@2025
-        host: 101.230.159.234
-        port: 8600
-        timeout: 10
-        heartbeat_interval: 60
-        auto_reconnect: true
-        local_path: D://AmazingData_local_data//
-        use_local: true
-        max_retries: 2
-        network_provider: telecom
     cloudflare:
       enabled: true
       priority: 2
-      type: cloudflare_proxy
-      config:
-        worker_url: https://akshare-proxy.934073514.workers.dev
-        workers:
-        - https://akshare-proxy.934073514.workers.dev
-        api_key: ''
-        fallback_to_direct: true
-        timeout: 30
-        retry_count: 3
-        cache_enabled: true
-        cache_ttl: 300
     qmt:
-      enabled: true
-      priority: 3
-      type: qmt
+      enabled: false
+      priority: 4
+log:
+  active: true
+  format: json
+  level: INFO
+  toConsole: true
+  toFile: true
+logging:
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  level: INFO
+  output: console
+message_bus:
+  buses:
+    zmq:
       config:
         host: localhost
-        port: 8888
-    miniqmt:
-      enabled: true
-      priority: 4
-      type: miniqmt
-      config:
-        enabled: true
-        connection:
-          host: 127.0.0.1
-          port: 7777
-          username: ''
-          password: ''
-          timeout: 10
-        data:
-          symbols: []
-          period: 1d
-          cache_ttl: 60
-          batch_size: 100
-        monitoring:
-          enabled: true
-          heartbeat_interval: 30
-          report_interval: 60
-    akshare:
-      enabled: true
-      priority: 5
-      type: akshare
-      config:
-        timeout: 30
-        max_retries: 3
-        cache_ttl: 300
-        rate_limit:
-          max_requests: 100
-          time_window: 60
-amazingdata:
-  enabled: false
-  username: '212200038719'
-  password: 212200038719@2025
-  host: 101.230.159.234
-  port: 8600
-  timeout: 10
-  heartbeat_interval: 60
-  auto_reconnect: true
-  local_path: D://AmazingData_local_data//
-  use_local: true
-  max_retries: 2
-  network_provider: telecom
-qmt:
-  enabled: false
-  host: localhost
-  port: 5556
+        pub_port: 5556
+        sub_port: 5557
+      type: zeromq
+monitoring:
+  enabled: true
+  interval: 60
+system:
+  mode: production
+  name: DeepSearch
+  version: 0.1.0
+webui:
+  backend_port: 8000
+  frontend_port: 3000
+  host: 0.0.0.0
