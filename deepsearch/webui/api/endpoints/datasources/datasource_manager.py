@@ -569,6 +569,49 @@ async def toggle_datasource(datasource_id: str, enabled: bool):
         if enabled:
             logger.info(f"启用前测试数据源连接: {datasource.name}")
 
+            # 对于AmazingData，使用进程池管理
+            if datasource.type == "amazingdata":
+                try:
+                    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
+                        get_global_pool
+                    )
+
+                    pool = get_global_pool()
+
+                    # 创建专属进程（不自动清理，生产环境长期运行）
+                    config = datasource.config.model_dump() if datasource.config else {}
+                    proxy = pool.get_or_create(
+                        datasource_id,
+                        auto_cleanup=False,  # 生产进程不自动清理
+                        config=config
+                    )
+
+                    if proxy and proxy.is_running:
+                        logger.info(f"[Toggle] Created dedicated process for {datasource_id}")
+                        datasource.enabled = True
+                        datasource.status = "online"
+                        datasource.updated_at = datetime.now()
+
+                        return APIResponse.success(
+                            data={
+                                "id": datasource_id,
+                                "enabled": True,
+                                "status": "online",
+                                "message": f"{datasource.name}已启用（专属进程已创建）"
+                            }
+                        )
+                    else:
+                        raise Exception("Failed to start dedicated process")
+
+                except Exception as e:
+                    logger.error(f"[Toggle] Failed to enable datasource: {e}")
+                    return APIResponse.error(
+                        code=ErrorCodes.DATASOURCE_TEST_FAILED,
+                        message=f"启用失败: {str(e)}",
+                        status_code=500
+                    )
+
+            # 对于其他数据源，执行原有的测试流程
             # 构建测试请求
             test_request = TestDataSourceRequest(
                 type=datasource.type,
@@ -634,7 +677,20 @@ async def toggle_datasource(datasource_id: str, enabled: bool):
             logger.info(f"数据源 {datasource.name} 测试成功，继续启用")
             datasource.status = "online"
         else:
-            # 禁用操作保持原样
+            # 禁用操作 - 销毁专属进程
+            if datasource.type == "amazingdata":
+                try:
+                    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
+                        get_global_pool
+                    )
+
+                    pool = get_global_pool()
+                    # 停止进程
+                    success = pool.stop(datasource_id)
+                    logger.info(f"[Toggle] Stopped process for {datasource_id}: {success}")
+                except Exception as e:
+                    logger.warning(f"[Toggle] Error stopping process: {e}")
+
             datasource.status = "offline"
 
         # 更新配置
@@ -1001,51 +1057,49 @@ async def test_datasource(request: TestDataSourceRequest):
                     port = 8600
 
                 try:
-                    # 使用进程隔离的安全包装器进行连接测试
-                    logger.info(f"[DataSource] Using safe wrapper for AmazingData login: {request.config.username}@{host}:{port}")
+                    # 使用新的测试函数（每次创建独立进程）
+                    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import (
+                        test_connection_with_datasource
+                    )
+
+                    logger.info(f"[DataSource] Testing AmazingData with dedicated process: {request.config.username}@{host}:{port}")
                     logger.debug(f"[DataSource] Network provider: {request.config.networkProvider}, Use local: {request.config.useLocal}")
 
-                    # 创建安全包装器实例
-                    logger.debug("[DataSource] Creating AmazingDataSafeWrapper instance...")
-                    safe_wrapper = AmazingDataSafeWrapper(
-                        auto_restart=True,
-                        max_retries=2,
-                        default_timeout=30.0
-                    )
-                    logger.debug("[DataSource] SafeWrapper created successfully")
-
-                    # 使用安全登录方法（在独立进程中执行，防止SystemExit崩溃）
-                    logger.debug(f"[DataSource] Calling safe_login with timeout=30.0...")
-                    success, error_msg = safe_wrapper.safe_login(
+                    # 执行测试（使用独立进程）
+                    test_response = test_connection_with_datasource(
+                        datasource_id="amazingdata",
                         username=request.config.username,
                         password=request.config.password,
                         host=host,
-                        port=port,
-                        timeout=30.0
+                        port=port
                     )
 
-                    logger.debug(f"[DataSource] safe_login returned: success={success}, error_msg={error_msg}")
+                    logger.debug(f"[DataSource] Test response: success={test_response['success']}, error={test_response.get('error')}")
 
-                    if success:
+                    if test_response["success"]:
                         test_result["success"] = True
                         test_result["message"] = "银河证券星耀数智连接成功"
-                        logger.info("[DataSource] AmazingData login successful")
+                        test_result["latency"] = int(test_response["latency_ms"])
+                        logger.info("[DataSource] AmazingData test successful")
                         test_result["details"]["server"] = f"{host}:{port}"
                         test_result["details"]["username"] = request.config.username
                         test_result["details"]["network_provider"] = request.config.networkProvider or "custom"
                         test_result["details"]["status"] = "已认证"
-                        test_result["details"]["note"] = "使用进程隔离安全模式"
-                        # 注意：不需要调用logout，安全包装器会处理
+                        test_result["details"]["test_id"] = test_response.get("test_id")
+                        test_result["details"]["stats"] = test_response.get("stats", {})
+                        test_result["details"]["note"] = "使用数据源专属进程池"
                         # 更新数据源状态
-                        update_datasource_status_after_test("amazingdata", True, test_result.get("latency", 100))
+                        update_datasource_status_after_test("amazingdata", True, test_result["latency"])
                     else:
-                        logger.error(f"[DataSource] AmazingData login failed: {error_msg}")
+                        error_msg = test_response.get("error", "登录失败")
+                        logger.error(f"[DataSource] AmazingData test failed: {error_msg}")
                         test_result["success"] = False
-                        test_result["message"] = error_msg or "登录失败"
+                        test_result["message"] = error_msg
                         test_result["details"]["error"] = error_msg
                         test_result["details"]["error_type"] = "login_failed"
+                        test_result["details"]["test_id"] = test_response.get("test_id")
                         # 如果是SDK未安装的错误，添加安装提示
-                        if "ImportError" in (error_msg or ""):
+                        if "ImportError" in error_msg:
                             test_result["details"]["note"] = "需要安装installer目录下的AmazingData-1.0.9-cp313-none-any.whl"
                         # 更新数据源状态为错误
                         update_datasource_status_after_test("amazingdata", False, 0)
@@ -1766,3 +1820,32 @@ async def warm_essential_cache() -> None:
     except Exception as e:
         logger.error(f"预热缓存失败: {e}")
         # 预热失败不影响主流程
+
+
+@router.get("/process-status")
+async def get_process_status():
+    """
+    获取进程池状态
+
+    返回所有数据源进程的运行状态
+    """
+    try:
+        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
+            get_global_pool
+        )
+
+        pool = get_global_pool()
+        status = pool.get_status()
+
+        return APIResponse.success(
+            data=status,
+            message="进程池状态获取成功"
+        )
+
+    except Exception as e:
+        logger.error(f"[ProcessStatus] Failed to get process status: {e}")
+        return APIResponse.error(
+            code=ErrorCodes.INTERNAL_ERROR,
+            message=f"获取进程状态失败: {str(e)}",
+            status_code=500
+        )

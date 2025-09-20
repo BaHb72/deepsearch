@@ -481,29 +481,3 @@ class AmazingDataProcessProxy:
                 logger.error(traceback.format_exc())
 
         logger.info("Worker process exiting")
-
-
-# 全局代理实例
-_global_proxy = None
-
-
-def get_proxy() -> AmazingDataProcessProxy:
-    """
-    获取全局代理实例（单例模式）
-
-    Returns:
-        进程代理实例
-    """
-    global _global_proxy
-    if _global_proxy is None:
-        _global_proxy = AmazingDataProcessProxy()
-        _global_proxy.start()
-    return _global_proxy
-
-
-def shutdown_proxy():
-    """关闭全局代理"""
-    global _global_proxy
-    if _global_proxy:
-        _global_proxy.stop()
-        _global_proxy = None

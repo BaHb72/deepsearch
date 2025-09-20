@@ -13,9 +13,9 @@ from loguru import logger
 
 from .amazingdata_process_proxy import (
     AmazingDataProcessProxy,
-    RequestType,
-    get_proxy
+    RequestType
 )
+from .amazingdata_process_pool import get_global_pool
 
 
 class AmazingDataSafeWrapper:
@@ -32,24 +32,35 @@ class AmazingDataSafeWrapper:
 
     def __init__(
         self,
+        datasource_id: str = "default",
         auto_restart: bool = True,
         max_retries: int = 3,
-        default_timeout: float = 30.0
+        default_timeout: float = 30.0,
+        auto_cleanup: bool = False
     ):
         """
         初始化安全包装器
 
         Args:
+            datasource_id: 数据源标识
             auto_restart: 进程崩溃后是否自动重启
             max_retries: 最大重试次数
             default_timeout: 默认超时时间
+            auto_cleanup: 是否自动清理进程（用于测试）
         """
+        self.datasource_id = datasource_id
         self.auto_restart = auto_restart
         self.max_retries = max_retries
         self.default_timeout = default_timeout
+        self.auto_cleanup = auto_cleanup
 
-        # 获取进程代理
-        self.proxy = get_proxy()
+        # 从进程池获取专属进程
+        pool = get_global_pool()
+        self.proxy = pool.get_or_create(
+            datasource_id,
+            auto_cleanup=auto_cleanup,
+            cleanup_delay=60.0 if auto_cleanup else 0
+        )
 
         # 连接状态
         self.is_connected = False
@@ -357,3 +368,60 @@ def test_connection(
         wrapper.safe_logout()
 
     return result
+
+
+def test_connection_with_datasource(
+    datasource_id: str,
+    username: str,
+    password: str,
+    host: str = "101.230.159.234",
+    port: int = 8600
+) -> Dict[str, Any]:
+    """
+    测试指定数据源的连接（使用独立进程）
+
+    每次测试创建新的临时进程，测试完成后自动清理
+
+    Args:
+        datasource_id: 数据源标识
+        username: 用户名
+        password: 密码
+        host: 服务器地址
+        port: 端口
+
+    Returns:
+        测试结果
+    """
+    # 为测试创建唯一ID
+    test_id = f"{datasource_id}_test_{int(time.time() * 1000)}"
+
+    # 创建临时wrapper
+    wrapper = AmazingDataSafeWrapper(
+        datasource_id=test_id,
+        auto_restart=False,
+        max_retries=2,
+        auto_cleanup=True  # 启用自动清理
+    )
+
+    start_time = time.time()
+
+    try:
+        # 执行登录测试
+        success, error = wrapper.safe_login(username, password, host, port)
+
+        result = {
+            "success": success,
+            "error": error,
+            "datasource_id": datasource_id,
+            "test_id": test_id,
+            "latency_ms": (time.time() - start_time) * 1000,
+            "stats": wrapper.get_stats()
+        }
+
+        return result
+
+    finally:
+        # 立即清理测试进程
+        pool = get_global_pool()
+        pool.stop(test_id, force=True)
+        logger.info(f"[Test] Cleaned up test process: {test_id}")
