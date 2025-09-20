@@ -127,12 +127,12 @@ def test_amazingdata_connection(
     logger.info("[HELPER] 使用进程隔离代理，防止SDK崩溃影响主进程")
 
     try:
-        # 使用安全包装器进行测试
+        # 导入独立进程测试函数
         try:
             from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import (
-                get_safe_wrapper
+                test_connection_with_datasource
             )
-            logger.info("[HELPER] 安全包装器导入成功")
+            logger.info("[HELPER] 独立进程测试函数导入成功")
         except ImportError as e:
             logger.error(f"[HELPER] 安全包装器导入失败: {e}")
             # 降级到旧方式（直接调用SDK，有崩溃风险）
@@ -197,26 +197,20 @@ def test_amazingdata_connection(
                     latency_ms=(time.time() - start_time) * 1000
                 )
 
-        # 使用安全包装器
-        wrapper = get_safe_wrapper()
+        # 使用独立进程测试函数（每次创建新进程）
+        logger.info(f"[HELPER] 使用独立进程测试连接到 {host}:{port}")
 
-        logger.info(f"[HELPER] 尝试通过进程代理登录到 {host}:{port}")
-        success, error = wrapper.safe_login(
+        # 每次测试创建新的独立进程
+        result = test_connection_with_datasource(
+            datasource_id="amazingdata",
             username=username,
             password=password,
             host=host,
-            port=port,
-            timeout=30.0
+            port=port
         )
 
-        if success:
-            logger.info("[HELPER] 登录成功")
-
-            # 获取统计信息
-            stats = wrapper.get_stats()
-
-            # 自动登出（实际会跳过以避免崩溃）
-            wrapper.safe_logout(username)
+        if result["success"]:
+            logger.info("[HELPER] 登录成功（独立进程已自动清理）")
 
             return create_test_result(
                 success=True,
@@ -225,28 +219,28 @@ def test_amazingdata_connection(
                     "server": f"{host}:{port}",
                     "username": username,
                     "test_type": "connection",
-                    "mode": "process_proxy",
-                    "note": "使用进程隔离代理，SDK崩溃不会影响主进程",
-                    "stats": {
-                        "crashes_handled": stats.get("crashes_handled", 0),
-                        "proxy_restarts": stats.get("proxy_stats", {}).get("process_restarts", 0)
-                    }
+                    "mode": "dedicated_process",
+                    "test_id": result.get("test_id"),
+                    "note": "每次测试使用独立进程，测试后自动清理",
+                    "stats": result.get("stats", {})
                 },
-                latency_ms=(time.time() - start_time) * 1000,
+                latency_ms=result.get("latency_ms", (time.time() - start_time) * 1000),
                 data_size=0
             )
         else:
+            error = result.get('error', '登录失败')
             logger.error(f"[HELPER] 登录失败: {error}")
 
             # 分析错误类型
             error_details = {
                 "server": f"{host}:{port}",
-                "username": username
+                "username": username,
+                "test_id": result.get("test_id")
             }
 
             if "SystemExit" in str(error):
                 error_details["crash_type"] = "SystemExit"
-                error_details["note"] = "SDK尝试退出但被进程代理拦截"
+                error_details["note"] = "SDK尝试退出但被进程隔离拦截，进程已自动清理"
             elif "进程崩溃" in str(error):
                 error_details["crash_type"] = "ProcessCrash"
                 error_details["note"] = "工作进程崩溃但主进程安全"
@@ -254,9 +248,9 @@ def test_amazingdata_connection(
             return create_test_result(
                 success=False,
                 message="测试失败",
-                error=error or "登录失败",
+                error=error,
                 details=error_details,
-                latency_ms=(time.time() - start_time) * 1000
+                latency_ms=result.get("latency_ms", (time.time() - start_time) * 1000)
             )
 
     except Exception as e:

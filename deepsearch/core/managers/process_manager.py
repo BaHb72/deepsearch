@@ -653,8 +653,13 @@ class ProcessManager:
             # 添加 ZMQ 端口（如果配置存在）
             if 'zmq' in config.message_bus.buses:
                 zmq_config = config.message_bus.buses['zmq'].config
-                ports.append(zmq_config.pub_port)
-                ports.append(zmq_config.sub_port)
+                # 处理不同类型的配置对象
+                if hasattr(zmq_config, 'pub_port'):
+                    ports.append(zmq_config.pub_port)
+                    ports.append(zmq_config.sub_port)
+                elif isinstance(zmq_config, dict):
+                    ports.append(zmq_config.get('pub_port', 5556))
+                    ports.append(zmq_config.get('sub_port', 5557))
 
             for conn in psutil.net_connections():
                 if hasattr(conn, 'laddr') and conn.laddr.port in ports:

@@ -190,7 +190,35 @@ class DataProviderRegistry:
             provider_class = getattr(module, provider_info.class_name)
 
             # 创建实例
-            if provider_info.config:
+            # 特殊处理AmazingDataProvider
+            if name == 'amazingdata':
+                # 导入AmazingDataConfig
+                from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import AmazingDataConfig
+                from deepsearch.config import get_config
+
+                # 如果没有配置，从系统配置中获取
+                if not provider_info.config or not provider_info.config.get('username'):
+                    app_config = get_config()
+                    if hasattr(app_config, 'amazingdata') and app_config.amazingdata:
+                        provider_info.config = {
+                            'username': app_config.amazingdata.connection.username,
+                            'password': app_config.amazingdata.connection.password,
+                            'host': app_config.amazingdata.connection.host,
+                            'port': app_config.amazingdata.connection.port
+                        }
+                    else:
+                        # 提供默认配置
+                        logger.warning("AmazingData配置未找到，使用默认配置")
+                        provider_info.config = {
+                            'username': '',
+                            'password': '',
+                            'host': 'localhost',
+                            'port': 8888
+                        }
+
+                config_obj = AmazingDataConfig(**provider_info.config)
+                instance = provider_class(config_obj)
+            elif provider_info.config:
                 # 检查构造函数签名
                 sig = inspect.signature(provider_class.__init__)
                 if 'config' in sig.parameters:
@@ -198,6 +226,16 @@ class DataProviderRegistry:
                 else:
                     instance = provider_class(**provider_info.config)
             else:
+                # 检查是否需要config参数
+                sig = inspect.signature(provider_class.__init__)
+                params = sig.parameters
+                # 排除self参数
+                required_params = [p for p in params if p != 'self' and params[p].default == inspect.Parameter.empty]
+
+                if required_params:
+                    logger.error(f"Provider {name} requires parameters but none provided: {required_params}")
+                    raise ValueError(f"Provider {name} requires configuration parameters: {required_params}")
+
                 instance = provider_class()
 
             # 缓存实例

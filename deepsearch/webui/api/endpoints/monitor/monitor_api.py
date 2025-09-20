@@ -13,9 +13,9 @@ import time
 from collections import deque, defaultdict
 
 from deepsearch.config import get_config
-from deepsearch.infrastructure.monitoring import MetricsCollector
-from deepsearch.event import EventBus
-from deepsearch.event.types import EventType
+from deepsearch.observability.metrics.metrics import MetricsCollector
+# from deepsearch.event import EventBus  # EventBus已经被EventEngine替代
+# from deepsearch.event.types import EventType  # EventType模块不存在，且未使用
 from deepsearch.infrastructure.cache import CacheManager
 
 

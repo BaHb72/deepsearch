@@ -264,7 +264,7 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
             测试连接
           </Button>
           <Button type="primary" htmlType="submit">
-            {initialValues ? '更新' : '创建'}
+            {initialValues ? '保存' : '创建'}
           </Button>
         </Space>
       </Form.Item>
@@ -428,11 +428,11 @@ const DataSourceConfig = () => {
     if (!editModal.data || !editModal.data.id) return
     try {
       await updateDataSource(editModal.data.id, values)
-      message.success('更新成功')
+      message.success('保存成功')
       editModal.close()
       refresh()
     } catch (error) {
-      message.error('更新失败: ' + error.message)
+      message.error('保存失败: ' + error.message)
     }
   }
 

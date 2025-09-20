@@ -11,8 +11,8 @@ from pydantic import BaseModel
 from loguru import logger
 import random
 
-from ....config import get_config
-from ....infrastructure.providers.managers.data_source_manager import DataSourceManager
+from deepsearch.config import get_config
+from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceManager
 
 # 创建路由器
 router = APIRouter(prefix="/market", tags=["市场数据管理"])

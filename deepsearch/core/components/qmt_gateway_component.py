@@ -6,11 +6,12 @@ QMT网关组件优化版本
 import asyncio
 import time
 from datetime import datetime
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 
 from loguru import logger
 
-from deepsearch.core.interfaces.component import Component
+from ..async_component import AsyncComponent
+from ..interfaces import ComponentType
 from deepsearch.infrastructure.providers.datafeed.qmt.gateway import (
     EVENT_QMT_TICK,
     EVENT_QMT_ORDERBOOK,
@@ -24,11 +25,11 @@ from deepsearch.event.schema import Event
 from deepsearch.messaging.bus import MessageBus
 
 
-class QMTGatewayComponent(Component):
+class QMTGatewayComponent(AsyncComponent):
     """优化的QMT网关组件"""
 
     def __init__(self, event_engine: EventEngine, message_bus: MessageBus, config: Dict):
-        super().__init__()
+        super().__init__("qmt_gateway_optimized", ComponentType.BUSINESS, "QMT网关(优化版)")
         self.event_engine = event_engine
         self.message_bus = message_bus
         self.config = config
@@ -38,6 +39,19 @@ class QMTGatewayComponent(Component):
 
         # 接收器
         self.receiver: Optional[QMTReceiver] = None
+
+    async def _do_initialize(self) -> Optional[Any]:
+        """初始化组件 - AsyncComponent 基类要求的抽象方法"""
+        await self.initialize()
+        return None
+
+    async def _do_start(self) -> None:
+        """启动组件 - AsyncComponent 基类要求的抽象方法"""
+        await self.start()
+
+    async def _do_stop(self) -> None:
+        """停止组件 - AsyncComponent 基类要求的抽象方法"""
+        await self.stop()
 
         # 数据缓存（优化的缓存结构）
         self._tick_cache = {}  # symbol -> TickData

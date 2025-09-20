@@ -363,7 +363,7 @@ class MainEngine:
                 self._ipc_server = EngineIPCServer(
                     self,
                     message_bus.get_instance(),
-                    cache.get_instance()
+                    cache.resource  # CacheComponent使用resource属性
                 )
 
                 # 初始化并启动 IPC 服务器
@@ -429,12 +429,12 @@ class MainEngine:
 
                 # 发送系统就绪事件
                 event_engine = self.get_component(EventEngineComponent)
-                if event_engine:
+                if event_engine and event_engine.resource:
                     event = Event(EVENT_SYSTEM_READY, {
                         "timestamp": datetime.now(),
                         "mode": self._mode
                     })
-                    event_engine.get_instance().put(event)
+                    event_engine.resource.put(event)
 
                 self._logger.info("[OK] DeepSearch System started successfully")
                 self._logger.info(f"System is running in {self._mode} mode")
@@ -522,12 +522,12 @@ class MainEngine:
         """关闭阶段1: 发送系统退出事件"""
         try:
             event_engine = self.get_component(EventEngineComponent)
-            if event_engine and event_engine.status == ComponentStatus.RUNNING:
+            if event_engine and event_engine.status == ComponentStatus.RUNNING and event_engine.resource:
                 event = Event(EVENT_SYSTEM_EXIT, {
                     "timestamp": datetime.now(),
                     "uptime": (datetime.now() - self._start_time).total_seconds() if self._start_time else 0
                 })
-                event_engine.get_instance().put(event)
+                event_engine.resource.put(event)
                 await asyncio.wait_for(asyncio.sleep(0.5), timeout=timeout)
         except asyncio.TimeoutError:
             self._logger.warning("Event notification phase timed out")

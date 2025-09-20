@@ -444,7 +444,7 @@ class SimpleAsyncComponent(AsyncComponent[T]):
 
     async def _do_start(self) -> None:
         """启动实例"""
-        instance = self.get_resource()
+        instance = self.resource
         if instance and self._start_method:
             start_func = getattr(instance, self._start_method)
             if asyncio.iscoroutinefunction(start_func):
@@ -454,7 +454,7 @@ class SimpleAsyncComponent(AsyncComponent[T]):
 
     async def _do_stop(self) -> None:
         """停止实例"""
-        instance = self.get_resource()
+        instance = self.resource
         if instance and self._stop_method:
             stop_func = getattr(instance, self._stop_method)
             if asyncio.iscoroutinefunction(stop_func):
@@ -470,11 +470,11 @@ class SimpleAsyncComponent(AsyncComponent[T]):
     @property
     def _instance(self):
         """兼容性属性：获取管理的实例"""
-        return self.get_resource()
+        return self.resource
 
     def _health_check(self) -> bool:
         """健康检查（同步版本，兼容旧代码）"""
-        instance = self.get_resource()
+        instance = self.resource
         if not instance:
             return False
         # 如果实例有健康检查方法，调用它

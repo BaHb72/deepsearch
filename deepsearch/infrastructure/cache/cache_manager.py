@@ -5,10 +5,69 @@ import asyncio
 from typing import Any, Optional, Dict, List
 from loguru import logger
 
-from .interfaces import ICache
+from .interfaces import ICache, ICacheStrategy
 from .providers.memory import MemoryCache
 from .strategies.lru import LRUStrategy
 from .strategies.ttl import TTLStrategy
+
+
+class HybridStrategy(ICacheStrategy):
+    """
+    Hybrid strategy combining LRU and TTL.
+    """
+
+    def __init__(self, lru_strategy: LRUStrategy, ttl_strategy: TTLStrategy):
+        """
+        Initialize hybrid strategy.
+
+        Args:
+            lru_strategy: LRU strategy instance
+            ttl_strategy: TTL strategy instance
+        """
+        self.lru_strategy = lru_strategy
+        self.ttl_strategy = ttl_strategy
+
+    def should_evict(self, key: str, metadata: Dict[str, Any]) -> bool:
+        """Check if key should be evicted (TTL or LRU)."""
+        # Evict if expired
+        if self.ttl_strategy.should_evict(key, metadata):
+            return True
+
+        # Evict if cache is full
+        return self.lru_strategy.should_evict(key, metadata)
+
+    def on_access(self, key: str) -> None:
+        """Update access tracking."""
+        self.lru_strategy.on_access(key)
+        self.ttl_strategy.on_access(key)
+
+    def on_set(self, key: str, size: int, ttl: Optional[int] = None) -> None:
+        """Track new key in both strategies."""
+        self.lru_strategy.on_set(key, size)
+        self.ttl_strategy.on_set(key, size, ttl)
+
+    def get_eviction_candidate(self) -> Optional[str]:
+        """Get key to evict (expired first, then LRU)."""
+        # Check for expired keys first
+        expired = self.ttl_strategy.get_eviction_candidate()
+        if expired:
+            return expired
+
+        # Otherwise use LRU
+        return self.lru_strategy.get_eviction_candidate()
+
+    def remove(self, key: str) -> None:
+        """Remove key from both strategies."""
+        self.lru_strategy.remove(key)
+        self.ttl_strategy.remove(key)
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get combined statistics."""
+        return {
+            'strategy': 'Hybrid (LRU + TTL)',
+            'lru_stats': self.lru_strategy.get_stats(),
+            'ttl_stats': self.ttl_strategy.get_stats()
+        }
 
 
 class CacheManager:
@@ -262,60 +321,4 @@ class CacheManager:
         return stats
 
 
-class HybridStrategy(ICacheStrategy):
-    """
-    Hybrid strategy combining LRU and TTL.
-    """
-    
-    def __init__(self, lru_strategy: LRUStrategy, ttl_strategy: TTLStrategy):
-        """
-        Initialize hybrid strategy.
-        
-        Args:
-            lru_strategy: LRU strategy instance
-            ttl_strategy: TTL strategy instance
-        """
-        self.lru_strategy = lru_strategy
-        self.ttl_strategy = ttl_strategy
-    
-    def should_evict(self, key: str, metadata: Dict[str, Any]) -> bool:
-        """Check if key should be evicted (TTL or LRU)."""
-        # Evict if expired
-        if self.ttl_strategy.should_evict(key, metadata):
-            return True
-        
-        # Evict if cache is full
-        return self.lru_strategy.should_evict(key, metadata)
-    
-    def on_access(self, key: str) -> None:
-        """Update access tracking."""
-        self.lru_strategy.on_access(key)
-        self.ttl_strategy.on_access(key)
-    
-    def on_set(self, key: str, size: int, ttl: Optional[int] = None) -> None:
-        """Track new key in both strategies."""
-        self.lru_strategy.on_set(key, size)
-        self.ttl_strategy.on_set(key, size, ttl)
-    
-    def get_eviction_candidate(self) -> Optional[str]:
-        """Get key to evict (expired first, then LRU)."""
-        # Check for expired keys first
-        expired = self.ttl_strategy.get_eviction_candidate()
-        if expired:
-            return expired
-        
-        # Otherwise use LRU
-        return self.lru_strategy.get_eviction_candidate()
-    
-    def remove(self, key: str) -> None:
-        """Remove key from both strategies."""
-        self.lru_strategy.remove(key)
-        self.ttl_strategy.remove(key)
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get combined statistics."""
-        return {
-            'strategy': 'Hybrid (LRU + TTL)',
-            'lru_stats': self.lru_strategy.get_stats(),
-            'ttl_stats': self.ttl_strategy.get_stats()
-        }
+# HybridStrategy class has been moved to the top of the file

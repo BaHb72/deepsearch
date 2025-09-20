@@ -8,7 +8,7 @@ AmazingData 自定义异常类
 from enum import Enum
 from typing import Optional
 
-from deepsearch.infrastructure.providers.base import DataProviderError
+from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
 
 
 class AmazingDataErrorCode(Enum):

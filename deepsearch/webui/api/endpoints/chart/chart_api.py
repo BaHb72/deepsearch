@@ -11,8 +11,8 @@ from pydantic import BaseModel
 from loguru import logger
 import pandas as pd
 
-from ....config import get_config
-from ....infrastructure.providers.managers.data_source_manager import DataSourceManager
+from deepsearch.config import get_config
+from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceManager
 
 # 创建路由器
 router = APIRouter(prefix="/chart", tags=["图表数据管理"])

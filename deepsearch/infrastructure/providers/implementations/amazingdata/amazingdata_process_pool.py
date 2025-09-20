@@ -10,7 +10,7 @@ Date: 2025-01-21
 
 import threading
 import time
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple
 from concurrent.futures import ThreadPoolExecutor
 from loguru import logger
 
@@ -43,6 +43,71 @@ class AmazingDataProcessPool:
 
         # 启动健康检查
         self._start_health_monitor()
+
+    def get_test_process(
+        self,
+        datasource_type: str = "amazingdata",
+        reuse_window: float = 30.0
+    ) -> Tuple[AmazingDataProcessProxy, str]:
+        """
+        获取测试专用进程（支持时间窗口内复用）
+
+        Args:
+            datasource_type: 数据源类型
+            reuse_window: 复用时间窗口（秒）
+
+        Returns:
+            (进程代理实例, 进程ID)
+        """
+        current_time = time.time()
+        test_process_id = f"{datasource_type}_test"
+
+        with self.lock:
+            # 检查是否存在可复用的测试进程
+            if test_process_id in self.processes:
+                proxy = self.processes[test_process_id]
+                info = self.process_info[test_process_id]
+
+                # 检查进程是否健康且在复用时间窗口内
+                time_since_created = current_time - info.get("created_at", 0)
+
+                if proxy.is_running and time_since_created <= reuse_window:
+                    # 复用现有进程
+                    info["last_used"] = current_time
+                    info["reuse_count"] = info.get("reuse_count", 0) + 1
+                    logger.info(f"[ProcessPool] Reusing test process {test_process_id} "
+                              f"(age: {time_since_created:.1f}s, reuse_count: {info['reuse_count']})")
+                    return proxy, test_process_id
+                else:
+                    # 进程过期或已死，清理并创建新的
+                    if time_since_created > reuse_window:
+                        logger.info(f"[ProcessPool] Test process expired "
+                                  f"(age: {time_since_created:.1f}s > {reuse_window}s)")
+                    else:
+                        logger.warning(f"[ProcessPool] Test process dead, creating new one")
+
+                    # 停止旧进程（带logout）
+                    self.stop(test_process_id, with_logout=True)
+
+            # 创建新的测试进程
+            logger.info(f"[ProcessPool] Creating new test process {test_process_id}")
+            proxy = AmazingDataProcessProxy(restart_on_crash=False)
+
+            if not proxy.start():
+                raise Exception(f"Failed to start test process")
+
+            # 注册进程
+            self.processes[test_process_id] = proxy
+            self.process_info[test_process_id] = {
+                "created_at": current_time,
+                "last_used": current_time,
+                "is_test": True,
+                "reuse_count": 0,
+                "reuse_window": reuse_window
+            }
+
+            logger.info(f"[ProcessPool] Test process created (PID: {proxy.worker_process.pid})")
+            return proxy, test_process_id
 
     def get_or_create(
         self,
@@ -113,13 +178,14 @@ class AmazingDataProcessPool:
             logger.info(f"[ProcessPool] Process created for {datasource_id} (PID: {proxy.worker_process.pid})")
             return proxy
 
-    def stop(self, datasource_id: str, force: bool = False) -> bool:
+    def stop(self, datasource_id: str, force: bool = False, with_logout: bool = True) -> bool:
         """
         停止指定数据源的进程
 
         Args:
             datasource_id: 数据源标识
             force: 是否强制停止
+            with_logout: 是否先尝试执行logout（测试成功后应设置为True）
 
         Returns:
             是否成功停止
@@ -128,11 +194,14 @@ class AmazingDataProcessPool:
             if datasource_id not in self.processes:
                 return True
 
-            logger.info(f"[ProcessPool] Stopping process for {datasource_id}")
+            logger.info(f"[ProcessPool] Stopping process for {datasource_id} (with_logout={with_logout})")
             proxy = self.processes[datasource_id]
 
-            # 尝试优雅停止
-            success = proxy.stop(timeout=5.0 if not force else 1.0)
+            # 尝试优雅停止（包含logout）
+            success = proxy.stop(
+                timeout=5.0 if not force else 1.0,
+                with_logout=with_logout
+            )
 
             if not success and force:
                 # 强制终止

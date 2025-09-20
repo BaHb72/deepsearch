@@ -9,8 +9,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from loguru import logger
 
-from ....api.cache.unified import UnifiedCache
-from ....config import get_config
+from deepsearch.webui.api.cache.unified import UnifiedCache
+from deepsearch.config import get_config
 
 # 创建路由器
 router = APIRouter(prefix="/cache", tags=["缓存管理"])

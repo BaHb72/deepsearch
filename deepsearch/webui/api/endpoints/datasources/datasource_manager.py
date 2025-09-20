@@ -685,9 +685,12 @@ async def toggle_datasource(datasource_id: str, enabled: bool):
                     )
 
                     pool = get_global_pool()
-                    # 停止进程
-                    success = pool.stop(datasource_id)
-                    logger.info(f"[Toggle] Stopped process for {datasource_id}: {success}")
+                    # 停止进程（包含logout尝试）
+                    success = pool.stop(
+                        datasource_id,
+                        with_logout=True  # 尝试执行logout
+                    )
+                    logger.info(f"[Toggle] Stopped process for {datasource_id} with logout: {success}")
                 except Exception as e:
                     logger.warning(f"[Toggle] Error stopping process: {e}")
 
@@ -718,6 +721,75 @@ async def toggle_datasource(datasource_id: str, enabled: bool):
         return APIResponse.error(
             code=ErrorCodes.INTERNAL_ERROR,
             message=f"切换数据源状态失败: {str(e)}",
+            status_code=500
+        )
+
+
+@router.get("/process-status")
+async def get_process_pool_status():
+    """
+    获取进程池状态
+
+    Returns:
+        进程池状态信息
+    """
+    try:
+        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
+            get_global_pool
+        )
+
+        pool = get_global_pool()
+        status = pool.get_status()
+
+        return APIResponse.success(
+            data=status,
+            message="进程池状态获取成功"
+        )
+
+    except Exception as e:
+        logger.error(f"获取进程池状态失败: {e}")
+        return APIResponse.error(
+            code=ErrorCodes.INTERNAL_ERROR,
+            message=f"获取进程池状态失败: {str(e)}",
+            status_code=500
+        )
+
+
+@router.post("/process/{process_id}/restart")
+async def restart_process(process_id: str):
+    """
+    重启指定进程
+
+    Args:
+        process_id: 进程ID
+
+    Returns:
+        重启结果
+    """
+    try:
+        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
+            get_global_pool
+        )
+
+        pool = get_global_pool()
+        success = pool.restart(process_id)
+
+        if success:
+            return APIResponse.success(
+                data={"process_id": process_id, "restarted": True},
+                message=f"进程 {process_id} 重启成功"
+            )
+        else:
+            return APIResponse.error(
+                code=ErrorCodes.INTERNAL_ERROR,
+                message=f"进程 {process_id} 重启失败"
+            )
+
+    except Exception as e:
+        logger.error(f"重启进程失败: {e}")
+        return APIResponse.error(
+            code=ErrorCodes.INTERNAL_ERROR,
+            message=f"重启进程失败: {str(e)}",
             status_code=500
         )
 
@@ -858,25 +930,28 @@ async def test_datasource_enhanced(request: TestDataSourceRequest, symbol: str =
                     port = 8600
 
                 try:
-                    logger.info(f"[TEST] 使用进程隔离安全包装器进行AmazingData测试...")
+                    logger.info(f"[TEST] 使用进程复用机制进行AmazingData测试...")
 
-                    # 创建安全包装器实例
-                    safe_wrapper = AmazingDataSafeWrapper(
-                        auto_restart=True,
-                        max_retries=2,
-                        default_timeout=30.0
+                    # 使用新的复用测试函数
+                    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import (
+                        test_connection_with_reuse
                     )
 
-                    # 使用安全登录方法
-                    logger.info(f"[TEST] 开始安全登录: username={request.config.username}, host={host}, port={port}")
-                    success, error_msg = safe_wrapper.safe_login(
+                    # 执行测试（支持进程复用）
+                    logger.info(f"[TEST] 开始测试: username={request.config.username}, host={host}, port={port}")
+                    test_result = test_connection_with_reuse(
                         username=request.config.username,
                         password=request.config.password,
                         host=host,
                         port=port,
-                        timeout=30.0
+                        reuse_window=30.0  # 30秒内复用同一进程
                     )
-                    logger.info(f"[TEST] 登录结果: success={success}, error={error_msg}")
+
+                    success = test_result.get("success", False)
+                    error_msg = test_result.get("error")
+                    process_id = test_result.get("process_id")
+
+                    logger.info(f"[TEST] 测试完成: success={success}, process_id={process_id}, error={error_msg}")
 
                     if success:
                         # 登录成功，尝试获取数据

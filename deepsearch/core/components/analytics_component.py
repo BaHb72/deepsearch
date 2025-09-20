@@ -5,7 +5,7 @@
 """
 from typing import Optional, Dict, Any
 
-from deepsearch.core.component import Component
+from ..async_component import AsyncComponent
 from loguru import logger
 
 from deepsearch.config import get_config
@@ -13,17 +13,18 @@ from deepsearch.infrastructure.providers.managers.data_sync_service import DataS
 from deepsearch.infrastructure.persistence.duckdb_analytics import DuckDBAnalytics, get_analytics_db
 
 
-class AnalyticsComponent(Component):
+class AnalyticsComponent(AsyncComponent):
     """DuckDB 分析组件"""
 
     def __init__(self, database_component=None):
         """
         初始化分析组件
-        
+
         Args:
             database_component: 主数据库组件（用于数据同步）
         """
-        super().__init__("Analytics")
+        from ..interfaces import ComponentType
+        super().__init__("Analytics", ComponentType.SUPPORTING)
         self.config = get_config()
         self.analytics_config = self.config.database.analytics
 
@@ -34,11 +35,16 @@ class AnalyticsComponent(Component):
         # 同步任务
         self._sync_task = None
 
-    async def start(self):
+    async def _do_initialize(self) -> Optional[Any]:
+        """初始化组件"""
+        # 初始化逻辑移到 _do_start 中
+        return None
+
+    async def _do_start(self):
         """启动组件"""
         if not self.analytics_config.enabled:
             logger.info("分析数据库已禁用")
-            self._status = "disabled"
+            self._state_manager.state.metadata["status"] = "disabled"
             return
 
         try:
@@ -63,16 +69,14 @@ class AnalyticsComponent(Component):
                 await self.sync_service.start()
                 logger.info(f"数据同步服务已启动，同步间隔: {self.analytics_config.sync_interval}秒")
 
-            self._status = "running"
             logger.info("分析组件启动成功")
 
         except Exception as e:
             logger.error(f"分析组件启动失败: {e}")
-            self._status = "error"
-            self._error_message = str(e)
+            self._state_manager.state.error_message = str(e)
             raise
 
-    async def stop(self):
+    async def _do_stop(self):
         """停止组件"""
         logger.info("正在停止分析组件...")
 
@@ -85,13 +89,11 @@ class AnalyticsComponent(Component):
             if self.analytics_db:
                 await self.analytics_db.close()
 
-            self._status = "stopped"
             logger.info("分析组件已停止")
 
         except Exception as e:
             logger.error(f"分析组件停止失败: {e}")
-            self._status = "error"
-            self._error_message = str(e)
+            self._state_manager.state.error_message = str(e)
 
     async def health_check(self) -> Dict[str, Any]:
         """健康检查"""
@@ -114,7 +116,7 @@ class AnalyticsComponent(Component):
 
                 return {
                     "healthy": True,
-                    "status": self._status,
+                    "status": self.status.value,
                     "database": {
                         "path": self.analytics_config.path,
                         "memory_limit": self.analytics_config.memory_limit,
@@ -126,7 +128,7 @@ class AnalyticsComponent(Component):
             else:
                 return {
                     "healthy": False,
-                    "status": self._status,
+                    "status": self.status.value,
                     "error": "分析数据库未初始化"
                 }
 

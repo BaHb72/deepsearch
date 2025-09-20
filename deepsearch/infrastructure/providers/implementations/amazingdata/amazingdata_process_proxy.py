@@ -152,12 +152,13 @@ class AmazingDataProcessProxy:
             logger.error(f"Failed to start worker process: {e}")
             return False
 
-    def stop(self, timeout: float = 5.0) -> bool:
+    def stop(self, timeout: float = 5.0, with_logout: bool = False) -> bool:
         """
         停止工作进程
 
         Args:
             timeout: 等待超时时间
+            with_logout: 是否先尝试执行logout
 
         Returns:
             是否成功停止
@@ -166,7 +167,28 @@ class AmazingDataProcessProxy:
             return True
 
         try:
-            logger.info("Stopping AmazingData worker process...")
+            logger.info(f"Stopping AmazingData worker process (with_logout={with_logout})...")
+
+            # 如果需要logout，先发送logout请求
+            if with_logout:
+                logger.info("Sending logout request before stopping...")
+                logout_request = ProxyRequest(
+                    request_id="logout_before_stop",
+                    request_type=RequestType.LOGOUT,
+                    method="logout",
+                    args=(),
+                    kwargs={}
+                )
+                self.request_queue.put(pickle.dumps(logout_request))
+
+                # 给logout一些时间执行（进程可能会崩溃）
+                self.worker_process.join(timeout=2.0)
+
+                # 如果进程已经退出（logout导致），直接返回成功
+                if not self.worker_process.is_alive():
+                    logger.info("Process terminated after logout")
+                    self.is_running = False
+                    return True
 
             # 发送关闭请求
             shutdown_request = ProxyRequest(
@@ -179,7 +201,8 @@ class AmazingDataProcessProxy:
             self.request_queue.put(pickle.dumps(shutdown_request))
 
             # 等待进程结束
-            self.worker_process.join(timeout=timeout)
+            remaining_timeout = max(1.0, timeout - (2.0 if with_logout else 0))
+            self.worker_process.join(timeout=remaining_timeout)
 
             if self.worker_process.is_alive():
                 logger.warning("Worker process not responding, terminating...")
@@ -419,14 +442,38 @@ class AmazingDataProcessProxy:
                                 result=result
                             )
 
-                    # 特殊处理logout（跳过以避免崩溃）
+                    # 特殊处理logout - 尝试安全执行
                     elif request.request_type == RequestType.LOGOUT:
-                        logger.warning("Skipping logout to avoid SDK crash")
-                        response = ProxyResponse(
-                            request_id=request.request_id,
-                            success=True,
-                            result="logout_skipped"
-                        )
+                        logger.info("Attempting safe logout...")
+                        try:
+                            # 设置一个标记表示即将logout
+                            # logout后进程可能崩溃，这是预期行为
+                            response = ProxyResponse(
+                                request_id=request.request_id,
+                                success=True,
+                                result="logout_initiated"
+                            )
+                            # 先发送响应
+                            response.timestamp = time.time()
+                            response_queue.put(pickle.dumps(response))
+
+                            # 尝试执行logout（可能导致进程退出）
+                            logger.info("Executing logout, process may terminate...")
+                            if hasattr(ad, 'logout'):
+                                ad.logout(*request.args, **request.kwargs)
+
+                            # 如果执行到这里，说明logout没有崩溃
+                            logger.info("Logout completed without crash")
+                            # 主动退出进程，确保状态清理
+                            break
+
+                        except Exception as e:
+                            logger.warning(f"Logout failed: {e}, terminating process")
+                            # logout失败，退出进程
+                            break
+
+                        # 跳过后续的响应发送
+                        continue
 
                     # 通用方法调用
                     else:

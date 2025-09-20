@@ -29,13 +29,12 @@ class WebUIComponent(AsyncComponent):
         self._frontend_port = config.webui.frontend_port if config and config.webui else 3000
         self._enabled = config.webui.enabled if config and config.webui else True
 
-    async def _initialize(self) -> None:
+    async def _do_initialize(self) -> None:
         """初始化WebUI"""
         with error_context(self.name, "initialize"):
             if not self._enabled:
                 self._logger.info("WebUI组件已禁用")
-                self._instance = self
-                return
+                return self
 
             # 使用超时控制进行初始化
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_INIT)
@@ -43,14 +42,14 @@ class WebUIComponent(AsyncComponent):
                 async def _init_webui():
                     # WebUI的初始化在启动时进行
                     # 这里只做基本准备工作
-                    self._instance = self
                     self._logger.info(f"WebUI组件已初始化，后端端口: {self._backend_port}, 前端端口: {self._frontend_port}")
 
                 await asyncio.wait_for(_init_webui(), timeout=timeout)
+                return self
             except asyncio.TimeoutError:
                 raise RuntimeError(f"WebUI initialization timeout after {timeout} seconds")
 
-    async def _start(self) -> None:
+    async def _do_start(self) -> None:
         """启动WebUI服务"""
         with error_context(self.name, "start"):
             if not self._enabled:
@@ -70,7 +69,7 @@ class WebUIComponent(AsyncComponent):
             except asyncio.TimeoutError:
                 self._logger.warning(f"WebUI start timeout after {timeout} seconds")
 
-    async def _stop(self) -> None:
+    async def _do_stop(self) -> None:
         """停止WebUI服务"""
         with error_context(self.name, "stop"):
             if not self._enabled:
@@ -109,7 +108,7 @@ class WebUIComponent(AsyncComponent):
             return True  # 禁用状态下认为是健康的
 
         # 基本健康检查
-        return self._instance is not None
+        return True
 
     async def health_check_async(self) -> bool:
         """异步健康检查（带超时）"""

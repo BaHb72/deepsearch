@@ -425,3 +425,89 @@ def test_connection_with_datasource(
         pool = get_global_pool()
         pool.stop(test_id, force=True)
         logger.info(f"[Test] Cleaned up test process: {test_id}")
+
+
+def test_connection_with_reuse(
+    username: str,
+    password: str,
+    host: str = "101.230.159.234",
+    port: int = 8600,
+    reuse_window: float = 30.0
+) -> Dict[str, Any]:
+    """
+    测试连接（支持进程复用，适合连续测试）
+
+    在指定时间窗口内复用同一个测试进程，避免频繁创建销毁。
+    超过时间窗口会创建新进程，确保状态干净。
+
+    Args:
+        username: 用户名
+        password: 密码
+        host: 服务器地址
+        port: 端口
+        reuse_window: 复用时间窗口（秒），默认30秒
+
+    Returns:
+        测试结果字典
+    """
+    from .amazingdata_process_proxy import RequestType
+
+    start_time = time.time()
+    pool = get_global_pool()
+
+    try:
+        # 获取测试进程（可能复用）
+        proxy, process_id = pool.get_test_process(
+            datasource_type="amazingdata",
+            reuse_window=reuse_window
+        )
+
+        logger.info(f"[Test] Using process {process_id} for testing")
+
+        # 执行登录测试
+        response = proxy.execute(
+            "login",
+            username,
+            password,
+            host,
+            port,
+            timeout=30.0,
+            request_type=RequestType.LOGIN
+        )
+
+        if response.success:
+            login_result = response.result
+            success = login_result == 0 or login_result is True
+
+            result = {
+                "success": success,
+                "error": None if success else f"登录失败，返回码: {login_result}",
+                "process_id": process_id,
+                "latency_ms": (time.time() - start_time) * 1000,
+                "stats": proxy.get_stats()
+            }
+        else:
+            result = {
+                "success": False,
+                "error": response.error or "登录失败",
+                "process_id": process_id,
+                "latency_ms": (time.time() - start_time) * 1000,
+                "stats": proxy.get_stats()
+            }
+
+        logger.info(f"[Test] Test completed: success={result['success']}, "
+                   f"latency={result['latency_ms']:.0f}ms")
+
+        # 测试成功后，进程会被保留供后续复用
+        # 超过时间窗口后会自动清理
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[Test] Test failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "process_id": None,
+            "latency_ms": (time.time() - start_time) * 1000
+        }

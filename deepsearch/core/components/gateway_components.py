@@ -24,7 +24,7 @@ class GatewayComponent(AsyncComponent[Gateway]):
         self._config = None
         self._timeout_manager = TimeoutManager()
 
-    async def _initialize(self) -> None:
+    async def _do_initialize(self) -> Gateway:
         """初始化网关"""
         with error_context(self.name, "initialize"):
             # 从配置获取网关配置
@@ -41,29 +41,32 @@ class GatewayComponent(AsyncComponent[Gateway]):
                 async def _create_gateway():
                     # 创建网关实例 - Gateway 只需要 engine 参数
                     # 这里暂时传入 None，实际应该注入 EventEngine
-                    self._instance = Gateway(None)
+                    instance = Gateway(None)
 
                     # 如果网关有初始化方法，调用它
-                    if hasattr(self._instance, 'initialize'):
-                        await self._instance.initialize()
+                    if hasattr(instance, 'initialize'):
+                        await instance.initialize()
 
-                await asyncio.wait_for(_create_gateway(), timeout=timeout)
+                    return instance
+
+                return await asyncio.wait_for(_create_gateway(), timeout=timeout)
             except asyncio.TimeoutError:
                 raise ComponentLifecycleError(
                     self.name, "initialize",
                     f"Gateway initialization timeout after {timeout} seconds"
                 )
 
-    async def _start(self) -> None:
+    async def _do_start(self) -> None:
         """启动网关"""
         with error_context(self.name, "start"):
-            if self._instance and hasattr(self._instance, 'connect'):
+            instance = self.resource
+            if instance and hasattr(instance, 'connect'):
                 # 使用超时控制进行连接
                 timeout = self._timeout_manager.get_timeout(TimeoutCategory.DB_CONNECT)
                 try:
                     async def _connect():
                         # Gateway 的 connect 是同步方法
-                        self._instance.connect()
+                        instance.connect()
 
                     await asyncio.wait_for(_connect(), timeout=timeout)
                 except asyncio.TimeoutError:
@@ -72,18 +75,19 @@ class GatewayComponent(AsyncComponent[Gateway]):
                         f"Gateway connection timeout after {timeout} seconds"
                     )
 
-    async def _stop(self) -> None:
+    async def _do_stop(self) -> None:
         """停止网关"""
         with error_context(self.name, "stop"):
-            if self._instance:
+            instance = self.resource
+            if instance:
                 timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_STOP)
                 try:
                     async def _close():
-                        if hasattr(self._instance, 'close'):
+                        if hasattr(instance, 'close'):
                             # Gateway 使用 close 方法
-                            self._instance.close()
-                        elif hasattr(self._instance, 'disconnect'):
-                            self._instance.disconnect()
+                            instance.close()
+                        elif hasattr(instance, 'disconnect'):
+                            instance.disconnect()
 
                     await asyncio.wait_for(_close(), timeout=timeout)
                 except asyncio.TimeoutError:
@@ -93,17 +97,18 @@ class GatewayComponent(AsyncComponent[Gateway]):
         """提供额外的状态信息"""
         return {
             "gateway_type": self._gateway_type,
-            "connected": self._instance and getattr(self._instance, 'is_connected', lambda: False)()
+            "connected": self.resource and getattr(self.resource, 'is_connected', lambda: False)()
         }
 
     def _health_check(self) -> bool:
         """检查网关健康状态"""
-        if not self._instance:
+        instance = self.resource
+        if not instance:
             return False
 
         # 检查连接状态
-        if hasattr(self._instance, 'is_connected'):
-            return self._instance.is_connected()
+        if hasattr(instance, 'is_connected'):
+            return instance.is_connected()
 
         return True
 
@@ -130,7 +135,7 @@ class QMTGatewayComponent(AsyncComponent):
         self._config = None
         self._timeout_manager = TimeoutManager()
 
-    async def _initialize(self) -> None:
+    async def _do_initialize(self) -> None:
         """初始化QMT网关"""
         with error_context(self.name, "initialize"):
             # 从配置获取QMT设置
@@ -155,13 +160,10 @@ class QMTGatewayComponent(AsyncComponent):
 
             if not self._config.get('enabled', False):
                 self._logger.info("QMT网关已禁用")
-                # 设置 _instance 为 self，让组件管理器知道组件已初始化
-                self._instance = self
-                return
+                return None
 
             self._logger.info("QMT网关配置已加载，等待依赖注入...")
-            # 设置 _instance 为 self，让组件管理器知道组件已初始化
-            self._instance = self
+            return None
 
     def _build_qmt_config(self, config) -> Dict[str, Any]:
         """构建QMT配置字典"""
@@ -198,7 +200,7 @@ class QMTGatewayComponent(AsyncComponent):
             self._gateway = OptimizedQMTGateway(event_engine, message_bus, self._config)
             self._logger.info("QMT网关实例已创建")
 
-    async def _start(self) -> None:
+    async def _do_start(self) -> None:
         """启动QMT网关"""
         with error_context(self.name, "start"):
             if not self._config or not self._config.get('enabled', False):
@@ -233,7 +235,7 @@ class QMTGatewayComponent(AsyncComponent):
             else:
                 self._logger.error("QMT网关实例未创建，无法启动")
 
-    async def _stop(self) -> None:
+    async def _do_stop(self) -> None:
         """停止QMT网关"""
         with error_context(self.name, "stop"):
             if self._gateway:

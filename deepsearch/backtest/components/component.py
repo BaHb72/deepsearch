@@ -48,6 +48,27 @@ class BacktestComponent(AsyncComponent):
         self._message_bus = message_bus
         self._data_provider = data_provider
 
+    async def _do_initialize(self) -> Optional[Any]:
+        """初始化回测组件"""
+        self._logger.info("初始化回测组件")
+        return None
+
+    async def _do_start(self) -> None:
+        """启动回测组件"""
+        self._logger.info("启动回测组件")
+
+    async def _do_stop(self) -> None:
+        """停止回测组件"""
+        self._logger.info("停止回测组件")
+        # 清理所有运行中的回测
+        for engine_id in list(self._engines.keys()):
+            try:
+                engine = self._engines.pop(engine_id)
+                if hasattr(engine, 'stop'):
+                    engine.stop()
+            except Exception as e:
+                self._logger.error(f"停止回测引擎 {engine_id} 失败: {e}")
+
     async def _initialize(self) -> None:
         """初始化回测组件"""
         with error_context(self.name, "initialize"):

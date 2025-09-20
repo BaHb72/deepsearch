@@ -435,8 +435,8 @@ class AppState:
             # 从引擎获取事件引擎组件
             from deepsearch.core.components import EventEngineComponent
             event_engine_component = self.engine.get_component(EventEngineComponent)
-            if event_engine_component:
-                event_engine = event_engine_component.get_instance()
+            if event_engine_component and event_engine_component.resource:
+                event_engine = event_engine_component.resource
                 self.monitor = EventSystemMonitor(event_engine)
             else:
                 logger.warning("无法获取事件引擎组件，监控功能将不可用")
@@ -772,34 +772,34 @@ def create_app() -> FastAPI:
     # Data Source Management API (新增)
     try:
         from deepsearch.webui.api.endpoints.datasources.datasource_management_api import router as datasource_management_api
-        app.include_router(datasource_management_api, tags=["DataSource Management V2"])
-        logger.info("数据源管理API V2已注册")
+        app.include_router(datasource_management_api, tags=["DataSource Management"])
+        logger.info("数据源管理API已注册")
     except ImportError as e:
-        logger.warning(f"数据源管理API V2模块加载失败: {e}")
+        logger.warning(f"数据源管理API模块加载失败: {e}")
 
-    # 注册缓存管理API (P2级新增真实实现)
+    # 注册缓存管理API
     try:
         from deepsearch.webui.api.endpoints.cache import router as cache_api
         app.include_router(cache_api, prefix="/api", tags=["Cache Management"])
-        logger.info("缓存管理API已注册（真实实现）")
+        logger.info("缓存管理API已注册")
     except ImportError as e:
         logger.warning(f"缓存管理API模块加载失败: {e}")
 
-    # 注册图表数据API (P2级新增真实实现)
+    # 注册图表数据API
     try:
-        from deepsearch.webui.api.endpoints.chart import router as chart_api_v2
-        app.include_router(chart_api_v2, prefix="/api", tags=["Chart Data V2"])
-        logger.info("图表数据API V2已注册（真实实现）")
+        from deepsearch.webui.api.endpoints.chart import router as chart_api
+        app.include_router(chart_api, prefix="/api", tags=["Chart Data"])
+        logger.info("图表数据API已注册")
     except ImportError as e:
-        logger.warning(f"图表数据API V2模块加载失败: {e}")
+        logger.warning(f"图表数据API模块加载失败: {e}")
 
-    # 注册市场分析API (P2级新增真实实现)
+    # 注册市场分析API
     try:
-        from deepsearch.webui.api.endpoints.market import router as market_api_v2
-        app.include_router(market_api_v2, prefix="/api", tags=["Market Analysis V2"])
-        logger.info("市场分析API V2已注册（真实实现）")
+        from deepsearch.webui.api.endpoints.market import router as market_api
+        app.include_router(market_api, prefix="/api", tags=["Market Analysis"])
+        logger.info("市场分析API已注册")
     except ImportError as e:
-        logger.warning(f"市场分析API V2模块加载失败: {e}")
+        logger.warning(f"市场分析API模块加载失败: {e}")
 
     # 注册市场数据API
     try:

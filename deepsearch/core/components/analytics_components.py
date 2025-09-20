@@ -26,7 +26,7 @@ class AnalyticsComponent(AsyncComponent):
         self._config = None
         self._timeout_manager = TimeoutManager()
 
-    async def _initialize(self) -> None:
+    async def _do_initialize(self) -> None:
         """初始化分析组件"""
         from deepsearch.infrastructure.persistence.duckdb_analytics import get_analytics_db
         from deepsearch.infrastructure.providers.managers.data_sync_service import get_sync_service
@@ -75,7 +75,7 @@ class AnalyticsComponent(AsyncComponent):
         """设置数据库组件（用于数据同步）"""
         self._database_component = database_component
 
-    async def _start(self) -> None:
+    async def _do_start(self) -> None:
         """启动分析组件"""
         with error_context(self.name, "start"):
             if not self._config or not self._config.enabled:
@@ -92,7 +92,7 @@ class AnalyticsComponent(AsyncComponent):
             except asyncio.TimeoutError:
                 self._logger.warning(f"Analytics start timeout after {timeout} seconds")
 
-    async def _stop(self) -> None:
+    async def _do_stop(self) -> None:
         """停止分析组件"""
         with error_context(self.name, "stop"):
             stop_timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_STOP)

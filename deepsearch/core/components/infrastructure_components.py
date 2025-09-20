@@ -161,3 +161,7 @@ class MessageBusComponent(AsyncComponent[CompositeMessageBus]):
         if instance:
             return instance.get_statistics()
         return {}
+
+    def get_instance(self):
+        """获取消息总线实例（兼容旧代码）"""
+        return self.resource

@@ -190,6 +190,33 @@ When modifying QMT scripts:
 3. Read with: `open(file, 'r', encoding='gbk')`
 4. Write with: `open(file, 'w', encoding='gbk')`
 
+## Recent Updates (2025-01-21)
+
+### 数据源专属进程池架构实施完成 (14:30)
+- **问题**: AmazingData SDK第一次测试成功但第二次测试失败，SDK不支持重复登录
+- **根本原因**:
+  - 全局单例进程代理导致SDK状态残留
+  - SDK在已登录状态下再次login会卡死
+  - 由于logout会崩溃，系统无法清理SDK状态
+- **实施方案**:
+  - 完善进程池管理器，支持安全logout机制
+  - 实现连续测试的智能进程复用（30秒时间窗口）
+  - 改进进程停止流程，先尝试logout再终止进程
+  - 添加进程监控和健康检查API端点
+- **关键改进**:
+  - `amazingdata_process_proxy.py`: 改进logout处理，先发送响应再执行logout
+  - `amazingdata_process_pool.py`: 新增get_test_process方法，支持进程复用
+  - `amazingdata_safe_wrapper.py`: 添加test_connection_with_reuse函数
+  - `datasource_manager.py`: 更新测试和toggle端点，支持新的复用机制
+- **新增API端点**:
+  - `/api/data-source/process-status`: 获取进程池状态
+  - `/api/data-source/process/{process_id}/restart`: 重启指定进程
+- **测试结果**: 支持无限次连续测试，30秒内复用进程，性能大幅提升
+- **影响**: 彻底解决SDK状态残留问题，提供稳定可靠的数据源管理
+
+### 数据源专属进程池架构设计完成 (10:30)
+- **技术文档**: `docs/DATASOURCE_PROCESS_POOL_ARCHITECTURE.md` - 完整的架构设计和实施方案
+
 ## Recent Updates (2025-09-20)
 
 ### Toggle端点错误信息传递修复 (19:00)
