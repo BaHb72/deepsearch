@@ -192,6 +192,22 @@ When modifying QMT scripts:
 
 ## Recent Updates (2025-01-21)
 
+### AmazingData性能列显示修复 (14:58)
+- **问题**: 启用amazingdata数据源后页面性能列不显示
+- **原因**: toggle_datasource函数未设置successRate和avgResponseTime字段
+- **解决方案**:
+  - 启用成功后设置初始性能指标（successRate=100.0, avgResponseTime=0）
+  - 响应数据包含性能字段供前端显示
+- **影响**: 性能列立即可见，提升用户体验
+
+### AmazingData logout参数修复 (14:45)
+- **问题**: `logout() missing 1 required positional argument: 'username'`
+- **解决方案**:
+  - worker进程保存登录用户名
+  - 进程代理添加last_login_username属性
+  - stop方法在logout请求中传递用户名
+- **影响**: logout正确执行，进程安全终止
+
 ### 数据源专属进程池架构实施完成 (14:30)
 - **问题**: AmazingData SDK第一次测试成功但第二次测试失败，SDK不支持重复登录
 - **根本原因**:
