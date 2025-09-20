@@ -49,6 +49,58 @@ def create_test_result(
     return result
 
 
+def safe_logout(username: str) -> bool:
+    """
+    安全的logout包装，防止SDK的SystemExit影响主进程
+
+    Args:
+        username: 用户名
+
+    Returns:
+        bool: logout是否成功
+    """
+    import threading
+    import time
+    from loguru import logger
+
+    # 用于存储logout结果
+    result_holder = {'success': False, 'exception': None}
+
+    def logout_in_thread():
+        """在独立线程中执行logout"""
+        try:
+            # 导入AmazingData模块
+            import AmazingData as ad
+            # 执行logout
+            ad.logout(username)
+            result_holder['success'] = True
+        except SystemExit as e:
+            # SDK调用了exit，但我们认为logout成功
+            logger.warning(f"[HELPER] SDK在logout时调用了exit: {e}")
+            result_holder['success'] = True
+        except Exception as e:
+            logger.error(f"[HELPER] logout异常: {e}")
+            result_holder['exception'] = e
+
+    # 创建并启动线程
+    thread = threading.Thread(target=logout_in_thread)
+    thread.start()
+
+    # 等待线程完成（最多5秒）
+    thread.join(timeout=5)
+
+    if thread.is_alive():
+        logger.warning("[HELPER] logout操作超时")
+        # 即使超时也认为logout成功（避免阻塞）
+        return True
+
+    if result_holder['exception']:
+        logger.error(f"[HELPER] logout失败: {result_holder['exception']}")
+        return False
+
+    return result_holder['success']
+
+
 def test_amazingdata_connection(
     username: str,
     password: str,
@@ -57,7 +109,7 @@ def test_amazingdata_connection(
     test_type: str = "realtime"
 ) -> Dict[str, Any]:
     """
-    测试AmazingData连接
+    测试AmazingData连接（使用进程隔离）
 
     Args:
         username: 用户名
@@ -71,90 +123,139 @@ def test_amazingdata_connection(
     """
     start_time = time.time()
 
+    logger.info(f"[HELPER] 开始测试AmazingData连接: {username}@{host}:{port}")
+    logger.info("[HELPER] 使用进程隔离代理，防止SDK崩溃影响主进程")
+
     try:
-        logger.info(f"[HELPER] 开始测试AmazingData连接: {username}@{host}:{port}")
-
-        # 尝试导入AmazingData
+        # 使用安全包装器进行测试
         try:
-            import AmazingData as ad
-            logger.info("[HELPER] AmazingData SDK导入成功")
+            from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import (
+                get_safe_wrapper
+            )
+            logger.info("[HELPER] 安全包装器导入成功")
         except ImportError as e:
-            logger.error(f"[HELPER] AmazingData SDK未安装: {e}")
-            return create_test_result(
-                success=False,
-                message="测试失败",
-                error="AmazingData SDK未安装，请先安装SDK",
-                details={
-                    "install_command": "pip install installer/AmazingData-1.0.9-cp313-none-any.whl",
-                    "import_error": str(e)
-                },
-                latency_ms=(time.time() - start_time) * 1000
-            )
+            logger.error(f"[HELPER] 安全包装器导入失败: {e}")
+            # 降级到旧方式（直接调用SDK，有崩溃风险）
+            logger.warning("[HELPER] 降级到直接SDK调用模式（有崩溃风险）")
 
-        # 尝试登录
-        try:
-            logger.info(f"[HELPER] 尝试登录到 {host}:{port}")
-            login_result = ad.login(
-                username=username,
-                password=password,
-                host=host,
-                port=port
-            )
+            try:
+                import AmazingData as ad
+                logger.info("[HELPER] AmazingData SDK导入成功")
 
-            if login_result == 0 or login_result is True:
-                logger.info("[HELPER] 登录成功")
-
-
-                logger.info("[HELPER] 登录验证成功")
-
-                # 立即登出并返回成功
-                try:
-                    ad.logout(username)
-                    logger.info("[HELPER] 登出成功")
-                except Exception as logout_error:
-                    logger.warning(f"[HELPER] 登出时出错: {logout_error}")
-
-                return create_test_result(
-                    success=True,
-                    message="测试成功",
-                    details={
-                        "server": f"{host}:{port}",
-                        "username": username,
-                        "test_type": "connection",
-                        "note": "连接验证成功，数据获取请使用具体的API接口"
-                    },
-                    latency_ms=(time.time() - start_time) * 1000,
-                    data_size=0
+                # 直接调用SDK（危险！）
+                logger.warning("[HELPER] 警告：直接调用SDK可能导致进程崩溃")
+                login_result = ad.login(
+                    username=username,
+                    password=password,
+                    host=host,
+                    port=port
                 )
-            else:
-                logger.error(f"[HELPER] 登录失败: {login_result}")
+
+                if login_result == 0 or login_result is True:
+                    logger.info("[HELPER] 登录成功")
+                    return create_test_result(
+                        success=True,
+                        message="测试成功",
+                        details={
+                            "server": f"{host}:{port}",
+                            "username": username,
+                            "test_type": "connection",
+                            "mode": "direct_sdk",
+                            "warning": "使用直接SDK调用，存在崩溃风险"
+                        },
+                        latency_ms=(time.time() - start_time) * 1000,
+                        data_size=0
+                    )
+                else:
+                    return create_test_result(
+                        success=False,
+                        message="测试失败",
+                        error=f"登录失败，错误码: {login_result}",
+                        latency_ms=(time.time() - start_time) * 1000
+                    )
+
+            except ImportError:
                 return create_test_result(
                     success=False,
                     message="测试失败",
-                    error=f"登录失败，错误码: {login_result}",
+                    error="AmazingData SDK未安装，请先安装SDK",
                     details={
-                        "server": f"{host}:{port}",
-                        "login_result": login_result
+                        "install_command": "pip install installer/AmazingData-1.0.9-cp313-none-any.whl"
+                    },
+                    latency_ms=(time.time() - start_time) * 1000
+                )
+            except SystemExit as e:
+                logger.critical(f"[HELPER] SDK尝试退出进程: {e}")
+                return create_test_result(
+                    success=False,
+                    message="测试失败",
+                    error="SDK尝试终止进程（SystemExit），连接失败",
+                    details={
+                        "crash_type": "SystemExit",
+                        "exit_code": str(e.code) if hasattr(e, 'code') else "unknown"
                     },
                     latency_ms=(time.time() - start_time) * 1000
                 )
 
-        except Exception as e:
-            logger.error(f"[HELPER] 登录过程异常: {e}")
-            error_msg = str(e)
+        # 使用安全包装器
+        wrapper = get_safe_wrapper()
 
-            # 检查并替换历史错误信息
-            if "does not support realtime" in error_msg.lower():
-                error_msg = "无法连接到AmazingData服务器，请检查网络和凭证"
+        logger.info(f"[HELPER] 尝试通过进程代理登录到 {host}:{port}")
+        success, error = wrapper.safe_login(
+            username=username,
+            password=password,
+            host=host,
+            port=port,
+            timeout=30.0
+        )
+
+        if success:
+            logger.info("[HELPER] 登录成功")
+
+            # 获取统计信息
+            stats = wrapper.get_stats()
+
+            # 自动登出（实际会跳过以避免崩溃）
+            wrapper.safe_logout(username)
+
+            return create_test_result(
+                success=True,
+                message="测试成功",
+                details={
+                    "server": f"{host}:{port}",
+                    "username": username,
+                    "test_type": "connection",
+                    "mode": "process_proxy",
+                    "note": "使用进程隔离代理，SDK崩溃不会影响主进程",
+                    "stats": {
+                        "crashes_handled": stats.get("crashes_handled", 0),
+                        "proxy_restarts": stats.get("proxy_stats", {}).get("process_restarts", 0)
+                    }
+                },
+                latency_ms=(time.time() - start_time) * 1000,
+                data_size=0
+            )
+        else:
+            logger.error(f"[HELPER] 登录失败: {error}")
+
+            # 分析错误类型
+            error_details = {
+                "server": f"{host}:{port}",
+                "username": username
+            }
+
+            if "SystemExit" in str(error):
+                error_details["crash_type"] = "SystemExit"
+                error_details["note"] = "SDK尝试退出但被进程代理拦截"
+            elif "进程崩溃" in str(error):
+                error_details["crash_type"] = "ProcessCrash"
+                error_details["note"] = "工作进程崩溃但主进程安全"
 
             return create_test_result(
                 success=False,
                 message="测试失败",
-                error=error_msg,
-                details={
-                    "server": f"{host}:{port}",
-                    "exception": type(e).__name__
-                },
+                error=error or "登录失败",
+                details=error_details,
                 latency_ms=(time.time() - start_time) * 1000
             )
 

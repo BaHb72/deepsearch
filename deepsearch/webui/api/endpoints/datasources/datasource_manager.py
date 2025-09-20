@@ -6,7 +6,7 @@
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field, ConfigDict
-from datetime import datetime
+from datetime import datetime, timedelta
 from loguru import logger
 import asyncio
 import aiohttp
@@ -931,7 +931,6 @@ async def test_datasource(request: TestDataSourceRequest):
                 try:
                     # 尝试获取最近一个交易日
                     import pandas as pd
-                    from datetime import datetime, timedelta
 
                     # 获取最近的交易日历
                     end_date = datetime.now().strftime("%Y%m%d")
@@ -1214,7 +1213,6 @@ async def get_data_source_monitor():
                 # 格式化最后检查时间
                 last_access = health.get("last_access")
                 if last_access:
-                    from datetime import datetime
                     try:
                         last_time = datetime.fromisoformat(last_access)
                         time_diff = datetime.now() - last_time

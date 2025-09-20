@@ -1,0 +1,490 @@
+"""
+AmazingData SDK进程隔离代理
+
+通过独立进程运行AmazingData SDK，防止SDK崩溃影响主进程。
+主要解决SDK的SystemExit和段错误问题。
+
+Author: DeepSearch Team
+Version: 1.0.0
+Date: 2025-09-20
+"""
+import multiprocessing as mp
+import queue
+import time
+import pickle
+import traceback
+from typing import Dict, Any, Optional, Tuple
+from enum import Enum
+from dataclasses import dataclass
+from loguru import logger
+
+
+class RequestType(Enum):
+    """请求类型枚举"""
+    LOGIN = "login"
+    LOGOUT = "logout"
+    GET_DATA = "get_data"
+    SUBSCRIBE = "subscribe"
+    UNSUBSCRIBE = "unsubscribe"
+    HEALTH_CHECK = "health_check"
+    SHUTDOWN = "shutdown"
+
+
+@dataclass
+class ProxyRequest:
+    """代理请求数据结构"""
+    request_id: str
+    request_type: RequestType
+    method: str
+    args: tuple
+    kwargs: dict
+    timeout: float = 30.0
+
+
+@dataclass
+class ProxyResponse:
+    """代理响应数据结构"""
+    request_id: str
+    success: bool
+    result: Any = None
+    error: Optional[str] = None
+    error_type: Optional[str] = None
+    timestamp: float = 0
+
+
+class AmazingDataProcessProxy:
+    """
+    AmazingData SDK进程隔离代理
+
+    通过独立进程运行SDK，实现完全隔离：
+    - SDK崩溃不影响主进程
+    - 自动检测和重启工作进程
+    - 请求排队和超时控制
+    - 健康检查和监控
+    """
+
+    def __init__(self, max_workers: int = 1, restart_on_crash: bool = True):
+        """
+        初始化进程代理
+
+        Args:
+            max_workers: 最大工作进程数（目前只支持1）
+            restart_on_crash: 崩溃后是否自动重启
+        """
+        self.max_workers = max_workers
+        self.restart_on_crash = restart_on_crash
+
+        # 进程通信
+        self.manager = mp.Manager()
+        self.request_queue = self.manager.Queue()
+        self.response_queue = self.manager.Queue()
+
+        # 工作进程
+        self.worker_process = None
+        self.is_running = False
+
+        # 统计信息
+        self.stats = {
+            "requests_sent": 0,
+            "requests_completed": 0,
+            "requests_failed": 0,
+            "process_restarts": 0,
+            "last_crash_time": None,
+            "last_crash_reason": None
+        }
+
+        # 请求跟踪
+        self.pending_requests = {}
+
+    def start(self) -> bool:
+        """
+        启动工作进程
+
+        Returns:
+            是否成功启动
+        """
+        if self.is_running and self.worker_process and self.worker_process.is_alive():
+            logger.info("AmazingData worker process already running")
+            return True
+
+        try:
+            logger.info("Starting AmazingData worker process...")
+
+            # 创建工作进程
+            self.worker_process = mp.Process(
+                target=self._worker_loop,
+                args=(self.request_queue, self.response_queue),
+                daemon=True
+            )
+            self.worker_process.start()
+
+            # 等待进程启动
+            time.sleep(0.5)
+
+            if self.worker_process.is_alive():
+                self.is_running = True
+                logger.info(f"AmazingData worker process started (PID: {self.worker_process.pid})")
+                return True
+            else:
+                logger.error("Worker process failed to start")
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to start worker process: {e}")
+            return False
+
+    def stop(self, timeout: float = 5.0) -> bool:
+        """
+        停止工作进程
+
+        Args:
+            timeout: 等待超时时间
+
+        Returns:
+            是否成功停止
+        """
+        if not self.is_running:
+            return True
+
+        try:
+            logger.info("Stopping AmazingData worker process...")
+
+            # 发送关闭请求
+            shutdown_request = ProxyRequest(
+                request_id="shutdown",
+                request_type=RequestType.SHUTDOWN,
+                method="shutdown",
+                args=(),
+                kwargs={}
+            )
+            self.request_queue.put(pickle.dumps(shutdown_request))
+
+            # 等待进程结束
+            self.worker_process.join(timeout=timeout)
+
+            if self.worker_process.is_alive():
+                logger.warning("Worker process not responding, terminating...")
+                self.worker_process.terminate()
+                self.worker_process.join(timeout=2)
+
+                if self.worker_process.is_alive():
+                    logger.error("Force killing worker process")
+                    self.worker_process.kill()
+
+            self.is_running = False
+            logger.info("AmazingData worker process stopped")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error stopping worker process: {e}")
+            return False
+
+    def execute(
+        self,
+        method: str,
+        *args,
+        request_type: RequestType = RequestType.GET_DATA,
+        timeout: float = 30.0,
+        **kwargs
+    ) -> ProxyResponse:
+        """
+        执行SDK方法
+
+        Args:
+            method: 方法名
+            *args: 位置参数
+            request_type: 请求类型
+            timeout: 超时时间
+            **kwargs: 关键字参数
+
+        Returns:
+            代理响应
+        """
+        # 确保进程在运行
+        if not self.is_running or not self.worker_process or not self.worker_process.is_alive():
+            if self.restart_on_crash:
+                logger.warning("Worker process not running, attempting restart...")
+                if not self.start():
+                    return ProxyResponse(
+                        request_id="",
+                        success=False,
+                        error="Failed to start worker process"
+                    )
+                self.stats["process_restarts"] += 1
+            else:
+                return ProxyResponse(
+                    request_id="",
+                    success=False,
+                    error="Worker process not running"
+                )
+
+        # 创建请求
+        request_id = f"{method}_{time.time()}"
+        request = ProxyRequest(
+            request_id=request_id,
+            request_type=request_type,
+            method=method,
+            args=args,
+            kwargs=kwargs,
+            timeout=timeout
+        )
+
+        self.stats["requests_sent"] += 1
+
+        try:
+            # 发送请求
+            self.request_queue.put(pickle.dumps(request))
+
+            # 等待响应
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                try:
+                    # 检查进程是否崩溃
+                    if not self.worker_process.is_alive():
+                        logger.error("Worker process crashed during request")
+                        self.stats["last_crash_time"] = time.time()
+                        self.stats["last_crash_reason"] = "Process died during request"
+
+                        if self.restart_on_crash:
+                            self.start()
+
+                        return ProxyResponse(
+                            request_id=request_id,
+                            success=False,
+                            error="Worker process crashed",
+                            error_type="ProcessCrash"
+                        )
+
+                    # 检查响应队列
+                    response_data = self.response_queue.get(timeout=0.1)
+                    response = pickle.loads(response_data)
+
+                    if response.request_id == request_id:
+                        if response.success:
+                            self.stats["requests_completed"] += 1
+                        else:
+                            self.stats["requests_failed"] += 1
+                        return response
+
+                except queue.Empty:
+                    continue
+                except Exception as e:
+                    logger.error(f"Error getting response: {e}")
+
+            # 超时
+            self.stats["requests_failed"] += 1
+            return ProxyResponse(
+                request_id=request_id,
+                success=False,
+                error=f"Request timeout after {timeout}s",
+                error_type="Timeout"
+            )
+
+        except Exception as e:
+            logger.error(f"Error executing request: {e}")
+            self.stats["requests_failed"] += 1
+            return ProxyResponse(
+                request_id=request_id,
+                success=False,
+                error=str(e),
+                error_type=type(e).__name__
+            )
+
+    def health_check(self) -> bool:
+        """
+        健康检查
+
+        Returns:
+            工作进程是否健康
+        """
+        if not self.is_running or not self.worker_process:
+            return False
+
+        if not self.worker_process.is_alive():
+            return False
+
+        # 发送健康检查请求
+        response = self.execute(
+            "health_check",
+            request_type=RequestType.HEALTH_CHECK,
+            timeout=5.0
+        )
+
+        return response.success
+
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        获取统计信息
+
+        Returns:
+            统计数据
+        """
+        return self.stats.copy()
+
+    @staticmethod
+    def _worker_loop(request_queue: mp.Queue, response_queue: mp.Queue):
+        """
+        工作进程主循环
+
+        在独立进程中运行，处理SDK调用。
+
+        Args:
+            request_queue: 请求队列
+            response_queue: 响应队列
+        """
+        # 在工作进程中导入SDK
+        sdk_imported = False
+        ad = None
+
+        logger.info(f"Worker process started (PID: {mp.current_process().pid})")
+
+        # SDK实例缓存
+        sdk_instances = {}
+
+        while True:
+            try:
+                # 获取请求
+                request_data = request_queue.get(timeout=1)
+                request = pickle.loads(request_data)
+
+                # 处理关闭请求
+                if request.request_type == RequestType.SHUTDOWN:
+                    logger.info("Worker received shutdown request")
+                    break
+
+                # 延迟导入SDK
+                if not sdk_imported:
+                    try:
+                        import AmazingData as ad_module
+                        ad = ad_module
+                        sdk_imported = True
+                        logger.info("AmazingData SDK imported in worker process")
+                    except ImportError as e:
+                        response = ProxyResponse(
+                            request_id=request.request_id,
+                            success=False,
+                            error=f"Failed to import SDK: {e}",
+                            error_type="ImportError"
+                        )
+                        response_queue.put(pickle.dumps(response))
+                        continue
+
+                # 处理健康检查
+                if request.request_type == RequestType.HEALTH_CHECK:
+                    response = ProxyResponse(
+                        request_id=request.request_id,
+                        success=True,
+                        result="healthy"
+                    )
+                    response_queue.put(pickle.dumps(response))
+                    continue
+
+                # 执行SDK方法
+                try:
+                    # 特殊处理login
+                    if request.request_type == RequestType.LOGIN:
+                        result = ad.login(*request.args, **request.kwargs)
+
+                        # 判断登录结果
+                        if result == 0 or result is True:
+                            response = ProxyResponse(
+                                request_id=request.request_id,
+                                success=True,
+                                result=result
+                            )
+                        else:
+                            response = ProxyResponse(
+                                request_id=request.request_id,
+                                success=False,
+                                error=f"Login failed with code: {result}",
+                                result=result
+                            )
+
+                    # 特殊处理logout（跳过以避免崩溃）
+                    elif request.request_type == RequestType.LOGOUT:
+                        logger.warning("Skipping logout to avoid SDK crash")
+                        response = ProxyResponse(
+                            request_id=request.request_id,
+                            success=True,
+                            result="logout_skipped"
+                        )
+
+                    # 通用方法调用
+                    else:
+                        # 获取SDK方法
+                        method = getattr(ad, request.method, None)
+                        if method is None:
+                            response = ProxyResponse(
+                                request_id=request.request_id,
+                                success=False,
+                                error=f"Method {request.method} not found",
+                                error_type="AttributeError"
+                            )
+                        else:
+                            result = method(*request.args, **request.kwargs)
+                            response = ProxyResponse(
+                                request_id=request.request_id,
+                                success=True,
+                                result=result
+                            )
+
+                except SystemExit as e:
+                    # SDK调用了exit
+                    logger.critical(f"SDK called SystemExit: {e}")
+                    response = ProxyResponse(
+                        request_id=request.request_id,
+                        success=False,
+                        error=f"SDK attempted to exit with code: {e.code}",
+                        error_type="SystemExit"
+                    )
+                    # 继续运行，不退出
+
+                except Exception as e:
+                    logger.error(f"Error executing SDK method: {e}")
+                    logger.error(traceback.format_exc())
+                    response = ProxyResponse(
+                        request_id=request.request_id,
+                        success=False,
+                        error=str(e),
+                        error_type=type(e).__name__
+                    )
+
+                # 发送响应
+                response.timestamp = time.time()
+                response_queue.put(pickle.dumps(response))
+
+            except queue.Empty:
+                # 队列为空，继续等待
+                continue
+
+            except Exception as e:
+                logger.error(f"Worker loop error: {e}")
+                logger.error(traceback.format_exc())
+
+        logger.info("Worker process exiting")
+
+
+# 全局代理实例
+_global_proxy = None
+
+
+def get_proxy() -> AmazingDataProcessProxy:
+    """
+    获取全局代理实例（单例模式）
+
+    Returns:
+        进程代理实例
+    """
+    global _global_proxy
+    if _global_proxy is None:
+        _global_proxy = AmazingDataProcessProxy()
+        _global_proxy.start()
+    return _global_proxy
+
+
+def shutdown_proxy():
+    """关闭全局代理"""
+    global _global_proxy
+    if _global_proxy:
+        _global_proxy.stop()
+        _global_proxy = None

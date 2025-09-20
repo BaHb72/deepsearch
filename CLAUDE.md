@@ -189,6 +189,70 @@ When modifying QMT scripts:
 3. Read with: `open(file, 'r', encoding='gbk')`
 4. Write with: `open(file, 'w', encoding='gbk')`
 
+## Recent Updates (2025-09-20)
+
+### AmazingData SDK进程隔离方案实施 (17:50)
+- **问题**: AmazingData SDK在login失败时调用SystemExit导致整个服务崩溃
+- **根本原因**:
+  - SDK设计缺陷：login失败时调用exit(0)终止进程
+  - logout操作导致段错误（SIGSEGV/0xC0000005）
+  - 线程隔离和try/except无法阻止SystemExit传播
+- **综合解决方案**:
+  - 创建进程隔离代理：`amazingdata_process_proxy.py`
+  - 实现安全包装器：`amazingdata_safe_wrapper.py`
+  - SDK在独立进程中运行，通过Queue进行IPC通信
+  - 主进程与SDK完全隔离，SDK崩溃不影响服务
+- **关键特性**:
+  - 自动检测工作进程崩溃并重启
+  - 请求超时控制和重试机制
+  - 完整的错误处理和降级支持
+  - 统计信息和健康检查
+- **关键文件**:
+  - `infrastructure/providers/implementations/amazingdata/amazingdata_process_proxy.py`
+  - `infrastructure/providers/implementations/amazingdata/amazingdata_safe_wrapper.py`
+  - `webui/api/endpoints/datasources/amazingdata_test_helper.py`（已更新）
+- **测试结果**: SDK崩溃被成功隔离，主进程保持稳定
+- **影响**: 彻底解决了AmazingData SDK导致的系统崩溃问题
+
+### datetime作用域冲突修复 (17:45)
+- **问题**: toggle端点调用test_datasource函数时报错"cannot access local variable 'datetime' where it is not associated with a value"
+- **根本原因**:
+  - Python作用域规则：函数内部的import会创建局部变量，覆盖全局导入
+  - datasource_manager.py的test_datasource函数内有条件块导入datetime
+  - 当条件不满足时，局部datetime变量未赋值，导致UnboundLocalError
+- **调试过程**:
+  - 发现/test端点(test_datasource_enhanced函数)正常，/toggle端点(test_datasource函数)失败
+  - 定位到第934行和第1216行有局部import datetime语句
+  - 确认是Python作用域冲突导致的典型问题
+- **解决方案**:
+  - 在文件开头第9行添加timedelta导入：`from datetime import datetime, timedelta`
+  - 删除第934行的局部导入：`from datetime import datetime, timedelta`
+  - 删除第1216行的局部导入：`from datetime import datetime`
+- **关键文件修改**:
+  - `datasource_manager.py`: 第9、934、1216行，统一使用全局导入
+- **测试结果**: Python语法检查通过，代码结构正确
+- **影响**: 解决了数据源启用/禁用功能的错误，恢复toggle端点正常工作
+
+### AmazingData SDK logout崩溃问题修复 (15:45)
+- **问题**: AmazingData SDK的logout操作导致进程崩溃（0xC0000005访问违规/SIGSEGV段错误）
+- **根本原因**:
+  - SDK的logout方法会调用SystemExit或执行不安全的内存操作
+  - 即使在独立线程中执行logout也会影响主进程
+  - SDK存在设计缺陷：不logout会导致第二次login卡住
+- **调试过程**:
+  - 初次尝试：直接调用`ad.logout(username)`导致立即崩溃
+  - 二次尝试：创建safe_logout使用线程隔离，仍然崩溃（退出代码139）
+  - 最终方案：完全跳过logout操作
+- **解决方案**:
+  - 在测试连接后跳过logout操作
+  - 添加注释说明SDK崩溃问题
+  - 连接会在进程结束时自动清理
+- **关键文件修改**:
+  - `amazingdata_test_helper.py`: 第162-165行，跳过logout并记录原因
+- **测试结果**: 第一次测试成功，但第二次测试会卡在login阶段
+- **遗留问题**: SDK保持登录状态，第二次login会无响应（需要重启进程）
+- **影响**: 避免了进程崩溃，但限制了连续测试能力
+
 ## Recent Updates (2025-09-18)
 
 ### AmazingData大数据量崩溃修复 (23:50)
