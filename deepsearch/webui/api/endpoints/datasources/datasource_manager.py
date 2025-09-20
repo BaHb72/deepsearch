@@ -590,6 +590,10 @@ async def toggle_datasource(datasource_id: str, enabled: bool):
                         logger.info(f"[Toggle] Created dedicated process for {datasource_id}")
                         datasource.enabled = True
                         datasource.status = "online"
+                        # 设置初始性能指标，使前端性能列可见
+                        datasource.successRate = 100.0  # 初始成功率
+                        datasource.avgResponseTime = 0  # 初始响应时间（将在实际测试后更新）
+                        datasource.lastCheckTime = datetime.now()
                         datasource.updated_at = datetime.now()
 
                         return APIResponse.success(
@@ -597,6 +601,8 @@ async def toggle_datasource(datasource_id: str, enabled: bool):
                                 "id": datasource_id,
                                 "enabled": True,
                                 "status": "online",
+                                "successRate": 100.0,
+                                "avgResponseTime": 0,
                                 "message": f"{datasource.name}已启用（专属进程已创建）"
                             }
                         )
