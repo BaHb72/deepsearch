@@ -126,7 +126,26 @@ class AmazingDataProcessProxy:
                 logger.info(f"AmazingData worker process started (PID: {self.worker_process.pid})")
                 return True
             else:
+                import platform
                 logger.error("Worker process failed to start")
+
+                # 添加平台特定的诊断信息
+                if platform.system() == "Windows":
+                    logger.error("===== Windows进程启动失败诊断 =====")
+                    logger.error("可能的原因：")
+                    logger.error("1. Python multiprocessing在Windows上需要if __name__ == '__main__'保护")
+                    logger.error("2. 需要以管理员权限运行")
+                    logger.error("3. Windows防火墙或杀毒软件阻止了进程创建")
+                    logger.error("4. 系统资源不足（内存、句柄等）")
+                    logger.error("5. Python环境问题（建议使用Python 3.8+）")
+                    logger.error("解决建议：")
+                    logger.error("- 尝试以管理员身份运行")
+                    logger.error("- 临时禁用杀毒软件测试")
+                    logger.error("- 检查系统事件日志")
+                else:
+                    logger.error(f"进程在{platform.system()}系统上启动失败")
+                    logger.error("可能的原因：资源限制、权限问题或Python环境问题")
+
                 return False
 
         except Exception as e:

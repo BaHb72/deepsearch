@@ -87,6 +87,24 @@ class AmazingDataSafeWrapper:
         """
         logger.info(f"[SafeWrapper] Attempting login: {username}@{host}:{port}")
 
+        # 首先检查进程代理是否正常
+        if not self.proxy:
+            logger.error("[SafeWrapper] Process proxy is None")
+            return False, "进程代理未初始化"
+
+        if not self.proxy.is_running:
+            logger.warning("[SafeWrapper] Process proxy not running, attempting to start...")
+            if not self.proxy.start():
+                logger.error("[SafeWrapper] Failed to start process proxy")
+                error_msg = (
+                    "进程代理启动失败。可能原因：\n"
+                    "1. Windows系统需要管理员权限\n"
+                    "2. 防火墙或杀毒软件阻止\n"
+                    "3. Python multiprocessing限制\n"
+                    "请查看日志获取详细诊断信息"
+                )
+                return False, error_msg
+
         # 重试逻辑
         for attempt in range(self.max_retries):
             if attempt > 0:

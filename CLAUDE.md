@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**最后更新时间**: 2025-09-18 (UTC+8)
+**最后更新时间**: 2025-09-20 (UTC+8)
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -28,6 +28,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 📄 **前端API定义**: `docs/api/FRONTEND_API_REGISTRY.md` - 前端调用的API列表
 - 📄 **后端API定义**: `docs/api/BACKEND_API_REGISTRY.md` - 后端提供的API路由
 - 📄 **接口映射关系**: `docs/api/API_MAPPING.md` - 前后端API对应关系
+- 📄 **数据源API**: `docs/api/datasource_api.md` - 数据源管理相关API文档
 
 ### 重要：修改API前必读
 在修改任何API接口前，**必须**先执行以下步骤：
@@ -190,6 +191,50 @@ When modifying QMT scripts:
 4. Write with: `open(file, 'w', encoding='gbk')`
 
 ## Recent Updates (2025-09-20)
+
+### Toggle端点错误信息传递修复 (19:00)
+- **问题**: toggle端点返回模糊的"测试失败"错误，没有具体原因
+- **根本原因**:
+  - test_datasource错误响应使用details字段，toggle_datasource只读取data字段
+  - 进程代理可能因Windows权限限制未能启动
+  - 错误处理链条中缺少详细诊断信息
+- **解决方案**:
+  - 修改toggle_datasource同时检查data和details字段
+  - 统一test_datasource使用data字段返回错误信息
+  - 增强进程代理启动诊断，提供Windows特定错误提示
+  - 改进safe_wrapper在代理未启动时的错误处理
+  - 添加详细的调试日志跟踪执行流程
+- **关键改进**:
+  - 错误信息现在能正确传递到前端
+  - Windows进程启动失败时提供具体解决建议
+  - 完整的日志链路便于问题诊断
+- **修改文件**:
+  - `datasource_manager.py`: 第586-601、1136-1141、994-1036行
+  - `amazingdata_process_proxy.py`: 第124-149行
+  - `amazingdata_safe_wrapper.py`: 第88-106行
+- **测试结果**: 语法检查通过，错误信息传递链路完整
+- **影响**: 用户现在能看到具体的错误原因，便于问题排查
+
+### TGW/AmazingData登录崩溃完全修复 (18:30)
+- **问题**: datasource_manager.py中直接调用AmazingData SDK导致SystemExit崩溃
+- **根本原因**:
+  - AmazingData SDK内部实际使用TGW库（login\tgw_login.pyc）
+  - TGW在登录失败时调用SystemExit(0)终止进程
+  - datasource_manager.py未使用已实现的进程隔离方案
+- **解决方案**:
+  - 修改datasource_manager.py使用AmazingDataSafeWrapper
+  - 替换所有直接SDK调用为进程隔离调用
+  - test_datasource和test_datasource_enhanced函数都已更新
+  - 不再调用ad.logout()避免段错误
+- **关键改进**:
+  - 所有AmazingData/TGW调用现在都在独立进程中执行
+  - SDK崩溃不再影响主FastAPI服务
+  - 支持自动重试和优雅的错误处理
+  - 提供明确的错误信息而非服务崩溃
+- **修改文件**:
+  - `webui/api/endpoints/datasources/datasource_manager.py`: 第22、782-850、1001-1040行
+- **测试结果**: Python语法检查通过，SDK崩溃被成功隔离
+- **影响**: 彻底解决了数据源测试和切换时的服务崩溃问题
 
 ### AmazingData SDK进程隔离方案实施 (17:50)
 - **问题**: AmazingData SDK在login失败时调用SystemExit导致整个服务崩溃

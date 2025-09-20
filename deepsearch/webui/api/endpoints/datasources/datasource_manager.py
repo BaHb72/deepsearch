@@ -18,6 +18,8 @@ import time
 from deepsearch.webui.api.common.response_format import APIResponse, APIException, ErrorCodes
 from deepsearch.config import get_config
 from deepsearch.infrastructure.cache.cache_manager import CacheManager
+# 导入进程隔离的安全包装器
+from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import AmazingDataSafeWrapper
 
 
 # 创建路由
@@ -581,10 +583,32 @@ async def toggle_datasource(datasource_id: str, enabled: bool):
             test_message = "测试失败"
             test_details = {}
 
-            if hasattr(test_response, 'data') and test_response.data:
-                test_success = test_response.data.get("success", False)
-                test_message = test_response.data.get("message", "连接测试失败")
-                test_details = test_response.data.get("details", {})
+            # test_datasource返回的是字典，使用字典键访问而不是属性访问
+            if isinstance(test_response, dict):
+                # 优先从data字段获取
+                if 'data' in test_response and test_response['data']:
+                    test_data = test_response['data']
+                    test_success = test_data.get("success", False)
+                    test_message = test_data.get("message", "连接测试失败")
+                    test_details = test_data.get("details", {})
+                    logger.debug(f"从data字段获取测试结果: success={test_success}, message={test_message}, details={test_details}")
+                # 如果没有data，尝试从顶层获取message
+                elif 'message' in test_response:
+                    test_message = test_response['message']
+                    # 如果有details字段，也获取它
+                    if 'details' in test_response:
+                        test_details = test_response['details'] if isinstance(test_response['details'], dict) else {}
+                    logger.debug(f"从顶层获取错误信息: message={test_message}, details={test_details}")
+            else:
+                # 如果不是字典（可能是对象），使用原有的属性访问方式
+                if hasattr(test_response, 'data') and test_response.data:
+                    test_success = test_response.data.get("success", False)
+                    test_message = test_response.data.get("message", "连接测试失败")
+                    test_details = test_response.data.get("details", {})
+                    logger.debug(f"从对象data属性获取测试结果: success={test_success}, message={test_message}")
+                elif hasattr(test_response, 'message'):
+                    test_message = test_response.message
+                    logger.debug(f"从对象message属性获取错误信息: {test_message}")
 
             # 测试失败，不启用
             if not test_success:
@@ -778,91 +802,71 @@ async def test_datasource_enhanced(request: TestDataSourceRequest, symbol: str =
                     port = 8600
 
                 try:
-                    logger.info(f"[TEST] 尝试导入AmazingData SDK...")
-                    import AmazingData as ad
-                    logger.info(f"[TEST] AmazingData SDK导入成功")
+                    logger.info(f"[TEST] 使用进程隔离安全包装器进行AmazingData测试...")
 
-                    # 实际连接测试
-                    logger.info(f"[TEST] 开始登录: username={request.config.username}, host={host}, port={port}")
-                    login_result = ad.login(
+                    # 创建安全包装器实例
+                    safe_wrapper = AmazingDataSafeWrapper(
+                        auto_restart=True,
+                        max_retries=2,
+                        default_timeout=30.0
+                    )
+
+                    # 使用安全登录方法
+                    logger.info(f"[TEST] 开始安全登录: username={request.config.username}, host={host}, port={port}")
+                    success, error_msg = safe_wrapper.safe_login(
                         username=request.config.username,
                         password=request.config.password,
                         host=host,
-                        port=port
+                        port=port,
+                        timeout=30.0
                     )
-                    logger.info(f"[TEST] 登录结果: {login_result}")
+                    logger.info(f"[TEST] 登录结果: success={success}, error={error_msg}")
 
-                    if login_result == 0 or login_result is True:
+                    if success:
                         # 登录成功，尝试获取数据
-                        try:
-                            if test_type == "realtime":
-                                # 测试实时数据获取
-                                # 格式化股票代码（如果需要）
-                                formatted_symbol = symbol
-                                if len(symbol) == 6 and symbol.isdigit():
-                                    # 判断市场
-                                    if symbol.startswith(('60', '68', '50', '51')):
-                                        formatted_symbol = f"SH.{symbol}"
-                                    elif symbol.startswith(('00', '30', '12')):
-                                        formatted_symbol = f"SZ.{symbol}"
+                        # 注意：在进程隔离模式下，我们只测试登录连接性
+                        # 实际数据获取应该通过专门的数据API进行
+                        if test_type == "realtime":
+                            # 格式化股票代码（如果需要）
+                            formatted_symbol = symbol
+                            if len(symbol) == 6 and symbol.isdigit():
+                                # 判断市场
+                                if symbol.startswith(('60', '68', '50', '51')):
+                                    formatted_symbol = f"SH.{symbol}"
+                                elif symbol.startswith(('00', '30', '12')):
+                                    formatted_symbol = f"SZ.{symbol}"
 
-                                # 尝试获取实时行情数据
-                                # 注意：AmazingData实时数据需要通过订阅模式（onSnapshot）获取
-                                # 这里使用基础数据API测试连接
-                                try:
-                                    # 创建基础数据对象
-                                    logger.info(f"[TEST] 创建BaseData对象...")
-                                    base_data = ad.BaseData()
-                                    logger.info(f"[TEST] BaseData对象创建成功")
+                            # 在进程隔离模式下，登录成功即表示连接正常
+                            test_result["success"] = True
+                            test_result["message"] = "测试成功"
+                            test_result["details"]["symbol"] = formatted_symbol
+                            test_result["details"]["data_type"] = "连接测试"
+                            test_result["details"]["server"] = f"{host}:{port}"
+                            test_result["details"]["status"] = "已连接（进程隔离模式）"
+                            test_result["details"]["note"] = "使用进程隔离安全模式，避免SDK崩溃影响主进程"
 
-                                    # 获取证券信息验证连接
-                                    logger.info(f"[TEST] 调用get_code_info('EXTRA_STOCK_A')...")
-                                    code_info = base_data.get_code_info('EXTRA_STOCK_A')
-                                    logger.info(f"[TEST] get_code_info返回: {type(code_info)}, 数量: {len(code_info) if code_info is not None else 0}")
+                            # 注意：不执行BaseData等可能崩溃的操作
+                            # 这些操作应该在实际数据获取时通过进程代理执行
+                            logger.info("[TEST] 进程隔离模式下跳过基础数据获取测试")
 
-                                    if code_info is not None and len(code_info) > 0:
-                                        # 尝试获取交易日历作为额外验证
-                                        calendar = base_data.get_calendar()
+                        else:
+                            # 测试历史数据获取
+                            test_result["success"] = True
+                            test_result["message"] = "连接成功（历史数据测试待实现）"
 
-                                        test_result["success"] = True
-                                        test_result["message"] = "测试成功"
-                                        test_result["data_size"] = len(code_info)
-                                        test_result["details"]["symbol"] = formatted_symbol
-                                        test_result["details"]["data_type"] = "基础数据"
-                                        test_result["details"]["server"] = f"{host}:{port}"
-                                        test_result["details"]["status"] = "已连接并获取到基础数据"
-                                        test_result["details"]["code_count"] = len(code_info)
-                                        test_result["details"]["trading_days"] = len(calendar) if calendar else 0
-                                        test_result["details"]["note"] = "实时行情需通过订阅接口(onSnapshot)获取"
-                                    else:
-                                        test_result["message"] = "测试失败"
-                                        test_result["error"] = "无法获取证券基础信息"
-                                except Exception as data_error:
-                                    logger.error(f"[TEST] 获取数据时发生异常: {type(data_error).__name__}: {str(data_error)}")
-                                    logger.exception("[TEST] 详细异常信息:")
-                                    test_result["message"] = "测试失败"
-                                    test_result["error"] = f"获取数据失败: {str(data_error)}"
-                            else:
-                                # 测试历史数据获取
-                                test_result["success"] = True
-                                test_result["message"] = "连接成功（历史数据测试待实现）"
-
-                        finally:
-                            # 登出
-                            ad.logout(request.config.username)
+                        # 注意：不需要调用logout，安全包装器会处理
+                        logger.info("[TEST] 跳过logout操作（由安全包装器处理）")
                     else:
-                        logger.error(f"[TEST] 登录失败，返回值: {login_result}")
+                        logger.error(f"[TEST] 安全登录失败: {error_msg}")
                         test_result["message"] = "测试失败"
-                        test_result["error"] = f"登录失败，错误码: {login_result}"
+                        test_result["error"] = error_msg or "登录失败"
 
-                except ImportError as ie:
-                    logger.error(f"[TEST] 导入AmazingData SDK失败: {str(ie)}")
-                    test_result["success"] = False
-                    test_result["message"] = "测试失败"
-                    test_result["error"] = "AmazingData SDK未安装"
-                    test_result["details"]["note"] = "需要安装installer目录下的AmazingData-1.0.9-cp313-none-any.whl"
+                        # 如果是SDK未安装的错误，添加安装提示
+                        if "ImportError" in (error_msg or ""):
+                            test_result["details"]["note"] = "需要安装installer目录下的AmazingData-1.0.9-cp313-none-any.whl"
+
                 except Exception as e:
-                    logger.error(f"[TEST] 测试过程发生未知异常: {type(e).__name__}: {str(e)}")
+                    logger.error(f"[TEST] 测试过程发生异常: {type(e).__name__}: {str(e)}")
                     logger.exception("[TEST] 详细异常信息:")
                     test_result["message"] = "测试失败"
                     test_result["error"] = str(e)
@@ -997,37 +1001,52 @@ async def test_datasource(request: TestDataSourceRequest):
                     port = 8600
 
                 try:
-                    # 尝试导入并连接AmazingData
-                    try:
-                        import AmazingData as ad
-                        # 实际连接测试
-                        login_result = ad.login(
-                            username=request.config.username,
-                            password=request.config.password,
-                            host=host,
-                            port=port
-                        )
-                        if login_result == 0 or login_result is True:
-                            test_result["success"] = True
-                            test_result["message"] = "银河证券星耀数智连接成功"
-                            test_result["details"]["server"] = f"{host}:{port}"
-                            test_result["details"]["username"] = request.config.username
-                            test_result["details"]["network_provider"] = request.config.networkProvider or "custom"
-                            test_result["details"]["status"] = "已认证"
-                            # 登出
-                            ad.logout(request.config.username)
-                            # 更新数据源状态
-                            update_datasource_status_after_test("amazingdata", True, test_result.get("latency", 100))
-                        else:
-                            test_result["message"] = f"登录失败，错误码: {login_result}"
-                            # 更新数据源状态为错误
-                            update_datasource_status_after_test("amazingdata", False, 0)
-                    except ImportError:
-                        # 如果未安装AmazingData SDK，明确返回失败
+                    # 使用进程隔离的安全包装器进行连接测试
+                    logger.info(f"[DataSource] Using safe wrapper for AmazingData login: {request.config.username}@{host}:{port}")
+                    logger.debug(f"[DataSource] Network provider: {request.config.networkProvider}, Use local: {request.config.useLocal}")
+
+                    # 创建安全包装器实例
+                    logger.debug("[DataSource] Creating AmazingDataSafeWrapper instance...")
+                    safe_wrapper = AmazingDataSafeWrapper(
+                        auto_restart=True,
+                        max_retries=2,
+                        default_timeout=30.0
+                    )
+                    logger.debug("[DataSource] SafeWrapper created successfully")
+
+                    # 使用安全登录方法（在独立进程中执行，防止SystemExit崩溃）
+                    logger.debug(f"[DataSource] Calling safe_login with timeout=30.0...")
+                    success, error_msg = safe_wrapper.safe_login(
+                        username=request.config.username,
+                        password=request.config.password,
+                        host=host,
+                        port=port,
+                        timeout=30.0
+                    )
+
+                    logger.debug(f"[DataSource] safe_login returned: success={success}, error_msg={error_msg}")
+
+                    if success:
+                        test_result["success"] = True
+                        test_result["message"] = "银河证券星耀数智连接成功"
+                        logger.info("[DataSource] AmazingData login successful")
+                        test_result["details"]["server"] = f"{host}:{port}"
+                        test_result["details"]["username"] = request.config.username
+                        test_result["details"]["network_provider"] = request.config.networkProvider or "custom"
+                        test_result["details"]["status"] = "已认证"
+                        test_result["details"]["note"] = "使用进程隔离安全模式"
+                        # 注意：不需要调用logout，安全包装器会处理
+                        # 更新数据源状态
+                        update_datasource_status_after_test("amazingdata", True, test_result.get("latency", 100))
+                    else:
+                        logger.error(f"[DataSource] AmazingData login failed: {error_msg}")
                         test_result["success"] = False
-                        test_result["message"] = "AmazingData SDK未安装"
-                        test_result["details"]["error"] = "SDK not installed"
-                        test_result["details"]["note"] = "需要安装installer目录下的AmazingData-1.0.9-cp313-none-any.whl"
+                        test_result["message"] = error_msg or "登录失败"
+                        test_result["details"]["error"] = error_msg
+                        test_result["details"]["error_type"] = "login_failed"
+                        # 如果是SDK未安装的错误，添加安装提示
+                        if "ImportError" in (error_msg or ""):
+                            test_result["details"]["note"] = "需要安装installer目录下的AmazingData-1.0.9-cp313-none-any.whl"
                         # 更新数据源状态为错误
                         update_datasource_status_after_test("amazingdata", False, 0)
                 except Exception as e:
@@ -1133,10 +1152,11 @@ async def test_datasource(request: TestDataSourceRequest):
                 message="连接测试成功"
             )
         else:
+            # 确保错误信息在data字段，以便toggle_datasource能正确读取
             return APIResponse.error(
                 code=ErrorCodes.DATASOURCE_CONNECTION_FAILED,
                 message=test_result["message"],
-                details=test_result
+                data=test_result  # 使用data而非details，保持响应格式一致
             )
             
     except Exception as e:
