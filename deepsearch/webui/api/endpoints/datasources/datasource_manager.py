@@ -17,6 +17,7 @@ import time
 
 from deepsearch.webui.api.common.response_format import APIResponse, APIException, ErrorCodes
 from deepsearch.config import get_config
+from deepsearch.config.manager import ConfigManager
 from deepsearch.infrastructure.cache.cache_manager import CacheManager
 # 导入进程隔离的安全包装器
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import AmazingDataSafeWrapper
@@ -30,6 +31,9 @@ cache_manager = CacheManager(
     l1_max_size=10000,  # L1缓存最大条目数
     l1_ttl=300  # 默认TTL 5分钟
 )
+
+# 创建配置管理器实例（延迟加载）
+config_manager = ConfigManager()
 
 
 # 数据模型
@@ -214,30 +218,59 @@ def save_to_config(source_type: str, config_data: Dict[str, Any]):
         logger.error(f"保存配置失败: {e}")
 
 
+def save_datasource_state(datasource_id: str, enabled: bool):
+    """
+    保存数据源启用状态到配置文件
+
+    Args:
+        datasource_id: 数据源ID
+        enabled: 是否启用
+    """
+    try:
+        # 获取配置键路径
+        config_key = f"data_sources.providers.{datasource_id}.enabled"
+
+        # 使用 ConfigManager 更新配置
+        config_manager.set(config_key, enabled)
+
+        # 保存到文件
+        config_manager.save()
+
+        logger.info(f"数据源 {datasource_id} 状态已保存: enabled={enabled}")
+
+    except Exception as e:
+        logger.error(f"保存数据源状态失败: {e}")
+
+
 def init_default_datasources():
     """初始化默认数据源（从配置文件加载）"""
     global data_sources
 
-    # 尝试从配置文件加载配置
+    # 使用 ConfigManager 加载配置
     try:
-        config_file = get_config_file_path()
-        with open(config_file, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f) or {}
+        # 确保配置管理器已加载正确的配置文件
+        config_file_path = get_config_file_path()
+        config_manager.load(config_file_path)
+        config = config_manager.get_all()
     except Exception as e:
         logger.warning(f"无法加载配置文件，使用默认配置: {e}")
         config = {}
 
+    # 获取数据源配置
+    data_sources_config = config.get('data_sources', {}).get('providers', {})
+
     # AKShare数据源
+    akshare_config = data_sources_config.get('akshare', {})
     akshare_source = DataSource(
         id="akshare",
         name="AKShare直连",
         type="akshare",
-        enabled=True,
-        priority=3,
+        enabled=akshare_config.get('enabled', True),  # 从配置文件读取
+        priority=akshare_config.get('priority', 3),
         config=DataSourceConfig(
-            timeout=30000,
-            retryCount=3,
-            rateLimit=10
+            timeout=akshare_config.get('timeout', 30) * 1000 if 'timeout' in akshare_config else 30000,
+            retryCount=akshare_config.get('max_retries', 3),
+            rateLimit=akshare_config.get('rate_limit', {}).get('max_requests', 10) if 'rate_limit' in akshare_config else 10
         ),
         status="online",
         successRate=95.5,
@@ -247,26 +280,26 @@ def init_default_datasources():
     data_sources[akshare_source.id] = akshare_source
 
     # 银河证券数据源 - 从配置文件加载
-    amazingdata_config = config.get('amazingdata', {})
+    amazingdata_config = data_sources_config.get('amazingdata', {})
     amazingdata_source = DataSource(
         id="amazingdata",
         name="银河证券星耀数智",
         type="amazingdata",
-        enabled=amazingdata_config.get('enabled', False),
-        priority=1,
+        enabled=amazingdata_config.get('enabled', False),  # 从配置文件读取
+        priority=amazingdata_config.get('priority', 1),
         config=DataSourceConfig(
-            timeout=amazingdata_config.get('timeout', 10) * 1000,  # 从秒转换为毫秒
-            retryCount=amazingdata_config.get('max_retries', 2),
+            timeout=amazingdata_config.get('config', {}).get('connection', {}).get('timeout', 10) * 1000,  # 从秒转换为毫秒
+            retryCount=amazingdata_config.get('config', {}).get('connection', {}).get('max_retries', 2),
             rateLimit=100,
-            username=amazingdata_config.get('username', ''),
-            password=amazingdata_config.get('password', ''),
-            networkProvider=amazingdata_config.get('network_provider', 'telecom'),
-            host=amazingdata_config.get('host', '101.230.159.234'),
-            port=amazingdata_config.get('port', 8600),
-            heartbeatInterval=amazingdata_config.get('heartbeat_interval', 60),
-            autoReconnect=amazingdata_config.get('auto_reconnect', True),
-            localPath=amazingdata_config.get('local_path', 'D://AmazingData_local_data//'),
-            useLocal=amazingdata_config.get('use_local', True)
+            username=amazingdata_config.get('config', {}).get('connection', {}).get('username', ''),
+            password=amazingdata_config.get('config', {}).get('connection', {}).get('password', ''),
+            networkProvider=amazingdata_config.get('config', {}).get('connection', {}).get('network_provider', 'telecom'),
+            host=amazingdata_config.get('config', {}).get('connection', {}).get('host', '101.230.159.234'),
+            port=amazingdata_config.get('config', {}).get('connection', {}).get('port', 8600),
+            heartbeatInterval=amazingdata_config.get('config', {}).get('connection', {}).get('heartbeat_interval', 60),
+            autoReconnect=amazingdata_config.get('config', {}).get('connection', {}).get('auto_reconnect', True),
+            localPath=amazingdata_config.get('config', {}).get('local', {}).get('path', 'D://AmazingData_local_data//'),
+            useLocal=amazingdata_config.get('config', {}).get('local', {}).get('use_local', True)
         ),
         status="offline",
         successRate=None,
@@ -276,19 +309,19 @@ def init_default_datasources():
     data_sources[amazingdata_source.id] = amazingdata_source
     
     # QMT数据源 - 从配置文件加载
-    qmt_config = config.get('qmt', {})
+    qmt_config = data_sources_config.get('qmt', {})
     qmt_source = DataSource(
         id="qmt",
         name="QMT实时数据",
         type="qmt",
-        enabled=qmt_config.get('enabled', True),
-        priority=2,
+        enabled=qmt_config.get('enabled', False),  # 从配置文件读取
+        priority=qmt_config.get('priority', 4),
         config=DataSourceConfig(
-            timeout=5000,
-            retryCount=1,
+            timeout=qmt_config.get('config', {}).get('timeout', 5) * 1000 if 'config' in qmt_config else 5000,
+            retryCount=qmt_config.get('config', {}).get('max_retries', 1) if 'config' in qmt_config else 1,
             rateLimit=1000,
-            host=qmt_config.get('host', 'localhost'),
-            port=qmt_config.get('port', 5556)
+            host=qmt_config.get('config', {}).get('host', 'localhost') if 'config' in qmt_config else 'localhost',
+            port=qmt_config.get('config', {}).get('port', 5556) if 'config' in qmt_config else 5556
         ),
         status="offline",
         successRate=None,
@@ -297,18 +330,19 @@ def init_default_datasources():
     )
     data_sources[qmt_source.id] = qmt_source
     
-    # CloudFlare代理
+    # CloudFlare代理 - 从配置文件加载
+    cloudflare_config = data_sources_config.get('cloudflare', {})
     cloudflare_source = DataSource(
         id="cloudflare",
         name="CloudFlare代理",
         type="cloudflare",
-        enabled=True,
-        priority=4,
+        enabled=cloudflare_config.get('enabled', True),  # 从配置文件读取
+        priority=cloudflare_config.get('priority', 2),
         config=DataSourceConfig(
-            timeout=20000,
-            retryCount=3,
+            timeout=cloudflare_config.get('config', {}).get('timeout', 30) * 1000 if 'config' in cloudflare_config else 30000,
+            retryCount=cloudflare_config.get('config', {}).get('retry_count', 3) if 'config' in cloudflare_config else 3,
             rateLimit=50,
-            workerUrl="https://api.workers.dev"
+            workerUrl=cloudflare_config.get('config', {}).get('worker_url', 'https://akshare-proxy.934073514.workers.dev') if 'config' in cloudflare_config else 'https://akshare-proxy.934073514.workers.dev'
         ),
         status="online",
         successRate=98.0,
@@ -474,11 +508,8 @@ async def update_datasource(datasource_id: str, datasource: DataSource):
 
         data_sources[datasource_id] = datasource
 
-        # 保存到配置文件
-        if datasource.type in ['amazingdata', 'qmt', 'cloudflare']:
-            config_data = datasource.config.model_dump(mode='json')
-            config_data['enabled'] = datasource.enabled
-            save_to_config(datasource.type, config_data)
+        # 保存启用状态到配置文件
+        save_datasource_state(datasource_id, datasource.enabled)
 
         logger.info(f"更新数据源: {datasource.name} ({datasource_id})")
 
@@ -521,9 +552,12 @@ async def delete_datasource(datasource_id: str):
             )
         
         datasource = data_sources.pop(datasource_id)
-        
+
+        # 在配置文件中禁用该数据源（保留配置但禁用）
+        save_datasource_state(datasource_id, False)
+
         logger.info(f"删除数据源: {datasource.name} ({datasource_id})")
-        
+
         return APIResponse.success(
             data={"id": datasource_id, "name": datasource.name},
             message=f"数据源 '{datasource.name}' 已删除"
@@ -706,11 +740,8 @@ async def toggle_datasource(datasource_id: str, enabled: bool):
         datasource.enabled = enabled
         datasource.updated_at = datetime.now()
 
-        # 保存到配置文件
-        if datasource.type in ['amazingdata', 'qmt', 'cloudflare']:
-            config_data = datasource.config.model_dump(mode='json')
-            config_data['enabled'] = enabled
-            save_to_config(datasource.type, config_data)
+        # 保存启用状态到配置文件
+        save_datasource_state(datasource_id, enabled)
 
         logger.info(f"{'启用' if enabled else '禁用'}数据源: {datasource.name}")
 
