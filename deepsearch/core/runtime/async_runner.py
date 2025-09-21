@@ -87,28 +87,46 @@ class AsyncRunner:
     async def _start_webui_mode(self, config: dict):
         """WebUI 模式"""
         infrastructure_only = config.get('infrastructure_only', True)
+        include_frontend = config.get('include_frontend', False)
+        include_webui = config.get('include_webui', False)
         await self.engine._start_phased_async(
             include_business=not infrastructure_only,
-            include_webui=False,
-            include_frontend=False
+            include_webui=include_webui,
+            include_frontend=include_frontend
         )
 
     async def run_until_complete(self):
         """运行直到收到停止信号"""
-        # 设置信号处理
-        if sys.platform != "win32":
-            loop = asyncio.get_event_loop()
-            for sig in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(
-                    sig, lambda: asyncio.create_task(self._handle_signal())
-                )
+        loop = asyncio.get_running_loop()
 
-        # 等待停止信号
-        await self._shutdown_event.wait()
+        previous_signal_handlers = {}
+        try:
+            if sys.platform != "win32":
+                for sig in (signal.SIGINT, signal.SIGTERM):
+                    loop.add_signal_handler(
+                        sig, lambda s=sig: asyncio.create_task(self._handle_signal())
+                    )
+            else:
+                def _windows_signal_handler(signum, frame):
+                    if loop.is_closed():
+                        return
+                    loop.call_soon_threadsafe(asyncio.create_task, self._handle_signal())
 
-        # 停止引擎
-        if self.engine and self.engine.is_running():
-            await self.engine.stop_async()
+                for sig in (signal.SIGINT, signal.SIGTERM):
+                    previous_signal_handlers[sig] = signal.getsignal(sig)
+                    signal.signal(sig, _windows_signal_handler)
+
+            # �ȴ�ֹͣ�ź�
+            await self._shutdown_event.wait()
+
+            # ֹͣ����
+            if self.engine and self.engine.is_running():
+                await self.engine.stop_async()
+        finally:
+            if previous_signal_handlers:
+                for sig, handler in previous_signal_handlers.items():
+                    signal.signal(sig, handler)
+
 
     async def _handle_signal(self):
         """处理信号"""

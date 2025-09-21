@@ -474,18 +474,16 @@ class Gateway(BaseGateway):
     在实际使用中，应该为每个具体的交易所创建专门的网关实现。
     """
 
-    def __init__(self, engine):
-        """初始化网关
-        
-        :param engine: 事件引擎实例
-        """
-        # 从事件引擎获取消息总线
-        from deepsearch.messaging.implementations.inmemory import InMemoryMessageBus
-        message_bus = InMemoryMessageBus()
+    def __init__(self, engine=None, message_bus: Optional[CompositeMessageBus] = None, gateway_name: str = "MockGateway"):
+        """初始化网关"""
+
+        if message_bus is None:
+            from deepsearch.messaging.implementations.inmemory import InMemoryMessageBus
+            message_bus = InMemoryMessageBus()
 
         super().__init__(
             message_bus=message_bus,
-            gateway_name="MockGateway"
+            gateway_name=gateway_name
         )
         self.engine = engine
         self._connected = False

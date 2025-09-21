@@ -88,17 +88,21 @@ class DatabaseComponent(AsyncComponent[Any]):
         }
 
     def _health_check(self) -> bool:
-        """检查数据库健康状态"""
+        """检查数据库可用状态"""
         if not self._engine:
             return False
 
         try:
-            # 使用同步连接进行健康检查，避免协程警告
-            with self._engine.connect() as conn:
+            sync_engine = getattr(self._engine, 'sync_engine', None)
+            if sync_engine is None:
+                self._logger.warning("Async engine does not expose sync_engine for health check")
+                return False
+
+            with sync_engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
-                conn.commit()
             return True
-        except Exception:
+        except Exception as exc:
+            self._logger.error(f"数据库健康检查失败: {exc}")
             return False
 
     async def health_check_async(self) -> bool:

@@ -592,27 +592,49 @@ class MainEngine:
 
         self._logger.info(f"Cancelling {len(self._tasks)} async tasks...")
 
-        # 取消所有任务
-        for task in self._tasks:
-            if not task.done():
-                task.cancel()
 
-        # 等待所有任务完成，设置超时以避免永久等待
+        # Cancel outstanding tasks and, where possible, wait for them on this loop
         try:
-            # 过滤掉已完成的任务
-            pending_tasks = [t for t in self._tasks if not t.done()]
-            if pending_tasks:
+            try:
+                current_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                current_loop = None
+
+            pending_same_loop: List[asyncio.Task] = []
+            for task in self._tasks:
+                if not task.done():
+                    try:
+                        task.cancel()
+                    except Exception:
+                        pass
+
+                    task_loop = None
+                    try:
+                        task_loop = task.get_loop()
+                    except AttributeError:
+                        task_loop = current_loop
+
+                    if current_loop and task_loop is current_loop:
+                        pending_same_loop.append(task)
+                    elif task_loop and task_loop is not current_loop:
+                        try:
+                            task_loop.call_soon_threadsafe(task.cancel)
+                        except Exception:
+                            pass
+
+            results: List[Any] = []
+            if pending_same_loop:
                 results = await asyncio.wait_for(
-                    asyncio.gather(*pending_tasks, return_exceptions=True),
+                    asyncio.gather(*pending_same_loop, return_exceptions=True),
                     timeout=5.0
                 )
-            # 记录任何错误
+            # 记录任何异常
             for i, result in enumerate(results):
                 if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
                     self._logger.error(f"Task {i} error: {result}")
         except asyncio.TimeoutError:
             self._logger.warning("Some tasks did not complete within timeout")
-            # 强制取消所有未完成的任务
+            # 强制取消仍未完成的任务
             for task in self._tasks:
                 if not task.done():
                     task.cancel()
@@ -891,17 +913,21 @@ class MainEngine:
 
     def initialize(self) -> None:
         """同步初始化方法（向后兼容）"""
+        loop_running = False
         try:
-            loop = asyncio.get_running_loop()
-            # 如果已经有运行的循环，说明在异步环境中
-            # 不能在异步环境中调用同步方法，抛出错误
-            raise RuntimeError(
-                "Cannot call synchronous initialize() from async context. "
-                "Use await initialize_async() instead."
-            )
+            asyncio.get_running_loop()
         except RuntimeError:
-            # 没有运行的循环，可以安全地创建新循环
-            asyncio.run(self.initialize_async())
+            loop_running = False
+        else:
+            loop_running = True
+
+        if loop_running:
+            raise RuntimeError(
+                "Cannot call synchronous initialize() from async context. Use await initialize_async() instead."
+            )
+
+        asyncio.run(self.initialize_async())
+
 
     async def initialize_async(self) -> None:
         """异步初始化（调用内部的异步方法）"""
@@ -1025,5 +1051,5 @@ async def run_engine(mode: Optional[str] = None, container: Optional[AsyncContai
         logger_manager.get_logger(__name__).error(f"Engine failed: {e}")
         raise
     finally:
-        if engine._running:
-            await engine.stop()
+        if engine.is_running():
+            await engine.stop_async()

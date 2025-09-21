@@ -6,6 +6,7 @@
 import asyncio
 import functools
 import logging
+import threading
 import time
 from typing import Callable, Any, Optional, TypeVar
 
@@ -190,7 +191,7 @@ def measure_performance(
         def sync_wrapper(*args, **kwargs):
             start_time = time.time()
             try:
-                result = func(self, *args, **kwargs)
+                result = func(*args, **kwargs)
                 return result
             finally:
                 elapsed = time.time() - start_time
@@ -213,7 +214,7 @@ def measure_performance(
         async def async_wrapper(*args, **kwargs):
             start_time = time.time()
             try:
-                result = await func(self, *args, **kwargs)
+                result = await func(*args, **kwargs)
                 return result
             finally:
                 elapsed = time.time() - start_time
@@ -277,28 +278,20 @@ def ensure_initialized(func: F) -> F:
 
 def singleton(cls):
     """
-    单例装饰器
-    
-    确保类只有一个实例
+    Singleton decorator.
+
+    Ensures the decorated class only has a single instance.
     """
     instances = {}
-    lock = asyncio.Lock() if asyncio else None
+    lock = threading.RLock()
 
     @functools.wraps(cls)
     def get_instance(*args, **kwargs):
-        if cls not in instances:
-            if lock and asyncio.get_event_loop().is_running():
-                # 异步环境下使用锁
-                async def create_instance():
-                    async with lock:
-                        if cls not in instances:
-                            instances[cls] = cls(*args, **kwargs)
-                    return instances[cls]
-
-                return asyncio.create_task(create_instance())
-            else:
-                # 同步环境下直接创建
+        if cls in instances:
+            return instances[cls]
+        with lock:
+            if cls not in instances:
                 instances[cls] = cls(*args, **kwargs)
-        return instances[cls]
+            return instances[cls]
 
     return get_instance

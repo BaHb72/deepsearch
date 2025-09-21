@@ -205,7 +205,6 @@ class P1Cleanup:
     def save_report(self):
         """保存清理报告"""
         report_path = self.project_root / "docs" / "P1_CLEANUP_REPORT.md"
-
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write("# P1级清理执行报告\n\n")
             f.write(f"执行时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")

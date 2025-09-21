@@ -88,7 +88,7 @@ class ProcessManager:
 
         # 弱引用存储，避免循环引用
         self._threads: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
-        self._processes: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+        self._processes: Dict[str, subprocess.Popen] = {}
         self._executors: weakref.WeakSet = weakref.WeakSet()
         self._event_loops: weakref.WeakSet = weakref.WeakSet()
 
@@ -109,28 +109,15 @@ class ProcessManager:
         self.logger.debug("ProcessManager 初始化完成")
 
     def _setup_signal_handlers(self):
-        """设置信号处理器"""
+        """注册信号处理器"""
+        if threading.current_thread() is not threading.main_thread():
+            self.logger.debug("Signal handlers can only be registered on the main thread; skipping")
+            return
 
         def signal_handler(signum, frame):
-            self.logger.info(f"收到信号 {signum}，开始优雅关闭...")
+            self.logger.info(f"收到信号 {signum}，开始协调关闭...")
+            self.shutdown(force=True)
 
-            try:
-                # 尝试获取当前事件循环
-                loop = asyncio.get_running_loop()
-                # 在事件循环内，创建异步任务
-                loop.create_task(self._async_shutdown())
-                self.logger.debug("Created async shutdown task in running event loop")
-            except RuntimeError:
-                # 不在事件循环内，进行同步关闭
-                if self._primary_engine:
-                    try:
-                        self._primary_engine.stop()
-                    except Exception as e:
-                        self.logger.error(f"停止引擎时出错: {e}")
-                # 执行全面清理
-                self.shutdown()
-
-        # Unix/Linux 信号
         if sys.platform != "win32":
             signal.signal(signal.SIGTERM, signal_handler)
             signal.signal(signal.SIGINT, signal_handler)
@@ -139,14 +126,12 @@ class ProcessManager:
             except AttributeError:
                 pass
         else:
-            # Windows 信号
             signal.signal(signal.SIGINT, signal_handler)
             signal.signal(signal.SIGTERM, signal_handler)
 
-            # Windows 特殊处理
             try:
                 import win32api
-                win32api.SetConsoleCtrlHandler(lambda x: self.shutdown() or True, True)
+                win32api.SetConsoleCtrlHandler(lambda _: (self.shutdown(force=True) or True), True)
             except ImportError:
                 pass
 
@@ -365,25 +350,29 @@ class ProcessManager:
                      timeout: float = 5.0, force: bool = False) -> bool:
         """
         停止进程
-        
+
         Args:
             process: 进程对象或资源ID
             timeout: 超时时间
-            force: 是否强制终止
+            force: 是否强制停止
             
         Returns:
             是否成功停止
         """
         if isinstance(process, str):
             resource_id = process
-            process = self._processes.get(resource_id)
-            if not process:
+            process_obj = self._processes.get(resource_id)
+            if not process_obj:
+                # 资源表中不存在，视为已停止
                 return True
         else:
             resource_id = f"process_{process.pid}"
+            process_obj = process
 
+        process = process_obj
         if not process or (hasattr(process, 'poll') and process.poll() is not None) or (
                 hasattr(process, 'returncode') and process.returncode is not None):
+            self._processes.pop(resource_id, None)
             return True
 
         self.logger.debug(f"停止进程: PID={process.pid}")
@@ -394,7 +383,7 @@ class ProcessManager:
 
         try:
             if sys.platform == "win32":
-                # Windows上先尝试正常终止
+                # Windows优先尝试正常停止
                 if not force:
                     process.terminate()
                     try:
@@ -403,7 +392,7 @@ class ProcessManager:
                     except subprocess.TimeoutExpired:
                         success = False
 
-                # 如果失败或强制模式，使用taskkill
+                # 若失败或强制模式，使用taskkill
                 if force or not success:
                     result = subprocess.run(
                         ["taskkill", "/F", "/T", "/PID", str(process.pid)],
@@ -435,6 +424,9 @@ class ProcessManager:
             self._resources[resource_id].status = ResourceStatus.STOPPED if success else ResourceStatus.FAILED
             if success:
                 self._resources[resource_id].stopped_at = datetime.now()
+
+        if success or force:
+            self._processes.pop(resource_id, None)
 
         return success
 
@@ -520,47 +512,85 @@ class ProcessManager:
             self.logger.debug(f"Failed to check if process is related: {e}")
             return False
 
-    async def _async_shutdown(self):
-        """异步关闭方法"""
-        if self._primary_engine:
-            try:
-                await self._primary_engine.stop_async()
-            except Exception as e:
-                self.logger.error(f"异步停止引擎时出错: {e}")
 
-        # 调用同步的 shutdown 进行其他清理
-        self.shutdown()
-
-    def shutdown(self, timeout: float = 10.0, force: bool = False):
-        """
-        关闭所有资源
-        
-        Args:
-            timeout: 总超时时间
-            force: 是否强制关闭
-        """
+    def _prepare_shutdown(self) -> Optional[float]:
+        """初始化关停流程，返回起始时间"""
         if self._shutting_down:
-            return
-
+            return None
         self._shutting_down = True
         self._shutdown_event.set()
+        self.logger.info("开始关闭受管资源...")
+        return time.time()
 
-        self.logger.info("开始关闭所有资源...")
-        start_time = time.time()
+    async def _async_shutdown(self):
+        """兼容旧信号处理逻辑的异步关停入口"""
+        await self.shutdown_async()
 
-        # 首先停止所有引擎
+    async def shutdown_async(self, timeout: float = 10.0, force: bool = False) -> None:
+        """异步关闭所有受管资源"""
+        start_time = self._prepare_shutdown()
+        if start_time is None:
+            return
+
+        stop_tasks = []
+        tracked_engines = []
+        for engine in list(self._engines):
+            try:
+                if hasattr(engine, 'is_running') and engine.is_running():
+                    self.logger.debug(f"异步停止引擎: {id(engine)}")
+                    if hasattr(engine, 'stop_async'):
+                        stop_tasks.append(engine.stop_async())
+                        tracked_engines.append(engine)
+                    elif hasattr(engine, 'stop'):
+                        stop_tasks.append(asyncio.to_thread(engine.stop))
+                        tracked_engines.append(engine)
+            except Exception as e:
+                self.logger.error(f"异步停止引擎时发生异常: {e}")
+
+        if stop_tasks:
+            results = await asyncio.gather(*stop_tasks, return_exceptions=True)
+            for engine, result in zip(tracked_engines, results):
+                if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
+                    self.logger.error(f"停止引擎 {id(engine)} 失败: {result}")
+
+        self._shutdown_resources(start_time, timeout, force)
+
+    def shutdown(self, timeout: float = 10.0, force: bool = False):
+        """关闭所有受管资源"""
+        loop = None
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            self.logger.debug("Event loop detected; scheduling asynchronous shutdown")
+
+            def _schedule_shutdown():
+                asyncio.create_task(self.shutdown_async(timeout=timeout, force=force))
+
+            loop.call_soon_threadsafe(_schedule_shutdown)
+            return
+
+        start_time = self._prepare_shutdown()
+        if start_time is None:
+            return
+
         for engine in list(self._engines):
             try:
                 if hasattr(engine, 'is_running') and engine.is_running():
                     self.logger.debug(f"停止引擎: {id(engine)}")
                     engine.stop()
             except Exception as e:
-                self.logger.error(f"停止引擎时出错: {e}")
+                self.logger.error(f"停止引擎时出现异常: {e}")
 
+        self._shutdown_resources(start_time, timeout, force)
+
+    def _shutdown_resources(self, start_time: float, timeout: float, force: bool) -> None:
+        """统一处理线程、进程、事件循环等资源的收尾工作"""
         with self._resource_lock:
             resources = list(self._resources.values())
 
-        # 按类型分组
         threads = []
         processes = []
         executors = []
@@ -577,12 +607,12 @@ class ProcessManager:
                 elif info.resource_type == ResourceType.EVENT_LOOP:
                     event_loops.append(info)
 
-        # 1. 先停止事件循环（阻止新任务）
+        # 1. 停止事件循环以避免继续调度
         for info in event_loops:
             loop = None
-            for l in self._event_loops:
-                if f"eventloop_{id(l)}" == info.resource_id:
-                    loop = l
+            for existing_loop in self._event_loops:
+                if f"eventloop_{id(existing_loop)}" == info.resource_id:
+                    loop = existing_loop
                     break
             if loop:
                 self.stop_event_loop(loop)
@@ -590,9 +620,9 @@ class ProcessManager:
         # 2. 停止线程池
         for info in executors:
             executor = None
-            for e in self._executors:
-                if f"executor_{id(e)}" == info.resource_id:
-                    executor = e
+            for existing_executor in self._executors:
+                if f"executor_{id(existing_executor)}" == info.resource_id:
+                    executor = existing_executor
                     break
             if executor:
                 self.stop_executor(executor, wait=not force)
@@ -601,14 +631,12 @@ class ProcessManager:
         for info in threads:
             thread = self._threads.get(info.resource_id)
             if thread:
-                # 执行清理回调
                 if info.cleanup_callback:
                     try:
                         info.cleanup_callback()
                     except Exception as e:
                         self.logger.error(f"清理回调失败: {e}")
 
-                # 计算剩余时间
                 elapsed = time.time() - start_time
                 remaining = max(0.1, timeout - elapsed)
                 self.stop_thread(thread, timeout=remaining)
@@ -617,28 +645,25 @@ class ProcessManager:
         for info in processes:
             process = self._processes.get(info.resource_id)
             if process:
-                # 执行清理回调
                 if info.cleanup_callback:
                     try:
                         info.cleanup_callback()
                     except Exception as e:
                         self.logger.error(f"清理回调失败: {e}")
 
-                # 计算剩余时间
                 elapsed = time.time() - start_time
                 remaining = max(0.1, timeout - elapsed)
                 self.stop_process(process, timeout=remaining, force=force)
 
-        # 5. 清理孤儿进程
+        # 5. 清理孤立进程
         if force or sys.platform == "win32":
             self.cleanup_orphan_processes()
 
-        # 6. 清理端口
+        # 6. 释放端口
         if force:
             self._cleanup_ports()
 
-        self.logger.info(f"资源清理完成，耗时: {time.time() - start_time:.2f}秒")
-
+        self.logger.info(f"资源关闭完成，用时: {time.time() - start_time:.2f}秒")
     def _cleanup_ports(self):
         """清理占用的端口"""
         try:

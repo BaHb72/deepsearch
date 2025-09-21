@@ -1,0 +1,345 @@
+# 前端 API 使用映射
+
+## ⚠️ 未使用的后端 API
+
+- GET / (deepsearch\webui\server.py:852)
+- POST /api/frontend/errors (deepsearch\webui\server.py:914)
+- GET /errors/stream (deepsearch\webui\api\errors.py:124)
+- GET /errors/stats (deepsearch\webui\api\errors.py:177)
+- POST /clear-cache (deepsearch\webui\api\proxy.py:216)
+- POST /reset-statistics (deepsearch\webui\api\proxy.py:225)
+- GET /workers (deepsearch\webui\api\proxy.py:234)
+- POST /workers/{worker_id}/test (deepsearch\webui\api\proxy.py:271)
+- POST /workers/{worker_id}/reset (deepsearch\webui\api\proxy.py:303)
+- GET /strategy (deepsearch\webui\api\proxy.py:335)
+- GET /stock/{symbol} (deepsearch\webui\api\middleware\deduplication.py:311)
+- GET /records (deepsearch\webui\api\monitor\data_source_api.py:120)
+- POST /reset (deepsearch\webui\api\monitor\data_source_api.py:224)
+- POST /login (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:112)
+- POST /logout (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:143)
+- POST /update-password (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:158)
+- GET /code-info (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:180)
+- GET /calendar (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:201)
+- POST /stock-basic (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:223)
+- POST /backward-factor (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:242)
+- POST /adj-factor (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:265)
+- POST /history-stock-status (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:288)
+- POST /hist-code-list (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:311)
+- GET /code-list (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:335)
+- GET /future-code-list (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:356)
+- GET /bj-code-mapping (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:377)
+- POST /query-snapshot (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:398)
+- POST /query-kline (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:433)
+- POST /balance-sheet (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:471)
+- POST /cash-flow (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:494)
+- POST /income (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:517)
+- POST /profit-express (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:540)
+- POST /profit-notice (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:563)
+- POST /share-holder (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:588)
+- POST /holder-num (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:611)
+- POST /equity-structure (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:634)
+- POST /equity-pledge-freeze (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:657)
+- POST /equity-restricted (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:680)
+- POST /dividend (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:705)
+- POST /right-issue (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:728)
+- GET /margin-summary (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:753)
+- POST /margin-detail (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:772)
+- POST /long-hu-bang (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:795)
+- POST /subscribe/index (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:822)
+- POST /subscribe/stock (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:844)
+- POST /subscribe/future (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:866)
+- POST /subscribe/etf (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:888)
+- POST /subscribe/kzz (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:910)
+- POST /subscribe/hkt (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:932)
+- POST /subscribe/kline (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:954)
+- GET /subscription-status (deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:991)
+- GET /code-info (deepsearch\webui\api\endpoints\amazingdata\basic_data.py:56)
+- GET /calendar (deepsearch\webui\api\endpoints\amazingdata\basic_data.py:85)
+- POST /stock-basic (deepsearch\webui\api\endpoints\amazingdata\basic_data.py:121)
+- POST /backward-factor (deepsearch\webui\api\endpoints\amazingdata\basic_data.py:152)
+- POST /adj-factor (deepsearch\webui\api\endpoints\amazingdata\basic_data.py:189)
+- POST /history-stock-status (deepsearch\webui\api\endpoints\amazingdata\basic_data.py:226)
+- POST /hist-code-list (deepsearch\webui\api\endpoints\amazingdata\basic_data.py:263)
+- GET /code-list (deepsearch\webui\api\endpoints\amazingdata\basic_data.py:299)
+- GET /future-code-list (deepsearch\webui\api\endpoints\amazingdata\basic_data.py:328)
+- GET /bj-code-mapping (deepsearch\webui\api\endpoints\amazingdata\basic_data.py:350)
+- POST /balance-sheet (deepsearch\webui\api\endpoints\amazingdata\financial.py:44)
+- POST /cash-flow (deepsearch\webui\api\endpoints\amazingdata\financial.py:80)
+- POST /income (deepsearch\webui\api\endpoints\amazingdata\financial.py:116)
+- POST /profit-express (deepsearch\webui\api\endpoints\amazingdata\financial.py:152)
+- POST /profit-notice (deepsearch\webui\api\endpoints\amazingdata\financial.py:187)
+- POST /financial-summary (deepsearch\webui\api\endpoints\amazingdata\financial.py:222)
+- POST /query-snapshot (deepsearch\webui\api\endpoints\amazingdata\history.py:47)
+- POST /query-kline (deepsearch\webui\api\endpoints\amazingdata\history.py:86)
+- POST /batch-query-kline (deepsearch\webui\api\endpoints\amazingdata\history.py:153)
+- GET /margin-summary (deepsearch\webui\api\endpoints\amazingdata\margin.py:24)
+- POST /margin-detail (deepsearch\webui\api\endpoints\amazingdata\margin.py:80)
+- POST /long-hu-bang (deepsearch\webui\api\endpoints\amazingdata\margin.py:140)
+- POST /subscribe/index (deepsearch\webui\api\endpoints\amazingdata\realtime.py:120)
+- POST /subscribe/stock (deepsearch\webui\api\endpoints\amazingdata\realtime.py:166)
+- POST /subscribe/future (deepsearch\webui\api\endpoints\amazingdata\realtime.py:208)
+- POST /subscribe/etf (deepsearch\webui\api\endpoints\amazingdata\realtime.py:250)
+- POST /subscribe/kzz (deepsearch\webui\api\endpoints\amazingdata\realtime.py:292)
+- POST /subscribe/hkt (deepsearch\webui\api\endpoints\amazingdata\realtime.py:334)
+- POST /subscribe/kline (deepsearch\webui\api\endpoints\amazingdata\realtime.py:376)
+- GET /subscription-status (deepsearch\webui\api\endpoints\amazingdata\realtime.py:453)
+- GET / (deepsearch\webui\api\endpoints\amazingdata\router.py:29)
+- POST /share-holder (deepsearch\webui\api\endpoints\amazingdata\shareholder.py:24)
+- POST /holder-num (deepsearch\webui\api\endpoints\amazingdata\shareholder.py:73)
+- POST /equity-structure (deepsearch\webui\api\endpoints\amazingdata\shareholder.py:124)
+- POST /equity-pledge-freeze (deepsearch\webui\api\endpoints\amazingdata\shareholder.py:175)
+- POST /equity-restricted (deepsearch\webui\api\endpoints\amazingdata\shareholder.py:227)
+- POST /dividend (deepsearch\webui\api\endpoints\amazingdata\shareholder.py:283)
+- POST /right-issue (deepsearch\webui\api\endpoints\amazingdata\shareholder.py:339)
+- GET /market-depth (deepsearch\webui\api\endpoints\chart\chart_api.py:353)
+- GET /apis/list (deepsearch\webui\api\endpoints\data\akshare_apis.py:15)
+- GET /apis/by-category (deepsearch\webui\api\endpoints\data\akshare_apis.py:78)
+- GET /apis/{api_name} (deepsearch\webui\api\endpoints\data\akshare_apis.py:156)
+- GET /apis/statistics (deepsearch\webui\api\endpoints\data\akshare_apis.py:215)
+- GET /export/{data_type} (deepsearch\webui\api\endpoints\data\data.py:272)
+- DELETE /clean (deepsearch\webui\api\endpoints\data\data.py:385)
+- GET /workers (deepsearch\webui\api\endpoints\data\data_source.py:31)
+- POST /test-worker (deepsearch\webui\api\endpoints\data\data_source.py:90)
+- POST /fetch (deepsearch\webui\api\endpoints\data\data_source.py:131)
+- GET /recommendation (deepsearch\webui\api\endpoints\data\data_source_config_api.py:261)
+- GET /health/{source} (deepsearch\webui\api\endpoints\data\data_source_monitor_api.py:56)
+- GET /recommendation (deepsearch\webui\api\endpoints\data\data_source_monitor_api.py:114)
+- POST /reset (deepsearch\webui\api\endpoints\data\data_source_monitor_api.py:177)
+- GET /circuit-breaker (deepsearch\webui\api\endpoints\data\data_source_monitor_api.py:213)
+- POST /circuit-breaker/reset (deepsearch\webui\api\endpoints\data\data_source_monitor_api.py:243)
+- GET /config/validate (deepsearch\webui\api\endpoints\data\data_source_status.py:43)
+- GET /config/current (deepsearch\webui\api\endpoints\data\data_source_status.py:116)
+- GET /test/{symbol} (deepsearch\webui\api\endpoints\data\data_source_status.py:171)
+- GET /stock/hist (deepsearch\webui\api\endpoints\data\data_unified.py:20)
+- GET /stock/quote (deepsearch\webui\api\endpoints\data\data_unified.py:64)
+- GET /stock/info (deepsearch\webui\api\endpoints\data\data_unified.py:96)
+- GET /stock/list (deepsearch\webui\api\endpoints\data\data_unified.py:139)
+- GET /source/status (deepsearch\webui\api\endpoints\data\data_unified.py:177)
+- POST /source/check (deepsearch\webui\api\endpoints\data\data_unified.py:217)
+- GET /stock/{symbol} (deepsearch\webui\api\endpoints\data\market_data_api.py:108)
+- GET /realtime/{symbol} (deepsearch\webui\api\endpoints\data\market_data_api.py:222)
+- POST /realtime/batch (deepsearch\webui\api\endpoints\data\market_data_api.py:255)
+- GET /rank/gainers (deepsearch\webui\api\endpoints\data\market_overview_api.py:101)
+- GET /rank/losers (deepsearch\webui\api\endpoints\data\market_overview_api.py:134)
+- GET /test-all (deepsearch\webui\api\endpoints\data\test_data_source.py:212)
+- GET /sse/summary (deepsearch\webui\api\endpoints\datasources\akshare_integration.py:91)
+- GET /szse/summary (deepsearch\webui\api\endpoints\datasources\akshare_integration.py:131)
+- GET /stock/list (deepsearch\webui\api\endpoints\datasources\akshare_integration.py:254)
+- GET /stock/{symbol}/kline (deepsearch\webui\api\endpoints\datasources\akshare_integration.py:313)
+- GET /realtime/quote (deepsearch\webui\api\endpoints\datasources\akshare_integration.py:374)
+- POST /add (deepsearch\webui\api\endpoints\datasources\datasource_management_api.py:370)
+- PUT /update/{source_id} (deepsearch\webui\api\endpoints\datasources\datasource_management_api.py:387)
+- DELETE /delete/{source_id} (deepsearch\webui\api\endpoints\datasources\datasource_management_api.py:409)
+- POST /toggle/{source_id} (deepsearch\webui\api\endpoints\datasources\datasource_management_api.py:428)
+- POST /test/{source_id} (deepsearch\webui\api\endpoints\datasources\datasource_management_api.py:447)
+- GET /statistics/{source_id} (deepsearch\webui\api\endpoints\datasources\datasource_management_api.py:466)
+- GET /health/{source_id} (deepsearch\webui\api\endpoints\datasources\datasource_management_api.py:492)
+- POST /batch-test (deepsearch\webui\api\endpoints\datasources\datasource_management_api.py:522)
+- DELETE /{datasource_id}/delete (deepsearch\webui\api\endpoints\datasources\datasource_manager.py:502)
+- PATCH /{datasource_id}/toggle (deepsearch\webui\api\endpoints\datasources\datasource_manager.py:544)
+- GET /monitor (deepsearch\webui\api\endpoints\datasources\datasource_manager.py:1152)
+- GET /rank/{rank_type} (deepsearch\webui\api\endpoints\market\market_api.py:219)
+- GET /hot-stocks (deepsearch\webui\api\endpoints\market\market_api.py:337)
+- GET /market-calendar (deepsearch\webui\api\endpoints\market\market_api.py:390)
+- GET /aggregates/{symbol} (deepsearch\webui\api\endpoints\monitoring\analytics.py:75)
+- POST /backtest (deepsearch\webui\api\endpoints\monitoring\analytics.py:112)
+- POST /sync/trigger (deepsearch\webui\api\endpoints\monitoring\analytics.py:344)
+- GET /sync/status (deepsearch\webui\api\endpoints\monitoring\analytics.py:374)
+- POST /export/parquet (deepsearch\webui\api\endpoints\monitoring\analytics.py:388)
+- POST /import/parquet (deepsearch\webui\api\endpoints\monitoring\analytics.py:413)
+- GET /cache/stats (deepsearch\webui\api\endpoints\monitoring\metrics_api.py:32)
+- GET /minute (deepsearch\webui\api\endpoints\qmt\miniqmt.py:280)
+- GET /subscriptions (deepsearch\webui\api\endpoints\qmt\miniqmt.py:369)
+- GET /updates/{client_id} (deepsearch\webui\api\endpoints\qmt\qmt_subscription.py:381)
+- GET /schema (deepsearch\webui\api\endpoints\system\config.py:188)
+- POST /save (deepsearch\webui\api\endpoints\system\config.py:206)
+- GET /validate (deepsearch\webui\api\endpoints\system\config.py:385)
+- POST /test-database (deepsearch\webui\api\endpoints\system\config.py:462)
+- POST /test-cache (deepsearch\webui\api\endpoints\system\config.py:594)
+- PUT /connections/{connection_id} (deepsearch\webui\api\endpoints\system\database_manager.py:223)
+- DELETE /connections/{connection_id} (deepsearch\webui\api\endpoints\system\database_manager.py:266)
+- GET / (deepsearch\webui\api\endpoints\system\health.py:23)
+- GET /detailed (deepsearch\webui\api\endpoints\system\health.py:53)
+- GET /stream (deepsearch\webui\api\endpoints\system\logs.py:123)
+- GET /files (deepsearch\webui\api\endpoints\system\logs.py:275)
+- GET /download/{filename} (deepsearch\webui\api\endpoints\system\logs.py:323)
+- GET /components/{component_name} (deepsearch\webui\api\endpoints\system\system.py:601)
+- POST /components/{component_name}/start (deepsearch\webui\api\endpoints\system\system.py:661)
+- POST /components/{component_name}/stop (deepsearch\webui\api\endpoints\system\system.py:701)
+- POST /login (deepsearch\webui\api\endpoints\system\system_api.py:104)
+- GET /webui_port (deepsearch\webui\api\endpoints\system\system_info.py:70)
+- POST /notify_port_change (deepsearch\webui\api\endpoints\system\system_info.py:92)
+- GET /strategies (deepsearch\webui\api\endpoints\trading\backtest_api.py:90)
+- POST /run (deepsearch\webui\api\endpoints\trading\backtest_api.py:120)
+- GET /results/{backtest_id} (deepsearch\webui\api\endpoints\trading\backtest_api.py:270)
+- GET /results (deepsearch\webui\api\endpoints\trading\backtest_api.py:295)
+- POST /optimize (deepsearch\webui\api\endpoints\trading\backtest_api.py:330)
+- DELETE /results/{backtest_id} (deepsearch\webui\api\endpoints\trading\backtest_api.py:386)
+- GET /results/{backtest_id}/plot (deepsearch\webui\api\endpoints\trading\backtest_api.py:397)
+- GET /sample_config/{strategy} (deepsearch\webui\api\endpoints\trading\backtest_api.py:442)
+- GET /validate/{symbol} (deepsearch\webui\api\endpoints\trading\chart.py:292)
+- GET /meta/{symbol} (deepsearch\webui\api\endpoints\trading\chart.py:327)
+- DELETE /subscribe/{subscription_id} (deepsearch\webui\api\endpoints\trading\chart.py:672)
+- GET /concept-ths/list (deepsearch\webui\api\endpoints\trading\market.py:177)
+- GET /concept-ths/{concept}/index (deepsearch\webui\api\endpoints\trading\market.py:200)
+- GET /concept-ths/{concept}/info (deepsearch\webui\api\endpoints\trading\market.py:229)
+- GET /concept-ths/{concept}/constituents (deepsearch\webui\api\endpoints\trading\market.py:254)
+- GET /sse-summary (deepsearch\webui\api\endpoints\trading\market_overview.py:201)
+- GET /szse-summary (deepsearch\webui\api\endpoints\trading\market_overview.py:210)
+- GET /szse-area (deepsearch\webui\api\endpoints\trading\market_overview.py:221)
+- GET /szse-sector (deepsearch\webui\api\endpoints\trading\market_overview.py:232)
+- GET /sse-daily (deepsearch\webui\api\endpoints\trading\market_overview.py:244)
+- GET /stock/{symbol}/info (deepsearch\webui\api\endpoints\trading\market_overview.py:255)
+- GET /stock/{symbol}/bid-ask (deepsearch\webui\api\endpoints\trading\market_overview.py:264)
+- GET /spot (deepsearch\webui\api\endpoints\trading\market_overview.py:273)
+- GET /types (deepsearch\webui\api\endpoints\trading\strategy_api.py:63)
+- POST /add (deepsearch\webui\api\endpoints\trading\strategy_api.py:130)
+- POST /start/{strategy_id} (deepsearch\webui\api\endpoints\trading\strategy_api.py:160)
+- POST /stop/{strategy_id} (deepsearch\webui\api\endpoints\trading\strategy_api.py:178)
+- POST /pause/{strategy_id} (deepsearch\webui\api\endpoints\trading\strategy_api.py:196)
+- POST /resume/{strategy_id} (deepsearch\webui\api\endpoints\trading\strategy_api.py:212)
+- DELETE /remove/{strategy_id} (deepsearch\webui\api\endpoints\trading\strategy_api.py:228)
+- GET /status/{strategy_id} (deepsearch\webui\api\endpoints\trading\strategy_api.py:255)
+- GET /metrics/{strategy_id} (deepsearch\webui\api\endpoints\trading\strategy_api.py:267)
+- GET /positions/{strategy_id} (deepsearch\webui\api\endpoints\trading\strategy_api.py:279)
+- POST /backtest (deepsearch\webui\api\endpoints\trading\strategy_api.py:291)
+
+## ⚠️ 未匹配的前端 API 调用
+
+- /api
+  - deepsearch\webui\frontend\src\services\request.ts
+- /api/datasource/capabilities/batch-check
+  - deepsearch\webui\frontend\src\api\dataSource.js
+- /api/datasource/capabilities/categories
+  - deepsearch\webui\frontend\src\api\dataSource.js
+- /api/datasource/config/{source}
+  - deepsearch\webui\frontend\src\api\dataSource.js
+  - deepsearch\webui\frontend\src\api\dataSource.js
+- /api/datasource/monitor/performance/{source}
+  - deepsearch\webui\frontend\src\api\dataSource.js
+- /api/datasource/test/{source}
+  - deepsearch\webui\frontend\src\api\dataSource.js
+- /chart/subscribe/{subscriptionId}
+  - deepsearch\webui\frontend\src\api\chart.js
+- /chart/timeline
+  - deepsearch\webui\frontend\src\api\market.ts
+- /data-source/{id}
+  - deepsearch\webui\frontend\src\api\systemConfig.js
+  - deepsearch\webui\frontend\src\api\systemConfig.js
+  - deepsearch\webui\frontend\src\api\systemConfig.js
+- /data-sources/config/{sourceName}
+  - deepsearch\webui\frontend\src\api\dataSource.ts
+  - deepsearch\webui\frontend\src\api\dataSource.ts
+- /data-sources/test/{sourceName}
+  - deepsearch\webui\frontend\src\api\dataSource.ts
+- /data-sources/{id}/delete
+  - deepsearch\webui\frontend\src\api\dataSource.js
+- /data/export/{dataType}
+  - deepsearch\webui\frontend\src\api\data.js
+- /indicators/{code}/boll
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /indicators/{code}/kdj
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /indicators/{code}/ma
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /indicators/{code}/macd
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /indicators/{code}/rsi
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /indicators/{code}/volume
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /indicators/{code}/{indicator}
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /indicators/{indicator}
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /market/dragon-tiger
+  - deepsearch\webui\frontend\src\services\market.ts
+- /market/dt-pool
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /market/hot
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /market/indices
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /market/kline/{code}
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /market/kline/{symbol}
+  - deepsearch\webui\frontend\src\services\market.js
+- /market/limit-up
+  - deepsearch\webui\frontend\src\services\market.ts
+- /market/moneyflow/{code}
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /market/northbound
+  - deepsearch\webui\frontend\src\services\market.ts
+- /market/orderbook/{code}
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /market/quote/{code}
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /market/quote/{symbol}
+  - deepsearch\webui\frontend\src\services\market.js
+- /market/rankings/{type}
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /market/ticks/{symbol}
+  - deepsearch\webui\frontend\src\services\market.js
+- /market/timeline/{code}
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /market/timeline/{symbol}
+  - deepsearch\webui\frontend\src\services\market.js
+- /market/top-movers
+  - deepsearch\webui\frontend\src\services\market.js
+- /market/trades/{code}
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /monitor/alerts/{id}/acknowledge
+  - deepsearch\webui\frontend\src\services\api\modules\system.js
+- /monitor/alerts/{id}/close
+  - deepsearch\webui\frontend\src\services\api\modules\system.js
+- /monitor/cpu
+  - deepsearch\webui\frontend\src\services\api\modules\system.js
+- /monitor/disk
+  - deepsearch\webui\frontend\src\services\api\modules\system.js
+- /monitor/history/{metric}
+  - deepsearch\webui\frontend\src\services\api\modules\system.js
+- /monitor/memory
+  - deepsearch\webui\frontend\src\services\api\modules\system.js
+- /monitor/network
+  - deepsearch\webui\frontend\src\services\api\modules\system.js
+- /monitor/processes
+  - deepsearch\webui\frontend\src\services\api\modules\system.js
+- /monitor/services
+  - deepsearch\webui\frontend\src\services\api\modules\system.js
+- /stocks/watchlist
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /stocks/watchlist/{code}
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /stocks/{code}/announcements
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /stocks/{code}/company
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /stocks/{code}/dividends
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /stocks/{code}/financial
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /stocks/{code}/news
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /stocks/{code}/reports
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /stocks/{code}/shareholders
+  - deepsearch\webui\frontend\src\services\api\modules\market.js
+- /system/components/{componentName}
+  - deepsearch\webui\frontend\src\api\system.js
+- /system/components/{name}/{action}
+  - deepsearch\webui\frontend\src\services\api\modules\system.js
+- /system/config/import
+  - deepsearch\webui\frontend\src\api\systemConfig.js
+  - deepsearch\webui\frontend\src\services\api\modules\system.js
+- /system/config/save-all
+  - deepsearch\webui\frontend\src\api\systemConfig.js
+- /system/modules
+  - deepsearch\webui\frontend\src\api\systemConfig.js
+- /system/modules/{moduleId}
+  - deepsearch\webui\frontend\src\api\systemConfig.js
+- /system/modules/{moduleId}/auto-start
+  - deepsearch\webui\frontend\src\api\systemConfig.js
+- /system/performance
+  - deepsearch\webui\frontend\src\services\system.js
+

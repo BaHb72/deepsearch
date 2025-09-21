@@ -15,7 +15,7 @@ from .exceptions import (
     ComponentNotFoundError, ComponentAlreadyExistsError,
     ComponentDependencyError
 )
-from ..interfaces import Component
+from ..interfaces import Component, ComponentType
 
 T = TypeVar('T')
 
@@ -336,48 +336,53 @@ class AsyncContainer(Container):
 
     async def start_async_services(self, provider: ServiceProvider):
         """启动所有异步服务"""
-        # 分阶段启动，确保基础设施组件先启动
-        infrastructure_services = []
-        business_services = []
+        infrastructure_entries = []
+        business_entries = []
 
-        # 定义基础设施组件（需要先启动）
-        infrastructure_names = ['event_engine', 'message_bus', 'database', 'cache']
-        
+        infrastructure_types = {
+            ComponentType.INFRASTRUCTURE,
+            ComponentType.EXTERNAL,
+            ComponentType.SUPPORTING,
+        }
+
+        infrastructure_order = {
+            'event_engine': 0,
+            'message_bus': 1,
+            'database': 2,
+            'cache': 3,
+        }
+
         for service_type, descriptor in self._services.items():
-            if descriptor.lifetime == ServiceLifetime.SINGLETON:
-                service = provider.get_service(service_type)
-                if service and hasattr(service, 'start_async'):
-                    # 检查是否是基础设施组件
-                    service_name = getattr(service, 'name', str(service_type))
-                    if any(name in service_name.lower() for name in infrastructure_names):
-                        infrastructure_services.append((service_name, service))
-                    else:
-                        business_services.append((service_name, service))
+            if descriptor.lifetime != ServiceLifetime.SINGLETON:
+                continue
 
-        # 先顺序启动基础设施组件（保证消息总线在事件引擎之后）
-        # 按特定顺序排序：event_engine -> message_bus -> database -> cache
-        infrastructure_order = {'event_engine': 0, 'message_bus': 1, 'database': 2, 'cache': 3}
-        infrastructure_services.sort(key=lambda x: min(
-            [infrastructure_order.get(name, 999) for name in infrastructure_names
-             if name in x[0].lower()]
-        ))
+            service = provider.get_service(service_type)
+            if not service or not hasattr(service, 'start_async'):
+                continue
 
-        for name, service in infrastructure_services:
+            component_type = getattr(service, 'component_type', None)
+            service_name = getattr(service, 'name', service_type.__name__)
+            priority = infrastructure_order.get(service_name.lower(), len(infrastructure_order))
+
+            if component_type in infrastructure_types:
+                infrastructure_entries.append((priority, service_name, service))
+            else:
+                business_entries.append((service_name, service))
+
+        for _, service_name, service in sorted(infrastructure_entries, key=lambda item: (item[0], item[1])):
             try:
                 await service.start_async()
-                logger.debug(f"Started infrastructure service: {name}")
+                logger.debug(f"Started infrastructure service: {service_name}")
             except Exception as e:
-                logger.error(f"Failed to start infrastructure service {name}: {e}")
+                logger.error(f"Failed to start infrastructure service {service_name}: {e}")
                 raise
 
-        # 然后并发启动业务组件
-        if business_services:
-            tasks = [service.start_async() for _, service in business_services]
+        if business_entries:
+            tasks = [service.start_async() for _, service in business_entries]
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            # 检查是否有错误
-            for i, result in enumerate(results):
+            for (service_name, _), result in zip(business_entries, results):
                 if isinstance(result, Exception):
-                    logger.error(f"Failed to start business service {business_services[i][0]}: {result}")
+                    logger.error(f"Failed to start business service {service_name}: {result}")
 
     async def stop_async_services(self, provider: ServiceProvider):
         """停止所有异步服务"""

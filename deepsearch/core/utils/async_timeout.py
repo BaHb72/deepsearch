@@ -57,10 +57,11 @@ async def run_with_timeout(
     Returns:
         函数的返回值，或超时后的默认值
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
+    executor_call = functools.partial(func, *args, **kwargs)
     try:
         return await asyncio.wait_for(
-            loop.run_in_executor(None, func, *args, **kwargs),
+            loop.run_in_executor(None, executor_call),
             timeout=timeout
         )
     except asyncio.TimeoutError:

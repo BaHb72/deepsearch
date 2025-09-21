@@ -9,6 +9,8 @@ from typing import Optional, Dict, Any
 
 from deepsearch.config import get_config
 from deepsearch.gateway.gateway import Gateway
+from deepsearch.messaging.bus import CompositeMessageBus
+from deepsearch.core.runtime.context import get_context
 from ..async_component import AsyncComponent
 from ..utils.exceptions import error_context, ComponentLifecycleError
 from ..interfaces import ComponentType
@@ -22,6 +24,7 @@ class GatewayComponent(AsyncComponent[Gateway]):
         super().__init__("gateway", ComponentType.BUSINESS, "交易网关")
         self._gateway_type = "simulation"  # 默认使用模拟网关
         self._config = None
+        self._message_bus: Optional[CompositeMessageBus] = None
         self._timeout_manager = TimeoutManager()
 
     async def _do_initialize(self) -> Gateway:
@@ -37,15 +40,23 @@ class GatewayComponent(AsyncComponent[Gateway]):
 
             # 使用超时控制创建网关实例
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_INIT)
+            message_bus = self._resolve_message_bus()
+            gateway_name = 'Gateway'
+            if isinstance(self._config, dict):
+                gateway_name = self._config.get('name', gateway_name)
+
             try:
                 async def _create_gateway():
-                    # 创建网关实例 - Gateway 只需要 engine 参数
-                    # 这里暂时传入 None，实际应该注入 EventEngine
-                    instance = Gateway(None)
+                    if message_bus is not None:
+                        instance = Gateway(None, message_bus=message_bus, gateway_name=gateway_name)
+                    else:
+                        # 回退到 Gateway 内部的默认消息总线实现
+                        instance = Gateway(None, gateway_name=gateway_name)
 
-                    # 如果网关有初始化方法，调用它
                     if hasattr(instance, 'initialize'):
-                        await instance.initialize()
+                        init_result = instance.initialize()
+                        if asyncio.iscoroutine(init_result):
+                            await init_result
 
                     return instance
 
@@ -55,6 +66,28 @@ class GatewayComponent(AsyncComponent[Gateway]):
                     self.name, "initialize",
                     f"Gateway initialization timeout after {timeout} seconds"
                 )
+
+    def _resolve_message_bus(self) -> Optional[CompositeMessageBus]:
+        """获取已初始化的消息总线组件，若缺失则回退到默认实现。"""
+        try:
+            context = get_context()
+        except RuntimeError:
+            self._logger.warning("未检测到全局应用上下文，网关将使用内存消息总线作为后备方案")
+            return None
+
+        try:
+            message_bus_component = context.get_component('message_bus')
+        except ValueError:
+            self._logger.warning("应用上下文未注册消息总线组件，使用内存消息总线作为后备方案")
+            return None
+
+        message_bus = getattr(message_bus_component, 'resource', None)
+        if not message_bus:
+            self._logger.warning("消息总线组件尚未初始化，网关将使用内存消息总线作为后备方案")
+            return None
+
+        self._message_bus = message_bus
+        return message_bus
 
     async def _do_start(self) -> None:
         """启动网关"""
@@ -95,10 +128,18 @@ class GatewayComponent(AsyncComponent[Gateway]):
 
     def _get_extra_status_info(self) -> Dict[str, Any]:
         """提供额外的状态信息"""
-        return {
+        info = {
             "gateway_type": self._gateway_type,
-            "connected": self.resource and getattr(self.resource, 'is_connected', lambda: False)()
+            "connected": bool(self.resource and getattr(self.resource, 'is_connected', lambda: False)())
         }
+
+        if self._message_bus is not None:
+            try:
+                info["message_bus_running"] = bool(getattr(self._message_bus, 'is_running', lambda: False)())
+            except Exception:
+                info["message_bus_running"] = False
+
+        return info
 
     def _health_check(self) -> bool:
         """检查网关健康状态"""
@@ -299,3 +340,4 @@ class QMTGatewayComponent(AsyncComponent):
         except asyncio.TimeoutError:
             self._logger.warning(f"Get statistics timeout after {timeout} seconds")
             return {"error": "Timeout getting statistics"}
+

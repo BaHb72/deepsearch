@@ -1,0 +1,5381 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "DeepSearch API",
+    "version": "1.0.0",
+    "description": "量化交易系统 API"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000/api",
+      "description": "开发服务器"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/api/frontend/errors": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/status": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/connect": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/disconnect": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/reconnect": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/tables": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据库"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/errors": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      },
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      },
+      "delete": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/errors/stream": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/errors/stats": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/config": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      },
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      },
+      "put": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/toggle": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/test": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      },
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/clear-cache": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/reset-statistics": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/workers": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/workers/{worker_id}/test": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/workers/{worker_id}/reset": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/strategy": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/list": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/detail/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/fund-flow": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/intraday-desire/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/export": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/data/stats": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/data/query": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/database/status": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/qmt/status": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/qmt/subscribe": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/system/status": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/system/start": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/system/stop": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/system/restart": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/monitor/dashboard": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/monitor/metrics/realtime": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock-comment/list": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock-comment/detail/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/datasource/capabilities/matrix": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/datasource/monitor/status": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/statistics": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/records": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/recommend": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/reset": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/alerts": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/login": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/logout": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/update-password": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/code-info": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/calendar": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock-basic": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/backward-factor": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/adj-factor": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/history-stock-status": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/hist-code-list": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/code-list": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/future-code-list": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/bj-code-mapping": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/query-snapshot": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/query-kline": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/balance-sheet": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/cash-flow": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/income": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/profit-express": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/profit-notice": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/share-holder": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/holder-num": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/equity-structure": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/equity-pledge-freeze": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/equity-restricted": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/dividend": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/right-issue": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/margin-summary": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/margin-detail": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/long-hu-bang": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscribe/index": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscribe/stock": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscribe/future": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscribe/etf": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscribe/kzz": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscribe/hkt": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscribe/kline": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/unsubscribe": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscription-status": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/financial-summary": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/batch-query-kline": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "AmazingData"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/info": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/clear": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stats": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/series": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/indicators": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/chip-distribution": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/realtime": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/market-depth": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/apis/list": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/apis/by-category": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/apis/{api_name}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/apis/statistics": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/query": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/import/csv": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/export/{data_type}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/clean": {
+      "delete": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stocks": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/kline": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/symbols": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/test-worker": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/fetch": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/refresh": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/capabilities/matrix": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/capabilities/{source}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/capabilities/compare": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/capabilities/recommend": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/capabilities/check": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/update": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/preset": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/presets": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/recommendation": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/health/{source}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/circuit-breaker": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/circuit-breaker/reset": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/config/validate": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/config/current": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/test/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock/hist": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock/quote": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock/info": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock/list": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/source/status": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/source/check": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/compare": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      },
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/source/config": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/realtime/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/realtime/batch": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/market/overview": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/rank/gainers": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/rank/losers": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/test-all": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "数据源"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/sse/summary": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/szse/summary": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/overview": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock/{symbol}/kline": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/realtime/quote": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/add": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/update/{source_id}": {
+      "put": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/delete/{source_id}": {
+      "delete": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/toggle/{source_id}": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/test/{source_id}": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/statistics/{source_id}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/health/{source_id}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/batch-test": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/create": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/{datasource_id}/update": {
+      "put": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/{datasource_id}": {
+      "put": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      },
+      "delete": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/{datasource_id}/delete": {
+      "delete": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/{datasource_id}/toggle": {
+      "patch": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/monitor": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/switch": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/cache/refresh": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "其他"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/sectors": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/rank/{rank_type}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/money-flow": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/hot-stocks": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/market-calendar": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/metrics/realtime": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/slow-events": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/history": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/events/summary": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/indicators/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/aggregates/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/backtest": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/sync/trigger": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/sync/status": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/export/parquet": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/import/parquet": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/cache/stats": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscribe": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/minute": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscriptions": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscribed": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/tick/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/orderbook/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/trades/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/clients": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/batch": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/updates/{client_id}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "QMT集成"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/schema": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/save": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/validate": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/test-database": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/test-cache": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/connections": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      },
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/connections/{connection_id}": {
+      "put": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      },
+      "delete": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/detailed": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/{component}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/check": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stream": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/files": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/download/{filename}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/start": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stop": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/restart": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/logs/recent": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/components": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/components/{component_name}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/components/{component_name}/start": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/components/{component_name}/stop": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/components/{component_name}/health": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/logs": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/webui_port": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/notify_port_change": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "系统管理"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/strategies": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/run": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/results/{backtest_id}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      },
+      "delete": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/results": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/optimize": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/results/{backtest_id}/plot": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/sample_config/{strategy}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/indicator-list": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/snap": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/validate/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/providers": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/meta/{symbol}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock-info": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock-list": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/signals": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/subscribe/{subscription_id}": {
+      "delete": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/concept-ths/list": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/concept-ths/{concept}/index": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/concept-ths/{concept}/info": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/concept-ths/{concept}/constituents": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/anomalies": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stocks/{symbol}/intraday": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/data-source": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/activity": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock-changes": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/zt-pool": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/sse-summary": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/szse-summary": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/szse-area": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/szse-sector": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/sse-daily": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock/{symbol}/info": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stock/{symbol}/bid-ask": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/spot": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "市场数据"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/types": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/start/{strategy_id}": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/stop/{strategy_id}": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/pause/{strategy_id}": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/resume/{strategy_id}": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/remove/{strategy_id}": {
+      "delete": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/status/{strategy_id}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/metrics/{strategy_id}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/positions/{strategy_id}": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    },
+    "/summary": {
+      "get": {
+        "summary": "",
+        "description": "",
+        "tags": [
+          "交易"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "请求错误"
+          },
+          "500": {
+            "description": "服务器错误"
+          }
+        }
+      }
+    }
+  }
+}

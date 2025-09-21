@@ -191,7 +191,7 @@ class ComponentManager:
             return
 
         if info.status == ComponentStatus.UNINITIALIZED:
-            self.initialize_component(name)
+            await self.initialize_component(name)
 
         # 检查依赖
         for dep in info.dependencies:
@@ -554,3 +554,4 @@ class ComponentManager:
     async def stop_all_components(self) -> None:
         """停止所有组件（别名）"""
         await self.stop_all()
+

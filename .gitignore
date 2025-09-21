@@ -1,4 +1,4 @@
-# Python
+# ==================== Python ====================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -14,52 +14,55 @@ lib/
 lib64/
 parts/
 sdist/
-var/
 wheels/
+var/
 *.egg-info/
 .installed.cfg
 *.egg
 
-# Virtual Environment
+# Virtual environments
+.venv/
 venv/
 env/
 ENV/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Testing
-.coverage
+# ==================== Tooling & Caches ====================
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 htmlcov/
+.coverage
+coverage.xml
 
-# Logs
+# Logs & diagnostics
 *.log
 logs/
+diagnostic_*.json
+diagnostic_log.json
 
-# OS
+# ==================== OS & Editors ====================
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
 
-# ==================== Project Configuration ====================
+# ==================== Local configuration (do not commit secrets) ====================
 config/settings.local.yaml
 settings.local.yaml
 settings.*.local.yaml
-
-# IMPORTANT: Never commit real configuration files with passwords!
 deepsearch/config/settings.dev.yaml
 deepsearch/config/settings.local.yaml
-# Keep only template/example files
-!deepsearch/config/settings.template.yaml
-!deepsearch/config/settings.dev.yaml.example
 config/.crypto_key
 .crypto_key
 
-# ==================== Build Artifacts ====================
-# Frontend build outputs
+# keep shared templates
+!deepsearch/config/settings.template.yaml
+!deepsearch/config/settings.dev.yaml.example
+
+# ==================== Frontend build artifacts ====================
 /deepsearch/webui/static/assets/
 /deepsearch/webui/static/index.html
 /deepsearch/webui/frontend/dist/
@@ -67,77 +70,17 @@ config/.crypto_key
 /deepsearch/webui/frontend/node_modules/
 /deepsearch/webui/frontend/package-lock.json
 /deepsearch/webui/frontend/src/.trash/
+/deepsearch/webui/frontend/__mocks__/
+/deepsearch/webui/frontend/.husky/
+/deepsearch/webui/frontend/.env.*
 
-# Python build artifacts
-uv.lock
-*.db
-*.sqlite
-*.duckdb.wal
+# ==================== Installer & deployment ====================
+/installer/
+cloudflare-deploy/*.toml
+cloudflare-deploy/*.min.js
+wrangler*.toml
 
-# ==================== Test Scripts ====================
-# Test reports with sensitive data
-amazingdata_test_report.txt
-*_test_report.txt
-# Test files (all patterns)
-test_*.py
-*_test.py
-tests_*.py
-*_tests.py
-test_*.html
-check_*.py
-force_*.py
-quick_*.py
-simple_*.py
-run_tests.py
-safe_start.py
-diagnose_*.py
-validate_*.py
-benchmark_*.py
-analyze_*.py
-
-# Test directories
-/tests/
-/test/
-
-# ==================== Documentation (Build-time) ====================
-# Temporary/generated documentation
-README_NEW.md
-README_*.md
-REFACTORING_*.md
-SYSTEM_*.md
-WEBUI_*.md
-DESIGN_*.md
-MIGRATION_*.md
-*_REPORT.md
-*_GUIDE.md
-*_ANALYSIS.md
-*_SUMMARY.md
-*_TRACKER.md
-*_LOG.md
-CODE_ISSUES_*.md
-DATA_*.md
-REACT_*.md
-TYPESCRIPT_*.md
-API_*.md
-FRONTEND_*.md
-DEPLOYMENT_*.md
-CLEANUP_*.md
-BEST_PRACTICES_*.md
-ERROR_*.md
-ISSUES_*.md
-
-# Documentation directories (generated/temporary)
-/docs/api-guides/
-/docs/api/
-/docs/architecture/
-/docs/archive/
-/docs/development/
-/docs/migration/
-/docs/operations/
-/docs/solutions/
-
-# ==================== Data Files ====================
-# Data directory - only keep structure, ignore data files
+# ==================== Data artifacts ====================
 data/**/*.db
 data/**/*.duckdb
 data/**/*.duckdb.wal
@@ -150,109 +93,29 @@ data/logs/
 data/monitoring/
 data/analytics/
 data/datasourceapi/
-# Keep directory structure
 !/data/**/.gitkeep
-# Legacy data paths
 deepsearch/data/
-diagnostic_log.json
+deepsearch/infrastructure/data/**/*.duckdb.wal
 
-# ==================== Deployment ====================
-# Cloudflare deployment configs (contain sensitive info)
-cloudflare-deploy/*.toml
-cloudflare-deploy/*.min.js
-wrangler.toml
-wrangler-*.toml
-
-# Installer files
-/installer/
-
-# ==================== Development Tools ====================
-/.claude/
-/.venv/
-.venv/
-
-# Batch/Shell scripts for development
-*.bat
-*.ps1
-*.sh
-
-# ==================== Temporary Files ====================
-*_old.py
+# ==================== Temporary helpers ====================
 *.bak
 *.backup
-/temp/
-/tmp/
-/examples/
-/cloudflare-worker/
-nul
+*_old.py
+cleanup_*.py
+cleanup_*.bat
+final_*.py
+2025-*.txt
+*-think.txt
+deepsearch/webui/frontend/.backup-cleanup/
+deepsearch/webui/frontend/jsx-backup-*/
 
-# System error files
-D:*
-*qmt_config.json
-
-# Archive/Trash directories
+# ==================== Misc ====================
+/.claude/
 /.archive/
 /.trash/
 */.trash/
 **/.trash/
 .trash/
-*/cleanup-duplicates.md
-
-# Backup directories
-*backup*/
-*jsx-backup*/
-*.backup-cleanup/
-
-# ==================== Frontend Development ====================
-# React/TypeScript config files (development only)
-/deepsearch/webui/frontend/.env.*
-/deepsearch/webui/frontend/.eslintrc.*
-/deepsearch/webui/frontend/.prettierrc
-/deepsearch/webui/frontend/.lintstagedrc.*
-/deepsearch/webui/frontend/babel.config.*
-/deepsearch/webui/frontend/commitlint.config.*
-/deepsearch/webui/frontend/jest.config.*
-/deepsearch/webui/frontend/tsconfig.*
-/deepsearch/webui/frontend/vite.config.*
-/deepsearch/webui/frontend/__mocks__/
-/deepsearch/webui/frontend/.husky/
-/deepsearch/webui/frontend/index-react.html
-
-# ==================== Miscellaneous ====================
-# Editor/IDE specific files  
-*~
-*.swp
-*.swo
-.idea/
-.vscode/
-
-# OS specific
-.DS_Store
-Thumbs.db
-
-# Log files
-*.log
-logs/
-
-# Coverage reports
-.coverage
-.pytest_cache/
-htmlcov/
-
-# ==================== Temporary Files ====================
-# Temporary thinking/notes files
-2025-*.txt
-*-think.txt
-
-# Cleanup scripts
-cleanup_*.py
-cleanup_*.bat
-final_*.py
-
-# Example files
-*_example.py
-*_example.js
-
-# Temporary diagnosis files
-diagnose_*.py
-diagnostic_*.json
+*qmt_config.json
+nul
+D?Stockcodedeepsearch.pre-commit-config.yaml

@@ -6,13 +6,13 @@ app:
 data_sources:
   providers:
     akshare:
-      enabled: true
+      enabled: false
       priority: 3
     amazingdata:
-      enabled: false
+      enabled: true
       priority: 1
     cloudflare:
-      enabled: true
+      enabled: false
       priority: 2
     qmt:
       enabled: false
@@ -23,10 +23,6 @@ log:
   level: INFO
   toConsole: true
   toFile: true
-logging:
-  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-  level: INFO
-  output: console
 message_bus:
   buses:
     zmq:
@@ -34,15 +30,11 @@ message_bus:
         host: localhost
         pub_port: 5556
         sub_port: 5557
-      type: zeromq
+      type: zmq
 monitoring:
   enabled: true
   interval: 60
-system:
-  mode: production
-  name: DeepSearch
-  version: 0.1.0
 webui:
+  backend_host: 0.0.0.0
   backend_port: 8000
   frontend_port: 3000
-  host: 0.0.0.0

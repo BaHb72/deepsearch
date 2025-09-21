@@ -64,18 +64,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - 定期检查前后端API一致性
 
 ### 架构优化文档
-**系统架构优化报告** (`docs/ARCHITECTURE_OPTIMIZATION_REPORT.md`)：
-- **功能**：详细的系统架构分析和优化建议
+**系统架构优化策略** (`docs/ARCHITECTURE_OPTIMIZATION_STRATEGY.md`)：
+- **功能**：规划架构目标形态与各阶段优化路线
 - **更新时间**：2025-09-17
-- **内容**：包含架构问题清单、优化方案、实施路线图
-- **关键指标**：测试覆盖率4.16%，代码总量95,661行
+- **内容**：覆盖性能、可靠性、团队协作三大方向的行动清单
 
-### AmazingData API覆盖报告
-**API覆盖情况报告** (`docs/AMAZINGDATA_API_COVERAGE_REPORT.md`)：
-- **功能**：分析35个AmazingData API接口的实现覆盖情况
-- **更新时间**：2025-09-18
-- **覆盖率**：已实现32.4%（12/37个），部分实现8.1%（3/37个）
-- **重点**：列出未实现的关键接口和优先级实施建议
+### AmazingData 集成资料
+**综合方案** (`docs/AMAZINGDATA_COMPREHENSIVE_SOLUTION.md`)：
+- **范围**：涵盖接入流程、隔离策略与关键 API 封装
+- **同步**：结合 SDK 隔离设计与技术实现文档一并维护
+- **建议**：落地变更时对照 `AMAZINGDATA_SDK_ISOLATION_*` 系列文档核查
 
 ### API接口规范
 - 前端请求路径：相对路径，如 `/database/status`
@@ -84,15 +82,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 后端路由前缀：在 server.py 中通过 `prefix="/api/database"` 设置
 - Vite代理配置：将 `/api` 请求代理到 `http://localhost:8000`
 
-### 配置文件检查报告
-**配置审核报告** (`docs/CONFIG_REVIEW_REPORT.md`)：
-- **功能**：详细的配置文件合理性检查报告
-- **更新时间**：2025-09-18
-- **发现问题**：6个严重错误（生产环境），2个错误（开发环境）
-- **关键问题**：生产环境debug开启、密码明文存储、Redis无密码
-- **配置模板**：`deepsearch/config/settings.template.yaml` - 标准配置模板
-- **环境变量**：`.env.example` - 环境变量示例文件
-- **验证工具**：`tools/validate_config.py` - 自动化配置验证脚本
+### 配置自检
+- **模板**：`deepsearch/config/settings.template.yaml` 提供基础结构，修改后务必保留占位符
+- **示例**：`.env.example` 列出所有环境变量，请复制为本地私有文件使用
+- **校验**：运行 `python tools/validate_config.py` 自动检查必填项与敏感字段配置
 
 ## Project Overview
 

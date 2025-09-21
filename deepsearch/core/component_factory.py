@@ -6,6 +6,7 @@
 from typing import Dict, Any, Optional, Type, TypeVar, Callable
 from dataclasses import dataclass
 import logging
+import copy
 
 from .interfaces import Component, ComponentType
 from .async_component import AsyncComponent
@@ -261,6 +262,16 @@ class DatabaseComponentFactory:
 
 class CacheComponentFactory:
     """缓存组件工厂"""
+    @staticmethod
+    def _clone_config(config: Any) -> Any:
+        """Return a deep copy of config without mutating shared instances."""
+        if hasattr(config, "model_copy"):
+            return config.model_copy(deep=True)
+        try:
+            return copy.deepcopy(config)
+        except Exception:
+            return config
+
 
     @staticmethod
     def create(
@@ -290,8 +301,12 @@ class CacheComponentFactory:
 
         # 注入配置
         if config:
-            component.update_config(config)
-            config.enabled = enabled
+            config_copy = CacheComponentFactory._clone_config(config)
+            if isinstance(config_copy, dict):
+                config_copy['enabled'] = enabled
+            elif hasattr(config_copy, 'enabled'):
+                config_copy.enabled = enabled
+            component.update_config(config_copy)
 
         return component
 

@@ -1,0 +1,1085 @@
+# AkShare API 函数列表
+
+版本: 1.17.31
+生成时间: 2025-08-11 01:01:41
+总函数数: 1046
+
+
+## 股票数据 (405 个函数)
+
+- `ak.bond_cov_stock_issue_cninfo() -> pandas.core.frame.DataFrame`
+- `ak.fund_report_stock_cninfo(date: str = '20210630') -> pandas.core.frame.DataFrame`
+- `ak.fund_stock_position_lg() -> pandas.core.frame.DataFrame`
+- `ak.futures_spot_stock(symbol: str = '能源') -> pandas.core.frame.DataFrame`
+- `ak.futures_stock_shfe_js(date: str = '20240419') -> pandas.core.frame.DataFrame`
+- `ak.get_us_stock_name() -> pandas.core.frame.DataFrame`
+- `ak.index_stock_cons(symbol: str = '399639') -> pandas.core.frame.DataFrame`
+- `ak.index_stock_cons_csindex(symbol: str = '000300') -> pandas.core.frame.DataFrame`
+- `ak.index_stock_cons_sina(symbol: str = '000300') -> pandas.core.frame.DataFrame`
+- `ak.index_stock_cons_weight_csindex(symbol: str = '000300') -> pandas.core.frame.DataFrame`
+- `ak.index_stock_info() -> pandas.core.frame.DataFrame`
+- `ak.index_us_stock_sina(symbol: str = '.INX') -> pandas.core.frame.DataFrame`
+- `ak.macro_china_stock_market_cap() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_lme_stock() -> pandas.core.frame.DataFrame`
+- `ak.macro_stock_finance() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_api_crude_stock() -> pandas.core.frame.DataFrame`
+- `ak.rv_from_stock_zh_a_hist_min_em(symbol='000001', start_date='2021-10-20 09:30:00', end_date='2024-11-01 15:00:00', period='1', adjust='hfq') -> pandas.core.frame.DataFrame`
+- `ak.stock_a_all_pb() -> pandas.core.frame.DataFrame`
+- `ak.stock_a_below_net_asset_statistics(symbol: str = '全部A股') -> pandas.core.frame.DataFrame`
+- `ak.stock_a_code_to_symbol(symbol: str = '000300') -> str`
+- `ak.stock_a_congestion_lg() -> pandas.core.frame.DataFrame`
+- `ak.stock_a_gxl_lg(symbol: str = '上证A股') -> pandas.core.frame.DataFrame`
+- `ak.stock_a_high_low_statistics(symbol: str = 'all') -> pandas.core.frame.DataFrame`
+- `ak.stock_a_indicator_lg(symbol: str = '000001') -> pandas.core.frame.DataFrame`
+- `ak.stock_a_ttm_lyr() -> pandas.core.frame.DataFrame`
+- `ak.stock_account_statistics_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_add_stock(symbol: str = '688166') -> pandas.core.frame.DataFrame`
+- `ak.stock_allotment_cninfo(symbol: str = '600030', start_date: str = '19700101', end_date: str = '22220222') -> pandas.core.frame.DataFrame`
+- `ak.stock_analyst_detail_em(analyst_id: str = '11000200926', indicator: str = '最新跟踪成分股') -> pandas.core.frame.DataFrame`
+- `ak.stock_analyst_rank_em(year: str = '2024') -> pandas.core.frame.DataFrame`
+- `ak.stock_balance_sheet_by_report_delisted_em(symbol: str = 'SZ000013') -> pandas.core.frame.DataFrame`
+- `ak.stock_balance_sheet_by_report_em(symbol: str = 'SH600519') -> pandas.core.frame.DataFrame`
+- `ak.stock_balance_sheet_by_yearly_em(symbol: str = 'SH600036') -> pandas.core.frame.DataFrame`
+- `ak.stock_bid_ask_em(symbol: str = '000001') -> pandas.core.frame.DataFrame`
+- `ak.stock_bj_a_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_board_change_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_board_concept_cons_em(symbol: str = '融资融券') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_concept_hist_em(symbol: str = '绿色电力', period: str = 'daily', start_date: str = '20220101', end_date: str = '20221128', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_concept_hist_min_em(symbol: str = '长寿药', period: str = '5') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_concept_index_ths(symbol: str = '阿里巴巴概念', start_date: str = '20200101', end_date: str = '20250228') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_concept_info_ths(symbol: str = '阿里巴巴概念') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_concept_name_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_board_concept_name_em_async() -> pandas.core.frame.DataFrame`
+- `ak.stock_board_concept_name_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_board_concept_spot_em(symbol: str = '可燃冰') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_concept_summary_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_board_industry_cons_em(symbol: str = '小金属') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_industry_hist_em(symbol: str = '小金属', start_date: str = '20211201', end_date: str = '20220401', period: str = '日k', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_industry_hist_min_em(symbol: str = '小金属', period: str = '5') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_industry_index_ths(symbol: str = '元件', start_date: str = '20200101', end_date: str = '20240108') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_industry_info_ths(symbol: str = '半导体') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_industry_name_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_board_industry_name_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_board_industry_spot_em(symbol: str = '小金属') -> pandas.core.frame.DataFrame`
+- `ak.stock_board_industry_summary_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_buffett_index_lg() -> pandas.core.frame.DataFrame`
+- `ak.stock_cash_flow_sheet_by_quarterly_em(symbol: str = 'SH600519') -> pandas.core.frame.DataFrame`
+- `ak.stock_cash_flow_sheet_by_report_delisted_em(symbol: str = 'SZ000013') -> pandas.core.frame.DataFrame`
+- `ak.stock_cash_flow_sheet_by_report_em(symbol: str = 'SH600519') -> pandas.core.frame.DataFrame`
+- `ak.stock_cash_flow_sheet_by_yearly_em(symbol: str = 'SH600519') -> pandas.core.frame.DataFrame`
+- `ak.stock_cg_equity_mortgage_cninfo(date: str = '20210930') -> pandas.core.frame.DataFrame`
+- `ak.stock_cg_guarantee_cninfo(symbol: str = '全部', start_date: str = '20180630', end_date: str = '20210927') -> pandas.core.frame.DataFrame`
+- `ak.stock_cg_lawsuit_cninfo(symbol: str = '全部', start_date: str = '20180630', end_date: str = '20210927') -> pandas.core.frame.DataFrame`
+- `ak.stock_changes_em(symbol: str = '大笔买入') -> pandas.core.frame.DataFrame`
+- `ak.stock_circulate_stock_holder(symbol: str = '600000') -> pandas.core.frame.DataFrame`
+- `ak.stock_classify_sina(symbol: str = '热门概念') -> pandas.core.frame.DataFrame`
+- `ak.stock_comment_detail_scrd_desire_daily_em(symbol: str = '600000') -> pandas.core.frame.DataFrame`
+- `ak.stock_comment_detail_scrd_desire_em(symbol: str = '600000') -> pandas.core.frame.DataFrame`
+- `ak.stock_comment_detail_scrd_focus_em(symbol: str = '600000') -> pandas.core.frame.DataFrame`
+- `ak.stock_comment_detail_zhpj_lspf_em(symbol: str = '600000') -> pandas.core.frame.DataFrame`
+- `ak.stock_comment_detail_zlkp_jgcyd_em(symbol: str = '600000') -> pandas.core.frame.DataFrame`
+- `ak.stock_comment_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_concept_cons_futu(symbol: str = '特朗普概念股') -> pandas.core.frame.DataFrame`
+- `ak.stock_concept_fund_flow_hist(symbol: str = '数据要素') -> pandas.core.frame.DataFrame`
+- `ak.stock_cy_a_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_cyq_em(symbol: str = '000001', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_dividend_cninfo(symbol: str = '600009') -> pandas.core.frame.DataFrame`
+- `ak.stock_dxsyl_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_dzjy_hygtj(symbol: str = '近三月') -> pandas.core.frame.DataFrame`
+- `ak.stock_dzjy_hyyybtj(symbol: str = '近3日') -> pandas.core.frame.DataFrame`
+- `ak.stock_dzjy_mrmx(symbol: str = '基金', start_date: str = '20220104', end_date: str = '20220104') -> pandas.core.frame.DataFrame`
+- `ak.stock_dzjy_mrtj(start_date: str = '20220105', end_date: str = '20220105') -> pandas.core.frame.DataFrame`
+- `ak.stock_dzjy_sctj() -> pandas.core.frame.DataFrame`
+- `ak.stock_dzjy_yybph(symbol: str = '近三月') -> pandas.core.frame.DataFrame`
+- `ak.stock_ebs_lg() -> pandas.core.frame.DataFrame`
+- `ak.stock_esg_hz_sina() -> pandas.core.frame.DataFrame`
+- `ak.stock_esg_msci_sina() -> pandas.core.frame.DataFrame`
+- `ak.stock_esg_rate_sina() -> pandas.core.frame.DataFrame`
+- `ak.stock_esg_rft_sina() -> pandas.core.frame.DataFrame`
+- `ak.stock_esg_zd_sina() -> pandas.core.frame.DataFrame`
+- `ak.stock_fhps_detail_em(symbol: str = '300073') -> pandas.core.frame.DataFrame`
+- `ak.stock_fhps_detail_ths(symbol: str = '603444') -> pandas.core.frame.DataFrame`
+- `ak.stock_fhps_em(date: str = '20231231') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_abstract(symbol: str = '600004') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_abstract_ths(symbol: str = '000063', indicator: str = '按报告期') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_analysis_indicator(symbol: str = '600004', start_year: str = '1900') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_analysis_indicator_em(symbol: str = '301389.SZ', indicator: str = '按报告期') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_benefit_ths(symbol: str = '000063', indicator: str = '按报告期') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_cash_ths(symbol: str = '000063', indicator: str = '按报告期') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_debt_ths(symbol: str = '000063', indicator: str = '按报告期') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_hk_analysis_indicator_em(symbol: str = '00853', indicator: str = '年度') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_hk_report_em(stock: str = '00700', symbol: str = '资产负债表', indicator: str = '年度') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_report_sina(stock: str = 'sh600600', symbol: str = '资产负债表') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_us_analysis_indicator_em(symbol: str = 'TSLA', indicator: str = '年报') -> pandas.core.frame.DataFrame`
+- `ak.stock_financial_us_report_em(stock: str = 'TSLA', symbol: str = '资产负债表', indicator: str = '年报') -> pandas.core.frame.DataFrame`
+- `ak.stock_fund_flow_big_deal() -> pandas.core.frame.DataFrame`
+- `ak.stock_fund_flow_concept(symbol: str = '即时') -> pandas.core.frame.DataFrame`
+- `ak.stock_fund_flow_individual(symbol: str = '即时') -> pandas.core.frame.DataFrame`
+- `ak.stock_fund_flow_industry(symbol: str = '即时') -> pandas.core.frame.DataFrame`
+- `ak.stock_fund_stock_holder(symbol: str = '600004') -> pandas.core.frame.DataFrame`
+- `ak.stock_gddh_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_free_holding_analyse_em(date: str = '20230930') -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_free_holding_change_em(date: str = '20210930') -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_free_holding_detail_em(date: str = '20210930') -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_free_holding_statistics_em(date: str = '20210630') -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_free_holding_teamwork_em(symbol: str = '社保') -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_free_top_10_em(symbol: str = 'sh688686', date: str = '20240930') -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_holding_analyse_em(date: str = '20230331') -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_holding_change_em(date: str = '20210930') -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_holding_detail_em(date: str = '20230331', indicator: str = '个人', symbol: str = '新进') -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_holding_statistics_em(date: str = '20210930') -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_holding_teamwork_em(symbol: str = '社保') -> pandas.core.frame.DataFrame`
+- `ak.stock_gdfx_top_10_em(symbol: str = 'sh688686', date: str = '20210630') -> pandas.core.frame.DataFrame`
+- `ak.stock_ggcg_em(symbol: str = '全部') -> pandas.core.frame.DataFrame`
+- `ak.stock_gpzy_distribute_statistics_bank_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_gpzy_distribute_statistics_company_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_gpzy_industry_data_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_gpzy_pledge_ratio_detail_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_gpzy_pledge_ratio_em(date: str = '20240906') -> pandas.core.frame.DataFrame`
+- `ak.stock_gpzy_profile_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_gsrl_gsdt_em(date: str = '20230808') -> pandas.core.frame.DataFrame`
+- `ak.stock_history_dividend() -> pandas.core.frame.DataFrame`
+- `ak.stock_history_dividend_detail(symbol: str = '000002', indicator: str = '分红', date: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_company_profile_em(symbol: str = '03900') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_daily(symbol: str = '00981', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_famous_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_fhpx_detail_ths(symbol: str = '0700') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_ggt_components_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_gxl_lg() -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_hist(symbol: str = '00593', period: str = 'daily', start_date: str = '19700101', end_date: str = '22220101', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_hist_min_em(symbol: str = '01611', period: str = '1', adjust: str = '', start_date: str = '1979-09-01 09:32:00', end_date: str = '2222-01-01 09:32:00') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_hot_rank_detail_em(symbol: str = '00700') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_hot_rank_detail_realtime_em(symbol: str = '00700') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_hot_rank_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_hot_rank_latest_em(symbol: str = '00700') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_index_daily_em(symbol: str = 'HSTECF2L') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_index_daily_sina(symbol: str = 'CES100') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_index_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_index_spot_sina() -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_indicator_eniu(symbol: str = 'hk01093', indicator: str = '市盈率') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_main_board_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_profit_forecast_et(symbol: str = '09999', indicator: str = '盈利预测概览') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_security_profile_em(symbol: str = '03900') -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_spot() -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_hk_valuation_baidu(symbol: str = '06969', indicator: str = '总市值', period: str = '近一年') -> pandas.core.frame.DataFrame`
+- `ak.stock_hold_change_cninfo(symbol: str = '全部') -> pandas.core.frame.DataFrame`
+- `ak.stock_hold_control_cninfo(symbol: str = '全部') -> pandas.core.frame.DataFrame`
+- `ak.stock_hold_management_detail_cninfo(symbol: str = '增持') -> pandas.core.frame.DataFrame`
+- `ak.stock_hold_management_detail_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_hold_management_person_em(symbol: str = '001308', name: str = '吴远') -> pandas.core.frame.DataFrame`
+- `ak.stock_hold_num_cninfo(date: str = '20210630') -> pandas.core.frame.DataFrame`
+- `ak.stock_hot_deal_xq(symbol: str = '最热门') -> pandas.core.frame.DataFrame`
+- `ak.stock_hot_follow_xq(symbol: str = '最热门') -> pandas.core.frame.DataFrame`
+- `ak.stock_hot_keyword_em(symbol: str = 'SZ000665') -> pandas.core.frame.DataFrame`
+- `ak.stock_hot_rank_detail_em(symbol: str = 'SZ000665') -> pandas.core.frame.DataFrame`
+- `ak.stock_hot_rank_detail_realtime_em(symbol: str = 'SZ000665') -> pandas.core.frame.DataFrame`
+- `ak.stock_hot_rank_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_hot_rank_latest_em(symbol: str = 'SZ000665') -> pandas.core.frame.DataFrame`
+- `ak.stock_hot_rank_relate_em(symbol: str = 'SZ000665') -> pandas.core.frame.DataFrame`
+- `ak.stock_hot_search_baidu(symbol: str = 'A股', date: str = '20250616', time: str = '今日')`
+- `ak.stock_hot_tweet_xq(symbol: str = '最热门') -> pandas.core.frame.DataFrame`
+- `ak.stock_hot_up_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_hsgt_board_rank_em(symbol: str = '北向资金增持行业板块排行', indicator: str = '今日') -> pandas.core.frame.DataFrame`
+- `ak.stock_hsgt_fund_flow_summary_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_hsgt_fund_min_em(symbol: str = '北向资金') -> pandas.core.frame.DataFrame`
+- `ak.stock_hsgt_hist_em(symbol: str = '北向资金') -> pandas.core.frame.DataFrame`
+- `ak.stock_hsgt_hold_stock_em(market: str = '沪股通', indicator: str = '5日排行') -> pandas.core.frame.DataFrame`
+- `ak.stock_hsgt_individual_detail_em(symbol: str = '002008', start_date: str = '20220130', end_date: str = '20220330') -> pandas.core.frame.DataFrame`
+- `ak.stock_hsgt_individual_em(symbol: str = '002008') -> pandas.core.frame.DataFrame`
+- `ak.stock_hsgt_institution_statistics_em(market: str = '北向持股', start_date: str = '20220601', end_date: str = '20220609')`
+- `ak.stock_hsgt_sh_hk_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_hsgt_stock_statistics_em(symbol: str = '北向持股', start_date: str = '20240110', end_date: str = '20240110')`
+- `ak.stock_index_pb_lg(symbol: str = '上证50') -> pandas.core.frame.DataFrame`
+- `ak.stock_index_pe_lg(symbol: str = '沪深300') -> pandas.core.frame.DataFrame`
+- `ak.stock_individual_basic_info_hk_xq(symbol: str = '02097', token: str = None, timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.stock_individual_basic_info_us_xq(symbol: str = 'NVDA', token: str = None, timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.stock_individual_basic_info_xq(symbol: str = 'SH601127', token: str = None, timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.stock_individual_fund_flow(stock: str = '600094', market: str = 'sh') -> pandas.core.frame.DataFrame`
+- `ak.stock_individual_fund_flow_rank(indicator: str = '5日') -> pandas.core.frame.DataFrame`
+- `ak.stock_individual_fund_flow_rank_async(indicator: str = '5日') -> pandas.core.frame.DataFrame`
+- `ak.stock_individual_info_em(symbol: str = '603777', timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.stock_individual_spot_xq(symbol: str = 'SH600000', token: str = None, timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.stock_industry_category_cninfo(symbol: str = '巨潮行业分类标准') -> pandas.core.frame.DataFrame`
+- `ak.stock_industry_change_cninfo(symbol: str = '002594', start_date: str = '20091227', end_date: str = '20220713') -> pandas.core.frame.DataFrame`
+- `ak.stock_industry_clf_hist_sw() -> pandas.core.frame.DataFrame`
+- `ak.stock_industry_pe_ratio_cninfo(symbol: str = '证监会行业分类', date: str = '20210910') -> pandas.core.frame.DataFrame`
+- `ak.stock_info_a_code_name() -> pandas.core.frame.DataFrame`
+- `ak.stock_info_bj_name_code() -> pandas.core.frame.DataFrame`
+- `ak.stock_info_broker_sina(page: str = '1') -> pandas.core.frame.DataFrame`
+- `ak.stock_info_change_name(symbol: str = '000503') -> pandas.core.frame.DataFrame`
+- `ak.stock_info_cjzc_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_info_global_cls(symbol: str = '全部') -> pandas.core.frame.DataFrame`
+- `ak.stock_info_global_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_info_global_futu() -> pandas.core.frame.DataFrame`
+- `ak.stock_info_global_sina() -> pandas.core.frame.DataFrame`
+- `ak.stock_info_global_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_info_sh_delist(symbol: str = '全部') -> pandas.core.frame.DataFrame`
+- `ak.stock_info_sh_name_code(symbol: str = '主板A股') -> pandas.core.frame.DataFrame`
+- `ak.stock_info_sz_change_name(symbol: str = '全称变更') -> pandas.core.frame.DataFrame`
+- `ak.stock_info_sz_delist(symbol: str = '终止上市公司') -> pandas.core.frame.DataFrame`
+- `ak.stock_info_sz_name_code(symbol: str = 'A股列表') -> pandas.core.frame.DataFrame`
+- `ak.stock_inner_trade_xq() -> pandas.core.frame.DataFrame`
+- `ak.stock_institute_hold(symbol: str = '20051') -> pandas.core.frame.DataFrame`
+- `ak.stock_institute_hold_detail(stock: str = '600433', quarter: str = '20201') -> pandas.core.frame.DataFrame`
+- `ak.stock_institute_recommend(symbol: str = '投资评级选股') -> pandas.core.frame.DataFrame`
+- `ak.stock_institute_recommend_detail(symbol: str = '000001') -> pandas.core.frame.DataFrame`
+- `ak.stock_intraday_em(symbol: str = '000001') -> pandas.core.frame.DataFrame`
+- `ak.stock_intraday_sina(symbol: str = 'sz000001', date: str = '20240321') -> pandas.core.frame.DataFrame`
+- `ak.stock_ipo_benefit_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_ipo_declare() -> pandas.core.frame.DataFrame`
+- `ak.stock_ipo_info(stock: str = '600004') -> pandas.core.frame.DataFrame`
+- `ak.stock_ipo_summary_cninfo(symbol: str = '600030') -> pandas.core.frame.DataFrame`
+- `ak.stock_irm_ans_cninfo(symbol: str = '1513586704097333248') -> pandas.core.frame.DataFrame`
+- `ak.stock_irm_cninfo(symbol: str = '002594') -> pandas.core.frame.DataFrame`
+- `ak.stock_jgdy_detail_em(date: str = '20241211') -> pandas.core.frame.DataFrame`
+- `ak.stock_jgdy_tj_em(date: str = '20220101') -> pandas.core.frame.DataFrame`
+- `ak.stock_js_weibo_nlp_time() -> Dict`
+- `ak.stock_js_weibo_report(time_period: str = 'CNHOUR12') -> pandas.core.frame.DataFrame`
+- `ak.stock_kc_a_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_lh_yyb_capital() -> pandas.core.frame.DataFrame`
+- `ak.stock_lh_yyb_control() -> pandas.core.frame.DataFrame`
+- `ak.stock_lh_yyb_most() -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_detail_daily_sina(date: str = '20240222') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_detail_em(start_date: str = '20230403', end_date: str = '20230417') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_ggtj_sina(symbol: str = '5') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_hyyyb_em(start_date: str = '20220324', end_date: str = '20220324') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_jgmmtj_em(start_date: str = '20240417', end_date: str = '20240430') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_jgmx_sina() -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_jgstatistic_em(symbol: str = '近一月') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_jgzz_sina(symbol: str = '5') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_stock_detail_date_em(symbol: str = '600077') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_stock_detail_em(symbol: str = '000788', date: str = '20220315', flag: str = '卖出') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_stock_statistic_em(symbol: str = '近一月') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_traderstatistic_em(symbol: str = '近一月') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_yyb_detail_em(symbol: str = '10188715') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_yybph_em(symbol: str = '近一月') -> pandas.core.frame.DataFrame`
+- `ak.stock_lhb_yytj_sina(symbol: str = '5') -> pandas.core.frame.DataFrame`
+- `ak.stock_lrb_em(date: str = '20240331') -> pandas.core.frame.DataFrame`
+- `ak.stock_main_fund_flow(symbol: str = '全部股票') -> pandas.core.frame.DataFrame`
+- `ak.stock_main_stock_holder(stock: str = '600004') -> pandas.core.frame.DataFrame`
+- `ak.stock_management_change_ths(symbol: str = '688981') -> pandas.core.frame.DataFrame`
+- `ak.stock_margin_account_info() -> pandas.core.frame.DataFrame`
+- `ak.stock_margin_detail_sse(date: str = '20230922') -> pandas.core.frame.DataFrame`
+- `ak.stock_margin_detail_szse(date: str = '20230925') -> pandas.core.frame.DataFrame`
+- `ak.stock_margin_ratio_pa(date: str = '20231013') -> pandas.core.frame.DataFrame`
+- `ak.stock_margin_sse(start_date: str = '20010106', end_date: str = '20230922') -> pandas.core.frame.DataFrame`
+- `ak.stock_margin_szse(date: str = '20240411') -> pandas.core.frame.DataFrame`
+- `ak.stock_margin_underlying_info_szse(date: str = '20221129') -> pandas.core.frame.DataFrame`
+- `ak.stock_market_activity_legu() -> pandas.core.frame.DataFrame`
+- `ak.stock_market_fund_flow() -> pandas.core.frame.DataFrame`
+- `ak.stock_market_pb_lg(symbol: str = '上证') -> pandas.core.frame.DataFrame`
+- `ak.stock_market_pe_lg(symbol: str = '深证') -> pandas.core.frame.DataFrame`
+- `ak.stock_new_a_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_new_gh_cninfo() -> pandas.core.frame.DataFrame`
+- `ak.stock_new_ipo_cninfo() -> pandas.core.frame.DataFrame`
+- `ak.stock_news_em(symbol: str = '603777') -> pandas.core.frame.DataFrame`
+- `ak.stock_news_main_cx() -> pandas.core.frame.DataFrame`
+- `ak.stock_notice_report(symbol: str = '全部', date: str = '20220511') -> pandas.core.frame.DataFrame`
+- `ak.stock_pg_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_price_js(symbol: str = 'us') -> pandas.core.frame.DataFrame`
+- `ak.stock_profile_cninfo(symbol: str = '600030') -> pandas.core.frame.DataFrame`
+- `ak.stock_profit_forecast_em(symbol: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_profit_forecast_ths(symbol: str = '600519', indicator: str = '预测年报每股收益') -> pandas.core.frame.DataFrame`
+- `ak.stock_profit_sheet_by_quarterly_em(symbol: str = 'SH600519') -> pandas.core.frame.DataFrame`
+- `ak.stock_profit_sheet_by_report_delisted_em(symbol: str = 'SZ000013') -> pandas.core.frame.DataFrame`
+- `ak.stock_profit_sheet_by_report_em(symbol: str = 'SH600519') -> pandas.core.frame.DataFrame`
+- `ak.stock_profit_sheet_by_yearly_em(symbol: str = 'SH600519') -> pandas.core.frame.DataFrame`
+- `ak.stock_qbzf_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_qsjy_em(date: str = '20200731') -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_cxd_ths(symbol: str = '创月新低') -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_cxfl_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_cxg_ths(symbol: str = '创月新高') -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_cxsl_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_forecast_cninfo(date: str = '20230817') -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_ljqd_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_ljqs_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_lxsz_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_lxxd_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_xstp_ths(symbol: str = '500日均线') -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_xxtp_ths(symbol: str = '500日均线') -> pandas.core.frame.DataFrame`
+- `ak.stock_rank_xzjp_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_register_bj() -> pandas.core.frame.DataFrame`
+- `ak.stock_register_cyb() -> pandas.core.frame.DataFrame`
+- `ak.stock_register_db() -> pandas.core.frame.DataFrame`
+- `ak.stock_register_kcb() -> pandas.core.frame.DataFrame`
+- `ak.stock_register_sh() -> pandas.core.frame.DataFrame`
+- `ak.stock_register_sz() -> pandas.core.frame.DataFrame`
+- `ak.stock_report_disclosure(market: str = '沪深京', period: str = '2021年报') -> pandas.core.frame.DataFrame`
+- `ak.stock_report_fund_hold(symbol: str = '基金持仓', date: str = '20210331') -> pandas.core.frame.DataFrame`
+- `ak.stock_report_fund_hold_detail(symbol: str = '008286', date: str = '20220331') -> pandas.core.frame.DataFrame`
+- `ak.stock_repurchase_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_research_report_em(symbol: str = '000001') -> pandas.core.frame.DataFrame`
+- `ak.stock_restricted_release_detail_em(start_date: str = '20221202', end_date: str = '20241202') -> pandas.core.frame.DataFrame`
+- `ak.stock_restricted_release_queue_em(symbol: str = '600000') -> pandas.core.frame.DataFrame`
+- `ak.stock_restricted_release_queue_sina(symbol: str = '600000') -> pandas.core.frame.DataFrame`
+- `ak.stock_restricted_release_stockholder_em(symbol: str = '600000', date: str = '20200904') -> pandas.core.frame.DataFrame`
+- `ak.stock_restricted_release_summary_em(symbol: str = '全部股票', start_date: str = '20221101', end_date: str = '20221209') -> pandas.core.frame.DataFrame`
+- `ak.stock_sector_detail(sector: str = 'gn_gfgn') -> pandas.core.frame.DataFrame`
+- `ak.stock_sector_fund_flow_hist(symbol: str = '汽车服务') -> pandas.core.frame.DataFrame`
+- `ak.stock_sector_fund_flow_rank(indicator: str = '今日', sector_type: str = '行业资金流') -> pandas.core.frame.DataFrame`
+- `ak.stock_sector_fund_flow_summary(symbol: str = '电源设备', indicator: str = '今日') -> pandas.core.frame.DataFrame`
+- `ak.stock_sector_spot(indicator: str = '新浪行业') -> pandas.core.frame.DataFrame`
+- `ak.stock_sgt_reference_exchange_rate_sse() -> pandas.core.frame.DataFrame`
+- `ak.stock_sgt_reference_exchange_rate_szse() -> pandas.core.frame.DataFrame`
+- `ak.stock_sgt_settlement_exchange_rate_sse() -> pandas.core.frame.DataFrame`
+- `ak.stock_sgt_settlement_exchange_rate_szse() -> pandas.core.frame.DataFrame`
+- `ak.stock_sh_a_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_share_change_cninfo(symbol: str = '002594', start_date: str = '20091227', end_date: str = '20241021') -> pandas.core.frame.DataFrame`
+- `ak.stock_share_hold_change_bse(symbol: str = '430489') -> pandas.core.frame.DataFrame`
+- `ak.stock_share_hold_change_sse(symbol: str = '600000') -> pandas.core.frame.DataFrame`
+- `ak.stock_share_hold_change_szse(symbol: str = '全部') -> pandas.core.frame.DataFrame`
+- `ak.stock_shareholder_change_ths(symbol: str = '688981') -> pandas.core.frame.DataFrame`
+- `ak.stock_sns_sseinfo(symbol: str = '603119') -> pandas.core.frame.DataFrame`
+- `ak.stock_sse_deal_daily(date: str = '20241216') -> pandas.core.frame.DataFrame`
+- `ak.stock_sse_summary() -> pandas.core.frame.DataFrame`
+- `ak.stock_staq_net_stop() -> pandas.core.frame.DataFrame`
+- `ak.stock_sy_em(date: str = '20231231') -> pandas.core.frame.DataFrame`
+- `ak.stock_sy_hy_em(date: str = '20240930') -> pandas.core.frame.DataFrame`
+- `ak.stock_sy_jz_em(date: str = '20240630') -> pandas.core.frame.DataFrame`
+- `ak.stock_sy_profile_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_sy_yq_em(date: str = '20240630') -> pandas.core.frame.DataFrame`
+- `ak.stock_sz_a_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_szse_area_summary(date: str = '202203') -> pandas.core.frame.DataFrame`
+- `ak.stock_szse_sector_summary(symbol: str = '当月', date: str = '202501') -> pandas.core.frame.DataFrame`
+- `ak.stock_szse_summary(date: str = '20240830') -> pandas.core.frame.DataFrame`
+- `ak.stock_tfp_em(date: str = '20240426') -> pandas.core.frame.DataFrame`
+- `ak.stock_us_daily(symbol: str = 'FB', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_us_famous_spot_em(symbol: str = '科技类') -> pandas.core.frame.DataFrame`
+- `ak.stock_us_hist(symbol: str = '105.MSFT', period: str = 'daily', start_date: str = '19700101', end_date: str = '22220101', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_us_hist_min_em(symbol: str = '105.ATER', start_date: str = '1979-09-01 09:32:00', end_date: str = '2222-01-01 09:32:00') -> pandas.core.frame.DataFrame`
+- `ak.stock_us_pink_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_us_spot() -> pandas.core.frame.DataFrame`
+- `ak.stock_us_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_value_em(symbol: str = '300766') -> pandas.core.frame.DataFrame`
+- `ak.stock_xgsglb_em(symbol: str = '全部股票') -> pandas.core.frame.DataFrame`
+- `ak.stock_xgsr_ths() -> pandas.core.frame.DataFrame`
+- `ak.stock_xjll_em(date: str = '20240331') -> pandas.core.frame.DataFrame`
+- `ak.stock_yjbb_em(date: str = '20200331') -> pandas.core.frame.DataFrame`
+- `ak.stock_yjkb_em(date: str = '20211231') -> pandas.core.frame.DataFrame`
+- `ak.stock_yjyg_em(date: str = '20200331') -> pandas.core.frame.DataFrame`
+- `ak.stock_yysj_em(symbol: str = '沪深A股', date: str = '20200331') -> pandas.core.frame.DataFrame`
+- `ak.stock_yzxdr_em(date: str = '20240930') -> pandas.core.frame.DataFrame`
+- `ak.stock_zcfz_bj_em(date: str = '20240331') -> pandas.core.frame.DataFrame`
+- `ak.stock_zcfz_em(date: str = '20240331') -> pandas.core.frame.DataFrame`
+- `ak.stock_zdhtmx_em(start_date: str = '20200819', end_date: str = '20230819') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_cdr_daily(symbol: str = 'sh689009', start_date: str = '19900101', end_date: str = '22201116') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_daily(symbol: str = 'sh603843', start_date: str = '19900101', end_date: str = '21000118', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_disclosure_relation_cninfo(symbol: str = '000001', market: str = '沪深京', start_date: str = '20230618', end_date: str = '20231219') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_disclosure_report_cninfo(symbol: str = '000001', market: str = '沪深京', keyword: str = '', category: str = '', start_date: str = '20230618', end_date: str = '20231219') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_gbjg_em(symbol: str = '603392.SH') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_gdhs(symbol: str = '20230930') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_gdhs_detail_em(symbol: str = '000001') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_hist(symbol: str = '000001', period: str = 'daily', start_date: str = '19700101', end_date: str = '20500101', adjust: str = '', timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_hist_min_em(symbol: str = '000001', start_date: str = '1979-09-01 09:32:00', end_date: str = '2222-01-01 09:32:00', period: str = '5', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_hist_pre_min_em(symbol: str = '000001', start_time: str = '09:00:00', end_time: str = '15:50:00') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_hist_tx(symbol: str = 'sz000001', start_date: str = '19000101', end_date: str = '20500101', adjust: str = '', timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_minute(symbol: str = 'sh600519', period: str = '1', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_new() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_new_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_spot() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_spot_em_async() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_st_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_stop_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_a_tick_tx_js(symbol: str = 'sz000001') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_ab_comparison_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_ah_daily(symbol: str = '02318', start_year: str = '2000', end_year: str = '2019', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_ah_name() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_ah_spot() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_ah_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_b_daily(symbol: str = 'sh900901', start_date: str = '19900101', end_date: str = '21000118', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_b_minute(symbol: str = 'sh900901', period: str = '1', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_b_spot() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_b_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_index_daily(symbol: str = 'sh000922') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_index_daily_em(symbol: str = 'csi931151', start_date: str = '19900101', end_date: str = '20500101') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_index_daily_tx(symbol: str = 'sz980017') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_index_hist_csindex(symbol: str = '000928', start_date: str = '20180526', end_date: str = '20240604') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_index_spot_em(symbol: str = '上证系列指数') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_index_spot_sina() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_index_value_csindex(symbol: str = 'H30374') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_kcb_daily(symbol: str = 'sh688399', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_kcb_report_em(from_page: int = 1, to_page: int = 100) -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_kcb_spot() -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_valuation_baidu(symbol: str = '002044', indicator: str = '总市值', period: str = '近一年') -> pandas.core.frame.DataFrame`
+- `ak.stock_zh_vote_baidu(symbol: str = '000001', indicator: str = '指数') -> pandas.core.frame.DataFrame`
+- `ak.stock_zt_pool_dtgc_em(date: str = '20241011') -> pandas.core.frame.DataFrame`
+- `ak.stock_zt_pool_em(date: str = '20241008') -> pandas.core.frame.DataFrame`
+- `ak.stock_zt_pool_previous_em(date: str = '20240415') -> pandas.core.frame.DataFrame`
+- `ak.stock_zt_pool_strong_em(date: str = '20241231') -> pandas.core.frame.DataFrame`
+- `ak.stock_zt_pool_sub_new_em(date: str = '20241231') -> pandas.core.frame.DataFrame`
+- `ak.stock_zt_pool_zbgc_em(date: str = '20241011') -> pandas.core.frame.DataFrame`
+- `ak.stock_zygc_em(symbol: str = 'SH688041') -> pandas.core.frame.DataFrame`
+- `ak.stock_zyjs_ths(symbol: str = '000066') -> pandas.core.frame.DataFrame`
+
+## 基金数据 (81 个函数)
+
+- `ak.amac_fund_abs() -> pandas.core.frame.DataFrame`
+- `ak.amac_fund_account_info() -> pandas.core.frame.DataFrame`
+- `ak.amac_fund_info(start_page: str = '1', end_page: str = '2000') -> pandas.core.frame.DataFrame`
+- `ak.amac_fund_sub_info() -> pandas.core.frame.DataFrame`
+- `ak.amac_person_fund_org_list(symbol: str = '公募基金管理公司') -> pandas.core.frame.DataFrame`
+- `ak.fund_announcement_personnel_em(symbol: str = '000001') -> pandas.core.frame.DataFrame`
+- `ak.fund_aum_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_aum_hist_em(year: str = '2023') -> pandas.core.frame.DataFrame`
+- `ak.fund_aum_trend_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_balance_position_lg() -> pandas.core.frame.DataFrame`
+- `ak.fund_cf_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_etf_category_sina(symbol: str = 'LOF基金') -> pandas.core.frame.DataFrame`
+- `ak.fund_etf_dividend_sina(symbol: str = 'sh510050') -> pandas.core.frame.DataFrame`
+- `ak.fund_etf_fund_daily_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_etf_fund_info_em(fund: str = '511280', start_date: str = '20000101', end_date: str = '20500101') -> pandas.core.frame.DataFrame`
+- `ak.fund_etf_hist_em(symbol: str = '159707', period: str = 'daily', start_date: str = '19700101', end_date: str = '20500101', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.fund_etf_hist_min_em(symbol: str = '159707', start_date: str = '1979-09-01 09:32:00', end_date: str = '2222-01-01 09:32:00', period: str = '5', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.fund_etf_hist_sina(symbol: str = 'sh510050') -> pandas.core.frame.DataFrame`
+- `ak.fund_etf_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_etf_spot_ths(date: str = '') -> pandas.core.frame.DataFrame`
+- `ak.fund_exchange_rank_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_fee_em(symbol: str = '015641', indicator: str = '认购费率') -> pandas.core.frame.DataFrame`
+- `ak.fund_fh_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_fh_rank_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_financial_fund_daily_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_financial_fund_info_em(symbol: str = '000134') -> pandas.core.frame.DataFrame`
+- `ak.fund_graded_fund_daily_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_graded_fund_info_em(symbol: str = '150232') -> pandas.core.frame.DataFrame`
+- `ak.fund_hk_fund_hist_em(code: str = '1002200683', symbol: str = '历史净值明细') -> pandas.core.frame.DataFrame`
+- `ak.fund_hk_rank_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_hold_structure_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_individual_achievement_xq(symbol: str = '000001', timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.fund_individual_analysis_xq(symbol: str = '000001', timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.fund_individual_basic_info_xq(symbol: str = '000001', timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.fund_individual_detail_hold_xq(symbol: str = '002804', date: str = '20231231', timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.fund_individual_detail_info_xq(symbol: str = '000001', timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.fund_individual_profit_probability_xq(symbol: str = '000001', timeout: float = None) -> pandas.core.frame.DataFrame`
+- `ak.fund_info_index_em(symbol: str = '沪深指数', indicator: str = '被动指数型') -> pandas.core.frame.DataFrame`
+- `ak.fund_lcx_rank_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_linghuo_position_lg() -> pandas.core.frame.DataFrame`
+- `ak.fund_lof_hist_em(symbol: str = '166009', period: str = 'daily', start_date: str = '19700101', end_date: str = '20500101', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.fund_lof_hist_min_em(symbol: str = '166009', start_date: str = '1979-09-01 09:32:00', end_date: str = '2222-01-01 09:32:00', period: str = '5', adjust: str = '') -> pandas.core.frame.DataFrame`
+- `ak.fund_lof_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_manager_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_money_fund_daily_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_money_fund_info_em(symbol: str = '000009') -> pandas.core.frame.DataFrame`
+- `ak.fund_money_rank_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_name_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_new_found_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_open_fund_daily_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_open_fund_info_em(symbol: str = '710001', indicator: str = '单位净值走势', period: str = '成立来') -> pandas.core.frame.DataFrame`
+- `ak.fund_open_fund_rank_em(symbol: str = '全部') -> pandas.core.frame.DataFrame`
+- `ak.fund_portfolio_bond_hold_em(symbol: str = '000001', date: str = '2023') -> pandas.core.frame.DataFrame`
+- `ak.fund_portfolio_change_em(symbol: str = '003567', indicator: str = '累计买入', date: str = '2023') -> pandas.core.frame.DataFrame`
+- `ak.fund_portfolio_hold_em(symbol: str = '000001', date: str = '2024') -> pandas.core.frame.DataFrame`
+- `ak.fund_portfolio_industry_allocation_em(symbol: str = '000001', date: str = '2023') -> pandas.core.frame.DataFrame`
+- `ak.fund_purchase_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_rating_all() -> pandas.core.frame.DataFrame`
+- `ak.fund_rating_ja(date: str = '20230331') -> pandas.core.frame.DataFrame`
+- `ak.fund_rating_sh(date: str = '20230630') -> pandas.core.frame.DataFrame`
+- `ak.fund_rating_zs(date: str = '20230331') -> pandas.core.frame.DataFrame`
+- `ak.fund_report_asset_allocation_cninfo() -> pandas.core.frame.DataFrame`
+- `ak.fund_report_industry_allocation_cninfo(date: str = '20210630') -> pandas.core.frame.DataFrame`
+- `ak.fund_scale_change_em() -> pandas.core.frame.DataFrame`
+- `ak.fund_scale_close_sina() -> pandas.core.frame.DataFrame`
+- `ak.fund_scale_open_sina(symbol: str = '股票型基金') -> pandas.core.frame.DataFrame`
+- `ak.fund_scale_structured_sina() -> pandas.core.frame.DataFrame`
+- `ak.fund_value_estimation_em(symbol: str = '全部') -> pandas.core.frame.DataFrame`
+- `ak.get_qhkc_fund_bs(date: <method 'date' of 'datetime.datetime' objects> = '20190924', url: ~AnyStr = 'https://qhkch.com/ajax/fund_bs_pie.php')`
+- `ak.get_qhkc_fund_money_change(date: <method 'date' of 'datetime.datetime' objects> = '20190924', url: ~AnyStr = 'https://qhkch.com/ajax/fund_deal_pie.php')`
+- `ak.get_qhkc_fund_position(date: <method 'date' of 'datetime.datetime' objects> = '20190924', url: ~AnyStr = 'https://qhkch.com/ajax/fund_position_pie.php')`
+- `ak.index_hist_fund_sw(symbol: str = '807200', period: str = 'day') -> pandas.core.frame.DataFrame`
+- `ak.index_option_100etf_min_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_100etf_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_300etf_min_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_300etf_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_500etf_min_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_500etf_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_50etf_min_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_50etf_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_realtime_fund_sw(symbol: str = '基础一级') -> pandas.core.frame.DataFrame`
+
+## 债券数据 (40 个函数)
+
+- `ak.amac_person_bond_org_list() -> pandas.core.frame.DataFrame`
+- `ak.bond_buy_back_hist_em(symbol: str = '204001')`
+- `ak.bond_cash_summary_sse(date: str = '20210111') -> pandas.core.frame.DataFrame`
+- `ak.bond_cb_adj_logs_jsl(symbol: str = '128013') -> pandas.core.frame.DataFrame`
+- `ak.bond_cb_index_jsl() -> pandas.core.frame.DataFrame`
+- `ak.bond_cb_jsl(cookie: str = None) -> pandas.core.frame.DataFrame`
+- `ak.bond_cb_profile_sina(symbol: str = 'sz128039') -> pandas.core.frame.DataFrame`
+- `ak.bond_cb_redeem_jsl() -> pandas.core.frame.DataFrame`
+- `ak.bond_cb_summary_sina(symbol: str = 'sh155255') -> pandas.core.frame.DataFrame`
+- `ak.bond_china_close_return(symbol: str = '国债', period: str = '1', start_date: str = '20231101', end_date: str = '20231101') -> pandas.core.frame.DataFrame`
+- `ak.bond_china_close_return_map() -> pandas.core.frame.DataFrame`
+- `ak.bond_china_yield(start_date: str = '20200204', end_date: str = '20210124') -> pandas.core.frame.DataFrame`
+- `ak.bond_composite_index_cbond(indicator: str = '财富', period: str = '总值') -> pandas.core.frame.DataFrame`
+- `ak.bond_corporate_issue_cninfo(start_date: str = '20210911', end_date: str = '20211110') -> pandas.core.frame.DataFrame`
+- `ak.bond_cov_comparison() -> pandas.core.frame.DataFrame`
+- `ak.bond_cov_issue_cninfo(start_date: str = '20210913', end_date: str = '20211112') -> pandas.core.frame.DataFrame`
+- `ak.bond_deal_summary_sse(date: str = '20210104') -> pandas.core.frame.DataFrame`
+- `ak.bond_debt_nafmii(page: str = '1') -> pandas.core.frame.DataFrame`
+- `ak.bond_info_cm(bond_name: str = '', bond_code: str = '', bond_issue: str = '', bond_type: str = '', coupon_type: str = '', issue_year: str = '', underwriter: str = '', grade: str = '') -> pandas.core.frame.DataFrame`
+- `ak.bond_info_cm_query(symbol: str = '评级等级') -> pandas.core.frame.DataFrame`
+- `ak.bond_info_detail_cm(symbol: str = '淮安农商行CDSD2022021012') -> pandas.core.frame.DataFrame`
+- `ak.bond_local_government_issue_cninfo(start_date: str = '20210911', end_date: str = '20211110') -> pandas.core.frame.DataFrame`
+- `ak.bond_new_composite_index_cbond(indicator: str = '财富', period: str = '总值') -> pandas.core.frame.DataFrame`
+- `ak.bond_sh_buy_back_em() -> pandas.core.frame.DataFrame`
+- `ak.bond_spot_deal() -> pandas.core.frame.DataFrame`
+- `ak.bond_spot_quote() -> pandas.core.frame.DataFrame`
+- `ak.bond_sz_buy_back_em() -> pandas.core.frame.DataFrame`
+- `ak.bond_treasure_issue_cninfo(start_date: str = '20210910', end_date: str = '20211109') -> pandas.core.frame.DataFrame`
+- `ak.bond_zh_cov() -> pandas.core.frame.DataFrame`
+- `ak.bond_zh_cov_info(symbol: str = '123121', indicator: str = '基本信息') -> pandas.core.frame.DataFrame`
+- `ak.bond_zh_cov_info_ths() -> pandas.core.frame.DataFrame`
+- `ak.bond_zh_cov_value_analysis(symbol: str = '113527') -> pandas.core.frame.DataFrame`
+- `ak.bond_zh_hs_cov_daily(symbol: str = 'sh010107') -> pandas.core.frame.DataFrame`
+- `ak.bond_zh_hs_cov_min(symbol: str = 'sz128039', period: str = '15', adjust: str = '', start_date: str = '1979-09-01 09:32:00', end_date: str = '2222-01-01 09:32:00') -> pandas.core.frame.DataFrame`
+- `ak.bond_zh_hs_cov_pre_min(symbol: str = 'sh113570') -> pandas.core.frame.DataFrame`
+- `ak.bond_zh_hs_cov_spot() -> pandas.core.frame.DataFrame`
+- `ak.bond_zh_hs_daily(symbol: str = 'sh010107') -> pandas.core.frame.DataFrame`
+- `ak.bond_zh_hs_spot(start_page: str = '1', end_page: str = '10') -> pandas.core.frame.DataFrame`
+- `ak.bond_zh_us_rate(start_date: str = '19901219') -> pandas.core.frame.DataFrame`
+- `ak.macro_china_bond_public() -> pandas.core.frame.DataFrame`
+
+## 期货数据 (63 个函数)
+
+- `ak.amac_futures_info() -> pandas.core.frame.DataFrame`
+- `ak.futures_comex_inventory(symbol: str = '黄金') -> pandas.core.frame.DataFrame`
+- `ak.futures_comm_info(symbol: str = '所有') -> pandas.core.frame.DataFrame`
+- `ak.futures_contract_detail(symbol: str = 'AP2101') -> pandas.core.frame.DataFrame`
+- `ak.futures_contract_info_cffex(date: str = '20240228') -> pandas.core.frame.DataFrame`
+- `ak.futures_contract_info_czce(date: str = '20240228') -> pandas.core.frame.DataFrame`
+- `ak.futures_contract_info_dce() -> pandas.core.frame.DataFrame`
+- `ak.futures_contract_info_gfex() -> pandas.core.frame.DataFrame`
+- `ak.futures_contract_info_ine(date: str = '20241129') -> pandas.core.frame.DataFrame`
+- `ak.futures_contract_info_shfe(date: str = '20240513') -> pandas.core.frame.DataFrame`
+- `ak.futures_czce_warehouse_receipt(date: str = '20200702') -> dict`
+- `ak.futures_dce_position_rank(date: str = '20160919', vars_list=['IF', 'IC', 'IM', 'IH', 'T', 'TF', 'TS', 'TL', 'C', 'CS', 'A', 'B', 'M', 'Y', 'P', 'FB', 'BB', 'JD', 'L', 'V', 'PP', 'J', 'JM', 'I', 'EG', 'RR', 'EB', 'PG', 'LH', 'LG', 'BZ', 'WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'MA', 'ME', 'FG', 'RS', 'RM', 'ZC', 'JR', 'LR', 'SF', 'SM', 'WT', 'TC', 'GN', 'RO', 'ER', 'SRX', 'SRY', 'WSX', 'WSY', 'CY', 'AP', 'UR', 'CJ', 'SA', 'PK', 'PF', 'PX', 'SH', 'PR', 'CU', 'AL', 'ZN', 'PB', 'NI', 'SN', 'AU', 'AG', 'RB', 'WR', 'HC', 'FU', 'BU', 'RU', 'SC', 'NR', 'SP', 'SS', 'LU', 'BC', 'AO', 'BR', 'EC', 'AD', 'SI', 'LC', 'PS']) -> dict`
+- `ak.futures_dce_position_rank_other(date: str = '20160104')`
+- `ak.futures_dce_warehouse_receipt(date: str = '20200702') -> dict`
+- `ak.futures_delivery_czce(date: str = '20210112') -> pandas.core.frame.DataFrame`
+- `ak.futures_delivery_dce(date: str = '202312') -> pandas.core.frame.DataFrame`
+- `ak.futures_delivery_match_czce(date: str = '20210106') -> pandas.core.frame.DataFrame`
+- `ak.futures_delivery_match_dce(symbol: str = 'a') -> pandas.core.frame.DataFrame`
+- `ak.futures_delivery_shfe(date: str = '202312') -> pandas.core.frame.DataFrame`
+- `ak.futures_display_main_sina() -> pandas.core.frame.DataFrame`
+- `ak.futures_fees_info() -> pandas.core.frame.DataFrame`
+- `ak.futures_foreign_commodity_realtime(symbol: Union[str, List[str]]) -> pandas.core.frame.DataFrame`
+- `ak.futures_foreign_commodity_subscribe_exchange_symbol() -> list`
+- `ak.futures_foreign_detail(symbol: str = 'ZSD') -> pandas.core.frame.DataFrame`
+- `ak.futures_foreign_hist(symbol: str = 'ZSD') -> pandas.core.frame.DataFrame`
+- `ak.futures_gfex_position_rank(date: str = '20231113', vars_list: list = None)`
+- `ak.futures_gfex_warehouse_receipt(date: str = '20240122') -> dict`
+- `ak.futures_global_hist_em(symbol: str = 'HG00Y') -> pandas.core.frame.DataFrame`
+- `ak.futures_global_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.futures_hist_em(symbol: str = '热卷主连', period: str = 'daily', start_date: str = '19900101', end_date: str = '20500101') -> pandas.core.frame.DataFrame`
+- `ak.futures_hist_table_em() -> pandas.core.frame.DataFrame`
+- `ak.futures_hog_core(symbol: str = '外三元') -> pandas.core.frame.DataFrame`
+- `ak.futures_hog_cost(symbol: str = '玉米') -> pandas.core.frame.DataFrame`
+- `ak.futures_hog_supply(symbol: str = '猪肉批发价') -> pandas.core.frame.DataFrame`
+- `ak.futures_hold_pos_sina(symbol: str = '成交量', contract: str = 'OI2501', date: str = '20240223') -> pandas.core.frame.DataFrame`
+- `ak.futures_hq_subscribe_exchange_symbol() -> pandas.core.frame.DataFrame`
+- `ak.futures_index_ccidx(symbol: str = '中证商品期货指数') -> pandas.core.frame.DataFrame`
+- `ak.futures_index_min_ccidx(symbol: str = '中证监控油脂油料期货指数') -> pandas.core.frame.DataFrame`
+- `ak.futures_inventory_99(symbol: str = '豆一') -> pandas.core.frame.DataFrame`
+- `ak.futures_inventory_em(symbol: str = 'a') -> pandas.core.frame.DataFrame`
+- `ak.futures_main_sina(symbol: str = 'V0', start_date: str = '19900101', end_date: str = '22220101') -> pandas.core.frame.DataFrame`
+- `ak.futures_news_shmet(symbol: str = '全部') -> pandas.core.frame.DataFrame`
+- `ak.futures_rule(date: str = '20231205') -> pandas.core.frame.DataFrame`
+- `ak.futures_settlement_price_sgx(date: str = '20231107') -> pandas.core.frame.DataFrame`
+- `ak.futures_shfe_warehouse_receipt(date: str = '20200702') -> dict`
+- `ak.futures_spot_price(date: str = '20240430', vars_list: list = ['IF', 'IC', 'IM', 'IH', 'T', 'TF', 'TS', 'TL', 'C', 'CS', 'A', 'B', 'M', 'Y', 'P', 'FB', 'BB', 'JD', 'L', 'V', 'PP', 'J', 'JM', 'I', 'EG', 'RR', 'EB', 'PG', 'LH', 'LG', 'BZ', 'WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'MA', 'ME', 'FG', 'RS', 'RM', 'ZC', 'JR', 'LR', 'SF', 'SM', 'WT', 'TC', 'GN', 'RO', 'ER', 'SRX', 'SRY', 'WSX', 'WSY', 'CY', 'AP', 'UR', 'CJ', 'SA', 'PK', 'PF', 'PX', 'SH', 'PR', 'CU', 'AL', 'ZN', 'PB', 'NI', 'SN', 'AU', 'AG', 'RB', 'WR', 'HC', 'FU', 'BU', 'RU', 'SC', 'NR', 'SP', 'SS', 'LU', 'BC', 'AO', 'BR', 'EC', 'AD', 'SI', 'LC', 'PS']) -> pandas.core.frame.DataFrame`
+- `ak.futures_spot_price_daily(start_day: str = '20210201', end_day: str = '20210208', vars_list: list = ['IF', 'IC', 'IM', 'IH', 'T', 'TF', 'TS', 'TL', 'C', 'CS', 'A', 'B', 'M', 'Y', 'P', 'FB', 'BB', 'JD', 'L', 'V', 'PP', 'J', 'JM', 'I', 'EG', 'RR', 'EB', 'PG', 'LH', 'LG', 'BZ', 'WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'MA', 'ME', 'FG', 'RS', 'RM', 'ZC', 'JR', 'LR', 'SF', 'SM', 'WT', 'TC', 'GN', 'RO', 'ER', 'SRX', 'SRY', 'WSX', 'WSY', 'CY', 'AP', 'UR', 'CJ', 'SA', 'PK', 'PF', 'PX', 'SH', 'PR', 'CU', 'AL', 'ZN', 'PB', 'NI', 'SN', 'AU', 'AG', 'RB', 'WR', 'HC', 'FU', 'BU', 'RU', 'SC', 'NR', 'SP', 'SS', 'LU', 'BC', 'AO', 'BR', 'EC', 'AD', 'SI', 'LC', 'PS'])`
+- `ak.futures_spot_price_previous(date: str = '20240430') -> pandas.core.frame.DataFrame`
+- `ak.futures_spot_sys(symbol: str = '铜', indicator: str = '市场价格') -> pandas.core.frame.DataFrame`
+- `ak.futures_symbol_mark() -> pandas.core.frame.DataFrame`
+- `ak.futures_to_spot_czce(date: str = '20231228') -> pandas.core.frame.DataFrame`
+- `ak.futures_to_spot_dce(date: str = '202312') -> pandas.core.frame.DataFrame`
+- `ak.futures_to_spot_shfe(date: str = '202312') -> pandas.core.frame.DataFrame`
+- `ak.futures_zh_daily_sina(symbol: str = 'RB0') -> pandas.core.frame.DataFrame`
+- `ak.futures_zh_minute_sina(symbol: str = 'IF2008', period: str = '1') -> pandas.core.frame.DataFrame`
+- `ak.futures_zh_realtime(symbol: str = 'PTA') -> pandas.core.frame.DataFrame`
+- `ak.futures_zh_spot(symbol: str = 'V2309', market: str = 'CF', adjust: str = '0') -> pandas.core.frame.DataFrame`
+- `ak.get_futures_daily(start_date: str = '20220208', end_date: str = '20220208', market: str = 'CFFEX') -> pandas.core.frame.DataFrame`
+- `ak.macro_china_commodity_price_index() -> pandas.core.frame.DataFrame`
+- `ak.option_commodity_contract_sina(symbol: str = '玉米期权') -> pandas.core.frame.DataFrame`
+- `ak.option_commodity_contract_table_sina(symbol: str = '黄金期权', contract: str = 'au2204') -> pandas.core.frame.DataFrame`
+- `ak.option_commodity_hist_sina(symbol: str = 'au2012C392') -> pandas.core.frame.DataFrame`
+- `ak.rv_from_futures_zh_minute_sina(symbol: str = 'IF2008', period: str = '5') -> pandas.core.frame.DataFrame`
+
+## 期权数据 (49 个函数)
+
+- `ak.index_option_1000index_min_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_1000index_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_300index_min_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_300index_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_50index_min_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_50index_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_cyb_min_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_cyb_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_kcb_min_qvix() -> pandas.core.frame.DataFrame`
+- `ak.index_option_kcb_qvix() -> pandas.core.frame.DataFrame`
+- `ak.option_cffex_hs300_daily_sina(symbol: str = 'io2202P4350') -> pandas.core.frame.DataFrame`
+- `ak.option_cffex_hs300_list_sina() -> Dict[str, List[str]]`
+- `ak.option_cffex_hs300_spot_sina(symbol: str = 'io2204') -> pandas.core.frame.DataFrame`
+- `ak.option_cffex_sz50_daily_sina(symbol: str = 'ho2303P2350') -> pandas.core.frame.DataFrame`
+- `ak.option_cffex_sz50_list_sina() -> Dict[str, List[str]]`
+- `ak.option_cffex_sz50_spot_sina(symbol: str = 'ho2303') -> pandas.core.frame.DataFrame`
+- `ak.option_cffex_zz1000_daily_sina(symbol: str = 'mo2208P6200') -> pandas.core.frame.DataFrame`
+- `ak.option_cffex_zz1000_list_sina() -> Dict[str, List[str]]`
+- `ak.option_cffex_zz1000_spot_sina(symbol: str = 'mo2208') -> pandas.core.frame.DataFrame`
+- `ak.option_comm_info(symbol: str = '工业硅期权') -> pandas.core.frame.DataFrame`
+- `ak.option_comm_symbol() -> pandas.core.frame.DataFrame`
+- `ak.option_current_em() -> pandas.core.frame.DataFrame`
+- `ak.option_czce_daily(symbol: str = '白糖期权', trade_date: str = '20191017') -> pandas.core.frame.DataFrame`
+- `ak.option_czce_hist(symbol: str = 'SR', year: str = '2021') -> pandas.core.frame.DataFrame`
+- `ak.option_daily_stats_sse(date: str = '20240626') -> pandas.core.frame.DataFrame`
+- `ak.option_daily_stats_szse(date: str = '20240626') -> pandas.core.frame.DataFrame`
+- `ak.option_dce_daily(symbol: str = '聚乙烯期权', trade_date: str = '20210728') -> Optional[Tuple[Any, Any]]`
+- `ak.option_finance_board(symbol: str = '嘉实沪深300ETF期权', end_month: str = '2306') -> pandas.core.frame.DataFrame`
+- `ak.option_finance_minute_sina(symbol: str = '10002530') -> pandas.core.frame.DataFrame`
+- `ak.option_finance_sse_underlying(symbol: str = '华夏科创50ETF期权') -> pandas.core.frame.DataFrame`
+- `ak.option_gfex_daily(symbol: str = '工业硅', trade_date: str = '20230724')`
+- `ak.option_gfex_vol_daily(symbol: str = '碳酸锂', trade_date: str = '20230724')`
+- `ak.option_lhb_em(symbol: str = '510050', indicator: str = '期权交易情况-认沽交易量', trade_date: str = '20220121') -> pandas.core.frame.DataFrame`
+- `ak.option_margin(symbol: str = '原油期权') -> pandas.core.frame.DataFrame`
+- `ak.option_margin_symbol() -> pandas.core.frame.DataFrame`
+- `ak.option_minute_em(symbol: str = 'MO2404-P-4450') -> pandas.core.frame.DataFrame`
+- `ak.option_premium_analysis_em() -> pandas.core.frame.DataFrame`
+- `ak.option_risk_analysis_em() -> pandas.core.frame.DataFrame`
+- `ak.option_risk_indicator_sse(date: str = '20240626') -> pandas.core.frame.DataFrame`
+- `ak.option_shfe_daily(symbol: str = '铝期权', trade_date: str = '20250418') -> Optional[Tuple[pandas.core.frame.DataFrame, pandas.core.frame.DataFrame]]`
+- `ak.option_sse_codes_sina(symbol: str = '看涨期权', trade_date: str = '202202', underlying: str = '510050') -> pandas.core.frame.DataFrame`
+- `ak.option_sse_daily_sina(symbol: str = '10003889') -> pandas.core.frame.DataFrame`
+- `ak.option_sse_expire_day_sina(trade_date: str = '202102', symbol: str = '50ETF', exchange: str = 'null') -> Tuple[str, int]`
+- `ak.option_sse_greeks_sina(symbol: str = '10003045') -> pandas.core.frame.DataFrame`
+- `ak.option_sse_list_sina(symbol: str = '50ETF', exchange: str = 'null') -> List[str]`
+- `ak.option_sse_minute_sina(symbol: str = '10003720') -> pandas.core.frame.DataFrame`
+- `ak.option_sse_spot_price_sina(symbol: str = '10003720') -> pandas.core.frame.DataFrame`
+- `ak.option_sse_underlying_spot_price_sina(symbol: str = 'sh510300') -> pandas.core.frame.DataFrame`
+- `ak.option_value_analysis_em() -> pandas.core.frame.DataFrame`
+
+## 外汇数据 (12 个函数)
+
+- `ak.currency_boc_safe() -> pandas.core.frame.DataFrame`
+- `ak.currency_boc_sina(symbol: str = '美元', start_date: str = '20230304', end_date: str = '20231110') -> pandas.core.frame.DataFrame`
+- `ak.currency_convert(base: str = 'USD', to: str = 'CNY', amount: str = '10000', api_key: str = '') -> pandas.core.frame.DataFrame`
+- `ak.currency_currencies(c_type: str = 'fiat', api_key: str = '') -> pandas.core.frame.DataFrame`
+- `ak.currency_history(base: str = 'USD', date: str = '2023-02-03', symbols: str = '', api_key: str = '') -> pandas.core.frame.DataFrame`
+- `ak.currency_latest(base: str = 'USD', symbols: str = '', api_key: str = '') -> pandas.core.frame.DataFrame`
+- `ak.currency_pair_map(symbol: str = '美元') -> pandas.core.frame.DataFrame`
+- `ak.currency_time_series(base: str = 'USD', start_date: str = '2023-02-03', end_date: str = '2023-03-04', symbols: str = '', api_key: str = '') -> pandas.core.frame.DataFrame`
+- `ak.forex_hist_em(symbol: str = 'USDCNH') -> pandas.core.frame.DataFrame`
+- `ak.forex_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_foreign_exchange_gold() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_cftc_merchant_currency_holding() -> pandas.core.frame.DataFrame`
+
+## 加密货币 (3 个函数)
+
+- `ak.crypto_bitcoin_cme(date: str = '20230830') -> pandas.core.frame.DataFrame`
+- `ak.crypto_bitcoin_hold_report()`
+- `ak.crypto_js_spot() -> pandas.core.frame.DataFrame`
+
+## 宏观经济 (220 个函数)
+
+- `ak.macro_australia_bank_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_australia_cpi_quarterly() -> pandas.core.frame.DataFrame`
+- `ak.macro_australia_cpi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_australia_ppi_quarterly() -> pandas.core.frame.DataFrame`
+- `ak.macro_australia_retail_rate_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_australia_trade() -> pandas.core.frame.DataFrame`
+- `ak.macro_australia_unemployment_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_bank_australia_interest_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_bank_brazil_interest_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_bank_china_interest_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_bank_english_interest_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_bank_euro_interest_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_bank_india_interest_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_bank_japan_interest_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_bank_newzealand_interest_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_bank_russia_interest_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_bank_switzerland_interest_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_bank_usa_interest_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_canada_bank_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_canada_core_cpi_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_canada_core_cpi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_canada_cpi_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_canada_cpi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_canada_gdp_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_canada_new_house_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_canada_retail_rate_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_canada_trade() -> pandas.core.frame.DataFrame`
+- `ak.macro_canada_unemployment_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_agricultural_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_agricultural_product() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_au_report() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_bank_financing() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_bdti_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_bsi_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_central_bank_balance() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_construction_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_construction_price_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_consumer_goods_retail() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_cpi() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_cpi_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_cpi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_cx_pmi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_cx_services_pmi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_czsr() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_daily_energy() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_energy_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_enterprise_boom_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_exports_yoy() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_fdi() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_freight_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_fx_gold() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_fx_reserves_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_gdp() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_gdp_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_gdzctz() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_gyzjz() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_hgjck() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_hk_building_amount() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_hk_building_volume() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_hk_cpi() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_hk_cpi_ratio() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_hk_gbp() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_hk_gbp_ratio() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_hk_market_info() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_hk_ppi() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_hk_rate_of_unemployment() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_hk_trade_diff_ratio() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_imports_yoy() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_industrial_production_yoy() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_insurance() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_insurance_income() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_international_tourism_fx() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_lpi_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_lpr() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_m2_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_market_margin_sh() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_market_margin_sz() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_mobile_number() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_money_supply() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_national_tax_receipts() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_nbs_nation(kind: Literal['月度数据', '季度数据', '年度数据'], path: str, period: str = 'LAST10') -> pandas.core.frame.DataFrame`
+- `ak.macro_china_nbs_region(kind: Literal['分省月度数据', '分省季度数据', '分省年度数据', '主要城市月度价格', '主要城市年度数据', '港澳台月度数据', '港澳台年度数据'], path: str, indicator: Optional[str], region: Optional[str] = None, period: str = 'LAST10') -> pandas.core.frame.DataFrame`
+- `ak.macro_china_new_financial_credit() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_new_house_price(city_first: str = '北京', city_second: str = '上海') -> pandas.core.frame.DataFrame`
+- `ak.macro_china_non_man_pmi() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_passenger_load_factor() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_pmi() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_pmi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_postal_telecommunicational() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_ppi() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_ppi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_qyspjg() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_real_estate() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_reserve_requirement_ratio() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_retail_price_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_rmb() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_shibor_all() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_shrzgm() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_society_electricity() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_society_traffic_volume() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_supply_of_money() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_swap_rate(start_date: str = '20231101', end_date: str = '20231204') -> pandas.core.frame.DataFrame`
+- `ak.macro_china_trade_balance() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_urban_unemployment() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_vegetable_basket() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_wbck() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_whxd() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_xfzxx() -> pandas.core.frame.DataFrame`
+- `ak.macro_china_yw_electronic_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_cnbs() -> pandas.core.frame.DataFrame`
+- `ak.macro_cons_gold() -> pandas.core.frame.DataFrame`
+- `ak.macro_cons_opec_month() -> pandas.core.frame.DataFrame`
+- `ak.macro_cons_silver() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_cpi_mom() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_cpi_yoy() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_current_account_mom() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_employment_change_qoq() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_gdp_yoy() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_industrial_production_mom() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_lme_holding() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_manufacturing_pmi() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_ppi_mom() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_retail_sales_mom() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_sentix_investor_confidence() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_services_pmi() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_trade_balance() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_unemployment_rate_mom() -> pandas.core.frame.DataFrame`
+- `ak.macro_euro_zew_economic_sentiment() -> pandas.core.frame.DataFrame`
+- `ak.macro_fx_sentiment(start_date: str = '20221011', end_date: str = '20221017') -> pandas.core.frame.DataFrame`
+- `ak.macro_germany_cpi_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_germany_cpi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_germany_gdp() -> pandas.core.frame.DataFrame`
+- `ak.macro_germany_ifo() -> pandas.core.frame.DataFrame`
+- `ak.macro_germany_retail_sale_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_germany_retail_sale_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_germany_trade_adjusted() -> pandas.core.frame.DataFrame`
+- `ak.macro_germany_zew() -> pandas.core.frame.DataFrame`
+- `ak.macro_global_sox_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_info_ws(date: str = '20240514') -> pandas.core.frame.DataFrame`
+- `ak.macro_japan_bank_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_japan_core_cpi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_japan_cpi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_japan_head_indicator() -> pandas.core.frame.DataFrame`
+- `ak.macro_japan_unemployment_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_rmb_deposit() -> pandas.core.frame.DataFrame`
+- `ak.macro_rmb_loan() -> pandas.core.frame.DataFrame`
+- `ak.macro_shipping_bci() -> pandas.core.frame.DataFrame`
+- `ak.macro_shipping_bcti() -> pandas.core.frame.DataFrame`
+- `ak.macro_shipping_bdi() -> pandas.core.frame.DataFrame`
+- `ak.macro_shipping_bpi() -> pandas.core.frame.DataFrame`
+- `ak.macro_swiss_cpi_yearly()`
+- `ak.macro_swiss_gbd_bank_rate()`
+- `ak.macro_swiss_gbd_yearly()`
+- `ak.macro_swiss_gdp_quarterly()`
+- `ak.macro_swiss_svme()`
+- `ak.macro_swiss_trade()`
+- `ak.macro_uk_bank_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_core_cpi_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_core_cpi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_cpi_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_cpi_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_gdp_quarterly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_gdp_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_halifax_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_halifax_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_retail_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_retail_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_rightmove_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_rightmove_yearly() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_trade() -> pandas.core.frame.DataFrame`
+- `ak.macro_uk_unemployment_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_adp_employment() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_building_permits() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_business_inventories() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_cb_consumer_confidence() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_cftc_c_holding() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_cftc_merchant_goods_holding() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_cftc_nc_holding() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_cme_merchant_goods_holding()`
+- `ak.macro_usa_core_cpi_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_core_pce_price() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_core_ppi() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_cpi_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_cpi_yoy() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_crude_inner() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_current_account() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_durable_goods_orders() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_eia_crude_rate() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_exist_home_sales() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_export_price() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_factory_orders() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_gdp_monthly() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_house_price_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_house_starts() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_import_price() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_industrial_production() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_initial_jobless() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_ism_non_pmi() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_ism_pmi() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_job_cuts() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_lmci() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_michigan_consumer_sentiment() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_nahb_house_market_index() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_new_home_sales() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_nfib_small_business() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_non_farm() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_pending_home_sales() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_personal_spending() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_phs() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_pmi() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_ppi() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_real_consumer_spending() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_retail_sales() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_rig_count() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_services_pmi() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_spcs20() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_trade_balance() -> pandas.core.frame.DataFrame`
+- `ak.macro_usa_unemployment_rate() -> pandas.core.frame.DataFrame`
+- `ak.news_economic_baidu(date: str = '20241107') -> pandas.core.frame.DataFrame`
+- `ak.qhkc_tool_gdp(url: ~AnyStr = 'https://qhkch.com/dist/views/toolbox/gdp.html?v=1.10.7.1')`
+
+## 新闻资讯 (5 个函数)
+
+- `ak.index_news_sentiment_scope() -> pandas.core.frame.DataFrame`
+- `ak.news_cctv(date: str = '20240424') -> pandas.core.frame.DataFrame`
+- `ak.news_report_time_baidu(date: str = '20241107') -> pandas.core.frame.DataFrame`
+- `ak.news_trade_notify_dividend_baidu(date: str = '20241107') -> pandas.core.frame.DataFrame`
+- `ak.news_trade_notify_suspend_baidu(date: str = '20241107') -> pandas.core.frame.DataFrame`
+
+## 指数数据 (63 个函数)
+
+- `ak.article_epu_index(symbol: str = 'China') -> pandas.core.frame.DataFrame`
+- `ak.drewry_wci_index(symbol: str = 'composite') -> pandas.core.frame.DataFrame`
+- `ak.get_qhkc_index(name: ~AnyStr = '奇货商品', url: ~AnyStr = 'https://www.qhkch.com/ajax/index_show.php')`
+- `ak.get_qhkc_index_profit_loss(name: ~AnyStr = '奇货商品', url: ~AnyStr = 'https://qhkch.com/ajax/indexes_profit_loss.php', start_date='', end_date='')`
+- `ak.get_qhkc_index_trend(name: ~AnyStr = '奇货商品', url: ~AnyStr = 'https://qhkch.com/ajax/indexes_trend.php')`
+- `ak.index_ai_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_all_cni() -> pandas.core.frame.DataFrame`
+- `ak.index_analysis_daily_sw(symbol: str = '市场表征', start_date: str = '20221103', end_date: str = '20221103') -> pandas.core.frame.DataFrame`
+- `ak.index_analysis_monthly_sw(symbol: str = '市场表征', date: str = '20221031') -> pandas.core.frame.DataFrame`
+- `ak.index_analysis_week_month_sw(symbol: str = 'month') -> pandas.core.frame.DataFrame`
+- `ak.index_analysis_weekly_sw(symbol: str = '市场表征', date: str = '20221104') -> pandas.core.frame.DataFrame`
+- `ak.index_awpr_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_bei_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_bi_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_bloomberg_billionaires() -> pandas.core.frame.DataFrame`
+- `ak.index_bloomberg_billionaires_hist(year: str = '2021') -> pandas.core.frame.DataFrame`
+- `ak.index_cci_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_ci_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_code_id_map_em() -> dict`
+- `ak.index_component_sw(symbol: str = '801001') -> pandas.core.frame.DataFrame`
+- `ak.index_csindex_all() -> pandas.core.frame.DataFrame`
+- `ak.index_dei_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_detail_cni(symbol: str = '399001', date: str = '202404') -> pandas.core.frame.DataFrame`
+- `ak.index_detail_hist_adjust_cni(symbol: str = '399005') -> pandas.core.frame.DataFrame`
+- `ak.index_detail_hist_cni(symbol: str = '399001', date: str = '') -> pandas.core.frame.DataFrame`
+- `ak.index_eri(symbol: str = '月度') -> pandas.core.frame.DataFrame`
+- `ak.index_fi_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_global_hist_em(symbol: str = '美元指数') -> pandas.core.frame.DataFrame`
+- `ak.index_global_hist_sina(symbol: str = 'OMX') -> pandas.core.frame.DataFrame`
+- `ak.index_global_name_table() -> pandas.core.frame.DataFrame`
+- `ak.index_global_spot_em() -> pandas.core.frame.DataFrame`
+- `ak.index_hist_cni(symbol: str = '399001', start_date: str = '20230114', end_date: str = '20240114') -> pandas.core.frame.DataFrame`
+- `ak.index_hist_sw(symbol: str = '801030', period: str = 'day') -> pandas.core.frame.DataFrame`
+- `ak.index_hog_spot_price() -> pandas.core.frame.DataFrame`
+- `ak.index_ii_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_inner_quote_sugar_msweet() -> pandas.core.frame.DataFrame`
+- `ak.index_kq_fashion(symbol: str = '时尚创意指数') -> pandas.core.frame.DataFrame`
+- `ak.index_kq_fz(symbol: str = '价格指数') -> pandas.core.frame.DataFrame`
+- `ak.index_li_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_min_sw(symbol: str = '801001') -> pandas.core.frame.DataFrame`
+- `ak.index_neaw_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_neei_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_nei_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_outer_quote_sugar_msweet() -> pandas.core.frame.DataFrame`
+- `ak.index_pmi_com_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_pmi_man_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_pmi_ser_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_price_cflp(symbol: str = '周指数') -> pandas.core.frame.DataFrame`
+- `ak.index_qli_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_realtime_sw(symbol: str = '二级行业') -> pandas.core.frame.DataFrame`
+- `ak.index_si_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_sugar_msweet() -> pandas.core.frame.DataFrame`
+- `ak.index_ti_cx() -> pandas.core.frame.DataFrame`
+- `ak.index_volume_cflp(symbol: str = '月指数') -> pandas.core.frame.DataFrame`
+- `ak.index_yw(symbol: str = '月景气指数') -> pandas.core.frame.DataFrame`
+- `ak.index_zh_a_hist(symbol: str = '000859', period: str = 'daily', start_date: str = '19700101', end_date: str = '22220101') -> pandas.core.frame.DataFrame`
+- `ak.index_zh_a_hist_min_em(symbol: str = '399006', period: str = '1', start_date: str = '1979-09-01 09:32:00', end_date: str = '2222-01-01 09:32:00') -> pandas.core.frame.DataFrame`
+- `ak.qdii_a_index_jsl() -> pandas.core.frame.DataFrame`
+- `ak.qdii_e_index_jsl() -> pandas.core.frame.DataFrame`
+- `ak.sw_index_first_info() -> pandas.core.frame.DataFrame`
+- `ak.sw_index_second_info() -> pandas.core.frame.DataFrame`
+- `ak.sw_index_third_cons(symbol: str = '801120.SI') -> pandas.core.frame.DataFrame`
+- `ak.sw_index_third_info() -> pandas.core.frame.DataFrame`
+
+## 其他数据 (105 个函数)
+
+- `ak.air_city_table() -> pandas.core.frame.DataFrame`
+- `ak.air_quality_hebei() -> pandas.core.frame.DataFrame`
+- `ak.air_quality_hist(city: str = '杭州', period: str = 'day', start_date: str = '20190327', end_date: str = '20200427') -> pandas.core.frame.DataFrame`
+- `ak.air_quality_rank(date: str = '') -> pandas.core.frame.DataFrame`
+- `ak.air_quality_watch_point(city: str = '杭州', start_date: str = '20220408', end_date: str = '20220409') -> pandas.core.frame.DataFrame`
+- `ak.amac_aoin_info() -> pandas.core.frame.DataFrame`
+- `ak.amac_manager_cancelled_info() -> pandas.core.frame.DataFrame`
+- `ak.amac_manager_classify_info() -> pandas.core.frame.DataFrame`
+- `ak.amac_manager_info() -> pandas.core.frame.DataFrame`
+- `ak.amac_member_info() -> pandas.core.frame.DataFrame`
+- `ak.amac_member_sub_info() -> pandas.core.frame.DataFrame`
+- `ak.amac_securities_info() -> pandas.core.frame.DataFrame`
+- `ak.article_ff_crr() -> pandas.core.frame.DataFrame`
+- `ak.article_oman_rv(symbol: str = 'FTSE', index: str = 'rk_th2') -> pandas.core.frame.DataFrame`
+- `ak.article_oman_rv_short(symbol: str = 'FTSE') -> pandas.core.frame.DataFrame`
+- `ak.article_rlab_rv(symbol: str = '39693') -> pandas.core.frame.DataFrame`
+- `ak.bank_fjcf_table_detail(page: int = 5, item: str = '分局本级', begin: int = 1) -> pandas.core.frame.DataFrame`
+- `ak.business_value_artist() -> pandas.core.frame.DataFrame`
+- `ak.car_market_cate_cpca(symbol: str = '轿车', indicator: str = '批发') -> pandas.core.frame.DataFrame`
+- `ak.car_market_country_cpca() -> pandas.core.frame.DataFrame`
+- `ak.car_market_fuel_cpca(symbol: str = '整体市场') -> pandas.core.frame.DataFrame`
+- `ak.car_market_man_rank_cpca(symbol: str = '狭义乘用车-单月', indicator: str = '批发') -> pandas.core.frame.DataFrame`
+- `ak.car_market_segment_cpca(symbol: str = '轿车') -> pandas.core.frame.DataFrame`
+- `ak.car_market_total_cpca(symbol: str = '狭义乘用车', indicator: str = '产量') -> pandas.core.frame.DataFrame`
+- `ak.car_sale_rank_gasgoo(symbol: str = '车企榜', date: str = '202109') -> pandas.core.frame.DataFrame`
+- `ak.cost_living(symbol: str = 'world') -> pandas.core.frame.DataFrame`
+- `ak.energy_carbon_bj() -> pandas.core.frame.DataFrame`
+- `ak.energy_carbon_domestic(symbol: str = '湖北') -> pandas.core.frame.DataFrame`
+- `ak.energy_carbon_eu() -> pandas.core.frame.DataFrame`
+- `ak.energy_carbon_gz() -> pandas.core.frame.DataFrame`
+- `ak.energy_carbon_hb() -> pandas.core.frame.DataFrame`
+- `ak.energy_carbon_sz() -> pandas.core.frame.DataFrame`
+- `ak.energy_oil_detail(date: str = '20220517') -> pandas.core.frame.DataFrame`
+- `ak.energy_oil_hist() -> pandas.core.frame.DataFrame`
+- `ak.forbes_rank(symbol: str = '2021福布斯中国创投人100') -> pandas.core.frame.DataFrame`
+- `ak.fred_md(date: str = '2020-01') -> pandas.core.frame.DataFrame`
+- `ak.fred_qd(date: str = '2020-01') -> pandas.core.frame.DataFrame`
+- `ak.fx_pair_quote() -> pandas.core.frame.DataFrame`
+- `ak.fx_quote_baidu(symbol: str = '人民币') -> pandas.core.frame.DataFrame`
+- `ak.fx_spot_quote() -> pandas.core.frame.DataFrame`
+- `ak.fx_swap_quote() -> pandas.core.frame.DataFrame`
+- `ak.get_cffex_daily(date: str = '20100416') -> pandas.core.frame.DataFrame`
+- `ak.get_cffex_rank_table(date: str = '20190805', vars_list=['IF', 'IC', 'IM', 'IH', 'T', 'TF', 'TS', 'TL', 'C', 'CS', 'A', 'B', 'M', 'Y', 'P', 'FB', 'BB', 'JD', 'L', 'V', 'PP', 'J', 'JM', 'I', 'EG', 'RR', 'EB', 'PG', 'LH', 'LG', 'BZ', 'WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'MA', 'ME', 'FG', 'RS', 'RM', 'ZC', 'JR', 'LR', 'SF', 'SM', 'WT', 'TC', 'GN', 'RO', 'ER', 'SRX', 'SRY', 'WSX', 'WSY', 'CY', 'AP', 'UR', 'CJ', 'SA', 'PK', 'PF', 'PX', 'SH', 'PR', 'CU', 'AL', 'ZN', 'PB', 'NI', 'SN', 'AU', 'AG', 'RB', 'WR', 'HC', 'FU', 'BU', 'RU', 'SC', 'NR', 'SP', 'SS', 'LU', 'BC', 'AO', 'BR', 'EC', 'AD', 'SI', 'LC', 'PS'])`
+- `ak.get_czce_daily(date: str = '20050525') -> pandas.core.frame.DataFrame`
+- `ak.get_czce_rank_table(date: str = '20210428') -> dict`
+- `ak.get_dce_daily(date: str = '20220308') -> pandas.core.frame.DataFrame`
+- `ak.get_dce_rank_table(date: str = '20230706', vars_list=['IF', 'IC', 'IM', 'IH', 'T', 'TF', 'TS', 'TL', 'C', 'CS', 'A', 'B', 'M', 'Y', 'P', 'FB', 'BB', 'JD', 'L', 'V', 'PP', 'J', 'JM', 'I', 'EG', 'RR', 'EB', 'PG', 'LH', 'LG', 'BZ', 'WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'MA', 'ME', 'FG', 'RS', 'RM', 'ZC', 'JR', 'LR', 'SF', 'SM', 'WT', 'TC', 'GN', 'RO', 'ER', 'SRX', 'SRY', 'WSX', 'WSY', 'CY', 'AP', 'UR', 'CJ', 'SA', 'PK', 'PF', 'PX', 'SH', 'PR', 'CU', 'AL', 'ZN', 'PB', 'NI', 'SN', 'AU', 'AG', 'RB', 'WR', 'HC', 'FU', 'BU', 'RU', 'SC', 'NR', 'SP', 'SS', 'LU', 'BC', 'AO', 'BR', 'EC', 'AD', 'SI', 'LC', 'PS']) -> dict`
+- `ak.get_gfex_daily(date: str = '20221223') -> pandas.core.frame.DataFrame`
+- `ak.get_ine_daily(date: str = '20241129') -> pandas.core.frame.DataFrame`
+- `ak.get_rank_sum(date: str = '20210525', vars_list: list = ['IF', 'IC', 'IM', 'IH', 'T', 'TF', 'TS', 'TL', 'C', 'CS', 'A', 'B', 'M', 'Y', 'P', 'FB', 'BB', 'JD', 'L', 'V', 'PP', 'J', 'JM', 'I', 'EG', 'RR', 'EB', 'PG', 'LH', 'LG', 'BZ', 'WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'MA', 'ME', 'FG', 'RS', 'RM', 'ZC', 'JR', 'LR', 'SF', 'SM', 'WT', 'TC', 'GN', 'RO', 'ER', 'SRX', 'SRY', 'WSX', 'WSY', 'CY', 'AP', 'UR', 'CJ', 'SA', 'PK', 'PF', 'PX', 'SH', 'PR', 'CU', 'AL', 'ZN', 'PB', 'NI', 'SN', 'AU', 'AG', 'RB', 'WR', 'HC', 'FU', 'BU', 'RU', 'SC', 'NR', 'SP', 'SS', 'LU', 'BC', 'AO', 'BR', 'EC', 'AD', 'SI', 'LC', 'PS'])`
+- `ak.get_rank_sum_daily(start_day: str = '20210510', end_day: str = '20210510', vars_list: list = ['IF', 'IC', 'IM', 'IH', 'T', 'TF', 'TS', 'TL', 'C', 'CS', 'A', 'B', 'M', 'Y', 'P', 'FB', 'BB', 'JD', 'L', 'V', 'PP', 'J', 'JM', 'I', 'EG', 'RR', 'EB', 'PG', 'LH', 'LG', 'BZ', 'WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'MA', 'ME', 'FG', 'RS', 'RM', 'ZC', 'JR', 'LR', 'SF', 'SM', 'WT', 'TC', 'GN', 'RO', 'ER', 'SRX', 'SRY', 'WSX', 'WSY', 'CY', 'AP', 'UR', 'CJ', 'SA', 'PK', 'PF', 'PX', 'SH', 'PR', 'CU', 'AL', 'ZN', 'PB', 'NI', 'SN', 'AU', 'AG', 'RB', 'WR', 'HC', 'FU', 'BU', 'RU', 'SC', 'NR', 'SP', 'SS', 'LU', 'BC', 'AO', 'BR', 'EC', 'AD', 'SI', 'LC', 'PS'])`
+- `ak.get_receipt(start_date: str = None, end_date: str = None, vars_list: List = ['IF', 'IC', 'IM', 'IH', 'T', 'TF', 'TS', 'TL', 'C', 'CS', 'A', 'B', 'M', 'Y', 'P', 'FB', 'BB', 'JD', 'L', 'V', 'PP', 'J', 'JM', 'I', 'EG', 'RR', 'EB', 'PG', 'LH', 'LG', 'BZ', 'WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'MA', 'ME', 'FG', 'RS', 'RM', 'ZC', 'JR', 'LR', 'SF', 'SM', 'WT', 'TC', 'GN', 'RO', 'ER', 'SRX', 'SRY', 'WSX', 'WSY', 'CY', 'AP', 'UR', 'CJ', 'SA', 'PK', 'PF', 'PX', 'SH', 'PR', 'CU', 'AL', 'ZN', 'PB', 'NI', 'SN', 'AU', 'AG', 'RB', 'WR', 'HC', 'FU', 'BU', 'RU', 'SC', 'NR', 'SP', 'SS', 'LU', 'BC', 'AO', 'BR', 'EC', 'AD', 'SI', 'LC', 'PS'])`
+- `ak.get_roll_yield(date=None, var='BB', symbol1=None, symbol2=None, df=None)`
+- `ak.get_roll_yield_bar(type_method: str = 'var', var: str = 'RB', date: str = '20201030', start_day: str = None, end_day: str = None)`
+- `ak.get_shfe_daily(date: str = '20220415') -> pandas.core.frame.DataFrame`
+- `ak.get_shfe_rank_table(date: str = None, vars_list: list = ['IF', 'IC', 'IM', 'IH', 'T', 'TF', 'TS', 'TL', 'C', 'CS', 'A', 'B', 'M', 'Y', 'P', 'FB', 'BB', 'JD', 'L', 'V', 'PP', 'J', 'JM', 'I', 'EG', 'RR', 'EB', 'PG', 'LH', 'LG', 'BZ', 'WH', 'PM', 'CF', 'SR', 'TA', 'OI', 'RI', 'MA', 'ME', 'FG', 'RS', 'RM', 'ZC', 'JR', 'LR', 'SF', 'SM', 'WT', 'TC', 'GN', 'RO', 'ER', 'SRX', 'SRY', 'WSX', 'WSY', 'CY', 'AP', 'UR', 'CJ', 'SA', 'PK', 'PF', 'PX', 'SH', 'PR', 'CU', 'AL', 'ZN', 'PB', 'NI', 'SN', 'AU', 'AG', 'RB', 'WR', 'HC', 'FU', 'BU', 'RU', 'SC', 'NR', 'SP', 'SS', 'LU', 'BC', 'AO', 'BR', 'EC', 'AD', 'SI', 'LC', 'PS']) -> dict`
+- `ak.get_token()`
+- `ak.hf_sp_500(year: str = '2017') -> pandas.core.frame.DataFrame`
+- `ak.hurun_rank(indicator: str = '胡润百富榜', year: str = '2023') -> pandas.core.frame.DataFrame`
+- `ak.match_main_contract(symbol: str = 'cffex') -> str`
+- `ak.migration_area_baidu(area: str = '重庆市', indicator: str = 'move_in', date: str = '20230922') -> pandas.core.frame.DataFrame`
+- `ak.migration_scale_baidu(area: str = '广州市', indicator: str = 'move_in') -> pandas.core.frame.DataFrame`
+- `ak.movie_boxoffice_cinema_daily(date: str = '20240219') -> pandas.core.frame.DataFrame`
+- `ak.movie_boxoffice_cinema_weekly(date: str = '20240219') -> pandas.core.frame.DataFrame`
+- `ak.movie_boxoffice_daily(date: str = '20240219') -> pandas.core.frame.DataFrame`
+- `ak.movie_boxoffice_monthly(date: str = '20240218') -> pandas.core.frame.DataFrame`
+- `ak.movie_boxoffice_realtime() -> pandas.core.frame.DataFrame`
+- `ak.movie_boxoffice_weekly(date: str = '20240218') -> pandas.core.frame.DataFrame`
+- `ak.movie_boxoffice_yearly(date: str = '20240218') -> pandas.core.frame.DataFrame`
+- `ak.movie_boxoffice_yearly_first_week(date: str = '20201018') -> pandas.core.frame.DataFrame`
+- `ak.nlp_answer(question: str = '人工智能') -> str`
+- `ak.nlp_ownthink(word: str = '人工智能', indicator: str = 'entity') -> pandas.core.frame.DataFrame`
+- `ak.online_value_artist() -> pandas.core.frame.DataFrame`
+- `ak.pro_api(token='')`
+- `ak.qdii_e_comm_jsl() -> pandas.core.frame.DataFrame`
+- `ak.qhkc_tool_foreign(url: ~AnyStr = 'https://qhkch.com/ajax/toolbox_foreign.php')`
+- `ak.rate_interbank(market: str = '上海银行同业拆借市场', symbol: str = 'Shibor人民币', indicator: str = '隔夜')`
+- `ak.reits_hist_em(symbol: str = '508097') -> pandas.core.frame.DataFrame`
+- `ak.reits_realtime_em() -> pandas.core.frame.DataFrame`
+- `ak.repo_rate_hist(start_date: str = '20200930', end_date: str = '20201029') -> pandas.core.frame.DataFrame`
+- `ak.repo_rate_query(symbol: str = '回购定盘利率') -> pandas.core.frame.DataFrame`
+- `ak.set_token(token)`
+- `ak.spot_corn_price_soozhu() -> pandas.core.frame.DataFrame`
+- `ak.spot_golden_benchmark_sge() -> pandas.core.frame.DataFrame`
+- `ak.spot_goods(symbol: str = '波罗的海干散货指数') -> pandas.core.frame.DataFrame`
+- `ak.spot_hist_sge(symbol: str = 'Au99.99') -> pandas.core.frame.DataFrame`
+- `ak.spot_hog_crossbred_soozhu() -> pandas.core.frame.DataFrame`
+- `ak.spot_hog_lean_price_soozhu() -> pandas.core.frame.DataFrame`
+- `ak.spot_hog_soozhu() -> pandas.core.frame.DataFrame`
+- `ak.spot_hog_three_way_soozhu() -> pandas.core.frame.DataFrame`
+- `ak.spot_hog_year_trend_soozhu() -> pandas.core.frame.DataFrame`
+- `ak.spot_mixed_feed_soozhu() -> pandas.core.frame.DataFrame`
+- `ak.spot_price_qh(symbol: str = '螺纹钢') -> pandas.core.frame.DataFrame`
+- `ak.spot_price_table_qh() -> pandas.core.frame.DataFrame`
+- `ak.spot_quotations_sge(symbol: str = 'Au99.99') -> pandas.core.frame.DataFrame`
+- `ak.spot_silver_benchmark_sge() -> pandas.core.frame.DataFrame`
+- `ak.spot_soybean_price_soozhu() -> pandas.core.frame.DataFrame`
+- `ak.spot_symbol_table_sge() -> pandas.core.frame.DataFrame`
+- `ak.sunrise_daily(date: str = '20240428', city: str = 'beijing') -> pandas.core.frame.DataFrame`
+- `ak.sunrise_monthly(date: str = '20240428', city: str = 'beijing') -> pandas.core.frame.DataFrame`
+- `ak.tool_trade_date_hist_sina() -> pandas.core.frame.DataFrame`
+- `ak.video_tv() -> pandas.core.frame.DataFrame`
+- `ak.video_variety_show() -> pandas.core.frame.DataFrame`
+- `ak.volatility_yz_rv(data: pandas.core.frame.DataFrame) -> pandas.core.frame.DataFrame`
+- `ak.xincaifu_rank(year: str = '2022') -> pandas.core.frame.DataFrame`
