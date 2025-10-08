@@ -9,7 +9,7 @@
 ### 1. 运行环境缺失导致的导入错误
 - 现有 `pyproject.toml` 已声明大量核心依赖（如 `fastapi`、`loguru`、`pydantic`、`numpy`、`pandas`、`backtrader` 等），但当前运行环境未安装这些包或对应类型存根，触发 `import-not-found` 与 `import-untyped` 错误。【6d7bfb†L17-L66】【9e241e†L1-L44】【41fe3c†L1-L42】
 - 第一性原理分析：静态类型检查需要在编译期解析模块接口；依赖包缺失时，类型信息无法构建，导致连锁报错。根本矛盾是“工具期望的依赖状态”与“当前环境的实际状态”不一致。
-- 解决建议：在隔离虚拟环境中补齐运行时依赖与类型存根包（如 `types-redis`、`types-requests`、`pandas-stubs` 已在依赖列表中但未安装），可使用 `uv pip sync pyproject.toml` 或 `uv pip install <package>` 等命令快速拉取声明依赖；若需分阶段推进，也可暂时将 `ignore_missing_imports = true` 写入 mypy 配置以解耦后续分析。
+- 解决建议：在隔离虚拟环境中补齐运行时依赖与类型存根包（如 `types-redis`、`types-requests`、`pandas-stubs` 已在依赖列表中但未安装），先使用 `uv pip sync pyproject.toml` 或 `uv pip install <package>` 等命令快速拉取声明依赖，确保 mypy 可以解析所有外部接口。
 
 ### 2. 内部模块结构不完整
 - 多个错误指向仓库内缺失的模块（例如 `deepsearch.data.types`、`deepsearch.qmt.models.tick`、`domain.interfaces.*`）。检查目录可知 `deepsearch/data` 仅包含 `__init__.py` 与 `cleaner.py`，并无 `types.py` 等声明文件。【d1ee8c†L1-L2】【514fea†L57-L116】
