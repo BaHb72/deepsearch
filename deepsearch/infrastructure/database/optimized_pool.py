@@ -78,7 +78,7 @@ class OptimizedDatabasePool:
         self.config = config
         self.pool: Optional[Pool] = None
         self.engine: Optional[AsyncEngine] = None
-        self.session_factory: Optional[sessionmaker] = None
+        self.session_factory: Optional[sessionmaker[AsyncSession]] = None
         self.statistics = PoolStatistics()
         self._logger = get_logger("deepsearch.database.pool")
         self._initialized = False
@@ -227,6 +227,8 @@ class OptimizedDatabasePool:
         Returns:
             连接是否成功
         """
+        if self.pool is None:
+            raise RuntimeError("Connection pool is not initialized")
         try:
             async with self.pool.acquire() as conn:
                 # 执行简单查询测试连接
@@ -247,6 +249,8 @@ class OptimizedDatabasePool:
         if not self._initialized:
             await self.initialize()
 
+        if self.pool is None:
+            raise RuntimeError("Connection pool is not initialized")
         start_time = time.time()
         try:
             async with self.pool.acquire() as conn:
@@ -267,6 +271,9 @@ class OptimizedDatabasePool:
         """
         if not self._initialized:
             await self.initialize()
+
+        if self.session_factory is None:
+            raise RuntimeError("Session factory is not initialized")
 
         async with self.session_factory() as session:
             yield session
@@ -323,7 +330,7 @@ class OptimizedDatabasePool:
         try:
             async with self.acquire() as conn:
                 result = await conn.fetchval("SELECT 1")
-                return result == 1
+                return bool(result == 1)
         except Exception as e:
             self._logger.error(f"健康检查失败: {e}")
             self.statistics.connection_errors += 1

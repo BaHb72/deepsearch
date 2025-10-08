@@ -13,7 +13,20 @@ from contextlib import contextmanager
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    DefaultDict,
+    Deque,
+    Dict,
+    List,
+    ParamSpec,
+    Sequence,
+    TypedDict,
+    TypeVar,
+    cast,
+)
 
 import psutil
 from loguru import logger
@@ -21,21 +34,42 @@ from loguru import logger
 from deepsearch.observability.logger import logger_manager
 
 
+class Measurement(TypedDict):
+    duration_ms: float
+    memory_delta: int
+    timestamp: datetime
+
+
+class SlowOperation(TypedDict):
+    operation: str
+    duration_ms: float
+    memory_delta: int
+    timestamp: datetime
+    thread_id: int
+
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
 class PerformanceMetrics:
     """性能指标"""
 
     def __init__(self, operation: str):
         self.operation = operation
-        self.measurements = deque(maxlen=1000)
-        self.slow_threshold_ms = 100
+        self.measurements: Deque[Measurement] = deque(maxlen=1000)
+        self.slow_threshold_ms: float = 100.0
 
     def add_measurement(self, duration_ms: float, memory_delta: int):
         """添加测量数据"""
-        self.measurements.append(
-            {"duration_ms": duration_ms, "memory_delta": memory_delta, "timestamp": datetime.now()}
-        )
+        measurement: Measurement = {
+            "duration_ms": duration_ms,
+            "memory_delta": memory_delta,
+            "timestamp": datetime.now(),
+        }
+        self.measurements.append(measurement)
 
-    def _percentile(self, data: list, percentile: float) -> float:
+    def _percentile(self, data: Sequence[float], percentile: float) -> float:
         """计算百分位数"""
         if not data:
             return 0
@@ -89,17 +123,22 @@ class PerformanceProfiler:
 
     def __init__(self):
         if not hasattr(self, "_initialized"):
-            self.metrics = defaultdict(lambda: PerformanceMetrics("unknown"))
-            self.slow_operations = deque(maxlen=100)
+            self.metrics: DefaultDict[str, PerformanceMetrics] = defaultdict(
+                lambda: PerformanceMetrics("unknown")
+            )
+            self.slow_operations: Deque[SlowOperation] = deque(maxlen=100)
             self.threshold_ms = 100
             # 延迟导入配置
             try:
-                from deepsearch.config import settings
+                from deepsearch.config import get_config
 
-                self.enabled = settings.app.env == "dev"
+                config = get_config()
+                self.enabled = getattr(config.app, "env", "prod") == "dev"
             except ImportError:
                 self.enabled = True  # 默认启用
-            self.auto_suggestions = []
+            except Exception:
+                self.enabled = True
+            self.auto_suggestions: List[Dict[str, Any]] = []
             self._lock = threading.Lock()
             self._initialized = True
 
@@ -126,7 +165,7 @@ class PerformanceProfiler:
 
                 # 检测慢操作
                 if duration > self.threshold_ms:
-                    slow_op = {
+                    slow_op: SlowOperation = {
                         "operation": operation,
                         "duration_ms": duration,
                         "memory_delta": memory_delta,
@@ -141,22 +180,24 @@ class PerformanceProfiler:
                             f"(阈值: {self.threshold_ms}ms)"
                         )
 
-    def profile_function(self, func: Callable) -> Callable:
+    def profile_function(self, func: Callable[P, R]) -> Callable[P, R]:
         """函数性能分析装饰器"""
 
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             operation = f"{func.__module__}.{func.__name__}"
             with self.profile(operation):
                 return func(*args, **kwargs)
 
         return wrapper
 
-    def profile_async_function(self, func: Callable) -> Callable:
+    def profile_async_function(
+        self, func: Callable[P, Awaitable[R]]
+    ) -> Callable[P, Awaitable[R]]:
         """异步函数性能分析装饰器"""
 
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             operation = f"{func.__module__}.{func.__name__}"
             with self.profile(operation):
                 return await func(*args, **kwargs)
@@ -165,10 +206,12 @@ class PerformanceProfiler:
 
     def get_report(self, top_n: int = 20) -> Dict[str, Any]:
         """生成性能报告"""
-        report = {
+        operations: Dict[str, Dict[str, Any]] = {}
+        slow_operations: List[Dict[str, Any]] = []
+        report: Dict[str, Any] = {
             "timestamp": datetime.now().isoformat(),
-            "operations": {},
-            "slow_operations": [],
+            "operations": operations,
+            "slow_operations": slow_operations,
             "summary": {},
         }
 
@@ -176,28 +219,31 @@ class PerformanceProfiler:
         for operation, metrics in self.metrics.items():
             stats = metrics.get_statistics()
             if stats:
-                report["operations"][operation] = stats
+                operations[operation] = stats
 
         # 慢操作列表
-        report["slow_operations"] = [
-            {
-                "operation": op["operation"],
-                "duration_ms": op["duration_ms"],
-                "timestamp": op["timestamp"].isoformat(),
-            }
-            for op in list(self.slow_operations)[-top_n:]
-        ]
+        for op in list(self.slow_operations)[-top_n:]:
+            slow_operations.append(
+                {
+                    "operation": op["operation"],
+                    "duration_ms": op["duration_ms"],
+                    "timestamp": op["timestamp"].isoformat(),
+                }
+            )
 
         # 汇总信息
-        if report["operations"]:
-            total_ops = sum(op["count"] for op in report["operations"].values())
-            total_time = sum(op["duration"]["total_ms"] for op in report["operations"].values())
+        if operations:
+            total_ops = sum(cast(int, op.get("count", 0)) for op in operations.values())
+            total_time = sum(
+                cast(float, op.get("duration", {}).get("total_ms", 0.0))
+                for op in operations.values()
+            )
 
             report["summary"] = {
                 "total_operations": total_ops,
                 "total_time_ms": total_time,
                 "avg_time_ms": total_time / total_ops if total_ops > 0 else 0,
-                "slow_operations_count": len(report["slow_operations"]),
+                "slow_operations_count": len(slow_operations),
             }
 
         return report
@@ -247,7 +293,7 @@ class PerformanceProfiler:
 
     def auto_optimize_suggestions(self) -> List[Dict[str, Any]]:
         """生成自动优化建议"""
-        suggestions = []
+        suggestions: List[Dict[str, Any]] = []
 
         # 分析每个操作
         for operation, metrics in self.metrics.items():
@@ -255,8 +301,8 @@ class PerformanceProfiler:
             if not stats:
                 continue
 
-            duration_stats = stats.get("duration", {})
-            memory_stats = stats.get("memory", {})
+            duration_stats = cast(Dict[str, Any], stats.get("duration", {}))
+            memory_stats = cast(Dict[str, Any], stats.get("memory", {}))
 
             # 检测需要优化的操作
             if duration_stats.get("avg_ms", 0) > 500:
@@ -302,7 +348,9 @@ class PerformanceProfiler:
                 )
 
             # 检测频繁的慢操作
-            slow_ratio = stats.get("slow_operations", 0) / stats.get("count", 1)
+            slow_ratio = float(stats.get("slow_operations", 0)) / max(
+                1, int(stats.get("count", 1))
+            )
             if slow_ratio > 0.1:  # 超过10%的操作是慢操作
                 suggestions.append(
                     {

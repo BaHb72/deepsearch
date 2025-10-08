@@ -18,6 +18,7 @@ import psutil
 from loguru import logger
 
 from deepsearch.observability.logger import logger_manager
+from deepsearch.config import get_config
 
 
 class ErrorSolution:
@@ -61,10 +62,9 @@ class EnhancedErrorHandler:
             self.solution_database = self._init_solution_database()
             # 延迟导入配置
             try:
-                from deepsearch.config import settings
-
-                self.auto_recovery = settings.app.env == "dev"
-            except ImportError:
+                config = get_config()
+                self.auto_recovery = getattr(config.app, "env", "prod") == "dev"
+            except Exception:
                 self.auto_recovery = False
 
             # 自动注入到全局异常处理
@@ -166,11 +166,10 @@ class EnhancedErrorHandler:
 
         # 保存错误报告到文件（开发模式）
         try:
-            from deepsearch.config import settings
-
-            if settings.app.env == "dev":
+            config = get_config()
+            if getattr(config.app, "env", "prod") == "dev":
                 self._save_error_report(error_info)
-        except ImportError:
+        except Exception:
             pass
 
         # 尝试自动恢复
@@ -390,9 +389,8 @@ class EnhancedErrorHandler:
         status: Dict[str, Any] = {}
 
         try:
-            from deepsearch.config import settings
-
-            db_config = settings.database.main
+            config = get_config()
+            db_config = config.database.main
 
             status["configured"] = True
             status["host"] = db_config.host
@@ -486,14 +484,13 @@ class EnhancedErrorHandler:
 
         # 开发模式显示更多信息
         try:
-            from deepsearch.config import settings
-
-            if settings.app.env == "dev":
+            config = get_config()
+            if getattr(config.app, "env", "prod") == "dev":
                 if locals_dict := error_info.get("locals"):
                     logger.debug("局部变量:")
                     for key, value in list(locals_dict.items())[:5]:  # 只显示前5个
                         logger.debug(f"  {key} = {value}")
-        except ImportError:
+        except Exception:
             pass
 
         logger.error("=" * 80)

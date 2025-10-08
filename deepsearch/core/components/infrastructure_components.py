@@ -42,7 +42,7 @@ class EventEngineComponent(SimpleAsyncComponent[EventEngine]):
 
     def _health_check(self) -> bool:
         """检查事件引擎健康状态"""
-        return self._instance and self._instance._running
+        return bool(self._instance and getattr(self._instance, "_running", False))
 
     def _get_component_statistics(self) -> Dict[str, Any]:
         """获取事件引擎的详细统计信息"""
@@ -155,7 +155,7 @@ class MessageBusComponent(AsyncComponent[CompositeMessageBus]):
     def _health_check(self) -> bool:
         """检查消息总线健康状态"""
         instance = self.resource
-        return instance and instance.is_running() if instance else False
+        return bool(instance and instance.is_running())
 
     def get_statistics(self) -> Dict[str, Any]:
         """获取消息总线统计信息"""

@@ -9,10 +9,18 @@ import asyncio
 import json
 import uuid
 from datetime import datetime
-from typing import Any, Callable, Dict, Optional, cast
-
-from deepsearch.messaging.bus import MessageBus
+from typing import Any, Awaitable, Callable, Dict, Optional, Protocol, cast
 from deepsearch.observability.logger import logger
+
+
+class SupportsAsyncBus(Protocol):
+    async def subscribe_async(
+        self, topic: str, async_handler: Callable[[str, Any], Awaitable[None]]
+    ) -> None:
+        ...
+
+    async def publish_async(self, topic: str, message: Any) -> None:
+        ...
 
 
 class IPCMessage:
@@ -24,7 +32,7 @@ class IPCMessage:
         self.data = data
         self.timestamp = datetime.now()
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "type": self.type,
@@ -33,7 +41,7 @@ class IPCMessage:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "IPCMessage":
+    def from_dict(cls, data: Dict[str, Any]) -> "IPCMessage":
         msg = cls(data["type"], data["data"], data["id"])
         msg.timestamp = datetime.fromisoformat(data["timestamp"])
         return msg
@@ -49,13 +57,13 @@ class EngineIPCServer:
     - 处理控制请求
     """
 
-    def __init__(self, engine, message_bus: MessageBus, cache):
+    def __init__(self, engine: Any, message_bus: SupportsAsyncBus, cache: Any):
         self.name = "engine_ipc_server"
         self.engine = engine
         self.message_bus = message_bus
         self.cache = cache
-        self._handlers: Dict[str, Callable] = {}
-        self._status_update_task: Optional[asyncio.Task] = None
+        self._handlers: Dict[str, Callable[[Dict[str, Any]], Awaitable[Any]]] = {}
+        self._status_update_task: Optional[asyncio.Task[None]] = None
         self._logger = logger
 
     async def initialize_async(self) -> None:
@@ -82,14 +90,22 @@ class EngineIPCServer:
             }
         )
 
-    async def _handle_command(self, topic: str, data: dict):
+    async def _handle_command(self, topic: str, data: Any) -> None:
         """处理来自 WebUI 的命令"""
+        request_id = data.get("id") if isinstance(data, dict) else None
+
         try:
+            if not isinstance(data, dict):
+                raise TypeError("IPC payload must be a dictionary")
+
             msg = IPCMessage.from_dict(data)
             logger.debug(f"Received IPC command: {msg.type}")
 
             handler = self._handlers.get(msg.type)
             if handler:
+                if not isinstance(msg.data, dict):
+                    raise TypeError("Handler payload must be a dictionary")
+
                 result = await handler(msg.data)
                 # 发送响应
                 response = IPCMessage(
@@ -114,12 +130,13 @@ class EngineIPCServer:
         except Exception as e:
             logger.error(f"Error handling IPC command: {e}")
             response = IPCMessage(
-                "response", {"success": False, "error": str(e)}, request_id=data.get("id")
+                "response",
+                {"success": False, "error": str(e)},
+                request_id=request_id,
             )
 
-            await self.message_bus.publish_async(
-                f"engine.responses.{data.get('id')}", response.to_dict()
-            )
+            channel = f"engine.responses.{request_id or 'unknown'}"
+            await self.message_bus.publish_async(channel, response.to_dict())
 
     async def _handle_get_status(self, data: dict) -> dict:
         """获取引擎状态"""
@@ -215,7 +232,9 @@ class EngineIPCServer:
                 logger.error(f"Error updating engine status: {e}")
                 await asyncio.sleep(5)
 
-    def register_handler(self, command: str, handler: Callable):
+    def register_handler(
+        self, command: str, handler: Callable[[Dict[str, Any]], Awaitable[Any]]
+    ) -> None:
         """注册自定义命令处理器"""
         self._handlers[command] = handler
 
@@ -230,10 +249,10 @@ class WebUIIPCClient:
     - 处理异步响应
     """
 
-    def __init__(self, message_bus: MessageBus, cache):
+    def __init__(self, message_bus: SupportsAsyncBus, cache: Any):
         self.message_bus = message_bus
         self.cache = cache
-        self._response_futures: Dict[str, asyncio.Future] = {}
+        self._response_futures: Dict[str, asyncio.Future[Dict[str, Any]]] = {}
         self._initialized = False
 
     async def initialize(self):
@@ -250,15 +269,19 @@ class WebUIIPCClient:
         self._initialized = True
         logger.info("WebUI IPC Client initialized")
 
-    async def _handle_response(self, topic: str, data: dict):
+    async def _handle_response(self, topic: str, data: Any) -> None:
         """处理引擎响应"""
+        if not isinstance(data, dict):
+            logger.error("收到的响应数据格式无效")
+            return
+
         msg = IPCMessage.from_dict(data)
         future = self._response_futures.get(msg.id)
 
         if future and not future.done():
             future.set_result(msg.data)
 
-    async def _handle_status_update(self, topic: str, data: dict):
+    async def _handle_status_update(self, topic: str, data: Any) -> None:
         """处理状态更新"""
         # 可以在这里触发 WebSocket 广播等
         logger.debug(f"Received status update: {topic}")
@@ -278,7 +301,8 @@ class WebUIIPCClient:
         msg = IPCMessage(command, data or {})
 
         # 创建响应 Future
-        future: asyncio.Future[Dict[str, Any]] = asyncio.Future()
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[Dict[str, Any]] = loop.create_future()
         self._response_futures[msg.id] = future
 
         try:

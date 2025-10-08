@@ -5,7 +5,7 @@
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from loguru import logger
@@ -290,10 +290,10 @@ async def get_alerts(limit: int = Query(50, description="返回告警数量", ge
         monitor = get_monitor()
 
         # 从访问记录中筛选出错误和高延迟的记录
-        alerts = []
+        alerts: List[Dict[str, Any]] = []
 
         for record in list(monitor.access_history)[-500:]:  # 检查最近500条
-            alert = None
+            alert: Optional[Dict[str, Any]] = None
 
             # 错误告警
             if not record.success:
@@ -329,7 +329,7 @@ async def get_alerts(limit: int = Query(50, description="返回告警数量", ge
                 alerts.append(alert)
 
         # 按时间倒序，返回最近的
-        alerts.sort(key=lambda x: x["timestamp"], reverse=True)
+        alerts.sort(key=lambda x: cast(str, x["timestamp"]), reverse=True)
         return alerts[:limit]
 
     except Exception as e:

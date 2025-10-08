@@ -6,16 +6,24 @@ import asyncio
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, cast
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
 try:
-    from deepsearch.observability.logger import logger_manager
+    from deepsearch.observability.logger import logger_manager as _imported_logger_manager
 except Exception:  # pragma: no cover - fallback when logging is unavailable
-    logger_manager = None
+    _imported_logger_manager = None  # type: ignore[assignment]
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from deepsearch.observability.logger import LoggerManager
+
+
+logger_manager: Optional["LoggerManager"] = cast(
+    Optional["LoggerManager"], _imported_logger_manager
+)
 
 
 router = APIRouter()

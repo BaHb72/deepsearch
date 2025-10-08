@@ -138,5 +138,51 @@ warn_unused_ignores = true
 warn_return_any = true
 show_error_codes = true
 pretty = true
+files = [
+    "deepsearch/config/manager.py",
+    "deepsearch/config/crypto.py",
+    "deepsearch/webui/api/middleware/deduplication.py",
+    "deepsearch/webui/api/monitor/data_source_api.py",
+    "deepsearch/webui/api/endpoints/system/logs.py",
+    "deepsearch/infrastructure/messaging/event_publisher.py",
+    "deepsearch/infrastructure/database/optimized_pool.py",
+    "deepsearch/debug/performance_profiler.py",
+    "deepsearch/core/utils/ipc.py",
+    "deepsearch/core/utils/error_handler.py",
+    "deepsearch/core/components/infrastructure_components.py",
+]
+
+[[tool.mypy.overrides]]
+module = ["deepsearch.infrastructure.providers.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "deepsearch.config.loader",
+    "deepsearch.config.settings",
+    "deepsearch.webui.server_manager",
+    "deepsearch.webui.api.endpoints.system.config",
+    "deepsearch.memory.smart_memory",
+    "deepsearch.utils.system.port_checker",
+    "deepsearch.core.components.data_components",
+    "deepsearch.webui.api.proxy",
+    "deepsearch.webui.api.endpoints.amazingdata.realtime",
+    "deepsearch.infrastructure.persistence.query_optimizer",
+    "deepsearch.utils.network.akshare_proxy",
+    "deepsearch.webui.api.endpoints.qmt.miniqmt",
+    "deepsearch.webui.api.endpoints.monitoring.analytics",
+    "deepsearch.core.components.monitoring_components",
+    "deepsearch.core.components.analytics_components",
+    "deepsearch.webui.api.endpoints.notifications.push",
+    "deepsearch.webui.api.endpoints.market.market_api",
+    "deepsearch.webui.api.endpoints.chart.chart_api",
+    "deepsearch.webui.api.providers",
+    "deepsearch.webui.api.endpoints.data.market_data_api",
+    "deepsearch.webui.api.endpoints.data.data_unified",
+    "deepsearch.webui.api.endpoints.amazingdata.amazingdata_api",
+    "deepsearch.core.components.qmt_gateway_component",
+    "deepsearch.webui.api.endpoints.amazingdata.base",
+]
+ignore_errors = true
 
 

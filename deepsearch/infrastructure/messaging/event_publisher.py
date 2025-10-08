@@ -4,7 +4,7 @@ Event publisher implementations.
 
 import asyncio
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any, Awaitable, Callable, DefaultDict, Dict, List
 
 from domain.interfaces.base import DomainEvent
 from domain.interfaces.services import IEventPublisher
@@ -20,8 +20,8 @@ class InMemoryEventPublisher(IEventPublisher):
     """
 
     def __init__(self):
-        self._handlers: Dict[str, List[callable]] = defaultdict(list)
-        self._event_queue: asyncio.Queue = asyncio.Queue()
+        self._handlers: DefaultDict[str, List[Callable[[Dict[str, Any]], Awaitable[None]]]] = defaultdict(list)
+        self._event_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
 
     async def publish(self, event: Dict[str, Any]) -> None:
         """Publish an event."""
@@ -54,12 +54,16 @@ class InMemoryEventPublisher(IEventPublisher):
         for event in events:
             await self.publish(event)
 
-    def subscribe(self, event_type: str, handler: callable) -> None:
+    def subscribe(
+        self, event_type: str, handler: Callable[[Dict[str, Any]], Awaitable[None]]
+    ) -> None:
         """Subscribe to an event type."""
         self._handlers[event_type].append(handler)
         logger.debug(f"Handler subscribed to {event_type}")
 
-    def unsubscribe(self, event_type: str, handler: callable) -> None:
+    def unsubscribe(
+        self, event_type: str, handler: Callable[[Dict[str, Any]], Awaitable[None]]
+    ) -> None:
         """Unsubscribe from an event type."""
         if handler in self._handlers[event_type]:
             self._handlers[event_type].remove(handler)

@@ -8,7 +8,7 @@
 import base64
 import binascii
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -49,12 +49,14 @@ class PasswordCrypto:
             salt=salt,
             iterations=100000,
         )
-        return kdf.derive(password)
+        derived_key = kdf.derive(password)
+        return cast(bytes, derived_key)
 
     @staticmethod
     def generate_key() -> str:
         """生成新的加密密钥"""
-        return Fernet.generate_key().decode()
+        key_bytes = cast(bytes, Fernet.generate_key())
+        return key_bytes.decode()
 
     def encrypt(self, password: str) -> str:
         """
@@ -87,8 +89,8 @@ class PasswordCrypto:
 
         try:
             encrypted_bytes = base64.urlsafe_b64decode(encrypted_password.encode())
-            decrypted = self._cipher.decrypt(encrypted_bytes)
-            return decrypted.decode()
+            decrypted_bytes = cast(bytes, self._cipher.decrypt(encrypted_bytes))
+            return decrypted_bytes.decode()
         except (ValueError, binascii.Error) as e:
             # Base64 解码失败，可能是明文密码
             logger.debug(f"密码解码失败，可能是明文: {type(e).__name__}")

@@ -7,7 +7,7 @@
 import asyncio
 import json
 from datetime import timedelta
-from typing import Any, Dict, Optional, Set
+from typing import Any, Awaitable, Callable, Dict, Optional, Set, Union, cast
 
 from fastapi import Request
 from loguru import logger
@@ -41,7 +41,7 @@ class RequestDeduplicator:
         Args:
             ttl_seconds: 请求结果缓存时间（秒）
         """
-        self.pending_requests: Dict[str, asyncio.Future] = {}
+        self.pending_requests: Dict[str, asyncio.Future[Any]] = {}
         self.ttl = timedelta(seconds=ttl_seconds)
         self.request_count = 0
         self.dedup_count = 0
@@ -85,14 +85,18 @@ class RequestDeduplicator:
 
         # 使用 xxhash 进行快速哈希（比 MD5 快 10x）
         if XXHASH_AVAILABLE:
-            return xxhash.xxh64_hexdigest(str(key_data))
+            return cast(str, xxhash.xxh64_hexdigest(str(key_data)))
         else:
             # 降级到 MD5
             import hashlib
 
             return hashlib.md5(str(key_data).encode(), usedforsecurity=False).hexdigest()  # nosec B324 - 仅用于请求去重
 
-    async def deduplicate(self, key: str, coroutine):
+    async def deduplicate(
+        self,
+        key: str,
+        coroutine: Union[Callable[[], Awaitable[Any]], Awaitable[Any]],
+    ) -> Any:
         """
         执行去重逻辑
 
@@ -103,33 +107,35 @@ class RequestDeduplicator:
         Returns:
             请求结果（可能来自缓存）
         """
+        existing_future: Optional[asyncio.Future[Any]] = None
+
         async with self._lock:
             self.request_count += 1
 
             # 检查是否有相同的请求正在处理
             if key in self.pending_requests:
                 self.dedup_count += 1
-                future = self.pending_requests[key]
+                existing_future = self.pending_requests[key]
                 logger.debug(f"请求去重命中: {key[:8]}... (总去重: {self.dedup_count})")
 
         # 等待已存在的请求完成（在锁外等待，避免死锁）
-        if key in self.pending_requests:
+        if existing_future is not None:
             try:
-                return await future
+                return await existing_future
             except Exception as e:
                 logger.error(f"等待去重请求失败: {e}")
                 raise
 
         # 创建新的请求
         loop = asyncio.get_event_loop()
-        future = loop.create_future()
+        new_future: asyncio.Future[Any] = loop.create_future()
 
         async with self._lock:
             # 再次检查（可能在等待锁期间有其他请求创建了）
             if key in self.pending_requests:
                 return await self.pending_requests[key]
 
-            self.pending_requests[key] = future
+            self.pending_requests[key] = new_future
             logger.debug(f"创建新请求: {key[:8]}...")
 
         try:
@@ -138,10 +144,10 @@ class RequestDeduplicator:
                 result = await coroutine()
             else:
                 result = await coroutine
-            future.set_result(result)
+            new_future.set_result(result)
             return result
         except Exception as e:
-            future.set_exception(e)
+            new_future.set_exception(e)
             raise
         finally:
             # 异步清理（不阻塞返回）
