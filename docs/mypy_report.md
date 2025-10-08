@@ -37,3 +37,40 @@
 4. 在依赖补齐后再次运行 `mypy`，若仍有业务层类型冲突，再逐项定位并修复，实现从“环境问题”到“类型约束问题”的分层清理。
 5. 针对“额外观察”中的第 5 点（启用 `--check-untyped-defs` 等增强检查），计划在完成前述步骤并稳定现有类型问题后再处理。
 
+## 2025-10-09 错误分布与治理规划（327 项）
+
+### 最新扫描摘要
+- 执行命令：`uv run --no-sync mypy`（依赖补齐后在本地锁定虚拟环境内运行）。
+- 输出摘要：共检测到 327 个错误，分布在 66 个文件中，数量较前次扫描下降 40.3%。
+- 目录分布：
+  - `deepsearch/webui`：114 项（34.9%），集中在中间件与 API 响应模型。
+  - `deepsearch/infrastructure`：106 项（32.4%），以数据提供者、SQLAlchemy 封装和缓存客户端为主。
+  - `deepsearch/backtest` 与 `deepsearch/indicators`：合计 67 项（20.5%），主要源于数值序列运算缺乏准确的 pandas 建模。
+  - 其余目录（`core`、`utils`、`config` 等）：40 项（12.2%），多与上下文管理、配置对象和系统工具函数相关。
+
+### 共性问题分类
+| 分类 | 典型错误数* | 主要触发模块 | 根源分析 |
+| --- | --- | --- | --- |
+| 三方接口类型桩缺口 | ≈137 | `infrastructure.database`, `infrastructure.persistence`, `webui.api.cache`, `utils.network` | 当前自建桩未覆盖 SQLAlchemy `AsyncEngine.begin/dispose`、Requests `Session.request/mount`、Redis `setex/scan_iter` 等常用方法，导致 mypy 认为接口不存在。 |
+| 数值序列类型建模 | ≈38 | `backtest.interfaces`, `indicators.simple`, `indicators.technical` | `NumericSeries` 与 pandas/NumPy 的占位桩仍缺少运算符与链式方法签名，推断结果退化为 `float`，进而引起算术与属性访问报错。 |
+| 参数与调用契约不一致 | ≈89 | `webui.api.middleware`, `webui.api.endpoints`, `infrastructure.providers.akshare` | FastAPI 端点默认返回 `JSONResponse` 却声明为 `Response`、`Query` 关键字参数与签名不匹配、`CacheManager.get` 调用缺参数等，体现接口契约未与类型约束同步。 |
+| 可选配置未做显式分支 | 28 | `core.components`, `utils.system.port_checker`, `config.settings` | 多处对象被声明为 `Config | None` 但直接访问属性，需在运行前聚合缺省策略或补充断言。 |
+| 异步上下文与协程封装 | 27 | `infrastructure.database.optimized_pool`, `infrastructure.providers.akshare.worker_manager` | `asynccontextmanager` 使用方式、`async with` 上下文返回类型以及 `Coroutine` 标注未与实现对齐，导致 `__aenter__/__aexit__` 等协议校验失败。 |
+| 返回值未与声明对齐 | 31 | `webui.api.middleware.rate_limit`, `infrastructure.providers.akshare.request_handler`, `core.components.analytics_components` | 函数签名声明返回具体类型却直接透传 `Any` 或协程，需通过显式模型、判空分支或封装帮助函数收敛返回值。 |
+
+> *分类数量基于 2025-10-09 扫描结果的关键词统计，因同一错误可能同时满足多个条件，故合计会超过 327。
+
+### 治理路径规划
+1. **第一阶段（桩能力补齐）**：集中修订 `typings/` 目录，优先覆盖 SQLAlchemy `AsyncEngine`、Requests `Session`、Redis `Redis`、FastAPI 中 `Security` 等高频缺口，并同步调整 `NumericSeries` 的 pandas 算术与聚合接口，使工具能够理解主要依赖的 API 形态。
+2. **第二阶段（接口契约收敛）**：对 WebUI 中间件与 Akshare 适配层逐一核对签名与返回值，必要时拆分响应模型或引入数据类，将 `JSONResponse`/`dict` 的动态结构显式化；同时补全 `CacheManager`、`DataSyncService` 等注入依赖的参数与返回类型。
+3. **第三阶段（配置与异步语义强化）**：为声明为可选的配置对象统一提供 `ensure_xxx()` 帮助函数或在初始化阶段落地默认值；审查所有 `async with`、`asynccontextmanager` 的实现，确保返回类型遵循 `AsyncIterator[T]`，并在协程中显式 `await` 引擎与会话构造。
+4. **收尾阶段（增量检查策略）**：在上述问题收敛后，逐步开启 `--check-untyped-defs` 与更严格的 mypy 配置，结合模块级 `TypedDict`/`Protocol` 精细化模型，防止新增告警回潮。
+
+### 近期优先事项（未来 2~3 次迭代）
+- 产出 `typings/sqlalchemy/engine.pyi`、`typings/requests/sessions.pyi`、`typings/redis/asyncio/client.pyi` 等针对缺失方法的桩更新，保障数据库与缓存相关模块可进行下一步类型重构。
+- 调整 `NumericSeries` 定义为 `pandas.Series` 的细化子类或通过 `Protocol` 描述常用运算符，解除回测与指标模块的批量算术告警。
+- 逐个排查 `webui/api/middleware` 返回值，补齐 `Response`/`JSONResponse` 类型之间的桥接辅助函数，避免 `Any` 扩散。
+- 在 `core/components` 与 `utils/system` 中为配置对象新增空值校验或工厂方法，减少 `Optional` 属性访问导致的告警。
+
+以上规划为后续批量治理的路线基线，具体执行时应在每个阶段引入增量 mypy 扫描验证，确保指标持续下降且未引入新的类型回归。
+
