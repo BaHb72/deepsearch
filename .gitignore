@@ -83,7 +83,11 @@ deepsearch/webui/frontend/.backup-cleanup/
 deepsearch/webui/frontend/jsx-backup-*/
 
 # ==================== Third-Party Packages ====================
-/third_party/
+/third_party/*
+!/third_party/amazingdata/
+!/third_party/amazingdata/**
+!/third_party/tgw/
+!/third_party/tgw/**
 cloudflare-deploy/*.toml
 cloudflare-deploy/*.min.js
 wrangler*.toml
