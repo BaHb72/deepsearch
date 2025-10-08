@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 from loguru import logger
 
+bt: Any
+
 try:
     import backtrader as bt
 

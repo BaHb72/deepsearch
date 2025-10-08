@@ -9,6 +9,6 @@ import numpy.typing as npt
 import pandas as pd
 
 NumericArray: TypeAlias = npt.NDArray[np.float_]
-NumericSeries: TypeAlias = pd.Series[float]
+NumericSeries: TypeAlias = pd.Series
 
 __all__ = ["NumericArray", "NumericSeries"]

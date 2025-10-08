@@ -1,4 +1,18 @@
-from typing import Any, Callable, Iterable, Mapping, MutableMapping, Optional, Protocol
+from typing import Any, Callable, Iterable, Iterator, Mapping, MutableMapping, Optional, Protocol
+
+FormatFunction = Callable[["Record"], str]
+
+
+class Record(MutableMapping[str, Any]):
+    def __getitem__(self, key: str) -> Any: ...
+    def __setitem__(self, key: str, value: Any) -> None: ...
+    def __delitem__(self, key: str) -> None: ...
+    def __iter__(self) -> Iterator[str]: ...
+    def __len__(self) -> int: ...
+
+
+class Level:
+    name: str
 
 class _BindLogger(Protocol):
     def bind(self, **kwargs: Any) -> "Logger": ...
@@ -7,7 +21,6 @@ class _OptLogger(Protocol):
     def __call__(self, *args: Any, **kwargs: Any) -> "Logger": ...
 
 class Logger:
-    level: str
     def debug(self, message: str, *args: Any, **kwargs: Any) -> None: ...
     def info(self, message: str, *args: Any, **kwargs: Any) -> None: ...
     def success(self, message: str, *args: Any, **kwargs: Any) -> None: ...
@@ -24,7 +37,7 @@ class Logger:
         self,
         sink: Any,
         level: Any = ...,
-        format: Optional[str] = ...,
+        format: Optional[str | FormatFunction] = ...,
         filter: Optional[Mapping[str, Any]] = ...,
         enqueue: bool = ...,
         colorize: bool = ...,
@@ -34,5 +47,13 @@ class Logger:
         **kwargs: Any,
     ) -> int: ...
     def remove(self, handler_id: int = ...) -> None: ...
+    def configure(
+        self,
+        *,
+        handlers: Iterable[Mapping[str, Any]] | None = ...,
+        levels: Iterable[Mapping[str, Any]] | None = ...,
+        extra: Mapping[str, Any] | None = ...,
+    ) -> None: ...
+    def level(self, name: str) -> Level: ...
 
 logger: Logger

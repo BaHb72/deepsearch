@@ -1,6 +1,6 @@
 from typing import Any, Sequence
 
 class RequestValidationError(Exception):
-    errors: Sequence[Any]
+    def errors(self) -> Sequence[Any]: ...
 
 __all__ = ["RequestValidationError"]
