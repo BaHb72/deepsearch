@@ -1,0 +1,13 @@
+from typing import Any
+
+class Query:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+
+class Session:
+    def execute(self, statement: Any, params: Any = ...) -> Any: ...
+
+class sessionmaker:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    def __call__(self, *args: Any, **kwargs: Any) -> Session: ...
+
+__all__ = ["Query", "Session", "sessionmaker"]

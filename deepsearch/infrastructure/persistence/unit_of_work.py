@@ -6,7 +6,9 @@ from typing import Optional
 
 import asyncpg
 from domain.interfaces.repository import IStockRepository, IUnitOfWork
-from infrastructure.repositories.stock_repository import PostgreSQLStockRepository
+from deepsearch.infrastructure.repositories.stock_repository import (
+    PostgreSQLStockRepository,
+)
 
 from deepsearch.observability import get_logger
 

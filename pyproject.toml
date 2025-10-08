@@ -117,8 +117,8 @@ python-preference = "only-system"
 compile-bytecode = true
 
 [tool.uv.sources]
-amazingdata = { url = "https://cloud.chinastock.com.cn/c/dl-pubdir/AmazingData-1.0.10-cp313-none-any.whl?td=t3tr2n&xbgy=1&w=gGzCfDXf8kFbITSTiU-AM2kOdnK3lbPM-968vCQhq-U&hs=DSG36jYQx2IY_Y8CIAA&ix=%2FAmazingData%2FAmazingData-1.0.10-cp313-none-any.whl&cid=sPSMZTbIArEvPyt7j7YyxQ" }
-tgw = { url = "https://cloud.chinastock.com.cn/c/dl-pubdir/tgw-1.0.8.1-py3-none-any.whl?td=t3tr0e&xbgy=1&w=_mo6-F30nGChm2Ikf-f3Y-QuL-gOKhRdphI-lmVKRrI&hs=DSG36jYQx2IY_Y8CIAA&ix=%2Ftgw-1.0.8.1-py3-none-any.whl&cid=g20Ji_BI1o4j7DNNtysJHg" }
+amazingdata = { path = "third_party/amazingdata" }
+tgw = { path = "third_party/tgw" }
 
 [tool.uv.pip]
 index-url = "https://pypi.org/simple"
@@ -135,6 +135,8 @@ dev = [
 ]
 [tool.mypy]
 python_version = "3.13"
+# 为第三方依赖补充的本地类型桩
+mypy_path = ["typings"]
 #ignore_missing_imports = true
 warn_unused_ignores = true
 warn_return_any = true

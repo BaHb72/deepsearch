@@ -10,6 +10,8 @@ from typing import Any, Dict
 import numpy as np
 import pandas as pd
 
+bt: Any
+
 try:
     import backtrader as bt
 

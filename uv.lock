@@ -114,10 +114,7 @@ wheels = [
 [[package]]
 name = "amazingdata"
 version = "1.0.10"
-source = { path = "third_party/amazingdata/AmazingData-1.0.10-cp313-none-any.whl" }
-wheels = [
-    { filename = "amazingdata-1.0.10-cp313-none-any.whl", hash = "sha256:f7d6a96e7089669bad9af9362b0ad0b2c7463a89213e85f551c80799e85cee92" },
-]
+source = { directory = "third_party/amazingdata" }
 
 [[package]]
 name = "annotated-types"
@@ -778,6 +775,7 @@ dependencies = [
     { name = "sqlalchemy" },
     { name = "ta-lib" },
     { name = "tabulate" },
+    { name = "tgw" },
     { name = "twisted" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "websockets" },
@@ -816,7 +814,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.9.0" },
     { name = "aioredis", specifier = ">=2.0.1" },
     { name = "akshare", specifier = "==1.17.54" },
-    { name = "amazingdata", path = "third_party/amazingdata/AmazingData-1.0.10-cp313-none-any.whl" },
+    { name = "amazingdata", directory = "third_party/amazingdata" },
     { name = "anyio", specifier = ">=4.9.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "backtrader", specifier = ">=1.9.78.123" },
@@ -864,6 +862,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0.41" },
     { name = "ta-lib", specifier = ">=0.6.5" },
     { name = "tabulate", specifier = ">=0.9.0" },
+    { name = "tgw", directory = "third_party/tgw" },
     { name = "twisted", specifier = ">=25.5.0" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.33.0" },
@@ -3166,6 +3165,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/8a/11/965c6fd8e5cc254f1
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/9e/2064975477fdc887e47ad42157e214526dcad8f317a948dee17e1659a62f/terminado-0.18.1-py3-none-any.whl", hash = "sha256:a4468e1b37bb318f8a86514f65814e1afc977cf29b3992a4500d9dd305dcceb0", size = 14154, upload-time = "2024-03-12T14:34:36.569Z" },
 ]
+
+[[package]]
+name = "tgw"
+version = "1.0.8.1"
+source = { directory = "third_party/tgw" }
 
 [[package]]
 name = "tinycss2"
