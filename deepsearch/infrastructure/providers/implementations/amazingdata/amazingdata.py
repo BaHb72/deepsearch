@@ -25,12 +25,19 @@ import pandas as pd
 from loguru import logger
 
 def _coalesce(*values: object | None) -> object | None:
-    """按顺序返回首个真值；全为假值时返回最后一个"""
+    """按顺序返回首个有效值，避免将零值或布尔假值视为缺失"""
+
     if not values:
         return None
+
     for value in values:
-        if value:
-            return value
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            # 空字符串说明源数据缺失，尝试后续候选项
+            continue
+        return value
+
     return values[-1]
 
 def _ensure_float(value: object | None, default: float = 0.0) -> float:
