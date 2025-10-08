@@ -135,6 +135,8 @@ dev = [
 ]
 [tool.mypy]
 python_version = "3.13"
+# 为第三方依赖补充的本地类型桩
+mypy_path = ["typings"]
 #ignore_missing_imports = true
 warn_unused_ignores = true
 warn_return_any = true

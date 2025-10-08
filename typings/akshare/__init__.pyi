@@ -1,0 +1,6 @@
+from typing import Any
+
+def stock_zh_a_spot(*args: Any, **kwargs: Any) -> Any: ...
+def futures_zh_realtime(*args: Any, **kwargs: Any) -> Any: ...
+
+__all__ = ["stock_zh_a_spot", "futures_zh_realtime"]
