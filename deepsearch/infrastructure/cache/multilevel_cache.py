@@ -1,8 +1,6 @@
-"""
-多级缓存系统实现
+"""多级缓存系统实现，涵盖 Redis 与数据库的协同缓存策略。"""
 
-提供 L1（内存）、L2（Redis）、L3（数据库）三级缓存
-"""
+from __future__ import annotations
 
 import asyncio
 import hashlib
@@ -12,16 +10,31 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, AsyncContextManager, Callable, Dict, Optional, Tuple, TYPE_CHECKING, cast
 
 import redis.asyncio as aioredis
-from cachetools import TTLCache
+from cachetools import TTLCache  # type: ignore[import-untyped]
 from sqlalchemy import Column, DateTime, Integer, LargeBinary, String, select
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import DeclarativeBase
 
 from deepsearch.observability import get_logger
 
-Base = declarative_base()
+if TYPE_CHECKING:
+    # 仅用于类型检查，避免运行时强依赖
+    from redis.asyncio import Redis as AsyncRedis
+else:  # pragma: no cover - 运行时代码路径
+    AsyncRedis = aioredis.Redis
+
+
+class Base(DeclarativeBase):
+    """声明式基类，便于 mypy 正确识别 ORM 模型类型。"""
+
+    pass
+
+
+SessionFactory = Callable[[], AsyncContextManager[AsyncSession]]
+"""统一的异步会话工厂类型，便于与 SQLAlchemy 保持一致。"""
 
 
 class CacheLevel(Enum):
@@ -137,7 +150,9 @@ class MultiLevelCache:
     5. 统计和监控
     """
 
-    def __init__(self, config: CacheConfig, db_session_factory: Optional[Callable] = None):
+    def __init__(
+        self, config: CacheConfig, db_session_factory: Optional[SessionFactory] = None
+    ) -> None:
         """
         初始化多级缓存
 
@@ -156,13 +171,13 @@ class MultiLevelCache:
             self.l1_cache = None
 
         # L2: Redis 缓存
-        self.l2_cache: Optional[aioredis.Redis] = None
+        self.l2_cache: Optional[AsyncRedis] = None
 
         # 统计信息
         self.statistics = CacheStatistics() if config.enable_statistics else None
 
         # 清理任务
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: Optional[asyncio.Task[None]] = None
 
     async def initialize(self) -> None:
         """初始化缓存系统"""
@@ -407,7 +422,10 @@ class MultiLevelCache:
             try:
                 cursor = 0
                 while True:
-                    cursor, keys = await self.l2_cache.scan(cursor, match=pattern, count=100)
+                    cursor, raw_keys = await self.l2_cache.scan(
+                        cursor, match=pattern, count=100
+                    )
+                    keys = cast(Tuple[str | bytes, ...], tuple(raw_keys))
                     if keys:
                         await self.l2_cache.delete(*keys)
                         count += len(keys)
@@ -427,6 +445,9 @@ class MultiLevelCache:
 
     async def _get_from_l3(self, key: str) -> Optional[Any]:
         """从 L3 数据库获取数据"""
+        if not self.db_session_factory:
+            return None
+
         async with self.db_session_factory() as session:
             stmt = select(CacheEntry).where(
                 CacheEntry.key == key, CacheEntry.expires_at > datetime.now()
@@ -446,6 +467,9 @@ class MultiLevelCache:
 
     async def _set_to_l3(self, key: str, value: Any, ttl: int) -> None:
         """写入 L3 数据库"""
+        if not self.db_session_factory:
+            return
+
         async with self.db_session_factory() as session:
             expires_at = datetime.now() + timedelta(seconds=ttl)
             serialized = pickle.dumps(value)
@@ -469,6 +493,9 @@ class MultiLevelCache:
 
     async def _delete_from_l3(self, key: str) -> None:
         """从 L3 数据库删除"""
+        if not self.db_session_factory:
+            return
+
         async with self.db_session_factory() as session:
             stmt = select(CacheEntry).where(CacheEntry.key == key)
             result = await session.execute(stmt)
@@ -480,6 +507,9 @@ class MultiLevelCache:
 
     async def _invalidate_l3(self, pattern: str) -> int:
         """失效 L3 中的键"""
+        if not self.db_session_factory:
+            return 0
+
         async with self.db_session_factory() as session:
             # 使用 LIKE 查询
             like_pattern = pattern.replace("*", "%")
