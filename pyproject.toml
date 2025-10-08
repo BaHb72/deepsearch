@@ -41,6 +41,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0",
     # ==== 数据获取依赖 ====
     "amazingdata==1.0.10",
+    "tgw==1.0.8.1",
     "akshare==1.17.54",
     "aiohttp>=3.9.0",
     "numpy>=1.24.0",
@@ -116,7 +117,8 @@ python-preference = "only-system"
 compile-bytecode = true
 
 [tool.uv.sources]
-amazingdata = { path = "third_party/amazingdata/AmazingData-1.0.10-cp313-none-any.whl" }
+amazingdata = { url = "https://cloud.chinastock.com.cn/c/dl-pubdir/AmazingData-1.0.10-cp313-none-any.whl?td=t3tr2n&xbgy=1&w=gGzCfDXf8kFbITSTiU-AM2kOdnK3lbPM-968vCQhq-U&hs=DSG36jYQx2IY_Y8CIAA&ix=%2FAmazingData%2FAmazingData-1.0.10-cp313-none-any.whl&cid=sPSMZTbIArEvPyt7j7YyxQ" }
+tgw = { url = "https://cloud.chinastock.com.cn/c/dl-pubdir/tgw-1.0.8.1-py3-none-any.whl?td=t3tr0e&xbgy=1&w=_mo6-F30nGChm2Ikf-f3Y-QuL-gOKhRdphI-lmVKRrI&hs=DSG36jYQx2IY_Y8CIAA&ix=%2Ftgw-1.0.8.1-py3-none-any.whl&cid=g20Ji_BI1o4j7DNNtysJHg" }
 
 [tool.uv.pip]
 index-url = "https://pypi.org/simple"
@@ -133,7 +135,7 @@ dev = [
 ]
 [tool.mypy]
 python_version = "3.13"
-ignore_missing_imports = true
+#ignore_missing_imports = true
 warn_unused_ignores = true
 warn_return_any = true
 show_error_codes = true
@@ -151,38 +153,4 @@ files = [
     "deepsearch/core/utils/error_handler.py",
     "deepsearch/core/components/infrastructure_components.py",
 ]
-
-[[tool.mypy.overrides]]
-module = ["deepsearch.infrastructure.providers.*"]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "deepsearch.config.loader",
-    "deepsearch.config.settings",
-    "deepsearch.webui.server_manager",
-    "deepsearch.webui.api.endpoints.system.config",
-    "deepsearch.memory.smart_memory",
-    "deepsearch.utils.system.port_checker",
-    "deepsearch.core.components.data_components",
-    "deepsearch.webui.api.proxy",
-    "deepsearch.webui.api.endpoints.amazingdata.realtime",
-    "deepsearch.infrastructure.persistence.query_optimizer",
-    "deepsearch.utils.network.akshare_proxy",
-    "deepsearch.webui.api.endpoints.qmt.miniqmt",
-    "deepsearch.webui.api.endpoints.monitoring.analytics",
-    "deepsearch.core.components.monitoring_components",
-    "deepsearch.core.components.analytics_components",
-    "deepsearch.webui.api.endpoints.notifications.push",
-    "deepsearch.webui.api.endpoints.market.market_api",
-    "deepsearch.webui.api.endpoints.chart.chart_api",
-    "deepsearch.webui.api.providers",
-    "deepsearch.webui.api.endpoints.data.market_data_api",
-    "deepsearch.webui.api.endpoints.data.data_unified",
-    "deepsearch.webui.api.endpoints.amazingdata.amazingdata_api",
-    "deepsearch.core.components.qmt_gateway_component",
-    "deepsearch.webui.api.endpoints.amazingdata.base",
-]
-ignore_errors = true
-
 
