@@ -24,7 +24,7 @@ def _coalesce(*values: object | None) -> object | None:
             continue
         return value
 
-    return values[-1]
+    return None
 
 def _ensure_float(value: object | None, default: float = 0.0) -> float:
     """将任意类型转换为 float，无法转换时返回默认值"""

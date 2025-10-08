@@ -8,6 +8,12 @@ if "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_
 
 import pytest
 
+from deepsearch.infrastructure.providers.implementations.amazingdata import (
+    amazingdata as provider_module,
+)
+from deepsearch.infrastructure.providers.implementations.amazingdata import (
+    amazingdata_converter as converter_module,
+)
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_converter import (
     AmazingDataConverter,
 )
@@ -17,6 +23,16 @@ from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata
     SnapshotQuote,
     SubscriptionMessage,
 )
+
+
+@pytest.mark.parametrize("module", [provider_module, converter_module])
+def test_coalesce_filters_blank_and_preserves_falsey(module):
+    coalesce = module._coalesce
+
+    assert coalesce(None, "", "   ", None) is None
+    assert coalesce("", "   ", "value") == "value"
+    assert coalesce(None, 0, "") == 0
+    assert coalesce(None, False, "") is False
 
 
 @pytest.mark.parametrize(
