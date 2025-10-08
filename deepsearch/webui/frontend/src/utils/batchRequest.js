@@ -8,6 +8,10 @@
  * - 错误处理和重试
  */
 
+import logger from '@/utils/logger'
+
+const batchRequestLogger = logger.child('utils:batch-request')
+
 class BatchRequestManager {
   constructor(options = {}) {
     this.queue = new Map() // endpoint -> requests[]
@@ -56,7 +60,7 @@ class BatchRequestManager {
       
       // 检查是否有相同的pending请求（去重）
       if (dedupe && this.pendingRequests.has(requestKey)) {
-        console.log(`[BatchRequest] Deduping request: ${requestKey}`)
+        batchRequestLogger.info(`[BatchRequest] Deduping request: ${requestKey}`)
         // 返回已存在的promise
         return this.pendingRequests.get(requestKey)
       }
@@ -167,7 +171,7 @@ class BatchRequestManager {
   async processBatch(queueKey, requests) {
     const [method, endpoint] = queueKey.split(':')
     
-    console.log(`[BatchRequest] Processing batch: ${endpoint} (${requests.length} requests)`)
+    batchRequestLogger.info(`[BatchRequest] Processing batch: ${endpoint} (${requests.length} requests)`)
     
     // 更新统计
     this.stats.batchedRequests += requests.length
@@ -186,7 +190,7 @@ class BatchRequestManager {
         await this.executeParallelRequests(endpoint, method, requests)
       }
     } catch (error) {
-      console.error(`[BatchRequest] Batch processing error:`, error)
+      batchRequestLogger.error(`[BatchRequest] Batch processing error:`, error)
       // 批处理失败，尝试单独处理每个请求
       await this.fallbackToIndividualRequests(endpoint, method, requests)
     }
@@ -239,7 +243,7 @@ class BatchRequestManager {
       
     } catch (error) {
       // 批处理失败，回退到单独请求
-      console.error(`[BatchRequest] Batch request failed:`, error)
+      batchRequestLogger.error(`[BatchRequest] Batch request failed:`, error)
       await this.fallbackToIndividualRequests(endpoint, method, requests)
     }
   }
@@ -293,13 +297,13 @@ class BatchRequestManager {
       
       // 重试逻辑
       if (attempt < this.retryAttempts) {
-        console.log(`[BatchRequest] Retrying request (attempt ${attempt + 1}/${this.retryAttempts})`)
+        batchRequestLogger.info(`[BatchRequest] Retrying request (attempt ${attempt + 1}/${this.retryAttempts})`)
         await this.delay(this.retryDelay * attempt) // 指数退避
         return this.executeSingleRequest(endpoint, method, request, attempt + 1)
       }
       
       // 最终失败
-      console.error(`[BatchRequest] Request failed after ${attempt} attempts:`, error)
+      batchRequestLogger.error(`[BatchRequest] Request failed after ${attempt} attempts:`, error)
       request.reject(error)
       this.stats.failedRequests++
     }
@@ -309,7 +313,7 @@ class BatchRequestManager {
    * 回退到单独请求
    */
   async fallbackToIndividualRequests(endpoint, method, requests) {
-    console.log(`[BatchRequest] Falling back to individual requests for ${endpoint}`)
+    batchRequestLogger.info(`[BatchRequest] Falling back to individual requests for ${endpoint}`)
     
     for (const request of requests) {
       await this.executeSingleRequest(endpoint, method, request)

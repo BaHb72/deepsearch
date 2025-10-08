@@ -1,19 +1,26 @@
 """
 ZeroMQ message bus implementation.
 """
+
 from __future__ import annotations
 
 import fnmatch
 import json
-import logging
 import pickle
 import threading
-from typing import Any, Callable, Dict, Optional, Protocol, Set, TypeVar
+from typing import Any, Callable, Dict, Generic, Optional, Protocol, Set, TypeVar
 
-import zmq
+try:
+    import zmq as _zmq
+except ImportError as exc:  # pragma: no cover
+    raise ImportError("pyzmq is required for ZeroMQMessageBus") from exc
 
 from deepsearch.constants import DEFAULT_ZMQ_PUB_PORT, DEFAULT_ZMQ_SUB_PORT
+from deepsearch.observability import get_logger
+
 from ..bus import MessageBus
+
+zmq: Any = _zmq
 
 # Constants
 DEFAULT_HOST = "127.0.0.1"
@@ -26,7 +33,7 @@ PAYLOAD_FRAME = 1
 EXPECTED_FRAME_COUNT = 2
 
 T = TypeVar("T")
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class Serializer(Protocol):
@@ -46,18 +53,18 @@ class JsonSerializer:
 
     def serialize(self, obj: Any) -> bytes:
         """Serialize object to JSON bytes."""
-        return json.dumps(obj, default=str).encode('utf-8')
+        return json.dumps(obj, default=str).encode("utf-8")
 
     def deserialize(self, data: bytes) -> Any:
         """Deserialize JSON bytes to object."""
-        return json.loads(data.decode('utf-8'))
+        return json.loads(data.decode("utf-8"))
 
 
 class PickleSerializer:
     """
     Pickle-based serializer.
-    
-    WARNING: Only use with trusted data sources! 
+
+    WARNING: Only use with trusted data sources!
     Pickle can execute arbitrary code during deserialization.
     Consider using JsonSerializer for untrusted sources.
     """
@@ -72,16 +79,16 @@ class PickleSerializer:
 def _extract_zmq_prefix(pattern: str) -> str:
     """
     Extract ZeroMQ subscription prefix from pattern.
-    
+
     ZeroMQ only supports prefix matching, not wildcards.
     This function extracts the prefix before the first wildcard.
-    
+
     Args:
         pattern: Topic pattern that may contain wildcards
-        
+
     Returns:
         Prefix to use for ZeroMQ subscription
-        
+
     Examples:
         "engine.status.*" -> "engine.status."
         "webui.commands.*" -> "webui.commands."
@@ -93,31 +100,31 @@ def _extract_zmq_prefix(pattern: str) -> str:
     return pattern
 
 
-class ZeroMQMessageBus(MessageBus):
+class ZeroMQMessageBus(MessageBus[T], Generic[T]):
     """
     ZeroMQ-based message bus implementation.
-    
+
     Provides distributed messaging using ZeroMQ PUB/SUB pattern.
     Supports wildcard patterns in topic subscriptions.
     """
 
     def __init__(
-            self,
-            host: str = DEFAULT_HOST,
-            pub_port: int = DEFAULT_ZMQ_PUB_PORT,
-            sub_port: int = DEFAULT_ZMQ_SUB_PORT,
-            serializer: Optional[Serializer] = None,
-            send_hwm: int = 1000,
-            recv_hwm: int = 1000,
-            verbose: bool = True
+        self,
+        host: str = DEFAULT_HOST,
+        pub_port: int = DEFAULT_ZMQ_PUB_PORT,
+        sub_port: int = DEFAULT_ZMQ_SUB_PORT,
+        serializer: Optional[Serializer] = None,
+        send_hwm: int = 1000,
+        recv_hwm: int = 1000,
+        verbose: bool = True,
     ):
         """
         Initialize ZeroMQ message bus.
-        
+
         Args:
             host: Host address
             pub_port: Publisher port
-            sub_port: Subscriber port  
+            sub_port: Subscriber port
             serializer: Message serializer
             send_hwm: Send high water mark
             recv_hwm: Receive high water mark
@@ -132,9 +139,9 @@ class ZeroMQMessageBus(MessageBus):
         self.verbose = verbose
 
         # ZeroMQ components
-        self._context: Optional[zmq.Context] = None
-        self._publisher: Optional[zmq.Socket] = None
-        self._subscriber: Optional[zmq.Socket] = None
+        self._context: Optional[Any] = None
+        self._publisher: Optional[Any] = None
+        self._subscriber: Optional[Any] = None
 
         # Thread management
         self._subscriber_thread: Optional[threading.Thread] = None
@@ -142,7 +149,7 @@ class ZeroMQMessageBus(MessageBus):
         self._stop_event = threading.Event()
 
         # Subscription management
-        self._handlers: Dict[str, Set[Callable]] = {}
+        self._handlers: Dict[str, Set[Callable[[str, T], None]]] = {}
         self._lock = threading.Lock()
 
         # Statistics
@@ -150,7 +157,7 @@ class ZeroMQMessageBus(MessageBus):
         self._messages_received = 0
         self._errors = 0
 
-        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.logger = get_logger(f"{__name__}.{self.__class__.__name__}")
 
     def publish(self, topic: str, message: T) -> None:
         """Publish message via ZeroMQ."""
@@ -162,10 +169,7 @@ class ZeroMQMessageBus(MessageBus):
             payload = self.serializer.serialize(message)
 
             # Send as multipart message: [topic, payload]
-            self._publisher.send_multipart([
-                topic.encode('utf-8'),
-                payload
-            ])
+            self._publisher.send_multipart([topic.encode("utf-8"), payload])
 
             self._messages_published += 1
 
@@ -179,11 +183,11 @@ class ZeroMQMessageBus(MessageBus):
 
     def subscribe(self, topic: str, handler: Callable[[str, T], None]) -> None:
         """Subscribe to topic pattern.
-        
+
         Supports wildcard patterns:
         - "*" matches any sequence of characters
         - "?" matches any single character
-        
+
         Args:
             topic: Topic pattern (may include wildcards)
             handler: Message handler function
@@ -213,8 +217,7 @@ class ZeroMQMessageBus(MessageBus):
                         zmq_prefix = _extract_zmq_prefix(topic)
                         # Only unsubscribe if no other patterns use this prefix
                         prefix_still_needed = any(
-                            _extract_zmq_prefix(p) == zmq_prefix
-                            for p in self._handlers
+                            _extract_zmq_prefix(p) == zmq_prefix for p in self._handlers
                         )
                         if not prefix_still_needed:
                             self._subscriber.setsockopt_string(zmq.UNSUBSCRIBE, zmq_prefix)
@@ -237,7 +240,7 @@ class ZeroMQMessageBus(MessageBus):
             self._publisher.bind(pub_url)
             self.logger.info(f"Publisher bound to {pub_url} (local publish port)")
 
-            # Setup subscriber  
+            # Setup subscriber
             self._subscriber = self._context.socket(zmq.SUB)
             self._subscriber.setsockopt(zmq.RCVHWM, self.recv_hwm)
             sub_url = f"tcp://{self.host}:{self.sub_port}"
@@ -262,9 +265,7 @@ class ZeroMQMessageBus(MessageBus):
             # Start subscriber thread
             self._stop_event.clear()
             self._subscriber_thread = threading.Thread(
-                target=self._subscriber_loop,
-                name="ZeroMQ-Subscriber",
-                daemon=True
+                target=self._subscriber_loop, name="ZeroMQ-Subscriber", daemon=True
             )
             self._subscriber_thread.start()
 
@@ -302,32 +303,35 @@ class ZeroMQMessageBus(MessageBus):
     def get_statistics(self) -> Dict[str, Any]:
         """Get bus statistics."""
         import time
+
         stats = super().get_statistics()
 
         # 计算消息速率（近30秒）
-        current_time = time.time()
-        time_window = 30  # 秒
-        
-        stats.update({
-            "host": self.host,
-            "pub_port": self.pub_port,
-            "sub_port": self.sub_port,
-            "messages_published": self._messages_published,
-            "messages_received": self._messages_received,
-            "errors": self._errors,
-            "subscriptions": len(self._handlers),
-            "subscription_patterns": list(self._handlers.keys()),
-            "error_rate": self._errors / max(1, self._messages_published + self._messages_received),
-            "is_running": self._running,
-            "last_error_count": self._errors,
-            "health_status": self.get_health_status()
-        })
+        time.time()
+
+        stats.update(
+            {
+                "host": self.host,
+                "pub_port": self.pub_port,
+                "sub_port": self.sub_port,
+                "messages_published": self._messages_published,
+                "messages_received": self._messages_received,
+                "errors": self._errors,
+                "subscriptions": len(self._handlers),
+                "subscription_patterns": list(self._handlers.keys()),
+                "error_rate": self._errors
+                / max(1, self._messages_published + self._messages_received),
+                "is_running": self._running,
+                "last_error_count": self._errors,
+                "health_status": self.get_health_status(),
+            }
+        )
         return stats
 
     def get_health_status(self) -> Dict[str, Any]:
         """
         获取健康状态
-        
+
         Returns:
             健康状态信息
         """
@@ -340,12 +344,7 @@ class ZeroMQMessageBus(MessageBus):
         if not self._running:
             health_score = 0
             issues.append("MessageBus is not running")
-            return {
-                "healthy": False,
-                "score": health_score,
-                "issues": issues,
-                "status": "stopped"
-            }
+            return {"healthy": False, "score": health_score, "issues": issues, "status": "stopped"}
 
         # 检查错误率
         total_messages = self._messages_published + self._messages_received
@@ -383,31 +382,37 @@ class ZeroMQMessageBus(MessageBus):
                 "messages_received": self._messages_received,
                 "errors": self._errors,
                 "error_rate": self._errors / max(1, total_messages),
-                "active_subscriptions": len(self._handlers)
-            }
+                "active_subscriptions": len(self._handlers),
+            },
         }
 
     def _subscriber_loop(self) -> None:
         """Subscriber thread main loop."""
         poller = zmq.Poller()
-        poller.register(self._subscriber, zmq.POLLIN)
+        subscriber = self._subscriber
+        if subscriber is None:
+            self.logger.error("ZeroMQ subscriber socket is not initialized")
+            return
+
+        poller.register(subscriber, zmq.POLLIN)
 
         while not self._stop_event.is_set():
             try:
                 # Poll with timeout
                 socks = dict(poller.poll(timeout=100))  # 100ms timeout
 
-                if self._subscriber in socks:
+                if subscriber in socks:
                     # Receive multipart message
-                    frames = self._subscriber.recv_multipart()
+                    frames = subscriber.recv_multipart()
 
                     if len(frames) != EXPECTED_FRAME_COUNT:
                         self.logger.warning(
-                            f"Invalid message format: expected {EXPECTED_FRAME_COUNT} frames, got {len(frames)}")
+                            f"Invalid message format: expected {EXPECTED_FRAME_COUNT} frames, got {len(frames)}"
+                        )
                         continue
 
                     # Extract topic and payload
-                    topic = frames[TOPIC_FRAME].decode('utf-8')
+                    topic = frames[TOPIC_FRAME].decode("utf-8")
                     payload = frames[PAYLOAD_FRAME]
 
                     # Deserialize
@@ -434,7 +439,7 @@ class ZeroMQMessageBus(MessageBus):
 
     def _dispatch_message(self, topic: str, message: Any) -> None:
         """Dispatch message to appropriate handlers.
-        
+
         Matches topic against registered patterns using wildcard matching.
         """
         with self._lock:
@@ -445,11 +450,15 @@ class ZeroMQMessageBus(MessageBus):
                 if "*" in pattern or "?" in pattern:
                     # Pattern contains wildcards, use fnmatch
                     if fnmatch.fnmatch(topic, pattern):
-                        for handler in handlers.copy():  # Copy to avoid modification during iteration
+                        for (
+                            handler
+                        ) in handlers.copy():  # Copy to avoid modification during iteration
                             try:
                                 handler(topic, message)
                             except Exception as e:
-                                self.logger.error(f"Handler error for topic '{topic}': {e}", exc_info=True)
+                                self.logger.error(
+                                    f"Handler error for topic '{topic}': {e}", exc_info=True
+                                )
                                 self._errors += 1
                 else:
                     # No wildcards, use exact match for efficiency
@@ -458,7 +467,9 @@ class ZeroMQMessageBus(MessageBus):
                             try:
                                 handler(topic, message)
                             except Exception as e:
-                                self.logger.error(f"Handler error for topic '{topic}': {e}", exc_info=True)
+                                self.logger.error(
+                                    f"Handler error for topic '{topic}': {e}", exc_info=True
+                                )
                                 self._errors += 1
 
     def _cleanup(self) -> None:

@@ -8,10 +8,10 @@ from loguru import logger
 
 # 导入各个子模块的路由器
 from .basic_data import router as basic_data_router
-from .realtime import router as realtime_router
-from .history import router as history_router
 from .financial import router as financial_router
+from .history import router as history_router
 from .margin import router as margin_router
+from .realtime import router as realtime_router
 from .shareholder import router as shareholder_router
 
 # 创建主路由器
@@ -24,6 +24,7 @@ router.include_router(history_router, prefix="/history")
 router.include_router(financial_router, prefix="/financial")
 router.include_router(margin_router, prefix="/margin")
 router.include_router(shareholder_router, prefix="/shareholder")
+
 
 # 添加根路径信息接口
 @router.get("/", summary="AmazingData API信息")
@@ -42,33 +43,33 @@ async def get_api_info():
             "basic_data": {
                 "path": "/api/amazingdata/basic",
                 "description": "基础数据接口",
-                "endpoints": 10
+                "endpoints": 10,
             },
             "realtime": {
                 "path": "/api/amazingdata/realtime",
                 "description": "实时行情接口",
-                "endpoints": 9
+                "endpoints": 9,
             },
             "history": {
                 "path": "/api/amazingdata/history",
                 "description": "历史数据接口",
-                "endpoints": 3
+                "endpoints": 3,
             },
             "financial": {
                 "path": "/api/amazingdata/financial",
                 "description": "财务数据接口",
-                "endpoints": 6
+                "endpoints": 6,
             },
             "margin": {
                 "path": "/api/amazingdata/margin",
                 "description": "融资融券和龙虎榜接口",
-                "endpoints": 3
+                "endpoints": 3,
             },
             "shareholder": {
                 "path": "/api/amazingdata/shareholder",
                 "description": "股东股本和分红配股接口",
-                "endpoints": 7
-            }
+                "endpoints": 7,
+            },
         },
         "total_endpoints": 38,
         "features": [
@@ -76,9 +77,9 @@ async def get_api_info():
             "统一错误处理",
             "WebSocket实时推送",
             "批量查询支持",
-            "本地缓存支持"
+            "本地缓存支持",
         ],
-        "update_time": "2025-09-19"
+        "update_time": "2025-09-19",
     }
 
 

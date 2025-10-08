@@ -7,15 +7,17 @@ AkShare Worker管理器单元测试
 3. 熔断器机制
 4. 状态管理
 """
-import pytest
+
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, Mock
+
 import aiohttp
+import pytest
 
 from deepsearch.infrastructure.providers.implementations.akshare.worker_manager import (
     WorkerManager,
-    WorkerState
+    WorkerState,
 )
 
 
@@ -28,7 +30,7 @@ class TestWorkerManager:
         return [
             "https://worker1.example.com",
             "https://worker2.example.com",
-            "https://worker3.example.com"
+            "https://worker3.example.com",
         ]
 
     @pytest.fixture
@@ -285,6 +287,7 @@ class TestWorkerManager:
     @pytest.mark.asyncio
     async def test_initialize_with_all_unhealthy(self, manager_multi):
         """测试初始化时所有节点都不健康的情况"""
+
         # 模拟所有健康检查失败
         async def mock_check_health(url):
             manager_multi._update_worker_state(url, WorkerState.UNHEALTHY)

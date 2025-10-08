@@ -3,21 +3,26 @@
 
 提供依赖注入机制，替代全局状态管理。
 """
+
 import threading
 from contextvars import ContextVar
-from typing import Optional, Dict, Any, TypeVar, Type
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type, TypeVar, cast
 
 from deepsearch.observability.logger import logger
-from ..managers.component_manager import ComponentManager
-from ..interfaces import Component
 
-T = TypeVar('T')
+if TYPE_CHECKING:
+    from deepsearch.core.runtime.engine import MainEngine
+
+from ..interfaces import Component
+from ..managers.component_manager import ComponentManager
+
+T = TypeVar("T")
 
 
 class ApplicationContext:
     """
     应用上下文
-    
+
     管理应用级别的依赖和状态，支持依赖注入。
     """
 
@@ -29,7 +34,7 @@ class ApplicationContext:
 
         # 组件相关
         self._component_manager: Optional[ComponentManager] = None
-        self._engine: Optional['MainEngine'] = None
+        self._engine: Optional["MainEngine"] = None
 
         # 服务相关
         self._services: Dict[str, Any] = {}
@@ -39,7 +44,7 @@ class ApplicationContext:
     def register(self, interface: Type[T], implementation: T) -> None:
         """
         注册依赖
-        
+
         Args:
             interface: 接口类型
             implementation: 实现实例
@@ -51,28 +56,28 @@ class ApplicationContext:
     def resolve(self, interface: Type[T]) -> T:
         """
         解析依赖
-        
+
         Args:
             interface: 接口类型
-            
+
         Returns:
             实现实例
-            
+
         Raises:
             ValueError: 如果依赖未注册
         """
         with self._lock:
             if interface not in self._dependencies:
                 raise ValueError(f"依赖未注册: {interface.__name__}")
-            return self._dependencies[interface]
+            return cast(T, self._dependencies[interface])
 
     def has(self, interface: Type[T]) -> bool:
         """
         检查是否有注册的依赖
-        
+
         Args:
             interface: 接口类型
-            
+
         Returns:
             是否已注册
         """
@@ -96,32 +101,36 @@ class ApplicationContext:
     def get_component(self, name: str) -> Component:
         """
         获取组件
-        
+
         Args:
             name: 组件名称
-            
+
         Returns:
             组件实例
-            
+
         Raises:
             ValueError: 如果组件不存在
         """
         manager = self.get_component_manager()
         if not manager.has_component(name):
             raise ValueError(f"组件不存在: {name}")
-        return manager.get_component(name)
+        component = manager.get_component(name)
+        if component is None:
+            raise ValueError(f"组件未注册: {name}")
+        return component
 
     # ==================== 引擎管理 ====================
 
-    def set_engine(self, engine: 'MainEngine') -> None:
+    def set_engine(self, engine: "MainEngine") -> None:
         """设置主引擎"""
         with self._lock:
             self._engine = engine
             # 同时注册为依赖
             from deepsearch.core.runtime.engine import MainEngine
+
             self.register(MainEngine, engine)
 
-    def get_engine(self) -> 'MainEngine':
+    def get_engine(self) -> "MainEngine":
         """获取主引擎"""
         if not self._engine:
             raise RuntimeError("主引擎未设置")
@@ -132,7 +141,7 @@ class ApplicationContext:
     def register_service(self, name: str, service: Any) -> None:
         """
         注册服务
-        
+
         Args:
             name: 服务名称
             service: 服务实例
@@ -144,13 +153,13 @@ class ApplicationContext:
     def get_service(self, name: str) -> Any:
         """
         获取服务
-        
+
         Args:
             name: 服务名称
-            
+
         Returns:
             服务实例
-            
+
         Raises:
             ValueError: 如果服务不存在
         """
@@ -162,10 +171,10 @@ class ApplicationContext:
     def has_service(self, name: str) -> bool:
         """
         检查服务是否存在
-        
+
         Args:
             name: 服务名称
-            
+
         Returns:
             是否存在
         """
@@ -186,8 +195,7 @@ class ApplicationContext:
 
 # 全局上下文变量（使用 ContextVar 支持异步环境）
 _context_var: ContextVar[Optional[ApplicationContext]] = ContextVar(
-    'application_context',
-    default=None
+    "application_context", default=None
 )
 
 # 默认全局上下文（用于同步环境）
@@ -198,9 +206,9 @@ _context_lock = threading.Lock()
 def get_context() -> ApplicationContext:
     """
     获取当前应用上下文
-    
+
     优先返回当前异步上下文中的实例，否则返回默认全局上下文。
-    
+
     Returns:
         应用上下文实例
     """
@@ -220,7 +228,7 @@ def get_context() -> ApplicationContext:
 def set_context(context: ApplicationContext) -> None:
     """
     设置当前应用上下文
-    
+
     Args:
         context: 应用上下文实例
     """
@@ -230,9 +238,9 @@ def set_context(context: ApplicationContext) -> None:
 def create_scoped_context() -> ApplicationContext:
     """
     创建一个新的作用域上下文
-    
+
     用于测试或隔离的环境。
-    
+
     Returns:
         新的应用上下文实例
     """
@@ -245,12 +253,12 @@ def create_scoped_context() -> ApplicationContext:
 def inject(interface: Type[T]) -> T:
     """
     依赖注入装饰器
-    
+
     自动从上下文中解析依赖。
-    
+
     Args:
         interface: 接口类型
-        
+
     Returns:
         实现实例
     """
@@ -261,7 +269,7 @@ def inject(interface: Type[T]) -> T:
 class Injectable:
     """
     可注入基类
-    
+
     提供便捷的依赖注入方法。
     """
 

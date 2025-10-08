@@ -1,0 +1,145 @@
+app:
+  name: DeepSearch
+  author: BaHb
+  env: test
+  debug: true
+  data_dir: ./data/test
+
+runtime:
+  mode: full
+
+
+log:
+  active: true
+  level: INFO
+  rotation: 00:00
+  retention_days: 7
+  enable_json: false
+database:
+  main:
+    enabled: true
+    type: postgresql
+    host: updated-host
+    port: 5432
+    database: deepsearch
+    username: postgres
+    password: updated-secret
+    path: ./data/deepsearch.db
+    auto_connect: false
+    echo: false
+  cache:
+    enabled: true
+    host: localhost
+    port: 6379
+    username: ""
+    password: updated-cache
+    db: 0
+    pool_size: 10
+    socket_timeout: 5
+    socket_connect_timeout: 5
+    socket_keepalive: true
+    retry_on_timeout: true
+    health_check_interval: 30
+    max_idle_time: 300
+    idle_check_interval: 60
+    auto_start_windows: true
+    windows_service_names:
+      - Redis
+      - redis
+    startup_binary_path: 'C:/Program Files/Redis/redis-server.exe'
+    startup_arguments: []
+    startup_command: []
+    wsl:
+      enabled: false
+      distro: Ubuntu
+      auto_resolve_ip: true
+      service_name: redis-server
+      user: root
+    # 如需在 WSL 中拉起 Redis，可改用 startup_command: [wsl.exe, -d, Ubuntu, service, redis-server, start]
+message_bus:
+  buses:
+    zmq:
+      type: zmq
+      enabled: true
+      config:
+        host: localhost
+        pub_port: 5556
+        sub_port: 5557
+  routes:
+  - match: "*"
+    buses:
+    - zmq
+webui:
+  enabled: true
+  backend_host: 0.0.0.0
+  backend_port: 8000
+  frontend_enabled: true
+  frontend_host: localhost
+  frontend_port: 3000
+  enable_cors: true
+  reload: false
+  workers: null
+data_sources:
+  default: amazingdata
+  fallback_order:
+    - amazingdata
+    - cloudflare
+    - akshare
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 3
+    recovery_timeout: 30
+    half_open_attempts: 2
+  failover:
+    enabled: true
+    timeout: 3
+    retry_count: 2
+    backoff_factor: 2
+  providers:
+    amazingdata:
+      enabled: false
+      priority: 1
+      fallback_sources:
+        - cloudflare
+        - akshare
+      has_saved_credential: false
+      worker_env:
+        DEEPSEARCH_AMAZINGDATA_STUB: tests.stubs.amazingdata_stub
+      config:
+        implementation_mode: legacy
+        connection:
+          username: demo_user
+          password: demo_password
+          host: 101.230.159.234
+          port: 8600
+          timeout: 10
+          heartbeat_interval: 60
+          auto_reconnect: true
+          reconnect_interval: 10
+          max_retries: 3
+          network_provider: telecom
+        subscription:
+          enabled: true
+          batch_size: 50
+          max_symbols: 200
+        cache:
+          enabled: true
+          ttl: 120
+    cloudflare:
+      enabled: true
+      priority: 2
+      config:
+        worker_url: https://test-cloudflare-worker.example.com
+        timeout: 25
+        retry_count: 3
+    akshare:
+      enabled: true
+      priority: 3
+      config:
+        mode: direct
+        timeout: 30
+        proxy:
+          enabled: false
+
+notifications:
+  enabled: false

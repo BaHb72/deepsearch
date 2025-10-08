@@ -1,6 +1,7 @@
 """
 ZeroMQ configuration models.
 """
+
 from pydantic import BaseModel
 
 from deepsearch.constants import (
@@ -13,6 +14,7 @@ from deepsearch.constants import (
 
 class ZeroMQConfig(BaseModel):
     """ZeroMQ message bus configuration."""
+
     host: str = "127.0.0.1"
     pub_port: int = DEFAULT_ZMQ_PUB_PORT
     sub_port: int = DEFAULT_ZMQ_SUB_PORT

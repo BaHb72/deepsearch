@@ -3,13 +3,18 @@
 
 验证引擎核心功能和循环依赖解决情况
 """
+
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime
 
 from deepsearch.core.runtime.engine_refactored import (
-    EngineCore, EngineBuilder, IComponent, ILogger, IConfig, IEventBus
+    EngineBuilder,
+    EngineCore,
+    IComponent,
+    IConfig,
+    IEventBus,
+    ILogger,
 )
 
 
@@ -48,11 +53,7 @@ class TestEngineCore:
     @pytest.fixture
     def engine(self, mock_config, mock_logger, mock_event_bus):
         """创建引擎实例"""
-        return EngineCore(
-            config=mock_config,
-            logger=mock_logger,
-            event_bus=mock_event_bus
-        )
+        return EngineCore(config=mock_config, logger=mock_logger, event_bus=mock_event_bus)
 
     def test_engine_creation_without_dependencies(self):
         """测试无依赖创建引擎"""
@@ -65,11 +66,7 @@ class TestEngineCore:
 
     def test_engine_with_injected_dependencies(self, mock_config, mock_logger, mock_event_bus):
         """测试依赖注入"""
-        engine = EngineCore(
-            config=mock_config,
-            logger=mock_logger,
-            event_bus=mock_event_bus
-        )
+        engine = EngineCore(config=mock_config, logger=mock_logger, event_bus=mock_event_bus)
 
         assert engine.config == mock_config
         assert engine.logger == mock_logger
@@ -235,12 +232,13 @@ class TestEngineBuilder:
         event_bus = AsyncMock(spec=IEventBus)
         component = AsyncMock(spec=IComponent)
 
-        engine = (builder
-                 .with_config(config)
-                 .with_logger(logger)
-                 .with_event_bus(event_bus)
-                 .add_component("test", component)
-                 .build())
+        engine = (
+            builder.with_config(config)
+            .with_logger(logger)
+            .with_event_bus(event_bus)
+            .add_component("test", component)
+            .build()
+        )
 
         assert isinstance(engine, EngineCore)
         assert engine.config == config
@@ -265,6 +263,7 @@ class TestNoCyclicDependencies:
     def test_no_imports_from_other_modules(self):
         """验证引擎核心不导入其他业务模块"""
         import inspect
+
         from deepsearch.core.runtime import engine_refactored
 
         # 获取模块源代码
@@ -272,15 +271,15 @@ class TestNoCyclicDependencies:
 
         # 检查不应该出现的导入
         forbidden_imports = [
-            'from deepsearch.config',
-            'from deepsearch.observability',
-            'from deepsearch.event',
-            'from deepsearch.messaging',
-            'from deepsearch.gateway',
-            'from deepsearch.webui',
-            'from deepsearch.data',
-            'from deepsearch.infrastructure',
-            'from deepsearch.application',
+            "from deepsearch.config",
+            "from deepsearch.observability",
+            "from deepsearch.event",
+            "from deepsearch.messaging",
+            "from deepsearch.gateway",
+            "from deepsearch.webui",
+            "from deepsearch.data",
+            "from deepsearch.infrastructure",
+            "from deepsearch.application",
         ]
 
         for forbidden in forbidden_imports:
@@ -292,9 +291,9 @@ class TestNoCyclicDependencies:
         engine = EngineCore()
 
         assert engine is not None
-        assert hasattr(engine, 'start')
-        assert hasattr(engine, 'stop')
-        assert hasattr(engine, 'register_component')
+        assert hasattr(engine, "start")
+        assert hasattr(engine, "stop")
+        assert hasattr(engine, "register_component")
 
     @pytest.mark.asyncio
     async def test_minimal_engine_lifecycle(self):

@@ -3,7 +3,8 @@ Redis 缓存管理 API 路由
 
 提供 Redis 缓存连接管理、状态查询等功能
 """
-from typing import Dict, Any, Optional
+
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
 from loguru import logger
@@ -22,14 +23,15 @@ def get_cache_component():
     """获取缓存组件实例"""
     try:
         from deepsearch.webui.server import app_state
-        engine = getattr(app_state, 'engine', None)
+
+        engine = getattr(app_state, "engine", None)
         if not engine:
             logger.warning("引擎未初始化")
             raise HTTPException(status_code=503, detail="系统未初始化")
 
         # 获取缓存组件
         try:
-            cache_component = engine.get_component_by_name('cache')
+            cache_component = engine.get_component_by_name("cache")
             if not cache_component:
                 logger.warning("缓存组件未找到")
                 raise HTTPException(status_code=404, detail="Redis 缓存组件未找到")
@@ -49,7 +51,7 @@ def get_cache_component():
 async def get_cache_status() -> Dict[str, Any]:
     """
     获取 Redis 缓存详细状态
-    
+
     Returns:
         包含连接状态、配置信息、健康检查等详细信息
     """
@@ -66,10 +68,8 @@ async def get_cache_status() -> Dict[str, Any]:
                 "connected": False,
                 "status": "unavailable",
                 "connection_status": "component_not_found",
-                "config": {
-                    "enabled": False
-                },
-                "error": e.detail
+                "config": {"enabled": False},
+                "error": e.detail,
             }
 
         # 获取状态信息
@@ -85,6 +85,7 @@ async def get_cache_status() -> Dict[str, Any]:
         # 添加额外的配置信息
         try:
             from deepsearch.config import get_config
+
             config = get_config()
             cache_config = config.database.cache
         except Exception as e:
@@ -96,9 +97,7 @@ async def get_cache_status() -> Dict[str, Any]:
             "connected": False,
             "status": "unknown",
             "connection_status": "unknown",
-            "config": {
-                "enabled": False
-            }
+            "config": {"enabled": False},
         }
 
         # 尝试获取连接状态
@@ -120,12 +119,13 @@ async def get_cache_status() -> Dict[str, Any]:
         if cache_config:
             try:
                 result["config"] = {
-                    "host": getattr(cache_config, 'host', 'localhost'),
-                    "port": getattr(cache_config, 'port', 6379),
-                    "db": getattr(cache_config, 'db', 0),
-                    "pool_size": getattr(cache_config, 'poolSize', None) or getattr(cache_config, 'pool_size', 10),
-                    "auto_connect": getattr(cache_config, 'auto_connect', True),
-                    "enabled": getattr(cache_config, 'enabled', False)
+                    "host": getattr(cache_config, "host", "localhost"),
+                    "port": getattr(cache_config, "port", 6379),
+                    "db": getattr(cache_config, "db", 0),
+                    "pool_size": getattr(cache_config, "poolSize", None)
+                    or getattr(cache_config, "pool_size", 10),
+                    "auto_connect": getattr(cache_config, "auto_connect", True),
+                    "enabled": getattr(cache_config, "enabled", False),
                 }
             except Exception as e:
                 logger.warning(f"读取配置属性失败: {e}")
@@ -141,7 +141,9 @@ async def get_cache_status() -> Dict[str, Any]:
             logger.warning(f"获取Redis健康状态失败: {e}")
             result["health"] = {"status": "error", "error": str(e)}
 
-        logger.debug(f"返回缓存状态: connected={result.get('connected')}, status={result.get('status')}")
+        logger.debug(
+            f"返回缓存状态: connected={result.get('connected')}, status={result.get('status')}"
+        )
         return result
 
     except HTTPException:
@@ -153,10 +155,8 @@ async def get_cache_status() -> Dict[str, Any]:
             "connected": False,
             "status": "error",
             "connection_status": "error",
-            "config": {
-                "enabled": False
-            },
-            "error": str(e)
+            "config": {"enabled": False},
+            "error": str(e),
         }
 
 
@@ -164,10 +164,10 @@ async def get_cache_status() -> Dict[str, Any]:
 async def connect_cache(request: CacheConnectRequest) -> Dict[str, Any]:
     """
     手动连接 Redis 缓存
-    
+
     Args:
         request: 包含可选密码的请求体
-    
+
     Returns:
         连接结果
     """
@@ -179,14 +179,11 @@ async def connect_cache(request: CacheConnectRequest) -> Dict[str, Any]:
 
         # 检查是否已连接
         if cache_component.is_connected():
-            return {
-                "success": True,
-                "message": "Redis 缓存已经连接",
-                "already_connected": True
-            }
+            return {"success": True, "message": "Redis 缓存已经连接", "already_connected": True}
 
         # 检查配置
         from deepsearch.config import get_config
+
         config = get_config()
         cache_config = config.database.cache
 
@@ -209,12 +206,8 @@ async def connect_cache(request: CacheConnectRequest) -> Dict[str, Any]:
                 # 连接成功后恢复原密码配置
                 cache_config.password = original_password
 
-                return {
-                    "success": True,
-                    "message": "Redis 缓存连接成功",
-                    "status": "connected"
-                }
-            except Exception as e:
+                return {"success": True, "message": "Redis 缓存连接成功", "status": "connected"}
+            except Exception:
                 # 恢复原密码配置
                 cache_config.password = original_password
                 raise
@@ -227,11 +220,7 @@ async def connect_cache(request: CacheConnectRequest) -> Dict[str, Any]:
                 if cache_component.status != ComponentStatus.RUNNING:
                     await cache_component.start_async()
 
-                return {
-                    "success": True,
-                    "message": "Redis 缓存连接成功",
-                    "status": "connected"
-                }
+                return {"success": True, "message": "Redis 缓存连接成功", "status": "connected"}
 
             except RuntimeError as e:
                 error_msg = str(e)
@@ -253,7 +242,7 @@ async def connect_cache(request: CacheConnectRequest) -> Dict[str, Any]:
 async def disconnect_cache() -> Dict[str, Any]:
     """
     手动断开 Redis 缓存连接
-    
+
     Returns:
         断开结果
     """
@@ -262,11 +251,7 @@ async def disconnect_cache() -> Dict[str, Any]:
 
         # 检查是否已断开
         if not cache_component.is_connected():
-            return {
-                "success": True,
-                "message": "Redis 缓存未连接",
-                "already_disconnected": True
-            }
+            return {"success": True, "message": "Redis 缓存未连接", "already_disconnected": True}
 
         # 停止组件（会自动断开连接）
         if cache_component.status == ComponentStatus.RUNNING:
@@ -275,11 +260,7 @@ async def disconnect_cache() -> Dict[str, Any]:
         # 确保断开连接
         await cache_component.disconnect_async()
 
-        return {
-            "success": True,
-            "message": "Redis 缓存连接已断开",
-            "status": "disconnected"
-        }
+        return {"success": True, "message": "Redis 缓存连接已断开", "status": "disconnected"}
 
     except Exception as e:
         logger.error(f"断开 Redis 缓存连接失败: {e}")
@@ -290,25 +271,26 @@ async def disconnect_cache() -> Dict[str, Any]:
 async def reconnect_cache() -> Dict[str, Any]:
     """
     重新连接 Redis 缓存（先断开再连接）
-    
+
     Returns:
         重连结果
     """
     try:
         # 先断开
-        disconnect_result = await disconnect_cache()
+        disconnect_result: Dict[str, Any] = await disconnect_cache()
         if not disconnect_result.get("success"):
             return disconnect_result
 
         # 等待一下确保完全断开
         import asyncio
+
         await asyncio.sleep(0.5)
 
         # 再连接（使用空请求体）
-        connect_result = await connect_cache(CacheConnectRequest())
+        connect_result: Dict[str, Any] = await connect_cache(CacheConnectRequest())
         return connect_result
 
-    except HTTPException as e:
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"重连 Redis 缓存失败: {e}")
@@ -319,7 +301,7 @@ async def reconnect_cache() -> Dict[str, Any]:
 async def get_cache_info() -> Dict[str, Any]:
     """
     获取 Redis 详细信息
-    
+
     Returns:
         Redis 服务器信息
     """
@@ -341,26 +323,26 @@ async def get_cache_info() -> Dict[str, Any]:
                     "redis_mode": info.get("redis_mode"),
                     "process_id": info.get("process_id"),
                     "uptime_in_seconds": info.get("uptime_in_seconds"),
-                    "uptime_in_days": info.get("uptime_in_days")
+                    "uptime_in_days": info.get("uptime_in_days"),
                 },
                 "clients": {
                     "connected_clients": info.get("connected_clients"),
-                    "blocked_clients": info.get("blocked_clients")
+                    "blocked_clients": info.get("blocked_clients"),
                 },
                 "memory": {
                     "used_memory_human": info.get("used_memory_human"),
                     "used_memory_peak_human": info.get("used_memory_peak_human"),
                     "used_memory_rss_human": info.get("used_memory_rss_human"),
-                    "maxmemory_human": info.get("maxmemory_human")
+                    "maxmemory_human": info.get("maxmemory_human"),
                 },
                 "stats": {
                     "total_connections_received": info.get("total_connections_received"),
                     "total_commands_processed": info.get("total_commands_processed"),
                     "instantaneous_ops_per_sec": info.get("instantaneous_ops_per_sec"),
                     "keyspace_hits": info.get("keyspace_hits"),
-                    "keyspace_misses": info.get("keyspace_misses")
-                }
-            }
+                    "keyspace_misses": info.get("keyspace_misses"),
+                },
+            },
         }
 
     except HTTPException:

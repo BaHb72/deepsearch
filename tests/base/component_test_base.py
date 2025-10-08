@@ -3,17 +3,18 @@
 
 提供标准化的组件测试框架
 """
+
 import asyncio
 import gc
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional, Type
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pytest_mock import MockerFixture
 
-from deepsearch.core.interfaces import Component, ComponentStatus, ComponentType
 from deepsearch.core.async_component_v2 import AsyncComponentV2
+from deepsearch.core.interfaces import Component, ComponentStatus, ComponentType
 
 
 class ComponentTestBase:
@@ -51,9 +52,7 @@ class ComponentTestBase:
 
     @pytest.fixture
     async def component(
-        self,
-        component_config: Dict[str, Any],
-        mock_dependencies: Dict[str, Any]
+        self, component_config: Dict[str, Any], mock_dependencies: Dict[str, Any]
     ) -> Component:
         """
         创建组件实例
@@ -73,13 +72,13 @@ class ComponentTestBase:
             name=self.component_name,
             component_type=self.component_type,
             config=component_config,
-            dependencies=mock_dependencies
+            dependencies=mock_dependencies,
         )
 
         yield component
 
         # 清理
-        if hasattr(component, 'stop'):
+        if hasattr(component, "stop"):
             if asyncio.iscoroutinefunction(component.stop):
                 await component.stop()
             else:
@@ -98,26 +97,23 @@ class ComponentTestBase:
     async def test_component_start_stop(self, component: Component):
         """测试组件启动和停止"""
         # 初始化
-        if hasattr(component, 'initialize'):
+        if hasattr(component, "initialize"):
             if asyncio.iscoroutinefunction(component.initialize):
                 await component.initialize()
             else:
                 component.initialize()
 
         # 启动
-        if hasattr(component, 'start'):
+        if hasattr(component, "start"):
             if asyncio.iscoroutinefunction(component.start):
                 await component.start()
             else:
                 component.start()
 
-        assert component.status in [
-            ComponentStatus.RUNNING,
-            ComponentStatus.STARTED
-        ]
+        assert component.status in [ComponentStatus.RUNNING, ComponentStatus.STARTED]
 
         # 停止
-        if hasattr(component, 'stop'):
+        if hasattr(component, "stop"):
             if asyncio.iscoroutinefunction(component.stop):
                 await component.stop()
             else:
@@ -128,20 +124,20 @@ class ComponentTestBase:
     async def test_component_health_check(self, component: Component):
         """测试组件健康检查"""
         # 初始化并启动
-        if hasattr(component, 'initialize'):
+        if hasattr(component, "initialize"):
             if asyncio.iscoroutinefunction(component.initialize):
                 await component.initialize()
             else:
                 component.initialize()
 
-        if hasattr(component, 'start'):
+        if hasattr(component, "start"):
             if asyncio.iscoroutinefunction(component.start):
                 await component.start()
             else:
                 component.start()
 
         # 健康检查
-        if hasattr(component, 'health_check'):
+        if hasattr(component, "health_check"):
             if asyncio.iscoroutinefunction(component.health_check):
                 result = await component.health_check()
             else:
@@ -151,12 +147,12 @@ class ComponentTestBase:
 
     async def test_component_status_info(self, component: Component):
         """测试组件状态信息"""
-        if hasattr(component, 'get_status_info'):
+        if hasattr(component, "get_status_info"):
             status_info = component.get_status_info()
             assert isinstance(status_info, dict)
-            assert 'name' in status_info
-            assert 'type' in status_info
-            assert 'status' in status_info
+            assert "name" in status_info
+            assert "type" in status_info
+            assert "status" in status_info
 
 
 class AsyncComponentTestBase(ComponentTestBase):
@@ -182,9 +178,7 @@ class AsyncComponentTestBase(ComponentTestBase):
 
         # 等待任务取消
         if pending:
-            loop.run_until_complete(
-                asyncio.gather(*pending, return_exceptions=True)
-            )
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
 
         loop.close()
         gc.collect()
@@ -192,10 +186,7 @@ class AsyncComponentTestBase(ComponentTestBase):
     async def test_async_context_manager(self, component: AsyncComponentV2):
         """测试异步上下文管理器"""
         async with component:
-            assert component.status in [
-                ComponentStatus.RUNNING,
-                ComponentStatus.STARTED
-            ]
+            assert component.status in [ComponentStatus.RUNNING, ComponentStatus.STARTED]
 
         assert component.status == ComponentStatus.STOPPED
 
@@ -245,38 +236,31 @@ class DataComponentTestBase(AsyncComponentTestBase):
         return mock_cache
 
     async def test_data_operation(
-        self,
-        component: Component,
-        mock_database: Mock,
-        mock_cache: Mock
+        self, component: Component, mock_database: Mock, mock_cache: Mock
     ):
         """测试数据操作"""
         await component.initialize()
         await component.start()
 
         # 测试数据库操作
-        if hasattr(component, 'execute'):
+        if hasattr(component, "execute"):
             result = await component.execute("SELECT 1")
             assert result is not None
 
         # 测试缓存操作
-        if hasattr(component, 'cache_get'):
+        if hasattr(component, "cache_get"):
             cached = await component.cache_get("test_key")
             assert cached is None
 
         await component.stop()
 
-    async def test_transaction_handling(
-        self,
-        component: Component,
-        mock_database: Mock
-    ):
+    async def test_transaction_handling(self, component: Component, mock_database: Mock):
         """测试事务处理"""
         await component.initialize()
         await component.start()
 
-        if hasattr(component, 'begin_transaction'):
-            async with component.begin_transaction() as tx:
+        if hasattr(component, "begin_transaction"):
+            async with component.begin_transaction():
                 # 在事务中执行操作
                 pass
 
@@ -298,26 +282,18 @@ class ServiceComponentTestBase(AsyncComponentTestBase):
         mock_client.post = AsyncMock(return_value={"success": True})
         return mock_client
 
-    async def test_service_api_call(
-        self,
-        component: Component,
-        mock_http_client: Mock
-    ):
+    async def test_service_api_call(self, component: Component, mock_http_client: Mock):
         """测试服务API调用"""
         await component.initialize()
         await component.start()
 
-        if hasattr(component, 'call_api'):
+        if hasattr(component, "call_api"):
             result = await component.call_api("test_endpoint")
             assert result is not None
 
         await component.stop()
 
-    async def test_service_error_handling(
-        self,
-        component: Component,
-        mock_http_client: Mock
-    ):
+    async def test_service_error_handling(self, component: Component, mock_http_client: Mock):
         """测试服务错误处理"""
         # 模拟错误
         mock_http_client.get.side_effect = Exception("Network error")
@@ -325,7 +301,7 @@ class ServiceComponentTestBase(AsyncComponentTestBase):
         await component.initialize()
         await component.start()
 
-        if hasattr(component, 'call_api'):
+        if hasattr(component, "call_api"):
             with pytest.raises(Exception):
                 await component.call_api("test_endpoint")
 
@@ -354,8 +330,7 @@ class TestUtilities:
     @staticmethod
     @asynccontextmanager
     async def temporary_component(
-        component_class: Type[Component],
-        config: Optional[Dict[str, Any]] = None
+        component_class: Type[Component], config: Optional[Dict[str, Any]] = None
     ):
         """
         临时组件上下文管理器
@@ -368,9 +343,7 @@ class TestUtilities:
             组件实例
         """
         component = component_class(
-            name="temp_component",
-            component_type=ComponentType.CORE,
-            config=config or {}
+            name="temp_component", component_type=ComponentType.CORE, config=config or {}
         )
 
         try:
@@ -381,10 +354,7 @@ class TestUtilities:
             await component.stop()
 
     @staticmethod
-    def assert_component_state(
-        component: Component,
-        expected_status: ComponentStatus
-    ):
+    def assert_component_state(component: Component, expected_status: ComponentStatus):
         """
         断言组件状态
 
@@ -393,15 +363,12 @@ class TestUtilities:
             expected_status: 期望的状态
         """
         assert component.status == expected_status, (
-            f"组件状态不匹配: 期望 {expected_status}, "
-            f"实际 {component.status}"
+            f"组件状态不匹配: 期望 {expected_status}, " f"实际 {component.status}"
         )
 
     @staticmethod
     async def wait_for_condition(
-        condition_func: callable,
-        timeout: float = 5.0,
-        interval: float = 0.1
+        condition_func: callable, timeout: float = 5.0, interval: float = 0.1
     ) -> bool:
         """
         等待条件满足
@@ -417,7 +384,11 @@ class TestUtilities:
         start_time = asyncio.get_event_loop().time()
 
         while asyncio.get_event_loop().time() - start_time < timeout:
-            if await condition_func() if asyncio.iscoroutinefunction(condition_func) else condition_func():
+            if (
+                await condition_func()
+                if asyncio.iscoroutinefunction(condition_func)
+                else condition_func()
+            ):
                 return True
             await asyncio.sleep(interval)
 

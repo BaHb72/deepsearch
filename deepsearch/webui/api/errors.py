@@ -2,11 +2,14 @@
 前端错误日志 API
 收集和管理前端错误信息
 """
+from __future__ import annotations
+
+
 import asyncio
 import json
 from collections import deque
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -15,59 +18,55 @@ from loguru import logger
 router = APIRouter()
 
 # 错误缓存（最多保存100条）
-error_buffer = deque(maxlen=100)
+error_buffer: deque[Dict[str, Any]] = deque(maxlen=100)
 # SSE 客户端列表
-sse_clients = []
+sse_clients: list[asyncio.Queue[Dict[str, Any]]] = []
 
 
 @router.post("/errors")
 async def log_frontend_error(error: Dict[str, Any]) -> Dict[str, Any]:
     """
     接收前端错误日志
-    
+
     Args:
         error: 错误信息
-        
+
     Returns:
         确认信息
     """
     try:
         # 添加服务器端时间戳
-        error['server_timestamp'] = datetime.now().isoformat()
+        error["server_timestamp"] = datetime.now().isoformat()
 
         # 添加到缓冲区
         error_buffer.appendleft(error)
 
         # 记录到日志
-        level = error.get('level', 'error')
-        error_type = error.get('type', 'unknown')
-        message = error.get('message', 'No message')
+        level = error.get("level", "error")
+        error_type = error.get("type", "unknown")
+        message = error.get("message", "No message")
 
         # 特殊处理 Redis 相关错误
-        if error.get('category') == 'redis':
-            full_error = error.get('fullError', message)
+        if error.get("category") == "redis":
+            full_error = error.get("fullError", message)
             logger.warning(f"前端检测到 Redis 错误: {full_error}")
             logger.debug(f"完整错误信息: {json.dumps(error, ensure_ascii=False)}")
         else:
             log_message = f"[前端{error_type}] {message}"
 
-            if level == 'warning':
+            if level == "warning":
                 logger.warning(log_message)
             else:
                 logger.error(log_message)
 
             # 如果有堆栈信息，也记录下来
-            if error.get('stack'):
+            if error.get("stack"):
                 logger.debug(f"错误堆栈: {error['stack']}")
 
         # 通知所有 SSE 客户端
         await notify_sse_clients(error)
 
-        return {
-            "status": "success",
-            "message": "错误已记录",
-            "error_id": error.get('id')
-        }
+        return {"status": "success", "message": "错误已记录", "error_id": error.get("id")}
 
     except Exception as e:
         logger.error(f"记录前端错误失败: {e}")
@@ -75,17 +74,14 @@ async def log_frontend_error(error: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.get("/errors")
-async def get_frontend_errors(
-        limit: int = 50,
-        error_type: str = None
-) -> Dict[str, Any]:
+async def get_frontend_errors(limit: int = 50, error_type: Optional[str] = None) -> Dict[str, Any]:
     """
     获取前端错误列表
-    
+
     Args:
         limit: 返回的错误数量
         error_type: 过滤的错误类型
-        
+
     Returns:
         错误列表
     """
@@ -93,7 +89,7 @@ async def get_frontend_errors(
 
     # 过滤错误类型
     if error_type:
-        errors = [e for e in errors if e.get('type') == error_type]
+        errors = [e for e in errors if e.get("type") == error_type]
 
     # 限制返回数量
     errors = errors[:limit]
@@ -102,7 +98,7 @@ async def get_frontend_errors(
         "status": "success",
         "errors": errors,
         "total": len(error_buffer),
-        "filtered": len(errors)
+        "filtered": len(errors),
     }
 
 
@@ -110,15 +106,12 @@ async def get_frontend_errors(
 async def clear_frontend_errors() -> Dict[str, Any]:
     """
     清空前端错误日志
-    
+
     Returns:
         清空结果
     """
     error_buffer.clear()
-    return {
-        "status": "success",
-        "message": "错误日志已清空"
-    }
+    return {"status": "success", "message": "错误日志已清空"}
 
 
 @router.get("/errors/stream")
@@ -130,7 +123,7 @@ async def error_event_stream(request: Request):
 
     async def event_generator():
         # 创建一个队列来接收错误
-        client_queue = asyncio.Queue()
+        client_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
         sse_clients.append(client_queue)
 
         try:
@@ -160,8 +153,8 @@ async def error_event_stream(request: Request):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        }
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -178,22 +171,22 @@ async def notify_sse_clients(error: Dict[str, Any]):
 async def get_error_stats() -> Dict[str, Any]:
     """
     获取错误统计信息
-    
+
     Returns:
         统计信息
     """
     errors = list(error_buffer)
 
     # 按类型统计
-    type_stats = {}
+    type_stats: dict[str, int] = {}
     for error in errors:
-        error_type = error.get('type', 'unknown')
+        error_type = error.get("type", "unknown")
         type_stats[error_type] = type_stats.get(error_type, 0) + 1
 
     # 按级别统计
-    level_stats = {}
+    level_stats: dict[str, int] = {}
     for error in errors:
-        level = error.get('level', 'error')
+        level = error.get("level", "error")
         level_stats[level] = level_stats.get(level, 0) + 1
 
     # 最近一小时的错误数
@@ -201,7 +194,7 @@ async def get_error_stats() -> Dict[str, Any]:
     one_hour_ago = datetime.now().timestamp() - 3600
     for error in errors:
         try:
-            error_time = datetime.fromisoformat(error.get('timestamp', '')).timestamp()
+            error_time = datetime.fromisoformat(error.get("timestamp", "")).timestamp()
             if error_time > one_hour_ago:
                 recent_errors += 1
         except Exception as e:
@@ -216,6 +209,6 @@ async def get_error_stats() -> Dict[str, Any]:
             "by_type": type_stats,
             "by_level": level_stats,
             "recent_hour": recent_errors,
-            "sse_clients": len(sse_clients)
-        }
+            "sse_clients": len(sse_clients),
+        },
     }

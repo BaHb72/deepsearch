@@ -32,13 +32,11 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   SyncOutlined,
-  ClockCircleOutlined,
   WarningOutlined
 } from '@ant-design/icons'
-import { useModal, useAsyncData } from '@/hooks'
+import { useAsyncData } from '@/hooks'
 import {
   fetchSystemModules,
-  fetchModuleDetail,
   startModule,
   stopModule,
   restartModule,
@@ -55,7 +53,7 @@ import {
  * 模块详情抽屉组件
  */
 const ModuleDetailDrawer = ({ module, visible, onClose }) => {
-  const { data: logs, loading } = useAsyncData(
+  const { data: logs } = useAsyncData(
     () => fetchModuleLogs(module.id, { limit: 50 }),
     {
       immediate: !!module,

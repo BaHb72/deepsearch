@@ -6,21 +6,20 @@
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, List
 
 import pandas as pd
 from loguru import logger
 
 from deepsearch.interfaces.data import (
+    AdjustType,
     AmazingDataConfig,
     AmazingDataProvider,
-    DataCache,
-    SecurityType,
-    PeriodType,
-    AdjustType,
-    DataProviderError,
     AuthenticationError,
-    RateLimitError
+    DataCache,
+    DataProviderError,
+    PeriodType,
+    RateLimitError,
+    SecurityType,
 )
 
 
@@ -34,11 +33,7 @@ class DataInterfaceExample:
     async def setup(self):
         """初始化设置"""
         # 创建缓存
-        self.cache = DataCache(
-            ttl=300,
-            memory_size=1000,
-            redis_config=None  # 可选配置Redis
-        )
+        self.cache = DataCache(ttl=300, memory_size=1000, redis_config=None)  # 可选配置Redis
 
         # 创建配置
         config = AmazingDataConfig(
@@ -48,7 +43,7 @@ class DataInterfaceExample:
             port=8600,
             cache_enabled=True,
             cache_ttl=300,
-            auto_reconnect=True
+            auto_reconnect=True,
         )
 
         # 创建数据提供者
@@ -87,11 +82,9 @@ class DataInterfaceExample:
 
         # 获取交易日历
         today = datetime.now()
-        start_date = (today - timedelta(days=30)).strftime('%Y%m%d')
-        end_date = today.strftime('%Y%m%d')
-        trading_days = await self.provider.get_trading_calendar(
-            start_date, end_date
-        )
+        start_date = (today - timedelta(days=30)).strftime("%Y%m%d")
+        end_date = today.strftime("%Y%m%d")
+        trading_days = await self.provider.get_trading_calendar(start_date, end_date)
         logger.info(f"最近30天交易日: {len(trading_days)}天")
 
     async def example_market_data(self):
@@ -101,11 +94,11 @@ class DataInterfaceExample:
 
         # 获取日K线
         kline_df = await self.provider.get_kline(
-            symbol='000001',
+            symbol="000001",
             period=PeriodType.DAILY,
-            start_date='20250101',
-            end_date='20250115',
-            adjust=AdjustType.FORWARD  # 前复权
+            start_date="20250101",
+            end_date="20250115",
+            adjust=AdjustType.FORWARD,  # 前复权
         )
         if not kline_df.empty:
             logger.info(f"获取到{len(kline_df)}条K线数据")
@@ -114,15 +107,13 @@ class DataInterfaceExample:
 
         # 获取分钟K线
         minute_df = await self.provider.get_kline(
-            symbol='000001',
-            period=PeriodType.MINUTE_5,
-            count=100  # 最近100条
+            symbol="000001", period=PeriodType.MINUTE_5, count=100  # 最近100条
         )
         if not minute_df.empty:
             logger.info(f"获取到{len(minute_df)}条5分钟K线")
 
         # 获取实时快照
-        symbols = ['000001', '000002', '600000']
+        symbols = ["000001", "000002", "600000"]
         snapshot = await self.provider.get_snapshot(symbols)
         logger.info("实时行情:")
         for symbol, data in snapshot.items():
@@ -136,16 +127,14 @@ class DataInterfaceExample:
         logger.info("=" * 50)
         logger.info("财务数据示例")
 
-        symbols = ['000001', '600000']
+        symbols = ["000001", "600000"]
 
         # 获取主要财务指标
-        indicators = await self.provider.get_key_indicators(
-            symbols, '2024Q3'
-        )
+        indicators = await self.provider.get_key_indicators(symbols, "2024Q3")
         if not indicators.empty:
             logger.info("主要财务指标:")
             for symbol in symbols:
-                symbol_data = indicators[indicators['symbol'] == symbol]
+                symbol_data = indicators[indicators["symbol"] == symbol]
                 if not symbol_data.empty:
                     row = symbol_data.iloc[0]
                     logger.info(f"  {symbol}:")
@@ -160,8 +149,7 @@ class DataInterfaceExample:
 
         # 获取龙虎榜
         dragon_tiger = await self.provider.get_dragon_tiger(
-            start_date='20250101',
-            end_date='20250115'
+            start_date="20250101", end_date="20250115"
         )
         if not dragon_tiger.empty:
             logger.info(f"龙虎榜记录数: {len(dragon_tiger)}")
@@ -172,13 +160,10 @@ class DataInterfaceExample:
             )
 
         # 获取北向资金
-        north_flow = await self.provider.get_north_flow(
-            start_date='20250101',
-            end_date='20250115'
-        )
+        north_flow = await self.provider.get_north_flow(start_date="20250101", end_date="20250115")
         if not north_flow.empty:
             logger.info(f"北向资金记录数: {len(north_flow)}")
-            total = north_flow['total_flow'].sum()
+            total = north_flow["total_flow"].sum()
             logger.info(f"期间净流入: {total / 100000000:.2f}亿")
 
     async def example_subscription(self):
@@ -192,9 +177,7 @@ class DataInterfaceExample:
 
         # 订阅实时快照
         success = await self.provider.subscribe(
-            symbols=['000001', '600000'],
-            data_type=PeriodType.SNAPSHOT,
-            callback=on_snapshot
+            symbols=["000001", "600000"], data_type=PeriodType.SNAPSHOT, callback=on_snapshot
         )
 
         if success:
@@ -203,7 +186,7 @@ class DataInterfaceExample:
             await asyncio.sleep(10)
 
             # 取消订阅
-            await self.provider.unsubscribe(['000001', '600000'])
+            await self.provider.unsubscribe(["000001", "600000"])
             logger.info("已取消订阅")
 
     async def example_error_handling(self):
@@ -230,7 +213,7 @@ class DataInterfaceExample:
                 except RateLimitError as e:
                     logger.warning(f"触发限流: {e.message}")
                     # 等待后重试
-                    wait_time = e.details.get('retry_after', retry_delay)
+                    wait_time = e.details.get("retry_after", retry_delay)
                     await asyncio.sleep(wait_time)
 
                 except DataProviderError as e:
@@ -243,7 +226,7 @@ class DataInterfaceExample:
             return pd.DataFrame()
 
         # 测试错误处理
-        df = await safe_get_data('000001')
+        df = await safe_get_data("000001")
         if not df.empty:
             logger.info("成功获取数据")
         else:
@@ -255,7 +238,7 @@ class DataInterfaceExample:
         logger.info("性能优化示例")
 
         # 批量获取多个股票的K线
-        symbols = ['000001', '000002', '600000', '600036']
+        symbols = ["000001", "000002", "600000", "600036"]
 
         # 方法1：串行获取（慢）
         start_time = asyncio.get_event_loop().time()
@@ -266,10 +249,7 @@ class DataInterfaceExample:
 
         # 方法2：并发获取（快）
         start_time = asyncio.get_event_loop().time()
-        tasks = [
-            self.provider.get_kline(symbol, count=100)
-            for symbol in symbols
-        ]
+        tasks = [self.provider.get_kline(symbol, count=100) for symbol in symbols]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         parallel_time = asyncio.get_event_loop().time() - start_time
         logger.info(f"并发获取耗时: {parallel_time:.2f}秒")
@@ -305,8 +285,8 @@ class DataInterfaceExample:
             logger.info(f"  缓存命中: {stats['statistics']['cache_hits']}")
             logger.info(f"  缓存未命中: {stats['statistics']['cache_misses']}")
 
-            if stats['statistics']['queries'] > 0:
-                hit_rate = stats['statistics']['cache_hits'] / stats['statistics']['queries']
+            if stats["statistics"]["queries"] > 0:
+                hit_rate = stats["statistics"]["cache_hits"] / stats["statistics"]["queries"]
                 logger.info(f"  缓存命中率: {hit_rate:.1%}")
 
         finally:

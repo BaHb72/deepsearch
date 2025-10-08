@@ -3,17 +3,24 @@ AmazingData SDK 隔离机制测试用例
 
 测试SDK退出保护、降级机制、错误处理等功能。
 """
-import pytest
+
 import asyncio
-from unittest.mock import Mock, patch, MagicMock
-import sys
-from datetime import datetime
+from unittest.mock import patch
+
+import pytest
+
+from deepsearch.infrastructure.monitoring.provider_health import (
+    ProviderHealthMonitor,
+    ProviderStatus,
+)
 
 # 测试导入
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import AmazingDataProvider, AmazingDataConfig
-from deepsearch.webui.api.providers import DataProviderFactory
+from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+    AmazingDataConfig,
+    AmazingDataProvider,
+)
 from deepsearch.infrastructure.providers.mock.error_provider import MockErrorProvider
-from deepsearch.infrastructure.monitoring.provider_health import ProviderHealthMonitor, ProviderStatus
+from deepsearch.webui.api.providers import DataProviderFactory
 
 
 class TestSDKIsolation:
@@ -23,11 +30,7 @@ class TestSDKIsolation:
     def config(self):
         """创建测试配置"""
         return AmazingDataConfig(
-            username="test_user",
-            password="test_pass",
-            host="localhost",
-            port=8600,
-            timeout=5
+            username="test_user", password="test_pass", host="localhost", port=8600, timeout=5
         )
 
     @pytest.fixture
@@ -41,7 +44,7 @@ class TestSDKIsolation:
         测试: safe_login能够捕获SystemExit
         """
         # 模拟SDK调用exit(0)
-        with patch('AmazingData.ad.login') as mock_login:
+        with patch("AmazingData.ad.login") as mock_login:
             mock_login.side_effect = SystemExit(0)
 
             # 调用_login应该捕获SystemExit并返回错误
@@ -56,7 +59,7 @@ class TestSDKIsolation:
         """
         测试: safe_login能够捕获SystemExit(1)
         """
-        with patch('AmazingData.ad.login') as mock_login:
+        with patch("AmazingData.ad.login") as mock_login:
             mock_login.side_effect = SystemExit(1)
 
             with pytest.raises(Exception) as exc_info:
@@ -69,11 +72,12 @@ class TestSDKIsolation:
         """
         测试: 登录超时处理
         """
+
         # 模拟超时的登录函数
         async def slow_login():
             await asyncio.sleep(10)  # 超过5秒超时
 
-        with patch.object(provider, '_login', slow_login):
+        with patch.object(provider, "_login", slow_login):
             with pytest.raises(asyncio.TimeoutError):
                 await asyncio.wait_for(provider._login(), timeout=0.1)
 
@@ -103,11 +107,13 @@ class TestDataProviderFactory:
         DataProviderFactory.clear_all()
 
         # 模拟AmazingData初始化失败
-        with patch('deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.AmazingDataProvider.initialize') as mock_init:
+        with patch(
+            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.AmazingDataProvider.initialize"
+        ) as mock_init:
             mock_init.side_effect = Exception("SDK尝试强制退出程序")
 
             # 获取提供者应该降级到AkShare
-            provider = await DataProviderFactory.get_provider_async("amazingdata")
+            await DataProviderFactory.get_provider_async("amazingdata")
 
             # 验证降级状态
             assert "amazingdata" in DataProviderFactory._fallback_status
@@ -123,13 +129,17 @@ class TestDataProviderFactory:
         DataProviderFactory.clear_all()
 
         # 模拟所有提供者都失败
-        with patch('deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.AmazingDataProvider.initialize') as mock_ad_init:
-            with patch('deepsearch.infrastructure.providers.implementations.akshare.akshare.AkShareProxyProvider.initialize') as mock_ak_init:
+        with patch(
+            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.AmazingDataProvider.initialize"
+        ) as mock_ad_init:
+            with patch(
+                "deepsearch.infrastructure.providers.implementations.akshare.akshare.AkShareProxyProvider.initialize"
+            ) as mock_ak_init:
                 mock_ad_init.side_effect = Exception("AmazingData failed")
                 mock_ak_init.side_effect = Exception("AkShare failed")
 
                 # 获取提供者应该得到ErrorProvider或临时错误提供者
-                provider = await DataProviderFactory.get_provider_async("amazingdata")
+                await DataProviderFactory.get_provider_async("amazingdata")
 
                 # 验证健康状态
                 health = DataProviderFactory._provider_health.get("amazingdata", {})
@@ -141,7 +151,9 @@ class TestDataProviderFactory:
         """
         测试: 记录提供者失败信息
         """
-        DataProviderFactory._record_provider_failure("test_provider", "SDK_EXIT", "Test error message")
+        DataProviderFactory._record_provider_failure(
+            "test_provider", "SDK_EXIT", "Test error message"
+        )
 
         # 验证失败记录
         assert "test_provider" in DataProviderFactory._provider_health
@@ -221,10 +233,7 @@ class TestProviderHealthMonitor:
     @pytest.fixture
     def monitor(self):
         """创建监控器实例"""
-        return ProviderHealthMonitor(
-            check_interval=1,
-            max_consecutive_errors=3
-        )
+        return ProviderHealthMonitor(check_interval=1, max_consecutive_errors=3)
 
     def test_record_request_success(self, monitor):
         """
@@ -303,10 +312,10 @@ async def test_integration_sdk_exit_protection():
     DataProviderFactory.clear_all()
 
     # 创建监控器
-    monitor = ProviderHealthMonitor()
+    ProviderHealthMonitor()
 
     # 模拟SDK退出场景
-    with patch('AmazingData.ad.login') as mock_login:
+    with patch("AmazingData.ad.login") as mock_login:
         mock_login.side_effect = SystemExit(0)
 
         # 尝试获取提供者
@@ -320,7 +329,10 @@ async def test_integration_sdk_exit_protection():
         assert "amazingdata" in health_status["providers"]
 
         # 如果降级成功，provider应该不是AmazingDataProvider
-        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import AmazingDataProvider
+        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+            AmazingDataProvider,
+        )
+
         assert not isinstance(provider, AmazingDataProvider)
 
 

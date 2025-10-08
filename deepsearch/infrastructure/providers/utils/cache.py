@@ -3,6 +3,7 @@
 
 提供高效的内存缓存实现，支持LRU策略和TTL过期
 """
+
 import time
 from collections import OrderedDict
 from threading import RLock
@@ -14,7 +15,7 @@ from loguru import logger
 class LRUCache:
     """
     线程安全的LRU缓存实现
-    
+
     特性：
     - 支持最大容量限制
     - 支持TTL过期时间
@@ -25,7 +26,7 @@ class LRUCache:
     def __init__(self, max_size: int = 1000, default_ttl: int = 300):
         """
         初始化LRU缓存
-        
+
         Args:
             max_size: 最大缓存条目数
             default_ttl: 默认TTL（秒）
@@ -34,20 +35,15 @@ class LRUCache:
         self.default_ttl = default_ttl
         self._cache: OrderedDict[str, Tuple[Any, float, int]] = OrderedDict()
         self._lock = RLock()
-        self._stats = {
-            "hits": 0,
-            "misses": 0,
-            "evictions": 0,
-            "expired": 0
-        }
+        self._stats = {"hits": 0, "misses": 0, "evictions": 0, "expired": 0}
 
     def get(self, key: str) -> Optional[Any]:
         """
         获取缓存值
-        
+
         Args:
             key: 缓存键
-            
+
         Returns:
             缓存值，如果不存在或过期返回None
         """
@@ -73,7 +69,7 @@ class LRUCache:
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """
         设置缓存值
-        
+
         Args:
             key: 缓存键
             value: 缓存值
@@ -98,10 +94,10 @@ class LRUCache:
     def delete(self, key: str) -> bool:
         """
         删除缓存条目
-        
+
         Args:
             key: 缓存键
-            
+
         Returns:
             是否成功删除
         """
@@ -119,7 +115,7 @@ class LRUCache:
     def cleanup(self) -> int:
         """
         清理过期条目
-        
+
         Returns:
             清理的条目数
         """
@@ -144,7 +140,7 @@ class LRUCache:
     def get_stats(self) -> Dict[str, Any]:
         """
         获取缓存统计信息
-        
+
         Returns:
             统计信息字典
         """
@@ -159,14 +155,14 @@ class LRUCache:
                 "misses": self._stats["misses"],
                 "hit_rate": round(hit_rate * 100, 2),
                 "evictions": self._stats["evictions"],
-                "expired": self._stats["expired"]
+                "expired": self._stats["expired"],
             }
 
 
 class DataProviderCache:
     """
     数据提供者专用缓存
-    
+
     支持不同类型数据的分类缓存
     """
 
@@ -178,25 +174,24 @@ class DataProviderCache:
             "minute": {"max_size": 1000, "ttl": 60},  # 分钟数据，60秒过期
             "daily": {"max_size": 2000, "ttl": 300},  # 日线数据，5分钟过期
             "info": {"max_size": 5000, "ttl": 3600},  # 股票信息，1小时过期
-            "list": {"max_size": 100, "ttl": 1800}  # 股票列表，30分钟过期
+            "list": {"max_size": 100, "ttl": 1800},  # 股票列表，30分钟过期
         }
 
         # 为每种数据类型创建独立的缓存
         self.caches = {}
         for data_type, config in self.cache_configs.items():
             self.caches[data_type] = LRUCache(
-                max_size=config["max_size"],
-                default_ttl=config["ttl"]
+                max_size=config["max_size"], default_ttl=config["ttl"]
             )
 
     def get(self, data_type: str, key: str) -> Optional[Any]:
         """
         获取缓存数据
-        
+
         Args:
             data_type: 数据类型
             key: 缓存键
-            
+
         Returns:
             缓存数据
         """
@@ -207,7 +202,7 @@ class DataProviderCache:
     def set(self, data_type: str, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """
         设置缓存数据
-        
+
         Args:
             data_type: 数据类型
             key: 缓存键
@@ -223,10 +218,10 @@ class DataProviderCache:
     def generate_key(self, *args) -> str:
         """
         生成缓存键
-        
+
         Args:
             *args: 键的组成部分
-            
+
         Returns:
             缓存键字符串
         """
@@ -237,7 +232,7 @@ class DataProviderCache:
     def cleanup_all(self) -> Dict[str, int]:
         """
         清理所有缓存的过期条目
-        
+
         Returns:
             各缓存清理的条目数
         """
@@ -258,7 +253,7 @@ class DataProviderCache:
     def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
         """
         获取所有缓存的统计信息
-        
+
         Returns:
             统计信息字典
         """
@@ -275,7 +270,7 @@ _global_cache: Optional[DataProviderCache] = None
 def get_cache() -> DataProviderCache:
     """
     获取全局缓存实例
-    
+
     Returns:
         数据提供者缓存实例
     """

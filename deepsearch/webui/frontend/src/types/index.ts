@@ -1,7 +1,9 @@
+import type { JsonObject, JsonValue } from './common'
+
 // 全局类型定义
 
 // API 响应类型
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   code: number
   data: T
   message: string
@@ -9,7 +11,7 @@ export interface ApiResponse<T = any> {
 }
 
 // 分页响应
-export interface PaginationResponse<T = any> {
+export interface PaginationResponse<T = unknown> {
   list: T[]
   total: number
   page: number
@@ -52,7 +54,7 @@ export interface ComponentStatus {
   name: string
   status: 'running' | 'stopped' | 'error' | 'warning'
   message?: string
-  metadata?: Record<string, any>
+  metadata?: JsonObject
 }
 
 export interface SystemStatistics {
@@ -141,7 +143,7 @@ export interface Strategy {
   description: string
   type: StrategyType
   status: StrategyStatus
-  params: Record<string, any>
+  params: JsonObject
   performance: StrategyPerformance
   createdAt: string
   updatedAt: string
@@ -224,7 +226,7 @@ export enum OrderStatus {
 }
 
 // WebSocket 消息类型
-export interface WSMessage<T = any> {
+export interface WSMessage<T = unknown> {
   type: WSMessageType
   data: T
   timestamp: number
@@ -264,7 +266,7 @@ export interface Notification {
   message: string
   timestamp: string
   read: boolean
-  data?: any
+  data?: JsonValue
 }
 
 export enum NotificationType {
@@ -311,7 +313,7 @@ export interface DataSource {
   type: string
   enabled: boolean
   priority: number
-  config: Record<string, any>
+  config: JsonObject
 }
 
 export interface MonitoringConfig {
@@ -327,3 +329,4 @@ export interface NotificationConfig {
   webhookEnabled: boolean
   webhookUrl?: string
 }
+export * from './common'

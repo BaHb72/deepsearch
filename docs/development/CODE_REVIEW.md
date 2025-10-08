@@ -383,7 +383,7 @@ if db_url.startswith("postgresql://"):
 ```python
 self._engine = create_async_engine(
     db_url,
-    echo=(config.app.env == "dev"),
+    echo=(db_config.main.echo if db_config else False),
     pool_size=20,
     max_overflow=10,
 ```
@@ -397,7 +397,7 @@ self._engine = create_async_engine(
 
 ## 2. 数据提供者模块
 
-### 2.1 数据提供者基类 (`data_providers/interfaces/base.py`)
+### 2.1 数据提供者基类 (`infrastructure/providers/interfaces/base.py`)
 
 #### 审查时间: 2024-12-28 15:30
 
@@ -464,7 +464,7 @@ connector = aiohttp.TCPConnector(
 - 影响：在没有aiohttp的环境中会崩溃
 - 建议：检查HAS_AIOHTTP或在__init__中验证
 
-### 2.2 AkShare适配器 (`data_providers/implementations/akshare/akshare_adapter.py`)
+### 2.2 AkShare适配器 (`infrastructure/providers/implementations/akshare/akshare_adapter.py`)
 
 #### 审查时间: 2024-12-28 15:45
 
@@ -519,7 +519,7 @@ return False
 - 问题：is_connected应该是接口方法
 - 建议：在基类中定义
 
-### 2.3 AkShare 实现 (`data_providers/implementations/akshare/`)
+### 2.3 AkShare 实现 (`infrastructure/providers/implementations/akshare/`)
 
 #### 审查时间: 2024-12-28 11:00
 
@@ -637,7 +637,7 @@ return False
 
 ## 继续审查记录...
 
-### 2.2 数据适配器 (`data_providers/implementations/akshare/akshare_adapter.py`)
+### 2.2 数据适配器 (`infrastructure/providers/implementations/akshare/akshare_adapter.py`)
 
 **问题：**
 

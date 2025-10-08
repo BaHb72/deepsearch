@@ -8,8 +8,9 @@ Author: DeepSearch Team
 Version: 1.0.0
 """
 
-from decimal import Decimal, getcontext, ROUND_HALF_UP, ROUND_DOWN
-from typing import Union, List, Optional
+from decimal import ROUND_HALF_UP, Decimal, getcontext
+from collections.abc import Sequence
+from typing import List, Optional, Union
 
 # 设置全局精度（小数位数）
 # 金融计算通常需要4-10位精度
@@ -62,7 +63,7 @@ class FinanceDecimal:
             precision: 小数位数，None则使用初始化时的精度
         """
         prec = precision or self.precision
-        quantize_str = '0.' + '0' * prec
+        quantize_str = "0." + "0" * prec
         return str(self._value.quantize(Decimal(quantize_str)))
 
     def __str__(self) -> str:
@@ -128,9 +129,10 @@ class FinanceDecimal:
 
 # ==================== 常用金融计算函数 ====================
 
-def calculate_spread(bid_price: Union[float, str, Decimal],
-                    ask_price: Union[float, str, Decimal],
-                    precision: int = 4) -> Decimal:
+
+def calculate_spread(
+    bid_price: Union[float, str, Decimal], ask_price: Union[float, str, Decimal], precision: int = 4
+) -> Decimal:
     """
     计算买卖价差
 
@@ -147,13 +149,15 @@ def calculate_spread(bid_price: Union[float, str, Decimal],
     spread = ask - bid
 
     # 设置精度
-    quantize_str = '0.' + '0' * precision
+    quantize_str = "0." + "0" * precision
     return spread.quantize(Decimal(quantize_str))
 
 
-def calculate_change_rate(current_price: Union[float, str, Decimal],
-                         previous_price: Union[float, str, Decimal],
-                         precision: int = 4) -> Decimal:
+def calculate_change_rate(
+    current_price: Union[float, str, Decimal],
+    previous_price: Union[float, str, Decimal],
+    precision: int = 4,
+) -> Decimal:
     """
     计算涨跌幅
 
@@ -169,18 +173,20 @@ def calculate_change_rate(current_price: Union[float, str, Decimal],
     previous = Decimal(str(previous_price))
 
     if previous == 0:
-        return Decimal('0')
+        return Decimal("0")
 
     change_rate = (current - previous) / previous
 
     # 设置精度
-    quantize_str = '0.' + '0' * precision
+    quantize_str = "0." + "0" * precision
     return change_rate.quantize(Decimal(quantize_str))
 
 
-def calculate_return(initial_value: Union[float, str, Decimal],
-                    final_value: Union[float, str, Decimal],
-                    precision: int = 6) -> Decimal:
+def calculate_return(
+    initial_value: Union[float, str, Decimal],
+    final_value: Union[float, str, Decimal],
+    precision: int = 6,
+) -> Decimal:
     """
     计算收益率
 
@@ -196,17 +202,16 @@ def calculate_return(initial_value: Union[float, str, Decimal],
     final = Decimal(str(final_value))
 
     if initial == 0:
-        return Decimal('0')
+        return Decimal("0")
 
     return_rate = (final - initial) / initial
 
     # 设置精度
-    quantize_str = '0.' + '0' * precision
+    quantize_str = "0." + "0" * precision
     return return_rate.quantize(Decimal(quantize_str))
 
 
-def format_price(price: Union[float, str, Decimal],
-                precision: int = 2) -> str:
+def format_price(price: Union[float, str, Decimal], precision: int = 2) -> str:
     """
     格式化价格显示
 
@@ -218,13 +223,12 @@ def format_price(price: Union[float, str, Decimal],
         格式化后的价格字符串
     """
     price_decimal = Decimal(str(price))
-    quantize_str = '0.' + '0' * precision
+    quantize_str = "0." + "0" * precision
     formatted = price_decimal.quantize(Decimal(quantize_str))
     return str(formatted)
 
 
-def format_volume(volume: Union[int, float, str],
-                 unit: str = 'hand') -> str:
+def format_volume(volume: Union[int, float, str], unit: str = "hand") -> str:
     """
     格式化成交量显示
 
@@ -237,22 +241,23 @@ def format_volume(volume: Union[int, float, str],
     """
     vol = Decimal(str(volume))
 
-    if unit == 'hand':
+    if unit == "hand":
         # A股1手=100股
         hands = vol / 100
         return f"{hands:.0f}手"
-    elif unit == 'k':
+    elif unit == "k":
         thousands = vol / 1000
         return f"{thousands:.2f}K"
-    elif unit == 'm':
+    elif unit == "m":
         millions = vol / 1000000
         return f"{millions:.2f}M"
     else:
         return str(int(vol))
 
 
-def round_price(price: Union[float, str, Decimal],
-               tick_size: Union[float, str, Decimal] = '0.01') -> Decimal:
+def round_price(
+    price: Union[float, str, Decimal], tick_size: Union[float, str, Decimal] = "0.01"
+) -> Decimal:
     """
     按最小变动单位取整价格
 
@@ -270,9 +275,11 @@ def round_price(price: Union[float, str, Decimal],
     return (price_decimal // tick) * tick
 
 
-def compare_prices(price1: Union[float, str, Decimal],
-                  price2: Union[float, str, Decimal],
-                  tolerance: Union[float, str, Decimal] = '0.0001') -> int:
+def compare_prices(
+    price1: Union[float, str, Decimal],
+    price2: Union[float, str, Decimal],
+    tolerance: Union[float, str, Decimal] = "0.0001",
+) -> int:
     """
     比较两个价格（带容差）
 
@@ -300,7 +307,7 @@ def compare_prices(price1: Union[float, str, Decimal],
         return -1
 
 
-def sum_prices(prices: List[Union[float, str, Decimal]]) -> Decimal:
+def sum_prices(prices: Sequence[Union[float, str, Decimal]]) -> Decimal:
     """
     求和价格列表
 
@@ -310,14 +317,13 @@ def sum_prices(prices: List[Union[float, str, Decimal]]) -> Decimal:
     Returns:
         总和（Decimal类型）
     """
-    total = Decimal('0')
+    total = Decimal("0")
     for price in prices:
         total += Decimal(str(price))
     return total
 
 
-def average_price(prices: List[Union[float, str, Decimal]],
-                 precision: int = 4) -> Decimal:
+def average_price(prices: Sequence[Union[float, str, Decimal]], precision: int = 4) -> Decimal:
     """
     计算平均价格
 
@@ -329,22 +335,25 @@ def average_price(prices: List[Union[float, str, Decimal]],
         平均价格（Decimal类型）
     """
     if not prices:
-        return Decimal('0')
+        return Decimal("0")
 
     total = sum_prices(prices)
     count = Decimal(str(len(prices)))
     avg = total / count
 
     # 设置精度
-    quantize_str = '0.' + '0' * precision
+    quantize_str = "0." + "0" * precision
     return avg.quantize(Decimal(quantize_str))
 
 
 # ==================== 特殊金融计算 ====================
 
-def calculate_vwap(prices: List[Union[float, str, Decimal]],
-                  volumes: List[Union[int, float, str]],
-                  precision: int = 4) -> Decimal:
+
+def calculate_vwap(
+    prices: Sequence[Union[float, str, Decimal]],
+    volumes: Sequence[Union[int, float, str]],
+    precision: int = 4,
+) -> Decimal:
     """
     计算成交量加权平均价格（VWAP）
 
@@ -360,10 +369,10 @@ def calculate_vwap(prices: List[Union[float, str, Decimal]],
         raise ValueError("Prices and volumes must have same length")
 
     if not prices:
-        return Decimal('0')
+        return Decimal("0")
 
-    total_value = Decimal('0')
-    total_volume = Decimal('0')
+    total_value = Decimal("0")
+    total_volume = Decimal("0")
 
     for price, volume in zip(prices, volumes):
         p = Decimal(str(price))
@@ -372,18 +381,20 @@ def calculate_vwap(prices: List[Union[float, str, Decimal]],
         total_volume += v
 
     if total_volume == 0:
-        return Decimal('0')
+        return Decimal("0")
 
     vwap = total_value / total_volume
 
     # 设置精度
-    quantize_str = '0.' + '0' * precision
+    quantize_str = "0." + "0" * precision
     return vwap.quantize(Decimal(quantize_str))
 
 
-def calculate_commission(trade_value: Union[float, str, Decimal],
-                        commission_rate: Union[float, str, Decimal] = '0.0003',
-                        min_commission: Union[float, str, Decimal] = '5') -> Decimal:
+def calculate_commission(
+    trade_value: Union[float, str, Decimal],
+    commission_rate: Union[float, str, Decimal] = "0.0003",
+    min_commission: Union[float, str, Decimal] = "5",
+) -> Decimal:
     """
     计算交易佣金
 
@@ -406,11 +417,12 @@ def calculate_commission(trade_value: Union[float, str, Decimal],
         commission = min_comm
 
     # 佣金一般保留2位小数
-    return commission.quantize(Decimal('0.01'))
+    return commission.quantize(Decimal("0.01"))
 
 
-def calculate_stamp_duty(trade_value: Union[float, str, Decimal],
-                        rate: Union[float, str, Decimal] = '0.001') -> Decimal:
+def calculate_stamp_duty(
+    trade_value: Union[float, str, Decimal], rate: Union[float, str, Decimal] = "0.001"
+) -> Decimal:
     """
     计算印花税（仅卖出收取）
 
@@ -427,7 +439,7 @@ def calculate_stamp_duty(trade_value: Union[float, str, Decimal],
     stamp_duty = value * tax_rate
 
     # 印花税保留2位小数
-    return stamp_duty.quantize(Decimal('0.01'))
+    return stamp_duty.quantize(Decimal("0.01"))
 
 
 if __name__ == "__main__":
@@ -462,3 +474,5 @@ if __name__ == "__main__":
     price2 = FinanceDecimal("10.00")
     diff = price1 - price2
     print(f"价格差: {diff}")  # 0.0200
+
+

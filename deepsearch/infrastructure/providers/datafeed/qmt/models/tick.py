@@ -1,6 +1,7 @@
 """
 Tick数据和盘口数据模型
 """
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
@@ -9,6 +10,7 @@ from typing import List, Optional
 @dataclass
 class OrderBookLevel:
     """盘口单个价位数据"""
+
     price: float
     volume: int
     order_count: Optional[int] = None  # 委托笔数
@@ -17,6 +19,7 @@ class OrderBookLevel:
 @dataclass
 class OrderBook:
     """十档盘口数据"""
+
     symbol: str
     timestamp: float
     bid_levels: List[OrderBookLevel] = field(default_factory=list)  # 买盘
@@ -43,6 +46,7 @@ class OrderBook:
 @dataclass
 class TickData:
     """实时行情Tick数据"""
+
     # 基础信息
     symbol: str
     name: str
@@ -84,57 +88,57 @@ class TickData:
     def to_dict(self) -> dict:
         """转换为字典格式"""
         return {
-            'symbol': self.symbol,
-            'name': self.name,
-            'exchange': self.exchange,
-            'timestamp': self.timestamp,
-            'datetime': self.datetime.isoformat() if self.datetime else None,
-            'last_price': self.last_price,
-            'pre_close': self.pre_close,
-            'open_price': self.open_price,
-            'high_price': self.high_price,
-            'low_price': self.low_price,
-            'volume': self.volume,
-            'amount': self.amount,
-            'trades_count': self.trades_count,
-            'change': self.change,
-            'pct_change': self.pct_change,
-            'bid_price': self.bid_price,
-            'ask_price': self.ask_price,
-            'bid_volume': self.bid_volume,
-            'ask_volume': self.ask_volume,
-            'limit_up': self.limit_up,
-            'limit_down': self.limit_down,
-            'avg_price': self.avg_price,
-            'turnover_rate': self.turnover_rate,
-            'pe_ratio': self.pe_ratio,
-            'total_market_value': self.total_market_value,
-            'float_market_value': self.float_market_value,
+            "symbol": self.symbol,
+            "name": self.name,
+            "exchange": self.exchange,
+            "timestamp": self.timestamp,
+            "datetime": self.datetime.isoformat() if self.datetime else None,
+            "last_price": self.last_price,
+            "pre_close": self.pre_close,
+            "open_price": self.open_price,
+            "high_price": self.high_price,
+            "low_price": self.low_price,
+            "volume": self.volume,
+            "amount": self.amount,
+            "trades_count": self.trades_count,
+            "change": self.change,
+            "pct_change": self.pct_change,
+            "bid_price": self.bid_price,
+            "ask_price": self.ask_price,
+            "bid_volume": self.bid_volume,
+            "ask_volume": self.ask_volume,
+            "limit_up": self.limit_up,
+            "limit_down": self.limit_down,
+            "avg_price": self.avg_price,
+            "turnover_rate": self.turnover_rate,
+            "pe_ratio": self.pe_ratio,
+            "total_market_value": self.total_market_value,
+            "float_market_value": self.float_market_value,
         }
 
     @classmethod
-    def from_qmt_data(cls, qmt_data: dict) -> 'TickData':
+    def from_qmt_data(cls, qmt_data: dict) -> "TickData":
         """从QMT数据格式创建TickData对象"""
         # QMT数据格式转换逻辑
         # 这里需要根据实际QMT返回的数据格式进行调整
         return cls(
-            symbol=qmt_data.get('code', ''),
-            name=qmt_data.get('name', ''),
-            exchange=qmt_data.get('market', ''),
-            timestamp=qmt_data.get('time', 0),
-            datetime=datetime.fromtimestamp(qmt_data.get('time', 0)),
-            last_price=qmt_data.get('last', 0),
-            pre_close=qmt_data.get('pre_close', 0),
-            open_price=qmt_data.get('open', 0),
-            high_price=qmt_data.get('high', 0),
-            low_price=qmt_data.get('low', 0),
-            volume=qmt_data.get('volume', 0),
-            amount=qmt_data.get('amount', 0),
-            trades_count=qmt_data.get('trades_count', 0),
-            change=qmt_data.get('change', 0),
-            pct_change=qmt_data.get('pct_change', 0),
-            bid_price=qmt_data.get('bid_price', []),
-            ask_price=qmt_data.get('ask_price', []),
-            bid_volume=qmt_data.get('bid_volume', []),
-            ask_volume=qmt_data.get('ask_volume', []),
+            symbol=qmt_data.get("code", ""),
+            name=qmt_data.get("name", ""),
+            exchange=qmt_data.get("market", ""),
+            timestamp=qmt_data.get("time", 0),
+            datetime=datetime.fromtimestamp(qmt_data.get("time", 0)),
+            last_price=qmt_data.get("last", 0),
+            pre_close=qmt_data.get("pre_close", 0),
+            open_price=qmt_data.get("open", 0),
+            high_price=qmt_data.get("high", 0),
+            low_price=qmt_data.get("low", 0),
+            volume=qmt_data.get("volume", 0),
+            amount=qmt_data.get("amount", 0),
+            trades_count=qmt_data.get("trades_count", 0),
+            change=qmt_data.get("change", 0),
+            pct_change=qmt_data.get("pct_change", 0),
+            bid_price=qmt_data.get("bid_price", []),
+            ask_price=qmt_data.get("ask_price", []),
+            bid_volume=qmt_data.get("bid_volume", []),
+            ask_volume=qmt_data.get("ask_volume", []),
         )

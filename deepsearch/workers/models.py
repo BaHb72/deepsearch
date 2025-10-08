@@ -1,15 +1,17 @@
 """
 Cloudflare Workers 代理数据模型
 """
+
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
 
 class ProxyStatus(str, Enum):
     """代理状态枚举"""
+
     ENABLED = "enabled"
     DISABLED = "disabled"
     ERROR = "error"
@@ -18,11 +20,12 @@ class ProxyStatus(str, Enum):
 
 class WorkersConfig(BaseModel):
     """Workers 代理配置"""
+
     # 基本配置
     enabled: bool = Field(default=False, description="是否启用代理")
     url: str = Field(
         default="",  # 默认为空，强制用户配置真实的Workers URL
-        description="Workers 域名（例如：your-worker.workers.dev）"
+        description="Workers 域名（例如：your-worker.workers.dev）",
     )
 
     # 请求配置
@@ -34,10 +37,7 @@ class WorkersConfig(BaseModel):
     api_key: Optional[str] = Field(None, description="API 密钥")
 
     # 故障转移
-    fallback_to_direct: bool = Field(
-        default=True,
-        description="Workers 失败时是否自动切换到直连"
-    )
+    fallback_to_direct: bool = Field(default=True, description="Workers 失败时是否自动切换到直连")
 
     # 缓存配置
     cache_enabled: bool = Field(default=True, description="是否启用缓存")
@@ -50,13 +50,14 @@ class WorkersConfig(BaseModel):
                 "url": "akshare-proxy.934073514.workers.dev",
                 "timeout": 30,
                 "retry_count": 3,
-                "fallback_to_direct": True
+                "fallback_to_direct": True,
             }
         }
 
 
 class ProxyStatistics(BaseModel):
     """代理统计信息"""
+
     total_requests: int = Field(default=0, description="总请求数")
     successful_requests: int = Field(default=0, description="成功请求数")
     failed_requests: int = Field(default=0, description="失败请求数")
@@ -82,7 +83,7 @@ class ProxyStatistics(BaseModel):
         """转换为字典时处理 datetime"""
         d = super().dict(**kwargs)
         # 转换 datetime 为 ISO 格式字符串
-        for key in ['started_at', 'last_request_at', 'last_error_at']:
+        for key in ["started_at", "last_request_at", "last_error_at"]:
             if d.get(key):
                 d[key] = d[key].isoformat() if isinstance(d[key], datetime) else d[key]
         return d
@@ -104,6 +105,7 @@ class ProxyStatistics(BaseModel):
 
 class ProxyTestResult(BaseModel):
     """代理测试结果"""
+
     success: bool = Field(..., description="测试是否成功")
     response_time: float = Field(..., description="响应时间（毫秒）")
     status_code: Optional[int] = Field(None, description="HTTP 状态码")
@@ -120,29 +122,27 @@ class ProxyTestResult(BaseModel):
                 "status_code": 200,
                 "message": "Workers proxy is healthy",
                 "workers_version": "2.0.0",
-                "timestamp": "2024-08-09T12:00:00"
+                "timestamp": "2024-08-09T12:00:00",
             }
         }
 
 
 class AkShareRequest(BaseModel):
     """AkShare API 请求"""
+
     function: str = Field(..., description="AkShare 函数名")
     params: Dict[str, Any] = Field(default_factory=dict, description="函数参数")
     use_cache: bool = Field(default=True, description="是否使用缓存")
 
     class Config:
         json_schema_extra = {
-            "example": {
-                "function": "stock_zh_a_spot_em",
-                "params": {},
-                "use_cache": True
-            }
+            "example": {"function": "stock_zh_a_spot_em", "params": {}, "use_cache": True}
         }
 
 
 class AkShareResponse(BaseModel):
     """AkShare API 响应"""
+
     success: bool = Field(..., description="请求是否成功")
     data: Optional[Any] = Field(None, description="返回数据")
     error: Optional[str] = Field(None, description="错误信息")

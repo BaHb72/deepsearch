@@ -2,45 +2,131 @@
 
 提供统一的数据库访问接口
 """
-from typing import Optional, AsyncContextManager, Dict, Any
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
-import asyncio
+from typing import Literal, Optional, TypedDict, cast
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
+from deepsearch.core.components.data_components import DatabaseComponent
 from deepsearch.observability.logger import logger
+from deepsearch.infrastructure.persistence.types import (
+    DatabaseServiceProtocol,
+    DatabaseSessionManager,
+    DatabaseSessionProtocol,
+    RowDict,
+    SQLParams,
+)
 
 
-class DatabaseService:
+class DatabaseStatus(TypedDict, total=False):
+    """���ݿ�״̬��ʾ��"""
+
+    connected: bool
+    type: str
+    host: str
+    database: str
+    pool_size: int
+    active_connections: int
+    error: str
+
+
+CheckStatus = Literal["up", "down"]
+HealthStatus = Literal["unknown", "healthy", "degraded", "unhealthy", "error"]
+
+
+class HealthCheckEntry(TypedDict, total=False):
+    """������ؼ����ʵ�����"""
+
+    status: CheckStatus
+    latency_ms: float
+    version: str
+    error: str
+
+
+class DatabaseHealth(TypedDict, total=False):
+    """���ݿ⽡����ܱ���"""
+
+    status: HealthStatus
+    checks: dict[str, HealthCheckEntry]
+    timestamp: str | None
+    error: str
+
+
+class DatabaseService(DatabaseServiceProtocol):
     """数据库服务
-    
+
     提供统一的数据库访问接口，封装数据库操作
     """
 
-    def __init__(self, database_component: 'DatabaseComponent'):
-        self.db = database_component
-        self.logger = logger.bind(module="database_service")
+    def __init__(self, database_component: DatabaseComponent):
+        self.db: DatabaseComponent = database_component
+        self.logger = logger.bind(module="数据库服务")
+
+    @staticmethod
+    def _normalize_params(params: SQLParams | None) -> SQLParams:
+        """确保 SQL 参数始终为 SQLAlchemy 可接受的结构。"""
+        return {} if params is None else params
+
+    @staticmethod
+    def _normalize_row(row: Mapping[str, object]) -> RowDict:
+        """将 SQLAlchemy 行映射转换为可变字典，便于后续加工。"""
+        normalized: RowDict = {key: row[key] for key in row}
+        return normalized
 
     @asynccontextmanager
-    async def get_session(self) -> AsyncContextManager[AsyncSession]:
-        """获取数据库会话
-        
-        使用上下文管理器自动管理会话生命周期
-        """
+    async def _session_scope(self) -> AsyncIterator[DatabaseSessionProtocol]:
+        """Yield a typed database session wrapped in a transaction scope."""
         async with self.db.get_session() as session:
+            typed_session = cast(DatabaseSessionProtocol, session)
             try:
-                yield session
-                await session.commit()
+                yield typed_session
+                await typed_session.commit()
             except Exception:
-                await session.rollback()
+                await typed_session.rollback()
                 raise
             finally:
-                await session.close()
+                await typed_session.close()
+
+    def get_session(self) -> DatabaseSessionManager:
+        """Return an async context manager that manages a database session scope."""
+        return self._session_scope()
+
+    def transaction(self) -> DatabaseSessionManager:
+        """Expose the session scope API under the historical transaction helper."""
+        return self._session_scope()
+
+    async def execute(self, query: str, params: SQLParams | None = None) -> int:
+        """执行写操作并返回受影响行数。"""
+        normalized_params = self._normalize_params(params)
+        async with self.get_session() as session:
+            result = await session.execute(text(query), normalized_params)
+            rowcount = result.rowcount
+            return int(rowcount or 0)
+
+    async def fetch_all(self, query: str, params: SQLParams | None = None) -> list[RowDict]:
+        """批量查询并返回行字典列表。"""
+        normalized_params = self._normalize_params(params)
+        async with self.get_session() as session:
+            result = await session.execute(text(query), normalized_params)
+            return [self._normalize_row(row) for row in result.mappings().all()]
+
+    async def fetch_one(self, query: str, params: SQLParams | None = None) -> RowDict | None:
+        """查询单条记录。"""
+        normalized_params = self._normalize_params(params)
+        async with self.get_session() as session:
+            result = await session.execute(text(query), normalized_params)
+            mapping = result.mappings().first()
+            if mapping is None:
+                return None
+            return self._normalize_row(mapping)
 
     async def init_database(self) -> None:
         """初始化数据库表结构"""
-        from sqlalchemy import text
         from .models.base import Base
 
         async with self.db.engine.begin() as conn:
@@ -52,9 +138,8 @@ class DatabaseService:
             if self.db.is_timescale_enabled:
                 await self._init_timescaledb_tables(conn)
 
-    async def _init_timescaledb_tables(self, conn) -> None:
+    async def _init_timescaledb_tables(self, conn: AsyncConnection) -> None:
         """初始化 TimescaleDB 超表"""
-        from sqlalchemy import text
 
         try:
             # 将时序表转换为超表
@@ -62,31 +147,37 @@ class DatabaseService:
                 ("market_tick", "time"),
                 ("market_1min", "time"),
                 ("market_5min", "time"),
-                ("market_snapshot", "time")
+                ("market_snapshot", "time"),
             ]
 
             for table_name, time_column in hypertables:
                 try:
                     # 检查是否已经是超表
-                    check_sql = text(f"""
+                    check_sql = text(
+                        """
                         SELECT EXISTS (
                             SELECT 1 FROM timescaledb_information.hypertables 
                             WHERE hypertable_name = :table_name
                         );
-                    """)
+                    """
+                    )
                     result = await conn.execute(check_sql, {"table_name": table_name})
                     is_hypertable = result.scalar()
 
                     if not is_hypertable:
                         # 创建超表
-                        create_sql = text(f"SELECT create_hypertable('{table_name}', '{time_column}');")
+                        create_sql = text(
+                            f"SELECT create_hypertable('{table_name}', '{time_column}');"
+                        )
                         await conn.execute(create_sql)
                         self.logger.info(f"创建超表: {table_name}")
 
                         # 设置分区间隔（7天一个分区）
-                        interval_sql = text(f"""
+                        interval_sql = text(
+                            f"""
                             SELECT set_chunk_time_interval('{table_name}', INTERVAL '7 days');
-                        """)
+                        """
+                        )
                         await conn.execute(interval_sql)
                     else:
                         self.logger.info(f"超表已存在: {table_name}")
@@ -101,23 +192,25 @@ class DatabaseService:
             self.logger.error(f"TimescaleDB 初始化失败: {e}")
             raise
 
-    async def _create_continuous_aggregates(self, conn) -> None:
+    async def _create_continuous_aggregates(self, conn: AsyncConnection) -> None:
         """创建连续聚合视图"""
-        from sqlalchemy import text
 
         # 创建 1分钟 -> 5分钟 的连续聚合
         try:
             # 检查视图是否存在
-            check_sql = text("""
+            check_sql = text(
+                """
                              SELECT EXISTS (SELECT 1
                                             FROM timescaledb_information.continuous_aggregates
                                             WHERE view_name = 'market_5min_agg');
-                             """)
+                             """
+            )
             result = await conn.execute(check_sql)
             exists = result.scalar()
 
             if not exists:
-                create_agg_sql = text("""
+                create_agg_sql = text(
+                    """
                     CREATE MATERIALIZED VIEW market_5min_agg
                     WITH (timescaledb.continuous) AS
                     SELECT 
@@ -131,16 +224,19 @@ class DatabaseService:
                         sum(turnover) as turnover
                     FROM market_1min
                     GROUP BY time_bucket('5 minutes', time), symbol;
-                """)
+                """
+                )
                 await conn.execute(create_agg_sql)
 
                 # 添加刷新策略
-                policy_sql = text("""
+                policy_sql = text(
+                    """
                     SELECT add_continuous_aggregate_policy('market_5min_agg',
                         start_offset => INTERVAL '1 hour',
                         end_offset => INTERVAL '1 minute',
                         schedule_interval => INTERVAL '5 minutes');
-                """)
+                """
+                )
                 await conn.execute(policy_sql)
 
                 self.logger.info("创建连续聚合: market_5min_agg")
@@ -150,49 +246,49 @@ class DatabaseService:
         except Exception as e:
             self.logger.warning(f"创建连续聚合失败: {e}")
 
-    async def get_database_status(self) -> Dict[str, Any]:
+    async def get_database_status(self) -> DatabaseStatus:
         """获取数据库状态"""
-        status = {
+        status: DatabaseStatus = {
             "connected": False,
             "type": "postgresql",
-            "host": getattr(self.db.config, 'host', 'localhost'),
-            "database": getattr(self.db.config, 'database', 'deepsearch'),
+            "host": getattr(self.db.config, "host", "localhost"),
+            "database": getattr(self.db.config, "database", "deepsearch"),
             "pool_size": 10,
-            "active_connections": 0
+            "active_connections": 0,
         }
 
         try:
-            # 测试连接
+            # 测试数据库连接
             async with self.get_session() as session:
                 result = await session.execute(text("SELECT 1"))
                 if result.scalar() == 1:
                     status["connected"] = True
 
-                    # 获取连接池状态
-                    if hasattr(self.db.engine.pool, 'size'):
-                        status["pool_size"] = self.db.engine.pool.size()
-                    if hasattr(self.db.engine.pool, 'checked_out_connections'):
-                        status["active_connections"] = self.db.engine.pool.checked_out_connections()
-        except Exception as e:
-            status["error"] = str(e)
-            self.logger.error(f"数据库状态检查失败: {e}")
+                    engine = getattr(self.db, "engine", None)
+                    pool = getattr(engine, "pool", None)
+                    if pool is not None:
+                        if hasattr(pool, "size"):
+                            status["pool_size"] = int(pool.size())
+                        if hasattr(pool, "checked_out_connections"):
+                            status["active_connections"] = int(pool.checked_out_connections())
+        except Exception as error:
+            status["error"] = str(error)
+            self.logger.error(f"获取数据库状态失败: {error}")
 
         return status
 
-    async def get_health(self) -> Dict[str, Any]:
+    async def get_health(self) -> DatabaseHealth:
         """获取数据库健康状态"""
-        health = {
-            "status": "unknown",
-            "checks": {},
-            "timestamp": None
-        }
+        checks: dict[str, HealthCheckEntry] = {}
+        health: DatabaseHealth = {"status": "unknown", "checks": checks, "timestamp": None}
 
         try:
-            # PostgreSQL检查
-            pg_check = {"status": "down"}
+            # PostgreSQL 可用性检查
+            pg_check: HealthCheckEntry = {"status": "down"}
             try:
+                import time
+
                 async with self.get_session() as session:
-                    import time
                     start = time.time()
                     result = await session.execute(text("SELECT version()"))
                     version = result.scalar()
@@ -201,28 +297,28 @@ class DatabaseService:
                     pg_check = {
                         "status": "up",
                         "latency_ms": round(latency_ms, 2),
-                        "version": version
+                        "version": str(version),
                     }
-            except Exception as e:
-                pg_check["error"] = str(e)
+            except Exception as pg_error:
+                pg_check["error"] = str(pg_error)
 
-            health["checks"]["postgresql"] = pg_check
+            checks["postgresql"] = pg_check
 
-            # 判断整体健康状态
-            if all(c.get("status") == "up" for c in health["checks"].values()):
+            if all(entry.get("status") == "up" for entry in checks.values()):
                 health["status"] = "healthy"
-            elif any(c.get("status") == "up" for c in health["checks"].values()):
+            elif any(entry.get("status") == "up" for entry in checks.values()):
                 health["status"] = "degraded"
             else:
                 health["status"] = "unhealthy"
 
             import datetime
+
             health["timestamp"] = datetime.datetime.now().isoformat()
 
-        except Exception as e:
+        except Exception as error:
             health["status"] = "error"
-            health["error"] = str(e)
-            self.logger.error(f"健康检查失败: {e}")
+            health["error"] = str(error)
+            self.logger.error(f"获取数据库健康状态失败: {error}")
 
         return health
 
@@ -230,11 +326,13 @@ class DatabaseService:
 # 全局函数（为了兼容测试）
 _database_service: Optional[DatabaseService] = None
 
+
 async def get_connection():
     """获取数据库连接（兼容性函数）"""
     global _database_service
     if _database_service is None:
         from deepsearch.core.managers.component_manager import ComponentManager
+
         cm = ComponentManager()
         if "database" in cm._components:
             db_component = cm._components["database"]
@@ -245,7 +343,9 @@ async def get_connection():
 
     # 如果没有初始化，返回mock对象用于测试
     from unittest.mock import AsyncMock
+
     return AsyncMock()
+
 
 async def get_database_status():
     """获取数据库状态（兼容性函数）"""
@@ -254,8 +354,4 @@ async def get_database_status():
         return await _database_service.get_database_status()
 
     # 默认返回
-    return {
-        "connected": False,
-        "type": "unknown",
-        "error": "Database service not initialized"
-    }
+    return {"connected": False, "type": "unknown", "error": "Database service not initialized"}

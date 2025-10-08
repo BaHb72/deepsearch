@@ -4,14 +4,14 @@
 Safe Architecture Migration Tool
 安全的架构迁移工具，用于将代码迁移到六边形架构
 """
-import os
-import shutil
-import json
-from pathlib import Path
-from typing import List, Dict, Set, Tuple
-from datetime import datetime
 import ast
+import os
 import re
+import shutil
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Set, Tuple
+
 
 class SafeArchitectureMigration:
     """安全架构迁移工具"""
@@ -30,13 +30,11 @@ class SafeArchitectureMigration:
             "services/data": "application/services/data",
             "services/cache": "application/services/cache",
             "services/interfaces": "application/interfaces",
-
             # data_providers -> infrastructure/providers
             "data_providers/implementations": "infrastructure/providers",
             "data_providers/managers": "infrastructure/providers/managers",
             "data_providers/interfaces": "domain/interfaces/providers",
             "data_providers/datafeed": "infrastructure/datafeed",
-
             # database/models -> domain/entities
             "database/models": "domain/entities",
         }
@@ -45,7 +43,7 @@ class SafeArchitectureMigration:
         self.preserve_dirs = {
             "webui",  # Web界面暂时保留
             "config",  # 配置文件保留
-            "event",   # 事件系统保留
+            "event",  # 事件系统保留
             "messaging",  # 消息系统保留
             "gateway",  # 网关保留
             "cli",  # CLI保留
@@ -62,7 +60,7 @@ class SafeArchitectureMigration:
         """分析文件的依赖关系"""
         dependencies = set()
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 tree = ast.parse(f.read())
 
             for node in ast.walk(tree):
@@ -79,7 +77,7 @@ class SafeArchitectureMigration:
 
     def update_imports(self, content: str, import_map: Dict[str, str]) -> str:
         """更新文件中的import语句"""
-        lines = content.split('\n')
+        lines = content.split("\n")
         updated_lines = []
 
         for line in lines:
@@ -97,7 +95,7 @@ class SafeArchitectureMigration:
 
             updated_lines.append(updated_line)
 
-        return '\n'.join(updated_lines)
+        return "\n".join(updated_lines)
 
     def backup_file(self, file_path: Path):
         """备份文件"""
@@ -114,7 +112,7 @@ class SafeArchitectureMigration:
             self.backup_file(src_path)
 
             # 读取文件内容
-            with open(src_path, 'r', encoding='utf-8') as f:
+            with open(src_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             # 更新imports
@@ -126,7 +124,7 @@ class SafeArchitectureMigration:
             dest_path.parent.mkdir(parents=True, exist_ok=True)
 
             # 写入新文件
-            with open(dest_path, 'w', encoding='utf-8') as f:
+            with open(dest_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
             # 删除原文件
@@ -230,7 +228,9 @@ class SafeArchitectureMigration:
         if files_to_migrate:
             print("\nFiles to migrate (showing first 10):")
             for src, dest in files_to_migrate[:10]:
-                print(f"  {src.relative_to(self.project_root)} -> {dest.relative_to(self.project_root)}")
+                print(
+                    f"  {src.relative_to(self.project_root)} -> {dest.relative_to(self.project_root)}"
+                )
 
         # 2. 查找废弃的文件
         deprecated_files = self.find_deprecated_files()
@@ -258,8 +258,10 @@ class SafeArchitectureMigration:
         print(report)
 
         # 8. 保存报告
-        report_path = self.project_root / f"migration_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        with open(report_path, 'w', encoding='utf-8') as f:
+        report_path = (
+            self.project_root / f"migration_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        )
+        with open(report_path, "w", encoding="utf-8") as f:
             f.write(report)
         print(f"Report saved to: {report_path}")
 
@@ -268,9 +270,9 @@ def main():
     """主函数"""
     import argparse
 
-    parser = argparse.ArgumentParser(description='安全架构迁移工具')
-    parser.add_argument('--dry-run', action='store_true', help='模拟运行，不实际修改文件')
-    parser.add_argument('--project-root', default='D:/Stock/code/deepsearch', help='项目根目录')
+    parser = argparse.ArgumentParser(description="安全架构迁移工具")
+    parser.add_argument("--dry-run", action="store_true", help="模拟运行，不实际修改文件")
+    parser.add_argument("--project-root", default="D:/Stock/code/deepsearch", help="项目根目录")
 
     args = parser.parse_args()
 

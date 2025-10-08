@@ -11,31 +11,31 @@ Version: 1.0.0
 3. xtdata模块可用
 """
 
-import logging
 import threading
 import time
 from queue import Queue
-from typing import Dict, List, Any, Optional, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
 
+from deepsearch.observability import get_logger
+
 # 配置日志
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class MiniQMTCollector:
     """
     MiniQMT数据采集器
-    
+
     适配免费版QMT，通过xtdata与MiniQMT交互
     支持Level1数据的历史下载、实时订阅和主动获取
     """
 
-    def __init__(self, mini_qmt_path: str = None):
+    def __init__(self, mini_qmt_path: Optional[str] = None):
         """
         初始化MiniQMT采集器
-        
+
         Args:
             mini_qmt_path: MiniQMT安装路径（可选）
         """
@@ -61,6 +61,7 @@ class MiniQMTCollector:
         """初始化MiniQMT连接"""
         try:
             import xtquant.xtdata as xtdata
+
             self.xtdata = xtdata
 
             # 连接到MiniQMT
@@ -83,17 +84,17 @@ class MiniQMTCollector:
 
     # ==================== 1. 历史数据下载 ====================
     def download_history_data(
-            self,
-            stock_code: str,
-            period: str = '1d',
-            start_time: str = '',
-            end_time: str = '',
-            count: int = 0,
-            dividend_type: str = 'none'
+        self,
+        stock_code: str,
+        period: str = "1d",
+        start_time: str = "",
+        end_time: str = "",
+        count: int = 0,
+        dividend_type: str = "none",
     ) -> Dict[str, Any]:
         """
         下载历史K线数据（Level1）
-        
+
         Parameters:
         -----------
         stock_code: 股票代码 如'000001.SZ'
@@ -110,13 +111,13 @@ class MiniQMTCollector:
         end_time: 结束时间
         count: 数据条数（与时间范围二选一）
         dividend_type: 复权类型 'none'不复权 'front'前复权 'back'后复权
-        
+
         Returns:
         --------
         包含DataFrame数据的字典
         """
         if not self.connected:
-            return {'success': False, 'error': 'MiniQMT未连接'}
+            return {"success": False, "error": "MiniQMT未连接"}
 
         try:
             # 检查缓存
@@ -135,14 +136,14 @@ class MiniQMTCollector:
                 period=period,
                 start_time=start_time,
                 end_time=end_time,
-                count=count
+                count=count,
             )
 
             # 等待数据下载完成
             time.sleep(0.5)
 
             # 获取下载的数据
-            field_list = ['time', 'open', 'high', 'low', 'close', 'volume', 'amount']
+            field_list = ["time", "open", "high", "low", "close", "volume", "amount"]
 
             data = self.xtdata.get_market_data_ex(
                 field_list=field_list,
@@ -152,7 +153,7 @@ class MiniQMTCollector:
                 end_time=end_time,
                 count=count,
                 dividend_type=dividend_type,
-                fill_data=True  # 填充停牌数据
+                fill_data=True,  # 填充停牌数据
             )
 
             if data and stock_code in data:
@@ -161,16 +162,16 @@ class MiniQMTCollector:
                 # 处理数据格式
                 if not df.empty:
                     # 转换时间格式
-                    if 'time' in df.columns:
-                        df['time'] = pd.to_datetime(df['time'], format='%Y%m%d%H%M%S')
+                    if "time" in df.columns:
+                        df["time"] = pd.to_datetime(df["time"], format="%Y%m%d%H%M%S")
 
                     result = {
-                        'success': True,
-                        'symbol': stock_code,
-                        'period': period,
-                        'dividend_type': dividend_type,
-                        'count': len(df),
-                        'data': df.to_dict('records')
+                        "success": True,
+                        "symbol": stock_code,
+                        "period": period,
+                        "dividend_type": dividend_type,
+                        "count": len(df),
+                        "data": df.to_dict("records"),
                     }
 
                     # 缓存数据
@@ -179,39 +180,27 @@ class MiniQMTCollector:
                     logger.info(f"✅ 下载成功: {len(df)} 条数据")
                     return result
                 else:
-                    return {
-                        'success': False,
-                        'error': '返回数据为空'
-                    }
+                    return {"success": False, "error": "返回数据为空"}
             else:
-                return {
-                    'success': False,
-                    'error': '未获取到数据'
-                }
+                return {"success": False, "error": "未获取到数据"}
 
         except Exception as e:
             logger.error(f"❌ 下载历史数据失败: {e}")
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return {"success": False, "error": str(e)}
 
     # ==================== 2. 实时数据订阅 ====================
     def subscribe_quote(
-            self,
-            stock_code: str,
-            period: str = 'tick',
-            callback: Optional[Callable] = None
+        self, stock_code: str, period: str = "tick", callback: Optional[Callable] = None
     ) -> bool:
         """
         订阅实时行情（Level1）
-        
+
         Parameters:
         -----------
         stock_code: 股票代码
         period: 周期 'tick'分笔 '1m'一分钟 等
         callback: 数据回调函数
-        
+
         Returns:
         --------
         是否订阅成功
@@ -238,10 +227,10 @@ class MiniQMTCollector:
             self.xtdata.subscribe_quote(
                 stock_code=stock_code,
                 period=period,
-                start_time='',
-                end_time='',
+                start_time="",
+                end_time="",
                 count=0,
-                callback=on_data
+                callback=on_data,
             )
 
             # 保存订阅信息
@@ -255,15 +244,15 @@ class MiniQMTCollector:
             logger.error(f"❌ 订阅失败: {e}")
             return False
 
-    def unsubscribe_quote(self, stock_code: str, period: str = 'tick') -> bool:
+    def unsubscribe_quote(self, stock_code: str, period: str = "tick") -> bool:
         """
         取消订阅
-        
+
         Parameters:
         -----------
         stock_code: 股票代码
         period: 周期
-        
+
         Returns:
         --------
         是否取消成功
@@ -291,22 +280,22 @@ class MiniQMTCollector:
 
     # ==================== 3. 主动获取数据 ====================
     def get_market_data(
-            self,
-            stock_list: List[str],
-            field_list: List[str] = None,
-            period: str = '1d',
-            count: int = 20
+        self,
+        stock_list: List[str],
+        field_list: Optional[List[str]] = None,
+        period: str = "1d",
+        count: int = 20,
     ) -> Dict[str, pd.DataFrame]:
         """
         主动获取市场数据（Level1）
-        
+
         Parameters:
         -----------
         stock_list: 股票代码列表
         field_list: 字段列表 ['open', 'high', 'low', 'close', 'volume']
         period: 周期
         count: 获取最近N条数据
-        
+
         Returns:
         --------
         {stock_code: DataFrame}
@@ -316,16 +305,13 @@ class MiniQMTCollector:
 
         try:
             if field_list is None:
-                field_list = ['time', 'open', 'high', 'low', 'close', 'volume', 'amount']
+                field_list = ["time", "open", "high", "low", "close", "volume", "amount"]
 
             logger.info(f"📊 获取市场数据: {len(stock_list)} 只股票")
 
             # 获取数据
             data = self.xtdata.get_market_data(
-                field_list=field_list,
-                stock_list=stock_list,
-                period=period,
-                count=count
+                field_list=field_list, stock_list=stock_list, period=period, count=count
             )
 
             result = {}
@@ -335,7 +321,7 @@ class MiniQMTCollector:
                     df = pd.DataFrame(data[stock])
                     if not df.empty:
                         df = df.T  # 转置
-                        df.index.name = 'time'
+                        df.index.name = "time"
                         df.reset_index(inplace=True)
                         result[stock] = df
 
@@ -349,11 +335,11 @@ class MiniQMTCollector:
     def get_full_tick(self, stock_codes: List[str]) -> Dict[str, Dict]:
         """
         获取最新tick数据（含五档盘口）
-        
+
         Parameters:
         -----------
         stock_codes: 股票代码列表
-        
+
         Returns:
         --------
         {stock_code: tick_data}
@@ -374,20 +360,20 @@ class MiniQMTCollector:
 
                     # 格式化tick数据
                     result[code] = {
-                        'symbol': code,
-                        'time': tick.get('time', 0),
-                        'last_price': tick.get('lastPrice', 0),
-                        'open': tick.get('open', 0),
-                        'high': tick.get('high', 0),
-                        'low': tick.get('low', 0),
-                        'volume': tick.get('volume', 0),
-                        'amount': tick.get('amount', 0),
-                        'pre_close': tick.get('lastClose', 0),
+                        "symbol": code,
+                        "time": tick.get("time", 0),
+                        "last_price": tick.get("lastPrice", 0),
+                        "open": tick.get("open", 0),
+                        "high": tick.get("high", 0),
+                        "low": tick.get("low", 0),
+                        "volume": tick.get("volume", 0),
+                        "amount": tick.get("amount", 0),
+                        "pre_close": tick.get("lastClose", 0),
                         # 买卖盘
-                        'bid_price': [tick.get(f'bidPrice{i}', 0) for i in range(1, 6)],
-                        'ask_price': [tick.get(f'askPrice{i}', 0) for i in range(1, 6)],
-                        'bid_volume': [tick.get(f'bidVol{i}', 0) for i in range(1, 6)],
-                        'ask_volume': [tick.get(f'askVol{i}', 0) for i in range(1, 6)]
+                        "bid_price": [tick.get(f"bidPrice{i}", 0) for i in range(1, 6)],
+                        "ask_price": [tick.get(f"askPrice{i}", 0) for i in range(1, 6)],
+                        "bid_volume": [tick.get(f"bidVol{i}", 0) for i in range(1, 6)],
+                        "ask_volume": [tick.get(f"askVol{i}", 0) for i in range(1, 6)],
                     }
 
             logger.info(f"✅ 获取Tick成功: {len(result)} 只股票")
@@ -399,18 +385,16 @@ class MiniQMTCollector:
 
     # ==================== 4. 财务数据 ====================
     def get_financial_data(
-            self,
-            stock_list: List[str],
-            table_list: List[str] = None
+        self, stock_list: List[str], table_list: Optional[List[str]] = None
     ) -> Dict[str, pd.DataFrame]:
         """
         获取财务数据
-        
+
         Parameters:
         -----------
         stock_list: 股票代码列表
         table_list: 财务表列表 ['Balance', 'Income', 'CashFlow']
-        
+
         Returns:
         --------
         {stock_code: DataFrame}
@@ -420,7 +404,7 @@ class MiniQMTCollector:
 
         try:
             if table_list is None:
-                table_list = ['Balance', 'Income', 'CashFlow']
+                table_list = ["Balance", "Income", "CashFlow"]
 
             logger.info(f"💰 获取财务数据: {len(stock_list)} 只股票")
 
@@ -431,10 +415,7 @@ class MiniQMTCollector:
 
                 for table in table_list:
                     # 获取财务数据
-                    data = self.xtdata.get_financial_data(
-                        stock_code=stock,
-                        table_name=table
-                    )
+                    data = self.xtdata.get_financial_data(stock_code=stock, table_name=table)
 
                     if data:
                         stock_finance[table] = pd.DataFrame(data)
@@ -453,11 +434,11 @@ class MiniQMTCollector:
     def get_instrument_detail(self, stock_code: str) -> Dict[str, Any]:
         """
         获取合约详细信息
-        
+
         Parameters:
         -----------
         stock_code: 股票代码
-        
+
         Returns:
         --------
         合约信息字典
@@ -473,15 +454,15 @@ class MiniQMTCollector:
 
             if info:
                 result = {
-                    'symbol': stock_code,
-                    'name': info.get('InstrumentName', ''),
-                    'exchange': info.get('ExchangeID', ''),
-                    'product_type': info.get('ProductType', ''),
-                    'listed_date': info.get('OpenDate', ''),
-                    'expired_date': info.get('ExpireDate', ''),
-                    'price_tick': info.get('PriceTick', 0),
-                    'volume_multiple': info.get('VolumeMultiple', 1),
-                    'create_date': info.get('CreateDate', '')
+                    "symbol": stock_code,
+                    "name": info.get("InstrumentName", ""),
+                    "exchange": info.get("ExchangeID", ""),
+                    "product_type": info.get("ProductType", ""),
+                    "listed_date": info.get("OpenDate", ""),
+                    "expired_date": info.get("ExpireDate", ""),
+                    "price_tick": info.get("PriceTick", 0),
+                    "volume_multiple": info.get("VolumeMultiple", 1),
+                    "create_date": info.get("CreateDate", ""),
                 }
 
                 logger.info(f"✅ 获取合约信息成功: {info.get('InstrumentName', '')}")
@@ -497,11 +478,11 @@ class MiniQMTCollector:
     def get_stock_list_in_sector(self, sector_name: str) -> List[str]:
         """
         获取板块成分股
-        
+
         Parameters:
         -----------
         sector_name: 板块名称
-        
+
         Returns:
         --------
         股票代码列表
@@ -526,11 +507,11 @@ class MiniQMTCollector:
     def _process_realtime_data(self, stock_code: str, period: str, data: Any) -> Dict:
         """处理实时数据"""
         return {
-            'type': 'realtime_quote',
-            'symbol': stock_code,
-            'period': period,
-            'timestamp': time.time(),
-            'data': data
+            "type": "realtime_quote",
+            "symbol": stock_code,
+            "period": period,
+            "timestamp": time.time(),
+            "data": data,
         }
 
     def _get_cached_data(self, key: str) -> Optional[Dict]:
@@ -555,10 +536,10 @@ class MiniQMTCollector:
     def get_connection_status(self) -> Dict[str, Any]:
         """获取连接状态"""
         return {
-            'connected': self.connected,
-            'subscriptions': len(self.subscriptions),
-            'cached_items': len(self.data_cache),
-            'queue_size': self.message_queue.qsize()
+            "connected": self.connected,
+            "subscriptions": len(self.subscriptions),
+            "cached_items": len(self.data_cache),
+            "queue_size": self.message_queue.qsize(),
         }
 
     def close(self):
@@ -566,7 +547,7 @@ class MiniQMTCollector:
         try:
             # 取消所有订阅
             for key in list(self.subscriptions.keys()):
-                stock_code, period = key.split('_', 1)
+                stock_code, period = key.split("_", 1)
                 self.unsubscribe_quote(stock_code, period)
 
             # 清空缓存
@@ -592,14 +573,14 @@ def example_usage():
     print("=" * 50)
 
     history_data = collector.download_history_data(
-        stock_code='000001.SZ',
-        period='1d',
-        start_time='20240101',
-        end_time='20240131',
-        dividend_type='front'
+        stock_code="000001.SZ",
+        period="1d",
+        start_time="20240101",
+        end_time="20240131",
+        dividend_type="front",
     )
 
-    if history_data.get('success'):
+    if history_data.get("success"):
         print(f"下载成功: {history_data['count']} 条数据")
 
     # 2. 获取实时Tick
@@ -607,7 +588,7 @@ def example_usage():
     print("2. 获取实时Tick数据")
     print("=" * 50)
 
-    tick_data = collector.get_full_tick(['000001.SZ', '600000.SH'])
+    tick_data = collector.get_full_tick(["000001.SZ", "600000.SH"])
     for symbol, tick in tick_data.items():
         print(f"{symbol}: 最新价={tick['last_price']}, 成交量={tick['volume']}")
 
@@ -619,7 +600,7 @@ def example_usage():
     def on_quote(data):
         print(f"收到行情: {data}")
 
-    collector.subscribe_quote('000001.SZ', 'tick', callback=on_quote)
+    collector.subscribe_quote("000001.SZ", "tick", callback=on_quote)
 
     # 等待接收数据
     time.sleep(10)
@@ -629,7 +610,7 @@ def example_usage():
     print("4. 获取财务数据")
     print("=" * 50)
 
-    finance_data = collector.get_financial_data(['000001.SZ'])
+    finance_data = collector.get_financial_data(["000001.SZ"])
     if finance_data:
         print(f"获取到财务数据: {list(finance_data.keys())}")
 
@@ -638,7 +619,7 @@ def example_usage():
     print("5. 获取合约信息")
     print("=" * 50)
 
-    instrument = collector.get_instrument_detail('000001.SZ')
+    instrument = collector.get_instrument_detail("000001.SZ")
     if instrument:
         print(f"股票名称: {instrument.get('name')}")
         print(f"交易所: {instrument.get('exchange')}")
@@ -655,5 +636,5 @@ def example_usage():
     collector.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     example_usage()

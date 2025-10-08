@@ -3,32 +3,33 @@
 
 提供统一的错误处理、重试、超时和性能监控装饰器
 """
+
 import asyncio
 import functools
 import logging
 import time
 import traceback
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Type, TypeVar, Union
-from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, Optional, Type, TypeVar, cast
 
 from deepsearch.core.errors import (
-    BaseError,
-    ConfigurationError,
     DatabaseConnectionError,
     DataProviderError,
     NetworkError,
     ValidationError,
 )
+from deepsearch.observability import get_logger
 
-T = TypeVar('T')
-F = TypeVar('F', bound=Callable[..., Any])
+T = TypeVar("T")
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 class ErrorLevel(Enum):
     """错误级别"""
+
     DEBUG = "debug"
     INFO = "info"
     WARNING = "warning"
@@ -39,6 +40,7 @@ class ErrorLevel(Enum):
 @dataclass
 class ErrorContext:
     """错误上下文信息"""
+
     function_name: str
     module_name: str
     timestamp: datetime = field(default_factory=datetime.now)
@@ -62,15 +64,11 @@ class ErrorHandler:
         Args:
             logger: 日志记录器
         """
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or get_logger(__name__)
         self._error_stats: Dict[str, int] = {}
         self._last_errors: Dict[str, ErrorContext] = {}
 
-    def handle_error(
-        self,
-        context: ErrorContext,
-        level: ErrorLevel = ErrorLevel.ERROR
-    ) -> None:
+    def handle_error(self, context: ErrorContext, level: ErrorLevel = ErrorLevel.ERROR) -> None:
         """
         处理错误
 
@@ -123,7 +121,7 @@ class ErrorHandler:
                     "message": ctx.error_message,
                 }
                 for key, ctx in self._last_errors.items()
-            }
+            },
         }
 
 
@@ -137,7 +135,7 @@ def with_error_handling(
     default_return: Any = None,
     reraise: bool = True,
     level: ErrorLevel = ErrorLevel.ERROR,
-    context_info: Optional[Dict[str, Any]] = None
+    context_info: Optional[Dict[str, Any]] = None,
 ) -> Callable[[F], F]:
     """
     错误处理装饰器
@@ -159,6 +157,7 @@ def with_error_handling(
             # 数据库操作
             pass
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def sync_wrapper(*args, **kwargs):
@@ -168,7 +167,7 @@ def with_error_handling(
                 module_name=func.__module__,
                 args=args,
                 kwargs=kwargs,
-                additional_info=context_info or {}
+                additional_info=context_info or {},
             )
 
             try:
@@ -193,7 +192,7 @@ def with_error_handling(
                 module_name=func.__module__,
                 args=args,
                 kwargs=kwargs,
-                additional_info=context_info or {}
+                additional_info=context_info or {},
             )
 
             try:
@@ -211,8 +210,8 @@ def with_error_handling(
                 return default_return
 
         if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
+            return cast(F, async_wrapper)
+        return cast(F, sync_wrapper)
 
     return decorator
 
@@ -223,7 +222,7 @@ def with_retry(
     delay: float = 1.0,
     backoff: float = 2.0,
     exceptions: tuple = (Exception,),
-    on_retry: Optional[Callable[[int, Exception], None]] = None
+    on_retry: Optional[Callable[[int, Exception], None]] = None,
 ) -> Callable[[F], F]:
     """
     重试装饰器
@@ -245,6 +244,7 @@ def with_retry(
             # API调用
             pass
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def sync_wrapper(*args, **kwargs):
@@ -297,16 +297,13 @@ def with_retry(
                 raise last_exception
 
         if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
+            return cast(F, async_wrapper)
+        return cast(F, sync_wrapper)
 
     return decorator
 
 
-def with_timeout(
-    seconds: float,
-    error_message: str = "Operation timed out"
-) -> Callable[[F], F]:
+def with_timeout(seconds: float, error_message: str = "Operation timed out") -> Callable[[F], F]:
     """
     超时装饰器
 
@@ -320,14 +317,12 @@ def with_timeout(
             # 长时间运行的任务
             pass
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         async def async_wrapper(*args, **kwargs):
             try:
-                return await asyncio.wait_for(
-                    func(*args, **kwargs),
-                    timeout=seconds
-                )
+                return await asyncio.wait_for(func(*args, **kwargs), timeout=seconds)
             except asyncio.TimeoutError:
                 raise TimeoutError(error_message)
 
@@ -338,16 +333,14 @@ def with_timeout(
             return func(*args, **kwargs)
 
         if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
+            return cast(F, async_wrapper)
+        return cast(F, sync_wrapper)
 
     return decorator
 
 
 def with_performance_monitoring(
-    *,
-    threshold_seconds: float = 1.0,
-    log_slow: bool = True
+    *, threshold_seconds: float = 1.0, log_slow: bool = True
 ) -> Callable[[F], F]:
     """
     性能监控装饰器
@@ -362,8 +355,9 @@ def with_performance_monitoring(
             # 数据处理
             pass
     """
+
     def decorator(func: F) -> F:
-        logger = logging.getLogger(func.__module__)
+        logger = get_logger(func.__module__)
 
         @functools.wraps(func)
         def sync_wrapper(*args, **kwargs):
@@ -400,8 +394,8 @@ def with_performance_monitoring(
                     )
 
         if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
+            return cast(F, async_wrapper)
+        return cast(F, sync_wrapper)
 
     return decorator
 
@@ -410,7 +404,7 @@ def with_circuit_breaker(
     *,
     failure_threshold: int = 5,
     recovery_timeout: float = 60.0,
-    expected_exception: Type[Exception] = Exception
+    expected_exception: Type[Exception] = Exception,
 ) -> Callable[[F], F]:
     """
     熔断器装饰器
@@ -429,12 +423,9 @@ def with_circuit_breaker(
             # 外部API调用
             pass
     """
+
     def decorator(func: F) -> F:
-        state = {
-            "failure_count": 0,
-            "last_failure_time": None,
-            "is_open": False
-        }
+        state = {"failure_count": 0, "last_failure_time": None, "is_open": False}
 
         @functools.wraps(func)
         def sync_wrapper(*args, **kwargs):
@@ -456,7 +447,7 @@ def with_circuit_breaker(
                 # 成功，重置失败计数
                 state["failure_count"] = 0
                 return result
-            except expected_exception as e:
+            except expected_exception:
                 state["failure_count"] += 1
                 state["last_failure_time"] = time.time()
 
@@ -485,7 +476,7 @@ def with_circuit_breaker(
                 # 成功，重置失败计数
                 state["failure_count"] = 0
                 return result
-            except expected_exception as e:
+            except expected_exception:
                 state["failure_count"] += 1
                 state["last_failure_time"] = time.time()
 
@@ -495,17 +486,15 @@ def with_circuit_breaker(
                 raise
 
         if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
+            return cast(F, async_wrapper)
+        return cast(F, sync_wrapper)
 
     return decorator
 
 
 @asynccontextmanager
 async def error_context(
-    name: str,
-    suppress: bool = False,
-    on_error: Optional[Callable[[Exception], None]] = None
+    name: str, suppress: bool = False, on_error: Optional[Callable[[Exception], None]] = None
 ):
     """
     错误处理上下文管理器
@@ -523,7 +512,7 @@ async def error_context(
     try:
         yield
     except Exception as e:
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         logger.error(f"错误发生在 {name}: {e}")
 
         if on_error:
@@ -549,11 +538,13 @@ def compose_decorators(*decorators) -> Callable[[F], F]:
         async def complex_operation():
             pass
     """
+
     def decorator(func: F) -> F:
         result = func
         for dec in reversed(decorators):
             result = dec(result)
         return result
+
     return decorator
 
 
@@ -571,47 +562,28 @@ def reset_error_statistics() -> None:
 
 # 预定义的装饰器组合
 safe_database_operation = compose_decorators(
-    with_retry(
-        max_attempts=3,
-        delay=0.5,
-        exceptions=(DatabaseConnectionError,)
-    ),
+    with_retry(max_attempts=3, delay=0.5, exceptions=(DatabaseConnectionError,)),
     with_timeout(30.0),
     with_error_handling(
-        exceptions=(DatabaseConnectionError, ValidationError),
-        reraise=False,
-        default_return=None
+        exceptions=(DatabaseConnectionError, ValidationError), reraise=False, default_return=None
     ),
-    with_performance_monitoring(threshold_seconds=1.0)
+    with_performance_monitoring(threshold_seconds=1.0),
 )
 
 safe_api_call = compose_decorators(
     with_circuit_breaker(
-        failure_threshold=5,
-        recovery_timeout=60.0,
-        expected_exception=NetworkError
+        failure_threshold=5, recovery_timeout=60.0, expected_exception=NetworkError
     ),
-    with_retry(
-        max_attempts=3,
-        delay=1.0,
-        exceptions=(NetworkError, DataProviderError)
-    ),
+    with_retry(max_attempts=3, delay=1.0, exceptions=(NetworkError, DataProviderError)),
     with_timeout(10.0),
-    with_error_handling(
-        exceptions=(NetworkError, DataProviderError),
-        level=ErrorLevel.WARNING
-    )
+    with_error_handling(exceptions=(NetworkError, DataProviderError), level=ErrorLevel.WARNING),
 )
 
 
 # 使用示例
 if __name__ == "__main__":
     # 示例1：基本错误处理
-    @with_error_handling(
-        exceptions=(ValueError,),
-        default_return=0,
-        reraise=False
-    )
+    @with_error_handling(exceptions=(ValueError,), default_return=0, reraise=False)
     def divide(a: int, b: int) -> float:
         if b == 0:
             raise ValueError("除数不能为0")
@@ -628,6 +600,7 @@ if __name__ == "__main__":
     @with_circuit_breaker(failure_threshold=3)
     def unstable_service():
         import random
+
         if random.random() < 0.7:
             raise Exception("Service unavailable")
         return "Success"

@@ -3,20 +3,30 @@ QMT DataFeed 实现
 
 实现 IDataFeed 接口，提供统一的数据访问接口
 """
-from typing import Any, Dict, List
+
+from typing import Any, Dict, List, Optional, Union, cast, TYPE_CHECKING
 
 from loguru import logger
 
 from deepsearch.infrastructure.providers.datafeed.base import IDataFeed, KlineParams
+
 from .provider import QMTDataProvider
+
+
+if TYPE_CHECKING:
+    from pandas import DataFrame
+else:
+    DataFrame = Any  # type: ignore[assignment]
 
 try:
     import pandas as pd
-
     HAS_PANDAS = True
-except ImportError:
+except ImportError:  # pragma: no cover
+    pd = cast(Any, None)
     HAS_PANDAS = False
-    pd = None
+
+
+KlineResult = Union[List[Dict[str, Any]], "DataFrame"]
 
 
 class QMTDataFeed(IDataFeed):
@@ -27,20 +37,20 @@ class QMTDataFeed(IDataFeed):
         self.provider = QMTDataProvider()
         self.initialized = False
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化连接"""
         if not self.initialized:
             await self.provider.initialize()
             self.initialized = True
             logger.info("QMT DataFeed 初始化完成")
 
-    async def get_kline(self, params: KlineParams):
+    async def get_kline(self, params: KlineParams) -> KlineResult:
         """
         获取K线数据
-        
+
         Args:
             params: K线参数
-            
+
         Returns:
             DataFrame 或 List[Dict] 格式的K线数据
         """
@@ -57,7 +67,7 @@ class QMTDataFeed(IDataFeed):
             "60m": "60",
             "1d": "daily",
             "1w": "weekly",
-            "1mo": "monthly"
+            "1mo": "monthly",
         }
 
         period = period_map.get(params.timeframe, params.timeframe)
@@ -68,7 +78,7 @@ class QMTDataFeed(IDataFeed):
             period=period,
             start_date=params.start_date,
             end_date=params.end_date,
-            adjust=params.adjust
+            adjust=params.adjust,
         )
 
         if result.get("error"):
@@ -80,20 +90,20 @@ class QMTDataFeed(IDataFeed):
         # 标准化数据格式
         return self.normalize_bars(data)
 
-    async def get_realtime(self, symbols: List[str]) -> Dict[str, Any]:
+    async def get_realtime(self, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
         """
         获取实时行情
-        
+
         Args:
             symbols: 股票代码列表
-            
+
         Returns:
             实时行情数据字典
         """
         if not self.initialized:
             await self.initialize()
 
-        quotes = {}
+        quotes: Dict[str, Dict[str, Any]] = {}
 
         for symbol in symbols:
             try:
@@ -111,8 +121,15 @@ class QMTDataFeed(IDataFeed):
                         "amount": quote.get("amount", 0),
                         "time": quote.get("time", ""),
                         "change": quote.get("current", 0) - quote.get("prev_close", 0),
-                        "change_pct": ((quote.get("current", 0) - quote.get("prev_close", 0)) /
-                                       quote.get("prev_close", 1) * 100) if quote.get("prev_close") else 0
+                        "change_pct": (
+                            (
+                                (quote.get("current", 0) - quote.get("prev_close", 0))
+                                / quote.get("prev_close", 1)
+                                * 100
+                            )
+                            if quote.get("prev_close")
+                            else 0
+                        ),
                     }
             except Exception as e:
                 logger.error(f"获取 {symbol} 实时行情失败: {e}")
@@ -120,18 +137,20 @@ class QMTDataFeed(IDataFeed):
 
         return quotes
 
-    def normalize_bars(self, data: List[Dict[str, Any]]):
+    def normalize_bars(self, data: List[Dict[str, Any]]) -> KlineResult:
         """
         标准化K线数据格式
-        
+
         Args:
             data: 原始K线数据
-            
+
         Returns:
             标准化后的数据
         """
         if not data:
-            return [] if not HAS_PANDAS else pd.DataFrame()
+            if HAS_PANDAS and pd is not None:
+                return pd.DataFrame()
+            return []
 
         # 标准化字段映射
         field_map = {
@@ -146,12 +165,12 @@ class QMTDataFeed(IDataFeed):
             "涨跌幅": "change_pct",
             "涨跌额": "change",
             "换手率": "turnover",
-            "振幅": "amplitude"
+            "振幅": "amplitude",
         }
 
-        normalized = []
+        normalized: List[Dict[str, Any]] = []
         for bar in data:
-            normalized_bar = {}
+            normalized_bar: Dict[str, Any] = {}
 
             # 映射字段
             for old_key, new_key in field_map.items():
@@ -166,12 +185,12 @@ class QMTDataFeed(IDataFeed):
             normalized.append(normalized_bar)
 
         # 如果有pandas，返回DataFrame
-        if HAS_PANDAS:
+        if HAS_PANDAS and pd is not None:
             df = pd.DataFrame(normalized)
             # 设置日期为索引
-            if 'date' in df.columns:
-                df['date'] = pd.to_datetime(df['date'])
-                df.set_index('date', inplace=True)
+            if "date" in df.columns:
+                df["date"] = pd.to_datetime(df["date"])
+                df.set_index("date", inplace=True)
             return df
 
         return normalized
@@ -179,34 +198,36 @@ class QMTDataFeed(IDataFeed):
     async def get_stock_info(self, symbol: str) -> Dict[str, Any]:
         """
         获取股票信息
-        
+
         Args:
             symbol: 股票代码
-            
+
         Returns:
             股票信息字典
         """
         if not self.initialized:
             await self.initialize()
 
-        return await self.provider.fetch_stock_info(symbol)
+        result: Dict[str, Any] = await self.provider.fetch_stock_info(symbol)
+        return result
 
     async def get_stock_list(self) -> List[Dict[str, str]]:
         """
         获取股票列表
-        
+
         Returns:
             股票列表
         """
         if not self.initialized:
             await self.initialize()
 
-        return await self.provider.fetch_stock_list()
+        stock_list: List[Dict[str, str]] = await self.provider.fetch_stock_list()
+        return stock_list
 
-    async def subscribe(self, symbols: List[str]):
+    async def subscribe(self, symbols: List[str]) -> None:
         """
         订阅股票行情
-        
+
         Args:
             symbols: 股票代码列表
         """
@@ -215,10 +236,10 @@ class QMTDataFeed(IDataFeed):
 
         await self.provider.subscribe_symbols(symbols)
 
-    async def unsubscribe(self, symbols: List[str]):
+    async def unsubscribe(self, symbols: List[str]) -> None:
         """
         取消订阅
-        
+
         Args:
             symbols: 股票代码列表
         """
@@ -231,7 +252,7 @@ class QMTDataFeed(IDataFeed):
         """检查连接状态"""
         return self.provider.is_connected() if self.provider else False
 
-    async def close(self):
+    async def close(self) -> None:
         """关闭连接"""
         if self.provider:
             await self.provider.close()

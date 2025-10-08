@@ -1,22 +1,24 @@
 """
 性能跟踪器单元测试
 """
+
 import time
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
-from datetime import datetime, timedelta
 
 from deepsearch.infrastructure.monitoring.performance_tracker import (
+    Alert,
+    AlertSeverity,
+    ApplicationMetrics,
+    DatabaseMetrics,
+    MetricLevel,
     PerformanceTracker,
     SystemMetrics,
-    DatabaseMetrics,
-    ApplicationMetrics,
-    Alert,
-    MetricLevel,
-    AlertSeverity,
     get_tracker,
+    record_app_metrics,
     record_db_metrics,
-    record_app_metrics
 )
 
 
@@ -37,7 +39,7 @@ class TestSystemMetrics:
             network_recv_bytes=256000,
             process_count=100,
             thread_count=200,
-            open_files=50
+            open_files=50,
         )
 
         assert metrics.cpu_percent == 50.5
@@ -59,7 +61,7 @@ class TestSystemMetrics:
             network_recv_bytes=256000,
             process_count=100,
             thread_count=200,
-            open_files=50
+            open_files=50,
         )
 
         result = metrics.to_dict()
@@ -89,7 +91,7 @@ class TestDatabaseMetrics:
             failed_queries=5,
             avg_query_time=0.05,
             max_query_time=2.5,
-            cache_hit_ratio=0.85
+            cache_hit_ratio=0.85,
         )
 
         assert metrics.active_connections == 10
@@ -110,7 +112,7 @@ class TestDatabaseMetrics:
             max_query_time=2.5,
             cache_hit_ratio=0.85,
             deadlocks=2,
-            lock_waits=15
+            lock_waits=15,
         )
 
         result = metrics.to_dict()
@@ -143,7 +145,7 @@ class TestApplicationMetrics:
             p99_response_time=1.2,
             active_sessions=25,
             cache_hit_rate=0.75,
-            event_queue_size=100
+            event_queue_size=100,
         )
 
         assert metrics.request_count == 5000
@@ -165,7 +167,7 @@ class TestApplicationMetrics:
             p99_response_time=1.2,
             active_sessions=25,
             cache_hit_rate=0.75,
-            event_queue_size=100
+            event_queue_size=100,
         )
 
         result = metrics.to_dict()
@@ -189,7 +191,7 @@ class TestAlert:
             severity=AlertSeverity.WARNING,
             metric_level=MetricLevel.SYSTEM,
             message="CPU使用率过高",
-            details={"cpu_percent": 85.5}
+            details={"cpu_percent": 85.5},
         )
 
         assert alert.id == "test_alert_001"
@@ -204,7 +206,7 @@ class TestAlert:
             severity=AlertSeverity.WARNING,
             metric_level=MetricLevel.SYSTEM,
             message="CPU使用率过高",
-            details={"cpu_percent": 85.5}
+            details={"cpu_percent": 85.5},
         )
 
         # 标记为已解决
@@ -221,7 +223,7 @@ class TestAlert:
             severity=AlertSeverity.WARNING,
             metric_level=MetricLevel.SYSTEM,
             message="CPU使用率过高",
-            details={"cpu_percent": 85.5}
+            details={"cpu_percent": 85.5},
         )
 
         result = alert.to_dict()
@@ -241,11 +243,7 @@ class TestPerformanceTracker:
     @pytest.fixture
     def tracker(self):
         """创建跟踪器实例"""
-        tracker = PerformanceTracker(
-            collect_interval=0.1,
-            history_size=100,
-            enable_alerts=True
-        )
+        tracker = PerformanceTracker(collect_interval=0.1, history_size=100, enable_alerts=True)
         yield tracker
         # 清理
         if tracker._running:
@@ -259,7 +257,7 @@ class TestPerformanceTracker:
         assert not tracker._running
         assert len(tracker.alert_rules) > 0  # 有默认规则
 
-    @patch('deepsearch.infrastructure.monitoring.performance_tracker.psutil')
+    @patch("deepsearch.infrastructure.monitoring.performance_tracker.psutil")
     def test_collect_system_metrics(self, mock_psutil, tracker):
         """测试系统指标采集"""
         # 模拟psutil返回值
@@ -294,10 +292,7 @@ class TestPerformanceTracker:
     def test_record_database_metrics(self, tracker):
         """测试记录数据库指标"""
         metrics = DatabaseMetrics(
-            timestamp=time.time(),
-            active_connections=15,
-            total_queries=2000,
-            avg_query_time=0.08
+            timestamp=time.time(), active_connections=15, total_queries=2000, avg_query_time=0.08
         )
 
         tracker.record_database_metrics(metrics)
@@ -308,10 +303,7 @@ class TestPerformanceTracker:
     def test_record_application_metrics(self, tracker):
         """测试记录应用指标"""
         metrics = ApplicationMetrics(
-            timestamp=time.time(),
-            request_count=3000,
-            error_count=30,
-            avg_response_time=0.15
+            timestamp=time.time(), request_count=3000, error_count=30, avg_response_time=0.15
         )
 
         tracker.record_application_metrics(metrics)
@@ -332,18 +324,12 @@ class TestPerformanceTracker:
         """测试获取当前指标"""
         # 添加一些指标
         db_metrics = DatabaseMetrics(
-            timestamp=time.time(),
-            active_connections=10,
-            total_queries=1000,
-            avg_query_time=0.05
+            timestamp=time.time(), active_connections=10, total_queries=1000, avg_query_time=0.05
         )
         tracker.record_database_metrics(db_metrics)
 
         app_metrics = ApplicationMetrics(
-            timestamp=time.time(),
-            request_count=500,
-            error_count=5,
-            avg_response_time=0.1
+            timestamp=time.time(), request_count=500, error_count=5, avg_response_time=0.1
         )
         tracker.record_application_metrics(app_metrics)
 
@@ -362,7 +348,7 @@ class TestPerformanceTracker:
                 timestamp=time.time() + i,
                 active_connections=10 + i,
                 total_queries=1000 + i * 100,
-                avg_query_time=0.05
+                avg_query_time=0.05,
             )
             tracker.record_database_metrics(metrics)
             time.sleep(0.01)
@@ -381,7 +367,7 @@ class TestPerformanceTracker:
             request_count=1000,
             error_count=200,
             error_rate=0.2,  # 20%错误率，超过阈值
-            avg_response_time=0.1
+            avg_response_time=0.1,
         )
 
         tracker.record_application_metrics(metrics)
@@ -398,7 +384,7 @@ class TestPerformanceTracker:
             request_count=1000,
             error_count=200,
             error_rate=0.2,
-            avg_response_time=0.1
+            avg_response_time=0.1,
         )
         tracker.record_application_metrics(high_error_metrics)
 
@@ -411,7 +397,7 @@ class TestPerformanceTracker:
             request_count=1000,
             error_count=10,
             error_rate=0.01,  # 1%错误率，正常
-            avg_response_time=0.1
+            avg_response_time=0.1,
         )
         tracker.record_application_metrics(normal_metrics)
 
@@ -430,7 +416,7 @@ class TestPerformanceTracker:
                 timestamp=time.time() + i,
                 active_connections=10 + i,
                 total_queries=1000 + i * 100,
-                avg_query_time=0.05
+                avg_query_time=0.05,
             )
             tracker.record_database_metrics(db_metrics)
 
@@ -452,10 +438,7 @@ class TestPerformanceTracker:
 
         # 记录指标
         db_metrics = DatabaseMetrics(
-            timestamp=time.time(),
-            active_connections=10,
-            total_queries=1000,
-            avg_query_time=0.05
+            timestamp=time.time(), active_connections=10, total_queries=1000, avg_query_time=0.05
         )
         tracker.record_database_metrics(db_metrics)
 
@@ -478,7 +461,7 @@ class TestPerformanceTracker:
             request_count=1000,
             error_count=200,
             error_rate=0.2,
-            avg_response_time=0.1
+            avg_response_time=0.1,
         )
         tracker.record_application_metrics(high_error_metrics)
 
@@ -489,10 +472,7 @@ class TestPerformanceTracker:
         """测试导出指标"""
         # 添加一些指标
         db_metrics = DatabaseMetrics(
-            timestamp=time.time(),
-            active_connections=10,
-            total_queries=1000,
-            avg_query_time=0.05
+            timestamp=time.time(), active_connections=10, total_queries=1000, avg_query_time=0.05
         )
         tracker.record_database_metrics(db_metrics)
 
@@ -504,6 +484,7 @@ class TestPerformanceTracker:
 
         # 读取并验证
         import json
+
         with open(export_file, "r") as f:
             data = json.load(f)
 
@@ -515,18 +496,12 @@ class TestPerformanceTracker:
         """测试生成报告"""
         # 添加各种指标
         db_metrics = DatabaseMetrics(
-            timestamp=time.time(),
-            active_connections=10,
-            total_queries=1000,
-            avg_query_time=0.05
+            timestamp=time.time(), active_connections=10, total_queries=1000, avg_query_time=0.05
         )
         tracker.record_database_metrics(db_metrics)
 
         app_metrics = ApplicationMetrics(
-            timestamp=time.time(),
-            request_count=500,
-            error_count=5,
-            avg_response_time=0.1
+            timestamp=time.time(), request_count=500, error_count=5, avg_response_time=0.1
         )
         tracker.record_application_metrics(app_metrics)
 
@@ -536,7 +511,7 @@ class TestPerformanceTracker:
         assert "数据库性能" in report
         assert "应用性能" in report
 
-    @patch('deepsearch.infrastructure.monitoring.performance_tracker.threading.Thread')
+    @patch("deepsearch.infrastructure.monitoring.performance_tracker.threading.Thread")
     def test_start_stop(self, mock_thread, tracker):
         """测试启动和停止"""
         mock_thread_instance = MagicMock()
@@ -563,7 +538,7 @@ class TestPerformanceTracker:
                 timestamp=time.time() + i,
                 active_connections=i,
                 total_queries=i * 100,
-                avg_query_time=0.05
+                avg_query_time=0.05,
             )
             tracker.record_database_metrics(metrics)
 
@@ -576,7 +551,7 @@ class TestPerformanceTracker:
 class TestGlobalFunctions:
     """测试全局函数"""
 
-    @patch('deepsearch.infrastructure.monitoring.performance_tracker._tracker', None)
+    @patch("deepsearch.infrastructure.monitoring.performance_tracker._tracker", None)
     def test_get_tracker(self):
         """测试获取全局跟踪器"""
         tracker1 = get_tracker()
@@ -588,17 +563,14 @@ class TestGlobalFunctions:
         # 清理
         tracker1.stop()
 
-    @patch('deepsearch.infrastructure.monitoring.performance_tracker.get_tracker')
+    @patch("deepsearch.infrastructure.monitoring.performance_tracker.get_tracker")
     def test_record_db_metrics_shortcut(self, mock_get_tracker):
         """测试数据库指标快捷记录"""
         mock_tracker = MagicMock()
         mock_get_tracker.return_value = mock_tracker
 
         record_db_metrics(
-            active_connections=20,
-            total_queries=3000,
-            avg_query_time=0.1,
-            slow_queries=50
+            active_connections=20, total_queries=3000, avg_query_time=0.1, slow_queries=50
         )
 
         mock_tracker.record_database_metrics.assert_called_once()
@@ -607,17 +579,14 @@ class TestGlobalFunctions:
         assert call_args.total_queries == 3000
         assert call_args.slow_queries == 50
 
-    @patch('deepsearch.infrastructure.monitoring.performance_tracker.get_tracker')
+    @patch("deepsearch.infrastructure.monitoring.performance_tracker.get_tracker")
     def test_record_app_metrics_shortcut(self, mock_get_tracker):
         """测试应用指标快捷记录"""
         mock_tracker = MagicMock()
         mock_get_tracker.return_value = mock_tracker
 
         record_app_metrics(
-            request_count=1000,
-            error_count=10,
-            avg_response_time=0.2,
-            cache_hit_rate=0.8
+            request_count=1000, error_count=10, avg_response_time=0.2, cache_hit_rate=0.8
         )
 
         mock_tracker.record_application_metrics.assert_called_once()

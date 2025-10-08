@@ -1,7 +1,7 @@
 // 全局样式文件
-@import './variables.scss';
-@import './mixins.scss';
-@import './reset.scss';
+@use './variables' as *;
+@use './mixins' as *;
+@use './reset' as *;
 
 // Ant Design 主题覆盖
 :root {

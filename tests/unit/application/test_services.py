@@ -3,11 +3,10 @@ Application层服务测试
 测试数据源管理、图表服务等核心服务
 """
 
-import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import AsyncMock, Mock, patch
+
 import pandas as pd
+import pytest
 
 
 class TestDataSourceManager:
@@ -19,9 +18,9 @@ class TestDataSourceManager:
         config = Mock()
         # 添加data_sources配置
         config.data_sources = {
-            'amazingdata': {'enabled': True, 'priority': 1, 'config': {}},
-            'cloudflare_workers': {'enabled': True, 'priority': 2, 'config': {}},
-            'qmt': {'enabled': True, 'priority': 3, 'config': {}}
+            "amazingdata": {"enabled": True, "priority": 1, "config": {}},
+            "cloudflare_workers": {"enabled": True, "priority": 2, "config": {}},
+            "qmt": {"enabled": True, "priority": 3, "config": {}},
         }
         # 兼容旧配置格式
         config.amazingdata = Mock(enabled=True, priority=1)
@@ -32,7 +31,10 @@ class TestDataSourceManager:
     @pytest.fixture
     def data_source_manager(self, mock_config):
         """创建数据源管理器实例"""
-        from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceManager
+        from deepsearch.infrastructure.providers.managers.data_source_manager import (
+            DataSourceManager,
+        )
+
         manager = DataSourceManager(config=mock_config)
         return manager
 
@@ -40,7 +42,7 @@ class TestDataSourceManager:
     @pytest.mark.asyncio
     async def test_initialize(self, data_source_manager):
         """测试初始化"""
-        with patch.object(data_source_manager, '_init_source', new_callable=AsyncMock) as mock_init:
+        with patch.object(data_source_manager, "_init_source", new_callable=AsyncMock) as mock_init:
             mock_init.return_value = True
 
             result = await data_source_manager.initialize()
@@ -58,7 +60,7 @@ class TestDataSourceManager:
                 "name": "平安银行",
                 "current": 10.5,
                 "change": 0.2,
-                "change_pct": 1.94
+                "change_pct": 1.94,
             }
         }
 
@@ -121,7 +123,7 @@ class TestDataSourceManager:
 
         data_source_manager._sources = [mock_source]
 
-        with patch('asyncio.wait_for', new_callable=AsyncMock) as mock_wait_for:
+        with patch("asyncio.wait_for", new_callable=AsyncMock) as mock_wait_for:
             mock_wait_for.return_value = {"data": {"symbol": "000001"}}
 
             result = await data_source_manager._check_source_health(mock_source)
@@ -136,6 +138,7 @@ class TestChartService:
     def chart_service(self):
         """创建图表服务实例"""
         from deepsearch.webui.api.endpoints.trading.chart import ChartService
+
         service = ChartService()
         return service
 
@@ -146,7 +149,7 @@ class TestChartService:
         cached_data = {
             "symbol": "000001",
             "timeframe": "1d",
-            "data": [{"date": "2024-01-01", "close": 10.5}]
+            "data": [{"date": "2024-01-01", "close": 10.5}],
         }
 
         # 模拟缓存命中
@@ -161,47 +164,46 @@ class TestChartService:
     @pytest.mark.asyncio
     async def test_get_chart_data_with_indicators(self, chart_service):
         """测试获取带指标的图表数据"""
-        mock_df = pd.DataFrame({
-            'date': pd.date_range('2024-01-01', periods=100),
-            'open': [10.0] * 100,
-            'high': [10.5] * 100,
-            'low': [9.5] * 100,
-            'close': [10.2] * 100,
-            'volume': [1000000] * 100
-        })
+        mock_df = pd.DataFrame(
+            {
+                "date": pd.date_range("2024-01-01", periods=100),
+                "open": [10.0] * 100,
+                "high": [10.5] * 100,
+                "low": [9.5] * 100,
+                "close": [10.2] * 100,
+                "volume": [1000000] * 100,
+            }
+        )
 
         # 模拟数据管理器
         mock_data_manager = AsyncMock()
-        mock_data_manager.get_stock_hist = AsyncMock(return_value={
-            "data": mock_df.to_dict('records'),
-            "source": "test"
-        })
+        mock_data_manager.get_stock_hist = AsyncMock(
+            return_value={"data": mock_df.to_dict("records"), "source": "test"}
+        )
 
         chart_service._data_manager = mock_data_manager
         chart_service.cache_manager.get = Mock(return_value=None)
         chart_service.cache_manager.set = Mock()
 
         # 模拟指标计算
-        with patch.object(chart_service.indicators, 'calculate_macd') as mock_macd:
+        with patch.object(chart_service.indicators, "calculate_macd") as mock_macd:
             mock_macd.return_value = mock_df
 
-            result = await chart_service.get_chart_data(
-                "000001", "1d", indicators=["macd"]
-            )
+            result = await chart_service.get_chart_data("000001", "1d", indicators=["macd"])
 
             assert result is not None
-            assert result['symbol'] == "000001"
-            assert result['timeframe'] == "1d"
-            assert 'data' in result
+            assert result["symbol"] == "000001"
+            assert result["timeframe"] == "1d"
+            assert "data" in result
             mock_macd.assert_called_once()
 
     @pytest.mark.skip(reason="ChartService 需要重新实现")
     def test_timeframe_conversion(self, chart_service):
         """测试时间周期转换"""
-        assert chart_service._timeframe_to_period('1d') == 'daily'
-        assert chart_service._timeframe_to_period('1w') == 'weekly'
-        assert chart_service._timeframe_to_period('1M') == 'monthly'
-        assert chart_service._timeframe_to_period('1h') == '60min'
+        assert chart_service._timeframe_to_period("1d") == "daily"
+        assert chart_service._timeframe_to_period("1w") == "weekly"
+        assert chart_service._timeframe_to_period("1M") == "monthly"
+        assert chart_service._timeframe_to_period("1h") == "60min"
 
 
 class TestDataProcessor:
@@ -210,11 +212,12 @@ class TestDataProcessor:
     @pytest.fixture
     def data_processor(self):
         """创建数据处理器实例"""
+
         # DataProcessor class doesn't exist, using mock instead
-        from unittest.mock import Mock
         class DataProcessor:
             def clean_nan_values(self, data):
                 import numpy as np
+
                 def clean_value(v):
                     if isinstance(v, (float, np.floating)) and (np.isnan(v) or np.isinf(v)):
                         return 0
@@ -223,20 +226,21 @@ class TestDataProcessor:
                     elif isinstance(v, dict):
                         return {k: clean_value(val) for k, val in v.items()}
                     return v
+
                 return clean_value(data)
 
             def standardize_columns(self, df):
-                rename_map = {
-                    '日期': 'date',
-                    '开盘': 'open',
-                    '收盘': 'close',
-                    '成交量': 'volume'
-                }
+                rename_map = {"日期": "date", "开盘": "open", "收盘": "close", "成交量": "volume"}
                 return df.rename(columns=rename_map)
 
             def aggregate_bars(self, df, timeframe):
-                if timeframe == '5m':
-                    return df.iloc[::5].reset_index(drop=True).assign(volume=df.groupby(df.index // 5)['volume'].sum().values)
+                if timeframe == "5m":
+                    return (
+                        df.iloc[::5]
+                        .reset_index(drop=True)
+                        .assign(volume=df.groupby(df.index // 5)["volume"].sum().values)
+                    )
+
         return DataProcessor()
 
     def test_clean_nan_values(self, data_processor):
@@ -247,10 +251,7 @@ class TestDataProcessor:
             "value1": 10.5,
             "value2": np.nan,
             "value3": [1, 2, np.nan, 4],
-            "nested": {
-                "value4": np.inf,
-                "value5": 20
-            }
+            "nested": {"value4": np.inf, "value5": 20},
         }
 
         cleaned = data_processor.clean_nan_values(data)
@@ -264,37 +265,36 @@ class TestDataProcessor:
 
     def test_standardize_columns(self, data_processor):
         """测试列名标准化"""
-        df = pd.DataFrame({
-            '日期': ['2024-01-01'],
-            '开盘': [10.0],
-            '收盘': [10.5],
-            '成交量': [1000000]
-        })
+        df = pd.DataFrame(
+            {"日期": ["2024-01-01"], "开盘": [10.0], "收盘": [10.5], "成交量": [1000000]}
+        )
 
         standardized = data_processor.standardize_columns(df)
 
-        assert 'date' in standardized.columns
-        assert 'open' in standardized.columns
-        assert 'close' in standardized.columns
-        assert 'volume' in standardized.columns
-        assert '日期' not in standardized.columns
+        assert "date" in standardized.columns
+        assert "open" in standardized.columns
+        assert "close" in standardized.columns
+        assert "volume" in standardized.columns
+        assert "日期" not in standardized.columns
 
     def test_aggregate_bars(self, data_processor):
         """测试K线聚合"""
-        df = pd.DataFrame({
-            'date': pd.date_range('2024-01-01 09:30', periods=60, freq='1min'),
-            'open': range(60),
-            'high': range(1, 61),
-            'low': range(-1, 59),
-            'close': range(2, 62),
-            'volume': [1000] * 60
-        })
+        df = pd.DataFrame(
+            {
+                "date": pd.date_range("2024-01-01 09:30", periods=60, freq="1min"),
+                "open": range(60),
+                "high": range(1, 61),
+                "low": range(-1, 59),
+                "close": range(2, 62),
+                "volume": [1000] * 60,
+            }
+        )
 
-        aggregated = data_processor.aggregate_bars(df, '5m')
+        aggregated = data_processor.aggregate_bars(df, "5m")
 
         # 60分钟的1分钟数据聚合成5分钟应该有12条
         assert len(aggregated) == 12
-        assert aggregated['volume'].iloc[0] == 5000  # 5分钟的成交量总和
+        assert aggregated["volume"].iloc[0] == 5000  # 5分钟的成交量总和
 
 
 class TestTechnicalIndicators:
@@ -304,32 +304,35 @@ class TestTechnicalIndicators:
     def indicators(self):
         """创建技术指标实例"""
         from deepsearch.indicators.technical import TechnicalIndicators
+
         return TechnicalIndicators()
 
     @pytest.fixture
     def sample_df(self):
         """创建样本数据"""
-        return pd.DataFrame({
-            'date': pd.date_range('2024-01-01', periods=100),
-            'open': [10.0 + i * 0.01 for i in range(100)],
-            'high': [10.5 + i * 0.01 for i in range(100)],
-            'low': [9.5 + i * 0.01 for i in range(100)],
-            'close': [10.2 + i * 0.01 for i in range(100)],
-            'volume': [1000000 + i * 1000 for i in range(100)]
-        })
+        return pd.DataFrame(
+            {
+                "date": pd.date_range("2024-01-01", periods=100),
+                "open": [10.0 + i * 0.01 for i in range(100)],
+                "high": [10.5 + i * 0.01 for i in range(100)],
+                "low": [9.5 + i * 0.01 for i in range(100)],
+                "close": [10.2 + i * 0.01 for i in range(100)],
+                "volume": [1000000 + i * 1000 for i in range(100)],
+            }
+        )
 
     def test_calculate_macd(self, indicators, sample_df):
         """测试MACD计算"""
         result = indicators.macd(sample_df)
 
-        assert 'MACD' in result.columns
-        assert 'Signal' in result.columns
-        assert 'Histogram' in result.columns
+        assert "MACD" in result.columns
+        assert "Signal" in result.columns
+        assert "Histogram" in result.columns
         assert len(result) == len(sample_df)
 
         # MACD值应该在合理范围内
-        assert result['MACD'].notna().sum() > 0
-        assert result['Signal'].notna().sum() > 0
+        assert result["MACD"].notna().sum() > 0
+        assert result["Signal"].notna().sum() > 0
 
     def test_calculate_rsi(self, indicators, sample_df):
         """测试RSI计算"""
@@ -357,15 +360,15 @@ class TestTechnicalIndicators:
         """测试布林带计算"""
         result = indicators.bollinger_bands(sample_df)
 
-        assert 'BB_Upper' in result.columns
-        assert 'BB_Middle' in result.columns
-        assert 'BB_Lower' in result.columns
+        assert "BB_Upper" in result.columns
+        assert "BB_Middle" in result.columns
+        assert "BB_Lower" in result.columns
         assert len(result) == len(sample_df)
 
         # 验证布林带的逻辑关系
-        valid_idx = result[['BB_Upper', 'BB_Middle', 'BB_Lower']].notna().all(axis=1)
-        assert all(result.loc[valid_idx, 'BB_Upper'] > result.loc[valid_idx, 'BB_Middle'])
-        assert all(result.loc[valid_idx, 'BB_Middle'] > result.loc[valid_idx, 'BB_Lower'])
+        valid_idx = result[["BB_Upper", "BB_Middle", "BB_Lower"]].notna().all(axis=1)
+        assert all(result.loc[valid_idx, "BB_Upper"] > result.loc[valid_idx, "BB_Middle"])
+        assert all(result.loc[valid_idx, "BB_Middle"] > result.loc[valid_idx, "BB_Lower"])
 
 
 if __name__ == "__main__":

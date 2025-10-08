@@ -4,7 +4,7 @@
 """
 import time
 
-from deepsearch.constants import EVENT_TICK, EVENT_ORDER
+from deepsearch.constants import EVENT_ORDER, EVENT_TICK
 from deepsearch.core import MainEngine
 
 
@@ -44,8 +44,8 @@ def main():
                         "symbol": "AAPL",
                         "price": 150 + (count % 10) * 0.1,
                         "volume": 1000 + (count % 100) * 10,
-                        "timestamp": time.time()
-                    }
+                        "timestamp": time.time(),
+                    },
                 )
                 engine._event_engine.put(event)
 
@@ -60,8 +60,8 @@ def main():
                         "price": 150 + (count % 10) * 0.1,
                         "quantity": 100,
                         "status": "FILLED",
-                        "timestamp": time.time()
-                    }
+                        "timestamp": time.time(),
+                    },
                 )
                 engine._event_engine.put(event)
 

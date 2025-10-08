@@ -262,7 +262,7 @@ const EventHandlerPerformance = ({ handlers, loading }) => {
       title: '平均处理时间',
       dataIndex: 'avgTime',
       key: 'avgTime',
-      render: (time) => `${time}ms`,
+      render: (time) => (typeof time === 'number' ? `${time.toFixed(2)} ms` : (time ?? '-')),
       sorter: (a, b) => a.avgTime - b.avgTime,
     },
     {
@@ -299,7 +299,7 @@ const EventStream = ({ events, loading }) => {
     <Card 
       title={<Space><SyncOutlined spin /> 实时事件流</Space>} 
       loading={loading}
-      bodyStyle={{ maxHeight: 400, overflowY: 'auto' }}
+      styles={{ body: { maxHeight: 400, overflowY: 'auto' } }}
     >
       <Timeline mode="left">
         {(events || []).map((event, index) => (

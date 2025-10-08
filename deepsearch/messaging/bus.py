@@ -1,59 +1,100 @@
 """
 Base message bus interface and composite implementation.
 """
+
 from __future__ import annotations
 
 import asyncio
-import logging
-import pickle
-import zlib
 import hashlib
+import pickle
 import time
+import zlib
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from fnmatch import fnmatch
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar, Awaitable, DefaultDict, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    DefaultDict,
+    Deque,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    TypedDict,
+    Union,
+    cast,
+)
 
 from deepsearch.config.models import RouteConfig
+from deepsearch.messaging.types import MessageEnvelope
+from deepsearch.observability import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover
     pass
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 T = TypeVar("T")  # Data / Event / Command payload
 R = TypeVar("R")  # Response payload
+class DeduplicationStats(TypedDict):
+    """消息去重统计结构。"""
+
+    total_messages: int
+    duplicates_filtered: int
+    unique_messages: int
+
+
+class PerformanceStats(TypedDict):
+    """消息总线性能统计结构。"""
+
+    messages_published: int
+    messages_compressed: int
+    messages_deduplicated: int
+    bytes_sent: int
+    bytes_compressed: int
+    routing_decisions: DefaultDict[str, int]
+    publish_times: Deque[float]
+    errors: DefaultDict[str, int]
+
+
+AsyncHandler = Callable[[str, T], Awaitable[None]]
+SyncHandler = Callable[[str, T], None]
 
 
 class MessageCompressor:
     """消息压缩器"""
-    
+
     # 压缩阈值（字节）
     COMPRESSION_THRESHOLD = 1024  # 1KB
-    
+
     @staticmethod
     def compress(data: Any) -> Tuple[bytes, bool]:
         """
         压缩消息
-        
+
         Returns:
             (压缩后的数据, 是否压缩)
         """
         # 序列化
         serialized = pickle.dumps(data)
-        
+
         # 检查是否需要压缩
         if len(serialized) < MessageCompressor.COMPRESSION_THRESHOLD:
             return serialized, False
-        
+
         # 使用zlib压缩（速度和压缩率的平衡）
         compressed = zlib.compress(serialized, level=1)  # 使用较低的压缩级别以提高速度
-        
+
         # 只有压缩后更小才使用压缩
         if len(compressed) < len(serialized):
             return compressed, True
         return serialized, False
-    
+
     @staticmethod
     def decompress(data: bytes, is_compressed: bool) -> Any:
         """
@@ -66,53 +107,53 @@ class MessageCompressor:
 
 class MessageDeduplicator:
     """消息去重器"""
-    
+
     def __init__(self, ttl_seconds: int = 60, max_size: int = 10000):
         self.ttl_seconds = ttl_seconds
         self.max_size = max_size
-        self.seen_messages = {}  # message_id -> timestamp
-        self.message_queue = deque()  # 用于LRU淘汰
-        self.stats = {
-            'total_messages': 0,
-            'duplicates_filtered': 0,
-            'unique_messages': 0
+        self.seen_messages: Dict[str, datetime] = {}
+        self.message_queue: Deque[Tuple[str, datetime]] = deque()
+        self.stats: DeduplicationStats = {
+            "total_messages": 0,
+            "duplicates_filtered": 0,
+            "unique_messages": 0,
         }
-    
+
     def generate_message_id(self, topic: str, message: Any) -> str:
         """生成消息 ID"""
         msg_str = f"{topic}:{str(message)}"
         return hashlib.md5(msg_str.encode()).hexdigest()[:16]
-    
+
     def is_duplicate(self, message_id: str) -> bool:
         """检查是否为重复消息"""
-        self.stats['total_messages'] += 1
+        self.stats["total_messages"] += 1
         now = datetime.now()
-        
+
         # 清理过期消息
         self._cleanup_expired(now)
-        
+
         # 检查是否见过
         if message_id in self.seen_messages:
-            self.stats['duplicates_filtered'] += 1
+            self.stats["duplicates_filtered"] += 1
             return True
-        
+
         # 记录新消息
         self.seen_messages[message_id] = now
         self.message_queue.append((message_id, now))
-        self.stats['unique_messages'] += 1
-        
+        self.stats["unique_messages"] += 1
+
         # LRU淘汰
         if len(self.seen_messages) > self.max_size:
             oldest_id, _ = self.message_queue.popleft()
             if oldest_id in self.seen_messages:
                 del self.seen_messages[oldest_id]
-        
+
         return False
-    
+
     def _cleanup_expired(self, now: datetime):
         """清理过期消息"""
         cutoff = now - timedelta(seconds=self.ttl_seconds)
-        
+
         # 从队列头部开始清理过期消息
         while self.message_queue:
             msg_id, timestamp = self.message_queue[0]
@@ -121,16 +162,26 @@ class MessageDeduplicator:
             self.message_queue.popleft()
             if msg_id in self.seen_messages:
                 del self.seen_messages[msg_id]
-    
-    def get_stats(self) -> Dict[str, Any]:
+
+    def get_stats(self) -> DeduplicationStats:
         """获取统计信息"""
-        return dict(self.stats)
+        return cast(DeduplicationStats, self.stats.copy())
+
+    def reset(self) -> None:
+        """重置去重状态与统计数据。"""
+        self.seen_messages.clear()
+        self.message_queue.clear()
+        self.stats = {
+            "total_messages": 0,
+            "duplicates_filtered": 0,
+            "unique_messages": 0,
+        }
 
 
-class MessageBus(ABC):
+class MessageBus(ABC, Generic[T]):
     """
     Abstract base class for message bus implementations.
-    
+
     A message bus facilitates communication between different parts of the system
     by allowing publishers to send messages and subscribers to receive them.
     """
@@ -139,7 +190,7 @@ class MessageBus(ABC):
     def publish(self, topic: str, message: T) -> None:
         """
         Publish a message to a specific topic.
-        
+
         Args:
             topic: The topic to publish to
             message: The message to publish
@@ -150,7 +201,7 @@ class MessageBus(ABC):
     def subscribe(self, topic: str, handler: Callable[[str, T], None]) -> None:
         """
         Subscribe to messages on a specific topic.
-        
+
         Args:
             topic: The topic pattern to subscribe to (supports wildcards)
             handler: Callback function to handle received messages
@@ -161,7 +212,7 @@ class MessageBus(ABC):
     def unsubscribe(self, topic: str, handler: Callable[[str, T], None]) -> None:
         """
         Unsubscribe a handler from a topic.
-        
+
         Args:
             topic: The topic pattern to unsubscribe from
             handler: The handler to remove
@@ -186,32 +237,32 @@ class MessageBus(ABC):
     def get_statistics(self) -> Dict[str, Any]:
         """
         Get statistics about the message bus.
-        
+
         Returns:
             Dictionary containing bus statistics
         """
-        return {
-            "running": self.is_running(),
-            "type": self.__class__.__name__
-        }
+        return {"running": self.is_running(), "type": self.__class__.__name__}
 
 
-class CompositeMessageBus(MessageBus):
+class CompositeMessageBus(MessageBus[T], Generic[T]):
     """
     Composite message bus that routes messages to multiple underlying buses.
-    
+
     This implementation allows for flexible routing of messages based on
     topic patterns to different message bus implementations.
     """
 
-    def __init__(self, buses: Optional[Dict[str, MessageBus]] = None,
-                 routes: Optional[List[RouteConfig]] = None,
-                 enable_compression: bool = True,
-                 enable_deduplication: bool = True,
-                 dedup_ttl: int = 60):
+    def __init__(
+        self,
+        buses: Optional[Dict[str, MessageBus[T]]] = None,
+        routes: Optional[List[RouteConfig]] = None,
+        enable_compression: bool = True,
+        enable_deduplication: bool = True,
+        dedup_ttl: int = 60,
+    ):
         """
         Initialize composite message bus.
-        
+
         Args:
             buses: Dictionary mapping bus names to bus instances
             routes: List of routing configurations
@@ -219,34 +270,38 @@ class CompositeMessageBus(MessageBus):
             enable_deduplication: 启用消息去重
             dedup_ttl: 去重TTL（秒）
         """
-        self._buses: Dict[str, MessageBus] = buses or {}
+        self._buses: Dict[str, MessageBus[T]] = buses or {}
         self._routes: List[RouteConfig] = routes or []
         self._running = False
-        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.logger = get_logger(f"{__name__}.{self.__class__.__name__}")
         # 维护 async handler -> sync wrapper 的映射，按 topic 分组
-        self._async_wrappers: DefaultDict[str, Dict[Callable, Callable]] = defaultdict(dict)
-        
+        self._async_wrappers: DefaultDict[str, Dict[AsyncHandler, SyncHandler]] = defaultdict(dict)
+
         # 消息压缩和去重
         self.enable_compression = enable_compression
         self.compressor = MessageCompressor() if enable_compression else None
-        self.deduplicator = MessageDeduplicator(ttl_seconds=dedup_ttl) if enable_deduplication else None
-        
+        self.deduplicator = (
+            MessageDeduplicator(ttl_seconds=dedup_ttl) if enable_deduplication else None
+        )
+
         # 性能统计
-        self.stats = {
-            'messages_published': 0,
-            'messages_compressed': 0,
-            'messages_deduplicated': 0,
-            'bytes_sent': 0,
-            'bytes_compressed': 0,
-            'routing_decisions': defaultdict(int),
-            'publish_times': deque(maxlen=1000),  # 最近1000次发布时间
-            'errors': defaultdict(int)
+        routing_decisions: DefaultDict[str, int] = defaultdict(int)
+        errors: DefaultDict[str, int] = defaultdict(int)
+        self.stats: PerformanceStats = {
+            "messages_published": 0,
+            "messages_compressed": 0,
+            "messages_deduplicated": 0,
+            "bytes_sent": 0,
+            "bytes_compressed": 0,
+            "routing_decisions": routing_decisions,
+            "publish_times": deque(maxlen=1000),
+            "errors": errors,
         }
 
-    def add_bus(self, name: str, bus: MessageBus) -> None:
+    def add_bus(self, name: str, bus: MessageBus[T]) -> None:
         """
         Add a message bus to the composite.
-        
+
         Args:
             name: Name for the bus
             bus: The bus instance to add
@@ -259,7 +314,7 @@ class CompositeMessageBus(MessageBus):
     def add_route(self, route: RouteConfig) -> None:
         """
         Add a routing rule.
-        
+
         Args:
             route: The routing configuration to add
         """
@@ -270,41 +325,41 @@ class CompositeMessageBus(MessageBus):
         """Publish message to appropriate buses based on routing rules."""
         if not self._running:
             raise RuntimeError("Message bus is not running")
-        
+
         start_time = time.time()
-        self.stats['messages_published'] += 1
-        
+        self.stats["messages_published"] += 1
+
         # 消息去重
         if self.deduplicator:
             msg_id = self.deduplicator.generate_message_id(topic, message)
             if self.deduplicator.is_duplicate(msg_id):
-                self.stats['messages_deduplicated'] += 1
+                self.stats["messages_deduplicated"] += 1
                 self.logger.debug(f"Duplicate message filtered for topic '{topic}'")
                 return
-        
+
         # 消息压缩
-        processed_message = message
+        processed_message: Union[T, MessageEnvelope] = message
         is_compressed = False
-        
+
         if self.compressor:
             try:
                 compressed_data, is_compressed = self.compressor.compress(message)
                 if is_compressed:
-                    self.stats['messages_compressed'] += 1
-                    self.stats['bytes_compressed'] += len(compressed_data)
-                    processed_message = {'_compressed': True, '_data': compressed_data}
+                    self.stats["messages_compressed"] += 1
+                    self.stats["bytes_compressed"] += len(compressed_data)
+                    processed_message = {"_compressed": True, "_data": compressed_data}
                 else:
-                    processed_message = {'_compressed': False, '_data': compressed_data}
-                self.stats['bytes_sent'] += len(compressed_data)
+                    processed_message = {"_compressed": False, "_data": compressed_data}
+                self.stats["bytes_sent"] += len(compressed_data)
             except Exception as e:
                 self.logger.error(f"Message compression failed: {e}")
-                self.stats['errors']['compression'] += 1
+                self.stats["errors"]["compression"] += 1
 
         target_buses = self._get_target_buses(topic)
-        
+
         # 记录路由决策
         for bus_name in target_buses:
-            self.stats['routing_decisions'][bus_name] += 1
+            self.stats["routing_decisions"][bus_name] += 1
 
         if not target_buses:
             self.logger.warning(f"主题 '{topic}' 没有配置任何消息总线")
@@ -314,14 +369,14 @@ class CompositeMessageBus(MessageBus):
             bus = self._buses.get(bus_name)
             if bus and bus.is_running():
                 try:
-                    bus.publish(topic, processed_message)
+                    bus.publish(topic, cast(T, processed_message))
                 except Exception as e:
                     self.logger.error(f"发送消息到 '{bus_name}' 失败：{e}")
-                    self.stats['errors'][f'publish_{bus_name}'] += 1
-        
+                    self.stats["errors"][f"publish_{bus_name}"] += 1
+
         # 记录发布时间
         publish_time = time.time() - start_time
-        self.stats['publish_times'].append(publish_time)
+        self.stats["publish_times"].append(publish_time)
 
     def subscribe(self, topic: str, handler: Callable[[str, T], None]) -> None:
         """Subscribe to all buses."""
@@ -387,69 +442,65 @@ class CompositeMessageBus(MessageBus):
                 stats["buses"][name] = {"error": str(e)}
 
         stats["routes"] = len(self._routes)
-        
+
         # 添加性能统计
         stats["performance"] = {
-            'messages_published': self.stats['messages_published'],
-            'messages_compressed': self.stats['messages_compressed'],
-            'messages_deduplicated': self.stats['messages_deduplicated'],
-            'compression_ratio': self._calculate_compression_ratio(),
-            'deduplication_ratio': self._calculate_dedup_ratio(),
-            'avg_publish_time': self._calculate_avg_publish_time(),
-            'routing_decisions': dict(self.stats['routing_decisions']),
-            'errors': dict(self.stats['errors'])
+            "messages_published": self.stats["messages_published"],
+            "messages_compressed": self.stats["messages_compressed"],
+            "messages_deduplicated": self.stats["messages_deduplicated"],
+            "compression_ratio": self._calculate_compression_ratio(),
+            "deduplication_ratio": self._calculate_dedup_ratio(),
+            "avg_publish_time": self._calculate_avg_publish_time(),
+            "routing_decisions": dict(self.stats["routing_decisions"]),
+            "errors": dict(self.stats["errors"]),
         }
-        
+
         # 去重器统计
         if self.deduplicator:
             stats["deduplicator"] = self.deduplicator.get_stats()
-        
+
         return stats
-    
+
     def _calculate_compression_ratio(self) -> float:
         """计算压缩率"""
-        if self.stats['bytes_sent'] == 0:
+        if self.stats["bytes_sent"] == 0:
             return 0.0
-        return self.stats['bytes_compressed'] / self.stats['bytes_sent']
-    
+        return self.stats["bytes_compressed"] / self.stats["bytes_sent"]
+
     def _calculate_dedup_ratio(self) -> float:
         """计算去重率"""
-        total = self.stats['messages_published']
+        total = self.stats["messages_published"]
         if total == 0:
             return 0.0
-        return self.stats['messages_deduplicated'] / total
-    
+        return self.stats["messages_deduplicated"] / total
+
     def _calculate_avg_publish_time(self) -> float:
         """计算平均发布时间"""
-        if not self.stats['publish_times']:
+        if not self.stats["publish_times"]:
             return 0.0
-        return sum(self.stats['publish_times']) / len(self.stats['publish_times'])
-    
+        return sum(self.stats["publish_times"]) / len(self.stats["publish_times"])
+
     def reset_statistics(self):
         """重置统计信息"""
-        self.stats['messages_published'] = 0
-        self.stats['messages_compressed'] = 0
-        self.stats['messages_deduplicated'] = 0
-        self.stats['bytes_sent'] = 0
-        self.stats['bytes_compressed'] = 0
-        self.stats['routing_decisions'].clear()
-        self.stats['publish_times'].clear()
-        self.stats['errors'].clear()
-        
+        self.stats["messages_published"] = 0
+        self.stats["messages_compressed"] = 0
+        self.stats["messages_deduplicated"] = 0
+        self.stats["bytes_sent"] = 0
+        self.stats["bytes_compressed"] = 0
+        self.stats["routing_decisions"].clear()
+        self.stats["publish_times"].clear()
+        self.stats["errors"].clear()
+
         if self.deduplicator:
-            self.deduplicator.stats = {
-                'total_messages': 0,
-                'duplicates_filtered': 0,
-                'unique_messages': 0
-            }
+            self.deduplicator.reset()
 
     def _get_target_buses(self, topic: str) -> List[str]:
         """
         Get list of target buses for a topic based on routing rules.
-        
+
         Args:
             topic: The topic to route
-            
+
         Returns:
             List of bus names to route the message to
         """
@@ -459,7 +510,7 @@ class CompositeMessageBus(MessageBus):
             if fnmatch(topic, route.match):
                 for bus_name in route.buses:
                     # Convert BusName enum to string if needed
-                    bus_str = bus_name.value if hasattr(bus_name, 'value') else str(bus_name)
+                    bus_str = bus_name.value if hasattr(bus_name, "value") else str(bus_name)
                     if bus_str in self._buses:
                         target_buses.add(bus_str)
 
@@ -477,7 +528,7 @@ class CompositeMessageBus(MessageBus):
     async def publish_async(self, topic: str, message: T) -> None:
         """
         Async wrapper for publish. 与同步行为一致并校验运行状态。
-        
+
         Args:
             topic: The topic to publish to
             message: The message to publish
@@ -488,14 +539,16 @@ class CompositeMessageBus(MessageBus):
         # 直接使用同步路径，确保在当前线程内操作底层 ZeroMQ socket（线程安全）
         self.publish(topic, message)
 
-    async def subscribe_async(self, topic: str, async_handler: Callable[[str, T], Awaitable[None]]) -> None:
+    async def subscribe_async(
+        self, topic: str, async_handler: Callable[[str, T], Awaitable[None]]
+    ) -> None:
         """
         允许以异步 handler 订阅；内部包装为同步 handler 并把执行调度回事件循环。
-        
+
         Args:
             topic: The topic pattern to subscribe to (supports wildcards)
             async_handler: Async callback function to handle received messages
-            
+
         Raises:
             RuntimeError: If called outside of a running event loop
         """
@@ -518,16 +571,19 @@ class CompositeMessageBus(MessageBus):
             try:
                 # 确保事件循环仍在运行
                 if loop.is_closed():
-                    self.logger.error(f"Event loop is closed, cannot schedule handler for topic '{t}'")
+                    self.logger.error(
+                        f"Event loop is closed, cannot schedule handler for topic '{t}'"
+                    )
                     return
-
                 # 使用 call_soon_threadsafe 安全地调度异步任务
-                loop.call_soon_threadsafe(asyncio.create_task, async_handler(t, msg))
+                loop.call_soon_threadsafe(asyncio.ensure_future, async_handler(t, msg))
             except RuntimeError as e:
                 # 事件循环可能已停止
                 self.logger.error(f"Event loop no longer running for topic '{t}': {e}")
             except Exception as e:
-                self.logger.error(f"Failed to schedule async handler for topic '{t}': {e}", exc_info=True)
+                self.logger.error(
+                    f"Failed to schedule async handler for topic '{t}': {e}", exc_info=True
+                )
 
         # 保存映射用于取消订阅
         self._async_wrappers[topic][async_handler] = _sync_wrapper
@@ -535,10 +591,12 @@ class CompositeMessageBus(MessageBus):
         # 复用现有同步订阅到所有底层总线
         self.subscribe(topic, _sync_wrapper)
 
-    async def unsubscribe_async(self, topic: str, async_handler: Callable[[str, T], Awaitable[None]]) -> None:
+    async def unsubscribe_async(
+        self, topic: str, async_handler: Callable[[str, T], Awaitable[None]]
+    ) -> None:
         """
         按 topic 和 async_handler 取消订阅。
-        
+
         Args:
             topic: The topic pattern to unsubscribe from
             async_handler: The async handler to remove

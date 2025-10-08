@@ -8,7 +8,6 @@ DeepSearch WebUI 独立启动脚本（已废弃）
 保留此文件仅为向后兼容。
 """
 import asyncio
-import logging
 import os
 import signal
 import subprocess
@@ -18,6 +17,7 @@ import time
 from typing import Optional
 
 from deepsearch.core import MainEngine
+from deepsearch.observability import get_logger
 from deepsearch.observability.logger import logger_manager
 from deepsearch.webui.server_manager import get_server_manager
 
@@ -28,7 +28,7 @@ class StandaloneWebUIManager:
     def __init__(self):
         # 初始化日志
         logger_manager.start()
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(__name__)
 
         # 系统引擎实例（可以为空，通过WebUI启动）
         self.engine: Optional[MainEngine] = None
@@ -41,7 +41,9 @@ class StandaloneWebUIManager:
         # 前端目录
         self.frontend_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "deepsearch", "webui", "frontend"
+            "deepsearch",
+            "webui",
+            "frontend",
         )
 
         # 运行标志
@@ -117,12 +119,11 @@ class StandaloneWebUIManager:
                 self.frontend_process = subprocess.Popen(
                     f'cd /d "{self.frontend_dir}" && npm run dev',
                     shell=True,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
                 )
             else:
                 self.frontend_process = subprocess.Popen(
-                    ["npm", "run", "dev"],
-                    cwd=self.frontend_dir
+                    ["npm", "run", "dev"], cwd=self.frontend_dir
                 )
 
             time.sleep(3)
@@ -144,7 +145,7 @@ class StandaloneWebUIManager:
                 if sys.platform == "win32":
                     subprocess.run(
                         ["taskkill", "/F", "/T", "/PID", str(self.frontend_process.pid)],
-                        capture_output=True
+                        capture_output=True,
                     )
                 else:
                     self.frontend_process.terminate()
@@ -165,11 +166,7 @@ class StandaloneWebUIManager:
         try:
             # 启动服务器
             self.webui_server = await server_manager.start_server(
-                app,
-                name="webui",
-                host="0.0.0.0",
-                port=8000,
-                log_level="info"
+                app, name="webui", host="0.0.0.0", port=8000, log_level="info"
             )
 
             # 等待关闭
@@ -256,6 +253,6 @@ if __name__ == "__main__":
     warnings.warn(
         "webui_standalone.py 已废弃，请使用 'python -m deepsearch webui' 命令",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
     main()

@@ -107,7 +107,7 @@ DeepSearch is a high-performance quantitative trading event system built with Py
 - `dev`: 开发环境 - 使用真实数据源进行开发
 
 **真实数据源降级优先级：**
-1. AmazingData（银河证券星耀数智）- **唯一使用的主数据源**
+1. AmazingData（银河证券星耀数智）- **默认主数据源**
 2. AkShare Proxy（CloudFlare代理）
 3. AkShare Direct（直连）
 4. QMT（量化终端）
@@ -120,9 +120,10 @@ DeepSearch is a high-performance quantitative trading event system built with Py
 - **代码格式**：需要市场前缀，如 `SH.600000`、`SZ.000001`
 
 **⚠️ 重要说明：数据源API使用规范**
-- **只使用 AmazingData API**：本项目统一使用银河证券的 AmazingData（星耀数智）接口
-- **不使用 TGW API**：TGW 库仅作为备用保留（installer/tgw-1.0.8.1-py3-none-any.whl），未集成到系统中
-- **避免混淆**：AmazingData 和 TGW 是两个不同的库，API接口完全不同，请勿混用
+- **优先通过 AmazingData API 获取数据**：本项目默认使用银河证券的 AmazingData（星耀数智）接口，在可用范围内尽量通过该渠道完成需求
+- **通过 AmazingData 调用**：业务仅通过 AmazingData SDK 暴露的 API 访问数据，底层 TGW 组件随 SDK 一同交付，无需手动接入
+- **必要时使用 AkShare**：当 AmazingData 无法使用或无法提供特定数据时，可启用 AkShare（含 CloudFlare 代理）作为备选数据源，并在变更记录中说明原因
+- **避免直接调用 TGW**：禁止在业务代码中直接 import TGW 或操作其底层接口，避免破坏 AmazingData SDK 的封装
 - **实现位置**：AmazingData 实现代码位于 `infrastructure/providers/implementations/amazingdata/`
 
 ### 单元测试 Mock 实现规范

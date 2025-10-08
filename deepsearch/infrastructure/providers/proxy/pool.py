@@ -3,19 +3,21 @@
 
 管理代理的生命周期、状态和统计信息。
 """
+
 import asyncio
 import random
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Any, Deque, Dict, List, Optional, Set
 
 from loguru import logger
 
 
 class ProxyStatus(Enum):
     """代理状态"""
+
     UNKNOWN = "unknown"  # 未知
     AVAILABLE = "available"  # 可用
     BUSY = "busy"  # 使用中
@@ -26,6 +28,7 @@ class ProxyStatus(Enum):
 @dataclass
 class ProxyInfo:
     """代理信息"""
+
     url: str
     status: ProxyStatus = ProxyStatus.UNKNOWN
     success_count: int = 0
@@ -37,7 +40,7 @@ class ProxyInfo:
     avg_response_time: float = 0
     weight: float = 1.0  # 权重（用于加权轮询）
     blacklisted_until: Optional[datetime] = None
-    metadata: Dict[str, any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def success_rate(self) -> float:
@@ -72,7 +75,9 @@ class ProxyInfo:
             else:
                 # 指数移动平均
                 alpha = 0.3
-                self.avg_response_time = alpha * response_time + (1 - alpha) * self.avg_response_time
+                self.avg_response_time = (
+                    alpha * response_time + (1 - alpha) * self.avg_response_time
+                )
 
         # 更新权重（基于成功率和响应时间）
         self._update_weight()
@@ -109,28 +114,28 @@ class ProxyInfo:
 class ProxyPool:
     """
     代理池
-    
+
     管理所有代理，提供不同的选择策略。
     """
 
     def __init__(self, rotation_strategy: str = "round-robin"):
         """
         初始化代理池
-        
+
         Args:
             rotation_strategy: 轮换策略 (round-robin, random, weighted, least-used)
         """
         self.rotation_strategy = rotation_strategy
         self._proxies: Dict[str, ProxyInfo] = {}
-        self._available_queue: deque = deque()
+        self._available_queue: Deque[str] = deque()
         self._blacklist: Set[str] = set()
         self._lock = asyncio.Lock()
         self._round_robin_index = 0
 
-    async def add_proxy(self, proxy_url: str, metadata: Optional[Dict] = None) -> None:
+    async def add_proxy(self, proxy_url: str, metadata: Optional[Dict[str, Any]] = None) -> None:
         """
         添加代理
-        
+
         Args:
             proxy_url: 代理URL
             metadata: 代理元数据
@@ -156,15 +161,12 @@ class ProxyPool:
     async def get_proxy(self) -> Optional[str]:
         """
         获取一个可用代理
-        
+
         Returns:
             代理URL，如果没有可用代理返回None
         """
         async with self._lock:
-            available_proxies = [
-                url for url, info in self._proxies.items()
-                if info.is_available
-            ]
+            available_proxies = [url for url, info in self._proxies.items() if info.is_available]
 
             if not available_proxies:
                 logger.warning("没有可用的代理")
@@ -189,7 +191,7 @@ class ProxyPool:
 
             return proxy_url
 
-    def _round_robin_select(self, proxies: List[str]) -> str:
+    def _round_robin_select(self, proxies: List[str]) -> Optional[str]:
         """轮询选择"""
         if not proxies:
             return None
@@ -197,7 +199,7 @@ class ProxyPool:
         self._round_robin_index = (self._round_robin_index + 1) % len(proxies)
         return proxy
 
-    def _weighted_select(self, proxies: List[str]) -> str:
+    def _weighted_select(self, proxies: List[str]) -> Optional[str]:
         """加权选择"""
         if not proxies:
             return None
@@ -211,7 +213,7 @@ class ProxyPool:
 
         # 加权随机选择
         r = random.uniform(0, total_weight)
-        cumulative = 0
+        cumulative = 0.0
         for proxy, weight in zip(proxies, weights):
             cumulative += weight
             if r <= cumulative:
@@ -219,7 +221,7 @@ class ProxyPool:
 
         return proxies[-1]
 
-    def _least_used_select(self, proxies: List[str]) -> str:
+    def _least_used_select(self, proxies: List[str]) -> Optional[str]:
         """选择使用次数最少的代理"""
         if not proxies:
             return None
@@ -229,7 +231,7 @@ class ProxyPool:
     async def mark_success(self, proxy_url: str, response_time: float = 0) -> None:
         """
         标记代理请求成功
-        
+
         Args:
             proxy_url: 代理URL
             response_time: 响应时间（秒）
@@ -240,14 +242,11 @@ class ProxyPool:
                 logger.debug(f"代理成功: {proxy_url}, 响应时间: {response_time:.2f}s")
 
     async def mark_failure(
-            self,
-            proxy_url: str,
-            blacklist_threshold: int = 5,
-            blacklist_duration: int = 300
+        self, proxy_url: str, blacklist_threshold: int = 5, blacklist_duration: int = 300
     ) -> None:
         """
         标记代理请求失败
-        
+
         Args:
             proxy_url: 代理URL
             blacklist_threshold: 黑名单阈值
@@ -272,12 +271,11 @@ class ProxyPool:
 
             if recent_failures >= blacklist_threshold:
                 proxy_info.status = ProxyStatus.BLACKLISTED
-                proxy_info.blacklisted_until = datetime.now() + timedelta(seconds=blacklist_duration)
-                self._blacklist.add(proxy_url)
-                logger.warning(
-                    f"代理加入黑名单: {proxy_url}, "
-                    f"持续时间: {blacklist_duration}秒"
+                proxy_info.blacklisted_until = datetime.now() + timedelta(
+                    seconds=blacklist_duration
                 )
+                self._blacklist.add(proxy_url)
+                logger.warning(f"代理加入黑名单: {proxy_url}, " f"持续时间: {blacklist_duration}秒")
             else:
                 logger.debug(f"代理失败: {proxy_url}, 失败次数: {proxy_info.failure_count}")
 
@@ -289,7 +287,7 @@ class ProxyPool:
                 if proxy_info.status == ProxyStatus.BUSY:
                     proxy_info.status = ProxyStatus.AVAILABLE
 
-    def get_statistics(self) -> Dict[str, any]:
+    def get_statistics(self) -> Dict[str, Any]:
         """获取统计信息"""
         total_proxies = len(self._proxies)
         available_count = sum(1 for p in self._proxies.values() if p.is_available)
@@ -305,20 +303,18 @@ class ProxyPool:
         worst_proxy = None
         if self._proxies:
             sorted_proxies = sorted(
-                self._proxies.values(),
-                key=lambda p: p.success_rate,
-                reverse=True
+                self._proxies.values(), key=lambda p: p.success_rate, reverse=True
             )
             if sorted_proxies:
                 best_proxy = {
                     "url": sorted_proxies[0].url,
                     "success_rate": sorted_proxies[0].success_rate,
-                    "avg_response_time": sorted_proxies[0].avg_response_time
+                    "avg_response_time": sorted_proxies[0].avg_response_time,
                 }
                 worst_proxy = {
                     "url": sorted_proxies[-1].url,
                     "success_rate": sorted_proxies[-1].success_rate,
-                    "avg_response_time": sorted_proxies[-1].avg_response_time
+                    "avg_response_time": sorted_proxies[-1].avg_response_time,
                 }
 
         return {
@@ -330,10 +326,10 @@ class ProxyPool:
             "overall_success_rate": overall_success_rate,
             "rotation_strategy": self.rotation_strategy,
             "best_proxy": best_proxy,
-            "worst_proxy": worst_proxy
+            "worst_proxy": worst_proxy,
         }
 
-    def get_proxy_details(self) -> List[Dict]:
+    def get_proxy_details(self) -> List[Dict[str, Any]]:
         """获取所有代理的详细信息"""
         return [
             {
@@ -344,7 +340,9 @@ class ProxyPool:
                 "avg_response_time": info.avg_response_time,
                 "weight": info.weight,
                 "last_used": info.last_used.isoformat() if info.last_used else None,
-                "blacklisted_until": info.blacklisted_until.isoformat() if info.blacklisted_until else None
+                "blacklisted_until": (
+                    info.blacklisted_until.isoformat() if info.blacklisted_until else None
+                ),
             }
             for info in self._proxies.values()
         ]

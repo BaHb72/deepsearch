@@ -8,45 +8,53 @@ AmazingData 数据源综合测试脚本
 
 import asyncio
 import json
-import sys
 import os
+import sys
 import time
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
 import traceback
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta
+from typing import Dict, List
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from deepsearch.config import get_config
-from loguru import logger
 import pandas as pd
+
+from deepsearch.config import get_config
 
 # 尝试导入彩色输出库
 try:
-    from colorama import init, Fore, Back, Style
+    from colorama import Fore, Style, init
+
     init(autoreset=True)
     HAS_COLOR = True
 except ImportError:
     HAS_COLOR = False
+
     class Fore:
-        GREEN = RED = YELLOW = CYAN = MAGENTA = BLUE = WHITE = RESET = ''
+        GREEN = RED = YELLOW = CYAN = MAGENTA = BLUE = WHITE = RESET = ""
+
     class Style:
-        BRIGHT = DIM = RESET_ALL = ''
+        BRIGHT = DIM = RESET_ALL = ""
+
 
 # 尝试导入进度条库
 try:
     from tqdm import tqdm
+
     HAS_TQDM = True
 except ImportError:
     HAS_TQDM = False
-    tqdm = lambda x, **kwargs: x
+
+    def tqdm(x, **kwargs):
+        return x
 
 
 @dataclass
 class TestResult:
     """测试结果数据类"""
+
     name: str
     status: str  # 'success', 'fail', 'skip', 'warning'
     duration: float
@@ -84,20 +92,22 @@ class AmazingDataTester:
     def print_result(self, result: TestResult, verbose: bool = True):
         """打印测试结果"""
         icon = {
-            'success': f'{Fore.GREEN}[OK]',
-            'fail': f'{Fore.RED}[FAIL]',
-            'skip': f'{Fore.YELLOW}[SKIP]',
-            'warning': f'{Fore.YELLOW}[WARN]'
-        }.get(result.status, '[?]')
+            "success": f"{Fore.GREEN}[OK]",
+            "fail": f"{Fore.RED}[FAIL]",
+            "skip": f"{Fore.YELLOW}[SKIP]",
+            "warning": f"{Fore.YELLOW}[WARN]",
+        }.get(result.status, "[?]")
 
         status_color = {
-            'success': Fore.GREEN,
-            'fail': Fore.RED,
-            'skip': Fore.YELLOW,
-            'warning': Fore.YELLOW
+            "success": Fore.GREEN,
+            "fail": Fore.RED,
+            "skip": Fore.YELLOW,
+            "warning": Fore.YELLOW,
         }.get(result.status, Fore.WHITE)
 
-        print(f"{icon} {result.name}: {status_color}{result.status.upper()}{Style.RESET_ALL} ({result.duration:.2f}s)")
+        print(
+            f"{icon} {result.name}: {status_color}{result.status.upper()}{Style.RESET_ALL} ({result.duration:.2f}s)"
+        )
 
         if verbose and result.message:
             print(f"   {Fore.CYAN}{result.message}{Style.RESET_ALL}")
@@ -117,58 +127,58 @@ class AmazingDataTester:
             print(f"当前环境: {Fore.CYAN}{env}{Style.RESET_ALL}")
 
             # 尝试新格式配置
-            if hasattr(self.config, 'data_sources') and self.config.data_sources:
-                providers = self.config.data_sources.get('providers', {})
-                if 'amazingdata' in providers:
+            if hasattr(self.config, "data_sources") and self.config.data_sources:
+                providers = self.config.data_sources.get("providers", {})
+                if "amazingdata" in providers:
                     print(f"{Fore.GREEN}使用新格式配置{Style.RESET_ALL}")
-                    ad_provider = providers['amazingdata']
+                    ad_provider = providers["amazingdata"]
 
-                    enabled = ad_provider.get('enabled', False)
-                    ad_config = ad_provider.get('config', {})
-                    conn_config = ad_config.get('connection', {})
+                    enabled = ad_provider.get("enabled", False)
+                    ad_config = ad_provider.get("config", {})
+                    conn_config = ad_config.get("connection", {})
 
                     self.credentials = {
-                        'host': conn_config.get('host', ''),
-                        'port': conn_config.get('port', 8600),
-                        'username': conn_config.get('username', ''),
-                        'password': conn_config.get('password', ''),
-                        'timeout': conn_config.get('timeout', 10),
-                        'enabled': enabled
+                        "host": conn_config.get("host", ""),
+                        "port": conn_config.get("port", 8600),
+                        "username": conn_config.get("username", ""),
+                        "password": conn_config.get("password", ""),
+                        "timeout": conn_config.get("timeout", 10),
+                        "enabled": enabled,
                     }
             # 尝试旧格式配置
-            elif hasattr(self.config, 'amazingdata'):
+            elif hasattr(self.config, "amazingdata"):
                 print(f"{Fore.YELLOW}使用旧格式配置{Style.RESET_ALL}")
                 ad_config = self.config.amazingdata
 
                 self.credentials = {
-                    'host': getattr(ad_config, 'host', ''),
-                    'port': getattr(ad_config, 'port', 8600),
-                    'username': getattr(ad_config, 'username', ''),
-                    'password': str(getattr(ad_config, 'password', '')),
-                    'timeout': getattr(ad_config, 'timeout', 10),
-                    'enabled': getattr(ad_config, 'enabled', False)
+                    "host": getattr(ad_config, "host", ""),
+                    "port": getattr(ad_config, "port", 8600),
+                    "username": getattr(ad_config, "username", ""),
+                    "password": str(getattr(ad_config, "password", "")),
+                    "timeout": getattr(ad_config, "timeout", 10),
+                    "enabled": getattr(ad_config, "enabled", False),
                 }
             else:
                 raise ValueError("配置文件中没有amazingdata配置项")
 
             # 验证配置
-            if not self.credentials['enabled']:
+            if not self.credentials["enabled"]:
                 result = TestResult(
                     name="配置启用状态",
                     status="warning",
                     duration=time.time() - start_time,
-                    message="AmazingData未启用，请在配置文件中设置enabled: true"
+                    message="AmazingData未启用，请在配置文件中设置enabled: true",
                 )
                 self.results.append(result)
                 self.print_result(result)
                 return False
 
-            if not self.credentials['username'] or not self.credentials['password']:
+            if not self.credentials["username"] or not self.credentials["password"]:
                 result = TestResult(
                     name="凭证验证",
                     status="fail",
                     duration=time.time() - start_time,
-                    message="用户名或密码未配置"
+                    message="用户名或密码未配置",
                 )
                 self.results.append(result)
                 self.print_result(result)
@@ -178,12 +188,12 @@ class AmazingDataTester:
                 name="配置加载",
                 status="success",
                 duration=time.time() - start_time,
-                message=f"成功加载配置",
+                message="成功加载配置",
                 data={
                     "服务器": f"{self.credentials['host']}:{self.credentials['port']}",
                     "用户名": f"***{self.credentials['username'][-4:] if len(self.credentials['username']) > 4 else '***'}",
-                    "超时设置": f"{self.credentials['timeout']}秒"
-                }
+                    "超时设置": f"{self.credentials['timeout']}秒",
+                },
             )
             self.results.append(result)
             self.print_result(result)
@@ -194,7 +204,7 @@ class AmazingDataTester:
                 name="配置加载",
                 status="fail",
                 duration=time.time() - start_time,
-                message=f"配置加载失败: {str(e)}"
+                message=f"配置加载失败: {str(e)}",
             )
             self.results.append(result)
             self.print_result(result)
@@ -208,15 +218,13 @@ class AmazingDataTester:
         try:
             import AmazingData as ad
 
-            version = getattr(ad, '__version__', '未知')
+            version = getattr(ad, "__version__", "未知")
             result = TestResult(
                 name="SDK导入",
                 status="success",
                 duration=time.time() - start_time,
                 message=f"AmazingData SDK版本: {version}",
-                data={
-                    "模块路径": getattr(ad, '__file__', '未知')
-                }
+                data={"模块路径": getattr(ad, "__file__", "未知")},
             )
             self.results.append(result)
             self.print_result(result)
@@ -229,8 +237,8 @@ class AmazingDataTester:
                 duration=time.time() - start_time,
                 message=f"SDK未安装: {str(e)}",
                 data={
-                    "建议": "运行: uv pip install installer/AmazingData-1.0.9-cp313-none-any.whl"
-                }
+                    "建议": "运行: uv pip install third_party/AmazingData-1.0.9-cp313-none-any.whl"
+                },
             )
             self.results.append(result)
             self.print_result(result)
@@ -245,15 +253,17 @@ class AmazingDataTester:
             import AmazingData as ad
 
             # 直接使用ad模块的login函数
-            print(f"{Fore.CYAN}连接服务器 {self.credentials['host']}:{self.credentials['port']}...{Style.RESET_ALL}")
+            print(
+                f"{Fore.CYAN}连接服务器 {self.credentials['host']}:{self.credentials['port']}...{Style.RESET_ALL}"
+            )
             print(f"{Fore.CYAN}登录用户 {self.credentials['username'][:3]}***...{Style.RESET_ALL}")
 
             # AmazingData SDK使用直接的login函数（必须使用关键字参数）
             login_result = ad.login(
-                username=self.credentials['username'],
-                password=self.credentials['password'],
-                host=self.credentials['host'],
-                port=self.credentials['port']
+                username=self.credentials["username"],
+                password=self.credentials["password"],
+                host=self.credentials["host"],
+                port=self.credentials["port"],
             )
 
             if login_result == 0 or login_result is True:
@@ -264,8 +274,8 @@ class AmazingDataTester:
                     message="登录成功",
                     data={
                         "连接耗时": f"{(time.time() - start_time):.3f}秒",
-                        "服务器": f"{self.credentials['host']}:{self.credentials['port']}"
-                    }
+                        "服务器": f"{self.credentials['host']}:{self.credentials['port']}",
+                    },
                 )
                 self.results.append(result)
                 self.print_result(result)
@@ -275,7 +285,7 @@ class AmazingDataTester:
                     name="登录认证",
                     status="fail",
                     duration=time.time() - start_time,
-                    message="登录失败，请检查用户名密码"
+                    message="登录失败，请检查用户名密码",
                 )
                 self.results.append(result)
                 self.print_result(result)
@@ -286,7 +296,7 @@ class AmazingDataTester:
                 name="登录认证",
                 status="fail",
                 duration=time.time() - start_time,
-                message=f"连接异常: {str(e)}"
+                message=f"连接异常: {str(e)}",
             )
             self.results.append(result)
             self.print_result(result)
@@ -305,16 +315,24 @@ class AmazingDataTester:
             # 使用AmazingData BaseData获取股票列表
             stock_list = ad.BaseData.get_stock_list()
 
-            if stock_list is not None and isinstance(stock_list, pd.DataFrame) and not stock_list.empty:
+            if (
+                stock_list is not None
+                and isinstance(stock_list, pd.DataFrame)
+                and not stock_list.empty
+            ):
                 result = TestResult(
                     name="股票列表获取",
                     status="success",
                     duration=time.time() - start_time,
-                    message=f"获取成功",
+                    message="获取成功",
                     data={
                         "股票数量": len(stock_list),
-                        "示例股票": stock_list.head(3).to_dict('records') if len(stock_list) >= 3 else stock_list.to_dict('records')
-                    }
+                        "示例股票": (
+                            stock_list.head(3).to_dict("records")
+                            if len(stock_list) >= 3
+                            else stock_list.to_dict("records")
+                        ),
+                    },
                 )
                 success_count = 1
             else:
@@ -322,7 +340,7 @@ class AmazingDataTester:
                     name="股票列表获取",
                     status="warning",
                     duration=time.time() - start_time,
-                    message="返回列表为空"
+                    message="返回列表为空",
                 )
 
         except Exception as e:
@@ -330,7 +348,7 @@ class AmazingDataTester:
                 name="股票列表获取",
                 status="fail",
                 duration=time.time() - start_time,
-                message=f"获取失败: {str(e)}"
+                message=f"获取失败: {str(e)}",
             )
 
         self.results.append(result)
@@ -344,11 +362,7 @@ class AmazingDataTester:
 
         import AmazingData as ad
 
-        test_symbols = [
-            ('000001', '平安银行'),
-            ('600036', '招商银行'),
-            ('000002', '万科A')
-        ]
+        test_symbols = [("000001", "平安银行"), ("600036", "招商银行"), ("000002", "万科A")]
 
         success_count = 0
         end_date = datetime.now()
@@ -362,10 +376,10 @@ class AmazingDataTester:
                 # 使用AmazingData MarketData获取K线数据
                 kline_data = ad.MarketData.get_kline_data(
                     symbol=symbol,
-                    period='1d',
-                    start_date=start_date.strftime('%Y%m%d'),
-                    end_date=end_date.strftime('%Y%m%d'),
-                    adjust='none'
+                    period="1d",
+                    start_date=start_date.strftime("%Y%m%d"),
+                    end_date=end_date.strftime("%Y%m%d"),
+                    adjust="none",
                 )
 
                 if kline_data is not None and len(kline_data) > 0:
@@ -373,25 +387,25 @@ class AmazingDataTester:
                         name=f"{symbol} {name} K线",
                         status="success",
                         duration=time.time() - start_time,
-                        message=f"获取成功",
+                        message="获取成功",
                         data={
                             "数据条数": len(kline_data),
                             "时间范围": f"{start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}",
-                            "数据类型": type(kline_data).__name__
-                        }
+                            "数据类型": type(kline_data).__name__,
+                        },
                     )
                     success_count += 1
 
                     # 如果是DataFrame，显示最后几条数据
                     if isinstance(kline_data, pd.DataFrame) and not kline_data.empty:
-                        print(f"   最后3条数据:")
+                        print("   最后3条数据:")
                         print(kline_data.tail(3).to_string(index=False))
                 else:
                     result = TestResult(
                         name=f"{symbol} {name} K线",
                         status="warning",
                         duration=time.time() - start_time,
-                        message="返回数据为空"
+                        message="返回数据为空",
                     )
 
             except Exception as e:
@@ -399,7 +413,7 @@ class AmazingDataTester:
                     name=f"{symbol} {name} K线",
                     status="fail",
                     duration=time.time() - start_time,
-                    message=f"获取失败: {str(e)}"
+                    message=f"获取失败: {str(e)}",
                 )
 
             self.results.append(result)
@@ -413,7 +427,7 @@ class AmazingDataTester:
 
         import AmazingData as ad
 
-        test_symbols = ['000001', '000002', '600036', '600519']
+        test_symbols = ["000001", "000002", "600036", "600519"]
 
         start_time = time.time()
         try:
@@ -434,8 +448,8 @@ class AmazingDataTester:
                     message=f"成功获取 {len(quotes)}/{len(test_symbols)} 只股票行情",
                     data={
                         "成功股票": list(quotes.keys()),
-                        "平均响应时间": f"{(time.time() - start_time) / len(test_symbols):.3f}秒/股"
-                    }
+                        "平均响应时间": f"{(time.time() - start_time) / len(test_symbols):.3f}秒/股",
+                    },
                 )
 
                 # 显示部分行情数据
@@ -450,7 +464,7 @@ class AmazingDataTester:
                     name="实时行情批量获取",
                     status="fail",
                     duration=time.time() - start_time,
-                    message="未能获取任何股票行情"
+                    message="未能获取任何股票行情",
                 )
 
         except Exception as e:
@@ -458,7 +472,7 @@ class AmazingDataTester:
                 name="实时行情批量获取",
                 status="fail",
                 duration=time.time() - start_time,
-                message=f"获取失败: {str(e)}"
+                message=f"获取失败: {str(e)}",
             )
 
         self.results.append(result)
@@ -478,10 +492,10 @@ class AmazingDataTester:
         for i in range(10):
             start_time = time.time()
             try:
-                ad.MarketData.get_realtime_quote('000001')
+                ad.MarketData.get_realtime_quote("000001")
                 latency = time.time() - start_time
                 latencies.append(latency)
-            except:
+            except Exception:
                 pass
 
         if latencies:
@@ -497,15 +511,12 @@ class AmazingDataTester:
                 data={
                     "最小延迟": f"{min_latency:.3f}秒",
                     "最大延迟": f"{max_latency:.3f}秒",
-                    "测试次数": len(latencies)
-                }
+                    "测试次数": len(latencies),
+                },
             )
         else:
             result = TestResult(
-                name="请求延迟测试",
-                status="fail",
-                duration=0,
-                message="无法完成延迟测试"
+                name="请求延迟测试", status="fail", duration=0, message="无法完成延迟测试"
             )
 
         self.results.append(result)
@@ -513,7 +524,7 @@ class AmazingDataTester:
 
         # 测试并发请求
         print(f"\n{Fore.CYAN}测试并发请求能力...{Style.RESET_ALL}")
-        concurrent_symbols = ['000001', '000002', '600036', '600519', '300750']
+        concurrent_symbols = ["000001", "000002", "600036", "600519", "300750"]
 
         start_time = time.time()
         try:
@@ -530,15 +541,15 @@ class AmazingDataTester:
                 message=f"并发获取{len(concurrent_symbols)}只股票",
                 data={
                     "总耗时": f"{duration:.3f}秒",
-                    "平均耗时": f"{duration/len(concurrent_symbols):.3f}秒/股"
-                }
+                    "平均耗时": f"{duration/len(concurrent_symbols):.3f}秒/股",
+                },
             )
         except Exception as e:
             result = TestResult(
                 name="并发请求测试",
                 status="fail",
                 duration=time.time() - start_time,
-                message=f"并发请求失败: {str(e)}"
+                message=f"并发请求失败: {str(e)}",
             )
 
         self.results.append(result)
@@ -552,10 +563,10 @@ class AmazingDataTester:
 
         # 统计结果
         total_tests = len(self.results)
-        success_count = sum(1 for r in self.results if r.status == 'success')
-        fail_count = sum(1 for r in self.results if r.status == 'fail')
-        warning_count = sum(1 for r in self.results if r.status == 'warning')
-        skip_count = sum(1 for r in self.results if r.status == 'skip')
+        success_count = sum(1 for r in self.results if r.status == "success")
+        fail_count = sum(1 for r in self.results if r.status == "fail")
+        warning_count = sum(1 for r in self.results if r.status == "warning")
+        skip_count = sum(1 for r in self.results if r.status == "skip")
 
         success_rate = (success_count / total_tests * 100) if total_tests > 0 else 0
         total_duration = self.end_time - self.start_time if self.end_time and self.start_time else 0
@@ -576,26 +587,30 @@ class AmazingDataTester:
             f"  跳过: {skip_count}",
             "",
             "详细结果:",
-            "-" * 80
+            "-" * 80,
         ]
 
         for result in self.results:
             status_icon = {
-                'success': '[OK]',
-                'fail': '[FAIL]',
-                'warning': '[WARN]',
-                'skip': '[SKIP]'
-            }.get(result.status, '[?]')
+                "success": "[OK]",
+                "fail": "[FAIL]",
+                "warning": "[WARN]",
+                "skip": "[SKIP]",
+            }.get(result.status, "[?]")
 
-            report_lines.append(f"{status_icon} {result.name}: {result.status.upper()} ({result.duration:.2f}s)")
+            report_lines.append(
+                f"{status_icon} {result.name}: {result.status.upper()} ({result.duration:.2f}s)"
+            )
             if result.message:
                 report_lines.append(f"   {result.message}")
 
-        report_lines.extend([
-            "-" * 80,
-            "",
-            "建议:",
-        ])
+        report_lines.extend(
+            [
+                "-" * 80,
+                "",
+                "建议:",
+            ]
+        )
 
         # 添加建议
         if fail_count > 0:
@@ -610,39 +625,53 @@ class AmazingDataTester:
         # 保存文本报告
         report_text = "\n".join(report_lines)
         report_file = "amazingdata_test_report.txt"
-        with open(report_file, 'w', encoding='utf-8') as f:
+        with open(report_file, "w", encoding="utf-8") as f:
             # 去除颜色代码
             clean_text = report_text
             if HAS_COLOR:
-                for color in [Fore.GREEN, Fore.RED, Fore.YELLOW, Fore.CYAN, Fore.MAGENTA,
-                            Fore.BLUE, Fore.WHITE, Style.BRIGHT, Style.DIM, Style.RESET_ALL]:
-                    clean_text = clean_text.replace(color, '')
+                for color in [
+                    Fore.GREEN,
+                    Fore.RED,
+                    Fore.YELLOW,
+                    Fore.CYAN,
+                    Fore.MAGENTA,
+                    Fore.BLUE,
+                    Fore.WHITE,
+                    Style.BRIGHT,
+                    Style.DIM,
+                    Style.RESET_ALL,
+                ]:
+                    clean_text = clean_text.replace(color, "")
             f.write(clean_text)
 
         print(f"\n{Fore.GREEN}文本报告已保存到: {report_file}{Style.RESET_ALL}")
 
         # 保存JSON报告
         json_report = {
-            'test_time': datetime.now().isoformat(),
-            'total_duration': total_duration,
-            'statistics': {
-                'total': total_tests,
-                'success': success_count,
-                'fail': fail_count,
-                'warning': warning_count,
-                'skip': skip_count,
-                'success_rate': success_rate
+            "test_time": datetime.now().isoformat(),
+            "total_duration": total_duration,
+            "statistics": {
+                "total": total_tests,
+                "success": success_count,
+                "fail": fail_count,
+                "warning": warning_count,
+                "skip": skip_count,
+                "success_rate": success_rate,
             },
-            'results': [asdict(r) for r in self.results],
-            'credentials': {
-                'host': self.credentials['host'] if self.credentials else None,
-                'port': self.credentials['port'] if self.credentials else None,
-                'username': self.credentials['username'][:3] + '***' if self.credentials and self.credentials['username'] else None
-            }
+            "results": [asdict(r) for r in self.results],
+            "credentials": {
+                "host": self.credentials["host"] if self.credentials else None,
+                "port": self.credentials["port"] if self.credentials else None,
+                "username": (
+                    self.credentials["username"][:3] + "***"
+                    if self.credentials and self.credentials["username"]
+                    else None
+                ),
+            },
         }
 
         json_file = "amazingdata_test_report.json"
-        with open(json_file, 'w', encoding='utf-8') as f:
+        with open(json_file, "w", encoding="utf-8") as f:
             json.dump(json_report, f, ensure_ascii=False, indent=2)
 
         print(f"{Fore.GREEN}JSON报告已保存到: {json_file}{Style.RESET_ALL}")
@@ -702,9 +731,10 @@ class AmazingDataTester:
         # 登出
         try:
             import AmazingData as ad
+
             ad.logout()
             print(f"\n{Fore.GREEN}已安全登出{Style.RESET_ALL}")
-        except:
+        except Exception:
             pass
 
         self.end_time = time.time()

@@ -1,16 +1,44 @@
 from __future__ import annotations
 
 import json
-import logging
+import sys
 import time
-from typing import Any, Dict, List, Optional, Union
+from types import ModuleType
+from typing import Any, Dict, List, Optional, Union, cast
 
 import redis
+
+
+def _ensure_redis_compat() -> None:
+    """Ensure redis._compat exists for redistimeseries imports."""
+    if "redis._compat" in sys.modules:
+        compat_module = cast(ModuleType, sys.modules["redis._compat"])
+    else:
+        compat_module = ModuleType("redis._compat")
+
+        def nativestr(value: Any) -> Any:
+            if isinstance(value, memoryview):
+                value = value.tobytes()
+            if isinstance(value, bytes):
+                return value.decode("utf-8", "replace")
+            return value
+
+        setattr(compat_module, "nativestr", nativestr)
+        setattr(compat_module, "__all__", ["nativestr"])
+        sys.modules["redis._compat"] = compat_module
+
+    setattr(redis, "_compat", compat_module)
+
+
+_ensure_redis_compat()
+
 import redistimeseries.client as ts
+from redis.client import Redis
 
 # Import configuration defaults
 from deepsearch.config.models import RedisConfig
 from deepsearch.event.engine.engine import Event
+from deepsearch.observability import get_logger
 
 # ==============================================================================
 # Constants
@@ -34,7 +62,7 @@ _redis_defaults = RedisConfig()
 # Logging
 # ==============================================================================
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ==============================================================================
@@ -52,20 +80,21 @@ class RedisTimeSeriesStorage:
     # ==========================================================================
     # Initialization
     # ==========================================================================
-    
+
     def __init__(
-            self,
-            host: str = None,
-            port: int = None,
-            db: int = None,
-            password: Optional[str] = None,
-            key_prefix: str = None,
-            retention_ms: int = None,
-            duplicate_policy: str = None,
+        self,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        db: Optional[int] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        key_prefix: Optional[str] = None,
+        retention_ms: Optional[int] = None,
+        duplicate_policy: Optional[str] = None,
     ) -> None:
         """
         初始化 RedisTimeSeries 存储实例
-        
+
         :param host: Redis 服务器地址
         :param port: Redis 服务器端口
         :param db: Redis 数据库编号
@@ -78,11 +107,20 @@ class RedisTimeSeriesStorage:
         self.host = host if host is not None else _redis_defaults.host
         self.port = port if port is not None else _redis_defaults.port
         self.db = db if db is not None else _redis_defaults.db
-        self.password = password
+        self.username = (
+            username if username is not None else getattr(_redis_defaults, "username", None)
+        )
+        self.password = (
+            password if password is not None else getattr(_redis_defaults, "password", None)
+        )
         self.key_prefix = key_prefix if key_prefix is not None else _redis_defaults.key_prefix
-        self.retention_ms = retention_ms if retention_ms is not None else _redis_defaults.retention_ms
-        self.duplicate_policy = duplicate_policy if duplicate_policy is not None else _redis_defaults.duplicate_policy
-        
+        self.retention_ms = (
+            retention_ms if retention_ms is not None else _redis_defaults.retention_ms
+        )
+        self.duplicate_policy = (
+            duplicate_policy if duplicate_policy is not None else _redis_defaults.duplicate_policy
+        )
+
         # Validate inputs
         if self.port <= 0 or self.port > 65535:
             raise ValueError(f"Invalid port number: {self.port}")
@@ -94,7 +132,7 @@ class RedisTimeSeriesStorage:
             raise ValueError("Key prefix cannot be empty")
 
         # Initialize clients
-        self.redis_client: Optional[redis.Redis] = None
+        self.redis_client: Optional[Redis] = None
         self.ts_client: Optional[ts.Client] = None
         self._connected = False
 
@@ -113,6 +151,7 @@ class RedisTimeSeriesStorage:
                 host=self.host,
                 port=self.port,
                 db=self.db,
+                username=self.username,
                 password=self.password,
                 decode_responses=True,
                 socket_connect_timeout=5,
@@ -134,13 +173,23 @@ class RedisTimeSeriesStorage:
 
     def _ensure_connected(self) -> None:
         """确保已连接到 Redis"""
-        if not self._connected:
+        if not self._connected or self.redis_client is None or self.ts_client is None:
             raise RuntimeError("Not connected to Redis")
+
+    def _require_redis(self) -> Redis:
+        self._ensure_connected()
+        assert self.redis_client is not None
+        return self.redis_client
+
+    def _require_ts(self) -> ts.Client:
+        self._ensure_connected()
+        assert self.ts_client is not None
+        return self.ts_client
 
     # ==========================================================================
     # Utility Methods
     # ==========================================================================
-    
+
     def _get_series_key(self, topic: str, event_type: str) -> str:
         """获取时间序列键名"""
         if not topic or not event_type:
@@ -174,7 +223,7 @@ class RedisTimeSeriesStorage:
         topics = set()
         for key in keys:
             if not key.endswith(MESSAGES_SUFFIX) and key.startswith(self.key_prefix):
-                key_without_prefix = key[len(self.key_prefix):]
+                key_without_prefix = key[len(self.key_prefix) :]
                 parts = key_without_prefix.split(KEY_SEPARATOR, 1)
                 if parts and parts[0]:
                     topics.add(parts[0])
@@ -185,23 +234,23 @@ class RedisTimeSeriesStorage:
         event_types = set()
         for key in keys:
             if not key.endswith(MESSAGES_SUFFIX) and key.startswith(self.key_prefix):
-                key_without_prefix = key[len(self.key_prefix):]
+                key_without_prefix = key[len(self.key_prefix) :]
                 parts = key_without_prefix.split(KEY_SEPARATOR, 1)
                 if len(parts) > 1 and parts[1]:
                     event_types.add(parts[1])
         return sorted(list(event_types))
 
-    def _ensure_timeseries(self, key: str, labels: Dict[str, str] = None) -> None:
+    def _ensure_timeseries(self, key: str, labels: Optional[Dict[str, str]] = None) -> None:
         """确保时间序列存在"""
         self._ensure_connected()
-        
+
         try:
             # 检查时间序列是否存在
-            self.ts_client.info(key)
+            self._require_ts().info(key)
         except redis.exceptions.ResponseError:
             # 时间序列不存在，创建新的
             try:
-                self.ts_client.create(
+                self._require_ts().create(
                     key,
                     retention_msecs=self.retention_ms,
                     duplicate_policy=self.duplicate_policy,
@@ -221,10 +270,12 @@ class RedisTimeSeriesStorage:
     # Storage Operations
     # ==========================================================================
 
-    def store_event(self, event: Event, topic: Optional[str] = None, source: Optional[str] = None) -> bool:
+    def store_event(
+        self, event: Event, topic: Optional[str] = None, source: Optional[str] = None
+    ) -> bool:
         """
         存储事件到时间序列
-        
+
         :param event: 要存储的事件
         :param topic: 自定义主题，默认使用事件类型
         :param source: 事件来源
@@ -234,7 +285,7 @@ class RedisTimeSeriesStorage:
 
         if not isinstance(event, Event):
             raise TypeError("event must be an Event instance")
-            
+
         try:
             topic = topic or event.type
             ts_key = self._get_series_key(topic, event.type)
@@ -254,16 +305,19 @@ class RedisTimeSeriesStorage:
             # 使用消息数据的哈希作为值（确保为正数）
             value = hash(event_json) & HASH_MASK
 
+            ts_client = self._require_ts()
+            redis_client = self._require_redis()
+
             # 存储到时间序列
-            self.ts_client.add(ts_key, timestamp_ms, value)
+            ts_client.add(ts_key, timestamp_ms, value)
 
             # 将完整消息存储到 Hash 结构中
             hash_key = self._get_hash_key(ts_key)
-            self.redis_client.hset(hash_key, timestamp_ms, event_json)
+            redis_client.hset(hash_key, str(timestamp_ms), event_json)
 
             # 设置 Hash 的过期时间
             expire_seconds = self.retention_ms // MS_PER_SECOND
-            self.redis_client.expire(hash_key, expire_seconds)
+            redis_client.expire(hash_key, expire_seconds)
 
             logger.debug(f"事件已存储: {ts_key} @ {timestamp_ms}")
             return True
@@ -275,18 +329,18 @@ class RedisTimeSeriesStorage:
     # ==========================================================================
     # Query Operations
     # ==========================================================================
-    
+
     def query_events(
-            self,
-            topic: str,
-            event_type: str,
-            start_time: Optional[float] = None,
-            end_time: Optional[float] = None,
-            limit: Optional[int] = None,
+        self,
+        topic: str,
+        event_type: str,
+        start_time: Optional[float] = None,
+        end_time: Optional[float] = None,
+        limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         查询时间范围内的事件
-        
+
         :param topic: 主题
         :param event_type: 事件类型
         :param start_time: 开始时间（秒级时间戳）
@@ -298,7 +352,7 @@ class RedisTimeSeriesStorage:
 
         if not topic or not event_type:
             raise ValueError("Topic and event_type are required")
-            
+
         try:
             ts_key = self._get_series_key(topic, event_type)
             hash_key = self._get_hash_key(ts_key)
@@ -313,23 +367,29 @@ class RedisTimeSeriesStorage:
                 to_time = int(end_time * MS_PER_SECOND)
 
             # 查询时间序列获取时间戳
-            ts_data = self.ts_client.range(
+            ts_client = self._require_ts()
+            redis_client = self._require_redis()
+            ts_data = ts_client.range(
                 ts_key,
                 from_time=from_time,
                 to_time=to_time,
                 count=limit,
             )
 
-            events = []
+            events: List[Dict[str, Any]] = []
             for timestamp_ms, _ in ts_data:
-                # 从 Hash 中获取完整消息
-                event_json = self.redis_client.hget(hash_key, timestamp_ms)
-                if event_json:
-                    try:
-                        event_data = json.loads(event_json)
-                        events.append(event_data)
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"解析事件JSON失败: {e}")
+                event_json = redis_client.hget(hash_key, str(timestamp_ms))
+                if not event_json:
+                    continue
+                try:
+                    event_data = json.loads(event_json)
+                except json.JSONDecodeError as exc:
+                    logger.warning(f"解析事件JSON失败: {exc}")
+                    continue
+                if not isinstance(event_data, dict):
+                    logger.warning("解析事件JSON失败: 非法格式")
+                    continue
+                events.append(event_data)
 
             logger.debug(f"查询到 {len(events)} 条事件: {ts_key}")
             return events
@@ -347,10 +407,12 @@ class RedisTimeSeriesStorage:
     def get_topics(self) -> List[str]:
         """获取所有主题列表"""
         self._ensure_connected()
-        
+
         try:
             pattern = f"{self.key_prefix}*"
-            keys = self.redis_client.keys(pattern)
+            redis_client = self._require_redis()
+            raw_keys = redis_client.keys(pattern)
+            keys = cast(List[str], raw_keys)
             return self._extract_topics_from_keys(keys)
         except Exception as e:
             logger.error(f"获取主题列表失败: {e}")
@@ -362,10 +424,12 @@ class RedisTimeSeriesStorage:
 
         if not topic:
             raise ValueError("Topic cannot be empty")
-            
+
         try:
             pattern = f"{self.key_prefix}{topic}{KEY_SEPARATOR}*"
-            keys = self.redis_client.keys(pattern)
+            redis_client = self._require_redis()
+            raw_keys = redis_client.keys(pattern)
+            keys = cast(List[str], raw_keys)
             return self._extract_event_types_from_keys(keys)
         except Exception as e:
             logger.error(f"获取事件类型列表失败: {e}")
@@ -374,45 +438,49 @@ class RedisTimeSeriesStorage:
     # ==========================================================================
     # Maintenance Operations
     # ==========================================================================
-    
+
     def cleanup_expired_data(self) -> None:
         """清理过期数据"""
         self._ensure_connected()
-        
+
         try:
             # RedisTimeSeries 会自动清理过期的时间序列数据
             # 这里只需清理相关的 Hash 数据
             pattern = f"{self.key_prefix}*{MESSAGES_SUFFIX}"
-            keys = self.redis_client.keys(pattern)
+            redis_client = self._require_redis()
+            raw_keys = redis_client.keys(pattern)
+            keys = cast(List[str], raw_keys)
 
             cleaned_count = 0
             for key in keys:
                 # 检查 TTL，如果已过期则删除
-                ttl = self.redis_client.ttl(key)
+                ttl = redis_client.ttl(key)
                 if ttl == TTL_KEY_NOT_EXISTS:
-                    self.redis_client.delete(key)
+                    redis_client.delete(key)
                     cleaned_count += 1
                     logger.debug(f"清理过期数据: {key}")
 
             if cleaned_count > 0:
                 logger.info(f"清理了 {cleaned_count} 个过期的 Hash 键")
-                
+
         except Exception as e:
             logger.error(f"清理过期数据失败: {e}")
 
     def get_stats(self) -> Dict[str, Any]:
         """获取存储统计信息"""
         self._ensure_connected()
-        
+
         try:
             pattern = f"{self.key_prefix}*"
-            keys = self.redis_client.keys(pattern)
+            redis_client = self._require_redis()
+            raw_keys = redis_client.keys(pattern)
+            keys = cast(List[str], raw_keys)
 
             ts_keys = [k for k in keys if not k.endswith(MESSAGES_SUFFIX)]
             hash_keys = [k for k in keys if k.endswith(MESSAGES_SUFFIX)]
 
             # 获取内存信息
-            memory_info = self.redis_client.info("memory")
+            memory_info = cast(Dict[str, Any], redis_client.info("memory"))
             memory_usage = memory_info.get("used_memory_human", "N/A")
 
             return {
@@ -433,12 +501,34 @@ class RedisTimeSeriesStorage:
     # ==========================================================================
     # Resource Cleanup
     # ==========================================================================
-    
+
+    def publish(self, topic: str, message: str) -> bool:
+        """适配消息总线的写入接口"""
+        self._ensure_connected()
+        try:
+            try:
+                payload: Any = json.loads(message)
+            except json.JSONDecodeError:
+                payload = {"data": message}
+
+            if isinstance(payload, dict):
+                event_type = str(payload.get("type", topic))
+                data = payload.get("data", payload)
+            else:
+                event_type = topic
+                data = payload
+
+            event = Event(type=event_type, data=data)
+            return self.store_event(event, topic=topic, source="timeseries_bus")
+        except Exception as exc:
+            logger.error(f"写入 RedisTimeSeries 失败: {exc}")
+            return False
+
     def close(self) -> None:
         """关闭连接"""
         if not self._connected:
             return
-            
+
         try:
             if self.redis_client:
                 self.redis_client.close()

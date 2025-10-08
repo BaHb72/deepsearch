@@ -4,11 +4,11 @@
 测试所有数据源的基本功能和性能
 """
 import asyncio
-import time
-from typing import Dict, Any, List, Optional
-from dataclasses import dataclass
 import json
+import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
 import pytest
 from loguru import logger
@@ -20,6 +20,7 @@ logger.add("test_data_sources.log", rotation="10 MB")
 @dataclass
 class TestResult:
     """测试结果"""
+
     source: str
     method: str
     success: bool
@@ -40,7 +41,9 @@ class DataSourceTestSuite:
     async def setup(self):
         """初始化测试环境"""
         try:
-            from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceManager
+            from deepsearch.infrastructure.providers.managers.data_source_manager import (
+                DataSourceManager,
+            )
 
             self.manager = DataSourceManager.get_instance()
             await self.manager.initialize()
@@ -72,7 +75,7 @@ class DataSourceTestSuite:
                     success=True,
                     response_time=response_time,
                     data_count=len(stocks),
-                    data_sample=stocks[0] if stocks else None
+                    data_sample=stocks[0] if stocks else None,
                 )
             else:
                 return TestResult(
@@ -80,7 +83,7 @@ class DataSourceTestSuite:
                     method="get_stock_list",
                     success=False,
                     error="返回空数据",
-                    response_time=response_time
+                    response_time=response_time,
                 )
 
         except Exception as e:
@@ -89,7 +92,7 @@ class DataSourceTestSuite:
                 method="get_stock_list",
                 success=False,
                 error=str(e),
-                response_time=time.time() - start_time
+                response_time=time.time() - start_time,
             )
 
     async def test_get_kline_data(self, source: str) -> TestResult:
@@ -109,7 +112,7 @@ class DataSourceTestSuite:
                 period="1d",
                 start_date=start_date.strftime("%Y-%m-%d"),
                 end_date=end_date.strftime("%Y-%m-%d"),
-                limit=30
+                limit=30,
             )
 
             response_time = time.time() - start_time
@@ -121,7 +124,7 @@ class DataSourceTestSuite:
                     success=True,
                     response_time=response_time,
                     data_count=len(klines),
-                    data_sample=klines[-1] if klines else None
+                    data_sample=klines[-1] if klines else None,
                 )
             else:
                 return TestResult(
@@ -129,7 +132,7 @@ class DataSourceTestSuite:
                     method="get_kline_data",
                     success=False,
                     error="返回空数据",
-                    response_time=response_time
+                    response_time=response_time,
                 )
 
         except Exception as e:
@@ -138,7 +141,7 @@ class DataSourceTestSuite:
                 method="get_kline_data",
                 success=False,
                 error=str(e),
-                response_time=time.time() - start_time
+                response_time=time.time() - start_time,
             )
 
     async def test_get_realtime_quotes(self, source: str) -> TestResult:
@@ -161,7 +164,7 @@ class DataSourceTestSuite:
                     success=True,
                     response_time=response_time,
                     data_count=len(quotes),
-                    data_sample=quotes[0] if quotes else None
+                    data_sample=quotes[0] if quotes else None,
                 )
             else:
                 return TestResult(
@@ -169,7 +172,7 @@ class DataSourceTestSuite:
                     method="get_realtime_quotes",
                     success=False,
                     error="返回空数据",
-                    response_time=response_time
+                    response_time=response_time,
                 )
 
         except Exception as e:
@@ -178,7 +181,7 @@ class DataSourceTestSuite:
                 method="get_realtime_quotes",
                 success=False,
                 error=str(e),
-                response_time=time.time() - start_time
+                response_time=time.time() - start_time,
             )
 
     async def test_get_stock_info(self, source: str) -> TestResult:
@@ -201,7 +204,7 @@ class DataSourceTestSuite:
                     success=True,
                     response_time=response_time,
                     data_count=1,
-                    data_sample=info
+                    data_sample=info,
                 )
             else:
                 return TestResult(
@@ -209,7 +212,7 @@ class DataSourceTestSuite:
                     method="get_stock_info",
                     success=False,
                     error="返回空数据",
-                    response_time=response_time
+                    response_time=response_time,
                 )
 
         except Exception as e:
@@ -218,7 +221,7 @@ class DataSourceTestSuite:
                 method="get_stock_info",
                 success=False,
                 error=str(e),
-                response_time=time.time() - start_time
+                response_time=time.time() - start_time,
             )
 
     async def test_all_sources(self):
@@ -262,7 +265,9 @@ class DataSourceTestSuite:
                         f"数据量: {result.data_count})"
                     )
                     if result.data_sample:
-                        logger.debug(f"数据样例: {json.dumps(result.data_sample, ensure_ascii=False, indent=2)[:200]}...")
+                        logger.debug(
+                            f"数据样例: {json.dumps(result.data_sample, ensure_ascii=False, indent=2)[:200]}..."
+                        )
                 else:
                     logger.error(
                         f"❌ {result.method}: 失败 "
@@ -290,42 +295,42 @@ class DataSourceTestSuite:
         for result in self.results:
             if result.source not in source_stats:
                 source_stats[result.source] = {
-                    'total': 0,
-                    'success': 0,
-                    'failed': 0,
-                    'total_time': 0,
-                    'methods': {}
+                    "total": 0,
+                    "success": 0,
+                    "failed": 0,
+                    "total_time": 0,
+                    "methods": {},
                 }
 
             stats = source_stats[result.source]
-            stats['total'] += 1
-            stats['total_time'] += result.response_time
+            stats["total"] += 1
+            stats["total_time"] += result.response_time
 
             if result.success:
-                stats['success'] += 1
+                stats["success"] += 1
             else:
-                stats['failed'] += 1
+                stats["failed"] += 1
 
-            stats['methods'][result.method] = {
-                'success': result.success,
-                'time': result.response_time,
-                'error': result.error
+            stats["methods"][result.method] = {
+                "success": result.success,
+                "time": result.response_time,
+                "error": result.error,
             }
 
         # 生成报告
         for source, stats in source_stats.items():
-            success_rate = stats['success'] / stats['total'] * 100 if stats['total'] > 0 else 0
-            avg_time = stats['total_time'] / stats['total'] if stats['total'] > 0 else 0
+            success_rate = stats["success"] / stats["total"] * 100 if stats["total"] > 0 else 0
+            avg_time = stats["total_time"] / stats["total"] if stats["total"] > 0 else 0
 
             report.append(f"\n📊 {source}")
             report.append(f"  成功率: {success_rate:.1f}% ({stats['success']}/{stats['total']})")
             report.append(f"  平均响应时间: {avg_time:.2f}秒")
 
             # 方法详情
-            for method, method_stats in stats['methods'].items():
-                status = "✅" if method_stats['success'] else "❌"
+            for method, method_stats in stats["methods"].items():
+                status = "✅" if method_stats["success"] else "❌"
                 report.append(f"    {status} {method}: {method_stats['time']:.2f}s")
-                if method_stats['error']:
+                if method_stats["error"]:
                     report.append(f"       错误: {method_stats['error'][:50]}...")
 
         # 总体评分

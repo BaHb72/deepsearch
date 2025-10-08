@@ -1,15 +1,17 @@
 """
 使用正确的AmazingData SDK API测试
 """
-import sys
+
 import os
+import sys
 from datetime import datetime, timedelta
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from deepsearch.config import get_config
 import pandas as pd
+
+from deepsearch.config import get_config
 
 
 def get_amazingdata_config():
@@ -17,31 +19,31 @@ def get_amazingdata_config():
     config = get_config()
 
     # 优先使用新格式配置
-    if hasattr(config, 'data_sources') and config.data_sources:
-        providers = config.data_sources.get('providers', {})
-        if 'amazingdata' in providers:
-            ad_provider = providers['amazingdata']
-            if ad_provider.get('enabled'):
-                ad_config = ad_provider.get('config', {})
-                conn = ad_config.get('connection', {})
+    if hasattr(config, "data_sources") and config.data_sources:
+        providers = config.data_sources.get("providers", {})
+        if "amazingdata" in providers:
+            ad_provider = providers["amazingdata"]
+            if ad_provider.get("enabled"):
+                ad_config = ad_provider.get("config", {})
+                conn = ad_config.get("connection", {})
                 return {
-                    'username': conn.get('username', ''),
-                    'password': conn.get('password', ''),
-                    'host': conn.get('host', 'localhost'),
-                    'port': conn.get('port', 8888),
-                    'enabled': True
+                    "username": conn.get("username", ""),
+                    "password": conn.get("password", ""),
+                    "host": conn.get("host", "localhost"),
+                    "port": conn.get("port", 8888),
+                    "enabled": True,
                 }
 
     # 回退到旧格式
-    if hasattr(config, 'amazingdata'):
+    if hasattr(config, "amazingdata"):
         ad = config.amazingdata
         if ad.enabled:
             return {
-                'username': getattr(ad, 'username', ''),
-                'password': str(getattr(ad, 'password', '')),
-                'host': getattr(ad, 'host', 'localhost'),
-                'port': getattr(ad, 'port', 8888),
-                'enabled': ad.enabled
+                "username": getattr(ad, "username", ""),
+                "password": str(getattr(ad, "password", "")),
+                "host": getattr(ad, "host", "localhost"),
+                "port": getattr(ad, "port", 8888),
+                "enabled": ad.enabled,
             }
 
     return None
@@ -56,7 +58,7 @@ def test_amazingdata():
 
     # 获取配置
     config = get_amazingdata_config()
-    if not config or not config['enabled']:
+    if not config or not config["enabled"]:
         print("[FAIL] AmazingData未启用或未配置")
         return False
 
@@ -65,7 +67,10 @@ def test_amazingdata():
 
     try:
         import AmazingData as ad
-        print(f"[INFO] AmazingData SDK版本: {ad.__version__ if hasattr(ad, '__version__') else '未知'}\n")
+
+        print(
+            f"[INFO] AmazingData SDK版本: {ad.__version__ if hasattr(ad, '__version__') else '未知'}\n"
+        )
     except ImportError:
         print("[FAIL] AmazingData SDK未安装")
         return False
@@ -75,11 +80,11 @@ def test_amazingdata():
     try:
         # 登录（直接传递服务器地址和端口）
         login_result = ad.login(
-            username=config['username'],
-            password=config['password'],
-            host=config['host'],
-            port=config['port'],
-            api_mode='kInternetMode'  # 互联网模式
+            username=config["username"],
+            password=config["password"],
+            host=config["host"],
+            port=config["port"],
+            api_mode="kInternetMode",  # 互联网模式
         )
 
         if login_result == 0 or login_result is True:
@@ -90,6 +95,7 @@ def test_amazingdata():
     except Exception as e:
         print(f"    [FAIL] 登录异常: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -100,13 +106,13 @@ def test_amazingdata():
         from AmazingData import query_api
 
         # 获取股票列表
-        if hasattr(query_api, 'get_stock_list'):
+        if hasattr(query_api, "get_stock_list"):
             stock_list = query_api.get_stock_list()
             if stock_list:
                 print(f"    [OK] 获取{len(stock_list)}只股票")
                 if isinstance(stock_list, list) and len(stock_list) > 0:
                     print(f"    示例: {stock_list[:5]}")
-        elif hasattr(query_api, 'query_stock_list'):
+        elif hasattr(query_api, "query_stock_list"):
             stock_list = query_api.query_stock_list()
             if stock_list:
                 print(f"    [OK] 获取{len(stock_list)}只股票")
@@ -122,19 +128,19 @@ def test_amazingdata():
         from AmazingData import query_api
 
         # 尝试不同的API名称
-        if hasattr(query_api, 'get_realtime_quotes'):
+        if hasattr(query_api, "get_realtime_quotes"):
             quotes = query_api.get_realtime_quotes([test_code])
             if quotes:
-                print(f"    [OK] 获取实时行情")
+                print("    [OK] 获取实时行情")
                 print(f"    数据: {quotes}")
-        elif hasattr(query_api, 'query_realtime_quotes'):
+        elif hasattr(query_api, "query_realtime_quotes"):
             quotes = query_api.query_realtime_quotes([test_code])
             if quotes:
-                print(f"    [OK] 获取实时行情")
-        elif hasattr(query_api, 'get_snapshot'):
+                print("    [OK] 获取实时行情")
+        elif hasattr(query_api, "get_snapshot"):
             snapshot = query_api.get_snapshot([test_code])
             if snapshot:
-                print(f"    [OK] 获取快照数据")
+                print("    [OK] 获取快照数据")
         else:
             print("    [INFO] 实时行情API不可用")
     except Exception as e:
@@ -149,25 +155,20 @@ def test_amazingdata():
         start_date = end_date - timedelta(days=30)
 
         # 尝试不同的API名称
-        if hasattr(query_api, 'get_kline_data'):
+        if hasattr(query_api, "get_kline_data"):
             kline = query_api.get_kline_data(
-                test_code,
-                start_date.strftime('%Y%m%d'),
-                end_date.strftime('%Y%m%d'),
-                '1d'
+                test_code, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"), "1d"
             )
             if kline is not None:
-                print(f"    [OK] 获取K线数据")
+                print("    [OK] 获取K线数据")
                 if isinstance(kline, pd.DataFrame):
                     print(f"    共{len(kline)}条记录")
-        elif hasattr(query_api, 'query_history_bars'):
+        elif hasattr(query_api, "query_history_bars"):
             bars = query_api.query_history_bars(
-                test_code,
-                start_date.strftime('%Y%m%d'),
-                end_date.strftime('%Y%m%d')
+                test_code, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d")
             )
             if bars:
-                print(f"    [OK] 获取历史K线")
+                print("    [OK] 获取历史K线")
         else:
             print("    [INFO] K线数据API不可用")
     except Exception as e:
@@ -177,7 +178,8 @@ def test_amazingdata():
     print("\n[5] 可用的查询API函数:")
     try:
         from AmazingData import query_api
-        api_functions = [attr for attr in dir(query_api) if not attr.startswith('_')]
+
+        api_functions = [attr for attr in dir(query_api) if not attr.startswith("_")]
         for func in api_functions[:10]:  # 只显示前10个
             print(f"    - {func}")
         if len(api_functions) > 10:

@@ -7,13 +7,15 @@
 3. API智能超时
 4. 指数退避策略
 """
+
 import pytest
+
 from deepsearch.core.utils.timeout_config import (
-    TimeoutManager,
-    TimeoutConfig,
     TimeoutCategory,
+    TimeoutConfig,
+    TimeoutManager,
+    configure_timeouts,
     get_timeout_manager,
-    configure_timeouts
 )
 
 
@@ -70,12 +72,8 @@ class TestTimeoutManager:
     def custom_manager(self):
         """创建自定义配置的管理器"""
         custom_configs = {
-            TimeoutCategory.NETWORK_REALTIME: TimeoutConfig(
-                default=5.0, min=2.0, max=15.0
-            ),
-            TimeoutCategory.DB_QUERY: TimeoutConfig(
-                default=60.0, min=10.0, max=180.0
-            )
+            TimeoutCategory.NETWORK_REALTIME: TimeoutConfig(default=5.0, min=2.0, max=15.0),
+            TimeoutCategory.DB_QUERY: TimeoutConfig(default=60.0, min=10.0, max=180.0),
         }
         return TimeoutManager(custom_configs)
 
@@ -131,7 +129,7 @@ class TestTimeoutManager:
             "stock_spot_em",
             "tick_data",
             "orderbook_depth",
-            "quote_snapshot"
+            "quote_snapshot",
         ]
 
         for api_name in realtime_apis:
@@ -145,7 +143,7 @@ class TestTimeoutManager:
             "daily_kline",
             "weekly_data",
             "monthly_stats",
-            "kline_min"
+            "kline_min",
         ]
 
         for api_name in historical_apis:
@@ -215,9 +213,7 @@ class TestTimeoutManagerSingleton:
         """测试配置全局超时"""
         # 配置自定义超时
         custom_configs = {
-            TimeoutCategory.NETWORK_REALTIME: TimeoutConfig(
-                default=3.0, min=1.0, max=10.0
-            )
+            TimeoutCategory.NETWORK_REALTIME: TimeoutConfig(default=3.0, min=1.0, max=10.0)
         }
         configure_timeouts(custom_configs)
 

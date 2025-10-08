@@ -1,7 +1,11 @@
 /**
- * 安全的 localStorage 操作封装
- * 处理隐私模式和其他可能的访问限制
+ * 安全的 localStorage 封装
+ * 在隐私模式或受限环境中自动回退到内存存储
  */
+
+import logger from '@/utils/logger'
+
+const storageLogger = logger.child('utils:storage')
 
 class SafeStorage {
     constructor() {
@@ -18,29 +22,30 @@ class SafeStorage {
             localStorage.setItem(testKey, 'test')
             localStorage.removeItem(testKey)
             return true
-        } catch (e) {
-            // 静默处理，避免控制台噪音
+        } catch (error) {
+            // 在隐私模式或无存储权限时降级到内存
+            storageLogger.debug('[CHECK_UNAVAILABLE] localStorage not accessible, fallback to memory')
             return false
         }
     }
 
     /**
-     * 获取值
+     * 读取值
      */
     getItem(key) {
         try {
             if (this.isAvailable) {
                 return localStorage.getItem(key)
             }
-            return this.memoryStorage.get(key) || null
-        } catch (e) {
-            console.error('获取存储值失败:', e)
-            return this.memoryStorage.get(key) || null
+            return this.memoryStorage.get(key) ?? null
+        } catch (error) {
+            storageLogger.error('[GET_FAILED]', { key, error })
+            return this.memoryStorage.get(key) ?? null
         }
     }
 
     /**
-     * 设置值
+     * 写入值
      */
     setItem(key, value) {
         try {
@@ -48,14 +53,14 @@ class SafeStorage {
                 localStorage.setItem(key, value)
             }
             this.memoryStorage.set(key, value)
-        } catch (e) {
-            console.error('设置存储值失败:', e)
+        } catch (error) {
+            storageLogger.error('[SET_FAILED]', { key, value, error })
             this.memoryStorage.set(key, value)
         }
     }
 
     /**
-     * 移除值
+     * 删除值
      */
     removeItem(key) {
         try {
@@ -63,8 +68,8 @@ class SafeStorage {
                 localStorage.removeItem(key)
             }
             this.memoryStorage.delete(key)
-        } catch (e) {
-            console.error('移除存储值失败:', e)
+        } catch (error) {
+            storageLogger.error('[REMOVE_FAILED]', { key, error })
             this.memoryStorage.delete(key)
         }
     }
@@ -78,17 +83,15 @@ class SafeStorage {
                 localStorage.clear()
             }
             this.memoryStorage.clear()
-        } catch (e) {
-            console.error('清空存储失败:', e)
+        } catch (error) {
+            storageLogger.error('[CLEAR_FAILED]', error)
             this.memoryStorage.clear()
         }
     }
 }
 
-// 导出单例
 export const storage = new SafeStorage()
 
-// 导出常用的存储键
 export const STORAGE_KEYS = {
     THEME: 'theme',
     USER_PREFERENCES: 'user_preferences',

@@ -19,9 +19,6 @@ const PerformanceAnalytics = lazy(() => import('./pages/PerformanceAnalytics'))
 const AlertManager = lazy(() => import('./pages/AlertManager'))
 const ComponentManager = lazy(() => import('./pages/ComponentManager'))
 
-// 开发者工具页面
-const ComponentShowcase = lazy(() => import('./pages/ComponentShowcase'))
-const ApiTroubleshooting = lazy(() => import('./pages/ApiTroubleshooting'))
 
 // 加载组件
 const Loading = () => (
@@ -64,9 +61,6 @@ function App() {
               <Route path="/monitor/alert" element={<AlertManager />} />
               <Route path="/monitor/component" element={<ComponentManager />} />
 
-              {/* 开发者工具路由 */}
-              <Route path="/dev/components" element={<ComponentShowcase />} />
-              <Route path="/dev/api-debug" element={<ApiTroubleshooting />} />
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

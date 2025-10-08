@@ -290,10 +290,12 @@ def handle_query_response(event):
 
 连接数据提供者：
 ```python
-from deepsearch.data_providers import AkShareProvider
+from deepsearch.infrastructure.providers import AkShareProxyProvider
+from deepsearch.infrastructure.providers.datafeed import AkShareDataFeed
 
-provider = AkShareProvider()
-engine = BacktestEngine(data_provider=provider)
+provider = AkShareProxyProvider()
+data_feed = AkShareDataFeed(provider)
+engine = BacktestEngine(data_provider=data_feed)
 ```
 
 ### Q: 如何保存回测结果？

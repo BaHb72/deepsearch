@@ -1,1960 +1,935 @@
 """
-数据源CRUD管理API
+数据源管理 API
 
-提供数据源的增删改查、测试和状态管理功能
+提供统一的数据源状态、监控、配置与测试能力，消除原有重复逻辑，
+并为前后端建立清晰的数据交互层。
 """
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field, ConfigDict
-from datetime import datetime, timedelta
-from loguru import logger
-import asyncio
-import aiohttp
-import yaml
-from pathlib import Path
-import os
+
+from __future__ import annotations
+
 import time
+from collections import Counter
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple, cast
 
-from deepsearch.webui.api.common.response_format import APIResponse, APIException, ErrorCodes
-from deepsearch.config import get_config
-from deepsearch.config.manager import config_manager  # 使用全局实例
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import JSONResponse
+from loguru import logger
+from pydantic import BaseModel, Field
+
 from deepsearch.infrastructure.cache.cache_manager import CacheManager
-# 导入进程隔离的安全包装器
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import AmazingDataSafeWrapper
+from deepsearch.infrastructure.providers.managers.data_source_manager import (
+    DataSourceConfig,
+    DataSourceLifecycleStatus,
+    DataSourceManager,
+    DataSourceType,
+    get_data_source_manager,
+)
+from deepsearch.observability.monitoring.data_source_monitor import (
+    AccessRecord,
+    DataAccessType,
+    DataSourceMonitor,
+)
+from deepsearch.observability.monitoring.data_source_monitor import (
+    DataSourceType as MonitorDataSourceType,
+)
+from deepsearch.observability.monitoring.data_source_monitor import (
+    get_monitor,
+)
+from deepsearch.webui.api.common.response_format import APIResponse, ErrorCodes
+from deepsearch.webui.api.utils import sanitize_for_json
 
-
-# 创建路由
 router = APIRouter(prefix="/api/data-sources", tags=["DataSource Management"])
 
-# 创建全局缓存管理器实例
-cache_manager = CacheManager(
-    l1_max_size=10000,  # L1缓存最大条目数
-    l1_ttl=300  # 默认TTL 5分钟
-)
+# 复用单实例缓存管理器，主要用于刷新与统计
+cache_manager = CacheManager(l1_max_size=10_000, l1_ttl=300)
+DEFAULT_TEST_SYMBOL = "000001"
+
+PLACEHOLDER_SOURCES = {"default", "custom"}
+PROXY_SOURCE_MAP = {
+    "cloudflare": {
+        "target": "akshare",
+        "display_name": "Cloudflare 代理",
+        "kind": "proxy",
+    },
+    "cloudflare_proxy": {
+        "target": "akshare",
+        "display_name": "Cloudflare 代理",
+        "kind": "proxy",
+    },
+}
 
 
-# 数据模型
-class DataSourceConfig(BaseModel):
-    """数据源配置"""
-    timeout: int = Field(default=30000, description="超时时间(ms)")
-    retryCount: int = Field(default=3, description="重试次数")
-    rateLimit: int = Field(default=100, description="速率限制(req/s)")
-    host: Optional[str] = Field(None, description="主机地址")
-    port: Optional[int] = Field(None, description="端口号")
-    workerUrl: Optional[str] = Field(None, description="Worker URL")
-    username: Optional[str] = Field(None, description="用户名")
-    password: Optional[str] = Field(None, description="密码")
-    networkProvider: Optional[str] = Field("telecom", description="网络运营商: telecom|unicom|custom")
-    heartbeatInterval: Optional[int] = Field(60, description="心跳间隔(秒)")
-    autoReconnect: Optional[bool] = Field(True, description="自动重连")
-    localPath: Optional[str] = Field("D://AmazingData_local_data//", description="本地数据路径")
-    useLocal: Optional[bool] = Field(True, description="使用本地数据")
-    extra: Optional[Dict[str, Any]] = Field(default_factory=dict, description="额外配置")
+class SwitchRequest(BaseModel):
+    """主数据源切换请求"""
+
+    source: str = Field(..., description="目标数据源标识（amazingdata、akshare 等）")
 
 
-class DataSource(BaseModel):
-    """数据源模型"""
-    model_config = ConfigDict(
-        json_encoders={
-            datetime: lambda v: v.isoformat() if v else None
+class CacheRefreshRequest(BaseModel):
+    """缓存刷新请求"""
+
+    source: Optional[str] = Field(None, description="需要刷新的数据源，可为空表示全部")
+
+
+class ConfigUpdateRequest(BaseModel):
+    """数据源配置更新请求"""
+
+    enabled: Optional[bool] = None
+    priority: Optional[int] = Field(None, ge=1, description="优先级（数值越小优先级越高）")
+    timeout: Optional[float] = Field(None, gt=0, description="超时时间（秒）")
+    retry_count: Optional[int] = Field(None, ge=0, description="重试次数")
+    fallback_enabled: Optional[bool] = Field(None, description="是否启用降级")
+    fallback_sources: Optional[List[str]] = Field(None, description="降级备选数据源列表")
+    config: Optional[Dict[str, Any]] = None
+
+
+# ---------------------------------------------------------------------------
+# 内部工具函数
+# ---------------------------------------------------------------------------
+
+
+def _manager() -> DataSourceManager:
+    return get_data_source_manager()
+
+
+async def _ensure_manager(manager: DataSourceManager) -> DataSourceManager:
+    if not manager.initialized:
+        await manager.initialize()
+    return manager
+
+
+def _monitor() -> Optional[DataSourceMonitor]:
+    try:
+        return get_monitor()
+    except Exception as exc:  # pragma: no cover - 监控组件缺失时允许降级
+        logger.debug(f"数据源监控组件不可用: {exc}")
+        return None
+
+
+def _resolve_source(manager: DataSourceManager, source: Optional[str]) -> Optional[DataSourceType]:
+    if source is None:
+        return None
+    resolved = manager._resolve_source_type(source)
+    if resolved is None:
+        logger.warning(f"无法解析的数据源标识: {source}")
+    return resolved
+
+
+def _to_monitor_type(source: DataSourceType) -> Optional[MonitorDataSourceType]:
+    try:
+        return MonitorDataSourceType(source.value)
+    except ValueError:  # pragma: no cover - 理论上不会触发
+        mapping = {
+            DataSourceType.AMAZINGDATA: MonitorDataSourceType.AMAZINGDATA,
+            DataSourceType.CLOUDFLARE: MonitorDataSourceType.CLOUDFLARE,
+            DataSourceType.AKSHARE: MonitorDataSourceType.AKSHARE,
+            DataSourceType.QMT: MonitorDataSourceType.QMT,
+            DataSourceType.DEFAULT: MonitorDataSourceType.DEFAULT,
+            DataSourceType.CUSTOM: MonitorDataSourceType.CUSTOM,
+        }
+        return mapping.get(source)
+
+
+def _format_timestamp(ts: Optional[float]) -> Optional[str]:
+    if not ts:
+        return None
+    try:
+        return datetime.fromtimestamp(ts).isoformat()
+    except Exception:
+        return None
+
+
+def _build_metrics_payload(metrics: Any) -> Dict[str, Any]:
+    """将监控指标对象转换为可序列化的字典。"""
+
+    if not metrics:
+        return {
+            "totalRequests": 0,
+            "successRate": 0.0,
+            "avgLatency": None,
+            "recentErrorRate": 0.0,
+            "errorCount": 0,
+            "errorRate": 0.0,
+            "lastAccess": None,
+        }
+
+    total_requests = getattr(metrics, "total_requests", 0)
+    error_count = getattr(metrics, "error_count", 0)
+    avg_latency = getattr(metrics, "avg_latency_ms", None)
+    if isinstance(avg_latency, (int, float)) and avg_latency < 0:
+        avg_latency = None
+
+    return {
+        "totalRequests": total_requests,
+        "successRate": getattr(metrics, "success_rate", 0.0),
+        "avgLatency": avg_latency,
+        "recentErrorRate": getattr(metrics, "recent_error_rate", 0.0),
+        "errorCount": error_count,
+        "errorRate": (error_count / total_requests) if total_requests else 0.0,
+        "lastAccess": _format_timestamp(getattr(metrics, "last_access", None)),
+    }
+
+
+def _build_proxy_payload(
+    proxy_name: str,
+    info: Dict[str, Any],
+    metrics: Any,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """构造代理数据源的序列化信息。"""
+
+    meta = meta or {}
+    display_name = meta.get("display_name") or info.get("config", {}).get("name") or proxy_name
+    metrics_payload = _build_metrics_payload(metrics)
+
+    payload = sanitize_for_json(
+        {
+            "id": proxy_name,
+            "name": display_name,
+            "source": proxy_name,
+            "kind": meta.get("kind", "proxy"),
+            "status": info.get("status", DataSourceLifecycleStatus.DRAFT.value),
+            "available": info.get("available", False),
+            "reason": info.get("reason"),
+            "lastTransition": info.get("lastTransition"),
+            "lastTestTime": info.get("lastTestTime"),
+            "testSummary": info.get("testSummary"),
+            "hasSavedCredential": info.get("hasSavedCredential", False),
+            "metrics": metrics_payload,
+            "config": info.get("config", {}),
+            "proxyMeta": meta,
         }
     )
-
-    id: Optional[str] = None  # 使用字符串ID（英文名称）
-    name: str = Field(..., description="数据源名称")
-    type: str = Field(..., description="数据源类型: akshare|amazingdata|qmt|cloudflare")
-    enabled: bool = Field(default=True, description="是否启用")
-    priority: int = Field(default=1, description="优先级(数字越小优先级越高)")
-    config: DataSourceConfig = Field(default_factory=DataSourceConfig, description="配置信息")
-    status: Optional[str] = Field(default="untested", description="状态: online|offline|error|degraded|untested")
-    successRate: Optional[float] = Field(None, description="成功率")
-    avgResponseTime: Optional[int] = Field(None, description="平均响应时间(ms)")
-    lastCheckTime: Optional[datetime] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    return cast(Dict[str, Any], payload)
 
 
-class TestDataSourceRequest(BaseModel):
-    """测试数据源请求"""
-    type: str
-    config: DataSourceConfig
+def _extract_sources_context(
+    status_report: Dict[str, Any],
+    monitor: Optional[DataSourceMonitor],
+) -> Tuple[
+    Dict[str, Dict[str, Any]],
+    Dict[str, Any],
+    Dict[str, List[Tuple[str, Dict[str, Any], Any, Dict[str, Any]]]],
+]:
+    """提取数据源、监控指标以及代理映射。"""
+
+    sources: Dict[str, Dict[str, Any]] = dict(status_report.get("sources", {}))
+    metrics_map: Dict[str, Any] = {}
+    if monitor:
+        for src_type, metrics in monitor.source_metrics.items():
+            metrics_map[src_type.value] = metrics
+
+    # 过滤默认/自定义占位符
+    for placeholder in PLACEHOLDER_SOURCES:
+        sources.pop(placeholder, None)
+        metrics_map.pop(placeholder, None)
+
+    proxy_map: Dict[str, List[Tuple[str, Dict[str, Any], Any, Dict[str, Any]]]] = {}
+    for proxy_name, meta in PROXY_SOURCE_MAP.items():
+        info = sources.pop(proxy_name, None)
+        metrics = metrics_map.pop(proxy_name, None)
+        if info:
+            target_name = meta.get("target")
+            if not isinstance(target_name, str):
+                logger.debug(f"跳过无效代理目标: {proxy_name}")
+                continue
+            if target_name not in sources:
+                sources[target_name] = {
+                    "status": info.get("status", DataSourceLifecycleStatus.DRAFT.value),
+                    "available": info.get("available", False),
+                    "reason": info.get("reason"),
+                    "lastTransition": info.get("lastTransition"),
+                    "lastTestTime": info.get("lastTestTime"),
+                    "testSummary": info.get("testSummary"),
+                    "hasSavedCredential": info.get("hasSavedCredential", False),
+                    "config": info.get("config", {}),
+                }
+            proxy_map.setdefault(target_name, []).append((proxy_name, info, metrics, meta))
+
+    return sources, metrics_map, proxy_map
 
 
-# 模拟数据存储（实际应该使用数据库）
-data_sources: Dict[str, DataSource] = {}
+def _assemble_sources_payload(
+    sources: Dict[str, Dict[str, Any]],
+    metrics_map: Dict[str, Any],
+    proxy_map: Dict[str, List[Tuple[str, Dict[str, Any], Any, Dict[str, Any]]]],
+) -> List[Dict[str, Any]]:
+    """构建前端所需的数据源列表。"""
+
+    payload: List[Dict[str, Any]] = []
+    for source_name, info in sources.items():
+        config_info = info.get("config", {})
+        metrics_payload = _build_metrics_payload(metrics_map.get(source_name))
+        proxies = [
+            _build_proxy_payload(proxy_name, proxy_info, proxy_metrics, proxy_meta)
+            for proxy_name, proxy_info, proxy_metrics, proxy_meta in proxy_map.get(source_name, [])
+        ]
+
+        entry = {
+            "id": source_name,
+            "name": config_info.get("name") or source_name,
+            "type": source_name,
+            "status": info.get("status", DataSourceLifecycleStatus.DRAFT.value),
+            "available": info.get("available", False),
+            "enabled": config_info.get("enabled", False),
+            "priority": config_info.get("priority", 999),
+            "reason": info.get("reason"),
+            "lastTransition": info.get("lastTransition"),
+            "lastTestTime": info.get("lastTestTime"),
+            "testSummary": info.get("testSummary"),
+            "hasSavedCredential": info.get("hasSavedCredential", False),
+            "metrics": metrics_payload,
+            "requests": metrics_payload["totalRequests"],
+            "errors": metrics_payload["errorCount"],
+            "latency": metrics_payload["avgLatency"],
+            "lastCheck": metrics_payload["lastAccess"],
+            "config": config_info,
+        }
+
+        if proxies:
+            entry["proxies"] = proxies
+            entry["proxyEnabled"] = any(proxy.get("available") for proxy in proxies)
+
+        payload.append(sanitize_for_json(entry))
+
+    return payload
 
 
-def update_datasource_status_after_test(datasource_type: str, success: bool, latency: int):
-    """测试后更新数据源状态
+def _assemble_normalized_report(
+    status_report: Dict[str, Any],
+    sources: Dict[str, Dict[str, Any]],
+    proxy_map: Dict[str, List[Tuple[str, Dict[str, Any], Any, Dict[str, Any]]]],
+    metrics_map: Dict[str, Any],
+) -> Dict[str, Any]:
+    """对状态报告进行标准化，移除占位符并合并代理信息。"""
 
-    Args:
-        datasource_type: 数据源类型
-        success: 是否成功
-        latency: 延迟时间(ms)
-    """
-    datasource_id = datasource_type.lower()
-    if datasource_id in data_sources:
-        if success:
-            data_sources[datasource_id].status = "online"
-            data_sources[datasource_id].successRate = 100.0
-            data_sources[datasource_id].avgResponseTime = latency
-        else:
-            data_sources[datasource_id].status = "error"
-            data_sources[datasource_id].successRate = 0.0
-        data_sources[datasource_id].lastCheckTime = datetime.now()
-        logger.info(f"更新数据源 {datasource_id} 状态为 {'online' if success else 'error'}")
+    normalized_sources: Dict[str, Any] = {}
+    for source_name, info in sources.items():
+        entry = dict(info)
+        proxies = [
+            _build_proxy_payload(proxy_name, proxy_info, proxy_metrics, proxy_meta)
+            for proxy_name, proxy_info, proxy_metrics, proxy_meta in proxy_map.get(source_name, [])
+        ]
 
-    # 同步更新监控系统的健康状态
-    try:
-        from deepsearch.observability.monitoring.data_source_monitor import (
-            get_monitor,
-            DataSourceType
+        if proxies:
+            entry["proxies"] = proxies
+            entry["proxyEnabled"] = any(proxy.get("available") for proxy in proxies)
+
+        metrics_payload = _build_metrics_payload(metrics_map.get(source_name))
+        if metrics_payload:
+            entry["metrics"] = metrics_payload
+
+        normalized_sources[source_name] = sanitize_for_json(entry)
+
+    available_count = sum(1 for item in normalized_sources.values() if item.get("available"))
+
+    normalized_report = dict(status_report)
+    normalized_report["sources"] = normalized_sources
+    normalized_report["availableCount"] = available_count
+    normalized_report["available_count"] = available_count
+
+    payload = sanitize_for_json(normalized_report)
+    return cast(Dict[str, Any], payload)
+
+
+def _build_status_summary(sources: List[Dict[str, Any]]) -> Dict[str, int]:
+    counter = Counter(item.get("status", DataSourceLifecycleStatus.DRAFT.value) for item in sources)
+    return dict(counter)
+
+
+def _build_overview(
+    sources: List[Dict[str, Any]],
+    status_report: Dict[str, Any],
+    monitor: Optional[DataSourceMonitor],
+) -> Dict[str, Any]:
+    total = len(sources)
+    available = sum(1 for item in sources if item.get("available"))
+
+    total_requests = sum(item["metrics"].get("totalRequests", 0) for item in sources)
+    success_requests = sum(
+        item["metrics"].get("totalRequests", 0) * item["metrics"].get("successRate", 0.0)
+        for item in sources
+    )
+    avg_latency_values = [
+        item["metrics"].get("avgLatency") for item in sources if item["metrics"].get("avgLatency")
+    ]
+    avg_latency = sum(avg_latency_values) / len(avg_latency_values) if avg_latency_values else 0.0
+
+    error_rate = 0.0
+    if total_requests:
+        error_rate = max(0.0, 1.0 - (success_requests / total_requests))
+
+    bytes_transferred = 0
+    requests_per_minute = 0.0
+    active_connections = available
+
+    if monitor:
+        try:
+            stats = monitor.get_access_statistics(3600)
+            total_requests_window = stats.get("total_requests", 0)
+            requests_per_minute = total_requests_window / 60.0
+        except Exception as exc:  # pragma: no cover - 监控异常时继续
+            logger.debug(f"获取监控统计失败: {exc}")
+
+    cache_stats = cache_manager.get_stats()
+    cache_hit_rate = cache_stats.get("overall_hit_rate", 0.0)
+
+    payload = sanitize_for_json(
+        {
+            "total": total,
+            "available": available,
+            "active": status_report.get("availableCount", available),
+            "degraded": _build_status_summary(sources).get(
+                DataSourceLifecycleStatus.DEGRADED.value, 0
+            ),
+            "error": _build_status_summary(sources).get(DataSourceLifecycleStatus.ERROR.value, 0),
+            "offline": _build_status_summary(sources).get(
+                DataSourceLifecycleStatus.OFFLINE.value, 0
+            ),
+            "totalRequests": total_requests,
+            "avgLatency": avg_latency,
+            "successRate": success_requests / total_requests if total_requests else 0.0,
+            "errorRate": error_rate,
+            "requestsPerMinute": requests_per_minute,
+            "bytesTransferred": bytes_transferred,
+            "cacheHitRate": cache_hit_rate,
+            "activeConnections": active_connections,
+        }
+    )
+    return cast(Dict[str, Any], payload)
+
+
+def _build_timeline(monitor: Optional[DataSourceMonitor], limit: int = 60) -> List[Dict[str, Any]]:
+    if not monitor:
+        return []
+
+    records: List[AccessRecord] = list(monitor.access_history)[-limit:]
+    timeline: List[Dict[str, Any]] = []
+    for record in records:
+        timeline.append(
+            sanitize_for_json(
+                {
+                    "time": datetime.fromtimestamp(record.timestamp).isoformat(),
+                    "source": record.source.value,
+                    "accessType": record.access_type.value,
+                    "symbol": record.symbol,
+                    "requests": 1,
+                    "latency": record.latency_ms,
+                    "errors": 0 if record.success else 1,
+                    "success": record.success,
+                }
+            )
         )
+    return timeline
 
-        monitor = get_monitor()
 
-        # 将数据源类型转换为枚举
-        source_type_map = {
-            "amazingdata": DataSourceType.AMAZINGDATA,
-            "akshare": DataSourceType.AKSHARE,
-            "qmt": DataSourceType.QMT,
-            "cloudflare": DataSourceType.CLOUDFLARE,
-            "akshare_proxy": DataSourceType.AKSHARE_PROXY,
-            "akshare_direct": DataSourceType.AKSHARE_DIRECT,
-            "miniqmt": DataSourceType.MINIQMT,
+def _build_alerts(sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    alerts: List[Dict[str, Any]] = []
+    for item in sources:
+        status = item.get("status")
+        if status in {
+            DataSourceLifecycleStatus.DEGRADED.value,
+            DataSourceLifecycleStatus.ERROR.value,
+            DataSourceLifecycleStatus.OFFLINE.value,
+        }:
+            alerts.append(
+                {
+                    "level": (
+                        "warning" if status == DataSourceLifecycleStatus.DEGRADED.value else "error"
+                    ),
+                    "message": f"数据源 {item['id']} 状态为 {status}",
+                    "timestamp": item.get("lastTransition") or item.get("lastTestTime"),
+                    "source": item.get("id"),
+                }
+            )
+    return cast(List[Dict[str, Any]], sanitize_for_json(alerts))
+
+
+def _extract_metrics_for_source(
+    monitor: Optional[DataSourceMonitor],
+    source_name: str,
+) -> Dict[str, Any]:
+    if not monitor:
+        return {
+            "source": source_name,
+            "totalRequests": 0,
+            "successRate": 0.0,
+            "avgLatency": None,
+            "recentErrorRate": 0.0,
         }
 
-        source_type = source_type_map.get(datasource_id)
-        if source_type:
-            # 强制更新健康状态
-            monitor.update_health_status(source_type, success, reset_metrics_if_healthy=success)
-            logger.info(f"已同步更新监控系统中 {datasource_id} 的健康状态为: {'健康' if success else '异常'}")
-        else:
-            logger.warning(f"未找到数据源类型映射: {datasource_id}")
-
-    except Exception as e:
-        logger.error(f"更新监控系统健康状态失败: {e}")
-
-
-def get_config_file_path() -> Path:
-    """获取配置文件路径"""
-    # 获取当前环境
-    env = os.getenv("DEEPSEARCH_ENV", "prod")
-
-    # 构建配置文件路径
-    config_dir = Path(__file__).parent.parent.parent.parent.parent / "config"
-    config_file = config_dir / f"settings.{env}.yaml"
-
-    if not config_file.exists():
-        # 如果环境特定的配置文件不存在，使用默认的
-        config_file = config_dir / "settings.prod.yaml"
-
-    return config_file
-
-
-def save_to_config(source_type: str, config_data: Dict[str, Any]):
-    """
-    保存数据源配置到YAML文件
-
-    Args:
-        source_type: 数据源类型 (amazingdata, qmt, cloudflare)
-        config_data: 配置数据
-    """
     try:
-        config_file = get_config_file_path()
+        source_enum = MonitorDataSourceType(source_name)
+    except ValueError:
+        return {
+            "source": source_name,
+            "totalRequests": 0,
+            "successRate": 0.0,
+            "avgLatency": None,
+            "recentErrorRate": 0.0,
+        }
 
-        # 读取现有配置
-        with open(config_file, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f) or {}
+    metrics = monitor.source_metrics.get(source_enum)
+    if not metrics:
+        return {
+            "source": source_name,
+            "totalRequests": 0,
+            "successRate": 0.0,
+            "avgLatency": None,
+            "recentErrorRate": 0.0,
+        }
 
-        # 更新特定数据源的配置
-        if source_type == "amazingdata":
-            if 'amazingdata' not in config:
-                config['amazingdata'] = {}
-
-            # 更新AmazingData配置
-            config['amazingdata']['enabled'] = config_data.get('enabled', False)
-            config['amazingdata']['username'] = config_data.get('username', '')
-            config['amazingdata']['password'] = config_data.get('password', '')
-            config['amazingdata']['host'] = config_data.get('host', '101.230.159.234')
-            config['amazingdata']['port'] = config_data.get('port', 8600)
-            config['amazingdata']['timeout'] = config_data.get('timeout', 10000) // 1000  # 转换为秒
-            config['amazingdata']['heartbeat_interval'] = config_data.get('heartbeatInterval', 60)
-            config['amazingdata']['auto_reconnect'] = config_data.get('autoReconnect', True)
-            config['amazingdata']['local_path'] = config_data.get('localPath', 'D://AmazingData_local_data//')
-            config['amazingdata']['use_local'] = config_data.get('useLocal', True)
-            config['amazingdata']['max_retries'] = config_data.get('retryCount', 2)
-
-            # 处理网络运营商
-            network_provider = config_data.get('networkProvider', 'telecom')
-            config['amazingdata']['network_provider'] = network_provider
-
-        elif source_type == "qmt":
-            if 'qmt' not in config:
-                config['qmt'] = {}
-
-            config['qmt']['enabled'] = config_data.get('enabled', False)
-            config['qmt']['host'] = config_data.get('host', 'localhost')
-            config['qmt']['port'] = config_data.get('port', 8888)
-
-        elif source_type == "cloudflare":
-            if 'cloudflare_workers' not in config:
-                config['cloudflare_workers'] = {}
-
-            config['cloudflare_workers']['url'] = config_data.get('workerUrl', '')
-            config['cloudflare_workers']['timeout'] = config_data.get('timeout', 30000) // 1000
-            config['cloudflare_workers']['retry_count'] = config_data.get('retryCount', 3)
-
-        # 保存配置到文件
-        with open(config_file, 'w', encoding='utf-8') as f:
-            yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-
-        logger.info(f"配置已保存到 {config_file}: {source_type}")
-
-    except Exception as e:
-        logger.error(f"保存配置失败: {e}")
-
-
-def save_datasource_state(datasource_id: str, enabled: bool):
-    """
-    保存数据源启用状态到配置文件
-
-    Args:
-        datasource_id: 数据源ID
-        enabled: 是否启用
-    """
-    try:
-        # 获取配置键路径
-        config_key = f"data_sources.providers.{datasource_id}.enabled"
-
-        # 使用 ConfigManager 更新配置
-        config_manager.set(config_key, enabled)
-
-        # 保存到文件
-        config_manager.save()
-
-        logger.info(f"数据源 {datasource_id} 状态已保存: enabled={enabled}")
-
-    except Exception as e:
-        logger.error(f"保存数据源状态失败: {e}")
-
-
-def init_default_datasources():
-    """初始化默认数据源（从配置文件加载）"""
-    global data_sources
-
-    # 使用 ConfigManager 加载配置
-    try:
-        # 确保配置管理器已加载正确的配置文件
-        config_file_path = get_config_file_path()
-        config_manager.load(config_file_path)
-        config = config_manager.get_all()
-    except Exception as e:
-        logger.warning(f"无法加载配置文件，使用默认配置: {e}")
-        config = {}
-
-    # 获取数据源配置
-    data_sources_config = config.get('data_sources', {}).get('providers', {})
-
-    # AKShare数据源
-    akshare_config = data_sources_config.get('akshare', {})
-    akshare_source = DataSource(
-        id="akshare",
-        name="AKShare直连",
-        type="akshare",
-        enabled=akshare_config.get('enabled', True),  # 从配置文件读取
-        priority=akshare_config.get('priority', 3),
-        config=DataSourceConfig(
-            timeout=akshare_config.get('timeout', 30) * 1000 if 'timeout' in akshare_config else 30000,
-            retryCount=akshare_config.get('max_retries', 3),
-            rateLimit=akshare_config.get('rate_limit', {}).get('max_requests', 10) if 'rate_limit' in akshare_config else 10
-        ),
-        status="online",
-        successRate=95.5,
-        avgResponseTime=200,
-        created_at=datetime.now()
+    payload = sanitize_for_json(
+        {
+            "source": source_name,
+            "totalRequests": metrics.total_requests,
+            "successRate": metrics.success_rate,
+            "avgLatency": metrics.avg_latency_ms if metrics.avg_latency_ms >= 0 else None,
+            "recentErrorRate": metrics.recent_error_rate,
+            "errorCount": metrics.error_count,
+            "lastAccess": _format_timestamp(metrics.last_access),
+        }
     )
-    data_sources[akshare_source.id] = akshare_source
-
-    # 银河证券数据源 - 从配置文件加载
-    amazingdata_config = data_sources_config.get('amazingdata', {})
-    amazingdata_source = DataSource(
-        id="amazingdata",
-        name="银河证券星耀数智",
-        type="amazingdata",
-        enabled=amazingdata_config.get('enabled', False),  # 从配置文件读取
-        priority=amazingdata_config.get('priority', 1),
-        config=DataSourceConfig(
-            timeout=amazingdata_config.get('config', {}).get('connection', {}).get('timeout', 10) * 1000,  # 从秒转换为毫秒
-            retryCount=amazingdata_config.get('config', {}).get('connection', {}).get('max_retries', 2),
-            rateLimit=100,
-            username=amazingdata_config.get('config', {}).get('connection', {}).get('username', ''),
-            password=amazingdata_config.get('config', {}).get('connection', {}).get('password', ''),
-            networkProvider=amazingdata_config.get('config', {}).get('connection', {}).get('network_provider', 'telecom'),
-            host=amazingdata_config.get('config', {}).get('connection', {}).get('host', '101.230.159.234'),
-            port=amazingdata_config.get('config', {}).get('connection', {}).get('port', 8600),
-            heartbeatInterval=amazingdata_config.get('config', {}).get('connection', {}).get('heartbeat_interval', 60),
-            autoReconnect=amazingdata_config.get('config', {}).get('connection', {}).get('auto_reconnect', True),
-            localPath=amazingdata_config.get('config', {}).get('local', {}).get('path', 'D://AmazingData_local_data//'),
-            useLocal=amazingdata_config.get('config', {}).get('local', {}).get('use_local', True)
-        ),
-        status="offline",
-        successRate=None,
-        avgResponseTime=None,
-        created_at=datetime.now()
-    )
-    data_sources[amazingdata_source.id] = amazingdata_source
-    
-    # QMT数据源 - 从配置文件加载
-    qmt_config = data_sources_config.get('qmt', {})
-    qmt_source = DataSource(
-        id="qmt",
-        name="QMT实时数据",
-        type="qmt",
-        enabled=qmt_config.get('enabled', False),  # 从配置文件读取
-        priority=qmt_config.get('priority', 4),
-        config=DataSourceConfig(
-            timeout=qmt_config.get('config', {}).get('timeout', 5) * 1000 if 'config' in qmt_config else 5000,
-            retryCount=qmt_config.get('config', {}).get('max_retries', 1) if 'config' in qmt_config else 1,
-            rateLimit=1000,
-            host=qmt_config.get('config', {}).get('host', 'localhost') if 'config' in qmt_config else 'localhost',
-            port=qmt_config.get('config', {}).get('port', 5556) if 'config' in qmt_config else 5556
-        ),
-        status="offline",
-        successRate=None,
-        avgResponseTime=None,
-        created_at=datetime.now()
-    )
-    data_sources[qmt_source.id] = qmt_source
-    
-    # CloudFlare代理 - 从配置文件加载
-    cloudflare_config = data_sources_config.get('cloudflare', {})
-    cloudflare_source = DataSource(
-        id="cloudflare",
-        name="CloudFlare代理",
-        type="cloudflare",
-        enabled=cloudflare_config.get('enabled', True),  # 从配置文件读取
-        priority=cloudflare_config.get('priority', 2),
-        config=DataSourceConfig(
-            timeout=cloudflare_config.get('config', {}).get('timeout', 30) * 1000 if 'config' in cloudflare_config else 30000,
-            retryCount=cloudflare_config.get('config', {}).get('retry_count', 3) if 'config' in cloudflare_config else 3,
-            rateLimit=50,
-            workerUrl=cloudflare_config.get('config', {}).get('worker_url', 'https://akshare-proxy.934073514.workers.dev') if 'config' in cloudflare_config else 'https://akshare-proxy.934073514.workers.dev'
-        ),
-        status="online",
-        successRate=98.0,
-        avgResponseTime=150,
-        created_at=datetime.now()
-    )
-    data_sources[cloudflare_source.id] = cloudflare_source
+    return cast(Dict[str, Any], payload)
 
 
-# 初始化默认数据
-init_default_datasources()
+# ---------------------------------------------------------------------------
+# API 路由
+# ---------------------------------------------------------------------------
 
 
 @router.get("/status")
-async def get_datasources_status():
-    """
-    获取所有数据源状态
-    
-    Returns:
-        数据源状态列表
-    """
-    try:
-        sources_list = list(data_sources.values())
-        
-        # 按优先级排序
-        sources_list.sort(key=lambda x: x.priority)
-        
-        # 转换为前端期望的格式
-        formatted_list = []
-        for source in sources_list:
-            formatted_list.append({
-                "id": source.id,
-                "name": source.name,
-                "type": source.type,
-                "enabled": source.enabled,
-                "priority": source.priority,
-                "config": source.config.model_dump(mode='json'),
-                "status": source.status,
-                "successRate": source.successRate,
-                "avgResponseTime": source.avgResponseTime,
-                "lastCheckTime": source.lastCheckTime.isoformat() if source.lastCheckTime else None
-            })
-        
-        return APIResponse.success(
-            data=formatted_list,
-            message=f"共找到 {len(formatted_list)} 个数据源"
-        )
-    except Exception as e:
-        logger.error(f"获取数据源状态失败: {e}")
-        return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"获取数据源状态失败: {str(e)}",
-            status_code=500
-        )
+async def get_data_source_status():
+    """获取所有数据源当前状态"""
+
+    manager = await _ensure_manager(_manager())
+    report = manager.get_status_report()
+    monitor = _monitor()
+    sources, metrics_map, proxy_map = _extract_sources_context(report, monitor)
+    normalized_report = _assemble_normalized_report(report, sources, proxy_map, metrics_map)
+    return APIResponse.success(normalized_report, "获取数据源状态成功")
 
 
 @router.get("/list")
-async def list_datasources():
-    """
-    获取所有数据源列表（别名）
-    
-    Returns:
-        数据源列表
-    """
-    return await get_datasources_status()
-
-
-@router.post("/create")
-async def create_datasource(datasource: DataSource):
-    """
-    创建新的数据源
-    
-    Args:
-        datasource: 数据源配置
-        
-    Returns:
-        创建的数据源
-    """
-    try:
-        # 生成ID（使用类型和时间戳）
-        if not datasource.id:
-            datasource.id = f"{datasource.type}_{int(datetime.now().timestamp())}"
-        
-        # 检查ID是否已存在
-        if datasource.id in data_sources:
-            return APIResponse.error(
-                code=ErrorCodes.DATASOURCE_ALREADY_EXISTS,
-                message=f"数据源 '{datasource.id}' 已存在"
-            )
-        
-        # 设置创建时间
-        datasource.created_at = datetime.now()
-        datasource.updated_at = datetime.now()
-        datasource.status = "untested"
-        
-        data_sources[datasource.id] = datasource
-        
-        logger.info(f"创建数据源: {datasource.name} ({datasource.id})")
-        
-        return APIResponse.success(
-            data=datasource.model_dump(mode='json'),
-            message=f"数据源 '{datasource.name}' 创建成功"
-        )
-    except Exception as e:
-        logger.error(f"创建数据源失败: {e}")
-        return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"创建数据源失败: {str(e)}",
-            status_code=500
-        )
-
-
-@router.post("")
-async def create_datasource_alt(datasource: DataSource):
-    """创建数据源（兼容前端 /data-source 路径）"""
-    return await create_datasource(datasource)
-
-
-@router.put("/{datasource_id}/update")
-async def update_datasource(datasource_id: str, datasource: DataSource):
-    """
-    更新数据源
-    
-    Args:
-        datasource_id: 数据源ID
-        datasource: 更新的配置
-        
-    Returns:
-        更新后的数据源
-    """
-    try:
-        if datasource_id not in data_sources:
-            return APIResponse.error(
-                code=ErrorCodes.DATASOURCE_NOT_FOUND,
-                message=f"数据源 '{datasource_id}' 不存在",
-                status_code=404
-            )
-        
-        # 保留原有的创建时间和ID
-        existing = data_sources[datasource_id]
-        datasource.id = datasource_id
-        datasource.created_at = existing.created_at
-        datasource.updated_at = datetime.now()
-        
-        # 设置合理的状态
-        if not datasource.enabled:
-            datasource.status = "offline"
-            datasource.successRate = None
-            datasource.avgResponseTime = None
-        else:
-            # 保持现有状态或设置为unknown
-            if existing.status in ["online", "offline", "error", "degraded"]:
-                datasource.status = existing.status
-                datasource.successRate = existing.successRate
-                datasource.avgResponseTime = existing.avgResponseTime
-            else:
-                datasource.status = "untested"
-                datasource.successRate = None
-                datasource.avgResponseTime = None
-
-        # 更新检查时间
-        datasource.lastCheckTime = datetime.now()
-
-        data_sources[datasource_id] = datasource
-
-        # 保存启用状态到配置文件
-        save_datasource_state(datasource_id, datasource.enabled)
-
-        logger.info(f"更新数据源: {datasource.name} ({datasource_id})")
-
-        return APIResponse.success(
-            data=datasource.model_dump(mode='json'),
-            message=f"数据源 '{datasource.name}' 更新成功"
-        )
-    except Exception as e:
-        logger.error(f"更新数据源失败: {e}")
-        return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"更新数据源失败: {str(e)}",
-            status_code=500
-        )
-
-
-@router.put("/{datasource_id}")
-async def update_datasource_alt(datasource_id: str, datasource: DataSource):
-    """更新数据源（兼容前端路径）"""
-    return await update_datasource(datasource_id, datasource)
-
-
-@router.delete("/{datasource_id}/delete")
-async def delete_datasource(datasource_id: str):
-    """
-    删除数据源
-    
-    Args:
-        datasource_id: 数据源ID
-        
-    Returns:
-        删除结果
-    """
-    try:
-        if datasource_id not in data_sources:
-            return APIResponse.error(
-                code=ErrorCodes.DATASOURCE_NOT_FOUND,
-                message=f"数据源 '{datasource_id}' 不存在",
-                status_code=404
-            )
-        
-        datasource = data_sources.pop(datasource_id)
-
-        # 在配置文件中禁用该数据源（保留配置但禁用）
-        save_datasource_state(datasource_id, False)
-
-        logger.info(f"删除数据源: {datasource.name} ({datasource_id})")
-
-        return APIResponse.success(
-            data={"id": datasource_id, "name": datasource.name},
-            message=f"数据源 '{datasource.name}' 已删除"
-        )
-    except Exception as e:
-        logger.error(f"删除数据源失败: {e}")
-        return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"删除数据源失败: {str(e)}",
-            status_code=500
-        )
-
-
-@router.delete("/{datasource_id}")
-async def delete_datasource_alt(datasource_id: str):
-    """删除数据源（兼容前端路径）"""
-    return await delete_datasource(datasource_id)
-
-
-@router.patch("/{datasource_id}/toggle")
-async def toggle_datasource(datasource_id: str, enabled: bool):
-    """
-    切换数据源启用状态（带测试）
-
-    Args:
-        datasource_id: 数据源ID
-        enabled: 是否启用
-
-    Returns:
-        更新结果
-    """
-    try:
-        if datasource_id not in data_sources:
-            return APIResponse.error(
-                code=ErrorCodes.DATASOURCE_NOT_FOUND,
-                message=f"数据源 '{datasource_id}' 不存在",
-                status_code=404
-            )
-
-        datasource = data_sources[datasource_id]
-
-        # 如果是启用操作，先测试连接
-        if enabled:
-            logger.info(f"启用前测试数据源连接: {datasource.name}")
-
-            # 对于AmazingData，使用进程池管理
-            if datasource.type == "amazingdata":
-                try:
-                    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
-                        get_global_pool
-                    )
-
-                    pool = get_global_pool()
-
-                    # 创建专属进程（不自动清理，生产环境长期运行）
-                    config = datasource.config.model_dump() if datasource.config else {}
-                    proxy = pool.get_or_create(
-                        datasource_id,
-                        auto_cleanup=False,  # 生产进程不自动清理
-                        config=config
-                    )
-
-                    if proxy and proxy.is_running:
-                        logger.info(f"[Toggle] Created dedicated process for {datasource_id}")
-                        datasource.enabled = True
-                        datasource.status = "online"
-                        # 设置初始性能指标，使前端性能列可见
-                        datasource.successRate = 100.0  # 初始成功率
-                        datasource.avgResponseTime = 0  # 初始响应时间（将在实际测试后更新）
-                        datasource.lastCheckTime = datetime.now()
-                        datasource.updated_at = datetime.now()
-
-                        return APIResponse.success(
-                            data={
-                                "id": datasource_id,
-                                "enabled": True,
-                                "status": "online",
-                                "successRate": 100.0,
-                                "avgResponseTime": 0,
-                                "message": f"{datasource.name}已启用（专属进程已创建）"
-                            }
-                        )
-                    else:
-                        raise Exception("Failed to start dedicated process")
-
-                except Exception as e:
-                    logger.error(f"[Toggle] Failed to enable datasource: {e}")
-                    return APIResponse.error(
-                        code=ErrorCodes.DATASOURCE_TEST_FAILED,
-                        message=f"启用失败: {str(e)}",
-                        status_code=500
-                    )
-
-            # 对于其他数据源，执行原有的测试流程
-            # 构建测试请求
-            test_request = TestDataSourceRequest(
-                type=datasource.type,
-                config=datasource.config
-            )
-
-            # 执行测试
-            test_response = await test_datasource(test_request)
-
-            # 检查测试结果
-            test_success = False
-            test_message = "测试失败"
-            test_details = {}
-
-            # test_datasource返回的是字典，使用字典键访问而不是属性访问
-            if isinstance(test_response, dict):
-                # 优先从data字段获取
-                if 'data' in test_response and test_response['data']:
-                    test_data = test_response['data']
-                    test_success = test_data.get("success", False)
-                    test_message = test_data.get("message", "连接测试失败")
-                    test_details = test_data.get("details", {})
-                    logger.debug(f"从data字段获取测试结果: success={test_success}, message={test_message}, details={test_details}")
-                # 如果没有data，尝试从顶层获取message
-                elif 'message' in test_response:
-                    test_message = test_response['message']
-                    # 如果有details字段，也获取它
-                    if 'details' in test_response:
-                        test_details = test_response['details'] if isinstance(test_response['details'], dict) else {}
-                    logger.debug(f"从顶层获取错误信息: message={test_message}, details={test_details}")
-            else:
-                # 如果不是字典（可能是对象），使用原有的属性访问方式
-                if hasattr(test_response, 'data') and test_response.data:
-                    test_success = test_response.data.get("success", False)
-                    test_message = test_response.data.get("message", "连接测试失败")
-                    test_details = test_response.data.get("details", {})
-                    logger.debug(f"从对象data属性获取测试结果: success={test_success}, message={test_message}")
-                elif hasattr(test_response, 'message'):
-                    test_message = test_response.message
-                    logger.debug(f"从对象message属性获取错误信息: {test_message}")
-
-            # 测试失败，不启用
-            if not test_success:
-                logger.error(f"数据源 {datasource.name} 测试失败: {test_message}")
-
-                # 更新状态为error但不启用
-                datasource.status = "error"
-                datasource.updated_at = datetime.now()
-
-                return APIResponse.error(
-                    code=ErrorCodes.DATASOURCE_TEST_FAILED,
-                    message=f"数据源测试失败: {test_message}",
-                    data={
-                        "id": datasource_id,
-                        "enabled": False,
-                        "status": "error",
-                        "test_details": test_details
-                    },
-                    status_code=400
-                )
-
-            # 测试成功，继续启用流程
-            logger.info(f"数据源 {datasource.name} 测试成功，继续启用")
-            datasource.status = "online"
-        else:
-            # 禁用操作 - 销毁专属进程
-            if datasource.type == "amazingdata":
-                try:
-                    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
-                        get_global_pool
-                    )
-
-                    pool = get_global_pool()
-                    # 停止进程（包含logout尝试）
-                    success = pool.stop(
-                        datasource_id,
-                        with_logout=True  # 尝试执行logout
-                    )
-                    logger.info(f"[Toggle] Stopped process for {datasource_id} with logout: {success}")
-                except Exception as e:
-                    logger.warning(f"[Toggle] Error stopping process: {e}")
-
-            datasource.status = "offline"
-
-        # 更新配置
-        datasource.enabled = enabled
-        datasource.updated_at = datetime.now()
-
-        # 保存启用状态到配置文件
-        save_datasource_state(datasource_id, enabled)
-
-        logger.info(f"{'启用' if enabled else '禁用'}数据源: {datasource.name}")
-
-        return APIResponse.success(
-            data={
-                "id": datasource_id,
-                "enabled": enabled,
-                "status": datasource.status
-            },
-            message=f"数据源已{'启用' if enabled else '禁用'}"
-        )
-    except Exception as e:
-        logger.error(f"切换数据源状态失败: {e}")
-        return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"切换数据源状态失败: {str(e)}",
-            status_code=500
-        )
-
-
-@router.get("/process-status")
-async def get_process_pool_status():
-    """
-    获取进程池状态
-
-    Returns:
-        进程池状态信息
-    """
-    try:
-        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
-            get_global_pool
-        )
-
-        pool = get_global_pool()
-        status = pool.get_status()
-
-        return APIResponse.success(
-            data=status,
-            message="进程池状态获取成功"
-        )
-
-    except Exception as e:
-        logger.error(f"获取进程池状态失败: {e}")
-        return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"获取进程池状态失败: {str(e)}",
-            status_code=500
-        )
-
-
-@router.post("/process/{process_id}/restart")
-async def restart_process(process_id: str):
-    """
-    重启指定进程
-
-    Args:
-        process_id: 进程ID
-
-    Returns:
-        重启结果
-    """
-    try:
-        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
-            get_global_pool
-        )
-
-        pool = get_global_pool()
-        success = pool.restart(process_id)
-
-        if success:
-            return APIResponse.success(
-                data={"process_id": process_id, "restarted": True},
-                message=f"进程 {process_id} 重启成功"
-            )
-        else:
-            return APIResponse.error(
-                code=ErrorCodes.INTERNAL_ERROR,
-                message=f"进程 {process_id} 重启失败"
-            )
-
-    except Exception as e:
-        logger.error(f"重启进程失败: {e}")
-        return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"重启进程失败: {str(e)}",
-            status_code=500
-        )
-
-
-@router.put("/config")
-async def update_global_config(config: dict):
-    """
-    更新全局数据源配置
-
-    Args:
-        config: 全局配置（如速率限制等）
-
-    Returns:
-        更新结果
-    """
-    try:
-        # 这里应该保存到配置文件或数据库
-        # 目前只是返回成功
-        logger.info(f"更新全局配置: {config}")
-
-        return APIResponse.success(
-            data=config,
-            message="全局配置更新成功"
-        )
-    except Exception as e:
-        logger.error(f"更新全局配置失败: {e}")
-        return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"更新全局配置失败: {str(e)}",
-            status_code=500
-        )
-
-
-# 导入测试辅助模块
-try:
-    from .amazingdata_test_helper import test_amazingdata_connection, create_test_result
-except ImportError:
-    logger.warning("amazingdata_test_helper模块未找到，使用内置测试逻辑")
-    test_amazingdata_connection = None
-    create_test_result = None
-
-async def test_datasource_enhanced(request: TestDataSourceRequest, symbol: str = "000001", test_type: str = "realtime"):
-    """
-    增强版数据源测试，包含实际数据获取测试
-
-    Args:
-        request: 测试请求
-        symbol: 股票代码，用于测试数据获取
-        test_type: 测试类型（realtime/history）
-
-    Returns:
-        测试结果，包含连接状态和数据获取能力验证
-    """
-    try:
-        # 添加详细的请求日志
-        logger.info(f"[TEST] 开始测试数据源: type={request.type}, symbol={symbol}, test_type={test_type}")
-        logger.info(f"[TEST] 请求配置: {request.config.model_dump() if hasattr(request.config, 'model_dump') else request.config}")
-
-        test_result = {
-            "success": False,
-            "source": request.type,
-            "message": "",
-            "latency_ms": 0,
-            "data_size": 0,
-            "error": None,
-            "details": {}
-        }
-
-        start_time = time.time()
-
-        if request.type == "amazingdata":
-            # 使用辅助模块测试（如果可用）
-            if test_amazingdata_connection:
-                logger.info("[TEST] 使用辅助模块进行测试")
-
-                # 获取服务器配置
-                host = request.config.host
-                port = request.config.port or 8600
-
-                # 根据网络运营商选择服务器
-                if request.config.networkProvider == "telecom":
-                    host = "101.230.159.234"
-                    port = 8600
-                elif request.config.networkProvider == "unicom":
-                    host = "140.206.44.234"
-                    port = 8600
-                elif not host:
-                    host = "101.230.159.234"
-                    port = 8600
-
-                # 调用辅助函数，添加异常保护
-                try:
-                    test_result = test_amazingdata_connection(
-                        username=request.config.username,
-                        password=request.config.password,
-                        host=host,
-                        port=port,
-                        test_type=test_type
-                    )
-                except Exception as helper_error:
-                    logger.error(f"[TEST] 辅助模块执行失败: {helper_error}")
-                    test_result = {
-                        "success": False,
-                        "source": request.type,
-                        "message": "测试失败",
-                        "error": f"测试模块异常: {str(helper_error)}",
-                        "latency_ms": (time.time() - start_time) * 1000,
-                        "data_size": 0
-                    }
-
-                # 确保返回正确的source字段
-                test_result["source"] = request.type
-
-                # 记录结果
-                logger.info(f"[TEST] 辅助模块测试完成: {test_result}")
-
-                # 更新延迟时间（如果需要）
-                if "latency_ms" not in test_result:
-                    test_result["latency_ms"] = (time.time() - start_time) * 1000
-
-            elif not request.config.username or not request.config.password:
-                test_result["message"] = "测试失败"
-                test_result["error"] = "需要提供用户名和密码"
-            else:
-                # 根据网络运营商选择服务器
-                host = request.config.host
-                port = request.config.port or 8600
-
-                # 如果选择了运营商，使用对应的IP
-                if request.config.networkProvider == "telecom":
-                    host = "101.230.159.234"
-                    port = 8600
-                elif request.config.networkProvider == "unicom":
-                    host = "140.206.44.234"
-                    port = 8600
-                elif not host:
-                    host = "101.230.159.234"
-                    port = 8600
-
-                try:
-                    logger.info(f"[TEST] 使用进程复用机制进行AmazingData测试...")
-
-                    # 使用新的复用测试函数
-                    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import (
-                        test_connection_with_reuse
-                    )
-
-                    # 执行测试（支持进程复用）
-                    logger.info(f"[TEST] 开始测试: username={request.config.username}, host={host}, port={port}")
-                    test_result = test_connection_with_reuse(
-                        username=request.config.username,
-                        password=request.config.password,
-                        host=host,
-                        port=port,
-                        reuse_window=30.0  # 30秒内复用同一进程
-                    )
-
-                    success = test_result.get("success", False)
-                    error_msg = test_result.get("error")
-                    process_id = test_result.get("process_id")
-
-                    logger.info(f"[TEST] 测试完成: success={success}, process_id={process_id}, error={error_msg}")
-
-                    if success:
-                        # 登录成功，尝试获取数据
-                        # 注意：在进程隔离模式下，我们只测试登录连接性
-                        # 实际数据获取应该通过专门的数据API进行
-                        if test_type == "realtime":
-                            # 格式化股票代码（如果需要）
-                            formatted_symbol = symbol
-                            if len(symbol) == 6 and symbol.isdigit():
-                                # 判断市场
-                                if symbol.startswith(('60', '68', '50', '51')):
-                                    formatted_symbol = f"SH.{symbol}"
-                                elif symbol.startswith(('00', '30', '12')):
-                                    formatted_symbol = f"SZ.{symbol}"
-
-                            # 在进程隔离模式下，登录成功即表示连接正常
-                            test_result["success"] = True
-                            test_result["message"] = "测试成功"
-                            test_result["details"]["symbol"] = formatted_symbol
-                            test_result["details"]["data_type"] = "连接测试"
-                            test_result["details"]["server"] = f"{host}:{port}"
-                            test_result["details"]["status"] = "已连接（进程隔离模式）"
-                            test_result["details"]["note"] = "使用进程隔离安全模式，避免SDK崩溃影响主进程"
-
-                            # 注意：不执行BaseData等可能崩溃的操作
-                            # 这些操作应该在实际数据获取时通过进程代理执行
-                            logger.info("[TEST] 进程隔离模式下跳过基础数据获取测试")
-
-                        else:
-                            # 测试历史数据获取
-                            test_result["success"] = True
-                            test_result["message"] = "连接成功（历史数据测试待实现）"
-
-                        # 注意：不需要调用logout，安全包装器会处理
-                        logger.info("[TEST] 跳过logout操作（由安全包装器处理）")
-                    else:
-                        logger.error(f"[TEST] 安全登录失败: {error_msg}")
-                        test_result["message"] = "测试失败"
-                        test_result["error"] = error_msg or "登录失败"
-
-                        # 如果是SDK未安装的错误，添加安装提示
-                        if "ImportError" in (error_msg or ""):
-                            test_result["details"]["note"] = "需要安装installer目录下的AmazingData-1.0.9-cp313-none-any.whl"
-
-                except Exception as e:
-                    logger.error(f"[TEST] 测试过程发生异常: {type(e).__name__}: {str(e)}")
-                    logger.exception("[TEST] 详细异常信息:")
-                    test_result["message"] = "测试失败"
-                    test_result["error"] = str(e)
-
-        else:
-            # 其他数据源保持原有测试逻辑
-            standard_result = await test_datasource(request)
-            return standard_result
-
-        # 计算延迟
-        test_result["latency_ms"] = (time.time() - start_time) * 1000
-
-        # 记录最终结果
-        logger.info(f"[TEST] 测试完成: success={test_result['success']}, message={test_result['message']}, error={test_result.get('error')}")
-        logger.info(f"[TEST] 返回结果: {test_result}")
-
-        # 更新数据源状态
-        if test_result["success"]:
-            update_datasource_status_after_test(request.type, True, int(test_result["latency_ms"]))
-        else:
-            update_datasource_status_after_test(request.type, False, 0)
-
-        return test_result
-
-    except Exception as e:
-        logger.error(f"测试数据源连接失败: {e}")
-        return {
-            "success": False,
-            "source": request.type,
-            "message": "测试失败",
-            "error": str(e),
-            "latency_ms": 0,
-            "data_size": 0
-        }
-
-
-@router.post("/test")
-async def test_datasource(request: TestDataSourceRequest):
-    """
-    测试数据源连接
-    
-    Args:
-        request: 测试请求
-        
-    Returns:
-        测试结果
-    """
-    try:
-        test_result = {
-            "success": False,
-            "message": "",
-            "latency": 0,
-            "details": {}
-        }
-        
-        start_time = datetime.now()
-        
-        if request.type == "akshare":
-            # 测试AKShare连接
-            try:
-                # 真实测试AKShare连接
-                import akshare as ak
-
-                # 测试基本功能 - 获取交易日历（这是最基础的API）
-                test_start = time.time()
-                try:
-                    # 尝试获取最近一个交易日
-                    import pandas as pd
-
-                    # 获取最近的交易日历
-                    end_date = datetime.now().strftime("%Y%m%d")
-                    start_date = (datetime.now() - timedelta(days=7)).strftime("%Y%m%d")
-
-                    # 测试获取交易日历
-                    trade_calendar = ak.tool_trade_date_hist_sina()
-
-                    # 测试获取股票列表（更轻量级的测试）
-                    stock_info = ak.stock_info_a_code_name()
-
-                    test_latency = int((time.time() - test_start) * 1000)
-
-                    test_result["success"] = True
-                    test_result["message"] = "AKShare连接成功"
-                    test_result["details"]["version"] = ak.__version__ if hasattr(ak, '__version__') else "unknown"
-                    test_result["details"]["trade_days_count"] = len(trade_calendar) if trade_calendar is not None else 0
-                    test_result["details"]["stock_count"] = len(stock_info) if stock_info is not None else 0
-                    test_result["details"]["test_latency_ms"] = test_latency
-
-                    # 更新数据源状态
-                    update_datasource_status_after_test("akshare", True, test_latency)
-
-                except ImportError:
-                    test_result["success"] = False
-                    test_result["message"] = "AKShare库未安装"
-                    test_result["details"]["error"] = "Module not installed"
-                    test_result["details"]["note"] = "请运行: pip install akshare"
-                    update_datasource_status_after_test("akshare", False, 0)
-
-                except Exception as api_error:
-                    # API调用失败（可能是网络问题）
-                    test_result["success"] = False
-                    test_result["message"] = f"AKShare API调用失败: {str(api_error)}"
-                    test_result["details"]["error"] = str(api_error)
-                    test_result["details"]["note"] = "请检查网络连接或API服务状态"
-                    update_datasource_status_after_test("akshare", False, 0)
-
-            except Exception as e:
-                test_result["success"] = False
-                test_result["message"] = f"测试失败: {str(e)}"
-                test_result["details"]["error"] = str(e)
-                update_datasource_status_after_test("akshare", False, 0)
-                
-        elif request.type == "amazingdata":
-            # 测试银河证券API
-            if not request.config.username or not request.config.password:
-                test_result["message"] = "需要提供用户名和密码"
-            else:
-                # 根据网络运营商选择服务器
-                host = request.config.host
-                port = request.config.port or 8600
-
-                # 如果选择了运营商，使用对应的IP
-                if request.config.networkProvider == "telecom":
-                    host = "101.230.159.234"
-                    port = 8600
-                elif request.config.networkProvider == "unicom":
-                    host = "140.206.44.234"
-                    port = 8600
-                elif not host:
-                    # 如果没有指定host，默认使用电信
-                    host = "101.230.159.234"
-                    port = 8600
-
-                try:
-                    # 使用新的测试函数（每次创建独立进程）
-                    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import (
-                        test_connection_with_datasource
-                    )
-
-                    logger.info(f"[DataSource] Testing AmazingData with dedicated process: {request.config.username}@{host}:{port}")
-                    logger.debug(f"[DataSource] Network provider: {request.config.networkProvider}, Use local: {request.config.useLocal}")
-
-                    # 执行测试（使用独立进程）
-                    test_response = test_connection_with_datasource(
-                        datasource_id="amazingdata",
-                        username=request.config.username,
-                        password=request.config.password,
-                        host=host,
-                        port=port
-                    )
-
-                    logger.debug(f"[DataSource] Test response: success={test_response['success']}, error={test_response.get('error')}")
-
-                    if test_response["success"]:
-                        test_result["success"] = True
-                        test_result["message"] = "银河证券星耀数智连接成功"
-                        test_result["latency"] = int(test_response["latency_ms"])
-                        logger.info("[DataSource] AmazingData test successful")
-                        test_result["details"]["server"] = f"{host}:{port}"
-                        test_result["details"]["username"] = request.config.username
-                        test_result["details"]["network_provider"] = request.config.networkProvider or "custom"
-                        test_result["details"]["status"] = "已认证"
-                        test_result["details"]["test_id"] = test_response.get("test_id")
-                        test_result["details"]["stats"] = test_response.get("stats", {})
-                        test_result["details"]["note"] = "使用数据源专属进程池"
-                        # 更新数据源状态
-                        update_datasource_status_after_test("amazingdata", True, test_result["latency"])
-                    else:
-                        error_msg = test_response.get("error", "登录失败")
-                        logger.error(f"[DataSource] AmazingData test failed: {error_msg}")
-                        test_result["success"] = False
-                        test_result["message"] = error_msg
-                        test_result["details"]["error"] = error_msg
-                        test_result["details"]["error_type"] = "login_failed"
-                        test_result["details"]["test_id"] = test_response.get("test_id")
-                        # 如果是SDK未安装的错误，添加安装提示
-                        if "ImportError" in error_msg:
-                            test_result["details"]["note"] = "需要安装installer目录下的AmazingData-1.0.9-cp313-none-any.whl"
-                        # 更新数据源状态为错误
-                        update_datasource_status_after_test("amazingdata", False, 0)
-                except Exception as e:
-                    test_result["message"] = f"连接失败: {str(e)}"
-                    
-        elif request.type == "qmt":
-            # 测试QMT连接
-            try:
-                if not request.config.host or not request.config.port:
-                    test_result["success"] = False
-                    test_result["message"] = "需要配置主机和端口"
-                    test_result["details"]["error"] = "Missing configuration"
-                else:
-                    # 尝试真实连接到QMT网关（使用socket测试端口）
-                    import socket
-                    test_start = time.time()
-
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(5)  # 5秒超时
-
-                    try:
-                        result = sock.connect_ex((request.config.host, request.config.port))
-                        sock.close()
-
-                        test_latency = int((time.time() - test_start) * 1000)
-
-                        if result == 0:
-                            # 端口开放，可能QMT正在运行
-                            test_result["success"] = True
-                            test_result["message"] = f"QMT网关端口 {request.config.host}:{request.config.port} 可访问"
-                            test_result["details"]["host"] = request.config.host
-                            test_result["details"]["port"] = request.config.port
-                            test_result["details"]["latency_ms"] = test_latency
-                            update_datasource_status_after_test("qmt", True, test_latency)
-                        else:
-                            # 端口关闭
-                            test_result["success"] = False
-                            test_result["message"] = f"无法连接到QMT网关 {request.config.host}:{request.config.port}"
-                            test_result["details"]["error"] = "Connection refused"
-                            test_result["details"]["note"] = "请确保QMT终端已启动并运行数据收集脚本"
-                            update_datasource_status_after_test("qmt", False, 0)
-
-                    except socket.timeout:
-                        test_result["success"] = False
-                        test_result["message"] = f"连接超时 {request.config.host}:{request.config.port}"
-                        test_result["details"]["error"] = "Connection timeout"
-                        test_result["details"]["note"] = "请检查网络连接和防火墙设置"
-                        update_datasource_status_after_test("qmt", False, 0)
-
-                    except Exception as sock_error:
-                        test_result["success"] = False
-                        test_result["message"] = f"连接失败: {str(sock_error)}"
-                        test_result["details"]["error"] = str(sock_error)
-                        update_datasource_status_after_test("qmt", False, 0)
-
-            except Exception as e:
-                test_result["success"] = False
-                test_result["message"] = f"测试失败: {str(e)}"
-                test_result["details"]["error"] = str(e)
-                update_datasource_status_after_test("qmt", False, 0)
-                
-        elif request.type == "cloudflare":
-            # 测试CloudFlare Worker
-            if request.config.workerUrl:
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(
-                            f"{request.config.workerUrl}/health",
-                            timeout=aiohttp.ClientTimeout(total=5)
-                        ) as response:
-                            if response.status == 200:
-                                test_result["success"] = True
-                                test_result["message"] = "CloudFlare Worker连接成功"
-                                test_result["details"]["status"] = "healthy"
-                                test_result["details"]["endpoint"] = request.config.workerUrl
-                                # 更新数据源状态
-                                update_datasource_status_after_test("cloudflare", True, test_result.get("latency", 150))
-                            else:
-                                test_result["message"] = f"Worker返回状态码: {response.status}"
-                except Exception as e:
-                    test_result["message"] = f"连接失败: {str(e)}"
-            else:
-                test_result["message"] = "需要配置Worker URL"
-        else:
-            test_result["message"] = f"不支持的数据源类型: {request.type}"
-        
-        # 计算延迟（提前计算，以便在更新状态时使用）
-        end_time = datetime.now()
-        test_result["latency"] = int((end_time - start_time).total_seconds() * 1000)
-
-        # 获取更新后的数据源信息
-        datasource_type_lower = request.type.lower()
-        updated_datasource = None
-        if datasource_type_lower in data_sources:
-            updated_datasource = data_sources[datasource_type_lower].model_dump(mode='json')
-
-        # 在结果中包含更新后的数据源信息
-        test_result["datasource"] = updated_datasource
-
-        if test_result["success"]:
-            return APIResponse.success(
-                data=test_result,
-                message="连接测试成功"
-            )
-        else:
-            # 确保错误信息在data字段，以便toggle_datasource能正确读取
-            return APIResponse.error(
-                code=ErrorCodes.DATASOURCE_CONNECTION_FAILED,
-                message=test_result["message"],
-                data=test_result  # 使用data而非details，保持响应格式一致
-            )
-            
-    except Exception as e:
-        logger.error(f"测试数据源连接失败: {e}")
-        return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"测试连接时发生错误: {str(e)}",
-            status_code=500
-        )
+async def list_data_sources():
+    """获取数据源列表（兼容历史接口）"""
+
+    manager = await _ensure_manager(_manager())
+    report = manager.get_status_report()
+    monitor = _monitor()
+    sources, metrics_map, proxy_map = _extract_sources_context(report, monitor)
+    sources_payload = _assemble_sources_payload(sources, metrics_map, proxy_map)
+    return APIResponse.success(sources_payload, "获取数据源列表成功")
 
 
 @router.get("/monitor")
 async def get_data_source_monitor():
-    """
-    获取数据源监控信息
+    """综合监控数据"""
 
-    该端点桥接现有的监控服务，返回前端期望的格式
+    manager = await _ensure_manager(_manager())
+    report = manager.get_status_report()
+    monitor = _monitor()
 
-    Returns:
-        监控数据，包含overview、sources、timeline和alerts
-    """
-    try:
-        # 尝试从监控服务获取数据
-        try:
-            from deepsearch.observability.monitoring.data_source_monitor import get_monitor, DataSourceType as MonitorDataSourceType
-            monitor = get_monitor()
+    sources, metrics_map, proxy_map = _extract_sources_context(report, monitor)
+    normalized_report = _assemble_normalized_report(report, sources, proxy_map, metrics_map)
+    sources_payload = _assemble_sources_payload(sources, metrics_map, proxy_map)
+    response = {
+        "overview": _build_overview(sources_payload, normalized_report, monitor),
+        "sources": sources_payload,
+        "statusSummary": _build_status_summary(sources_payload),
+        "timeline": _build_timeline(monitor),
+        "alerts": _build_alerts(sources_payload),
+    }
 
-            # 获取健康状态
-            health_status = monitor.get_all_health_status()
+    return APIResponse.success(response, "获取数据源监控信息成功")
 
-            # 获取统计信息（最近1小时）
-            statistics = monitor.get_access_statistics(3600)
 
-            # 构建数据源列表
-            sources = []
-            source_id = 1
+@router.get("/metrics")
+async def get_data_source_metrics(source: Optional[str] = Query(None, description="数据源标识")):
+    """获取单个或全部数据源的监控指标"""
 
-            # 定义友好的数据源名称映射
-            source_name_map = {
-                "amazingdata": "AmazingData",
-                "cloudflare_proxy": "CloudFlare Workers",
-                "qmt": "QMT Gateway",
-                "akshare": "AKShare",
-                "akshare_proxy": "AKShare Proxy",
-                "akshare_direct": "AKShare Direct",
-                "miniqmt": "MiniQMT",
-                "database": "PostgreSQL",
-                "default": "Default Provider"
-            }
+    monitor = _monitor()
+    if source:
+        metrics = _extract_metrics_for_source(monitor, source)
+        return APIResponse.success(metrics, "获取数据源指标成功")
 
-            # 遍历所有监控的数据源
-            for source_name, health in health_status.items():
-                # 确定状态
-                status = "online" if health.get("healthy", False) else "offline"
+    aggregated = []
+    if monitor:
+        for source_type in MonitorDataSourceType:
+            if source_type.value in PLACEHOLDER_SOURCES:
+                continue
+            metrics = _extract_metrics_for_source(monitor, source_type.value)
+            aggregated.append(metrics)
+    else:
+        aggregated = []
 
-                # 确定健康度
-                success_rate = health.get("success_rate", 0)
-                if success_rate >= 95:
-                    health_level = "healthy"
-                elif success_rate >= 80:
-                    health_level = "warning"
-                else:
-                    health_level = "error"
-
-                # 计算趋势（简单判断）
-                recent_error_rate = health.get("recent_error_rate", 0)
-                if recent_error_rate > 10:
-                    trend = "down"
-                elif recent_error_rate < 2:
-                    trend = "up"
-                else:
-                    trend = "stable"
-
-                # 格式化最后检查时间
-                last_access = health.get("last_access")
-                if last_access:
-                    try:
-                        last_time = datetime.fromisoformat(last_access)
-                        time_diff = datetime.now() - last_time
-                        if time_diff.seconds < 60:
-                            last_check = f"{time_diff.seconds}秒前"
-                        elif time_diff.seconds < 3600:
-                            last_check = f"{time_diff.seconds // 60}分钟前"
-                        else:
-                            last_check = f"{time_diff.seconds // 3600}小时前"
-                    except:
-                        last_check = "未知"
-                else:
-                    last_check = "从未访问"
-
-                # 添加到源列表
-                sources.append({
-                    "id": source_id,
-                    "name": source_name_map.get(source_name, source_name),
-                    "type": source_name.lower().replace("_", ""),
-                    "status": status,
-                    "health": health_level,
-                    "latency": int(health.get("avg_latency_ms", 0)),
-                    "requests": health.get("total_requests", 0),
-                    "errors": int(health.get("total_requests", 0) * (1 - success_rate / 100) if health.get("total_requests", 0) > 0 else 0),
-                    "successRate": round(success_rate, 2),
-                    "lastCheck": last_check,
-                    "trend": trend
-                })
-                source_id += 1
-
-            # 计算overview统计
-            total_sources = len(sources)
-            online_sources = sum(1 for s in sources if s["status"] == "online")
-            offline_sources = total_sources - online_sources
-            healthy_count = sum(1 for s in sources if s["health"] == "healthy")
-            warning_count = sum(1 for s in sources if s["health"] == "warning")
-            error_count = sum(1 for s in sources if s["health"] == "error")
-
-            total_requests = sum(s["requests"] for s in sources)
-            avg_latency = sum(s["latency"] * s["requests"] for s in sources) / total_requests if total_requests > 0 else 0
-            overall_success_rate = sum(s["successRate"] * s["requests"] for s in sources) / total_requests if total_requests > 0 else 0
-
-            # 构建响应数据
-            monitor_data = {
-                "overview": {
-                    "total": total_sources,
-                    "online": online_sources,
-                    "offline": offline_sources,
-                    "healthy": healthy_count,
-                    "warning": warning_count,
-                    "error": error_count,
-                    "totalRequests": total_requests,
-                    "avgLatency": round(avg_latency, 2),
-                    "successRate": round(overall_success_rate, 2),
-                    "errorRate": round(100 - overall_success_rate, 2),
-                    "requestsPerMinute": statistics.get("requests_per_minute", 0) if statistics else 0,
-                    "bytesTransferred": 0,  # 暂不统计
-                    "cacheHitRate": 0,  # 暂不统计
-                    "activeConnections": online_sources
-                },
-                "sources": sources,
-                "timeline": [],  # 暂时返回空数组，后续可以从监控历史中提取
-                "alerts": []  # 暂时返回空数组，后续可以添加告警逻辑
-            }
-
-            return APIResponse.success(
-                data=monitor_data,
-                message="获取监控数据成功"
-            )
-
-        except ImportError as e:
-            # 监控模块未安装或导入失败，返回模拟数据
-            logger.warning(f"监控模块不可用，返回默认数据: {e}")
-
-            # 返回默认的监控数据，避免前端显示空白
-            default_data = {
-                "overview": {
-                    "total": 6,
-                    "online": 3,
-                    "offline": 3,
-                    "healthy": 2,
-                    "warning": 1,
-                    "error": 3,
-                    "totalRequests": 0,
-                    "avgLatency": 0,
-                    "successRate": 0,
-                    "errorRate": 0,
-                    "requestsPerMinute": 0,
-                    "bytesTransferred": 0,
-                    "cacheHitRate": 0,
-                    "activeConnections": 0
-                },
-                "sources": [
-                    {
-                        "id": 1,
-                        "name": "AmazingData",
-                        "type": "amazingdata",
-                        "status": "offline",
-                        "health": "error",
-                        "latency": 0,
-                        "requests": 0,
-                        "errors": 0,
-                        "successRate": 0,
-                        "lastCheck": "监控服务不可用",
-                        "trend": "stable"
-                    },
-                    {
-                        "id": 2,
-                        "name": "CloudFlare Workers",
-                        "type": "cloudflare",
-                        "status": "offline",
-                        "health": "error",
-                        "latency": 0,
-                        "requests": 0,
-                        "errors": 0,
-                        "successRate": 0,
-                        "lastCheck": "监控服务不可用",
-                        "trend": "stable"
-                    },
-                    {
-                        "id": 3,
-                        "name": "QMT Gateway",
-                        "type": "qmt",
-                        "status": "offline",
-                        "health": "error",
-                        "latency": 0,
-                        "requests": 0,
-                        "errors": 0,
-                        "successRate": 0,
-                        "lastCheck": "监控服务不可用",
-                        "trend": "stable"
-                    }
-                ],
-                "timeline": [],
-                "alerts": [{
-                    "level": "warning",
-                    "message": "监控服务未启动，显示默认数据",
-                    "timestamp": datetime.now().isoformat()
-                }]
-            }
-
-            return APIResponse.success(
-                data=default_data,
-                message="监控服务不可用，返回默认数据"
-            )
-
-    except Exception as e:
-        logger.error(f"获取监控数据失败: {e}")
-
-        # 发生异常时返回空数据结构，确保前端不会崩溃
-        return APIResponse.success(
-            data={
-                "overview": {
-                    "total": 0,
-                    "online": 0,
-                    "offline": 0,
-                    "healthy": 0,
-                    "warning": 0,
-                    "error": 0,
-                    "totalRequests": 0,
-                    "avgLatency": 0,
-                    "successRate": 0,
-                    "errorRate": 0,
-                    "requestsPerMinute": 0,
-                    "bytesTransferred": 0,
-                    "cacheHitRate": 0,
-                    "activeConnections": 0
-                },
-                "sources": [],
-                "timeline": [],
-                "alerts": [{
-                    "level": "error",
-                    "message": f"获取监控数据失败: {str(e)}",
-                    "timestamp": datetime.now().isoformat()
-                }]
-            },
-            message="获取监控数据失败"
-        )
+    return APIResponse.success(aggregated, "获取数据源指标成功")
 
 
 @router.post("/switch")
-async def switch_primary_source(source_name: str):
-    """
-    切换主数据源
+async def switch_data_source(request: SwitchRequest):
+    """切换主数据源"""
 
-    Args:
-        source_name: 数据源名称
-
-    Returns:
-        切换结果
-    """
-    try:
-        logger.info(f"切换主数据源为: {source_name}")
-
-        # 检查数据源是否存在
-        datasource_id = source_name.lower()
-        if datasource_id not in data_sources:
-            return APIResponse.error(
-                code=ErrorCodes.DATASOURCE_NOT_FOUND,
-                message=f"数据源 {source_name} 不存在",
-                status_code=404
-            )
-
-        datasource = data_sources[datasource_id]
-
-        # 检查数据源是否已启用
-        if not datasource.enabled:
-            return APIResponse.error(
-                code=ErrorCodes.DATASOURCE_NOT_ENABLED,
-                message=f"数据源 {source_name} 未启用，请先启用该数据源",
-                status_code=400
-            )
-
-        # 检查数据源状态
-        if datasource.status != "online":
-            return APIResponse.error(
-                code=ErrorCodes.DATASOURCE_NOT_ONLINE,
-                message=f"数据源 {source_name} 当前状态为 {datasource.status}，无法切换为主数据源",
-                status_code=400
-            )
-
-        # 将所有其他数据源的优先级降低
-        for ds_id, ds in data_sources.items():
-            if ds_id != datasource_id:
-                # 将其他数据源的优先级设置为较低值（数字越大优先级越低）
-                ds.priority = max(ds.priority, 10)
-
-        # 将目标数据源设置为最高优先级
-        datasource.priority = 1
-        datasource.updated_at = datetime.now()
-
-        # 保存优先级配置到配置文件
-        _save_datasource_priority(datasource_id, datasource.priority, source_name)
-
-        logger.info(f"已切换主数据源为 {source_name}，优先级设置为1")
-
-        return APIResponse.success(
-            data={
-                "source": source_name,
-                "priority": 1,
-                "status": datasource.status,
-                "message": f"已切换主数据源为 {source_name}"
-            },
-            message="主数据源切换成功"
-        )
-
-    except Exception as e:
-        logger.error(f"切换主数据源失败: {e}")
+    manager = await _ensure_manager(_manager())
+    source_type = _resolve_source(manager, request.source)
+    if source_type is None:
         return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"切换主数据源失败: {str(e)}",
-            status_code=500
+            code=ErrorCodes.DATASOURCE_NOT_FOUND,
+            message=f"未知数据源标识: {request.source}",
+            status_code=404,
         )
+
+    success = manager.set_primary_source(source_type)
+    if not success:
+        return APIResponse.error(
+            code=ErrorCodes.OPERATION_NOT_ALLOWED,
+            message="切换主数据源失败，请确认目标数据源可用",
+            status_code=400,
+        )
+
+    logger.info(f"已将 {source_type.value} 设为主数据源")
+    return APIResponse.success({"source": source_type.value}, "切换主数据源成功")
+
+
+@router.post("/test/{source}")
+async def test_data_source(
+    source: str, symbol: Optional[str] = Query(None, description="测试使用的标的")
+):
+    """触发单个数据源自检"""
+
+    manager = await _ensure_manager(_manager())
+    source_type = _resolve_source(manager, source)
+    if source_type is None:
+        return APIResponse.error(
+            code=ErrorCodes.DATASOURCE_NOT_FOUND,
+            message=f"未知数据源标识: {source}",
+            status_code=404,
+        )
+
+    test_symbol = symbol or DEFAULT_TEST_SYMBOL
+    start = time.perf_counter()
+    result = await manager.get_data(
+        data_type="realtime_quote",
+        symbol=test_symbol,
+        preferred_source=source_type,
+    )
+    latency_ms = (time.perf_counter() - start) * 1000
+    success = bool(result)
+
+    monitor = _monitor()
+    monitor_type = _to_monitor_type(source_type)
+    if monitor and monitor_type:
+        try:
+            monitor.record_access(
+                source=monitor_type,
+                access_type=DataAccessType.REALTIME_QUOTE,
+                symbol=test_symbol,
+                module="self-test",
+                success=success,
+                latency_ms=latency_ms,
+                data_size=len(str(result)) if result else 0,
+                error_message=None if success else "self_test_failed",
+            )
+        except Exception as exc:  # pragma: no cover - 监控异常时不阻塞
+            logger.debug(f"记录自检结果失败: {exc}")
+
+    payload = {
+        "success": success,
+        "source": source_type.value,
+        "latency_ms": latency_ms,
+        "data": sanitize_for_json(result) if result else None,
+    }
+    message = "自检成功" if success else "自检失败"
+
+    if success:
+        return APIResponse.success(payload, message)
+
+    return JSONResponse(
+        status_code=500,
+        content=APIResponse.error(
+            code=ErrorCodes.DATASOURCE_TEST_FAILED,
+            message=message,
+            data=payload,
+            status_code=500,
+        ),
+    )
 
 
 @router.post("/cache/refresh")
-async def refresh_data_source_cache(source_name: Optional[str] = None):
-    """
-    刷新数据源缓存
+async def refresh_data_source_cache(request: CacheRefreshRequest):
+    """刷新缓存"""
 
-    Args:
-        source_name: 可选，指定数据源名称。如果不指定，刷新所有数据源缓存
-
-    Returns:
-        刷新结果
-    """
-    try:
-        if source_name:
-            logger.info(f"刷新数据源 {source_name} 的缓存")
-
-            # 检查数据源是否存在
-            datasource_id = source_name.lower()
-            if datasource_id not in data_sources:
-                return APIResponse.error(
-                    code=ErrorCodes.DATASOURCE_NOT_FOUND,
-                    message=f"数据源 {source_name} 不存在",
-                    status_code=404
-                )
-
-            # 实现缓存刷新逻辑
-            # 清除指定数据源相关的所有缓存键
-            await refresh_source_cache(datasource_id)
-
-            message = f"数据源 {source_name} 缓存已刷新"
-        else:
-            logger.info("刷新所有数据源缓存")
-
-            # 实现全量缓存刷新
-            # 清除所有缓存并重新加载关键数据
-            await refresh_all_cache()
-
-            message = "所有数据源缓存已刷新"
-
-        return APIResponse.success(
-            data={
-                "source": source_name,
-                "timestamp": datetime.now().isoformat()
-            },
-            message=message
-        )
-
-    except Exception as e:
-        logger.error(f"刷新缓存失败: {e}")
-        return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"刷新缓存失败: {str(e)}",
-            status_code=500
-        )
-
-
-# 为了兼容性，提供 /api/data-source 路径的路由
-data_source_router = APIRouter(prefix="/api/data-source", tags=["DataSource Compatibility"])
-
-@data_source_router.post("")
-async def create_data_source(datasource: DataSource):
-    """创建数据源（兼容路径）"""
-    return await create_datasource(datasource)
-
-@data_source_router.put("/{id}")
-async def update_data_source(id: str, datasource: DataSource):
-    """更新数据源（兼容路径）"""
-    return await update_datasource(id, datasource)
-
-@data_source_router.delete("/{id}")
-async def delete_data_source(id: str):
-    """删除数据源（兼容路径）"""
-    return await delete_datasource(id)
-
-@data_source_router.patch("/{id}/toggle")
-async def toggle_data_source(id: str, request: dict):
-    """切换数据源状态（兼容路径）"""
-    return await toggle_datasource(id, request.get("enabled", False))
-
-@data_source_router.post("/test")
-async def test_data_source(request: dict):
-    """测试数据源（兼容路径，支持多种请求格式）"""
-
-    logger.info(f"[API] /data-source/test 收到请求: {request}")
-
-    # 检查请求格式，支持前端的格式 {source, symbol, test_type}
-    if "source" in request and "symbol" in request:
-        # 前端格式：转换为标准格式
-        source_type = request.get("source", "amazingdata")
-        symbol = request.get("symbol", "000001")
-        test_type = request.get("test_type", "realtime")
-
-        logger.info(f"[API] 解析前端请求: source={source_type}, symbol={symbol}, test_type={test_type}")
-
-        # 获取对应数据源的配置
-        datasource = data_sources.get(source_type)
-        if not datasource:
-            logger.error(f"[API] 数据源 '{source_type}' 未找到")
+    manager = await _ensure_manager(_manager())
+    if request.source:
+        source_type = _resolve_source(manager, request.source)
+        if source_type is None:
             return APIResponse.error(
                 code=ErrorCodes.DATASOURCE_NOT_FOUND,
-                message=f"数据源 '{source_type}' 未找到",
-                status_code=404
+                message=f"未知数据源标识: {request.source}",
+                status_code=404,
             )
-
-        # 创建标准测试请求
-        test_request = TestDataSourceRequest(
-            type=source_type,
-            config=datasource.config
-        )
-
-        logger.info(f"[API] 调用test_datasource_enhanced...")
-        # 执行测试（增强版，包含实际数据测试）
-        result = await test_datasource_enhanced(test_request, symbol, test_type)
-
-        # 检查并修正错误信息
-        if isinstance(result, dict):
-            if result.get("error") == "AmazingData provider does not support realtime data":
-                logger.warning("[API] 检测到历史错误信息，替换为正确的错误描述")
-                result["error"] = "AmazingData SDK未正确初始化或无法连接到服务器"
-                result["message"] = "测试失败"
-                result["details"] = {
-                    "note": "请检查AmazingData SDK是否已安装，以及用户名密码是否正确",
-                    "suggestion": "运行 pip install installer/AmazingData-1.0.9-cp313-none-any.whl 安装SDK"
-                }
-
-        logger.info(f"[API] 返回结果: success={result.get('success')}, error={result.get('error')}")
-        return result
-
-    elif "type" in request and "config" in request:
-        # 标准格式：直接转换
-        test_request = TestDataSourceRequest(**request)
-        return await test_datasource(test_request)
-
+        pattern = f"datasource:{source_type.value}:*"
+        cleared = await cache_manager.clear_pattern(pattern)
+        message = f"已清理 {cleared} 条 {source_type.value} 相关缓存"
     else:
-        return APIResponse.error(
-            code=ErrorCodes.INVALID_PARAMS,
-            message="无效的请求格式",
-            status_code=400
-        )
-
-
-def _save_datasource_priority(datasource_id: str, priority: int, source_name: str) -> None:
-    """
-    保存数据源优先级配置到配置文件
-
-    Args:
-        datasource_id: 数据源ID
-        priority: 优先级值
-        source_name: 数据源名称
-    """
-    try:
-        config = get_config()
-        config_dir = Path(config.app.data_dir) / "config"
-        config_dir.mkdir(parents=True, exist_ok=True)
-
-        # 优先级配置文件路径
-        priority_file = config_dir / "datasource_priorities.yaml"
-
-        # 读取现有配置
-        priorities = {}
-        if priority_file.exists():
-            with open(priority_file, 'r', encoding='utf-8') as f:
-                priorities = yaml.safe_load(f) or {}
-
-        # 更新优先级配置
-        priorities[datasource_id] = {
-            "name": source_name,
-            "priority": priority,
-            "updated_at": datetime.now().isoformat()
-        }
-
-        # 保存到文件
-        with open(priority_file, 'w', encoding='utf-8') as f:
-            yaml.dump(priorities, f, allow_unicode=True, default_flow_style=False)
-
-        logger.info(f"已保存数据源 {source_name} 的优先级配置: priority={priority}")
-
-    except Exception as e:
-        logger.error(f"保存数据源优先级配置失败: {e}")
-        # 不抛出异常，避免影响主流程
-
-
-async def refresh_source_cache(datasource_id: str) -> None:
-    """
-    刷新指定数据源的缓存
-
-    Args:
-        datasource_id: 数据源ID
-    """
-    try:
-        # 构建数据源相关的缓存键模式
-        # 通常缓存键格式为: datasource:{datasource_id}:{data_type}:{params}
-        cache_patterns = [
-            f"datasource:{datasource_id}:*",
-            f"kline:{datasource_id}:*",
-            f"tick:{datasource_id}:*",
-            f"snapshot:{datasource_id}:*",
-            f"realtime:{datasource_id}:*",
-            f"orderbook:{datasource_id}:*"
-        ]
-
-        # 清除L1和L2缓存中匹配的键
-        cleared_count = 0
-        for pattern in cache_patterns:
-            # 目前使用简单的前缀匹配，清除L1缓存
-            # 注意: 当前cache_manager.clear()清除所有缓存
-            # 后续可以实现更精确的模式匹配清除
-            if pattern.startswith(f"datasource:{datasource_id}"):
-                # 清除特定层的缓存
-                await cache_manager.clear('l1')
-                cleared_count += 1
-                logger.debug(f"清除缓存模式: {pattern}")
-
-        logger.info(f"已清除数据源 {datasource_id} 的 {cleared_count} 个缓存模式")
-
-        # 预热关键数据（可选）
-        # await warm_critical_cache(datasource_id)
-
-    except Exception as e:
-        logger.error(f"刷新数据源缓存失败: {e}")
-        raise
-
-
-async def refresh_all_cache() -> None:
-    """
-    刷新所有数据源的缓存
-    """
-    try:
-        # 清除所有L1和L2缓存
         await cache_manager.clear()
-        logger.info("已清除所有缓存层数据")
+        message = "已清理全部数据源缓存"
 
-        # 获取缓存统计信息
-        stats = cache_manager.get_stats()
-        logger.info(f"缓存清除后统计: L1缓存项={stats.get('l1_stats', {}).get('size', 0)}, "
-                   f"L2缓存项={stats.get('l2_stats', {}).get('size', 0) if stats.get('l2_stats') else 0}")
-
-        # 预热关键数据
-        await warm_essential_cache()
-
-    except Exception as e:
-        logger.error(f"刷新全部缓存失败: {e}")
-        raise
+    stats = cache_manager.get_stats()
+    return APIResponse.success({"cacheStats": sanitize_for_json(stats)}, message)
 
 
-async def warm_essential_cache() -> None:
-    """
-    预热关键缓存数据
-    """
-    try:
-        # 预热常用数据
-        essential_keys = [
-            "system:config",
-            "datasource:status",
-            "market:calendar:current",
-            "market:trading_hours"
-        ]
+@router.get("/config/{source}")
+async def get_data_source_config(source: str):
+    """读取数据源配置"""
 
-        # 使用loader函数预热缓存
-        async def load_essential_data(key: str):
-            # 这里应该调用实际的数据加载逻辑
-            # 目前返回占位数据
-            if key == "system:config":
-                return {"version": "1.0", "env": "production"}
-            elif key == "datasource:status":
-                return {"amazingdata": "active", "akshare": "active"}
-            elif key == "market:calendar:current":
-                return {"date": datetime.now().date().isoformat(), "is_trading": True}
-            elif key == "market:trading_hours":
-                return {"open": "09:30", "close": "15:00"}
-            return None
-
-        # 批量预热
-        await cache_manager.warm_cache(essential_keys, load_essential_data)
-        logger.info(f"已预热 {len(essential_keys)} 个关键缓存项")
-
-    except Exception as e:
-        logger.error(f"预热缓存失败: {e}")
-        # 预热失败不影响主流程
-
-
-@router.get("/process-status")
-async def get_process_status():
-    """
-    获取进程池状态
-
-    返回所有数据源进程的运行状态
-    """
-    try:
-        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
-            get_global_pool
-        )
-
-        pool = get_global_pool()
-        status = pool.get_status()
-
-        return APIResponse.success(
-            data=status,
-            message="进程池状态获取成功"
-        )
-
-    except Exception as e:
-        logger.error(f"[ProcessStatus] Failed to get process status: {e}")
+    manager = await _ensure_manager(_manager())
+    source_type = _resolve_source(manager, source)
+    if source_type is None:
         return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"获取进程状态失败: {str(e)}",
-            status_code=500
+            code=ErrorCodes.DATASOURCE_NOT_FOUND,
+            message=f"未知数据源标识: {source}",
+            status_code=404,
         )
+
+    config = manager.registry.get_config(source_type)
+    if not config:
+        return APIResponse.error(
+            code=ErrorCodes.DATASOURCE_NOT_FOUND,
+            message=f"未找到 {source} 的配置",
+            status_code=404,
+        )
+
+    payload = sanitize_for_json(
+        {
+            "enabled": config.enabled,
+            "priority": config.priority,
+            "timeout": config.timeout,
+            "retry_count": config.retry_count,
+            "fallback_enabled": config.fallback_enabled,
+            "fallback_sources": config.fallback_sources,
+            "config": config.config,
+        }
+    )
+    return APIResponse.success(payload, "获取数据源配置成功")
+
+
+@router.put("/config/{source}")
+async def update_data_source_config(request: Request, source: str, payload: ConfigUpdateRequest):
+    """更新数据源配置"""
+
+    manager = await _ensure_manager(_manager())
+    source_type = _resolve_source(manager, source)
+    if source_type is None:
+        return APIResponse.error(
+            code=ErrorCodes.DATASOURCE_NOT_FOUND,
+            message=f"未知数据源标识: {source}",
+            status_code=404,
+        )
+
+    config = manager.registry.get_config(source_type)
+    if not config:
+        config = DataSourceConfig(enabled=True)
+        manager.registry.set_config(source_type, config)
+
+    test_mode = request.headers.get("X-Test-Mode", "").lower() == "true"
+    status_entry = manager._source_status.get(source_type, {})
+
+    update_data = payload.model_dump(exclude_unset=True)
+    if "enabled" in update_data:
+        desired_enabled = bool(update_data["enabled"])
+        if desired_enabled:
+            was_soft_disabled = (
+                status_entry.get("degraded_reason") == "disabled_by_config"
+                or status_entry.get("reason") == "disabled_by_config"
+                or not config.enabled
+            )
+            if test_mode and was_soft_disabled:
+                manager.mark_test_reactivation_pending(source_type)
+            else:
+                manager.enable_provider(source_type)
+        else:
+            manager.disable_provider(source_type)
+    if "priority" in update_data:
+        config.priority = int(update_data["priority"])
+    if "timeout" in update_data:
+        config.timeout = float(update_data["timeout"])
+    if "retry_count" in update_data:
+        config.retry_count = int(update_data["retry_count"])
+    if "fallback_enabled" in update_data:
+        config.fallback_enabled = bool(update_data["fallback_enabled"])
+    if "fallback_sources" in update_data:
+        config.fallback_sources = list(update_data["fallback_sources"] or [])
+    if "config" in update_data and update_data["config"] is not None:
+        config.config = dict(update_data["config"])
+
+    status_entry = manager._source_status.get(source_type, {})
+    if "enabled" in update_data:
+        if config.enabled:
+            entry = manager._transition_status(
+                source_type,
+                DataSourceLifecycleStatus.ACTIVE,
+                available=True,
+                reason="config_updated",
+            )
+            entry.pop("degraded_reason", None)
+            entry.pop("pending_reactivation", None)
+        elif status_entry.get("pending_reactivation"):
+            entry = manager._transition_status(
+                source_type,
+                DataSourceLifecycleStatus.PENDING_TEST,
+                available=False,
+                reason=status_entry.get("reason") or "test_mode_pending_activation",
+            )
+            entry["pending_reactivation"] = True
+            entry.setdefault("degraded_reason", "disabled_by_config")
+        else:
+            entry = manager._transition_status(
+                source_type,
+                DataSourceLifecycleStatus.DEGRADED,
+                available=False,
+                reason="disabled_by_config",
+            )
+            entry["degraded_reason"] = "disabled_by_config"
+    else:
+        manager._transition_status(
+            source_type,
+            (
+                DataSourceLifecycleStatus.ACTIVE
+                if config.enabled
+                else DataSourceLifecycleStatus.DEGRADED
+            ),
+            available=config.enabled,
+            reason="config_updated",
+        )
+
+    logger.info(f"数据源 {source_type.value} 配置已更新: {update_data}")
+    return await get_data_source_config(source)
+
+
+@router.get("/history")
+async def get_data_source_history(
+    source: Optional[str] = Query(None, description="过滤指定数据源"),
+    limit: int = Query(100, ge=1, le=500, description="返回记录数量"),
+):
+    """获取近期访问历史"""
+
+    monitor = _monitor()
+    if not monitor:
+        return APIResponse.success({"records": []}, "监控组件不可用，返回空列表")
+
+    records: List[AccessRecord] = list(monitor.access_history)
+    if source:
+        records = [r for r in records if r.source.value == source]
+    records = records[-limit:]
+
+    payload = [
+        {
+            "timestamp": datetime.fromtimestamp(r.timestamp).isoformat(),
+            "source": r.source.value,
+            "accessType": r.access_type.value,
+            "symbol": r.symbol,
+            "success": r.success,
+            "latency": r.latency_ms,
+            "error": r.error_message,
+        }
+        for r in records
+    ]
+
+    return APIResponse.success({"records": sanitize_for_json(payload)}, "获取访问历史成功")
+
+
+@router.get("/errors")
+async def get_data_source_errors(
+    source: Optional[str] = Query(None, description="过滤指定数据源"),
+    limit: int = Query(50, ge=1, le=200, description="返回记录数量"),
+):
+    """获取近期错误记录"""
+
+    monitor = _monitor()
+    if not monitor:
+        return APIResponse.success({"records": []}, "监控组件不可用，返回空列表")
+
+    records = [r for r in monitor.access_history if not r.success]
+    if source:
+        records = [r for r in records if r.source.value == source]
+    records = records[-limit:]
+
+    payload = [
+        {
+            "timestamp": datetime.fromtimestamp(r.timestamp).isoformat(),
+            "source": r.source.value,
+            "accessType": r.access_type.value,
+            "symbol": r.symbol,
+            "latency": r.latency_ms,
+            "error": r.error_message,
+        }
+        for r in records
+    ]
+
+    return APIResponse.success({"records": sanitize_for_json(payload)}, "获取错误记录成功")
+
+
+# ---------------------------------------------------------------------------
+# 兼容旧逻辑的工具函数
+# ---------------------------------------------------------------------------
+
+
+def update_datasource_status_after_test(datasource_type: str, success: bool, latency: int) -> None:
+    """兼容旧接口：在测试完成后同步监控与状态"""
+
+    manager = _manager()
+    source_type = _resolve_source(manager, datasource_type)
+    if source_type is None:
+        logger.warning(f"update_datasource_status_after_test: 未知数据源 {datasource_type}")
+        return
+
+    monitor = _monitor()
+    monitor_type = _to_monitor_type(source_type)
+
+    if monitor and monitor_type:
+        monitor.record_access(
+            source=monitor_type,
+            access_type=DataAccessType.REALTIME_QUOTE,
+            symbol=DEFAULT_TEST_SYMBOL,
+            module="self-test",
+            success=success,
+            latency_ms=latency,
+            data_size=0,
+            error_message=None if success else "self_test_failed",
+        )
+
+    manager._transition_status(
+        source_type,
+        DataSourceLifecycleStatus.ACTIVE if success else DataSourceLifecycleStatus.ERROR,
+        available=success,
+        reason="self_test_passed" if success else "self_test_failed",
+        last_test_time=time.time(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 向后兼容: 映射旧版 /api/data-source 路由
+# ---------------------------------------------------------------------------
+
+
+data_source_router = APIRouter(prefix="/api/data-source", tags=["DataSource Compatibility"])
+
+
+@data_source_router.api_route(
+    "/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+)
+async def legacy_data_source_catch_all(path: str):
+    """旧版接口已废弃的统一提示。"""
+
+    message = "接口已迁移至 /api/data-sources/*，请更新前端调用路径。"
+    payload = APIResponse.error(
+        code=ErrorCodes.NOT_FOUND,
+        message=message,
+        status_code=410,
+    )
+    return JSONResponse(status_code=410, content=payload)
+
+
+__all__ = ["router", "data_source_router", "update_datasource_status_after_test"]

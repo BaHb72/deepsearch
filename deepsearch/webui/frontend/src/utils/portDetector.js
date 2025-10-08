@@ -117,7 +117,7 @@ export async function getBackendUrl(forceRefresh = false) {
         return '' // 使用相对路径，通过Vite代理
     }
 
-    return `http://localhost:${port}`
+    return `http://localhost:${port}/api`
 }
 
 /**

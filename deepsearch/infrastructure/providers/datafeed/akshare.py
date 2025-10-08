@@ -61,7 +61,11 @@ class AkShareDataFeed(IDataFeed):
 
         data = resp.get("data") if isinstance(resp, dict) else None
         data_list = data if isinstance(data, list) else []
-        return self.normalize_bars(data_list)[: params.limit] if HAS_PANDAS else data_list[: params.limit]
+        return (
+            self.normalize_bars(data_list)[: params.limit]
+            if HAS_PANDAS
+            else data_list[: params.limit]
+        )
 
     async def get_realtime(self, symbols: List[str]) -> Dict[str, Any]:
         return await self.provider.get_realtime_data(symbols)
@@ -73,25 +77,46 @@ class AkShareDataFeed(IDataFeed):
             for row in data:
                 r = dict(row)
                 # map possible keys
-                ts = r.get("ts") or r.get("日期") or r.get("时间") or r.get("date") or r.get("datetime") or r.get(
-                    "time")
+                ts = (
+                    r.get("ts")
+                    or r.get("日期")
+                    or r.get("时间")
+                    or r.get("date")
+                    or r.get("datetime")
+                    or r.get("time")
+                )
                 r["ts"] = ts
                 # rename
-                for cn, en in [("开盘", "open"), ("收盘", "close"), ("最高", "high"), ("最低", "low"),
-                               ("成交量", "volume"), ("成交额", "amount")]:
+                for cn, en in [
+                    ("开盘", "open"),
+                    ("收盘", "close"),
+                    ("最高", "high"),
+                    ("最低", "low"),
+                    ("成交量", "volume"),
+                    ("成交额", "amount"),
+                ]:
                     if cn in r and en not in r:
                         r[en] = r[cn]
                 out.append(r)
             return out
 
         import pandas as pd  # type: ignore
+
         df = pd.DataFrame(data)
         if df.empty:
             return df
         rename_map = {
-            "日期": "ts", "时间": "ts", "date": "ts", "datetime": "ts", "time": "ts",
-            "开盘": "open", "收盘": "close", "最高": "high", "最低": "low",
-            "成交量": "volume", "成交额": "amount",
+            "日期": "ts",
+            "时间": "ts",
+            "date": "ts",
+            "datetime": "ts",
+            "time": "ts",
+            "开盘": "open",
+            "收盘": "close",
+            "最高": "high",
+            "最低": "low",
+            "成交量": "volume",
+            "成交额": "amount",
         }
         df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns}, inplace=True)
         if "ts" not in df.columns:

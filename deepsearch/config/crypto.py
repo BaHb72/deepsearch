@@ -4,13 +4,16 @@
 提供密码的加密和解密功能，用于保护敏感信息。
 配置文件中可以存储加密后的密码，格式为: "encrypted:xxxxx"
 """
+
 import base64
-import os
+import binascii
 from pathlib import Path
 from typing import Optional
+
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
 from deepsearch.observability import logger
 
 
@@ -20,7 +23,7 @@ class PasswordCrypto:
     def __init__(self, key: Optional[str] = None):
         """
         初始化加密工具
-        
+
         Args:
             key: 加密密钥，如果不提供则从密钥文件读取
         """
@@ -38,7 +41,7 @@ class PasswordCrypto:
         self._cipher = Fernet(base64.urlsafe_b64encode(self._key[:32]))
 
     @staticmethod
-    def _generate_key_from_password(password: bytes, salt: bytes = b'deepsearch-salt') -> bytes:
+    def _generate_key_from_password(password: bytes, salt: bytes = b"deepsearch-salt") -> bytes:
         """从密码生成密钥"""
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -56,10 +59,10 @@ class PasswordCrypto:
     def encrypt(self, password: str) -> str:
         """
         加密密码
-        
+
         Args:
             password: 明文密码
-            
+
         Returns:
             加密后的密码（base64编码）
         """
@@ -72,10 +75,10 @@ class PasswordCrypto:
     def decrypt(self, encrypted_password: str) -> str:
         """
         解密密码
-        
+
         Args:
             encrypted_password: 加密的密码（base64编码）
-            
+
         Returns:
             明文密码
         """
@@ -86,7 +89,7 @@ class PasswordCrypto:
             encrypted_bytes = base64.urlsafe_b64decode(encrypted_password.encode())
             decrypted = self._cipher.decrypt(encrypted_bytes)
             return decrypted.decode()
-        except (ValueError, base64.binascii.Error) as e:
+        except (ValueError, binascii.Error) as e:
             # Base64 解码失败，可能是明文密码
             logger.debug(f"密码解码失败，可能是明文: {type(e).__name__}")
             return encrypted_password

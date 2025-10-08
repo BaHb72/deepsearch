@@ -1,9 +1,10 @@
 """
 系统监控和指标API
 """
-from typing import Dict, Any
-from fastapi import APIRouter, HTTPException
 
+from typing import Any, Dict
+
+from fastapi import APIRouter, HTTPException
 from loguru import logger
 
 router = APIRouter(prefix="/api")
@@ -22,7 +23,7 @@ async def get_metrics() -> Dict[str, Any]:
             "request_rate": 100,
             "error_rate": 0.01,
             "response_time_avg": 50.0,
-            "uptime": 86400
+            "uptime": 86400,
         }
     except Exception as e:
         logger.error(f"获取指标失败: {e}")
@@ -42,7 +43,7 @@ async def get_cache_stats() -> Dict[str, Any]:
             "cache_size": 1024 * 1024 * 50,  # 50MB
             "max_cache_size": 1024 * 1024 * 100,  # 100MB
             "evictions": 100,
-            "items_count": 500
+            "items_count": 500,
         }
     except Exception as e:
         logger.error(f"获取缓存统计失败: {e}")

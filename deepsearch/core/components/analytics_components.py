@@ -4,15 +4,18 @@
 负责DuckDB数据分析和数据同步
 从原unified_components.py拆分而来
 """
+
 import asyncio
 import concurrent.futures
-from typing import Optional, Dict, Any
+import inspect
+from typing import Any, Dict, Optional
 
 from deepsearch.config import get_config
+
 from ..async_component import AsyncComponent
-from ..utils.exceptions import error_context
 from ..interfaces import ComponentType
-from ..utils.timeout_config import TimeoutManager, TimeoutCategory
+from ..utils.exceptions import error_context
+from ..utils.timeout_config import TimeoutCategory, TimeoutManager
 
 
 class AnalyticsComponent(AsyncComponent):
@@ -44,12 +47,13 @@ class AnalyticsComponent(AsyncComponent):
             # 使用超时控制初始化 DuckDB
             init_timeout = self._timeout_manager.get_timeout(TimeoutCategory.DB_CONNECT)
             try:
+
                 async def _init_db():
                     # 初始化 DuckDB
                     self._analytics_db = get_analytics_db(
                         db_path=analytics_config.path,
                         memory_limit=analytics_config.memory_limit,
-                        threads=analytics_config.threads
+                        threads=analytics_config.threads,
                     )
 
                     # 初始化表结构
@@ -57,7 +61,9 @@ class AnalyticsComponent(AsyncComponent):
 
                 await asyncio.wait_for(_init_db(), timeout=init_timeout)
             except asyncio.TimeoutError:
-                raise RuntimeError(f"Analytics DB initialization timeout after {init_timeout} seconds")
+                raise RuntimeError(
+                    f"Analytics DB initialization timeout after {init_timeout} seconds"
+                )
 
             # 初始化同步服务
             if analytics_config.auto_sync:
@@ -66,7 +72,9 @@ class AnalyticsComponent(AsyncComponent):
                 # 设置DuckDB实例到同步服务
                 self._sync_service.set_analytics_db(self._analytics_db)
                 await self._sync_service.start()
-                self._logger.info(f"数据同步服务已启动，同步间隔: {analytics_config.sync_interval}秒")
+                self._logger.info(
+                    f"数据同步服务已启动，同步间隔: {analytics_config.sync_interval}秒"
+                )
 
             self._instance = self
             self._logger.info("分析组件初始化完成")
@@ -84,6 +92,7 @@ class AnalyticsComponent(AsyncComponent):
             # 使用超时控制启动
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_START)
             try:
+
                 async def _start_analytics():
                     # 如果有额外的启动逻辑，在这里添加
                     self._logger.info("分析组件已启动")
@@ -98,6 +107,7 @@ class AnalyticsComponent(AsyncComponent):
             stop_timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_STOP)
 
             try:
+
                 async def _stop_analytics():
                     # 停止同步服务
                     if self._sync_service:
@@ -124,6 +134,7 @@ class AnalyticsComponent(AsyncComponent):
         """异步健康检查（带超时）"""
         timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_HEALTH)
         try:
+
             async def _check():
                 if not self._config or not self._config.enabled:
                     return True
@@ -132,7 +143,7 @@ class AnalyticsComponent(AsyncComponent):
                     return False
 
                 # 执行简单查询测试连接
-                if hasattr(self._analytics_db, 'execute'):
+                if hasattr(self._analytics_db, "execute"):
                     await self._analytics_db.execute("SELECT 1")
                     return True
 
@@ -156,26 +167,26 @@ class AnalyticsComponent(AsyncComponent):
             "path": self._config.path,
             "memory_limit": self._config.memory_limit,
             "threads": self._config.threads,
-            "auto_sync": self._config.auto_sync
+            "auto_sync": self._config.auto_sync,
         }
 
         if self._sync_service:
             info["sync_interval"] = self._config.sync_interval
-            info["sync_running"] = getattr(self._sync_service, '_running', False)
+            info["sync_running"] = getattr(self._sync_service, "_running", False)
 
         return info
 
     def get_statistics(self) -> Dict[str, Any]:
         """获取统计信息"""
-        if self._analytics_db and hasattr(self._analytics_db, 'get_statistics'):
-            import inspect
+        if self._analytics_db and hasattr(self._analytics_db, "get_statistics"):
+
             stats_method = self._analytics_db.get_statistics
 
             # 检查是否是协程函数
             if inspect.iscoroutinefunction(stats_method):
                 try:
                     # 尝试获取当前事件循环
-                    loop = asyncio.get_running_loop()
+                    asyncio.get_running_loop()
                     # 在异步环境中，使用线程池避免阻塞
                     with concurrent.futures.ThreadPoolExecutor() as executor:
                         # 使用 lambda 包装以正确处理协程
@@ -190,16 +201,24 @@ class AnalyticsComponent(AsyncComponent):
         return {}
 
     async def get_statistics_async(self) -> Dict[str, Any]:
-        """异步获取统计信息（带超时）"""
-        if not self._analytics_db or not hasattr(self._analytics_db, 'get_statistics'):
+        """异步获取统计信息（包含超时处理）"""
+        if not self._analytics_db or not hasattr(self._analytics_db, "get_statistics"):
             return {}
 
+        stats_callable = getattr(self._analytics_db, "get_statistics")
         timeout = self._timeout_manager.get_timeout(TimeoutCategory.DB_QUERY)
+
         try:
-            return await asyncio.wait_for(
-                self._analytics_db.get_statistics(),
-                timeout=timeout
-            )
+            if inspect.iscoroutinefunction(stats_callable):
+                result = await asyncio.wait_for(stats_callable(), timeout=timeout)
+            else:
+                loop = asyncio.get_running_loop()
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(None, stats_callable), timeout=timeout
+                )
+                if inspect.isawaitable(result):
+                    result = await asyncio.wait_for(result, timeout=timeout)
+            return result if result is not None else {}
         except asyncio.TimeoutError:
             self._logger.warning(f"Get statistics timeout after {timeout} seconds")
             return {"error": "Timeout getting statistics"}
@@ -213,14 +232,17 @@ class AnalyticsComponent(AsyncComponent):
             raise RuntimeError("Analytics DB not initialized")
 
         # 根据查询类型选择超时
-        is_complex = any(keyword in query.upper() for keyword in ['JOIN', 'GROUP BY', 'ORDER BY', 'UNION'])
+        is_complex = any(
+            keyword in query.upper() for keyword in ["JOIN", "GROUP BY", "ORDER BY", "UNION"]
+        )
         timeout = self._timeout_manager.get_timeout(
             TimeoutCategory.DB_TRANSACTION if is_complex else TimeoutCategory.DB_QUERY
         )
 
         try:
+
             async def _execute():
-                if hasattr(self._analytics_db, 'execute'):
+                if hasattr(self._analytics_db, "execute"):
                     return await self._analytics_db.execute(query, params)
                 else:
                     raise RuntimeError("Analytics DB does not support execute")
@@ -240,8 +262,9 @@ class AnalyticsComponent(AsyncComponent):
 
         timeout = self._timeout_manager.get_timeout(TimeoutCategory.DB_TRANSACTION)
         try:
+
             async def _sync():
-                if hasattr(self._sync_service, 'sync_now'):
+                if hasattr(self._sync_service, "sync_now"):
                     return await self._sync_service.sync_now()
                 else:
                     return {"error": "Sync service does not support manual sync"}

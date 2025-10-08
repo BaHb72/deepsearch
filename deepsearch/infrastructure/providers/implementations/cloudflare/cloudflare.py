@@ -2,14 +2,16 @@
 通用代理数据提供者
 使用Cloudflare Worker代理获取真实股票数据
 """
+
 import json
 import time
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, Optional
 
 import aiohttp
 from loguru import logger
 
 # from deepsearch.application.services.cache.stock_info_cache import get_stock_info_cache
+
 
 # 临时的缓存实现
 class StockInfoCache:
@@ -22,10 +24,13 @@ class StockInfoCache:
     def set(self, symbol, data):
         self._cache[symbol] = data
 
+
 _stock_info_cache = StockInfoCache()
+
 
 def get_stock_info_cache():
     return _stock_info_cache
+
 
 try:
     import pandas as pd
@@ -40,15 +45,10 @@ class ProxyDataProvider:
     """通过代理获取真实股票数据"""
 
     def __init__(self, worker_url: str = "https://akshare-proxy.934073514.workers.dev"):
-        self.worker_url = worker_url.rstrip('/')
+        self.worker_url = worker_url.rstrip("/")
         self.session = None
         self._cache = {}
-        self._cache_ttl = {
-            'realtime': 5,
-            'minute': 60,
-            'daily': 300,
-            'info': 3600
-        }
+        self._cache_ttl = {"realtime": 5, "minute": 60, "daily": 300, "info": 3600}
 
     async def initialize(self):
         """初始化"""
@@ -67,13 +67,13 @@ class ProxyDataProvider:
             return False
 
     async def get_kline_data(
-            self,
-            symbol: str,
-            period: str = '1d',
-            start_date: Optional[str] = None,
-            end_date: Optional[str] = None,
-            limit: int = 100,
-            **kwargs
+        self,
+        symbol: str,
+        period: str = "1d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: int = 100,
+        **kwargs,
     ) -> Optional[list]:
         """
         获取K线数据 - DataSourceManager接口方法
@@ -92,23 +92,23 @@ class ProxyDataProvider:
         try:
             # 转换周期格式
             period_map = {
-                '1d': 'daily',
-                'd': 'daily',
-                'daily': 'daily',
-                '1w': 'weekly',
-                'w': 'weekly',
-                'weekly': 'weekly',
-                '1M': 'monthly',
-                'M': 'monthly',
-                'monthly': 'monthly',
-                '5m': '5',
-                '15m': '15',
-                '30m': '30',
-                '60m': '60'
+                "1d": "daily",
+                "d": "daily",
+                "daily": "daily",
+                "1w": "weekly",
+                "w": "weekly",
+                "weekly": "weekly",
+                "1M": "monthly",
+                "M": "monthly",
+                "monthly": "monthly",
+                "5m": "5",
+                "15m": "15",
+                "30m": "30",
+                "60m": "60",
             }
 
-            period_str = period_map.get(period, 'daily')
-            adjust = kwargs.get('adjust', '')
+            period_str = period_map.get(period, "daily")
+            adjust = kwargs.get("adjust", "")
 
             # 调用已有的get_stock_hist方法
             hist_data = await self.get_stock_hist(
@@ -116,16 +116,18 @@ class ProxyDataProvider:
                 period=period_str,
                 start_date=start_date,
                 end_date=end_date,
-                adjust=adjust
+                adjust=adjust,
             )
 
             # 检查返回数据
-            if not hist_data or 'error' in hist_data:
-                logger.error(f"获取K线数据失败: {hist_data.get('error', 'Unknown error') if hist_data else 'No data'}")
+            if not hist_data or "error" in hist_data:
+                logger.error(
+                    f"获取K线数据失败: {hist_data.get('error', 'Unknown error') if hist_data else 'No data'}"
+                )
                 return None
 
             # 获取data字段
-            data = hist_data.get('data', [])
+            data = hist_data.get("data", [])
             if not data:
                 return None
 
@@ -141,16 +143,16 @@ class ProxyDataProvider:
             return None
 
     async def get_stock_hist(
-            self,
-            symbol: str,
-            period: str = "daily",
-            start_date: Optional[str] = None,
-            end_date: Optional[str] = None,
-            adjust: str = ""
+        self,
+        symbol: str,
+        period: str = "daily",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "",
     ) -> Dict[str, Any]:
         """
         获取股票历史数据
-        
+
         通过东方财富API获取K线数据
         """
         try:
@@ -168,16 +170,16 @@ class ProxyDataProvider:
             klt = period_map.get(period, "101")
 
             # 构建secid (东方财富的股票ID格式)
-            if symbol.startswith('6'):
+            if symbol.startswith("6"):
                 secid = f"1.{symbol}"  # 上海
-            elif symbol.startswith('0') or symbol.startswith('3'):
+            elif symbol.startswith("0") or symbol.startswith("3"):
                 secid = f"0.{symbol}"  # 深圳
             else:
                 secid = symbol
 
             # 使用代理获取东方财富K线数据
             url = f"{self.worker_url}/proxy"
-            target = f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
+            target = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 
             params = {
                 "url": target,
@@ -189,23 +191,23 @@ class ProxyDataProvider:
                 "beg": start_date.replace("-", "") if start_date else "0",
                 "end": end_date.replace("-", "") if end_date else "20500101",
                 "ut": "fa5fd1943c7b386f172d6893dbfba10b",
-                "_": str(int(time.time() * 1000))
+                "_": str(int(time.time() * 1000)),
             }
 
             # 构建完整的目标URL
-            target_with_params = target + "?" + "&".join([f"{k}={v}" for k, v in params.items() if k != "url"])
+            target_with_params = (
+                target + "?" + "&".join([f"{k}={v}" for k, v in params.items() if k != "url"])
+            )
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                        url,
-                        params={"url": target_with_params},
-                        timeout=aiohttp.ClientTimeout(total=30)
+                    url, params={"url": target_with_params}, timeout=aiohttp.ClientTimeout(total=30)
                 ) as response:
                     if response.status == 200:
                         text = await response.text()
                         try:
                             data = json.loads(text)
-                        except:
+                        except Exception:
                             # 东方财富返回的可能不是标准JSON，需要解析
                             return await self._parse_eastmoney_response(text, symbol)
 
@@ -233,19 +235,21 @@ class ProxyDataProvider:
             for line in klines:
                 parts = line.split(",")
                 if len(parts) >= 7:
-                    result.append({
-                        "日期": parts[0],
-                        "开盘": float(parts[1]),
-                        "收盘": float(parts[2]),
-                        "最高": float(parts[3]),
-                        "最低": float(parts[4]),
-                        "成交量": float(parts[5]),
-                        "成交额": float(parts[6]),
-                        "振幅": float(parts[7]) if len(parts) > 7 else 0,
-                        "涨跌幅": float(parts[8]) if len(parts) > 8 else 0,
-                        "涨跌额": float(parts[9]) if len(parts) > 9 else 0,
-                        "换手率": float(parts[10]) if len(parts) > 10 else 0
-                    })
+                    result.append(
+                        {
+                            "日期": parts[0],
+                            "开盘": float(parts[1]),
+                            "收盘": float(parts[2]),
+                            "最高": float(parts[3]),
+                            "最低": float(parts[4]),
+                            "成交量": float(parts[5]),
+                            "成交额": float(parts[6]),
+                            "振幅": float(parts[7]) if len(parts) > 7 else 0,
+                            "涨跌幅": float(parts[8]) if len(parts) > 8 else 0,
+                            "涨跌额": float(parts[9]) if len(parts) > 9 else 0,
+                            "换手率": float(parts[10]) if len(parts) > 10 else 0,
+                        }
+                    )
 
             logger.info(f"成功获取 {symbol} 的 {len(result)} 条K线数据")
             return {"data": result, "source": "eastmoney"}
@@ -261,7 +265,7 @@ class ProxyDataProvider:
             import re
 
             # 尝试提取JSON部分
-            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            json_match = re.search(r"\{.*\}", text, re.DOTALL)
             if json_match:
                 json_str = json_match.group()
                 data = json.loads(json_str)
@@ -279,9 +283,9 @@ class ProxyDataProvider:
         """获取实时行情"""
         try:
             # 使用新浪接口获取实时行情
-            if symbol.startswith('6'):
+            if symbol.startswith("6"):
                 sina_symbol = f"sh{symbol}"
-            elif symbol.startswith('0') or symbol.startswith('3'):
+            elif symbol.startswith("0") or symbol.startswith("3"):
                 sina_symbol = f"sz{symbol}"
             else:
                 sina_symbol = symbol
@@ -291,9 +295,7 @@ class ProxyDataProvider:
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                        url,
-                        params={"url": target},
-                        timeout=aiohttp.ClientTimeout(total=10)
+                    url, params={"url": target}, timeout=aiohttp.ClientTimeout(total=10)
                 ) as response:
                     if response.status == 200:
                         text = await response.text()
@@ -309,11 +311,12 @@ class ProxyDataProvider:
         """解析新浪行情数据"""
         try:
             import re
+
             match = re.search(r'="(.+)"', text)
             if not match:
                 return {"error": "无法解析行情"}
 
-            parts = match.group(1).split(',')
+            parts = match.group(1).split(",")
             if len(parts) < 32:
                 return {"error": "数据格式错误"}
 
@@ -328,7 +331,7 @@ class ProxyDataProvider:
                 "volume": float(parts[8]),
                 "amount": float(parts[9]),
                 "time": parts[30] + " " + parts[31] if len(parts) > 31 else "",
-                "source": "sina"
+                "source": "sina",
             }
 
         except Exception as e:
@@ -338,10 +341,10 @@ class ProxyDataProvider:
     async def fetch_stock_info(self, symbol: str) -> Dict[str, Any]:
         """
         获取股票基础信息
-        
+
         Args:
             symbol: 股票代码
-            
+
         Returns:
             股票基础信息字典
         """
@@ -358,36 +361,38 @@ class ProxyDataProvider:
                     "sector": cached_info.get("sector", ""),
                     "market": cached_info.get("market", ""),
                     "listed_date": cached_info.get("listed_date", ""),
-                    **cached_info
+                    **cached_info,
                 }
 
             # 检查内存缓存
             cache_key = f"stock_info_{symbol}"
             if cache_key in self._cache:
                 cached_time, cached_data = self._cache[cache_key]
-                if time.time() - cached_time < self._cache_ttl.get('info', 3600):
+                if time.time() - cached_time < self._cache_ttl.get("info", 3600):
                     return cached_data
 
             # 从东方财富获取股票基础信息
-            if symbol.startswith('6'):
+            if symbol.startswith("6"):
                 secid = f"1.{symbol}"  # 上海
-            elif symbol.startswith('0') or symbol.startswith('3'):
+            elif symbol.startswith("0") or symbol.startswith("3"):
                 secid = f"0.{symbol}"  # 深圳
             else:
                 secid = symbol
 
             url = f"{self.worker_url}/proxy"
-            target = f"https://push2.eastmoney.com/api/qt/stock/get"
+            target = "https://push2.eastmoney.com/api/qt/stock/get"
 
             params = {
                 "url": target,
                 "secid": secid,
                 "fields": "f57,f58,f43,f44,f45,f46,f60,f169,f170,f171,f172,f173,f174,f175,f176,f177,f178,f179,f180,f181,f182,f183,f184,f185,f186,f187,f188,f189,f190,f191,f192,f193,f194,f195,f196,f197",
-                "_": str(int(time.time() * 1000))
+                "_": str(int(time.time() * 1000)),
             }
 
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                async with session.get(
+                    url, params=params, timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
 
@@ -397,20 +402,44 @@ class ProxyDataProvider:
                                 "symbol": symbol,
                                 "name": stock_data.get("f58", f"股票{symbol}"),
                                 "full_name": stock_data.get("f57", ""),
-                                "price": stock_data.get("f43", 0) / 100 if stock_data.get("f43") else 0,
-                                "change": stock_data.get("f169", 0) / 100 if stock_data.get("f169") else 0,
-                                "change_pct": stock_data.get("f170", 0) / 100 if stock_data.get("f170") else 0,
+                                "price": (
+                                    stock_data.get("f43", 0) / 100 if stock_data.get("f43") else 0
+                                ),
+                                "change": (
+                                    stock_data.get("f169", 0) / 100 if stock_data.get("f169") else 0
+                                ),
+                                "change_pct": (
+                                    stock_data.get("f170", 0) / 100 if stock_data.get("f170") else 0
+                                ),
                                 "volume": stock_data.get("f45", 0),
                                 "amount": stock_data.get("f46", 0),
-                                "amplitude": stock_data.get("f171", 0) / 100 if stock_data.get("f171") else 0,
-                                "high": stock_data.get("f44", 0) / 100 if stock_data.get("f44") else 0,
-                                "low": stock_data.get("f45", 0) / 100 if stock_data.get("f45") else 0,
-                                "open": stock_data.get("f46", 0) / 100 if stock_data.get("f46") else 0,
-                                "prev_close": stock_data.get("f60", 0) / 100 if stock_data.get("f60") else 0,
-                                "volume_ratio": stock_data.get("f172", 0) / 100 if stock_data.get("f172") else 0,
-                                "turnover": stock_data.get("f173", 0) / 100 if stock_data.get("f173") else 0,
-                                "pe_ratio": stock_data.get("f174", 0) / 100 if stock_data.get("f174") else 0,
-                                "pb_ratio": stock_data.get("f175", 0) / 100 if stock_data.get("f175") else 0,
+                                "amplitude": (
+                                    stock_data.get("f171", 0) / 100 if stock_data.get("f171") else 0
+                                ),
+                                "high": (
+                                    stock_data.get("f44", 0) / 100 if stock_data.get("f44") else 0
+                                ),
+                                "low": (
+                                    stock_data.get("f45", 0) / 100 if stock_data.get("f45") else 0
+                                ),
+                                "open": (
+                                    stock_data.get("f46", 0) / 100 if stock_data.get("f46") else 0
+                                ),
+                                "prev_close": (
+                                    stock_data.get("f60", 0) / 100 if stock_data.get("f60") else 0
+                                ),
+                                "volume_ratio": (
+                                    stock_data.get("f172", 0) / 100 if stock_data.get("f172") else 0
+                                ),
+                                "turnover": (
+                                    stock_data.get("f173", 0) / 100 if stock_data.get("f173") else 0
+                                ),
+                                "pe_ratio": (
+                                    stock_data.get("f174", 0) / 100 if stock_data.get("f174") else 0
+                                ),
+                                "pb_ratio": (
+                                    stock_data.get("f175", 0) / 100 if stock_data.get("f175") else 0
+                                ),
                                 "total_shares": stock_data.get("f176", 0),
                                 "float_shares": stock_data.get("f177", 0),
                                 "market_cap": stock_data.get("f178", 0),
@@ -423,32 +452,27 @@ class ProxyDataProvider:
                             self._cache[cache_key] = (time.time(), result)
 
                             # 更新本地缓存
-                            stock_cache.set(symbol, {
-                                "name": result.get("name"),
-                                "industry": result.get("industry", ""),
-                                "sector": result.get("sector", ""),
-                                "market": result.get("market", ""),
-                            })
+                            stock_cache.set(
+                                symbol,
+                                {
+                                    "name": result.get("name"),
+                                    "industry": result.get("industry", ""),
+                                    "sector": result.get("sector", ""),
+                                    "market": result.get("market", ""),
+                                },
+                            )
 
                             return result
 
             # 如果从API获取失败，返回基础信息
             logger.warning(f"从API获取股票 {symbol} 信息失败，返回基础信息")
-            return {
-                "symbol": symbol,
-                "name": f"股票{symbol}",
-                "error": "无法获取股票信息"
-            }
+            return {"symbol": symbol, "name": f"股票{symbol}", "error": "无法获取股票信息"}
 
         except Exception as e:
             logger.error(f"获取股票信息失败 {symbol}: {e}")
-            return {
-                "symbol": symbol,
-                "name": f"股票{symbol}",
-                "error": str(e)
-            }
+            return {"symbol": symbol, "name": f"股票{symbol}", "error": str(e)}
 
-    async def get_stock_list(self, limit: int = None, **kwargs) -> Optional[list]:
+    async def get_stock_list(self, limit: Optional[int] = None, **kwargs) -> Optional[list]:
         """
         获取股票列表 - DataSourceManager接口方法
 
@@ -469,12 +493,14 @@ class ProxyDataProvider:
             # 转换格式以匹配DataSourceManager的期望格式
             result = []
             for stock in stocks:
-                result.append({
-                    'symbol': stock.get('代码', ''),
-                    'name': stock.get('名称', ''),
-                    'code': stock.get('代码', ''),
-                    'source': 'cloudflare'
-                })
+                result.append(
+                    {
+                        "symbol": stock.get("代码", ""),
+                        "name": stock.get("名称", ""),
+                        "code": stock.get("代码", ""),
+                        "source": "cloudflare",
+                    }
+                )
 
             # 应用限制
             if limit and limit > 0:
@@ -490,7 +516,7 @@ class ProxyDataProvider:
     async def fetch_stock_list(self) -> list:
         """
         获取股票列表
-        
+
         Returns:
             股票列表数据
         """
@@ -509,7 +535,7 @@ class ProxyDataProvider:
                 "fid": "f3",  # 排序字段
                 "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",  # A股市场
                 "fields": "f12,f14",  # f12:代码, f14:名称
-                "_": str(int(time.time() * 1000))
+                "_": str(int(time.time() * 1000)),
             }
 
             # 构建完整URL
@@ -518,9 +544,7 @@ class ProxyDataProvider:
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                        url,
-                        params={"url": target_with_params},
-                        timeout=aiohttp.ClientTimeout(total=30)
+                    url, params={"url": target_with_params}, timeout=aiohttp.ClientTimeout(total=30)
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -529,10 +553,12 @@ class ProxyDataProvider:
                             stocks = []
                             for stock_data in data["data"]["diff"]:
                                 if isinstance(stock_data, dict):
-                                    stocks.append({
-                                        '代码': stock_data.get('f12', ''),
-                                        '名称': stock_data.get('f14', '')
-                                    })
+                                    stocks.append(
+                                        {
+                                            "代码": stock_data.get("f12", ""),
+                                            "名称": stock_data.get("f14", ""),
+                                        }
+                                    )
 
                             logger.info(f"成功获取 {len(stocks)} 条股票数据")
 
@@ -540,11 +566,11 @@ class ProxyDataProvider:
                             if stocks:
                                 stock_cache = get_stock_info_cache()
                                 for stock in stocks[:100]:  # 先更新前100条
-                                    if stock['代码'] and stock['名称']:
-                                        stock_cache.set(stock['代码'], {
-                                            "name": stock['名称'],
-                                            "code": stock['代码']
-                                        })
+                                    if stock["代码"] and stock["名称"]:
+                                        stock_cache.set(
+                                            stock["代码"],
+                                            {"name": stock["名称"], "code": stock["代码"]},
+                                        )
 
                             return stocks
 
@@ -564,7 +590,7 @@ class ProxyDataProvider:
                 params.get("period", "daily"),
                 params.get("start_date"),
                 params.get("end_date"),
-                params.get("adjust", "")
+                params.get("adjust", ""),
             )
         elif path == "stock_zh_a_spot_em":
             return await self.get_realtime_quote(params.get("symbol", "000001"))

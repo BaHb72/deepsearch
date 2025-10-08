@@ -9,34 +9,29 @@ Date: 2025-09-18
 """
 
 import asyncio
-from datetime import datetime, date
-from typing import Dict, List, Optional, Any, Union
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union, cast
+
 import pandas as pd
 from loguru import logger
-from pathlib import Path
+
+from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
 
 # AmazingData SDK
-try:
-    import AmazingData as ad
-    HAS_AMAZINGDATA = True
-except ImportError:
-    HAS_AMAZINGDATA = False
-    ad = None
-    logger.error("AmazingData SDK 未安装，请先安装: pip install AmazingData")
-
-from .amazingdata import AmazingDataProvider
-from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
+from ._sdk_loader import ad
+from .amazingdata import AmazingDataProvider, ProviderConfigLike
 
 
 class AmazingDataExtended(AmazingDataProvider):
     """AmazingData 扩展实现，包含所有35个API接口"""
 
-    def __init__(self, config):
+    def __init__(self, config: ProviderConfigLike):
         """初始化扩展接口"""
         super().__init__(config)
-        self._base_data = None
-        self._info_data = None
-        self._market_data = None
+        self._base_data: Any = None
+        self._info_data: Any = None
+        self._market_data: Any = None
         self._initialized_objects = False
 
     async def _ensure_data_objects(self):
@@ -55,9 +50,7 @@ class AmazingDataExtended(AmazingDataProvider):
                 calendar = await self.get_calendar()
                 if calendar:
                     # 初始化市场数据对象
-                    self._market_data = await loop.run_in_executor(
-                        None, ad.MarketData, calendar
-                    )
+                    self._market_data = await loop.run_in_executor(None, ad.MarketData, calendar)
 
                 self._initialized_objects = True
                 logger.info("AmazingData 数据对象初始化成功")
@@ -67,10 +60,7 @@ class AmazingDataExtended(AmazingDataProvider):
 
     # ================== P0基础接口 ==================
 
-    async def get_code_info(
-        self,
-        security_type: str = 'EXTRA_STOCK_A'
-    ) -> Optional[pd.DataFrame]:
+    async def get_code_info(self, security_type: str = "EXTRA_STOCK_A") -> Optional[pd.DataFrame]:
         """
         3.5.2.1 每日最新证券信息
         获取每日最新证券信息，包括证券简称、昨收价、涨跌停价等
@@ -85,23 +75,17 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._base_data.get_code_info,
-                security_type
-            )
+            result = await loop.run_in_executor(None, self._base_data.get_code_info, security_type)
 
             logger.info(f"成功获取{len(result) if result is not None else 0}条证券信息")
-            return result
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取证券信息失败: {e}")
             return None
 
     async def get_calendar(
-        self,
-        data_type: str = 'str',
-        market: str = 'SH'
+        self, data_type: str = "str", market: str = "SH"
     ) -> Optional[List[Union[str, datetime]]]:
         """
         3.5.2.7 交易日历
@@ -120,23 +104,17 @@ class AmazingDataExtended(AmazingDataProvider):
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                self._base_data.get_calendar,
-                data_type,
-                market
+                None, self._base_data.get_calendar, data_type, market
             )
 
             logger.info(f"成功获取交易日历，共{len(result) if result else 0}个交易日")
-            return result
+            return cast(Optional[List[Union[str, datetime]]], result)
 
         except Exception as e:
             logger.error(f"获取交易日历失败: {e}")
             return None
 
-    async def get_stock_basic(
-        self,
-        code_list: List[str]
-    ) -> Optional[pd.DataFrame]:
+    async def get_stock_basic(self, code_list: List[str]) -> Optional[pd.DataFrame]:
         """
         3.5.2.8 证券基础信息
         获取指定股票的基础信息，包括公司名称、上市日期、退市日期等
@@ -151,14 +129,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_stock_basic,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_stock_basic, code_list)
 
             logger.info(f"成功获取{len(result) if result is not None else 0}条股票基础信息")
-            return result
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取股票基础信息失败: {e}")
@@ -167,8 +141,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_backward_factor(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.2.4 复权因子（后复权因子）
@@ -190,15 +164,11 @@ class AmazingDataExtended(AmazingDataProvider):
 
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                self._base_data.get_backward_factor,
-                code_list,
-                local_path,
-                is_local
+                None, self._base_data.get_backward_factor, code_list, local_path, is_local
             )
 
-            logger.info(f"成功获取后复权因子数据")
-            return result
+            logger.info("成功获取后复权因子数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取后复权因子失败: {e}")
@@ -207,8 +177,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_adj_factor(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.2.5 复权因子（单次复权因子）
@@ -230,15 +200,11 @@ class AmazingDataExtended(AmazingDataProvider):
 
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                self._base_data.get_adj_factor,
-                code_list,
-                local_path,
-                is_local
+                None, self._base_data.get_adj_factor, code_list, local_path, is_local
             )
 
-            logger.info(f"成功获取单次复权因子数据")
-            return result
+            logger.info("成功获取单次复权因子数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取单次复权因子失败: {e}")
@@ -247,8 +213,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_history_stock_status(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.2.9 历史证券信息
@@ -270,15 +236,11 @@ class AmazingDataExtended(AmazingDataProvider):
 
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                self._info_data.get_history_stock_status,
-                code_list,
-                local_path,
-                is_local
+                None, self._info_data.get_history_stock_status, code_list, local_path, is_local
             )
 
-            logger.info(f"成功获取历史证券状态信息")
-            return result
+            logger.info("成功获取历史证券状态信息")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取历史证券状态失败: {e}")
@@ -286,10 +248,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
     async def get_hist_code_list(
         self,
-        security_type: str = 'EXTRA_STOCK_A_SH_SZ',
+        security_type: str = "EXTRA_STOCK_A_SH_SZ",
         start_date: int = 20130101,
         end_date: int = 20250101,
-        local_path: str = 'D://AmazingData_local_data//'
+        local_path: str = "D://AmazingData_local_data//",
     ) -> Optional[List[str]]:
         """
         3.5.2.6 历史代码列表
@@ -317,20 +279,17 @@ class AmazingDataExtended(AmazingDataProvider):
                 security_type,
                 start_date,
                 end_date,
-                local_path
+                local_path,
             )
 
             logger.info(f"成功获取历史代码列表，共{len(result) if result else 0}个代码")
-            return result
+            return cast(Optional[List[str]], result)
 
         except Exception as e:
             logger.error(f"获取历史代码列表失败: {e}")
             return None
 
-    async def get_code_list(
-        self,
-        security_type: str = 'EXTRA_STOCK_A'
-    ) -> Optional[List[str]]:
+    async def get_code_list(self, security_type: str = "EXTRA_STOCK_A") -> Optional[List[str]]:
         """
         3.5.2.2 每日最新代码列表
         获取最新的每日代码列表
@@ -345,22 +304,17 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._base_data.get_code_list,
-                security_type
-            )
+            result = await loop.run_in_executor(None, self._base_data.get_code_list, security_type)
 
             logger.info(f"成功获取代码列表，共{len(result) if result else 0}个代码")
-            return result
+            return cast(Optional[List[str]], result)
 
         except Exception as e:
             logger.error(f"获取代码列表失败: {e}")
             return None
 
     async def get_future_code_list(
-        self,
-        security_type: str = 'EXTRA__FUTURE'
+        self, security_type: str = "EXTRA__FUTURE"
     ) -> Optional[List[str]]:
         """
         3.5.2.3 每日最新代码（期货特殊接口）
@@ -377,22 +331,18 @@ class AmazingDataExtended(AmazingDataProvider):
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                self._base_data.get_future_code_list,
-                security_type
+                None, self._base_data.get_future_code_list, security_type
             )
 
             logger.info(f"成功获取期货代码列表，共{len(result) if result else 0}个代码")
-            return result
+            return cast(Optional[List[str]], result)
 
         except Exception as e:
             logger.error(f"获取期货代码列表失败: {e}")
             return None
 
     async def get_bj_code_mapping(
-        self,
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        self, local_path: str = "D://AmazingData_local_data//", is_local: bool = True
     ) -> Optional[pd.DataFrame]:
         """
         3.5.2.10 北交所代码新旧代码映射表
@@ -409,13 +359,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_bj_code_mapping
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_bj_code_mapping)
 
-            logger.info(f"成功获取北交所代码映射表")
-            return result
+            logger.info("成功获取北交所代码映射表")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取北交所代码映射失败: {e}")
@@ -424,10 +371,7 @@ class AmazingDataExtended(AmazingDataProvider):
     # ================== 历史行情接口 ==================
 
     async def query_snapshot(
-        self,
-        code_list: List[str],
-        begin_date: int,
-        end_date: int
+        self, code_list: List[str], begin_date: int, end_date: int
     ) -> Optional[Dict[str, pd.DataFrame]]:
         """
         3.5.4.1 历史快照
@@ -446,26 +390,18 @@ class AmazingDataExtended(AmazingDataProvider):
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                self._market_data.query_snapshot,
-                code_list,
-                begin_date,
-                end_date
+                None, self._market_data.query_snapshot, code_list, begin_date, end_date
             )
 
-            logger.info(f"成功获取历史快照数据")
-            return result
+            logger.info("成功获取历史快照数据")
+            return cast(Optional[Dict[str, pd.DataFrame]], result)
 
         except Exception as e:
             logger.error(f"查询历史快照失败: {e}")
             return None
 
     async def query_kline(
-        self,
-        code_list: List[str],
-        begin_date: int,
-        end_date: int,
-        period: str = None
+        self, code_list: List[str], begin_date: int, end_date: int, period: Optional[str] = None
     ) -> Optional[Dict[str, pd.DataFrame]]:
         """
         3.5.4.2 历史K线
@@ -488,16 +424,11 @@ class AmazingDataExtended(AmazingDataProvider):
 
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                self._market_data.query_kline,
-                code_list,
-                begin_date,
-                end_date,
-                period
+                None, self._market_data.query_kline, code_list, begin_date, end_date, period
             )
 
-            logger.info(f"成功获取历史K线数据")
-            return result
+            logger.info("成功获取历史K线数据")
+            return cast(Optional[Dict[str, pd.DataFrame]], result)
 
         except Exception as e:
             logger.error(f"查询历史K线失败: {e}")
@@ -508,8 +439,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_profit_express(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.5.4 业绩快报
@@ -527,14 +458,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_profit_express,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_profit_express, code_list)
 
-            logger.info(f"成功获取业绩快报数据")
-            return result
+            logger.info("成功获取业绩快报数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取业绩快报失败: {e}")
@@ -543,8 +470,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_profit_notice(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.5.5 业绩预告
@@ -562,14 +489,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_profit_notice,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_profit_notice, code_list)
 
-            logger.info(f"成功获取业绩预告数据")
-            return result
+            logger.info("成功获取业绩预告数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取业绩预告失败: {e}")
@@ -578,8 +501,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_balance_sheet(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.5.1 资产负债表
@@ -597,14 +520,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_balance_sheet,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_balance_sheet, code_list)
 
-            logger.info(f"成功获取资产负债表数据")
-            return result
+            logger.info("成功获取资产负债表数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取资产负债表失败: {e}")
@@ -613,8 +532,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_cash_flow(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.5.2 现金流量表
@@ -632,14 +551,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_cash_flow,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_cash_flow, code_list)
 
-            logger.info(f"成功获取现金流量表数据")
-            return result
+            logger.info("成功获取现金流量表数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取现金流量表失败: {e}")
@@ -648,8 +563,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_income(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.5.3 利润表
@@ -667,14 +582,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_income,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_income, code_list)
 
-            logger.info(f"成功获取利润表数据")
-            return result
+            logger.info("成功获取利润表数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取利润表失败: {e}")
@@ -685,8 +596,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_share_holder(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.6.1 十大股东数据
@@ -704,14 +615,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_share_holder,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_share_holder, code_list)
 
-            logger.info(f"成功获取十大股东数据")
-            return result
+            logger.info("成功获取十大股东数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取十大股东数据失败: {e}")
@@ -720,8 +627,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_holder_num(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.6.2 股东人数
@@ -739,14 +646,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_holder_num,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_holder_num, code_list)
 
-            logger.info(f"成功获取股东人数数据")
-            return result
+            logger.info("成功获取股东人数数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取股东人数失败: {e}")
@@ -755,8 +658,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_equity_structure(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.6.3 股本结构
@@ -775,13 +678,11 @@ class AmazingDataExtended(AmazingDataProvider):
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                self._info_data.get_equity_structure,
-                code_list
+                None, self._info_data.get_equity_structure, code_list
             )
 
-            logger.info(f"成功获取股本结构数据")
-            return result
+            logger.info("成功获取股本结构数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取股本结构失败: {e}")
@@ -790,8 +691,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_equity_pledge_freeze(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.6.4 股权质押/冻结
@@ -810,13 +711,11 @@ class AmazingDataExtended(AmazingDataProvider):
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                self._info_data.get_equity_pledge_freeze,
-                code_list
+                None, self._info_data.get_equity_pledge_freeze, code_list
             )
 
-            logger.info(f"成功获取股权质押/冻结数据")
-            return result
+            logger.info("成功获取股权质押/冻结数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取股权质押/冻结失败: {e}")
@@ -825,8 +724,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_equity_restricted(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.6.5 限售股解禁
@@ -845,13 +744,11 @@ class AmazingDataExtended(AmazingDataProvider):
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                self._info_data.get_equity_restricted,
-                code_list
+                None, self._info_data.get_equity_restricted, code_list
             )
 
-            logger.info(f"成功获取限售股解禁数据")
-            return result
+            logger.info("成功获取限售股解禁数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取限售股解禁失败: {e}")
@@ -862,8 +759,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_dividend(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.7.1 分红数据
@@ -881,14 +778,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_dividend,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_dividend, code_list)
 
-            logger.info(f"成功获取分红数据")
-            return result
+            logger.info("成功获取分红数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取分红数据失败: {e}")
@@ -897,8 +790,8 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_right_issue(
         self,
         code_list: List[str],
-        local_path: str = 'D://AmazingData_local_data//',
-        is_local: bool = True
+        local_path: str = "D://AmazingData_local_data//",
+        is_local: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         3.5.7.2 配股数据
@@ -916,14 +809,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_right_issue,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_right_issue, code_list)
 
-            logger.info(f"成功获取配股数据")
-            return result
+            logger.info("成功获取配股数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取配股数据失败: {e}")
@@ -931,9 +820,7 @@ class AmazingDataExtended(AmazingDataProvider):
 
     # ================== 融资融券接口 ==================
 
-    async def get_margin_summary(
-        self
-    ) -> Optional[pd.DataFrame]:
+    async def get_margin_summary(self) -> Optional[pd.DataFrame]:
         """
         3.5.8.1 融资融券交易汇总
         获取融资融券交易汇总数据
@@ -945,22 +832,16 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_margin_summary
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_margin_summary)
 
-            logger.info(f"成功获取融资融券汇总数据")
-            return result
+            logger.info("成功获取融资融券汇总数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取融资融券汇总失败: {e}")
             return None
 
-    async def get_margin_detail(
-        self,
-        code_list: List[str]
-    ) -> Optional[pd.DataFrame]:
+    async def get_margin_detail(self, code_list: List[str]) -> Optional[pd.DataFrame]:
         """
         3.5.8.2 融资融券标的明细
         获取指定股票的融资融券明细数据
@@ -975,14 +856,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_margin_detail,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_margin_detail, code_list)
 
-            logger.info(f"成功获取融资融券明细数据")
-            return result
+            logger.info("成功获取融资融券明细数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取融资融券明细失败: {e}")
@@ -990,10 +867,7 @@ class AmazingDataExtended(AmazingDataProvider):
 
     # ================== 市场异动数据接口 ==================
 
-    async def get_long_hu_bang(
-        self,
-        code_list: List[str]
-    ) -> Optional[pd.DataFrame]:
+    async def get_long_hu_bang(self, code_list: List[str]) -> Optional[pd.DataFrame]:
         """
         3.5.9.1 龙虎榜
         获取指定股票的龙虎榜数据
@@ -1008,14 +882,10 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._info_data.get_long_hu_bang,
-                code_list
-            )
+            result = await loop.run_in_executor(None, self._info_data.get_long_hu_bang, code_list)
 
-            logger.info(f"成功获取龙虎榜数据")
-            return result
+            logger.info("成功获取龙虎榜数据")
+            return cast(Optional[pd.DataFrame], result)
 
         except Exception as e:
             logger.error(f"获取龙虎榜数据失败: {e}")
@@ -1023,11 +893,7 @@ class AmazingDataExtended(AmazingDataProvider):
 
     # ================== 账户管理接口 ==================
 
-    async def update_password(
-        self,
-        old_password: str,
-        new_password: str
-    ) -> bool:
+    async def update_password(self, old_password: str, new_password: str) -> bool:
         """
         3.5.1.3 修改密码
         修改账户密码
@@ -1046,11 +912,7 @@ class AmazingDataExtended(AmazingDataProvider):
         try:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None,
-                ad.update_password,
-                self.config.username,
-                old_password,
-                new_password
+                None, ad.update_password, self.config.username, old_password, new_password
             )
 
             if result:

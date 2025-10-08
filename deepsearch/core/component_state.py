@@ -3,23 +3,25 @@
 
 提供组件状态管理和资源跟踪功能，替代原有的 self._instance = self 模式
 """
-from enum import Enum
-from typing import Optional, Any, Dict
-from datetime import datetime
+
 from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, Optional
 
 
 class ComponentLifecycle(Enum):
     """组件生命周期状态"""
-    CREATED = "created"          # 组件已创建，未初始化
-    INITIALIZING = "initializing" # 正在初始化
-    INITIALIZED = "initialized"   # 已初始化，未启动
-    STARTING = "starting"        # 正在启动
-    RUNNING = "running"          # 运行中
-    STOPPING = "stopping"        # 正在停止
-    STOPPED = "stopped"          # 已停止
-    FAILED = "failed"            # 失败状态
-    DISPOSED = "disposed"        # 已释放资源
+
+    CREATED = "created"  # 组件已创建，未初始化
+    INITIALIZING = "initializing"  # 正在初始化
+    INITIALIZED = "initialized"  # 已初始化，未启动
+    STARTING = "starting"  # 正在启动
+    RUNNING = "running"  # 运行中
+    STOPPING = "stopping"  # 正在停止
+    STOPPED = "stopped"  # 已停止
+    FAILED = "failed"  # 失败状态
+    DISPOSED = "disposed"  # 已释放资源
 
 
 @dataclass
@@ -30,6 +32,7 @@ class ComponentState:
     用于跟踪组件的生命周期状态和相关资源，
     避免使用 self._instance = self 的自引用模式。
     """
+
     lifecycle: ComponentLifecycle = ComponentLifecycle.CREATED
     resource: Optional[Any] = None  # 组件管理的资源（如数据库连接、Redis客户端等）
     error_message: Optional[str] = None
@@ -46,7 +49,7 @@ class ComponentState:
             ComponentLifecycle.STARTING,
             ComponentLifecycle.RUNNING,
             ComponentLifecycle.STOPPING,
-            ComponentLifecycle.STOPPED
+            ComponentLifecycle.STOPPED,
         ]
 
     def is_running(self) -> bool:
@@ -121,14 +124,20 @@ class ComponentState:
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "stopped_at": self.stopped_at.isoformat() if self.stopped_at else None,
             "uptime": self.get_uptime(),
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
 class StateTransitionError(Exception):
     """状态转换错误"""
-    def __init__(self, component_name: str, current: ComponentLifecycle,
-                 target: ComponentLifecycle, message: str = ""):
+
+    def __init__(
+        self,
+        component_name: str,
+        current: ComponentLifecycle,
+        target: ComponentLifecycle,
+        message: str = "",
+    ):
         self.component_name = component_name
         self.current = current
         self.target = target
@@ -147,14 +156,21 @@ class ComponentStateManager:
     # 允许的状态转换
     VALID_TRANSITIONS = {
         ComponentLifecycle.CREATED: [ComponentLifecycle.INITIALIZING, ComponentLifecycle.FAILED],
-        ComponentLifecycle.INITIALIZING: [ComponentLifecycle.INITIALIZED, ComponentLifecycle.FAILED],
-        ComponentLifecycle.INITIALIZED: [ComponentLifecycle.STARTING, ComponentLifecycle.DISPOSED, ComponentLifecycle.FAILED],
+        ComponentLifecycle.INITIALIZING: [
+            ComponentLifecycle.INITIALIZED,
+            ComponentLifecycle.FAILED,
+        ],
+        ComponentLifecycle.INITIALIZED: [
+            ComponentLifecycle.STARTING,
+            ComponentLifecycle.DISPOSED,
+            ComponentLifecycle.FAILED,
+        ],
         ComponentLifecycle.STARTING: [ComponentLifecycle.RUNNING, ComponentLifecycle.FAILED],
         ComponentLifecycle.RUNNING: [ComponentLifecycle.STOPPING, ComponentLifecycle.FAILED],
         ComponentLifecycle.STOPPING: [ComponentLifecycle.STOPPED, ComponentLifecycle.FAILED],
         ComponentLifecycle.STOPPED: [ComponentLifecycle.STARTING, ComponentLifecycle.DISPOSED],
         ComponentLifecycle.FAILED: [ComponentLifecycle.INITIALIZING, ComponentLifecycle.DISPOSED],
-        ComponentLifecycle.DISPOSED: []  # 终态，不能转换
+        ComponentLifecycle.DISPOSED: [],  # 终态，不能转换
     }
 
     def __init__(self, component_name: str):
@@ -187,10 +203,7 @@ class ComponentStateManager:
         """
         if not self.can_transition(target):
             raise StateTransitionError(
-                self.component_name,
-                self.state.lifecycle,
-                target,
-                "Invalid state transition"
+                self.component_name, self.state.lifecycle, target, "Invalid state transition"
             )
 
         self.state.set_lifecycle(target, error)
@@ -205,5 +218,5 @@ class ComponentStateManager:
             ComponentLifecycle.INITIALIZED,
             ComponentLifecycle.STARTING,
             ComponentLifecycle.RUNNING,
-            ComponentLifecycle.STOPPING
+            ComponentLifecycle.STOPPING,
         ]

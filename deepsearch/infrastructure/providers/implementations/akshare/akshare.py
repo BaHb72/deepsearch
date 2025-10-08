@@ -7,4 +7,4 @@ AkShare数据提供者 - 重构版本
 from .akshare_refactored import AkShareProxyProvider
 
 # 导出主类（保持向后兼容）
-__all__ = ['AkShareProxyProvider']
+__all__ = ["AkShareProxyProvider"]

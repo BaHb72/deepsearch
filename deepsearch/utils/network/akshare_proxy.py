@@ -2,7 +2,9 @@
 AkShare 代理补丁
 让 akshare 库的所有请求通过 Cloudflare Worker 代理
 """
+
 import functools
+import importlib
 import sys
 
 import requests
@@ -20,7 +22,7 @@ def patch_akshare():
     这样所有 akshare 的请求都会通过 Cloudflare Worker
     """
     try:
-        import akshare
+        importlib.import_module("akshare")
     except ImportError:
         logger.warning("akshare 未安装，跳过代理补丁")
         return
@@ -71,8 +73,8 @@ def patch_akshare():
     # 同时替换 akshare 模块内部的 requests
     # 某些 akshare 子模块可能已经导入了 requests
     for name, module in sys.modules.items():
-        if name.startswith('akshare'):
-            if hasattr(module, 'requests'):
+        if name.startswith("akshare"):
+            if hasattr(module, "requests"):
                 module.requests.get = proxy_get
                 module.requests.post = proxy_post
                 module.requests.request = proxy_request
@@ -85,7 +87,7 @@ def unpatch_akshare():
     移除 akshare 的代理补丁，恢复原始行为
     """
     try:
-        import akshare
+        importlib.import_module("akshare")
     except ImportError:
         return
 
@@ -118,7 +120,7 @@ class ProxySession(_OriginalSession):
 def create_akshare_session():
     """
     创建一个专门为 akshare 使用的代理 Session
-    
+
     Returns:
         ProxySession 实例
     """
@@ -128,7 +130,7 @@ def create_akshare_session():
 class AkShareProxyContext:
     """
     上下文管理器，在上下文中使用代理的 akshare
-    
+
     Example:
         with AkShareProxyContext():
             df = ak.stock_zh_a_spot_em()

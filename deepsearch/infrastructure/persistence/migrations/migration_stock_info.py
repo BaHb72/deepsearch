@@ -3,6 +3,7 @@
 
 创建和管理stock_info表
 """
+
 import asyncio
 from datetime import datetime
 from pathlib import Path
@@ -62,19 +63,23 @@ async def import_initial_data(session):
 
     if json_file.exists():
         try:
-            with open(json_file, 'r', encoding='utf-8') as f:
+            with open(json_file, "r", encoding="utf-8") as f:
                 stock_data = json.load(f)
 
             for symbol, info in stock_data.items():
                 stock_info = StockInfo(
                     symbol=symbol,
-                    name=info.get('name', ''),
-                    industry=info.get('industry'),
-                    sector=info.get('sector'),
-                    market=info.get('market'),
-                    listed_date=datetime.strptime(info['listed_date'], '%Y-%m-%d') if info.get('listed_date') else None,
-                    total_shares=info.get('total_shares'),
-                    float_shares=info.get('float_shares')
+                    name=info.get("name", ""),
+                    industry=info.get("industry"),
+                    sector=info.get("sector"),
+                    market=info.get("market"),
+                    listed_date=(
+                        datetime.strptime(info["listed_date"], "%Y-%m-%d")
+                        if info.get("listed_date")
+                        else None
+                    ),
+                    total_shares=info.get("total_shares"),
+                    float_shares=info.get("float_shares"),
                 )
                 session.add(stock_info)
 
@@ -87,14 +92,62 @@ async def import_initial_data(session):
     else:
         # 如果没有JSON文件，添加一些基础数据
         default_stocks = [
-            {'symbol': '000001', 'name': '平安银行', 'industry': '银行', 'sector': '大金融', 'market': '深圳主板'},
-            {'symbol': '000002', 'name': '万科A', 'industry': '房地产', 'sector': '房地产开发', 'market': '深圳主板'},
-            {'symbol': '000858', 'name': '五粮液', 'industry': '白酒', 'sector': '食品饮料', 'market': '深圳主板'},
-            {'symbol': '002415', 'name': '海康威视', 'industry': '安防', 'sector': '电子设备', 'market': '深圳中小板'},
-            {'symbol': '300750', 'name': '宁德时代', 'industry': '新能源', 'sector': '动力电池', 'market': '创业板'},
-            {'symbol': '600000', 'name': '浦发银行', 'industry': '银行', 'sector': '大金融', 'market': '上海主板'},
-            {'symbol': '600036', 'name': '招商银行', 'industry': '银行', 'sector': '大金融', 'market': '上海主板'},
-            {'symbol': '600519', 'name': '贵州茅台', 'industry': '白酒', 'sector': '食品饮料', 'market': '上海主板'},
+            {
+                "symbol": "000001",
+                "name": "平安银行",
+                "industry": "银行",
+                "sector": "大金融",
+                "market": "深圳主板",
+            },
+            {
+                "symbol": "000002",
+                "name": "万科A",
+                "industry": "房地产",
+                "sector": "房地产开发",
+                "market": "深圳主板",
+            },
+            {
+                "symbol": "000858",
+                "name": "五粮液",
+                "industry": "白酒",
+                "sector": "食品饮料",
+                "market": "深圳主板",
+            },
+            {
+                "symbol": "002415",
+                "name": "海康威视",
+                "industry": "安防",
+                "sector": "电子设备",
+                "market": "深圳中小板",
+            },
+            {
+                "symbol": "300750",
+                "name": "宁德时代",
+                "industry": "新能源",
+                "sector": "动力电池",
+                "market": "创业板",
+            },
+            {
+                "symbol": "600000",
+                "name": "浦发银行",
+                "industry": "银行",
+                "sector": "大金融",
+                "market": "上海主板",
+            },
+            {
+                "symbol": "600036",
+                "name": "招商银行",
+                "industry": "银行",
+                "sector": "大金融",
+                "market": "上海主板",
+            },
+            {
+                "symbol": "600519",
+                "name": "贵州茅台",
+                "industry": "白酒",
+                "sector": "食品饮料",
+                "market": "上海主板",
+            },
         ]
 
         for stock_dict in default_stocks:

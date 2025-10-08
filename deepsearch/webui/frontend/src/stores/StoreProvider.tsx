@@ -1,15 +1,25 @@
-import React, { createContext, useContext } from 'react'
-import { useSystemStore } from './systemStore'
-import { useMarketStore } from './marketStore'
-import { useConfigStore } from './configStore'
+import { createContext, useContext, type ReactNode } from 'react'
+import { useSystemStore } from './system.store'
+import { useMarketStore } from './market.store'
+import { useConfigStore } from './config.store'
 
-const StoreContext = createContext(null)
+type StoreContextValue = {
+  system: ReturnType<typeof useSystemStore>
+  market: ReturnType<typeof useMarketStore>
+  config: ReturnType<typeof useConfigStore>
+}
 
-export const StoreProvider = ({ children }) => {
-  const stores = {
+const StoreContext = createContext<StoreContextValue | null>(null)
+
+interface StoreProviderProps {
+  children: ReactNode
+}
+
+export const StoreProvider = ({ children }: StoreProviderProps) => {
+  const stores: StoreContextValue = {
     system: useSystemStore(),
     market: useMarketStore(),
-    config: useConfigStore()
+    config: useConfigStore(),
   }
 
   return (
@@ -19,7 +29,7 @@ export const StoreProvider = ({ children }) => {
   )
 }
 
-export const useStores = () => {
+export const useStores = (): StoreContextValue => {
   const context = useContext(StoreContext)
   if (!context) {
     throw new Error('useStores must be used within StoreProvider')

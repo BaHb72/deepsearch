@@ -2,27 +2,25 @@
 数据提供者测试套件
 测试所有数据提供者的功能和性能
 """
-import pytest
-import asyncio
-from unittest.mock import Mock, patch, AsyncMock
-from datetime import datetime, timedelta
 
+import asyncio
+from datetime import datetime
+
+import pytest
+
+from deepsearch.core.utils.async_timeout import run_with_timeout, with_timeout
+from deepsearch.infrastructure.providers.base.provider_base import BaseDataProvider
+from deepsearch.infrastructure.providers.factory import (
+    CircuitBreaker,
+    CircuitBreakerState,
+    DataProviderFactory,
+    SelectionStrategy,
+)
 from deepsearch.infrastructure.providers.registry import (
     DataProviderRegistry,
     ProviderInfo,
     ProviderType,
-    get_registry
 )
-from deepsearch.infrastructure.providers.factory import (
-    DataProviderFactory,
-    SelectionStrategy,
-    CircuitBreaker,
-    CircuitBreakerState,
-    get_factory
-)
-from deepsearch.infrastructure.providers.base.provider_base import BaseDataProvider
-from deepsearch.core.utils.async_timeout import with_timeout, run_with_timeout
-from deepsearch.core.utils.timeout_config import TimeoutCategory
 
 
 class MockDataProvider(BaseDataProvider):
@@ -47,11 +45,7 @@ class MockDataProvider(BaseDataProvider):
 
         self.success_count += 1
         await asyncio.sleep(self.delay)
-        return {
-            "symbol": symbol,
-            "price": 100.0,
-            "timestamp": datetime.now().isoformat()
-        }
+        return {"symbol": symbol, "price": 100.0, "timestamp": datetime.now().isoformat()}
 
     async def get_historical_data(self, symbol: str, start_date=None, end_date=None):
         """获取历史数据"""
@@ -62,10 +56,7 @@ class MockDataProvider(BaseDataProvider):
         await asyncio.sleep(self.delay)
         return {
             "symbol": symbol,
-            "data": [
-                {"date": "2024-01-01", "close": 99.0},
-                {"date": "2024-01-02", "close": 100.0}
-            ]
+            "data": [{"date": "2024-01-01", "close": 99.0}, {"date": "2024-01-02", "close": 100.0}],
         }
 
 
@@ -101,6 +92,7 @@ class TestDataProviderRegistry:
         # 清除全局注册表
         global _registry
         from deepsearch.infrastructure.providers import registry
+
         registry._registry = None
         self.registry = DataProviderRegistry()
 
@@ -108,51 +100,63 @@ class TestDataProviderRegistry:
         """测试注册提供者"""
         provider_info = ProviderInfo(
             name="test_provider",
-            type=ProviderType.CUSTOM,
+            type=ProviderType.AMAZINGDATA,
             module_path="tests.test_providers",
             class_name="MockDataProvider",
             description="Test provider",
-            priority=100
+            priority=100,
         )
 
         self.registry.register(provider_info)
         assert "test_provider" in self.registry._providers
         assert self.registry.get_provider_info("test_provider") == provider_info
 
+        disallowed = ProviderInfo(
+            name="legacy_provider",
+            type=ProviderType.QMT,
+            module_path="tests.test_providers",
+            class_name="MockDataProvider",
+            description="Legacy provider",
+        )
+        self.registry.register(disallowed)
+        assert "legacy_provider" not in self.registry._providers
+
     def test_get_providers_by_type(self):
         """测试按类型获取提供者"""
         # 注册多个提供者
         providers = [
             ProviderInfo(
-                name="akshare1",
-                type=ProviderType.AKSHARE,
+                name="amazing_primary",
+                type=ProviderType.AMAZINGDATA,
                 module_path="test",
                 class_name="Test1",
-                description="Test 1"
+                description="Primary",
             ),
             ProviderInfo(
-                name="akshare2",
-                type=ProviderType.AKSHARE,
+                name="amazing_secondary",
+                type=ProviderType.AMAZINGDATA,
                 module_path="test",
                 class_name="Test2",
-                description="Test 2"
+                description="Secondary",
             ),
-            ProviderInfo(
-                name="qmt1",
-                type=ProviderType.QMT,
-                module_path="test",
-                class_name="Test3",
-                description="Test 3"
-            )
         ]
 
         for provider in providers:
             self.registry.register(provider)
 
-        # 获取AKSHARE类型的提供者
-        akshare_providers = self.registry.get_providers_by_type(ProviderType.AKSHARE)
-        assert len(akshare_providers) == 2
-        assert all(p.type == ProviderType.AKSHARE for p in akshare_providers)
+        amazing_providers = self.registry.get_providers_by_type(ProviderType.AMAZINGDATA)
+        amazing_names = {p.name for p in amazing_providers}
+        assert {"amazing_primary", "amazing_secondary"}.issubset(amazing_names)
+        assert all(p.type == ProviderType.AMAZINGDATA for p in amazing_providers)
+
+        legacy = self.registry.get_providers_by_type(ProviderType.AKSHARE)
+        assert any(p.name == "akshare" for p in legacy)
+
+    def test_default_providers_initialized(self):
+        providers = self.registry.get_all_providers()
+        assert "amazingdata" in providers
+        assert "cloudflare" in providers
+        assert "akshare" in providers
 
     def test_get_providers_by_priority(self):
         """测试按优先级排序获取提供者"""
@@ -163,7 +167,7 @@ class TestDataProviderRegistry:
                 module_path="test",
                 class_name="Test1",
                 description="Low priority",
-                priority=10
+                priority=10,
             ),
             ProviderInfo(
                 name="high",
@@ -171,7 +175,7 @@ class TestDataProviderRegistry:
                 module_path="test",
                 class_name="Test2",
                 description="High priority",
-                priority=100
+                priority=100,
             ),
             ProviderInfo(
                 name="medium",
@@ -179,15 +183,17 @@ class TestDataProviderRegistry:
                 module_path="test",
                 class_name="Test3",
                 description="Medium priority",
-                priority=50
-            )
+                priority=50,
+            ),
         ]
 
         for provider in providers:
             self.registry.register(provider)
 
-        sorted_providers = self.registry.get_providers_by_priority()
-        priorities = [p.priority for p in sorted_providers]
+        sorted_providers = [
+            p for p in self.registry.get_providers_by_priority() if p.type == ProviderType.CUSTOM
+        ]
+        priorities = [p.priority for p in sorted_providers[:3]]
         assert priorities == [100, 50, 10]
 
     def test_enable_disable_provider(self):
@@ -197,7 +203,7 @@ class TestDataProviderRegistry:
             type=ProviderType.CUSTOM,
             module_path="test",
             class_name="Test",
-            description="Test"
+            description="Test",
         )
 
         self.registry.register(provider_info)
@@ -217,11 +223,7 @@ class TestCircuitBreaker:
 
     def test_circuit_breaker_states(self):
         """测试熔断器状态转换"""
-        breaker = CircuitBreaker(
-            failure_threshold=3,
-            recovery_timeout=1,
-            success_threshold=2
-        )
+        breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=1, success_threshold=2)
 
         # 初始状态：关闭
         assert breaker.state == CircuitBreakerState.CLOSED
@@ -235,6 +237,7 @@ class TestCircuitBreaker:
 
         # 等待恢复时间后变为半开
         import time
+
         time.sleep(1.1)
         assert breaker.can_attempt()
         assert breaker.state == CircuitBreakerState.HALF_OPEN
@@ -252,8 +255,7 @@ class TestDataProviderFactory:
     def setup_method(self):
         """设置测试环境"""
         self.factory = DataProviderFactory(
-            strategy=SelectionStrategy.PRIORITY,
-            enable_circuit_breaker=True
+            strategy=SelectionStrategy.PRIORITY, enable_circuit_breaker=True
         )
 
         # 注册测试提供者
@@ -263,7 +265,7 @@ class TestDataProviderFactory:
             module_path="tests.test_providers",
             class_name="MockDataProvider",
             description="Mock provider",
-            priority=100
+            priority=100,
         )
         self.factory.registry.register(provider_info)
 
@@ -287,7 +289,7 @@ class TestDataProviderFactory:
                 class_name="MockDataProvider",
                 description="Low",
                 priority=10,
-                enabled=True
+                enabled=True,
             ),
             ProviderInfo(
                 name="high_priority",
@@ -296,8 +298,8 @@ class TestDataProviderFactory:
                 class_name="MockDataProvider",
                 description="High",
                 priority=100,
-                enabled=True
-            )
+                enabled=True,
+            ),
         ]
 
         for p in providers:
@@ -317,7 +319,7 @@ class TestDataProviderFactory:
             module_path="tests.test_providers",
             class_name="FailingDataProvider",
             description="Failing",
-            priority=100
+            priority=100,
         )
         self.factory.registry.register(failing_info)
 
@@ -326,6 +328,7 @@ class TestDataProviderFactory:
         assert provider is not None
 
         # 模拟多次失败
+        self.factory._check_circuit_breaker("failing")
         for _ in range(5):
             self.factory.report_failure("failing")
 
@@ -358,6 +361,7 @@ class TestAsyncTimeout:
     @pytest.mark.asyncio
     async def test_with_timeout_decorator(self):
         """测试超时装饰器"""
+
         @with_timeout(0.1, default={"error": "timeout"})
         async def slow_function():
             await asyncio.sleep(1)
@@ -369,6 +373,7 @@ class TestAsyncTimeout:
     @pytest.mark.asyncio
     async def test_with_timeout_success(self):
         """测试超时内完成"""
+
         @with_timeout(1.0)
         async def fast_function():
             await asyncio.sleep(0.01)
@@ -380,15 +385,13 @@ class TestAsyncTimeout:
     @pytest.mark.asyncio
     async def test_run_with_timeout(self):
         """测试run_with_timeout函数"""
+
         async def slow_coro():
             await asyncio.sleep(1)
             return "done"
 
         result = await run_with_timeout(
-            slow_coro(),
-            0.1,
-            default="timeout",
-            operation_name="test_op"
+            slow_coro(), 0.1, default="timeout", operation_name="test_op"
         )
         assert result == "timeout"
 

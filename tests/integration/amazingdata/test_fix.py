@@ -1,35 +1,36 @@
 #!/usr/bin/env python
 """测试数据源修复"""
 import asyncio
+
 from loguru import logger
+
 
 async def test_amazingdata_init():
     """测试 AmazingData 初始化"""
     try:
         from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
-            AmazingDataProvider, AmazingDataConfig
+            AmazingDataConfig,
+            AmazingDataProvider,
         )
 
         config = AmazingDataConfig(
-            username="test",
-            password="test",
-            host="127.0.0.1",
-            port=8600,
-            timeout=10
+            username="test", password="test", host="127.0.0.1", port=8600, timeout=10
         )
 
-        provider = AmazingDataProvider(config)
+        AmazingDataProvider(config)
         logger.success("✓ AmazingDataProvider 初始化成功")
         return True
     except Exception as e:
         logger.error(f"✗ AmazingDataProvider 初始化失败: {e}")
         return False
 
+
 async def test_request_optimizer():
     """测试 RequestOptimizer"""
     try:
         from deepsearch.infrastructure.providers.implementations.akshare.request_optimizer import (
-            RequestOptimizer, RequestPriority
+            RequestOptimizer,
+            RequestPriority,
         )
 
         optimizer = RequestOptimizer()
@@ -44,11 +45,8 @@ async def test_request_optimizer():
         optimizer.executor = lambda api, params: task_future
 
         # 提交请求
-        result = await optimizer.submit(
-            "test_api",
-            {"param": "value"},
-            RequestPriority.NORMAL,
-            use_cache=False
+        await optimizer.submit(
+            "test_api", {"param": "value"}, RequestPriority.NORMAL, use_cache=False
         )
 
         await optimizer.stop()
@@ -57,8 +55,10 @@ async def test_request_optimizer():
     except Exception as e:
         logger.error(f"✗ RequestOptimizer 测试失败: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 async def main():
     """主测试函数"""
@@ -76,6 +76,7 @@ async def main():
         logger.error("✗ 部分测试失败，请检查修复")
 
     return test1 and test2
+
 
 if __name__ == "__main__":
     asyncio.run(main())

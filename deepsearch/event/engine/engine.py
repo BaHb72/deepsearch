@@ -36,19 +36,23 @@ ASCII architecture
   Uses `heapq` for next‑fire calculation; puts scheduled events
   back into the queue at runtime or reschedules / cancels them.
 """
+
 from __future__ import annotations
 
 import heapq
-import logging
 import os
 import threading
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, replace, field
+from dataclasses import dataclass, field, replace
 from itertools import count
 from queue import Empty, Full, PriorityQueue
-from typing import Callable, Dict, List, Tuple, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Protocol, Tuple, TypedDict, cast
+
+if TYPE_CHECKING:
+    from deepsearch.core.interfaces.component import MonitoringHook
+from deepsearch.observability import get_logger
 
 from ..const import EVENT_SYSTEM_EXIT
 
@@ -78,7 +82,7 @@ DEFAULT_BATCH_TIMEOUT = 0.1  # 100ms
 # Logging
 # ==============================================================================
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------
@@ -110,6 +114,7 @@ class Event:
     :ivar ts: 事件创建的时间戳。
     :type ts: float
     """
+
     type: str
     data: object | None = field(default_factory=dict)
     ts: float = field(default_factory=time.perf_counter)
@@ -137,25 +142,44 @@ class _ScheduledTask:
     :ivar async_flag: 标识任务是否为异步任务。
     :type async_flag: bool
     """
+
     next_ts: float
     seq: int
     interval: float
     priority: int
     event_type: str
     async_flag: bool
+    payload: Any | None = field(default=None, compare=False)
 
 
 Handler = Callable[[Event], None]
+
+# 处理器包装器在运行时会附加 `_original_handler` 属性，以便调试/监控。
+class MonitoredHandler(Protocol):
+    """为监控包装后的处理器提供类型约束。"""
+
+    def __call__(self, event: Event) -> None:
+        ...
+
+    _original_handler: Handler
+
+
+class HandlerStatistics(TypedDict):
+    """事件引擎处理器统计结构。"""
+
+    specific_handlers: dict[str, int]
+    general_handlers: int
 
 
 # ==============================================================================
 # Batch Handler Support
 # ==============================================================================
 
+
 class BatchHandler:
     """
     Base class for handlers that support batch processing.
-    
+
     Handlers that inherit from this class can process events in batches
     for improved performance.
     """
@@ -167,7 +191,7 @@ class BatchHandler:
     def process_batch(self, events: List[Event]) -> None:
         """
         Process a batch of events.
-        
+
         :param events: List of events to process
         """
         raise NotImplementedError("Subclasses must implement process_batch")
@@ -186,10 +210,15 @@ class HandlerManager:
         self._handlers: Dict[str, List[Tuple[int, Handler, bool]]] = {}
         self._general_handlers: List[Tuple[int, Handler, bool]] = []
         self._lock = threading.RLock()
-        self._monitoring_hooks: List['MonitoringHook'] = []
+        self._monitoring_hooks: List["MonitoringHook"] = []
 
-    def register(self, event_type: str, handler: Handler, priority: int = DEFAULT_PRIORITY,
-                 async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
+    def register(
+        self,
+        event_type: str,
+        handler: Handler,
+        priority: int = DEFAULT_PRIORITY,
+        async_flag: bool = DEFAULT_ASYNC_FLAG,
+    ) -> None:
         """
         注册特定类型的事件处理器。
         """
@@ -197,7 +226,7 @@ class HandlerManager:
             raise ValueError("event_type cannot be empty")
         if not callable(handler):
             raise TypeError("handler must be callable")
-        
+
         key = (handler, async_flag)
         with self._lock:
             lst = self._handlers.setdefault(event_type, [])
@@ -213,23 +242,27 @@ class HandlerManager:
             raise ValueError("event_type cannot be empty")
         if not callable(handler):
             raise TypeError("handler must be callable")
-        
+
         with self._lock:
             lst = self._handlers.get(event_type, [])
-            original_len = len(lst)
+            len(lst)
             lst[:] = [item for item in lst if item[1] is not handler]
             # Clean up empty lists
             if not lst and event_type in self._handlers:
                 del self._handlers[event_type]
 
-    def register_general(self, handler: Handler, priority: int = DEFAULT_PRIORITY,
-                         async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
+    def register_general(
+        self,
+        handler: Handler,
+        priority: int = DEFAULT_PRIORITY,
+        async_flag: bool = DEFAULT_ASYNC_FLAG,
+    ) -> None:
         """
         注册通用事件处理器。
         """
         if not callable(handler):
             raise TypeError("handler must be callable")
-        
+
         key = (handler, async_flag)
         with self._lock:
             if all((h, a) != key for _, h, a in self._general_handlers):
@@ -242,14 +275,18 @@ class HandlerManager:
         """
         if not callable(handler):
             raise TypeError("handler must be callable")
-        
-        with self._lock:
-            self._general_handlers[:] = [item for item in self._general_handlers if item[1] is not handler]
 
-    def get_handlers(self, event_type: str) -> Tuple[List[Tuple[int, Handler, bool]], List[Tuple[int, Handler, bool]]]:
+        with self._lock:
+            self._general_handlers[:] = [
+                item for item in self._general_handlers if item[1] is not handler
+            ]
+
+    def get_handlers(
+        self, event_type: str
+    ) -> Tuple[List[Tuple[int, Handler, bool]], List[Tuple[int, Handler, bool]]]:
         """
         获取指定事件类型的处理器列表。
-        
+
         :param event_type: 事件类型
         :return: 元组，包含特定类型处理器列表和通用处理器列表
         """
@@ -258,23 +295,29 @@ class HandlerManager:
             general = list(self._general_handlers)
             return specific, general
 
-    def get_statistics(self) -> Dict[str, int]:
+    def get_statistics(self) -> HandlerStatistics:
         """
         获取处理器统计信息。
-        
+
         :return: 包含处理器统计信息的字典
         """
         with self._lock:
+            specific_counts: dict[str, int] = {k: int(len(v)) for k, v in self._handlers.items()}
             return {
-                "specific_handlers": {k: len(v) for k, v in self._handlers.items()},
+                "specific_handlers": specific_counts,
                 "general_handlers": len(self._general_handlers),
             }
 
-    def register_batch_handler(self, event_types: List[str], handler: Handler,
-                               priority: int = DEFAULT_PRIORITY, async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
+    def register_batch_handler(
+        self,
+        event_types: List[str],
+        handler: Handler,
+        priority: int = DEFAULT_PRIORITY,
+        async_flag: bool = DEFAULT_ASYNC_FLAG,
+    ) -> None:
         """
         Register a handler for multiple event types at once.
-        
+
         :param event_types: List of event types to register for
         :param handler: Handler function
         :param priority: Handler priority
@@ -288,30 +331,32 @@ class HandlerManager:
         for event_type in event_types:
             self.register(event_type, handler, priority, async_flag)
 
-    def add_monitoring_hook(self, hook: 'MonitoringHook') -> None:
+    def add_monitoring_hook(self, hook: "MonitoringHook") -> None:
         """
         添加监控钩子
-        
+
         :param hook: 监控钩子实例
         """
         with self._lock:
             if hook not in self._monitoring_hooks:
                 self._monitoring_hooks.append(hook)
 
-    def remove_monitoring_hook(self, hook: 'MonitoringHook') -> None:
+    def remove_monitoring_hook(self, hook: "MonitoringHook") -> None:
         """
         移除监控钩子
-        
+
         :param hook: 监控钩子实例
         """
         with self._lock:
             if hook in self._monitoring_hooks:
                 self._monitoring_hooks.remove(hook)
 
-    def create_monitored_handler(self, handler: Handler, handler_name: str, event_type: str) -> Handler:
+    def create_monitored_handler(
+        self, handler: Handler, handler_name: str, event_type: str
+    ) -> Handler:
         """
         创建带监控的处理器包装器
-        
+
         :param handler: 原始处理器
         :param handler_name: 处理器名称
         :param event_type: 事件类型
@@ -347,9 +392,10 @@ class HandlerManager:
                         logger.error(f"Error in monitoring hook on_handler_complete: {e}")
 
         # 保留原始处理器的属性
-        monitored_wrapper.__name__ = getattr(handler, '__name__', str(handler))
-        monitored_wrapper.__doc__ = getattr(handler, '__doc__', '')
-        monitored_wrapper._original_handler = handler
+        monitored_wrapper.__name__ = getattr(handler, "__name__", str(handler))
+        monitored_wrapper.__doc__ = getattr(handler, "__doc__", "")
+        wrapper_with_origin = cast(MonitoredHandler, monitored_wrapper)
+        wrapper_with_origin._original_handler = handler
 
         return monitored_wrapper
 
@@ -368,9 +414,15 @@ class EventEngine:
     :type max_workers: int
     """
 
-    def __init__(self, *, queue_size: int = DEFAULT_QUEUE_SIZE, max_workers: int = DEFAULT_MAX_WORKERS,
-                 enable_batch_processing: bool = False, batch_size: int = DEFAULT_BATCH_SIZE,
-                 batch_timeout: float = DEFAULT_BATCH_TIMEOUT) -> None:
+    def __init__(
+        self,
+        *,
+        queue_size: int = DEFAULT_QUEUE_SIZE,
+        max_workers: int = DEFAULT_MAX_WORKERS,
+        enable_batch_processing: bool = False,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+        batch_timeout: float = DEFAULT_BATCH_TIMEOUT,
+    ) -> None:
         # Validate parameters
         if queue_size <= 0:
             logger.error("队列大小必须为正数")
@@ -429,33 +481,32 @@ class EventEngine:
 
             # Initialize thread pool executor if needed
             if self._max_workers > 0:
-                self._executor = ThreadPoolExecutor(max_workers=self._max_workers, thread_name_prefix="EventEngine")
+                self._executor = ThreadPoolExecutor(
+                    max_workers=self._max_workers, thread_name_prefix="EventEngine"
+                )
                 # 注册线程池到 ProcessManager
                 from deepsearch.core.managers.process_manager import process_manager
-                process_manager.register_executor(
-                    self._executor,
-                    name="EventEngine-ThreadPool"
-                )
+
+                process_manager.register_executor(self._executor, name="EventEngine-ThreadPool")
             else:
                 self._executor = None
 
             # Create and start worker threads
-            self._dispatcher_th = threading.Thread(target=self._dispatcher, name="EventEngine-Dispatcher", daemon=False)
-            self._scheduler_th = threading.Thread(target=self._scheduler, name="EventEngine-Scheduler", daemon=False)
+            self._dispatcher_th = threading.Thread(
+                target=self._dispatcher, name="EventEngine-Dispatcher", daemon=False
+            )
+            self._scheduler_th = threading.Thread(
+                target=self._scheduler, name="EventEngine-Scheduler", daemon=False
+            )
 
             self._dispatcher_th.start()
             self._scheduler_th.start()
 
             # 注册到 ProcessManager
             from deepsearch.core.managers.process_manager import process_manager
-            process_manager.register_thread(
-                self._dispatcher_th,
-                name="EventEngine-Dispatcher"
-            )
-            process_manager.register_thread(
-                self._scheduler_th,
-                name="EventEngine-Scheduler"
-            )
+
+            process_manager.register_thread(self._dispatcher_th, name="EventEngine-Dispatcher")
+            process_manager.register_thread(self._scheduler_th, name="EventEngine-Scheduler")
 
             logger.debug("事件引擎启动完成")
 
@@ -500,6 +551,7 @@ class EventEngine:
         if self._executor:
             try:
                 import sys
+
                 # Python 3.9+ 支持 cancel_futures 参数
                 if sys.version_info >= (3, 9):
                     # 使用 cancel_futures 来取消待处理的任务
@@ -510,14 +562,16 @@ class EventEngine:
 
                 # 等待一小段时间让线程清理
                 import time
+
                 time.sleep(0.1)
-                
+
             except Exception as e:
                 logger.error(f"关闭线程池失败：{e}")
                 try:
                     # 兜底：仅使用基本的shutdown
                     self._executor.shutdown(wait=False)
                     import time
+
                     time.sleep(0.1)
                 except Exception as force_error:
                     logger.error(f"强制关闭线程池也失败：{force_error}")
@@ -534,8 +588,13 @@ class EventEngine:
     # ==========================================================================
     # Handler Registration
     # ==========================================================================
-    def register(self, event_type: str, handler: Handler, priority: int = DEFAULT_PRIORITY,
-                 async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
+    def register(
+        self,
+        event_type: str,
+        handler: Handler,
+        priority: int = DEFAULT_PRIORITY,
+        async_flag: bool = DEFAULT_ASYNC_FLAG,
+    ) -> None:
         """
         注册事件处理器的方法，用于指定事件类型、处理器、优先级以及是否异步执行。注册的处理器会按优先级从高到低的顺序排列。
         """
@@ -545,8 +604,9 @@ class EventEngine:
             raise TypeError("handler must be callable")
 
         with self._handler_lock:
-            self._handler_manager.register(event_type=event_type, handler=handler, priority=priority,
-                                           async_flag=async_flag)
+            self._handler_manager.register(
+                event_type=event_type, handler=handler, priority=priority, async_flag=async_flag
+            )
 
     def unregister(self, event_type: str, handler: Handler) -> None:
         """注销事件处理器"""
@@ -558,14 +618,20 @@ class EventEngine:
         with self._handler_lock:
             self._handler_manager.unregister(event_type=event_type, handler=handler)
 
-    def register_general(self, handler: Handler, priority: int = DEFAULT_PRIORITY,
-                         async_flag: bool = DEFAULT_ASYNC_FLAG) -> None:
+    def register_general(
+        self,
+        handler: Handler,
+        priority: int = DEFAULT_PRIORITY,
+        async_flag: bool = DEFAULT_ASYNC_FLAG,
+    ) -> None:
         """注册通用事件处理器"""
         if not callable(handler):
             raise TypeError("handler must be callable")
 
         with self._handler_lock:
-            self._handler_manager.register_general(handler=handler, priority=priority, async_flag=async_flag)
+            self._handler_manager.register_general(
+                handler=handler, priority=priority, async_flag=async_flag
+            )
 
     def unregister_general(self, handler: Handler) -> None:
         """注销通用事件处理器"""
@@ -579,8 +645,14 @@ class EventEngine:
     # Event Queue Operations
     # ==========================================================================
 
-    def put(self, event: Event, *, priority: int = DEFAULT_PRIORITY, block: bool = True,
-            timeout: Optional[float] = None) -> bool:
+    def put(
+        self,
+        event: Event,
+        *,
+        priority: int = DEFAULT_PRIORITY,
+        block: bool = True,
+        timeout: Optional[float] = None,
+    ) -> bool:
         """
         Add an event to the queue.
         Returns ``True`` if enqueued, ``False`` if queue full (and ``block``=False).
@@ -591,9 +663,9 @@ class EventEngine:
         if not self._running:
             logger.debug("无法添加事件 - 引擎未运行")
             return False
-        
+
         seq = next(self._seq_ctr)
-        item = (-priority, seq, event)
+        item = (priority, seq, event)
         try:
             self._queue.put(item, block=block, timeout=timeout)
             return True
@@ -604,12 +676,18 @@ class EventEngine:
             logger.error(f"Error putting event to queue: {e}")
             return False
 
-    def put_batch(self, events: List[Event], *, priority: int = DEFAULT_PRIORITY,
-                  block: bool = True, timeout: Optional[float] = None) -> List[bool]:
+    def put_batch(
+        self,
+        events: List[Event],
+        *,
+        priority: int = DEFAULT_PRIORITY,
+        block: bool = True,
+        timeout: Optional[float] = None,
+    ) -> List[bool]:
         """
         Add multiple events to the queue in batch.
         Returns list of booleans indicating success for each event.
-        
+
         :param events: List of events to enqueue
         :param priority: Priority for all events in the batch
         :param block: Whether to block when queue is full
@@ -635,8 +713,14 @@ class EventEngine:
 
         return results
 
-    def add_periodic(self, *, event_type: str, interval: float, priority: int = DEFAULT_PRIORITY,
-                     async_flag: bool = DEFAULT_ASYNC_FLAG) -> int:
+    def add_periodic(
+        self,
+        *,
+        event_type: str,
+        interval: float,
+        priority: int = DEFAULT_PRIORITY,
+        async_flag: bool = DEFAULT_ASYNC_FLAG,
+    ) -> int:
         """
         为调度器添加一个周期性任务。
         该方法会在调度器中添加一个任务，该任务按照指定的时间间隔被周期性调度。
@@ -654,39 +738,46 @@ class EventEngine:
             raise ValueError("interval must be > 0")
         if not self._running:
             raise RuntimeError("Engine is not running")
-        
+
         with self._cond:
             task_id = next(self._seq_ctr)
             task = _ScheduledTask(
-                next_ts=_now() + interval, seq=task_id, interval=interval,
-                priority=priority, event_type=event_type, async_flag=async_flag
+                next_ts=_now() + interval,
+                seq=task_id,
+                interval=interval,
+                priority=priority,
+                event_type=event_type,
+                async_flag=async_flag,
             )
             heapq.heappush(self._scheduler_heap, task)
             self._cond.notify()
             return task_id
 
-    def cancel_periodic(self, task_id: int) -> None:
+    def cancel_periodic(self, task_id: int) -> bool:
         """取消周期性任务"""
         with self._cond:
-            self._cancelled_tasks.add(task_id)
-            # Don't immediately remove from heap - let scheduler clean up lazily
-            # This avoids expensive heap operations
-            self._cond.notify()
+            exists = any(task.seq == task_id for task in self._scheduler_heap)
+            if exists:
+                self._cancelled_tasks.add(task_id)
+                self._cond.notify()
+            return exists
 
     def update_periodic(
-            self, task_id: int, *,
-            new_interval: float | None = None,
-            new_priority: int | None = None,
+        self,
+        task_id: int,
+        *,
+        new_interval: float | None = None,
+        new_priority: int | None = None,
     ) -> None:
         """更新周期性任务"""
         if new_interval is not None and new_interval <= 0:
             raise ValueError("new_interval must be > 0")
-        
+
         with self._cond:
             # Check if task is cancelled
             if task_id in self._cancelled_tasks:
                 raise ValueError(f"Task {task_id} is already cancelled")
-            
+
             for idx, task in enumerate(self._scheduler_heap):
                 if task.seq == task_id:
                     interval = new_interval if new_interval is not None else task.interval
@@ -710,14 +801,17 @@ class EventEngine:
     # ==========================================================================
     # Worker Thread Implementations
     # ==========================================================================
-    
+
     def _dispatcher(self) -> None:
         """事件分发器线程主循环"""
         while self._running:
             try:
                 # Use shorter timeout when batch processing is enabled
-                timeout = min(self._batch_timeout,
-                              DISPATCHER_TIMEOUT) if self._enable_batch_processing else DISPATCHER_TIMEOUT
+                timeout = (
+                    min(self._batch_timeout, DISPATCHER_TIMEOUT)
+                    if self._enable_batch_processing
+                    else DISPATCHER_TIMEOUT
+                )
                 _, _, ev = self._queue.get(timeout=timeout)
             except Empty:
                 # Check if we need to flush batches on timeout
@@ -761,7 +855,7 @@ class EventEngine:
             try:
                 # 如果有监控钩子，创建监控包装器
                 if self._handler_manager._monitoring_hooks:
-                    handler_name = getattr(handler, '__name__', str(handler))
+                    handler_name = getattr(handler, "__name__", str(handler))
                     monitored_handler = self._handler_manager.create_monitored_handler(
                         handler, handler_name, ev.type
                     )
@@ -782,7 +876,7 @@ class EventEngine:
         """Add event to batch and process if batch is full"""
         should_process = False
         batch_to_process = None
-        
+
         with self._batch_lock:
             self._event_batches[ev.type].append(ev)
 
@@ -800,7 +894,7 @@ class EventEngine:
     def _process_batch(self, event_type: str) -> None:
         """Process a batch of events for a specific type"""
         batch_to_process = None
-        
+
         with self._batch_lock:
             batch = self._event_batches[event_type]
             if not batch:
@@ -822,7 +916,7 @@ class EventEngine:
         # Check if any handler supports batch processing
         for _, handler, async_flag in specific + general:
             # Check if handler has batch processing capability
-            if hasattr(handler, 'process_batch'):
+            if hasattr(handler, "process_batch"):
                 try:
                     if async_flag and executor:
                         executor.submit(handler.process_batch, batch)
@@ -836,7 +930,7 @@ class EventEngine:
                     try:
                         # 如果有监控钩子，创建监控包装器
                         if self._handler_manager._monitoring_hooks:
-                            handler_name = getattr(handler, '__name__', str(handler))
+                            handler_name = getattr(handler, "__name__", str(handler))
                             monitored_handler = self._handler_manager.create_monitored_handler(
                                 handler, handler_name, ev.type
                             )
@@ -864,7 +958,7 @@ class EventEngine:
         """Flush all pending batches"""
         # 获取所有待处理批次的快照，避免长时间持有锁
         batches_to_process = {}
-        
+
         with self._batch_lock:
             for event_type, batch in self._event_batches.items():
                 if batch:
@@ -881,7 +975,10 @@ class EventEngine:
             try:
                 with self._cond:
                     # Clean up cancelled tasks from the top of heap
-                    while self._scheduler_heap and self._scheduler_heap[0].seq in self._cancelled_tasks:
+                    while (
+                        self._scheduler_heap
+                        and self._scheduler_heap[0].seq in self._cancelled_tasks
+                    ):
                         cancelled_task = heapq.heappop(self._scheduler_heap)
                         self._cancelled_tasks.discard(cancelled_task.seq)
 
@@ -904,7 +1001,7 @@ class EventEngine:
 
                 # Execute task (outside of lock)
                 try:
-                    evt = Event(task.event_type)
+                    evt = Event(task.event_type, data=task.payload)
                     if not self.put(evt, priority=task.priority, block=False):
                         logger.warning(f"Failed to queue scheduled event: {task.event_type}")
                 except Exception as e:
@@ -912,7 +1009,7 @@ class EventEngine:
 
                 # Reschedule if not cancelled
                 with self._cond:
-                    if task.seq not in self._cancelled_tasks:
+                    if task.seq not in self._cancelled_tasks and task.interval > 0:
                         try:
                             resched = replace(task, next_ts=_now() + task.interval)
                             heapq.heappush(self._scheduler_heap, resched)
@@ -930,7 +1027,7 @@ class EventEngine:
     # ==========================================================================
     # Utility Methods
     # ==========================================================================
-    
+
     @staticmethod
     def _safe_call(func: Handler, ev: Event) -> None:
         try:
@@ -942,8 +1039,9 @@ class EventEngine:
     # Batch Processing Control
     # ==========================================================================
 
-    def enable_batch_processing(self, batch_size: int = DEFAULT_BATCH_SIZE,
-                                batch_timeout: float = DEFAULT_BATCH_TIMEOUT) -> None:
+    def enable_batch_processing(
+        self, batch_size: int = DEFAULT_BATCH_SIZE, batch_timeout: float = DEFAULT_BATCH_TIMEOUT
+    ) -> None:
         """Enable batch processing mode"""
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
@@ -982,7 +1080,7 @@ class EventEngine:
     # ==========================================================================
     # Debugging and Monitoring
     # ==========================================================================
-    
+
     def snapshot(self) -> dict:
         handler_stats = self._handler_manager.get_statistics()
         with self._lock:
@@ -993,7 +1091,7 @@ class EventEngine:
                         "enabled": True,
                         "batch_size": self._batch_size,
                         "batch_timeout": self._batch_timeout,
-                        "pending_batches": {k: len(v) for k, v in self._event_batches.items()}
+                        "pending_batches": {k: len(v) for k, v in self._event_batches.items()},
                     }
             else:
                 batch_info = {"enabled": False}
@@ -1003,7 +1101,7 @@ class EventEngine:
                 "handlers": handler_stats["specific_handlers"],
                 "general": handler_stats["general_handlers"],
                 "scheduled": len(self._scheduler_heap),
-                "batch_processing": batch_info
+                "batch_processing": batch_info,
             }
 
     def is_active(self) -> bool:
@@ -1015,92 +1113,88 @@ class EventEngine:
         with self._lock:
             return self._running
 
-    def schedule(self, *, event_type: str, delay: float, priority: int = DEFAULT_PRIORITY,
-                 data: Any = None) -> int:
-        """
-        调度一个单次延迟执行的事件
+    def schedule(
+        self,
+        *,
+        event_type: str,
+        interval: float | None = None,
+        delay: float | None = None,
+        priority: int = DEFAULT_PRIORITY,
+        async_flag: bool = DEFAULT_ASYNC_FLAG,
+        data: Any = None,
+    ) -> int:
+        """调度一次性或周期性事件。"""
+        if not event_type:
+            raise ValueError("event_type cannot be empty")
+        if interval is not None and interval <= 0:
+            raise ValueError("interval must be > 0")
+        if delay is not None and delay < 0:
+            raise ValueError("delay must be >= 0")
+        if not self._running:
+            raise RuntimeError("Engine is not running")
 
-        :param event_type: 事件类型
-        :param delay: 延迟时间（秒）
-        :param priority: 事件优先级
-        :param data: 事件数据
-        :return: 任务ID，用于取消
-        """
-        with self._lock:
-            if not self._running:
-                logger.debug("事件引擎未运行，无法调度任务")
-                return -1
+        repeat_interval = interval if interval is not None else 0.0
+        initial_delay = delay if delay is not None else (interval or 0.0)
+        next_ts = _now() + initial_delay
 
-            # 生成任务ID
-            task_id = id(object())  # 使用对象ID作为唯一标识
-
-            # 创建调度任务
+        with self._cond:
+            task_id = next(self._seq_ctr)
             task = _ScheduledTask(
-                task_id=task_id,
-                event_type=event_type,
-                interval=0,  # 单次执行，interval为0
+                next_ts=next_ts,
+                seq=task_id,
+                interval=repeat_interval,
                 priority=priority,
-                data=data,
-                next_time=time.time() + delay
+                event_type=event_type,
+                async_flag=async_flag,
+                payload=data,
             )
-
-            # 添加到调度器堆
             heapq.heappush(self._scheduler_heap, task)
+            self._cond.notify()
 
-            # 通知调度器线程
-            with self._cond:
-                self._cond.notify()
-
-            logger.debug(f"已调度单次任务: type={event_type}, delay={delay}s, id={task_id}")
-            return task_id
+        logger.debug(
+            "Scheduled task: type=%s initial=%.3fs interval=%s id=%s",
+            event_type,
+            initial_delay,
+            repeat_interval if repeat_interval > 0 else "once",
+            task_id,
+        )
+        return task_id
 
     def cancel_scheduled_task(self, task_id: int) -> bool:
-        """
-        取消已调度的任务
+        """取消已调度的任务"""
+        return self.cancel_periodic(task_id)
 
-        :param task_id: 任务ID
-        :return: 如果成功取消返回True，否则返回False
-        """
-        with self._lock:
-            # 查找并移除任务
-            for i, task in enumerate(self._scheduler_heap):
-                if task.task_id == task_id:
-                    # 将任务标记为已取消（设置interval为-1）
-                    task.interval = -1
-                    # 重新构建堆
-                    heapq.heapify(self._scheduler_heap)
-                    logger.debug(f"已取消调度任务: id={task_id}")
-                    return True
-
-            logger.debug(f"未找到调度任务: id={task_id}")
-            return False
+    def cancel(self, task_id: int) -> None:
+        """兼容旧接口的取消方法"""
+        self.cancel_periodic(task_id)
 
     def get_all_handlers(self) -> Dict[str, List[Any]]:
         """
         获取所有注册的处理器（用于监控）
-        
+
         :return: 事件类型到处理器列表的映射
         """
         # 为了保持封装，我们返回处理器的副本而不是内部引用
         with self._handler_manager._lock:
             return {
-                event_type: [(priority, handler, async_flag)
-                             for priority, handler, async_flag in handlers]
+                event_type: [
+                    (priority, handler, async_flag) for priority, handler, async_flag in handlers
+                ]
                 for event_type, handlers in self._handler_manager._handlers.items()
             }
 
-    def add_monitoring_hook(self, hook: 'MonitoringHook') -> None:
+    def add_monitoring_hook(self, hook: "MonitoringHook") -> None:
         """
         添加监控钩子到事件引擎
-        
+
         :param hook: 监控钩子实例
         """
         self._handler_manager.add_monitoring_hook(hook)
 
-    def remove_monitoring_hook(self, hook: 'MonitoringHook') -> None:
+    def remove_monitoring_hook(self, hook: "MonitoringHook") -> None:
         """
         从事件引擎移除监控钩子
-        
+
         :param hook: 监控钩子实例
         """
         self._handler_manager.remove_monitoring_hook(hook)

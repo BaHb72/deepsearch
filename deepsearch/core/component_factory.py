@@ -3,20 +3,27 @@
 
 实现依赖注入和组件创建的工厂模式
 """
-from typing import Dict, Any, Optional, Type, TypeVar, Callable
-from dataclasses import dataclass
-import logging
+
 import copy
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Type, TypeVar, cast
+
+from deepsearch.observability import get_logger
 
 from .interfaces import Component, ComponentType
-from .async_component import AsyncComponent
 
-T = TypeVar('T', bound=Component)
+if TYPE_CHECKING:
+    from deepsearch.core.components.data_components import CacheComponent, DatabaseComponent
+    from deepsearch.event.engine.engine import EventEngine
+    from deepsearch.messaging.composite_bus import CompositeMessageBus
+
+T = TypeVar("T", bound=Component)
 
 
 @dataclass
 class ComponentConfig:
     """组件配置"""
+
     name: str
     component_type: ComponentType
     display_name: Optional[str] = None
@@ -34,17 +41,14 @@ class ComponentFactory:
 
     def __init__(self):
         """初始化组件工厂"""
-        self._logger = logging.getLogger("deepsearch.component_factory")
+        self._logger = get_logger("deepsearch.component_factory")
         self._component_registry: Dict[str, Type[Component]] = {}
-        self._singleton_instances: Dict[str, Component] = {}
+        self._singleton_instances: Dict[str, Optional[Component]] = {}
         self._config_providers: Dict[str, Callable[[], Any]] = {}
         self._dependency_providers: Dict[str, Callable[[], Any]] = {}
 
     def register_component(
-        self,
-        name: str,
-        component_class: Type[T],
-        singleton: bool = False
+        self, name: str, component_class: Type[T], singleton: bool = False
     ) -> None:
         """
         注册组件类
@@ -60,11 +64,7 @@ class ComponentFactory:
             self._singleton_instances[name] = None
         self._logger.debug(f"注册组件: {name} (单例: {singleton})")
 
-    def register_config_provider(
-        self,
-        component_name: str,
-        provider: Callable[[], Any]
-    ) -> None:
+    def register_config_provider(self, component_name: str, provider: Callable[[], Any]) -> None:
         """
         注册配置提供者
 
@@ -74,11 +74,7 @@ class ComponentFactory:
         """
         self._config_providers[component_name] = provider
 
-    def register_dependency_provider(
-        self,
-        name: str,
-        provider: Callable[[], Any]
-    ) -> None:
+    def register_dependency_provider(self, name: str, provider: Callable[[], Any]) -> None:
         """
         注册依赖提供者
 
@@ -88,11 +84,7 @@ class ComponentFactory:
         """
         self._dependency_providers[name] = provider
 
-    def create_component(
-        self,
-        name: str,
-        config: Optional[ComponentConfig] = None
-    ) -> Component:
+    def create_component(self, name: str, config: Optional[ComponentConfig] = None) -> Component:
         """
         创建组件实例
 
@@ -131,7 +123,7 @@ class ComponentFactory:
                 component_type=config.component_type,
                 display_name=config.display_name,
                 config=config.config,
-                dependencies=dependencies
+                dependencies=dependencies,
             )
 
             # 如果是单例，保存实例
@@ -161,15 +153,10 @@ class ComponentFactory:
             config_data = self._config_providers[name]()
 
         return ComponentConfig(
-            name=name,
-            component_type=ComponentType.CORE,  # 默认类型
-            config=config_data
+            name=name, component_type=ComponentType.SUPPORTING, config=config_data  # 默认类型
         )
 
-    def _resolve_dependencies(
-        self,
-        dependency_names: Dict[str, str]
-    ) -> Dict[str, Any]:
+    def _resolve_dependencies(self, dependency_names: Dict[str, str]) -> Dict[str, Any]:
         """
         解析依赖
 
@@ -220,14 +207,12 @@ def get_component_factory() -> ComponentFactory:
 
 # ==================== 具体组件工厂 ====================
 
+
 class DatabaseComponentFactory:
     """数据库组件工厂"""
 
     @staticmethod
-    def create(
-        config: Optional[Any] = None,
-        auto_connect: bool = True
-    ) -> 'DatabaseComponent':
+    def create(config: Optional[Any] = None, auto_connect: bool = True) -> "DatabaseComponent":
         """
         创建数据库组件
 
@@ -243,6 +228,7 @@ class DatabaseComponentFactory:
         # 如果没有提供配置，尝试获取默认配置
         if config is None:
             from deepsearch.config import get_config
+
             full_config = get_config()
             config = full_config.database.main if full_config else None
 
@@ -254,7 +240,7 @@ class DatabaseComponentFactory:
             component.update_config(config)
 
         # 设置自动连接选项
-        if hasattr(config, 'auto_connect'):
+        if config is not None and hasattr(config, "auto_connect"):
             config.auto_connect = auto_connect
 
         return component
@@ -262,6 +248,7 @@ class DatabaseComponentFactory:
 
 class CacheComponentFactory:
     """缓存组件工厂"""
+
     @staticmethod
     def _clone_config(config: Any) -> Any:
         """Return a deep copy of config without mutating shared instances."""
@@ -272,12 +259,8 @@ class CacheComponentFactory:
         except Exception:
             return config
 
-
     @staticmethod
-    def create(
-        config: Optional[Any] = None,
-        enabled: bool = True
-    ) -> 'CacheComponent':
+    def create(config: Optional[Any] = None, enabled: bool = True) -> "CacheComponent":
         """
         创建缓存组件
 
@@ -293,6 +276,7 @@ class CacheComponentFactory:
         # 如果没有提供配置，尝试获取默认配置
         if config is None:
             from deepsearch.config import get_config
+
             full_config = get_config()
             config = full_config.database.cache if full_config else None
 
@@ -303,8 +287,8 @@ class CacheComponentFactory:
         if config:
             config_copy = CacheComponentFactory._clone_config(config)
             if isinstance(config_copy, dict):
-                config_copy['enabled'] = enabled
-            elif hasattr(config_copy, 'enabled'):
+                config_copy["enabled"] = enabled
+            elif hasattr(config_copy, "enabled"):
                 config_copy.enabled = enabled
             component.update_config(config_copy)
 
@@ -315,10 +299,7 @@ class EventEngineFactory:
     """事件引擎工厂"""
 
     @staticmethod
-    def create(
-        queue_size: int = 10000,
-        thread_count: int = 1
-    ) -> 'EventEngine':
+    def create(queue_size: int = 10000, thread_count: int = 1) -> "EventEngine":
         """
         创建事件引擎
 
@@ -332,16 +313,13 @@ class EventEngineFactory:
         from deepsearch.event.engine.engine import EventEngine
 
         # 创建配置
-        config = {
-            'queue_size': queue_size,
-            'thread_count': thread_count
-        }
+        config = {"queue_size": queue_size, "thread_count": thread_count}
 
         # 创建引擎
         engine = EventEngine()
 
         # 应用配置
-        if hasattr(engine, 'configure'):
+        if hasattr(engine, "configure"):
             engine.configure(config)
 
         return engine
@@ -351,9 +329,7 @@ class MessageBusFactory:
     """消息总线工厂"""
 
     @staticmethod
-    def create(
-        config: Optional[Dict[str, Any]] = None
-    ) -> 'CompositeMessageBus':
+    def create(config: Optional[Dict[str, Any]] = None) -> "CompositeMessageBus":
         """
         创建消息总线
 
@@ -367,27 +343,21 @@ class MessageBusFactory:
 
         # 如果没有提供配置，使用默认配置
         if config is None:
-            config = {
-                "buses": {
-                    "memory": {
-                        "type": "memory",
-                        "enabled": True
-                    }
-                }
-            }
+            config = {"buses": {"memory": {"type": "memory", "enabled": True}}}
 
         return CompositeMessageBus(config)
 
 
 # ==================== 测试支持 ====================
 
+
 class TestComponentFactory:
     """测试组件工厂"""
 
     @staticmethod
-    def create_mock_database() -> 'DatabaseComponent':
+    def create_mock_database() -> "DatabaseComponent":
         """创建模拟数据库组件"""
-        from unittest.mock import Mock, AsyncMock
+        from unittest.mock import AsyncMock, Mock
 
         mock = Mock()
         mock.initialize = AsyncMock()
@@ -399,9 +369,9 @@ class TestComponentFactory:
         return mock
 
     @staticmethod
-    def create_mock_cache() -> 'CacheComponent':
+    def create_mock_cache() -> "CacheComponent":
         """创建模拟缓存组件"""
-        from unittest.mock import Mock, AsyncMock
+        from unittest.mock import AsyncMock, Mock
 
         mock = Mock()
         mock.initialize = AsyncMock()
@@ -436,10 +406,11 @@ class TestComponentFactory:
         # 应用覆盖
         if overrides:
             for key, value in overrides.items():
-                parts = key.split('.')
+                parts = key.split(".")
                 obj = config
                 for part in parts[:-1]:
                     obj = getattr(obj, part)
                 setattr(obj, parts[-1], value)
 
         return config
+

@@ -1,13 +1,15 @@
-# ==================== Python ====================
+# ==================== Python Artifacts ====================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# ==================== Packaging Outputs ====================
 build/
-develop-eggs/
 dist/
 downloads/
+develop-eggs/
 eggs/
 .eggs/
 lib/
@@ -20,21 +22,24 @@ var/
 .installed.cfg
 *.egg
 
-# Virtual environments
+# ==================== Virtual Environments ====================
 .venv/
 venv/
 env/
 ENV/
 
 # ==================== Tooling & Caches ====================
+.benchmarks/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 htmlcov/
 .coverage
+.coverage.*
 coverage.xml
+pytest-coverage.log
 
-# Logs & diagnostics
+# ==================== Logs & Diagnostics ====================
 *.log
 logs/
 diagnostic_*.json
@@ -49,7 +54,7 @@ Thumbs.db
 .vscode/
 .idea/
 
-# ==================== Local configuration (do not commit secrets) ====================
+# ==================== Local Configuration (never commit secrets) ====================
 config/settings.local.yaml
 settings.local.yaml
 settings.*.local.yaml
@@ -57,12 +62,13 @@ deepsearch/config/settings.dev.yaml
 deepsearch/config/settings.local.yaml
 config/.crypto_key
 .crypto_key
+deepsearch/config/database_connections.*.yaml
 
-# keep shared templates
+# Shared templates must remain tracked
 !deepsearch/config/settings.template.yaml
 !deepsearch/config/settings.dev.yaml.example
 
-# ==================== Frontend build artifacts ====================
+# ==================== Frontend Build Artifacts ====================
 /deepsearch/webui/static/assets/
 /deepsearch/webui/static/index.html
 /deepsearch/webui/frontend/dist/
@@ -73,14 +79,16 @@ config/.crypto_key
 /deepsearch/webui/frontend/__mocks__/
 /deepsearch/webui/frontend/.husky/
 /deepsearch/webui/frontend/.env.*
+deepsearch/webui/frontend/.backup-cleanup/
+deepsearch/webui/frontend/jsx-backup-*/
 
-# ==================== Installer & deployment ====================
-/installer/
+# ==================== Third-Party Packages ====================
+/third_party/
 cloudflare-deploy/*.toml
 cloudflare-deploy/*.min.js
 wrangler*.toml
 
-# ==================== Data artifacts ====================
+# ==================== Data Artifacts ====================
 data/**/*.db
 data/**/*.duckdb
 data/**/*.duckdb.wal
@@ -96,8 +104,15 @@ data/datasourceapi/
 !/data/**/.gitkeep
 deepsearch/data/
 deepsearch/infrastructure/data/**/*.duckdb.wal
+monitoring_data/
+reports/test_reports/
+reports/probes/
 
-# ==================== Temporary helpers ====================
+# ==================== Temporary Helpers ====================
+test_report_*.json
+temp_*.txt
+temp_*.py
+tmp/
 *.bak
 *.backup
 *_old.py
@@ -106,8 +121,13 @@ cleanup_*.bat
 final_*.py
 2025-*.txt
 *-think.txt
-deepsearch/webui/frontend/.backup-cleanup/
-deepsearch/webui/frontend/jsx-backup-*/
+temp_block.txt
+*qmt_config.json
+
+# ==================== Project Automation ====================
+runtime/interpreters/
+worker/
+.python-version
 
 # ==================== Misc ====================
 /.claude/
@@ -116,6 +136,7 @@ deepsearch/webui/frontend/jsx-backup-*/
 */.trash/
 **/.trash/
 .trash/
-*qmt_config.json
 nul
+runs/
 D?Stockcodedeepsearch.pre-commit-config.yaml
+

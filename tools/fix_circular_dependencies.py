@@ -5,8 +5,8 @@
 
 import json
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
-import ast
+from typing import Dict, List
+
 
 class CircularDependencyFixer:
     def __init__(self):
@@ -15,26 +15,26 @@ class CircularDependencyFixer:
 
     def load_analysis_report(self):
         """加载依赖分析报告"""
-        report_file = Path('dependency_analysis_report.json')
+        report_file = Path("dependency_analysis_report.json")
         if report_file.exists():
-            with open(report_file, 'r', encoding='utf-8') as f:
+            with open(report_file, "r", encoding="utf-8") as f:
                 self.report = json.load(f)
-                self.circular_deps = self.report.get('circular_dependencies', [])
-                self.module_deps = self.report.get('module_dependencies', {})
+                self.circular_deps = self.report.get("circular_dependencies", [])
+                self.module_deps = self.report.get("module_dependencies", {})
         else:
             print("[!] 未找到依赖分析报告，请先运行 analyze_dependencies.py")
             exit(1)
 
     def analyze_and_fix(self):
         """分析并修复循环依赖"""
-        print("="*60)
+        print("=" * 60)
         print("循环依赖修复方案")
-        print("="*60)
+        print("=" * 60)
 
         # 分析主要的循环依赖模式
         patterns = self.identify_patterns()
 
-        print(f"\n[+] 识别到的循环依赖模式:")
+        print("\n[+] 识别到的循环依赖模式:")
         for pattern_name, cycles in patterns.items():
             print(f"\n  {pattern_name}: {len(cycles)}个循环")
             for cycle in cycles[:2]:  # 只显示前2个示例
@@ -49,24 +49,24 @@ class CircularDependencyFixer:
     def identify_patterns(self) -> Dict[str, List[List[str]]]:
         """识别循环依赖模式"""
         patterns = {
-            'core_centric': [],      # 以core为中心的循环
-            'config_cycle': [],      # config相关的循环
-            'observability_cycle': [], # observability相关的循环
-            'infrastructure_cycle': [], # infrastructure相关的循环
-            'small_cycles': []       # 小循环（2-3个模块）
+            "core_centric": [],  # 以core为中心的循环
+            "config_cycle": [],  # config相关的循环
+            "observability_cycle": [],  # observability相关的循环
+            "infrastructure_cycle": [],  # infrastructure相关的循环
+            "small_cycles": [],  # 小循环（2-3个模块）
         }
 
         for cycle in self.circular_deps:
-            if 'core' in cycle:
-                patterns['core_centric'].append(cycle)
-            elif 'config' in cycle:
-                patterns['config_cycle'].append(cycle)
-            elif 'observability' in cycle:
-                patterns['observability_cycle'].append(cycle)
-            elif 'infrastructure' in cycle:
-                patterns['infrastructure_cycle'].append(cycle)
+            if "core" in cycle:
+                patterns["core_centric"].append(cycle)
+            elif "config" in cycle:
+                patterns["config_cycle"].append(cycle)
+            elif "observability" in cycle:
+                patterns["observability_cycle"].append(cycle)
+            elif "infrastructure" in cycle:
+                patterns["infrastructure_cycle"].append(cycle)
             elif len(cycle) <= 4:
-                patterns['small_cycles'].append(cycle)
+                patterns["small_cycles"].append(cycle)
 
         return patterns
 
@@ -74,11 +74,12 @@ class CircularDependencyFixer:
         """生成具体的修复方案"""
 
         # 1. Core模块的循环依赖修复
-        self.fixes.append({
-            'priority': 'HIGH',
-            'problem': 'Core模块与多个模块形成循环依赖',
-            'modules': ['core', 'gateway', 'messaging', 'config', 'observability'],
-            'solution': """
+        self.fixes.append(
+            {
+                "priority": "HIGH",
+                "problem": "Core模块与多个模块形成循环依赖",
+                "modules": ["core", "gateway", "messaging", "config", "observability"],
+                "solution": """
 1. 将core拆分为更小的独立模块:
    - core/runtime: 运行时管理（不依赖其他模块）
    - core/components: 组件管理（依赖runtime）
@@ -100,19 +101,21 @@ class CircularDependencyFixer:
    - 移除: from deepsearch.observability import ...
    - 改为: 通过依赖注入获取监控服务
 """,
-            'files_to_modify': [
-                'deepsearch/core/runtime/engine.py',
-                'deepsearch/core/components/component_manager.py',
-                'deepsearch/core/gateway/gateway.py'
-            ]
-        })
+                "files_to_modify": [
+                    "deepsearch/core/runtime/engine.py",
+                    "deepsearch/core/components/component_manager.py",
+                    "deepsearch/core/gateway/gateway.py",
+                ],
+            }
+        )
 
         # 2. Config模块的循环依赖修复
-        self.fixes.append({
-            'priority': 'HIGH',
-            'problem': 'Config模块与observability和messaging形成循环',
-            'modules': ['config', 'observability', 'messaging'],
-            'solution': """
+        self.fixes.append(
+            {
+                "priority": "HIGH",
+                "problem": "Config模块与observability和messaging形成循环",
+                "modules": ["config", "observability", "messaging"],
+                "solution": """
 1. 创建独立的配置层:
    - shared/config/base.py: 基础配置类（无依赖）
    - shared/config/loader.py: 配置加载器
@@ -130,19 +133,21 @@ class CircularDependencyFixer:
    - 移除: from deepsearch.messaging import ...
    - 配置验证逻辑移到应用层
 """,
-            'files_to_modify': [
-                'deepsearch/config/__init__.py',
-                'deepsearch/config/settings.py',
-                'deepsearch/config/loader.py'
-            ]
-        })
+                "files_to_modify": [
+                    "deepsearch/config/__init__.py",
+                    "deepsearch/config/settings.py",
+                    "deepsearch/config/loader.py",
+                ],
+            }
+        )
 
         # 3. Infrastructure循环依赖修复
-        self.fixes.append({
-            'priority': 'MEDIUM',
-            'problem': 'Infrastructure与shared和core形成循环',
-            'modules': ['infrastructure', 'shared', 'core'],
-            'solution': """
+        self.fixes.append(
+            {
+                "priority": "MEDIUM",
+                "problem": "Infrastructure与shared和core形成循环",
+                "modules": ["infrastructure", "shared", "core"],
+                "solution": """
 1. Infrastructure层应该是最底层，不依赖上层:
    - 移除对core的依赖
    - 移除对application的依赖
@@ -161,18 +166,20 @@ class CircularDependencyFixer:
    - 移除: from deepsearch.core.config import ...
    - 改为: 配置通过参数传递
 """,
-            'files_to_modify': [
-                'deepsearch/infrastructure/providers/factory.py',
-                'deepsearch/infrastructure/persistence/database.py'
-            ]
-        })
+                "files_to_modify": [
+                    "deepsearch/infrastructure/providers/factory.py",
+                    "deepsearch/infrastructure/persistence/database.py",
+                ],
+            }
+        )
 
         # 4. Observability循环依赖修复
-        self.fixes.append({
-            'priority': 'MEDIUM',
-            'problem': 'Observability与event和messaging形成循环',
-            'modules': ['observability', 'event', 'messaging'],
-            'solution': """
+        self.fixes.append(
+            {
+                "priority": "MEDIUM",
+                "problem": "Observability与event和messaging形成循环",
+                "modules": ["observability", "event", "messaging"],
+                "solution": """
 1. Observability应该是独立的横切关注点:
    - 不应该依赖业务模块
    - 其他模块通过接口使用observability
@@ -186,18 +193,20 @@ class CircularDependencyFixer:
    - 移除: from deepsearch.messaging import ...
    - 改为: 使用事件发布订阅模式
 """,
-            'files_to_modify': [
-                'deepsearch/observability/monitoring/monitor.py',
-                'deepsearch/observability/logging/logger.py'
-            ]
-        })
+                "files_to_modify": [
+                    "deepsearch/observability/monitoring/monitor.py",
+                    "deepsearch/observability/logging/logger.py",
+                ],
+            }
+        )
 
         # 5. 小循环的快速修复
-        self.fixes.append({
-            'priority': 'LOW',
-            'problem': '小循环依赖（2-3个模块间）',
-            'modules': ['utils-config', 'messaging-config', 'shared-core'],
-            'solution': """
+        self.fixes.append(
+            {
+                "priority": "LOW",
+                "problem": "小循环依赖（2-3个模块间）",
+                "modules": ["utils-config", "messaging-config", "shared-core"],
+                "solution": """
 1. utils-config循环:
    - utils不应该依赖config
    - 将需要配置的工具类改为接收配置参数
@@ -211,26 +220,27 @@ class CircularDependencyFixer:
    - core不应该被shared依赖
    - 将共享的核心功能移到shared
 """,
-            'files_to_modify': [
-                'deepsearch/utils/helpers.py',
-                'deepsearch/messaging/config.py',
-                'deepsearch/shared/core_utils.py'
-            ]
-        })
+                "files_to_modify": [
+                    "deepsearch/utils/helpers.py",
+                    "deepsearch/messaging/config.py",
+                    "deepsearch/shared/core_utils.py",
+                ],
+            }
+        )
 
     def output_fixes(self):
         """输出修复方案"""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("具体修复方案")
-        print("="*60)
+        print("=" * 60)
 
         for idx, fix in enumerate(self.fixes, 1):
             print(f"\n[{idx}] {fix['problem']}")
             print(f"    优先级: {fix['priority']}")
             print(f"    涉及模块: {', '.join(fix['modules'])}")
             print(f"    解决方案:{fix['solution']}")
-            print(f"    需要修改的文件:")
-            for file in fix['files_to_modify']:
+            print("    需要修改的文件:")
+            for file in fix["files_to_modify"]:
                 print(f"      - {file}")
 
         # 生成执行计划
@@ -238,11 +248,12 @@ class CircularDependencyFixer:
 
     def generate_execution_plan(self):
         """生成执行计划"""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("执行计划")
-        print("="*60)
+        print("=" * 60)
 
-        print("""
+        print(
+            """
 [第一阶段] 解除核心循环（1-2天）
 1. 重构core模块，拆分为runtime、components、lifecycle
 2. 引入依赖注入容器，移除直接import
@@ -271,7 +282,8 @@ class CircularDependencyFixer:
 1. 重新运行依赖分析
 2. 确认循环依赖已解决
 3. 运行完整测试套件
-""")
+"""
+        )
 
         # 保存修复方案
         self.save_fix_plan()
@@ -279,19 +291,19 @@ class CircularDependencyFixer:
     def save_fix_plan(self):
         """保存修复方案到文件"""
         fix_plan = {
-            'total_cycles': len(self.circular_deps),
-            'fixes': self.fixes,
-            'execution_order': [
-                'core_refactoring',
-                'config_isolation',
-                'infrastructure_cleanup',
-                'observability_independence',
-                'small_cycles_fix'
-            ]
+            "total_cycles": len(self.circular_deps),
+            "fixes": self.fixes,
+            "execution_order": [
+                "core_refactoring",
+                "config_isolation",
+                "infrastructure_cleanup",
+                "observability_independence",
+                "small_cycles_fix",
+            ],
         }
 
-        output_file = Path('circular_dependency_fixes.json')
-        with open(output_file, 'w', encoding='utf-8') as f:
+        output_file = Path("circular_dependency_fixes.json")
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(fix_plan, f, indent=2, ensure_ascii=False)
 
         print(f"\n[*] 修复方案已保存到: {output_file}")

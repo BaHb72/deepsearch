@@ -42,9 +42,4 @@ API_VERSION = "v1"
 API_PREFIX = "/api"
 
 # Data source priorities
-DATA_SOURCE_PRIORITY = {
-    "amazingdata": 1,
-    "cloudflare": 2,
-    "qmt": 3,
-    "akshare": 4
-}
+DATA_SOURCE_PRIORITY = {"amazingdata": 1, "cloudflare": 2, "qmt": 3, "akshare": 4}

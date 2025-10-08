@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { WebSocketClient, WebSocketState } from '@/services/websocket/WebSocketClient'
+import { WebSocketClient } from '@/services/websocket/WebSocketClient'
 import { WSMessage, WSMessageType } from '@/types'
 
 export interface UseWebSocketOptions {

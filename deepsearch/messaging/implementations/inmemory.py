@@ -1,39 +1,41 @@
 """
 In-memory message bus implementation.
 """
+
 from __future__ import annotations
 
-import logging
 from collections import defaultdict
 from fnmatch import fnmatch
-from typing import Any, Callable, Dict, Set, TypeVar
+from typing import Any, Callable, DefaultDict, Dict, Generic, Set, TypeVar
+
+from deepsearch.observability import get_logger
 
 from ..bus import MessageBus
 
 T = TypeVar("T")
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
-class InMemoryMessageBus(MessageBus):
+class InMemoryMessageBus(MessageBus[T], Generic[T]):
     """
     In-memory message bus implementation.
-    
+
     This implementation provides a simple, fast message bus that operates
     entirely in memory. Suitable for single-process applications or testing.
     """
 
     def __init__(self):
         """Initialize the in-memory message bus."""
-        self._subscribers: Dict[str, Set[Callable]] = defaultdict(set)
-        self._running = False
-        self._message_count = 0
-        self._subscription_count = 0
-        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self._subscribers: DefaultDict[str, Set[Callable[[str, T], None]]] = defaultdict(set)
+        self._running: bool = False
+        self._message_count: int = 0
+        self._subscription_count: int = 0
+        self.logger = get_logger(f"{__name__}.{self.__class__.__name__}")
 
     def publish(self, topic: str, message: T) -> None:
         """
         Publish a message to all matching subscribers.
-        
+
         Args:
             topic: The topic to publish to
             message: The message to publish
@@ -41,7 +43,7 @@ class InMemoryMessageBus(MessageBus):
         if not self._running:
             raise RuntimeError("Message bus is not running")
 
-        matching_handlers: Set[Callable] = set()
+        matching_handlers: Set[Callable[[str, T], None]] = set()
 
         # Find all handlers with patterns matching the topic
         for pattern, handlers in self._subscribers.items():
@@ -60,7 +62,7 @@ class InMemoryMessageBus(MessageBus):
     def subscribe(self, topic: str, handler: Callable[[str, T], None]) -> None:
         """
         Subscribe to messages matching a topic pattern.
-        
+
         Args:
             topic: Topic pattern (supports wildcards)
             handler: Callback function
@@ -72,7 +74,7 @@ class InMemoryMessageBus(MessageBus):
     def unsubscribe(self, topic: str, handler: Callable[[str, T], None]) -> None:
         """
         Unsubscribe a handler from a topic pattern.
-        
+
         Args:
             topic: Topic pattern
             handler: Handler to remove
@@ -107,12 +109,14 @@ class InMemoryMessageBus(MessageBus):
     def get_statistics(self) -> Dict[str, Any]:
         """Get bus statistics."""
         stats = super().get_statistics()
-        stats.update({
-            "message_count": self._message_count,
-            "subscription_count": self._subscription_count,
-            "topic_patterns": len(self._subscribers),
-            "total_handlers": sum(len(handlers) for handlers in self._subscribers.values())
-        })
+        stats.update(
+            {
+                "message_count": self._message_count,
+                "subscription_count": self._subscription_count,
+                "topic_patterns": len(self._subscribers),
+                "total_handlers": sum(len(handlers) for handlers in self._subscribers.values()),
+            }
+        )
         return stats
 
     def clear_subscriptions(self) -> None:

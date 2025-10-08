@@ -4,7 +4,7 @@ import path from 'path'
 import fs from 'fs'
 
 // 自定义插件：使用 React HTML 文件
-const useReactHtml = () => ({
+const createReactHtmlPlugin = () => ({
   name: 'use-react-html',
   configureServer(server) {
     server.middlewares.use((req, res, next) => {
@@ -32,7 +32,7 @@ const useReactHtml = () => ({
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
-    useReactHtml(),
+    createReactHtmlPlugin(),
     react({
       // 启用 Fast Refresh
       fastRefresh: true,

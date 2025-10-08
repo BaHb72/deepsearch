@@ -204,7 +204,7 @@ class MainEngine:
 
 ### 3.3 DataSourceManager（数据源管理器）
 
-**位置**: `deepsearch/services/data_source_manager.py`
+**位置**: `deepsearch/infrastructure/providers/managers/data_source_manager.py`
 
 **职责**:
 
@@ -223,8 +223,7 @@ class MainEngine:
 │  │            Priority Queue                         │  │
 │  │  1. AmazingData (Priority: 1)                    │  │
 │  │  2. CloudFlare Proxy (Priority: 3)               │  │
-│  │  3. QMT Provider (Priority: 5)                   │  │
-│  │  4. AkShare Direct (Priority: 10)                │  │
+│  │  3. AkShare Direct (Priority: 5)                 │  │
 │  └────────────┬─────────────────────────────────────┘  │
 │               │                                          │
 │               ▼                                          │

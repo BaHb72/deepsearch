@@ -3,6 +3,10 @@
  * 捕获并记录错误，但不在界面上频繁显示
  */
 
+import logger from '@/utils/logger'
+
+const errorHandlerLogger = logger.child('utils:error-handler')
+
 class ErrorHandler {
   constructor() {
     this.errors = []
@@ -56,12 +60,11 @@ class ErrorHandler {
 
     // 开发环境打印到控制台
     if (!this.isProduction) {
-      console.group(`🔴 ${error.type || 'Error'}`)
-      console.error(error.message)
+      const errorTitle = `🔴 ${error.type || 'Error'}`
+      errorHandlerLogger.error(`${errorTitle}: ${error.message}`)
       if (error.stack) {
-        console.log(error.stack)
+        errorHandlerLogger.info(error.stack)
       }
-      console.groupEnd()
     }
 
     // 通知监听器
@@ -106,18 +109,16 @@ class ErrorHandler {
       try {
         callback(error)
       } catch (e) {
-        console.error('Error listener failed:', e)
+        errorHandlerLogger.error('Error listener failed:', e)
       }
     })
   }
 
   // 发送错误到后端
   async sendToBackend(error) {
-    // 只在生产环境发送
     if (!this.isProduction) return
 
     try {
-      // 这里可以集成错误监控服务（如Sentry）
       const payload = {
         ...error,
         userAgent: navigator.userAgent,
@@ -125,15 +126,14 @@ class ErrorHandler {
         timestamp: error.timestamp || new Date().toISOString()
       }
 
-      // 示例：发送到后端API
+      errorHandlerLogger.debug('[SEND_PAYLOAD]', payload)
       // await fetch('/api/errors', {
       //   method: 'POST',
       //   headers: { 'Content-Type': 'application/json' },
       //   body: JSON.stringify(payload)
       // })
-    } catch (e) {
-      // 发送失败，静默处理
-      console.error('Failed to send error to backend:', e)
+    } catch (sendError) {
+      errorHandlerLogger.error('Failed to send error to backend:', sendError)
     }
   }
 

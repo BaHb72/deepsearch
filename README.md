@@ -1,322 +1,191 @@
 # DeepSearch
 
-高性能量化交易事件系统
+DeepSearch 是一套面向 AmazingData 数据源的单机量化交易事件系统，聚焦实时行情处理、策略编排与诊断工具链。工程采用模块化设计，后端以 Python 3.13 + FastAPI 构建，前端提供 React 管理界面，并集成多级缓存、可观测性与自动化测试能力。
 
-## 项目结构
+## 仓库结构
 
-```
+```text
 deepsearch/
-├── deepsearch/                    # 源代码
-│   ├── __init__.py
-│   ├── __main__.py                # CLI 入口
-│   ├── cli.py                     # 命令行界面
-│   ├── config/                    # 配置管理
-│   │   ├── models/                # 配置模型
-│   │   ├── manager.py             # 配置管理器
-│   │   ├── settings.py            # 配置设置
-│   │   ├── settings.dev.yaml      # 开发环境配置
-│   │   └── settings.prod.yaml     # 生产环境配置
-│   ├── constants/                 # 常量定义
-│   ├── core/                      # 核心组件
-│   │   ├── engine.py              # 主引擎（事件循环、组件管理）
-│   │   ├── component_manager.py   # 组件生命周期管理
-│   │   ├── unified_components.py  # 统一组件接口
-│   │   └── interfaces.py          # 接口定义
-│   ├── infrastructure/            # 基础设施层（新增）
-│   │   ├── database/              # 数据库管理
-│   │   ├── cache/                 # 缓存管理
-│   │   └── message_queue/         # 消息队列
-│   ├── event/                     # 事件系统
-│   │   ├── engine.py              # 事件引擎
-│   │   ├── handler.py             # 事件处理器
-│   │   └── schemas.py             # 事件模式定义
-│   ├── gateway/                   # 交易网关
-│   ├── messaging/                 # 消息系统
-│   │   ├── bus.py                 # 消息总线
-│   │   ├── zeromq_bus.py          # ZeroMQ实现
-│   │   └── redis_bus.py           # Redis实现
-│   ├── observability/             # 日志监控
-│   │   ├── logger.py              # 结构化日志
-│   │   └── monitoring/            # 监控系统
-│   ├── strategies/                # 策略模块
-│   │   ├── interfaces/            # 策略接口
-│   │   ├── implementations/       # 策略实现
-│   │   └── managers/              # 策略管理
-│   ├── backtest/                  # 回测系统
-│   │   ├── engines/               # 回测引擎
-│   │   ├── data/                  # 数据管理
-│   │   └── utils/                 # 回测工具
-│   ├── utils/                     # 工具类
-│   └── webui/                     # Web UI
-│       ├── api/                   # FastAPI 后端
-│       │   ├── middleware/        # 请求中间件
-│       │   └── endpoints/         # API端点
-│       ├── frontend/              # Vue 前端
-│       │   ├── src/
-│       │   │   ├── components/    # 组件
-│       │   │   ├── stores/        # 状态管理
-│       │   │   └── utils/         # 工具函数
-│       │   └── package.json
-│       └── server.py              # 服务器入口
-├── docs/                          # 文档中心
-│   ├── README.md                  # 文档目录
-│   ├── architecture/              # 架构文档
-│   ├── api-guides/                # API指南
-│   ├── development/               # 开发文档
-│   └── operations/                # 运维文档
-├── tests/                         # 测试套件
-│   ├── unit/                      # 单元测试
-│   ├── api/                       # API测试
-│   ├── integration/               # 集成测试
-│   └── performance/               # 性能测试
-├── scripts/                       # 自动化脚本
-│   ├── run_all_tests.py           # 一键测试运行器
-│   └── install_git_hooks.py       # Git Hooks安装器
-├── .github/                       # GitHub配置
-│   └── workflows/                 # CI/CD工作流
-│       └── automated_testing.yml  # 自动化测试流程
-├── .pre-commit-config.yaml        # Pre-commit配置
-├── pyproject.toml                 # UV项目配置
-├── pytest.ini                     # Pytest配置
-├── .coveragerc                    # 覆盖率配置
-├── TESTING_GUIDE.md               # 测试使用指南
-├── AUTOMATED_TESTING_PLAN.md     # 自动化测试计划
-├── CLAUDE.md                      # Claude Code指南
-└── README.md                      # 本文件
+├── deepsearch/                    # 核心源代码
+│   ├── cli/                       # CLI 命令与运行入口
+│   ├── config/                    # Pydantic 设置模型与 settings.<env>.yaml
+│   ├── core/                      # 事件引擎、组件生命周期与运行时
+│   ├── infrastructure/            # 缓存、消息、监控、持久化、数据提供方等
+│   │   ├── cache/                 # 本地/Redis/DuckDB 缓存实现
+│   │   ├── messaging/             # 消息总线与总线工厂
+│   │   ├── monitoring/            # 监控与指标采集
+│   │   ├── providers/             # 数据源统一抽象（AmazingData 等）
+│   │   └── persistence/           # PostgreSQL、DuckDB 管理
+│   ├── messaging/                 # 高层消息与事件桥接
+│   ├── observability/             # 日志、追踪、告警
+│   ├── webui/                     # FastAPI 后端与 React 前端
+│   │   ├── api/                   # WebUI API 分层
+│   │   ├── runner.py              # WebUI 启动器
+│   │   └── frontend/              # React + Ant Design 管理界面
+│   ├── workers/                   # Worker 管理与进程隔离
+│   └── utils/                     # 通用工具与系统脚手架
+├── docs/                          # 文档中心（详见 docs/README.md）
+├── scripts/                       # 常用脚本（run_all_tests.py 等）
+├── tests/                         # 测试套件（unit/integration/api）
+├── third_party/                   # AmazingData 离线包等第三方资源
+├── tools/                         # 开发与诊断辅助工具
+└── uv.lock / pyproject.toml       # UV 与依赖配置
 ```
 
-## 核心功能
+> `.trash/` 为临时回收区，不应提交或依赖其中内容。
 
-### 1. 专业交易视图 (Professional Trading View)
+## 核心能力
 
-- **K线图表**: 支持空心/实心K线切换，日线时间格式优化
-- **技术指标**: MA均线连续显示，MACD/RSI/KDJ等多种指标
-- **筹码分布**: 实时跟随鼠标显示，价格轴对齐
-- **复权处理**: 支持前复权、后复权、不复权三种模式
-- **成交量**: 红绿柱状图，与主图联动缩放
-- **盘口数据**: RAF批处理优化，避免频繁渲染
+- **事件驱动引擎**：`core/runtime/async_runner.py` 提供高并发事件循环，组件拓扑由 `core/components` 与 `core/managers` 管理，支持批量调度与健康检查。
+- **数据源与缓存**：仅支持 AmazingData，统一由 `infrastructure/providers` 注册；多级缓存覆盖内存、Redis、DuckDB，保证断线重连与速率控制。
+- **可观测性**：`observability` 集成结构化日志、性能统计与告警通道，配合 `tools/` 下的诊断脚本快速定位问题。
+- **Web 管理界面**：FastAPI 暴露 `/api/*` 接口，React 前端（Ant Design Pro + Zustand + ECharts）提供监控、策略与事件视图。
+- **自动化运维**：CLI 提供 `run`、`check-ports`、`check-amazingdata` 等命令，脚本目录覆盖一键测试与 Git Hooks 安装。
 
-### 2. 数据源架构
+## 架构约束
 
-- **统一数据源管理**: DataSourceManager提供单一入口，自动选择最优数据源
-- **优先级机制**: AmazingData > CloudFlare Proxy > QMT > AkShare Direct
-- **断路器模式**: 故障隔离和自动恢复，避免级联失败
-- **多级缓存**: L1内存 → L2 Redis → L3 DuckDB/PostgreSQL
-- **请求优化**: 速率限制、请求去重、批处理
+- DeepSearch 仅支持单机部署，禁止引入分布式缓存、消息队列、微服务或容器调度等方案。
+- 基础设施组件统一归类于 `deepsearch/infrastructure/`，新增能力需遵守现有分层与工厂/观察者等模式实现。
+- AmazingData 为默认优先数据源，核心实现位于 `deepsearch/infrastructure/providers/implementations/amazingdata/`；按配置可降级至 AkShare、Cloudflare Worker 或 QMT 等实现，遵循现有优先级与故障切换策略。Mock 仅用于测试稳定性及回归验证，不向终端用户提供数据。
+- QMT 历史脚本位于 `deepsearch/infrastructure/providers/datafeed/qmt/scripts/`，需使用 GBK 编码并在首行声明 `# encoding:gbk`。
 
-### 3. 事件驱动系统
+## 环境准备
 
-- **高性能事件引擎**: 支持批处理和优先级调度
-- **异步事件处理**: 基于asyncio的高并发处理
-- **事件订阅**: 灵活的事件订阅和发布机制
+> ⚠️ 默认在 **Windows PowerShell/CMD** 中运行 `uv`、`python`、`npm` 等命令；WSL 仅允许只读操作（如查看文件、grep）。
 
-### 4. 消息总线
+1. 克隆仓库并进入目录：
+   ```powershell
+   git clone https://github.com/BaHb/deepsearch.git
+   cd deepsearch
+   ```
+2. 安装 [uv](https://github.com/astral-sh/uv)（尚未安装时）：
+   ```powershell
+   python -m pip install --upgrade uv
+   ```
+3. 创建或复用仓库虚拟环境（版本见 `.python-version`）：
+   ```powershell
+   uv venv --python (Get-Content .python-version)
+   . .\.venv\Scripts\Activate.ps1
+   ```
+4. 安装后端依赖（含所有 extra）：
+   ```powershell
+   uv sync --all-extras
+   ```
+5. 安装 WebUI 依赖：
+   ```powershell
+   cd deepsearch/webui/frontend
+   npm install
+   cd ..\..\..
+   ```
+6. AmazingData 运行在隔离解释器：按 `docs/datasources/amazingdata/` 指南配置 `runtime/interpreters/py39/`，并在 `settings.<env>.yaml` 中填写 `amazingdata.connection.python_interpreter_path`。
 
-- **多后端支持**: ZeroMQ、Redis TimeSeries
-- **路由机制**: 基于主题的消息路由
-- **持久化**: 支持消息持久化和重放
+## 启动方式
 
-### 5. 自动化测试系统
+### 后端引擎与 API
 
-- **一键测试**: `python scripts/run_all_tests.py` 运行所有测试
-- **API测试覆盖**: 100%接口测试覆盖，20+测试场景
-- **质量门禁**: Git Hooks自动阻止错误代码提交
-- **CI/CD集成**: GitHub Actions自动化测试流程
-- **测试报告**: 自动生成覆盖率和性能报告
+```powershell
+# 生产配置（默认）
+uv run deepsearch run
 
-## 安装
+# 开发模式 + 前端另行启动
+uv run deepsearch run dev --mode full --no-frontend
 
-本项目使用 UV 作为包管理工具，提供更快的依赖安装和更好的依赖解析。
+# 仅运行事件引擎
+uv run deepsearch run dev --mode engine
 
-```bash
-# 克隆项目
-git clone https://github.com/your-repo/deepsearch.git
-cd deepsearch
+# 仅运行 WebUI 后端（FastAPI）
+uv run deepsearch run dev --mode webui
 
-# 安装 UV（如果未安装）
-pip install uv
+# 端口自检
+uv run deepsearch check-ports
 
-# 创建虚拟环境（使用Python 3.13）
-uv venv --python 3.13
+# AmazingData 连通性自检
+uv run deepsearch check-amazingdata dev
+```
 
-# 激活虚拟环境
-source .venv/bin/activate  # Linux/Mac
-# 或
-.venv\Scripts\activate  # Windows
+### WebUI 前端
 
-# 安装所有依赖（包括开发依赖）
-uv sync --all-extras
-
-# 安装前端依赖
+```powershell
 cd deepsearch/webui/frontend
-npm install
-cd ../../..
-```
-
-## 使用
-
-### 启动系统
-
-```bash
-# 使用UV启动后端系统（不含前端）
-uv run python -m deepsearch run
-
-# 单独启动前端（另一个终端）
-cd deepsearch/webui/frontend
-npm run dev
-
-# 运行特定模式
-uv run python -m deepsearch run --mode engine  # 仅引擎
-uv run python -m deepsearch run --mode webui   # 仅WebUI
-
-# 检查端口配置
-uv run python -m deepsearch check-ports
-```
-
-### 访问界面
-
-- WebUI: http://localhost:3000
-- API文档: http://localhost:8000/docs
-- 专业交易视图: http://localhost:3000/pro-trading
-
-### CLI 命令
-
-```bash
-# 查看帮助
-uv run python -m deepsearch --help
-
-# 检查端口
-uv run python -m deepsearch check-ports
-
-# 运行特定模式
-uv run python -m deepsearch run --mode engine  # 仅引擎
-uv run python -m deepsearch run --mode webui   # 仅WebUI
-
-# 添加新依赖
-uv add package-name
-
-# 添加开发依赖
-uv add --group dev package-name
-
-# 更新依赖
-uv lock --update
-```
-
-## 配置
-
-系统配置文件位于 `deepsearch/config/` 目录：
-
-- `settings.dev.yaml` - 开发环境配置
-- `settings.prod.yaml` - 生产环境配置
-
-### 环境变量
-
-使用双下划线分隔的环境变量覆盖配置：
-
-```bash
-export LOG__LEVEL=DEBUG
-export WEBUI__BACKEND_PORT=8080
-export MESSAGE_BUS__BUSES__ZMQ__CONFIG__HOST=10.0.0.5
-```
-
-## 开发
-
-### 自动化测试
-
-```bash
-# 安装Git Hooks（防止错误代码提交）
-python scripts/install_git_hooks.py
-
-# 运行所有测试（一键测试）
-python scripts/run_all_tests.py
-
-# 快速测试模式
-python scripts/run_all_tests.py --quick
-
-# 运行特定类型测试
-pytest tests/unit        # 单元测试
-pytest tests/api         # API测试
-pytest tests/integration # 集成测试
-
-# 查看测试覆盖率
-pytest --cov=deepsearch --cov-report=html
-open htmlcov/index.html  # 查看HTML报告
-```
-
-### 代码规范
-
-```bash
-# 代码格式化
-black deepsearch tests
-isort deepsearch tests
-
-# 代码质量检查
-ruff check deepsearch
-
-# 类型检查
-mypy deepsearch
-
-# 安全扫描
-bandit -r deepsearch
-```
-
-### 构建前端
-
-```bash
-cd deepsearch/webui/frontend
+npm run dev          # 默认端口 3000
+# 或构建生产包
 npm run build
 ```
 
-生成的文件将位于 `deepsearch/webui/static/` 目录。
+访问入口：
+- WebUI（开发环境）：http://localhost:3000
+- API 文档（FastAPI）：http://localhost:8000/docs
+
+## 配置管理
+
+- 所有环境配置存放于 `deepsearch/config/settings.<env>.yaml`，仓库提供 `.example` 与 `settings.template.yaml` 作为模板。
+- 非必要情况下不要依赖环境变量覆盖配置，确需调整时务必同步更新示例文件并保持结构一致。
+- 涉及敏感字段使用占位符（如 `your_database_password`），真实凭据仅保存在本地未纳入 Git。
+- 提交前执行 `git grep -i "password\|secret\|token" -- ':(exclude)*.example'` 自检，确保未泄露真实凭据。
+
+## API 管理
+
+- API 文档集中于 `docs/api/`：
+  - `docs/api/README.md` 总览
+  - `docs/api/FRONTEND_API_REGISTRY.md` 前端调用列表
+  - `docs/api/BACKEND_API_REGISTRY.md` 后端实现
+  - `docs/api/API_MAPPING.md` 前后端映射
+  - `docs/api/datasource_api.md` 数据源接口说明
+- 调整接口后必须运行 `uv run python tools/generate_api_documentation.py` 更新 `docs/api/`，并在变更说明中记录时间、内容与原因。
+- 前端统一使用 `/api` 作为 axios `baseURL`，后端在 FastAPI 中以 `prefix="/api/<domain>"` 注册路由。
+
+## 开发流程与质量
+
+- 遵循 PEP 8 四空格缩进，业务类名以领域结尾（如 `OrderEngine`），配置模型使用 `Settings` 后缀。
+- 提交前依次运行 `ruff check`、`black`、`isort`，类型敏感模块执行 `mypy deepsearch`，安全相关代码运行 `bandit -r deepsearch`。
+- 测试遵循失败→修复流程，保持整体覆盖率 ≥85%，必要时更新 `docs/testing` 记录；优先通过 pytest fixtures 与 `unittest.mock` 注入依赖。
+
+```powershell
+# 一键运行所有检查
+uv run python scripts/run_all_tests.py
+
+# 单元/集成测试
+uv run pytest tests/unit -n auto
+uv run pytest tests/integration
+
+# 质量工具
+uv run ruff check deepsearch tests
+uv run black --check deepsearch tests
+uv run isort --check-only deepsearch tests
+uv run mypy deepsearch
+uv run bandit -r deepsearch
+```
+
+测试覆盖率报告位于 `htmlcov/`，可通过 `htmlcov/index.html` 查看。
 
 ## 技术栈
 
-### 后端
+- **后端**：Python 3.13、FastAPI、Pydantic、SQLAlchemy、AsyncIO、Redis、DuckDB、PostgreSQL、ZeroMQ、Twisted。
+- **前端**：React 19、Ant Design Pro、Zustand、ECharts、Vite、TypeScript。
+- **数据源**：AmazingData 官方 SDK（`third_party/amazingdata`）为默认优先；根据配置可切换至 AkShare、Cloudflare Worker 或 QMT 等数据源。Mock 仅用于测试稳定性与验证，不可向用户提供实时数据。
 
-- Python 3.13 - 主要开发语言
-- UV - 现代Python包管理器
-- FastAPI - 高性能Web框架
-- AsyncIO - 异步编程
-- Pydantic - 数据验证和设置管理
-- SQLAlchemy - ORM
-- DuckDB - 分析型数据库
-- PostgreSQL - 事务型数据库
-- Redis - 缓存和消息队列
-- ZeroMQ - 高性能消息传输
+## 文档导航
 
-### 前端
+- `docs/README.md`：文档索引与快速导航
+- 架构说明：`docs/architecture/SYSTEM_ARCHITECTURE.md`、`docs/architecture/DEEPSEARCH_ARCH_IMPROVEMENT_PLAN.md`
+- 开发与调试：`docs/development/BEST_PRACTICES.md`、`docs/development/DEBUG_FEATURES.md`、`docs/development/CODE_REVIEW.md`
+- 数据源资料：`docs/datasources/`（含 AmazingData 快速开始与隔离方案）
+- 运维与常见问题：`docs/operations/` 及 `docs/operations/runbooks/`
+- 历史归档： `docs/archive/datasources/amazingdata/AmazingData_API.md` 记录 AmazingData 官方 API 摘要版本，供参考使用
 
-- Vue 3 - 前端框架
-- Element Plus - UI组件库
-- ECharts - 专业图表库
-- Vite - 构建工具
-- TypeScript - 类型支持
+## 贡献指南
 
-### 数据源
-
-- AmazingData - 银河证券专业数据（最高优先级）
-- CloudFlare Workers - AkShare API代理
-- AkShare - A股数据
-- QMT - 迅投量化实时数据
-- 支持自定义数据源扩展
-
-## 性能优化
-
-- **requestAnimationFrame批处理**: 优化高频数据更新
-- **防抖处理**: ResizeObserver和窗口resize事件
-- **shallowRef**: Vue3响应式优化
-- **虚拟滚动**: 大数据列表渲染
-- **Web Workers**: CPU密集型计算隔离
+- 提交信息遵循 Conventional Commits（如 `feat: ...`、`fix: ...`、`docs: ...`）。
+- 涉及前端或可视化调整请在变更说明中附带效果描述；配置改动需同步更新示例文件与相关文档。
+- PR 描述应概述变更、列出测试结果并关联对应 issue；提交前确保 pre-commit 钩子与所需检查全部通过。
 
 ## 许可证
 
-MIT License
-
-## 贡献
-
-欢迎提交 Pull Request 和 Issue。
+本项目使用 MIT License。
 
 ## 联系方式
 
-- GitHub Issues: [提交问题](https://github.com/your-repo/deepsearch/issues)
-- Email: your-email@example.com
+- GitHub Issues: https://github.com/BaHb/deepsearch/issues
+- 团队邮箱（示例）：team@deepsearch.local
+
+

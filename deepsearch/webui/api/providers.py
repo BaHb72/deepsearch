@@ -4,28 +4,97 @@ Singleton Data Provider Factory
 Ensures single instances of data providers across all API endpoints
 to reduce memory usage and improve caching efficiency.
 """
-from typing import Dict, Any, Optional
-from threading import Lock
+
+from __future__ import annotations
+
 from datetime import datetime
-from loguru import logger
 from enum import Enum
+from threading import Lock
+from typing import Any, Final, Literal, MutableMapping, NotRequired, Optional, TypedDict, Union, cast
+
+from loguru import logger
+
+try:
+    from deepsearch.application.services.market.market_service import MarketService
+except ImportError:  # pragma: no cover
+    MarketService = cast(Any, None)
+
+try:
+    from deepsearch.application.services.market.eastmoney_service import EastMoneyService
+except ImportError:  # pragma: no cover
+    EastMoneyService = cast(Any, None)
+
+try:
+    from deepsearch.application.services.market.akshare_direct_service import AkShareDirectService
+except ImportError:  # pragma: no cover
+    AkShareDirectService = cast(Any, None)
 
 
-class DataSourceType(Enum):
+class DataSourceType(str, Enum):
     """数据源类型枚举"""
+
     AMAZINGDATA = "amazingdata"
     CLOUDFLARE = "cloudflare"
-    CLOUDFLARE_PROXY = "cloudflare_proxy"
     AKSHARE = "akshare"
+    AKSHARE_PROXY = "akshare_proxy"
+    AKSHARE_DIRECT = "akshare_direct"
     QMT = "qmt"
+    MINIQMT = "miniqmt"
+    UNIFIED = "unified"
+    TUSHARE = "tushare"
+    EASTMONEY = "eastmoney"
+    SINA = "sina"
+    DIRECT_API = "direct_api"
+    DATABASE = "database"
     DEFAULT = "default"
     CUSTOM = "custom"
+
+
+ProviderType = Literal["akshare", "unified", "market", "qmt", "amazingdata"]
+ProviderKey = Union[str, DataSourceType]
+
+
+class ProviderFailureRecord(TypedDict):
+    timestamp: str
+    type: str
+    message: str
+
+
+class ProviderFallbackStatus(TypedDict, total=False):
+    original: str
+    fallback: str
+    reason: NotRequired[Optional[str]]
+    timestamp: str
+
+
+class ProviderHealthStatus(TypedDict, total=False):
+    status: Literal["healthy", "degraded", "failed"]
+    provider: str
+    initialized_at: str
+    fallback_reason: NotRequired[str]
+    error: NotRequired[str]
+    failures: NotRequired[list[ProviderFailureRecord]]
+    last_failure: NotRequired[ProviderFailureRecord]
+    critical_error: NotRequired[bool]
+
+
+class ProviderFactoryStats(TypedDict, total=False):
+    instance_count: int
+    providers: list[str]
+    memory_saved_mb: int
+    provider_details: NotRequired[dict[str, Any]]
+
+
+class ProviderHealthSnapshot(TypedDict):
+    providers: dict[str, ProviderHealthStatus]
+    fallback_status: dict[str, ProviderFallbackStatus]
+    timestamp: str
 
 
 class DataProviderFactory:
     """
     Singleton factory for data providers.
-    
+
     Benefits:
     - Reduces memory usage by ~500MB (avoiding duplicate instances)
     - Improves cache hit rate (shared cache across endpoints)
@@ -33,271 +102,322 @@ class DataProviderFactory:
     - Consistent state across API endpoints
     """
 
-    _instances: Dict[str, Any] = {}
-    _lock = Lock()
+    _instances: MutableMapping[str, Any] = {}
+    _lock: Lock = Lock()
 
     # 新增：降级状态跟踪和健康监控
-    _fallback_status: Dict[str, Dict[str, Any]] = {}
-    _provider_health: Dict[str, Dict[str, Any]] = {}
-    
+    _fallback_status: MutableMapping[str, ProviderFallbackStatus] = {}
+    _provider_health: MutableMapping[str, ProviderHealthStatus] = {}
+
+    @staticmethod
+    def _normalize_provider_type(provider_type: ProviderKey) -> str:
+        if isinstance(provider_type, DataSourceType):
+            return provider_type.value
+        return str(provider_type).strip().lower()
+
     @classmethod
-    def get_provider(cls, provider_type: str = "akshare") -> Any:
+    def get_provider(cls, provider_type: ProviderKey = "akshare") -> Any:
         """
         Get or create singleton provider instance (synchronous version).
-        
+
         Args:
             provider_type: Type of provider to get
                 - "akshare": AkShareProxyProvider
                 - "unified": DataSourceManager
                 - "market": MarketService
                 - "qmt": QMTDataProvider
-                
+
         Returns:
             Singleton instance of requested provider
         """
+        normalized_type = cls._normalize_provider_type(provider_type)
+
         with cls._lock:
-            if provider_type not in cls._instances:
-                logger.info(f"Creating singleton instance for {provider_type}")
-                
-                if provider_type == "akshare":
-                    from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
-                    cls._instances[provider_type] = AkShareProxyProvider()
-                    
-                elif provider_type == "unified":
+            if normalized_type not in cls._instances:
+                logger.info(f"Creating singleton instance for {normalized_type}")
+
+                if normalized_type == "akshare":
+                    from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
+                        AkShareProxyProvider,
+                    )
+
+                    cls._instances[normalized_type] = AkShareProxyProvider()
+
+                elif normalized_type == "unified":
                     # For unified, we need async initialization - use get_provider_async instead
-                    logger.warning(f"Unified provider requires async initialization. Use get_provider_async()")
+                    logger.warning(
+                        "Unified provider requires async initialization. Use get_provider_async()"
+                    )
                     return None
-                    
-                elif provider_type == "market":
-                    # from deepsearch.application.services.market.market_service import MarketService
-                    from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
-                    # Market service with a default AkShare provider
+
+                elif normalized_type == "market":
+                    from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
+                        AkShareProxyProvider,
+                    )
+
                     default_provider = AkShareProxyProvider()
-                    cls._instances[provider_type] = MarketService(default_provider)
-                    
-                elif provider_type == "qmt":
-                    from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTDataProvider
-                    cls._instances[provider_type] = MiniQMTDataProvider()
-                    
+                    if MarketService is None:
+                        raise RuntimeError("MarketService implementation is unavailable")
+                    cls._instances[normalized_type] = MarketService(default_provider)
+
+                elif normalized_type == "qmt":
+                    from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import (
+                        MiniQMTDataProvider,
+                    )
+
+                    cls._instances[normalized_type] = MiniQMTDataProvider()
+
                 else:
                     raise ValueError(f"Unknown provider type: {provider_type}")
-                    
-                logger.info(f"Created {provider_type} provider instance")
-                
-            return cls._instances[provider_type]
-    
+
+                logger.info(f"Created {normalized_type} provider instance")
+
+            return cls._instances[normalized_type]
+
     @classmethod
-    async def get_provider_async(cls, provider_type: str = "akshare") -> Any:
-        """
-        Get or create singleton provider instance (asynchronous version).
-        
-        Args:
-            provider_type: Type of provider to get
-                
-        Returns:
-            Singleton instance of requested provider
-        """
-        # Check if already exists
-        if provider_type in cls._instances:
-            return cls._instances[provider_type]
-            
-        with cls._lock:
-            # Double check after acquiring lock
-            if provider_type in cls._instances:
-                return cls._instances[provider_type]
-                
-            logger.info(f"Creating singleton instance for {provider_type} (async)")
-            
-            if provider_type == "akshare":
-                from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
-                cls._instances[provider_type] = AkShareProxyProvider()
-                
-            elif provider_type == "unified":
-                from deepsearch.infrastructure.providers.managers.data_source_manager import get_data_source_manager
-                cls._instances[provider_type] = await get_data_source_manager()
-                
-            elif provider_type == "market":
-                # from deepsearch.application.services.market.market_service import MarketService
-                from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
-                # Try to get akshare provider if available, or create a new one
-                akshare_provider = None
-                if "akshare" in cls._instances:
-                    akshare_provider = cls._instances["akshare"]
-                else:
-                    akshare_provider = AkShareProxyProvider()
-                cls._instances[provider_type] = MarketService(akshare_provider)
-                
-            elif provider_type == "qmt":
-                from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTDataProvider
-                cls._instances[provider_type] = MiniQMTDataProvider()
+    async def get_provider_async(cls, provider_type: ProviderKey = "akshare") -> Any:
+        """Get or create singleton provider instance (asynchronous version)."""
+        normalized_type = cls._normalize_provider_type(provider_type)
 
-            elif provider_type == "amazingdata":
-                # 实现多级降级链
-                init_success = False
-                fallback_reason = None
+        instance = cls._instances.get(normalized_type)
 
-                # 级别1: 尝试AmazingData
-                try:
-                    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
-                        AmazingDataProvider, AmazingDataConfig
-                    )
-                    from deepsearch.config import get_config
+        if instance is None:
+            with cls._lock:
+                instance = cls._instances.get(normalized_type)
+                if instance is None:
+                    logger.info(f"Creating singleton instance for {normalized_type} (async)")
 
-                    # 从配置文件读取凭据
-                    app_config = get_config()
-                    amazingdata_config = app_config.get('amazingdata', {})
-                    network_provider = amazingdata_config.get('network_provider', 'telecom')
-                    server_config = amazingdata_config.get('servers', {}).get(network_provider, {})
+                    if normalized_type == "akshare":
+                        from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
+                            AkShareProxyProvider,
+                        )
 
-                    # 创建配置对象
-                    config = AmazingDataConfig(
-                        username=amazingdata_config.get('username', ''),
-                        password=amazingdata_config.get('password', ''),
-                        host=server_config.get('host', '101.230.159.234'),
-                        port=server_config.get('port', 8600),
-                        timeout=10,  # 秒，不是毫秒
-                        retry_count=2,
-                        heartbeat_interval=60,
-                        auto_reconnect=True
-                    )
-                    # 使用配置创建实例
-                    provider = AmazingDataProvider(config)
-                    # 初始化
-                    await provider.initialize()
-                    cls._instances[provider_type] = provider
-                    init_success = True
-                    logger.info("AmazingData provider initialized successfully")
+                        instance = AkShareProxyProvider()
 
-                    # 记录健康状态
-                    cls._provider_health[provider_type] = {
-                        'status': 'healthy',
-                        'provider': 'amazingdata',
-                        'initialized_at': datetime.now().isoformat()
-                    }
+                    elif normalized_type == "unified":
+                        from deepsearch.infrastructure.providers.managers.data_source_manager import (
+                            get_data_source_manager,
+                        )
 
-                except ImportError as e:
-                    fallback_reason = f"AmazingData provider not available: {e}"
-                    logger.warning(fallback_reason)
+                        instance = get_data_source_manager()
 
-                except Exception as e:
-                    fallback_reason = f"Failed to initialize AmazingData provider: {e}"
-                    logger.error(fallback_reason)
+                    elif normalized_type == "market":
+                        from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
+                            AkShareProxyProvider,
+                        )
 
-                    # 检查是否是SDK退出导致的
-                    if "SDK尝试强制退出程序" in str(e):
-                        fallback_reason = f"CRITICAL: AmazingData SDK attempted to exit the process"
-                        logger.critical(fallback_reason)
-                        cls._record_provider_failure("amazingdata", "SDK_EXIT", str(e))
+                        akshare_provider = cls._instances.get("akshare") or AkShareProxyProvider()
+                        if MarketService is None:
+                            raise RuntimeError("MarketService implementation is unavailable")
+                        instance = MarketService(akshare_provider)
 
-                # 级别2: 降级到AkShare
-                if not init_success:
-                    logger.warning(f"Falling back to AkShare due to: {fallback_reason}")
-                    try:
-                        from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
-                        fallback_provider = AkShareProxyProvider()
-                        await fallback_provider.initialize() if hasattr(fallback_provider, 'initialize') else None
-                        cls._instances[provider_type] = fallback_provider
-                        init_success = True
+                    elif normalized_type == "qmt":
+                        from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import (
+                            MiniQMTDataProvider,
+                        )
 
-                        # 记录降级状态
-                        cls._fallback_status[provider_type] = {
-                            'original': 'amazingdata',
-                            'fallback': 'akshare',
-                            'reason': fallback_reason,
-                            'timestamp': datetime.now().isoformat()
-                        }
+                        instance = MiniQMTDataProvider()
 
-                        cls._provider_health[provider_type] = {
-                            'status': 'degraded',
-                            'provider': 'akshare',
-                            'fallback_reason': fallback_reason,
-                            'initialized_at': datetime.now().isoformat()
-                        }
+                    elif normalized_type == "amazingdata":
+                        init_success = False
+                        fallback_reason = None
+                        chosen_instance = None
 
-                        logger.info("Successfully fell back to AkShare provider")
+                        try:
+                            from deepsearch.config import get_config
+                            from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+                                AmazingDataConfig,
+                                AmazingDataProvider,
+                            )
 
-                    except Exception as e:
-                        logger.error(f"Failed to initialize AkShare fallback: {e}")
-                        cls._record_provider_failure("akshare", "INIT_FAILED", str(e))
+                            app_config = get_config()
+                            amazingdata_config = app_config.get("amazingdata", {})
+                            network_provider = amazingdata_config.get("network_provider", "telecom")
+                            server_config = amazingdata_config.get("servers", {}).get(
+                                network_provider, {}
+                            )
 
-                # 级别3: 最终降级到ErrorProvider
-                if not init_success:
-                    logger.critical("All data providers failed, using ErrorProvider as last resort")
-                    try:
-                        from deepsearch.infrastructure.providers.mock.error_provider import MockErrorProvider
-                        cls._instances[provider_type] = MockErrorProvider(fallback_reason)
-                    except:
-                        # 如果ErrorProvider还未创建，使用临时的错误提供者
-                        class TempErrorProvider:
-                            def __init__(self, error_msg):
-                                self.error_msg = error_msg
-                            async def get_data(self, *args, **kwargs):
-                                return {'error': self.error_msg, 'status': 'all_providers_failed'}
+                            config = AmazingDataConfig(
+                                username=amazingdata_config.get("username", ""),
+                                password=amazingdata_config.get("password", ""),
+                                host=server_config.get("host", "101.230.159.234"),
+                                port=server_config.get("port", 8600),
+                                timeout=10,
+                                retry_count=2,
+                                heartbeat_interval=60,
+                                auto_reconnect=True,
+                            )
 
-                        cls._instances[provider_type] = TempErrorProvider(fallback_reason)
+                            provider = AmazingDataProvider(config)
+                            await provider.initialize()
+                            chosen_instance = provider
+                            init_success = True
+                            logger.info("AmazingData provider initialized successfully")
 
-                    cls._provider_health[provider_type] = {
-                        'status': 'failed',
-                        'provider': 'error',
-                        'error': fallback_reason,
-                        'initialized_at': datetime.now().isoformat()
-                    }
+                            cls._provider_health[normalized_type] = {
+                                "status": "healthy",
+                                "provider": "amazingdata",
+                                "initialized_at": datetime.now().isoformat(),
+                            }
 
-            else:
-                raise ValueError(f"Unknown provider type: {provider_type}")
-                
-            logger.info(f"Created {provider_type} provider instance (async)")
-            
-            return cls._instances[provider_type]
-    
+                        except ImportError as e:
+                            fallback_reason = f"AmazingData provider not available: {e}"
+                            logger.warning(fallback_reason)
+
+                        except Exception as e:
+                            fallback_reason = f"Failed to initialize AmazingData provider: {e}"
+                            logger.error(fallback_reason)
+
+                            if "SDK尝试强制退出程序" in str(e):
+                                fallback_reason = (
+                                    "CRITICAL: AmazingData SDK attempted to exit the process"
+                                )
+                                logger.critical(fallback_reason)
+                                cls._record_provider_failure("amazingdata", "SDK_EXIT", str(e))
+
+                        if not init_success:
+                            reason_text = fallback_reason or "unknown failure"
+                            logger.warning(f"Falling back to AkShare due to: {reason_text}")
+                            try:
+                                from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
+                                    AkShareProxyProvider,
+                                )
+
+                                fallback_provider = AkShareProxyProvider()
+                                if hasattr(fallback_provider, "initialize"):
+                                    await fallback_provider.initialize()
+                                chosen_instance = fallback_provider
+                                init_success = True
+
+                                cls._fallback_status[normalized_type] = {
+                                    "original": "amazingdata",
+                                    "fallback": "akshare",
+                                    "reason": reason_text,
+                                    "timestamp": datetime.now().isoformat(),
+                                }
+
+                                cls._provider_health[normalized_type] = {
+                                    "status": "degraded",
+                                    "provider": "akshare",
+                                    "fallback_reason": reason_text,
+                                    "initialized_at": datetime.now().isoformat(),
+                                }
+
+                                logger.info("Successfully fell back to AkShare provider")
+
+                            except Exception as e:
+                                logger.error(f"Failed to initialize AkShare fallback: {e}")
+                                cls._record_provider_failure("akshare", "INIT_FAILED", str(e))
+
+                        if not init_success:
+                            reason_text = fallback_reason or "unknown failure"
+                            logger.critical(
+                                "All data providers failed, using ErrorProvider as last resort"
+                            )
+                            try:
+                                from deepsearch.infrastructure.providers.mock.error_provider import (
+                                    MockErrorProvider,
+                                )
+
+                                chosen_instance = MockErrorProvider(reason_text)
+                            except Exception:
+
+                                class TempErrorProvider:
+                                    def __init__(self, error_msg):
+                                        self.error_msg = error_msg
+
+                                    async def get_data(self, *args, **kwargs):
+                                        return {
+                                            "error": self.error_msg,
+                                            "status": "all_providers_failed",
+                                        }
+
+                                chosen_instance = TempErrorProvider(reason_text)
+
+                            cls._provider_health[normalized_type] = {
+                                "status": "failed",
+                                "provider": "error",
+                                "error": reason_text,
+                                "initialized_at": datetime.now().isoformat(),
+                            }
+
+                        instance = chosen_instance
+
+                    else:
+                        raise ValueError(f"Unknown provider type: {provider_type}")
+
+                    if instance is None:
+                        raise RuntimeError(
+                            f"Failed to create provider instance for {provider_type}"
+                        )
+
+                    cls._instances[normalized_type] = instance
+                    logger.info(f"Created {normalized_type} provider instance (async)")
+
+        instance = cls._instances.get(normalized_type)
+
+        if normalized_type == "unified" and instance is not None:
+            if not getattr(instance, "initialized", False):
+                await instance.initialize()
+
+        return instance
+
     @classmethod
-    def clear_instance(cls, provider_type: str):
+    def clear_instance(cls, provider_type: ProviderKey):
         """
         Clear a specific provider instance (useful for testing or reconnection).
-        
+
         Args:
             provider_type: Type of provider to clear
         """
+        normalized_type = cls._normalize_provider_type(provider_type)
         with cls._lock:
-            if provider_type in cls._instances:
-                logger.info(f"Clearing {provider_type} provider instance")
+            if normalized_type in cls._instances:
+                logger.info(f"Clearing {normalized_type} provider instance")
                 # Attempt graceful cleanup if available
-                instance = cls._instances[provider_type]
-                if hasattr(instance, 'close'):
+                instance = cls._instances[normalized_type]
+                if hasattr(instance, "close"):
                     try:
                         instance.close()
                     except Exception as e:
-                        logger.warning(f"Error closing {provider_type}: {e}")
-                        
-                del cls._instances[provider_type]
-    
+                        logger.warning(f"Error closing {normalized_type}: {e}")
+
+                del cls._instances[normalized_type]
+
     @classmethod
     def clear_all(cls):
         """Clear all provider instances."""
         with cls._lock:
             for provider_type in list(cls._instances.keys()):
                 cls.clear_instance(provider_type)
-    
+
     @classmethod
-    def get_stats(cls) -> Dict[str, Any]:
+    def get_stats(cls) -> ProviderFactoryStats:
         """
         Get statistics about provider instances.
-        
+
         Returns:
             Dictionary with instance information
         """
         with cls._lock:
-            stats = {
+            stats: ProviderFactoryStats = {
                 "instance_count": len(cls._instances),
                 "providers": list(cls._instances.keys()),
-                "memory_saved_mb": len(cls._instances) * 50  # Approx 50MB per instance saved
+                "memory_saved_mb": len(cls._instances) * 50,  # Approx 50MB per instance saved
             }
-            
+
             # Add provider-specific stats if available
+            provider_details: dict[str, Any] = {}
             for name, instance in cls._instances.items():
-                if hasattr(instance, 'get_statistics'):
-                    stats[f"{name}_stats"] = instance.get_statistics()
-                    return stats
+                if hasattr(instance, "get_statistics"):
+                    try:
+                        provider_details[name] = instance.get_statistics()
+                    except Exception as error:
+                        logger.warning(f"Failed to collect statistics for {name}: {error}")
+            if provider_details:
+                stats["provider_details"] = provider_details
+
+            return stats
 
     @classmethod
     def _record_provider_failure(cls, provider_name: str, failure_type: str, error_msg: str):
@@ -310,38 +430,37 @@ class DataProviderFactory:
             error_msg: 错误消息
         """
         if provider_name not in cls._provider_health:
-            cls._provider_health[provider_name] = {
-                'failures': []
-            }
+            cls._provider_health[provider_name] = {"failures": []}
 
-        failure_record = {
-            'timestamp': datetime.now().isoformat(),
-            'type': failure_type,
-            'message': error_msg
+        failure_record: ProviderFailureRecord = {
+            "timestamp": datetime.now().isoformat(),
+            "type": failure_type,
+            "message": error_msg,
         }
 
         # 记录失败
-        if 'failures' not in cls._provider_health[provider_name]:
-            cls._provider_health[provider_name]['failures'] = []
+        if "failures" not in cls._provider_health[provider_name]:
+            cls._provider_health[provider_name]["failures"] = []
 
-        cls._provider_health[provider_name]['failures'].append(failure_record)
+        cls._provider_health[provider_name]["failures"].append(failure_record)
 
         # 保留最近的20条失败记录
-        if len(cls._provider_health[provider_name]['failures']) > 20:
-            cls._provider_health[provider_name]['failures'] = \
-                cls._provider_health[provider_name]['failures'][-20:]
+        if len(cls._provider_health[provider_name]["failures"]) > 20:
+            cls._provider_health[provider_name]["failures"] = cls._provider_health[provider_name][
+                "failures"
+            ][-20:]
 
         # 更新状态
-        cls._provider_health[provider_name]['status'] = 'failed'
-        cls._provider_health[provider_name]['last_failure'] = failure_record
+        cls._provider_health[provider_name]["status"] = "failed"
+        cls._provider_health[provider_name]["last_failure"] = failure_record
 
         # 记录严重错误
-        if failure_type == 'SDK_EXIT':
+        if failure_type == "SDK_EXIT":
             logger.critical(f"[CRITICAL] Provider {provider_name} attempted to exit the process!")
-            cls._provider_health[provider_name]['critical_error'] = True
+            cls._provider_health[provider_name]["critical_error"] = True
 
     @classmethod
-    def get_health_status(cls) -> Dict[str, Any]:
+    def get_health_status(cls) -> ProviderHealthSnapshot:
         """
         获取所有提供者的健康状态
 
@@ -349,9 +468,9 @@ class DataProviderFactory:
             包含健康状态信息的字典
         """
         return {
-            'providers': cls._provider_health.copy(),
-            'fallback_status': cls._fallback_status.copy(),
-            'timestamp': datetime.now().isoformat()
+            "providers": dict(cls._provider_health),
+            "fallback_status": dict(cls._fallback_status),
+            "timestamp": datetime.now().isoformat(),
         }
 
 
@@ -368,23 +487,31 @@ async def get_unified_manager():
 
 async def get_market_service():
     """FastAPI dependency for Market Service."""
-    # 优先使用东方财富服务（最快）
-    try:
-        # from deepsearch.application.services.market.eastmoney_service import EastMoneyService
-        logger.info("Using EastMoneyService for fast real market data")
-        return EastMoneyService()
-    except Exception as e1:
-        logger.warning(f"EastMoneyService failed: {e1}, trying AkShareDirectService")
-        # 备选：使用AkShare直接服务
+    if EastMoneyService is not None:
         try:
-            # from deepsearch.application.services.market.akshare_direct_service import AkShareDirectService
+            logger.info("Using EastMoneyService for fast real market data")
+            return EastMoneyService()
+        except Exception as e1:
+            logger.warning(f"EastMoneyService failed: {e1}, trying AkShareDirectService")
+    else:
+        logger.warning("EastMoneyService implementation not available; skipping")
+
+    if AkShareDirectService is not None:
+        try:
             logger.info("Using AkShareDirectService for real market data")
             return AkShareDirectService()
         except Exception as e2:
             logger.error(f"AkShareDirectService failed: {e2}")
-            # 最后的后备：返回一个基础的MarketService
-            # from deepsearch.application.services.market.market_service import MarketService
-            return MarketService(None)
+    else:
+        logger.warning("AkShareDirectService implementation not available; skipping")
+
+    if MarketService is not None:
+        logger.info("Falling back to MarketService default implementation")
+        return MarketService(None)
+
+    raise RuntimeError(
+        "No market service implementation available; please configure a market data service."
+    )
 
 
 async def get_qmt_provider():

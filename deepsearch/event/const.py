@@ -1,6 +1,7 @@
 """
 Event type constants for the DeepSearch event system.
 """
+
 from __future__ import annotations
 
 # ==============================================================================

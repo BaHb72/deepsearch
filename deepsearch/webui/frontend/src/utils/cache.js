@@ -10,6 +10,10 @@
  * - 数据压缩
  */
 
+import logger from '@/utils/logger'
+
+const cacheLogger = logger.child('utils:cache')
+
 class CacheManager {
   constructor(options = {}) {
     // 配置选项
@@ -53,7 +57,7 @@ class CacheManager {
   async initIndexedDB() {
     return new Promise((resolve, reject) => {
       if (!window.indexedDB) {
-        console.warn('[CacheManager] IndexedDB not supported')
+        cacheLogger.warn('[CacheManager] IndexedDB not supported')
         resolve(null)
         return
       }
@@ -61,13 +65,13 @@ class CacheManager {
       const request = indexedDB.open(this.dbName, this.dbVersion)
       
       request.onerror = () => {
-        console.error('[CacheManager] IndexedDB error:', request.error)
+        cacheLogger.error('[CacheManager] IndexedDB error:', request.error)
         reject(request.error)
       }
       
       request.onsuccess = () => {
         this.db = request.result
-        console.log('[CacheManager] IndexedDB initialized')
+        cacheLogger.info('[CacheManager] IndexedDB initialized')
         resolve(this.db)
       }
       
@@ -159,7 +163,7 @@ class CacheManager {
         await this.set(key, value, options)
         return value
       } catch (error) {
-        console.error('[CacheManager] Fallback error:', error)
+        cacheLogger.error('[CacheManager] Fallback error:', error)
         return null
       }
     }
@@ -182,7 +186,7 @@ class CacheManager {
     const expiry = now + ttl
     
     // 准备缓存数据
-    let cacheData = {
+    const cacheData = {
       key,
       value,
       timestamp: now,
@@ -253,7 +257,7 @@ class CacheManager {
       await this.clearIndexed()
     }
     
-    console.log('[CacheManager] All caches cleared')
+    cacheLogger.info('[CacheManager] All caches cleared')
   }
   
   // === 内存缓存操作 ===
@@ -310,7 +314,7 @@ class CacheManager {
       const key = this.accessOrder[0]
       this.removeFromMemory(key)
       this.stats.evictions++
-      console.log(`[CacheManager] Evicted LRU item: ${key}`)
+      cacheLogger.info(`[CacheManager] Evicted LRU item: ${key}`)
     }
   }
   
@@ -334,7 +338,7 @@ class CacheManager {
       this.stats.evictions++
     })
     
-    console.log(`[CacheManager] Evicted ${toEvict.length} items to free ${freedSize} bytes`)
+    cacheLogger.info(`[CacheManager] Evicted ${toEvict.length} items to free ${freedSize} bytes`)
   }
   
   // === SessionStorage操作 ===
@@ -346,7 +350,7 @@ class CacheManager {
         return JSON.parse(data)
       }
     } catch (error) {
-      console.error('[CacheManager] SessionStorage read error:', error)
+      cacheLogger.error('[CacheManager] SessionStorage read error:', error)
     }
     return null
   }
@@ -368,7 +372,7 @@ class CacheManager {
             JSON.stringify(cacheData)
           )
         } catch (retryError) {
-          console.error('[CacheManager] SessionStorage write failed:', retryError)
+          cacheLogger.error('[CacheManager] SessionStorage write failed:', retryError)
         }
       }
     }
@@ -399,7 +403,7 @@ class CacheManager {
       }
     })
     
-    console.log(`[CacheManager] Cleaned ${removed} expired items from SessionStorage`)
+    cacheLogger.info(`[CacheManager] Cleaned ${removed} expired items from SessionStorage`)
   }
   
   // === IndexedDB操作 ===
@@ -417,7 +421,7 @@ class CacheManager {
       }
       
       request.onerror = () => {
-        console.error('[CacheManager] IndexedDB read error:', request.error)
+        cacheLogger.error('[CacheManager] IndexedDB read error:', request.error)
         reject(request.error)
       }
     })
@@ -436,7 +440,7 @@ class CacheManager {
       }
       
       request.onerror = () => {
-        console.error('[CacheManager] IndexedDB write error:', request.error)
+        cacheLogger.error('[CacheManager] IndexedDB write error:', request.error)
         reject(request.error)
       }
     })
@@ -455,7 +459,7 @@ class CacheManager {
       }
       
       request.onerror = () => {
-        console.error('[CacheManager] IndexedDB delete error:', request.error)
+        cacheLogger.error('[CacheManager] IndexedDB delete error:', request.error)
         reject(request.error)
       }
     })
@@ -474,7 +478,7 @@ class CacheManager {
       }
       
       request.onerror = () => {
-        console.error('[CacheManager] IndexedDB clear error:', request.error)
+        cacheLogger.error('[CacheManager] IndexedDB clear error:', request.error)
         reject(request.error)
       }
     })
@@ -566,7 +570,7 @@ class CacheManager {
     }
     
     if (removed > 0) {
-      console.log(`[CacheManager] Cleaned ${removed} expired items`)
+      cacheLogger.info(`[CacheManager] Cleaned ${removed} expired items`)
     }
   }
   
@@ -591,13 +595,13 @@ class CacheManager {
           removed++
           cursor.continue()
         } else {
-          console.log(`[CacheManager] Cleaned ${removed} expired items from IndexedDB`)
+          cacheLogger.info(`[CacheManager] Cleaned ${removed} expired items from IndexedDB`)
           resolve(removed)
         }
       }
       
       request.onerror = () => {
-        console.error('[CacheManager] IndexedDB cleanup error:', request.error)
+        cacheLogger.error('[CacheManager] IndexedDB cleanup error:', request.error)
         reject(request.error)
       }
     })

@@ -1,16 +1,19 @@
 """
 消息总线配置模型。
 """
+
 from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field, field_validator
 
 from deepsearch.messaging.types import BusName
+
 from .cache import RedisConfig
 
 
 class RouteConfig(BaseModel):
     """消息总线的路由配置。"""
+
     match: str = Field(..., description="遵循 fnmatch 规则的主题模式")
     buses: List[BusName] = Field(..., description="目标总线列表")
 
@@ -21,6 +24,7 @@ class RouteConfig(BaseModel):
 
 class BusInstanceConfig(BaseModel):
     """单个总线实例配置。"""
+
     type: BusName = Field(..., description="总线类型")
     enabled: bool = Field(True, description="是否启用该总线")
     config: Dict[str, Any] = Field(default_factory=dict, description="总线特定配置")
@@ -28,13 +32,12 @@ class BusInstanceConfig(BaseModel):
 
 class MessageBusConfig(BaseModel):
     """消息总线配置。"""
+
     buses: Dict[str, BusInstanceConfig] = Field(
-        default_factory=lambda: MessageBusConfig._create_default_buses(),
-        description="总线实例配置"
+        default_factory=lambda: MessageBusConfig._create_default_buses(), description="总线实例配置"
     )
     routes: List[RouteConfig] = Field(
-        default_factory=lambda: [RouteConfig(match="*", buses=["zmq"])],
-        description="消息路由配置"
+        default_factory=lambda: [RouteConfig(match="*", buses=[BusName.ZMQ])], description="消息路由配置"
     )
 
     @staticmethod
@@ -53,14 +56,10 @@ class MessageBusConfig(BaseModel):
                     "sub_port": 5557,
                     "send_hwm": 1000,
                     "recv_hwm": 1000,
-                    "verbose": True
-                }
+                    "verbose": True,
+                },
             },
-            "inmem": {
-                "type": "inmem",
-                "enabled": False,
-                "config": {}
-            },
+            "inmem": {"type": "inmem", "enabled": False, "config": {}},
             "timeseries": {
                 "type": "timeseries",
                 "enabled": False,
@@ -72,16 +71,18 @@ class MessageBusConfig(BaseModel):
                         "db": redis_defaults.db,
                         "key_prefix": redis_defaults.key_prefix,
                         "retention_ms": redis_defaults.retention_ms,
-                        "duplicate_policy": redis_defaults.duplicate_policy
+                        "duplicate_policy": redis_defaults.duplicate_policy,
                     },
-                    "enable_persistence": True
-                }
-            }
+                    "enable_persistence": True,
+                },
+            },
         }
 
         # 使用模型进行验证
-        return {name: BusInstanceConfig.model_validate(config)
-                for name, config in default_configs.items()}
+        return {
+            name: BusInstanceConfig.model_validate(config)
+            for name, config in default_configs.items()
+        }
 
     @property
     def enabled_buses(self) -> List[str]:

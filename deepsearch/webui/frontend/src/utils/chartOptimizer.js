@@ -3,8 +3,13 @@
  * 提供性能优化、内存管理、渲染优化等功能
  */
 
+import logger from '@/utils/logger'
+import { ref, onMounted, onUnmounted } from 'vue'
+
+const chartOptimizerLogger = logger.child('utils:chart-optimizer')
+
 import * as echarts from 'echarts'
-import { debounce, throttle } from 'lodash-es'
+import { debounce } from 'lodash-es'
 
 /**
  * 图表优化配置
@@ -82,7 +87,7 @@ class ChartManager {
     
     // 检查容器
     if (!container || !container.offsetWidth || !container.offsetHeight) {
-      console.warn('Chart container is not ready:', container)
+      chartOptimizerLogger.warn('Chart container is not ready:', container)
       return null
     }
 
@@ -144,7 +149,7 @@ class ChartManager {
     const { instance } = chartInfo
     
     // 优化选项
-    const optimizedOption = this.optimizeOption(option, chartInfo)
+    const optimizedOption = this.optimizeOption(option)
     
     // 记录性能
     const startTime = performance.now()
@@ -162,7 +167,7 @@ class ChartManager {
     
     // 检查是否需要优化
     if (renderTime > 100) {
-      console.warn(`Chart ${chartId} rendering took ${renderTime}ms`)
+      chartOptimizerLogger.warn(`Chart ${chartId} rendering took ${renderTime}ms`)
       this.suggestOptimizations(chartInfo)
     }
   }
@@ -170,7 +175,7 @@ class ChartManager {
   /**
    * 优化图表选项
    */
-  optimizeOption(option, chartInfo) {
+  optimizeOption(option) {
     const optimized = { ...option }
     
     // 应用渲染优化
@@ -384,7 +389,7 @@ class ChartManager {
     this.charts.forEach((chartInfo, chartId) => {
       // 清理长时间未更新的图表
       if (now - chartInfo.lastUpdate > staleThreshold) {
-        console.log(`GC: Disposing stale chart ${chartId}`)
+        chartOptimizerLogger.info(`GC: Disposing stale chart ${chartId}`)
         this.dispose(chartId)
       }
     })
@@ -395,7 +400,7 @@ class ChartManager {
       const usageRatio = memoryInfo.usedJSHeapSize / memoryInfo.jsHeapSizeLimit
       
       if (usageRatio > 0.8) {
-        console.warn('Memory pressure detected, clearing chart cache')
+        chartOptimizerLogger.warn('Memory pressure detected, clearing chart cache')
         this.clearCache()
       }
     }
@@ -420,7 +425,7 @@ class ChartManager {
    * 紧急清理
    */
   emergencyCleanup() {
-    console.warn('Emergency cleanup triggered')
+    chartOptimizerLogger.warn('Emergency cleanup triggered')
     
     // 清理所有非活动图表
     const activeCharts = new Set()
@@ -482,7 +487,7 @@ class ChartManager {
     }
     
     if (suggestions.length > 0) {
-      console.log('Optimization suggestions:', suggestions)
+      chartOptimizerLogger.info('Optimization suggestions:', suggestions)
     }
   }
 

@@ -10,7 +10,10 @@
  * - 批量消息处理
  */
 
-import { ref, reactive } from 'vue'
+import { reactive, getCurrentInstance, onUnmounted } from 'vue'
+import logger from '@/utils/logger'
+
+const wsLogger = logger.child('utils:websocket')
 
 class WebSocketConnection {
   constructor({
@@ -153,7 +156,7 @@ class WebSocketConnection {
           this.handleMessage(data)
         }
       } catch (error) {
-        console.error('WebSocket message parsing error:', error)
+        wsLogger.error('[MESSAGE_PARSE_ERROR]', error)
       }
     }
   }
@@ -172,7 +175,7 @@ class WebSocketConnection {
       try {
         handler(data)
       } catch (error) {
-        console.error(`Handler error for topic ${topic}:`, error)
+        wsLogger.error(`[TOPIC_HANDLER_ERROR] ${topic}`, error)
       }
     })
     
@@ -182,7 +185,7 @@ class WebSocketConnection {
       try {
         handler(data)
       } catch (error) {
-        console.error('Universal handler error:', error)
+        wsLogger.error('[UNIVERSAL_HANDLER_ERROR]', error)
       }
     })
   }
@@ -245,7 +248,7 @@ class WebSocketConnection {
       this.stats.messagesSent++
       this.stats.bytesSent += message.length
     } catch (error) {
-      console.error('WebSocket send error:', error)
+      wsLogger.error('[SEND_ERROR]', error)
       this.handleError(error)
     }
   }
@@ -346,7 +349,7 @@ class WebSocketConnection {
       try {
         handler(data)
       } catch (error) {
-        console.error(`Event handler error for ${event}:`, error)
+        wsLogger.error(`[EVENT_HANDLER_ERROR] ${event}`, error)
       }
     })
   }
@@ -409,7 +412,7 @@ class WebSocketManager {
   
   create(key, options) {
     if (this.connections.has(key)) {
-      console.warn(`WebSocket connection ${key} already exists`)
+      wsLogger.warn(`[DUPLICATE_CONNECTION] 已存在连接 ${key}`)
       return this.connections.get(key)
     }
     

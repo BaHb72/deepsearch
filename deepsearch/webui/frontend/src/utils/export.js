@@ -2,6 +2,10 @@
  * 导出工具函数
  */
 
+import logger from '@/utils/logger'
+
+const exportLogger = logger.child('utils:export')
+
 /**
  * 导出数据到Excel
  * @param {Array} data - 要导出的数据数组
@@ -19,7 +23,7 @@ export function exportToExcel(data, filename = 'export.xlsx') {
  */
 export function exportToCSV(data, filename = 'export.csv') {
   if (!data || data.length === 0) {
-    console.warn('No data to export')
+    exportLogger.warn('No data to export')
     return
   }
   
@@ -152,7 +156,7 @@ export async function copyToClipboard(text) {
       return success
     }
   } catch (error) {
-    console.error('Failed to copy to clipboard:', error)
+    exportLogger.error('Failed to copy to clipboard:', error)
     return false
   }
 }
@@ -174,12 +178,13 @@ export function exportCapabilityReport(comparisonData, format = 'csv', filename 
     case 'json':
       exportToJSON(comparisonData, filename || `${defaultFilename}.json`)
       break
-    case 'markdown':
+    case 'markdown': {
       const markdown = tableToMarkdown(comparisonData)
       const blob = new Blob([markdown], { type: 'text/markdown' })
       downloadBlob(blob, filename || `${defaultFilename}.md`)
       break
+    }
     default:
-      console.warn(`Unsupported export format: ${format}`)
+      exportLogger.warn(`Unsupported export format: ${format}`)
   }
 }

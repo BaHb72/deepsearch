@@ -3,8 +3,8 @@
 
 解决跨平台文件编码问题，特别是Windows的GBK编码问题
 """
+
 import codecs
-import logging
 import os
 import sys
 from contextlib import contextmanager
@@ -13,7 +13,9 @@ from typing import Any, Dict, List, Optional, Union
 
 import chardet
 
-logger = logging.getLogger(__name__)
+from deepsearch.observability import get_logger
+
+logger = get_logger(__name__)
 
 
 class EncodingDetector:
@@ -21,27 +23,24 @@ class EncodingDetector:
 
     # 常见编码列表（按优先级排序）
     COMMON_ENCODINGS = [
-        'utf-8',
-        'gbk',
-        'gb2312',
-        'gb18030',
-        'utf-16',
-        'utf-16le',
-        'utf-16be',
-        'big5',
-        'shift_jis',
-        'euc-jp',
-        'euc-kr',
-        'iso-8859-1',
-        'windows-1252',
-        'ascii'
+        "utf-8",
+        "gbk",
+        "gb2312",
+        "gb18030",
+        "utf-16",
+        "utf-16le",
+        "utf-16be",
+        "big5",
+        "shift_jis",
+        "euc-jp",
+        "euc-kr",
+        "iso-8859-1",
+        "windows-1252",
+        "ascii",
     ]
 
     @staticmethod
-    def detect_encoding(
-        file_path: Union[str, Path],
-        default: str = 'utf-8'
-    ) -> str:
+    def detect_encoding(file_path: Union[str, Path], default: str = "utf-8") -> str:
         """
         检测文件编码
 
@@ -59,7 +58,7 @@ class EncodingDetector:
 
         try:
             # 读取文件前几KB用于检测
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 raw_data = f.read(4096)
 
             if not raw_data:
@@ -68,20 +67,21 @@ class EncodingDetector:
             # 使用chardet检测
             result = chardet.detect(raw_data)
 
-            if result and result['encoding']:
-                encoding = result['encoding'].lower()
-                confidence = result.get('confidence', 0)
+            if result and result["encoding"]:
+                encoding = result["encoding"].lower()
+                confidence = result.get("confidence", 0)
 
                 # 如果置信度高，使用检测结果
                 if confidence > 0.8:
                     # 标准化编码名称
-                    encoding_map = {
-                        'gb2312': 'gbk',
-                        'gb18030': 'gbk',
-                        'windows-1252': 'iso-8859-1',
-                        'ascii': 'utf-8',  # ASCII是UTF-8的子集
+                    encoding_map: Dict[str, str] = {
+                        "gb2312": "gbk",
+                        "gb18030": "gbk",
+                        "windows-1252": "iso-8859-1",
+                        "ascii": "utf-8",  # ASCII是UTF-8的子集
                     }
-                    return encoding_map.get(encoding, encoding)
+                    mapped_encoding = encoding_map.get(encoding)
+                    return mapped_encoding if mapped_encoding is not None else encoding
 
             # 置信度低，尝试常见编码
             for encoding in EncodingDetector.COMMON_ENCODINGS:
@@ -111,12 +111,33 @@ class EncodingDetector:
 
         # 检查文件扩展名
         binary_extensions = {
-            '.exe', '.dll', '.so', '.dylib', '.bin',
-            '.jpg', '.jpeg', '.png', '.gif', '.bmp',
-            '.mp3', '.mp4', '.avi', '.mov',
-            '.zip', '.tar', '.gz', '.7z', '.rar',
-            '.pdf', '.doc', '.docx', '.xls', '.xlsx',
-            '.pyc', '.pyo', '.whl',
+            ".exe",
+            ".dll",
+            ".so",
+            ".dylib",
+            ".bin",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".gif",
+            ".bmp",
+            ".mp3",
+            ".mp4",
+            ".avi",
+            ".mov",
+            ".zip",
+            ".tar",
+            ".gz",
+            ".7z",
+            ".rar",
+            ".pdf",
+            ".doc",
+            ".docx",
+            ".xls",
+            ".xlsx",
+            ".pyc",
+            ".pyo",
+            ".whl",
         }
 
         if file_path.suffix.lower() in binary_extensions:
@@ -124,13 +145,13 @@ class EncodingDetector:
 
         # 读取文件开头检查
         try:
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 chunk = f.read(512)
                 if not chunk:
                     return False
 
                 # 检查是否包含NULL字节
-                if b'\x00' in chunk:
+                if b"\x00" in chunk:
                     return True
 
                 # 检查非文本字符比例
@@ -151,8 +172,8 @@ class SafeFileHandler:
     def read_file(
         file_path: Union[str, Path],
         encoding: Optional[str] = None,
-        errors: str = 'replace',
-        auto_detect: bool = True
+        errors: str = "replace",
+        auto_detect: bool = True,
     ) -> str:
         """
         安全读取文件
@@ -172,10 +193,10 @@ class SafeFileHandler:
         if encoding is None and auto_detect:
             encoding = EncodingDetector.detect_encoding(file_path)
         elif encoding is None:
-            encoding = 'utf-8'
+            encoding = "utf-8"
 
         try:
-            with open(file_path, 'r', encoding=encoding, errors=errors) as f:
+            with open(file_path, "r", encoding=encoding, errors=errors) as f:
                 return f.read()
         except UnicodeDecodeError as e:
             logger.warning(f"使用 {encoding} 读取文件失败: {e}")
@@ -186,7 +207,7 @@ class SafeFileHandler:
                     continue
 
                 try:
-                    with open(file_path, 'r', encoding=fallback_encoding, errors=errors) as f:
+                    with open(file_path, "r", encoding=fallback_encoding, errors=errors) as f:
                         logger.info(f"使用备用编码 {fallback_encoding} 成功读取文件")
                         return f.read()
                 except UnicodeDecodeError:
@@ -194,17 +215,17 @@ class SafeFileHandler:
 
             # 所有编码都失败，使用二进制模式
             logger.error(f"无法解码文件 {file_path}，返回二进制内容的字符串表示")
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 return str(f.read())
 
     @staticmethod
     def write_file(
         file_path: Union[str, Path],
         content: str,
-        encoding: str = 'utf-8',
-        errors: str = 'replace',
+        encoding: str = "utf-8",
+        errors: str = "replace",
         ensure_dir: bool = True,
-        backup: bool = False
+        backup: bool = False,
     ) -> None:
         """
         安全写入文件
@@ -225,27 +246,27 @@ class SafeFileHandler:
 
         # 备份原文件
         if backup and file_path.exists():
-            backup_path = file_path.with_suffix(file_path.suffix + '.bak')
+            backup_path = file_path.with_suffix(file_path.suffix + ".bak")
             file_path.rename(backup_path)
             logger.info(f"已备份原文件到 {backup_path}")
 
         # 写入文件
         try:
-            with open(file_path, 'w', encoding=encoding, errors=errors) as f:
+            with open(file_path, "w", encoding=encoding, errors=errors) as f:
                 f.write(content)
         except UnicodeEncodeError as e:
             logger.error(f"使用 {encoding} 写入文件失败: {e}")
 
             # 尝试GBK（Windows常用）
-            if encoding != 'gbk' and sys.platform == 'win32':
+            if encoding != "gbk" and sys.platform == "win32":
                 try:
-                    with open(file_path, 'w', encoding='gbk', errors=errors) as f:
+                    with open(file_path, "w", encoding="gbk", errors=errors) as f:
                         f.write(content)
                     logger.info("使用GBK编码成功写入文件")
                 except UnicodeEncodeError:
                     # 最后尝试UTF-8 with BOM
-                    with open(file_path, 'wb') as f:
-                        f.write(codecs.BOM_UTF8 + content.encode('utf-8', errors=errors))
+                    with open(file_path, "wb") as f:
+                        f.write(codecs.BOM_UTF8 + content.encode("utf-8", errors=errors))
                     logger.info("使用UTF-8 with BOM写入文件")
 
     @staticmethod
@@ -253,7 +274,7 @@ class SafeFileHandler:
         file_path: Union[str, Path],
         target_encoding: str,
         source_encoding: Optional[str] = None,
-        backup: bool = True
+        backup: bool = True,
     ) -> None:
         """
         转换文件编码
@@ -267,19 +288,10 @@ class SafeFileHandler:
         file_path = Path(file_path)
 
         # 读取文件
-        content = SafeFileHandler.read_file(
-            file_path,
-            encoding=source_encoding,
-            auto_detect=True
-        )
+        content = SafeFileHandler.read_file(file_path, encoding=source_encoding, auto_detect=True)
 
         # 写入新编码
-        SafeFileHandler.write_file(
-            file_path,
-            content,
-            encoding=target_encoding,
-            backup=backup
-        )
+        SafeFileHandler.write_file(file_path, content, encoding=target_encoding, backup=backup)
 
         logger.info(f"已将文件 {file_path} 转换为 {target_encoding} 编码")
 
@@ -290,44 +302,40 @@ class PlatformEncodingHelper:
     @staticmethod
     def get_default_encoding() -> str:
         """获取平台默认编码"""
-        if sys.platform == 'win32':
+        if sys.platform == "win32":
             # Windows默认使用GBK（中文版）
             import locale
+
             encoding = locale.getpreferredencoding(False)
-            return 'gbk' if encoding.lower().startswith('cp936') else encoding
+            return "gbk" if encoding.lower().startswith("cp936") else encoding
         else:
             # Unix/Linux/Mac默认使用UTF-8
-            return 'utf-8'
+            return "utf-8"
 
     @staticmethod
     def get_console_encoding() -> str:
         """获取控制台编码"""
-        if hasattr(sys.stdout, 'encoding'):
-            return sys.stdout.encoding or 'utf-8'
-        return 'utf-8'
+        if hasattr(sys.stdout, "encoding"):
+            return sys.stdout.encoding or "utf-8"
+        return "utf-8"
 
     @staticmethod
-    def setup_console_encoding(encoding: str = 'utf-8') -> None:
+    def setup_console_encoding(encoding: str = "utf-8") -> None:
         """
         设置控制台编码
 
         Args:
             encoding: 目标编码
         """
-        if sys.platform == 'win32':
+        if sys.platform == "win32":
             # Windows特殊处理
             import io
+
             sys.stdout = io.TextIOWrapper(
-                sys.stdout.buffer,
-                encoding=encoding,
-                errors='replace',
-                line_buffering=True
+                sys.stdout.buffer, encoding=encoding, errors="replace", line_buffering=True
             )
             sys.stderr = io.TextIOWrapper(
-                sys.stderr.buffer,
-                encoding=encoding,
-                errors='replace',
-                line_buffering=True
+                sys.stderr.buffer, encoding=encoding, errors="replace", line_buffering=True
             )
 
     @staticmethod
@@ -346,9 +354,9 @@ class PlatformEncodingHelper:
             print(text)
         except UnicodeEncodeError:
             # 尝试不同的编码
-            for fallback_encoding in ['utf-8', 'gbk', 'ascii']:
+            for fallback_encoding in ["utf-8", "gbk", "ascii"]:
                 try:
-                    encoded = text.encode(fallback_encoding, errors='replace')
+                    encoded = text.encode(fallback_encoding, errors="replace")
                     decoded = encoded.decode(fallback_encoding)
                     print(decoded)
                     break
@@ -356,16 +364,13 @@ class PlatformEncodingHelper:
                     continue
             else:
                 # 最后的手段：移除非ASCII字符
-                ascii_text = ''.join(c if ord(c) < 128 else '?' for c in text)
+                ascii_text = "".join(c if ord(c) < 128 else "?" for c in text)
                 print(ascii_text)
 
 
 @contextmanager
 def safe_open(
-    file_path: Union[str, Path],
-    mode: str = 'r',
-    encoding: Optional[str] = None,
-    **kwargs
+    file_path: Union[str, Path], mode: str = "r", encoding: Optional[str] = None, **kwargs
 ):
     """
     安全打开文件的上下文管理器
@@ -382,15 +387,15 @@ def safe_open(
     file_path = Path(file_path)
 
     # 如果是文本模式且没有指定编码，自动检测
-    if 'b' not in mode and encoding is None:
+    if "b" not in mode and encoding is None:
         encoding = EncodingDetector.detect_encoding(file_path)
 
     # 设置错误处理
-    if 'errors' not in kwargs and 'b' not in mode:
-        kwargs['errors'] = 'replace'
+    if "errors" not in kwargs and "b" not in mode:
+        kwargs["errors"] = "replace"
 
     # 打开文件
-    if 'b' not in mode:
+    if "b" not in mode:
         f = open(file_path, mode, encoding=encoding, **kwargs)
     else:
         f = open(file_path, mode, **kwargs)
@@ -403,69 +408,53 @@ def safe_open(
 
 def fix_encoding_in_directory(
     directory: Union[str, Path],
-    file_patterns: List[str] = None,
-    target_encoding: str = 'utf-8',
-    dry_run: bool = True
+    file_patterns: Optional[List[str]] = None,
+    target_encoding: str = "utf-8",
+    dry_run: bool = True,
 ) -> Dict[str, Any]:
-    """
-    修复目录中所有文件的编码
-
-    Args:
-        directory: 目录路径
-        file_patterns: 文件模式列表 (如 ['*.py', '*.txt'])
-        target_encoding: 目标编码
-        dry_run: 是否仅模拟运行
-
-    Returns:
-        处理结果统计
-    """
+    """修复目录中文件的文本编码。"""
     directory = Path(directory)
 
     if file_patterns is None:
-        file_patterns = ['*.py', '*.txt', '*.md', '*.json', '*.yaml', '*.yml']
+        file_patterns = ["*.py", "*.txt", "*.md", "*.json", "*.yaml", "*.yml"]
 
-    results = {
-        'total_files': 0,
-        'converted_files': [],
-        'skipped_files': [],
-        'failed_files': [],
-    }
+    total_files = 0
+    converted_files: List[Dict[str, str]] = []
+    skipped_files: List[str] = []
+    failed_files: List[Dict[str, str]] = []
 
     for pattern in file_patterns:
         for file_path in directory.rglob(pattern):
-            if file_path.is_file():
-                results['total_files'] += 1
+            if not file_path.is_file():
+                continue
 
-                # 检测当前编码
-                current_encoding = EncodingDetector.detect_encoding(file_path)
+            total_files += 1
+            current_encoding = EncodingDetector.detect_encoding(file_path)
 
-                if current_encoding == target_encoding:
-                    results['skipped_files'].append(str(file_path))
-                    continue
+            if current_encoding == target_encoding:
+                skipped_files.append(str(file_path))
+                continue
 
-                try:
-                    if not dry_run:
-                        SafeFileHandler.convert_encoding(
-                            file_path,
-                            target_encoding,
-                            source_encoding=current_encoding,
-                            backup=True
-                        )
-                    results['converted_files'].append({
-                        'path': str(file_path),
-                        'from': current_encoding,
-                        'to': target_encoding
-                    })
-                except Exception as e:
-                    results['failed_files'].append({
-                        'path': str(file_path),
-                        'error': str(e)
-                    })
+            try:
+                if not dry_run:
+                    SafeFileHandler.convert_encoding(
+                        file_path,
+                        target_encoding,
+                        source_encoding=current_encoding,
+                        backup=True,
+                    )
+                converted_files.append(
+                    {"path": str(file_path), "from": current_encoding, "to": target_encoding}
+                )
+            except Exception as exc:
+                failed_files.append({"path": str(file_path), "error": str(exc)})
 
-    return results
-
-
-# 便捷函数
+    return {
+        "total_files": total_files,
+        "converted_files": converted_files,
+        "skipped_files": skipped_files,
+        "failed_files": failed_files,
+    }
 def read_text(file_path: Union[str, Path], **kwargs) -> str:
     """便捷的文本读取函数"""
     return SafeFileHandler.read_file(file_path, **kwargs)
@@ -482,13 +471,14 @@ def detect(file_path: Union[str, Path]) -> str:
 
 
 # Windows特殊处理
-if sys.platform == 'win32':
+if sys.platform == "win32":
     # 设置环境变量以支持UTF-8
-    os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
+    os.environ["PYTHONIOENCODING"] = "utf-8:replace"
 
     # 启用ANSI转义序列（用于彩色输出）
     try:
         import ctypes
+
         kernel32 = ctypes.windll.kernel32
         kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
     except Exception:
@@ -502,17 +492,10 @@ if __name__ == "__main__":
     print(f"文件内容: {content[:100]}...")
 
     # 示例2：转换编码
-    SafeFileHandler.convert_encoding(
-        "test_gbk.txt",
-        target_encoding="utf-8",
-        source_encoding="gbk"
-    )
+    SafeFileHandler.convert_encoding("test_gbk.txt", target_encoding="utf-8", source_encoding="gbk")
 
     # 示例3：批量修复编码
     results = fix_encoding_in_directory(
-        ".",
-        file_patterns=["*.py"],
-        target_encoding="utf-8",
-        dry_run=False
+        ".", file_patterns=["*.py"], target_encoding="utf-8", dry_run=False
     )
     print(f"处理结果: {results}")

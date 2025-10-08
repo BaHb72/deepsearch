@@ -8,10 +8,10 @@ Version: 1.0.0
 Date: 2025-09-18
 """
 
-import asyncio
 import threading
 import time
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict
+
 from loguru import logger
 
 
@@ -27,12 +27,7 @@ def test_realtime_subscription(ad_module, symbol: str, timeout: int = 3) -> Dict
     Returns:
         测试结果字典
     """
-    result = {
-        "success": False,
-        "message": "",
-        "data": None,
-        "error": None
-    }
+    result = {"success": False, "message": "", "data": None, "error": None}
 
     try:
         # 创建订阅对象
@@ -40,17 +35,10 @@ def test_realtime_subscription(ad_module, symbol: str, timeout: int = 3) -> Dict
         received_data = []
 
         # 注册回调函数
-        @sub_data.register(
-            code_list=[symbol],
-            period=ad_module.constant.Period.snapshot.value
-        )
+        @sub_data.register(code_list=[symbol], period=ad_module.constant.Period.snapshot.value)
         def onSnapshot(data, period):
             """实时快照回调函数"""
-            received_data.append({
-                "data": data,
-                "period": period,
-                "timestamp": time.time()
-            })
+            received_data.append({"data": data, "period": period, "timestamp": time.time()})
             logger.info(f"收到实时数据: {symbol} - {period}")
 
         # 在后台线程运行订阅
@@ -79,7 +67,7 @@ def test_realtime_subscription(ad_module, symbol: str, timeout: int = 3) -> Dict
             result["error"] = "No realtime data received"
 
         # 停止订阅
-        if hasattr(sub_data, 'stop'):
+        if hasattr(sub_data, "stop"):
             sub_data.stop()
 
     except Exception as e:
@@ -114,7 +102,7 @@ async def test_realtime_with_fallback(ad_module, symbol: str) -> Dict[str, Any]:
         base_data = ad_module.BaseData()
 
         # 获取证券信息
-        code_info = base_data.get_code_info('EXTRA_STOCK_A')
+        code_info = base_data.get_code_info("EXTRA_STOCK_A")
 
         if code_info is not None and len(code_info) > 0:
             # 查找特定股票信息
@@ -125,12 +113,12 @@ async def test_realtime_with_fallback(ad_module, symbol: str) -> Dict[str, Any]:
                     "message": "获取到股票基础信息",
                     "data": {
                         "symbol": symbol,
-                        "pre_close": stock_info.get('pre_close', None),
-                        "high_limited": stock_info.get('high_limited', None),
-                        "low_limited": stock_info.get('low_limited', None)
+                        "pre_close": stock_info.get("pre_close", None),
+                        "high_limited": stock_info.get("high_limited", None),
+                        "low_limited": stock_info.get("low_limited", None),
                     },
                     "error": None,
-                    "note": "实时行情需在交易时间通过订阅获取"
+                    "note": "实时行情需在交易时间通过订阅获取",
                 }
             else:
                 # 获取交易日历验证连接
@@ -140,25 +128,20 @@ async def test_realtime_with_fallback(ad_module, symbol: str) -> Dict[str, Any]:
                     "message": "连接成功，获取到交易日历",
                     "data": {
                         "trading_days": len(calendar) if calendar else 0,
-                        "total_stocks": len(code_info)
+                        "total_stocks": len(code_info),
                     },
                     "error": None,
-                    "note": "股票代码不在列表中"
+                    "note": "股票代码不在列表中",
                 }
         else:
             return {
                 "success": False,
                 "message": "无法获取基础数据",
                 "data": None,
-                "error": "Failed to get basic data"
+                "error": "Failed to get basic data",
             }
     except Exception as e:
-        return {
-            "success": False,
-            "message": "基础数据测试失败",
-            "data": None,
-            "error": str(e)
-        }
+        return {"success": False, "message": "基础数据测试失败", "data": None, "error": str(e)}
 
 
 def format_symbol_for_amazingdata(symbol: str) -> str:
@@ -172,19 +155,19 @@ def format_symbol_for_amazingdata(symbol: str) -> str:
         格式化后的代码（如SZ.000001）
     """
     # 如果已经是正确格式，直接返回
-    if '.' in symbol:
+    if "." in symbol:
         return symbol
 
     # 6位数字代码，需要添加市场前缀
     if len(symbol) == 6 and symbol.isdigit():
         # 上海市场
-        if symbol.startswith(('60', '68', '50', '51')):
+        if symbol.startswith(("60", "68", "50", "51")):
             return f"SH.{symbol}"
         # 深圳市场
-        elif symbol.startswith(('00', '30', '12')):
+        elif symbol.startswith(("00", "30", "12")):
             return f"SZ.{symbol}"
         # 北交所
-        elif symbol.startswith(('83', '43', '87', '88')):
+        elif symbol.startswith(("83", "43", "87", "88")):
             return f"BJ.{symbol}"
 
     # 默认返回原始代码

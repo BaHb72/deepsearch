@@ -9,6 +9,11 @@
  * - 支持批量管理
  */
 
+import { getCurrentInstance, onUnmounted } from 'vue'
+import logger from '@/utils/logger'
+
+const pollingLogger = logger.child('utils:polling')
+
 class PollingTask {
   constructor({
     key,
@@ -128,7 +133,7 @@ class PollingTask {
       try {
         await this.execute()
       } catch (error) {
-        console.error(`Polling error for ${this.key}:`, error)
+        pollingLogger.error(`[TASK_ERROR] ${this.key}`, error)
       }
       
       if (!this.paused) {

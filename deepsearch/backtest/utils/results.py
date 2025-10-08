@@ -3,10 +3,12 @@ BacktestResult - 回测结果类
 
 存储和管理回测结果数据
 """
+
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 
 
@@ -14,7 +16,7 @@ import numpy as np
 class BacktestResult:
     """
     回测结果数据类
-    
+
     包含回测的所有关键指标和详细数据
     """
 
@@ -67,33 +69,39 @@ class BacktestResult:
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
         return {
-            'backtest_id': self.backtest_id,
-            'strategy_name': self.strategy_name,
-            'symbol': self.symbol,
-            'start_date': self.start_date.isoformat() if isinstance(self.start_date, datetime) else self.start_date,
-            'end_date': self.end_date.isoformat() if isinstance(self.end_date, datetime) else self.end_date,
-            'timestamp': self.timestamp.isoformat(),
-            'initial_cash': self.initial_cash,
-            'final_cash': self.final_cash,
-            'total_return': self.total_return,
-            'sharpe_ratio': self.sharpe_ratio,
-            'max_drawdown': self.max_drawdown,
-            'win_rate': self.win_rate,
-            'total_trades': self.total_trades,
-            'profit_trades': self.profit_trades,
-            'loss_trades': self.loss_trades,
-            'annual_returns': self.annual_returns,
-            'commission': self.commission,
-            'slippage': self.slippage,
-            'profit_factor': self.profit_factor,
-            'average_win': self.average_win,
-            'average_loss': self.average_loss,
-            'largest_win': self.largest_win,
-            'largest_loss': self.largest_loss,
-            'calmar_ratio': self.calmar_ratio,
-            'sortino_ratio': self.sortino_ratio,
-            'trades_count': len(self.trades),
-            'has_daily_returns': bool(self.daily_returns)
+            "backtest_id": self.backtest_id,
+            "strategy_name": self.strategy_name,
+            "symbol": self.symbol,
+            "start_date": (
+                self.start_date.isoformat()
+                if isinstance(self.start_date, datetime)
+                else self.start_date
+            ),
+            "end_date": (
+                self.end_date.isoformat() if isinstance(self.end_date, datetime) else self.end_date
+            ),
+            "timestamp": self.timestamp.isoformat(),
+            "initial_cash": self.initial_cash,
+            "final_cash": self.final_cash,
+            "total_return": self.total_return,
+            "sharpe_ratio": self.sharpe_ratio,
+            "max_drawdown": self.max_drawdown,
+            "win_rate": self.win_rate,
+            "total_trades": self.total_trades,
+            "profit_trades": self.profit_trades,
+            "loss_trades": self.loss_trades,
+            "annual_returns": self.annual_returns,
+            "commission": self.commission,
+            "slippage": self.slippage,
+            "profit_factor": self.profit_factor,
+            "average_win": self.average_win,
+            "average_loss": self.average_loss,
+            "largest_win": self.largest_win,
+            "largest_loss": self.largest_loss,
+            "calmar_ratio": self.calmar_ratio,
+            "sortino_ratio": self.sortino_ratio,
+            "trades_count": len(self.trades),
+            "has_daily_returns": bool(self.daily_returns),
         }
 
     def to_json(self) -> str:
@@ -101,15 +109,15 @@ class BacktestResult:
         return json.dumps(self.to_dict(), indent=2, ensure_ascii=False)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'BacktestResult':
+    def from_dict(cls, data: Dict[str, Any]) -> "BacktestResult":
         """从字典创建实例"""
         # 转换日期字符串为 datetime 对象
-        if isinstance(data.get('start_date'), str):
-            data['start_date'] = datetime.fromisoformat(data['start_date'])
-        if isinstance(data.get('end_date'), str):
-            data['end_date'] = datetime.fromisoformat(data['end_date'])
-        if isinstance(data.get('timestamp'), str):
-            data['timestamp'] = datetime.fromisoformat(data['timestamp'])
+        if isinstance(data.get("start_date"), str):
+            data["start_date"] = datetime.fromisoformat(data["start_date"])
+        if isinstance(data.get("end_date"), str):
+            data["end_date"] = datetime.fromisoformat(data["end_date"])
+        if isinstance(data.get("timestamp"), str):
+            data["timestamp"] = datetime.fromisoformat(data["timestamp"])
 
         return cls(**data)
 
@@ -165,7 +173,7 @@ class BacktestResult:
         if years <= 0:
             return 0
 
-        return ((1 + self.total_return) ** (1 / years)) - 1
+        return float(((1 + self.total_return) ** (1 / years)) - 1)
 
     def calculate_additional_metrics(self):
         """计算额外的性能指标"""
@@ -173,14 +181,14 @@ class BacktestResult:
             return
 
         # 分离盈利和亏损交易
-        profits = [t['pnl'] for t in self.trades if t.get('pnl', 0) > 0]
-        losses = [abs(t['pnl']) for t in self.trades if t.get('pnl', 0) < 0]
+        profits = [t["pnl"] for t in self.trades if t.get("pnl", 0) > 0]
+        losses = [abs(t["pnl"]) for t in self.trades if t.get("pnl", 0) < 0]
 
         # 计算盈亏比
         if losses and sum(losses) > 0:
             self.profit_factor = sum(profits) / sum(losses) if profits else 0
         else:
-            self.profit_factor = float('inf') if profits else 0
+            self.profit_factor = float("inf") if profits else 0
 
         # 计算平均盈亏
         self.average_win = sum(profits) / len(profits) if profits else 0
@@ -210,42 +218,42 @@ class BacktestResult:
                 else:
                     self.sortino_ratio = 0
             else:
-                self.sortino_ratio = float('inf')  # 没有负收益
+                self.sortino_ratio = float("inf")  # 没有负收益
 
-    def compare_with(self, other: 'BacktestResult') -> Dict[str, Dict[str, Any]]:
+    def compare_with(self, other: "BacktestResult") -> Dict[str, Dict[str, Any]]:
         """
         与另一个回测结果比较
-        
+
         Args:
             other: 另一个回测结果
-            
+
         Returns:
             比较结果字典
         """
-        comparison = {
-            'current': {
-                'strategy': self.strategy_name,
-                'total_return': self.total_return,
-                'sharpe_ratio': self.sharpe_ratio,
-                'max_drawdown': self.max_drawdown,
-                'win_rate': self.win_rate,
-                'total_trades': self.total_trades
+        comparison: Dict[str, Dict[str, Any]] = {
+            "current": {
+                "strategy": self.strategy_name,
+                "total_return": self.total_return,
+                "sharpe_ratio": self.sharpe_ratio,
+                "max_drawdown": self.max_drawdown,
+                "win_rate": self.win_rate,
+                "total_trades": self.total_trades,
             },
-            'other': {
-                'strategy': other.strategy_name,
-                'total_return': other.total_return,
-                'sharpe_ratio': other.sharpe_ratio,
-                'max_drawdown': other.max_drawdown,
-                'win_rate': other.win_rate,
-                'total_trades': other.total_trades
+            "other": {
+                "strategy": other.strategy_name,
+                "total_return": other.total_return,
+                "sharpe_ratio": other.sharpe_ratio,
+                "max_drawdown": other.max_drawdown,
+                "win_rate": other.win_rate,
+                "total_trades": other.total_trades,
             },
-            'difference': {
-                'total_return': self.total_return - other.total_return,
-                'sharpe_ratio': self.sharpe_ratio - other.sharpe_ratio,
-                'max_drawdown': self.max_drawdown - other.max_drawdown,
-                'win_rate': self.win_rate - other.win_rate,
-                'total_trades': self.total_trades - other.total_trades
-            }
+            "difference": {
+                "total_return": self.total_return - other.total_return,
+                "sharpe_ratio": self.sharpe_ratio - other.sharpe_ratio,
+                "max_drawdown": self.max_drawdown - other.max_drawdown,
+                "win_rate": self.win_rate - other.win_rate,
+                "total_trades": self.total_trades - other.total_trades,
+            },
         }
 
         return comparison

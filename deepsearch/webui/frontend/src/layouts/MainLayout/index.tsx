@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Button, Space, Dropdown, Avatar, Badge, Switch, Typography } from 'antd'
 import {
@@ -17,7 +17,7 @@ import {
   SunOutlined
 } from '@ant-design/icons'
 import { useTheme } from '@/contexts/ThemeContext'
-import { useSystemStore } from '@/stores/system'
+import { useSystemStore } from '@/stores'
 import './index.scss'
 
 const { Header, Sider, Content } = Layout
@@ -26,16 +26,15 @@ const { Title } = Typography
 const MainLayout: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const { theme, toggleTheme, isDark } = useTheme()
+  const { toggleTheme, isDark } = useTheme()
   const systemStore = useSystemStore()
   
   const [collapsed, setCollapsed] = useState(false)
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([])
 
   // 菜单配置
-  const menuItems = [
+  const menuItems = useMemo(() => [
     {
-      key: '/dashboard',
+      key: '/',
       icon: <DashboardOutlined />,
       label: '监控仪表板'
     },
@@ -45,26 +44,39 @@ const MainLayout: React.FC = () => {
       label: '市场行情'
     },
     {
-      key: '/trading',
+      key: '/events',
       icon: <TransactionOutlined />,
       label: '交易管理'
     },
     {
-      key: '/data-source',
+      key: '/monitor/datasource',
       icon: <DatabaseOutlined />,
       label: '数据源管理'
     },
     {
-      key: '/config',
+      key: '/system/config',
       icon: <SettingOutlined />,
       label: '系统配置'
     },
     {
-      key: '/logs',
+      key: '/system/logs',
       icon: <FileTextOutlined />,
       label: '日志查看'
     }
-  ]
+  ], [])
+
+  const selectedMenuKeys = useMemo(() => {
+    const currentPath = location.pathname || '/'
+    if (currentPath === '/' || currentPath === '') {
+      return ['/']
+    }
+
+    const match = menuItems.find(item =>
+      item.key !== '/' && currentPath.startsWith(item.key)
+    )
+
+    return [match?.key ?? currentPath]
+  }, [location.pathname, menuItems])
 
   // 用户菜单
   const userMenuItems = [
@@ -81,12 +93,12 @@ const MainLayout: React.FC = () => {
   ]
 
   // 监听路由变化
-  useEffect(() => {
-    setSelectedKeys([location.pathname])
-  }, [location])
-
   // 菜单点击处理
   const handleMenuClick = ({ key }: { key: string }) => {
+    if (key === '/') {
+      navigate('/')
+      return
+    }
     navigate(key)
   }
 
@@ -115,7 +127,7 @@ const MainLayout: React.FC = () => {
         <Menu
           theme="dark"
           mode="inline"
-          selectedKeys={selectedKeys}
+          selectedKeys={selectedMenuKeys}
           items={menuItems}
           onClick={handleMenuClick}
         />
@@ -147,7 +159,7 @@ const MainLayout: React.FC = () => {
                 <Button
                   type="text"
                   icon={<BellOutlined />}
-                  onClick={() => navigate('/logs')}
+                  onClick={() => navigate('/system/logs')}
                 />
               </Badge>
               
@@ -177,3 +189,4 @@ const MainLayout: React.FC = () => {
 }
 
 export default MainLayout
+

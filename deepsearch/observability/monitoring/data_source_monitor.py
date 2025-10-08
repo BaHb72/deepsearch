@@ -3,25 +3,26 @@
 
 统一监控和管理所有数据源的访问情况，提供性能分析和智能决策支持。
 """
+
 import time
 import uuid
-from collections import deque, defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Any, Deque
 from threading import Lock
+from typing import Any, ClassVar, Deque, DefaultDict, Dict, List, Optional, Tuple, TypedDict
 
 from loguru import logger
 
 # Import DataSourceType dynamically to avoid circular import
 
-
 class DataSourceType(Enum):
     """数据源类型 - 复制自base.py以避免循环导入"""
+
     AMAZINGDATA = "amazingdata"
     QMT = "qmt"
-    CLOUDFLARE = "cloudflare_proxy"
+    CLOUDFLARE = "cloudflare"
     AKSHARE = "akshare"
     AKSHARE_PROXY = "akshare_proxy"
     AKSHARE_DIRECT = "akshare_direct"
@@ -35,9 +36,11 @@ class DataSourceType(Enum):
     DEFAULT = "default"
     CUSTOM = "custom"
 
+_HIDDEN_SOURCES = {DataSourceType.DEFAULT, DataSourceType.CUSTOM}
 
 class DataAccessType(Enum):
     """数据访问类型"""
+
     REALTIME_QUOTE = "realtime_quote"  # 实时行情
     HISTORICAL_KLINE = "historical_kline"  # 历史K线
     STOCK_LIST = "stock_list"  # 股票列表
@@ -48,14 +51,36 @@ class DataAccessType(Enum):
     FINANCIAL_DATA = "financial_data"  # 财务数据
     NORTH_FLOW = "north_flow"  # 北向资金流向
 
+DEFAULT_MODULE_KEY = "unknown"
+
+class SourceSummary(TypedDict):
+    count: int
+    success: int
+    error: int
+
+class AccessStatistics(TypedDict):
+    time_window: int
+    total_requests: int
+    source_stats: Dict[str, SourceSummary]
+    type_stats: Dict[str, int]
+    hot_symbols: List[Tuple[str, int]]
+    module_stats: Dict[str, Dict[str, int]]
+
+def _build_source_summary() -> SourceSummary:
+    return {"count": 0, "success": 0, "error": 0}
+
+def _build_int_counter() -> DefaultDict[str, int]:
+    """Create a defaultdict for counting occurrences."""
+    return defaultdict(int)
 
 @dataclass
 class AccessRecord:
     """数据访问记录"""
+
     request_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: float = field(default_factory=time.time)
-    source: DataSourceType = None
-    access_type: DataAccessType = None
+    source: DataSourceType = DataSourceType.DEFAULT
+    access_type: DataAccessType = DataAccessType.REALTIME_QUOTE
     symbol: Optional[str] = None
     module: Optional[str] = None  # 调用模块
     success: bool = True
@@ -64,10 +89,10 @@ class AccessRecord:
     data_size: int = 0  # 返回数据大小（字节）
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-
 @dataclass
 class SourceMetrics:
     """数据源性能指标"""
+
     source: DataSourceType
     total_requests: int = 0
     success_count: int = 0
@@ -78,14 +103,14 @@ class SourceMetrics:
     last_error: Optional[str] = None
     error_timestamps: Deque[float] = field(default_factory=lambda: deque(maxlen=100))
     latency_history: Deque[float] = field(default_factory=lambda: deque(maxlen=1000))
-    
+
     @property
     def success_rate(self) -> float:
         """计算成功率"""
         if self.total_requests == 0:
             return 0.0
         return self.success_count / self.total_requests
-    
+
     @property
     def avg_latency_ms(self) -> float:
         """计算平均延迟"""
@@ -93,7 +118,7 @@ class SourceMetrics:
             # 无数据时返回-1表示无效值，前端会处理为"暂无数据"
             return -1.0
         return self.total_latency_ms / self.success_count
-    
+
     @property
     def recent_error_rate(self) -> float:
         """计算最近的错误率（最近5分钟）"""
@@ -118,71 +143,75 @@ class SourceMetrics:
         else:
             # 如果没有历史数据，假设错误率为100%
             return 1.0 if recent_errors > 0 else 0.0
-    
+
     @property
     def p95_latency(self) -> float:
         """计算P95延迟"""
         if not self.latency_history:
             # 无数据时返回-1表示无效值
             return -1.0
-        
+
         sorted_latencies = sorted(self.latency_history)
         p95_index = int(len(sorted_latencies) * 0.95)
-        return sorted_latencies[p95_index] if p95_index < len(sorted_latencies) else sorted_latencies[-1]
-
+        return (
+            sorted_latencies[p95_index]
+            if p95_index < len(sorted_latencies)
+            else sorted_latencies[-1]
+        )
 
 class DataSourceMonitor:
     """数据源监控中心"""
-    
+
     # 单例实例
-    _instance = None
-    _lock = Lock()
-    
-    def __new__(cls):
+    _instance: ClassVar[Optional["DataSourceMonitor"]] = None
+    _lock: ClassVar[Lock] = Lock()
+    _initialized: ClassVar[bool] = False
+
+    def __new__(cls) -> "DataSourceMonitor":
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
+                    cls._initialized = False
         return cls._instance
-    
-    def __init__(self):
-        if self._initialized:
+
+    def __init__(self) -> None:
+        if type(self)._initialized:
             return
-        
+
         # 访问记录（保留最近10000条）
         self.access_history: Deque[AccessRecord] = deque(maxlen=10000)
-        
+
         # 各数据源的性能指标
         self.source_metrics: Dict[DataSourceType, SourceMetrics] = {}
         for source_type in DataSourceType:
             self.source_metrics[source_type] = SourceMetrics(source=source_type)
-        
+
         # 访问统计（按访问类型）
-        self.access_stats: Dict[DataAccessType, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
-        
+        self.access_stats: DefaultDict[DataAccessType, DefaultDict[str, int]] = defaultdict(
+            _build_int_counter
+        )
+
         # 热点数据统计（最常访问的股票）
-        self.hot_symbols: Dict[str, int] = defaultdict(int)
-        
+        self.hot_symbols: DefaultDict[str, int] = defaultdict(int)
+
         # 模块访问统计
-        self.module_stats: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
-        
+        self.module_stats: DefaultDict[str, DefaultDict[str, int]] = defaultdict(_build_int_counter)
+
         # 配置
         self.alert_error_threshold = 10  # 连续错误次数阈值
         self.alert_latency_threshold = 5000  # 延迟阈值（毫秒）
         self.health_check_interval = 30  # 健康检查间隔（秒）
-        
+
         # 数据源健康状态
-        self.source_health: Dict[DataSourceType, bool] = {
-            source: True for source in DataSourceType
-        }
-        
+        self.source_health: Dict[DataSourceType, bool] = {source: True for source in DataSourceType}
+
         # 锁
         self._metrics_lock = Lock()
-        
-        self._initialized = True
+
+        type(self)._initialized = True
         logger.info("数据源监控中心初始化完成")
-    
+
     def record_access(
         self,
         source: DataSourceType,
@@ -193,11 +222,11 @@ class DataSourceMonitor:
         module: Optional[str] = None,
         error_message: Optional[str] = None,
         data_size: int = 0,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         记录数据访问
-        
+
         Args:
             source: 数据源类型
             access_type: 访问类型
@@ -208,32 +237,34 @@ class DataSourceMonitor:
             error_message: 错误信息
             data_size: 数据大小
             metadata: 额外元数据
-            
+
         Returns:
             请求ID
         """
+        module_key: str = module if module is not None else DEFAULT_MODULE_KEY
+
         # 创建访问记录
         record = AccessRecord(
             source=source,
             access_type=access_type,
             symbol=symbol,
-            module=module or "unknown",
+            module=module_key,
             success=success,
             latency_ms=latency_ms,
             error_message=error_message,
             data_size=data_size,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
-        
+
         with self._metrics_lock:
             # 添加到历史记录
             self.access_history.append(record)
-            
+
             # 更新数据源指标
             metrics = self.source_metrics[source]
             metrics.total_requests += 1
             metrics.last_access = record.timestamp
-            
+
             if success:
                 metrics.success_count += 1
                 metrics.total_latency_ms += latency_ms
@@ -243,20 +274,20 @@ class DataSourceMonitor:
                 metrics.error_count += 1
                 metrics.last_error = error_message
                 metrics.error_timestamps.append(record.timestamp)
-            
+
             # 更新访问统计
             self.access_stats[access_type][source.value] += 1
-            
+
             # 更新热点数据
             if symbol:
                 self.hot_symbols[symbol] += 1
-            
+
             # 更新模块统计
-            self.module_stats[module][source.value] += 1
-            
+            self.module_stats[module_key][source.value] += 1
+
             # 检查是否需要告警
             self._check_alerts(source, metrics)
-        
+
         # 记录日志
         if success:
             logger.debug(
@@ -268,10 +299,10 @@ class DataSourceMonitor:
                 f"数据访问失败: {source.value} -> {access_type.value} "
                 f"[{symbol}] {error_message}"
             )
-        
+
         return record.request_id
-    
-    def _check_alerts(self, source: DataSourceType, metrics: SourceMetrics):
+
+    def _check_alerts(self, source: DataSourceType, metrics: SourceMetrics) -> None:
         """检查是否需要发出告警"""
         # 检查连续错误 - 降低阈值到20%，并且需要至少有10次请求才判断
         if metrics.total_requests >= 10 and metrics.recent_error_rate > 0.2:  # 最近错误率超过20%
@@ -279,27 +310,26 @@ class DataSourceMonitor:
             # 只有当错误率非常高时才标记为不健康
             if metrics.recent_error_rate > 0.8:  # 错误率超过80%才标记为不健康
                 self.source_health[source] = False
-                logger.error(f"数据源 {source.value} 错误率过高，标记为不健康: {metrics.recent_error_rate:.1%}")
+                logger.error(
+                    f"数据源 {source.value} 错误率过高，标记为不健康: {metrics.recent_error_rate:.1%}"
+                )
 
         # 检查延迟
         if metrics.p95_latency > self.alert_latency_threshold:
-            logger.warning(
-                f"数据源 {source.value} 延迟过高: "
-                f"P95={metrics.p95_latency:.1f}ms"
-            )
-    
+            logger.warning(f"数据源 {source.value} 延迟过高: " f"P95={metrics.p95_latency:.1f}ms")
+
     def get_source_health(self, source: DataSourceType) -> Dict[str, Any]:
         """
         获取数据源健康状态
-        
+
         Args:
             source: 数据源类型
-            
+
         Returns:
             健康状态信息
         """
         metrics = self.source_metrics[source]
-        
+
         return {
             "source": source.value,
             "healthy": self.source_health[source],
@@ -308,38 +338,40 @@ class DataSourceMonitor:
             "avg_latency_ms": metrics.avg_latency_ms,
             "p95_latency_ms": metrics.p95_latency,
             "recent_error_rate": metrics.recent_error_rate,
-            "last_access": datetime.fromtimestamp(metrics.last_access).isoformat() if metrics.last_access else None,
-            "last_error": metrics.last_error
+            "last_access": (
+                datetime.fromtimestamp(metrics.last_access).isoformat()
+                if metrics.last_access
+                else None
+            ),
+            "last_error": metrics.last_error,
         }
-    
+
     def get_all_health_status(self) -> Dict[str, Dict[str, Any]]:
         """获取所有数据源的健康状态"""
         return {
             source.value: self.get_source_health(source)
             for source in DataSourceType
+            if source not in _HIDDEN_SOURCES
         }
-    
-    def get_access_statistics(self, time_window: int = 3600) -> Dict[str, Any]:
+
+    def get_access_statistics(self, time_window: int = 3600) -> AccessStatistics:
         """
         获取访问统计
-        
+
         Args:
             time_window: 时间窗口（秒）
-            
+
         Returns:
             统计信息
         """
         current_time = time.time()
         cutoff_time = current_time - time_window
-        
+
         # 筛选时间窗口内的记录
-        recent_records = [
-            r for r in self.access_history
-            if r.timestamp >= cutoff_time
-        ]
-        
+        recent_records = [r for r in self.access_history if r.timestamp >= cutoff_time]
+
         # 按数据源统计
-        source_stats = defaultdict(lambda: {"count": 0, "success": 0, "error": 0})
+        source_stats: DefaultDict[str, SourceSummary] = defaultdict(_build_source_summary)
         for record in recent_records:
             stats = source_stats[record.source.value]
             stats["count"] += 1
@@ -347,88 +379,82 @@ class DataSourceMonitor:
                 stats["success"] += 1
             else:
                 stats["error"] += 1
-        
+
         # 按访问类型统计
-        type_stats = defaultdict(int)
+        type_stats: DefaultDict[str, int] = defaultdict(int)
         for record in recent_records:
             type_stats[record.access_type.value] += 1
-        
+
         # 热点股票TOP10
-        hot_symbols_top10 = sorted(
-            self.hot_symbols.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )[:10]
-        
+        hot_symbols_top10 = sorted(self.hot_symbols.items(), key=lambda x: x[1], reverse=True)[:10]
+        module_stats_snapshot = {
+            module_name: dict(stats)
+            for module_name, stats in self.module_stats.items()
+        }
+
         return {
             "time_window": time_window,
             "total_requests": len(recent_records),
             "source_stats": dict(source_stats),
             "type_stats": dict(type_stats),
             "hot_symbols": hot_symbols_top10,
-            "module_stats": dict(self.module_stats)
+            "module_stats": module_stats_snapshot,
         }
-    
+
     def get_recommendation(
-        self,
-        access_type: DataAccessType,
-        require_realtime: bool = False
+        self, access_type: DataAccessType, require_realtime: bool = False
     ) -> Optional[DataSourceType]:
         """
         获取推荐的数据源
-        
+
         Args:
             access_type: 访问类型
             require_realtime: 是否需要实时数据
-            
+
         Returns:
             推荐的数据源
         """
         # 候选数据源
         candidates = []
-        
+
         for source in DataSourceType:
             metrics = self.source_metrics[source]
-            
+
             # 跳过不健康的数据源
             if not self.source_health[source]:
                 continue
-            
+
             # 跳过没有访问记录的数据源
             if metrics.total_requests == 0:
                 continue
-            
+
             # 计算得分
             score = self._calculate_source_score(metrics, require_realtime)
             candidates.append((source, score))
-        
+
         if not candidates:
             return None
-        
+
         # 按得分排序，返回最优的
         candidates.sort(key=lambda x: x[1], reverse=True)
         return candidates[0][0]
-    
-    def _calculate_source_score(
-        self,
-        metrics: SourceMetrics,
-        require_realtime: bool
-    ) -> float:
+
+    def _calculate_source_score(self, metrics: SourceMetrics, require_realtime: bool) -> float:
         """
         计算数据源得分
-        
+
         Args:
             metrics: 数据源指标
             require_realtime: 是否需要实时数据
-            
+
         Returns:
             得分（0-100）
         """
         score = 100.0
-        
+
         # 成功率权重：40%
         score *= metrics.success_rate * 0.4
-        
+
         # 延迟权重：30%
         if metrics.avg_latency_ms < 100:
             latency_score = 1.0
@@ -441,18 +467,18 @@ class DataSourceMonitor:
         else:
             latency_score = 0.2
         score += latency_score * 30
-        
+
         # 最近错误率权重：20%
         score -= metrics.recent_error_rate * 20
-        
+
         # 数据新鲜度权重：10%（如果需要实时数据）
         if require_realtime and metrics.last_access:
             freshness = max(0, 1 - (time.time() - metrics.last_access) / 60)
             score += freshness * 10
-        
+
         return max(0, min(100, score))
-    
-    def reset_metrics(self, source: Optional[DataSourceType] = None):
+
+    def reset_metrics(self, source: Optional[DataSourceType] = None) -> None:
         """
         重置指标
 
@@ -474,8 +500,9 @@ class DataSourceMonitor:
                 self.module_stats.clear()
                 logger.info("重置所有监控指标")
 
-    def update_health_status(self, source: DataSourceType, is_healthy: bool,
-                           reset_metrics_if_healthy: bool = True):
+    def update_health_status(
+        self, source: DataSourceType, is_healthy: bool, reset_metrics_if_healthy: bool = True
+    ) -> None:
         """
         强制更新数据源健康状态
 
@@ -502,11 +529,11 @@ class DataSourceMonitor:
                 logger.info(f"强制更新数据源 {source.value} 为健康状态并重置错误指标")
             else:
                 logger.info(f"强制更新数据源 {source.value} 健康状态为: {is_healthy}")
-    
+
     def export_metrics(self) -> Dict[str, Any]:
         """
         导出所有监控指标
-        
+
         Returns:
             完整的监控数据
         """
@@ -524,16 +551,14 @@ class DataSourceMonitor:
                     "module": r.module,
                     "success": r.success,
                     "latency_ms": r.latency_ms,
-                    "error": r.error_message
+                    "error": r.error_message,
                 }
                 for r in list(self.access_history)[-100:]  # 最近100条
-            ]
+            ],
         }
-
 
 # 全局监控实例
 data_source_monitor = DataSourceMonitor()
-
 
 def get_monitor() -> DataSourceMonitor:
     """获取全局监控实例"""

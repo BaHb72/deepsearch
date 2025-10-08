@@ -1,4 +1,18 @@
+import logger from '@/utils/logger'
+
+const performanceLogger = logger.child('utils:performance')
+
 import { getCLS, getFCP, getFID, getLCP, getTTFB, Metric } from 'web-vitals'
+
+interface PerformanceMemoryInfo {
+  usedJSHeapSize: number
+  totalJSHeapSize: number
+  jsHeapSizeLimit: number
+}
+
+interface PerformanceWithMemory extends Performance {
+  memory?: PerformanceMemoryInfo
+}
 
 interface PerformanceData {
   // Core Web Vitals
@@ -197,8 +211,8 @@ class PerformanceMonitor {
       try {
         observer.observe({ entryTypes: ['longtask'] })
         this.observers.set('longtask', observer)
-      } catch (e) {
-        this.log('Long task monitoring not supported')
+      } catch (error) {
+        this.log('Long task monitoring not supported', error)
       }
     }
   }
@@ -207,11 +221,15 @@ class PerformanceMonitor {
   private monitorMemory() {
     if ('memory' in performance) {
       setInterval(() => {
-        const memory = (performance as any).memory
+        const memory = (performance as PerformanceWithMemory).memory
+        if (!memory) {
+          this.log('Performance memory info unavailable')
+          return
+        }
         this.setCustomMetric('jsHeapUsed', memory.usedJSHeapSize)
         this.setCustomMetric('jsHeapTotal', memory.totalJSHeapSize)
         this.setCustomMetric('jsHeapLimit', memory.jsHeapSizeLimit)
-      }, 10000) // 每10秒采样一次
+      }, 10000) // ÿ10�����һ��
     }
   }
 
@@ -278,9 +296,9 @@ class PerformanceMonitor {
   }
 
   // 日志
-  private log(...args: any[]) {
+  private log(...args: unknown[]) {
     if (this.debug) {
-      console.log('[Performance]', ...args)
+      performanceLogger.info('[Performance]', ...args)
     }
   }
 }
@@ -304,17 +322,17 @@ export const getPerformanceMonitor = () => {
 
 // React Hook
 export const usePerformance = () => {
-  const monitor = getPerformanceMonitor()
-  
-  return {
+  const monitor = React.useMemo(() => getPerformanceMonitor(), [])
+
+  return React.useMemo(() => ({
     mark: (name: string) => monitor.mark(name),
-    measure: (name: string, startMark: string, endMark?: string) => 
+    measure: (name: string, startMark: string, endMark?: string) =>
       monitor.measure(name, startMark, endMark),
-    setMetric: (name: string, value: number) => 
+    setMetric: (name: string, value: number) =>
       monitor.setCustomMetric(name, value),
     getData: () => monitor.getData(),
     report: () => monitor.report(),
-  }
+  }), [monitor])
 }
 
 // 组件性能追踪 HOC
@@ -322,22 +340,26 @@ export const withPerformanceTracking = <P extends object>(
   Component: React.ComponentType<P>,
   componentName: string
 ) => {
-  return (props: P) => {
-    const perf = usePerformance()
-    
+  const WrappedComponent: React.FC<P> = (props: P) => {
+    const { mark, measure } = usePerformance()
+
     React.useEffect(() => {
-      perf.mark(`${componentName}-mount-start`)
-      
+      mark(`${componentName}-mount-start`)
+
       return () => {
-        perf.measure(
+        measure(
           `${componentName}-mounted`,
           `${componentName}-mount-start`
         )
       }
-    }, [])
-    
-    return <Component {...props} />
+    }, [mark, measure])
+
+    return React.createElement(Component, props)
   }
+
+  WrappedComponent.displayName = `withPerformanceTracking(${componentName})`
+
+  return WrappedComponent
 }
 
 export default PerformanceMonitor

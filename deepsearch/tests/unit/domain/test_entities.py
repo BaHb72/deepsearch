@@ -1,13 +1,15 @@
 """
 Unit tests for domain entities.
 """
-import pytest
+
 from datetime import datetime
 from decimal import Decimal
 
+import pytest
+
+from deepsearch.domain.entities.price import Price
 from deepsearch.domain.entities.stock_simple import Stock
-from deepsearch.domain.entities.price import Price, PriceChange
-from deepsearch.domain.entities.trade import Trade, Order, OrderType, OrderStatus
+from deepsearch.domain.entities.trade import Order, OrderStatus, OrderType, Trade
 
 
 class TestStock:
@@ -15,13 +17,7 @@ class TestStock:
 
     def test_create_stock_with_valid_data(self):
         """Test creating a stock with valid data."""
-        stock = Stock(
-            symbol="000001",
-            name="平安银行",
-            market="SZ",
-            industry="银行",
-            sector="金融"
-        )
+        stock = Stock(symbol="000001", name="平安银行", market="SZ", industry="银行", sector="金融")
 
         assert stock.symbol == "000001"
         assert stock.name == "平安银行"
@@ -58,7 +54,7 @@ class TestStock:
             previous_close=Decimal("10.00"),
             open=Decimal("10.10"),
             high=Decimal("10.80"),
-            low=Decimal("10.00")
+            low=Decimal("10.00"),
         )
 
         stock.update_price(new_price)
@@ -88,7 +84,7 @@ class TestPrice:
             high=Decimal("10.80"),
             low=Decimal("10.00"),
             volume=1000000,
-            turnover=Decimal("10500000")
+            turnover=Decimal("10500000"),
         )
 
         assert price.current == Decimal("10.50")
@@ -96,10 +92,7 @@ class TestPrice:
 
     def test_price_change_calculation(self):
         """Test price change calculation."""
-        price = Price(
-            current=Decimal("10.50"),
-            previous_close=Decimal("10.00")
-        )
+        price = Price(current=Decimal("10.50"), previous_close=Decimal("10.00"))
 
         change = price.calculate_change()
 
@@ -109,10 +102,7 @@ class TestPrice:
 
     def test_price_change_down(self):
         """Test price change when price goes down."""
-        price = Price(
-            current=Decimal("9.50"),
-            previous_close=Decimal("10.00")
-        )
+        price = Price(current=Decimal("9.50"), previous_close=Decimal("10.00"))
 
         change = price.calculate_change()
 
@@ -122,10 +112,7 @@ class TestPrice:
 
     def test_price_change_unchanged(self):
         """Test price change when price is unchanged."""
-        price = Price(
-            current=Decimal("10.00"),
-            previous_close=Decimal("10.00")
-        )
+        price = Price(current=Decimal("10.00"), previous_close=Decimal("10.00"))
 
         change = price.calculate_change()
 
@@ -153,7 +140,7 @@ class TestTrade:
             price=Decimal("10.50"),
             volume=1000,
             trade_type="BUY",
-            timestamp=datetime.now()
+            timestamp=datetime.now(),
         )
 
         assert trade.id == "T20250913001"
@@ -165,21 +152,14 @@ class TestTrade:
 
     def test_trade_total_value_calculation(self):
         """Test trade total value calculation."""
-        trade = Trade(
-            symbol="000001",
-            price=Decimal("10.50"),
-            volume=2000
-        )
+        trade = Trade(symbol="000001", price=Decimal("10.50"), volume=2000)
 
         assert trade.total_value == Decimal("21000.00")
 
     def test_trade_with_commission(self):
         """Test trade with commission."""
         trade = Trade(
-            symbol="000001",
-            price=Decimal("10.00"),
-            volume=1000,
-            commission=Decimal("5.00")
+            symbol="000001", price=Decimal("10.00"), volume=1000, commission=Decimal("5.00")
         )
 
         assert trade.commission == Decimal("5.00")
@@ -198,7 +178,7 @@ class TestOrder:
             side="BUY",
             price=Decimal("10.00"),
             volume=1000,
-            status=OrderStatus.PENDING
+            status=OrderStatus.PENDING,
         )
 
         assert order.id == "O20250913001"
@@ -212,7 +192,7 @@ class TestOrder:
             order_type=OrderType.LIMIT,
             price=Decimal("10.00"),
             volume=1000,
-            status=OrderStatus.PENDING
+            status=OrderStatus.PENDING,
         )
 
         order.fill(filled_price=Decimal("10.00"), filled_volume=1000)
@@ -224,10 +204,7 @@ class TestOrder:
     def test_order_partial_fill(self):
         """Test order partial fill."""
         order = Order(
-            symbol="000001",
-            price=Decimal("10.00"),
-            volume=1000,
-            status=OrderStatus.PENDING
+            symbol="000001", price=Decimal("10.00"), volume=1000, status=OrderStatus.PENDING
         )
 
         order.partial_fill(filled_volume=500)
@@ -238,10 +215,7 @@ class TestOrder:
     def test_order_cancel(self):
         """Test order cancellation."""
         order = Order(
-            symbol="000001",
-            price=Decimal("10.00"),
-            volume=1000,
-            status=OrderStatus.PENDING
+            symbol="000001", price=Decimal("10.00"), volume=1000, status=OrderStatus.PENDING
         )
 
         order.cancel()
@@ -251,15 +225,7 @@ class TestOrder:
     def test_order_validation(self):
         """Test order validation."""
         with pytest.raises(ValueError, match="Order price must be positive"):
-            Order(
-                symbol="000001",
-                price=Decimal("-10.00"),
-                volume=1000
-            )
+            Order(symbol="000001", price=Decimal("-10.00"), volume=1000)
 
         with pytest.raises(ValueError, match="Order volume must be positive"):
-            Order(
-                symbol="000001",
-                price=Decimal("10.00"),
-                volume=0
-            )
+            Order(symbol="000001", price=Decimal("10.00"), volume=0)

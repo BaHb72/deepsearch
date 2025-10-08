@@ -1,7 +1,7 @@
 // Input Component Styles
 // Comprehensive styling for all input types and states
 
-@import '../../styles/variables.css';
+@use '../../../styles/css-variables';
 
 .ds-input-container {
   display: flex;
@@ -256,7 +256,7 @@
   }
   
   // Textarea
-  textarea& {
+  textarea#{&} {
     line-height: var(--line-height-relaxed);
   }
 }

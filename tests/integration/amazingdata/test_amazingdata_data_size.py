@@ -1,9 +1,27 @@
 """
-测试AmazingData返回数据量大小
+注意：此脚本包含真实 AmazingData SDK 登录和交互，需人工输入。
+标记为手动测试，默认跳过。
 """
+
+import os
 import sys
 import time
-import AmazingData as ad
+
+import pytest
+
+try:
+    import AmazingData as ad
+except ImportError as exc:
+    pytest.skip(f"AmazingData 未安装: {exc}", allow_module_level=True)
+
+
+pytestmark = pytest.mark.manual(reason="需要手动环境和凭证")
+if not os.getenv("RUN_MANUAL_TESTS"):
+    pytest.skip(
+        "手动测试，默认跳过；设置环境变量 RUN_MANUAL_TESTS=1 后再运行。",
+        allow_module_level=True,
+    )
+
 
 # 配置
 USERNAME = "212200038719"
@@ -33,7 +51,7 @@ print("\n[3] 调用get_code_info('EXTRA_STOCK_A')...")
 start_time = time.time()
 
 try:
-    code_info = base_data.get_code_info('EXTRA_STOCK_A')
+    code_info = base_data.get_code_info("EXTRA_STOCK_A")
     elapsed = time.time() - start_time
 
     print(f"✓ 调用成功，耗时: {elapsed:.2f}秒")
@@ -42,6 +60,7 @@ try:
     if code_info is not None:
         # 检查数据大小
         import pandas as pd
+
         if isinstance(code_info, pd.DataFrame):
             print(f"  DataFrame形状: {code_info.shape}")
             print(f"  列数: {len(code_info.columns)}")
@@ -56,7 +75,6 @@ try:
 
             # 测试转JSON的大小
             try:
-                import json
                 # 只测试前10行
                 sample_json = code_info.head(10).to_json()
                 print(f"  前10行JSON大小: {len(sample_json) / 1024:.2f} KB")

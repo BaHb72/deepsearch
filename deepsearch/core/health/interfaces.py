@@ -3,15 +3,17 @@
 
 定义健康检查的核心接口和数据结构
 """
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 
 class HealthStatus(Enum):
     """健康状态枚举"""
+
     HEALTHY = "healthy"  # 健康
     DEGRADED = "degraded"  # 降级（部分功能不可用）
     UNHEALTHY = "unhealthy"  # 不健康
@@ -21,6 +23,7 @@ class HealthStatus(Enum):
 @dataclass
 class HealthMetrics:
     """健康指标"""
+
     response_time_ms: Optional[float] = None  # 响应时间（毫秒）
     memory_usage_mb: Optional[float] = None  # 内存使用（MB）
     cpu_usage_percent: Optional[float] = None  # CPU使用率（%）
@@ -33,6 +36,7 @@ class HealthMetrics:
 @dataclass
 class HealthCheckResult:
     """健康检查结果"""
+
     status: HealthStatus  # 健康状态
     message: str = ""  # 状态消息
     details: Dict[str, Any] = field(default_factory=dict)  # 详细信息
@@ -43,25 +47,27 @@ class HealthCheckResult:
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
-        result = {
+        result: Dict[str, Any] = {
             "status": self.status.value,
             "message": self.message,
             "timestamp": self.timestamp.isoformat(),
             "details": self.details,
-            "errors": self.errors
+            "errors": self.errors,
         }
 
         if self.metrics:
             result["metrics"] = {
-                k: v for k, v in {
+                k: v
+                for k, v in {
                     "response_time_ms": self.metrics.response_time_ms,
                     "memory_usage_mb": self.metrics.memory_usage_mb,
                     "cpu_usage_percent": self.metrics.cpu_usage_percent,
                     "connection_count": self.metrics.connection_count,
                     "error_rate": self.metrics.error_rate,
                     "queue_size": self.metrics.queue_size,
-                    **self.metrics.custom_metrics
-                }.items() if v is not None
+                    **self.metrics.custom_metrics,
+                }.items()
+                if v is not None
             }
 
         if self.duration_ms is not None:
@@ -76,7 +82,7 @@ class HealthChecker(ABC):
     def __init__(self, name: str, component: Any = None):
         """
         初始化健康检查器
-        
+
         Args:
             name: 检查器名称
             component: 要检查的组件实例（可选）
@@ -128,7 +134,7 @@ class HealthChecker(ABC):
     async def check(self) -> HealthCheckResult:
         """
         执行健康检查
-        
+
         Returns:
             健康检查结果
         """
@@ -137,7 +143,7 @@ class HealthChecker(ABC):
     async def perform_check(self) -> HealthCheckResult:
         """
         执行健康检查并记录统计信息
-        
+
         Returns:
             健康检查结果
         """
@@ -169,7 +175,7 @@ class HealthChecker(ABC):
                 status=HealthStatus.UNHEALTHY,
                 message=f"Health check failed: {str(e)}",
                 errors=[str(e)],
-                duration_ms=(time.perf_counter() - start_time) * 1000
+                duration_ms=(time.perf_counter() - start_time) * 1000,
             )
 
             self._last_check_result = result
@@ -185,7 +191,7 @@ class HealthChecker(ABC):
 class CompositeHealthChecker(HealthChecker):
     """
     组合健康检查器
-    
+
     可以包含多个子检查器，聚合它们的结果
     """
 
@@ -207,29 +213,28 @@ class CompositeHealthChecker(HealthChecker):
 
         if not self._checkers:
             return HealthCheckResult(
-                status=HealthStatus.UNKNOWN,
-                message="No sub-checkers configured"
+                status=HealthStatus.UNKNOWN, message="No sub-checkers configured"
             )
 
         # 并发执行所有子检查
         tasks = [checker.perform_check() for checker in self._checkers]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results: List[HealthCheckResult | BaseException] = await asyncio.gather(*tasks, return_exceptions=True)
 
         # 聚合结果
         all_healthy = True
         any_unhealthy = False
-        errors = []
-        details = {}
+        errors: List[str] = []
+        details: Dict[str, Any] = {}
         metrics = HealthMetrics()
 
         for checker, result in zip(self._checkers, results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 # 检查器执行出错
                 any_unhealthy = True
                 errors.append(f"{checker.name}: {str(result)}")
                 details[checker.name] = {
                     "status": HealthStatus.UNHEALTHY.value,
-                    "error": str(result)
+                    "error": str(result),
                 }
             else:
                 # 正常结果
@@ -255,9 +260,9 @@ class CompositeHealthChecker(HealthChecker):
             message = "Some components are degraded"
 
         return HealthCheckResult(
-            status=status,
-            message=message,
-            details=details,
-            errors=errors,
-            metrics=metrics
+            status=status, message=message, details=details, errors=errors, metrics=metrics
         )
+
+
+
+

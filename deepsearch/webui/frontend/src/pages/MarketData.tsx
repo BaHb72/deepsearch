@@ -8,19 +8,14 @@ import {
   Space,
   Button,
   Select,
-  DatePicker,
   Tabs,
   Typography,
-  Statistic,
   Input,
   Switch,
   Badge,
-  Tooltip,
-  Dropdown,
-  Menu
 } from 'antd'
-import { ProCard, StatisticCard, ProTable } from '@ant-design/pro-components'
-import { Stock, Line, Column, DualAxes, Area } from '@ant-design/charts'
+import { ProCard, StatisticCard } from '@ant-design/pro-components'
+import { Stock, Column, DualAxes } from '@ant-design/charts'
 import {
   RiseOutlined,
   FallOutlined,
@@ -28,16 +23,12 @@ import {
   StarOutlined,
   StarFilled,
   SearchOutlined,
-  FilterOutlined,
   ExportOutlined,
-  LineChartOutlined,
-  BarChartOutlined,
   StockOutlined,
   FundOutlined
 } from '@ant-design/icons'
 
-const { Title, Text } = Typography
-const { RangePicker } = DatePicker
+const { Title } = Typography
 const { Search } = Input
 
 const MarketData = () => {
@@ -143,7 +134,7 @@ const MarketData = () => {
   }
 
   // Timeline chart
-  const TimeLineChart = ({ data }) => {
+  const TimeLineChart = () => {
     const timeData = Array.from({ length: 240 }, (_, i) => {
       const hour = Math.floor(i / 60) + 9
       const minute = i % 60
@@ -196,6 +187,53 @@ const MarketData = () => {
   const handleRefresh = () => {
     setLoading(true)
     setTimeout(() => {
+      setMarketOverview(prev => ({
+        ...prev,
+        sh_index: {
+          ...prev.sh_index,
+          value: Number((prev.sh_index.value * (1 + (Math.random() - 0.5) * 0.004)).toFixed(2)),
+          change: Number(((Math.random() - 0.5) * 2).toFixed(2)),
+          changePercent: Number(((Math.random() - 0.5) * 1.5).toFixed(2)),
+        },
+        sz_index: {
+          ...prev.sz_index,
+          value: Number((prev.sz_index.value * (1 + (Math.random() - 0.5) * 0.004)).toFixed(2)),
+          change: Number(((Math.random() - 0.5) * 2).toFixed(2)),
+          changePercent: Number(((Math.random() - 0.5) * 1.5).toFixed(2)),
+        },
+        hs300: {
+          ...prev.hs300,
+          value: Number((prev.hs300.value * (1 + (Math.random() - 0.5) * 0.004)).toFixed(2)),
+          change: Number(((Math.random() - 0.5) * 2).toFixed(2)),
+          changePercent: Number(((Math.random() - 0.5) * 1.5).toFixed(2)),
+        },
+        total_amount: Math.max(0, prev.total_amount * (1 + (Math.random() - 0.5) * 0.01)),
+        up_count: Math.max(0, prev.up_count + Math.round((Math.random() - 0.5) * 30)),
+        down_count: Math.max(0, prev.down_count + Math.round((Math.random() - 0.5) * 30)),
+      }))
+
+      setKlineData(prev => prev.map(item => {
+        const delta = (Math.random() - 0.5) * 0.6
+        const newClose = Number((item.close + delta).toFixed(2))
+        const newOpen = Number((item.open + delta / 2).toFixed(2))
+        const newHigh = Number(Math.max(newOpen, newClose, item.high + Math.random() * 0.3).toFixed(2))
+        const newLow = Number(Math.min(newOpen, newClose, item.low - Math.random() * 0.3).toFixed(2))
+        return {
+          ...item,
+          open: newOpen,
+          close: newClose,
+          high: newHigh,
+          low: newLow,
+          volume: item.volume + Math.floor(Math.random() * 500000),
+        }
+      }))
+
+      setSectorData(prev => prev.map(sector => ({
+        ...sector,
+        change: Number((sector.change + (Math.random() - 0.5)).toFixed(2)),
+        volume: Math.max(0, sector.volume + Math.floor((Math.random() - 0.5) * 1000000)),
+      })))
+
       setLoading(false)
     }, 1000)
   }
@@ -331,7 +369,7 @@ const MarketData = () => {
             <Col>
               <Space size="large">
                 <Title level={4} style={{ margin: 0 }}>
-                  <StockOutlined /> Market Data
+                  <StockOutlined /> Market Data · {selectedStock}
                 </Title>
                 <Badge status="processing" text="Real-time" />
               </Space>
@@ -342,6 +380,8 @@ const MarketData = () => {
                   placeholder="Search stock code/name"
                   style={{ width: 200 }}
                   prefix={<SearchOutlined />}
+                  allowClear
+                  onSearch={(value) => value && setSelectedStock(value)}
                 />
                 <Select
                   value={timeRange}

@@ -4,18 +4,19 @@
 提供缓存状态查询、清理、配置等功能
 """
 
-from typing import Dict, Any, List, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
 from loguru import logger
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/cache", tags=["Cache Management"])
 
 
 class CacheStatus(BaseModel):
     """缓存状态"""
+
     cache_type: str = Field(description="缓存类型")
     enabled: bool = Field(description="是否启用")
     size: int = Field(description="缓存大小（条目数）")
@@ -26,6 +27,7 @@ class CacheStatus(BaseModel):
 
 class CacheConfig(BaseModel):
     """缓存配置"""
+
     cache_type: str = Field(description="缓存类型")
     max_size: int = Field(description="最大缓存大小")
     ttl: int = Field(description="TTL（秒）")
@@ -34,12 +36,14 @@ class CacheConfig(BaseModel):
 
 class ClearCacheRequest(BaseModel):
     """清理缓存请求"""
+
     cache_types: Optional[List[str]] = Field(default=None, description="要清理的缓存类型列表")
     pattern: Optional[str] = Field(default=None, description="要清理的键模式")
 
 
 class ClearCacheResponse(BaseModel):
     """清理缓存响应"""
+
     cleared_count: int = Field(description="清理的条目数")
     cache_types: List[str] = Field(description="清理的缓存类型")
     message: str = Field(description="操作消息")
@@ -63,7 +67,7 @@ async def get_cache_status():
                 size=1024,
                 memory_usage=1048576,
                 hit_rate=0.85,
-                last_clear_time=datetime.now()
+                last_clear_time=datetime.now(),
             ),
             CacheStatus(
                 cache_type="redis",
@@ -71,7 +75,7 @@ async def get_cache_status():
                 size=5000,
                 memory_usage=52428800,
                 hit_rate=0.92,
-                last_clear_time=datetime.now()
+                last_clear_time=datetime.now(),
             ),
             CacheStatus(
                 cache_type="disk",
@@ -79,8 +83,8 @@ async def get_cache_status():
                 size=0,
                 memory_usage=0,
                 hit_rate=0.0,
-                last_clear_time=None
-            )
+                last_clear_time=None,
+            ),
         ]
 
         logger.info(f"获取缓存状态，共{len(cache_statuses)}个缓存类型")
@@ -102,24 +106,9 @@ async def get_cache_config():
     try:
         # TODO: 从配置系统获取实际配置
         cache_configs = [
-            CacheConfig(
-                cache_type="memory",
-                max_size=10000,
-                ttl=300,
-                enabled=True
-            ),
-            CacheConfig(
-                cache_type="redis",
-                max_size=100000,
-                ttl=3600,
-                enabled=True
-            ),
-            CacheConfig(
-                cache_type="disk",
-                max_size=1000000,
-                ttl=86400,
-                enabled=False
-            )
+            CacheConfig(cache_type="memory", max_size=10000, ttl=300, enabled=True),
+            CacheConfig(cache_type="redis", max_size=100000, ttl=3600, enabled=True),
+            CacheConfig(cache_type="disk", max_size=1000000, ttl=86400, enabled=False),
         ]
 
         logger.info(f"获取缓存配置，共{len(cache_configs)}个配置")
@@ -148,7 +137,7 @@ async def update_cache_config(config: CacheConfig):
         return {
             "success": True,
             "message": f"缓存配置 {config.cache_type} 更新成功",
-            "config": config.dict()
+            "config": config.dict(),
         }
 
     except Exception as e:
@@ -177,7 +166,7 @@ async def clear_cache(request: ClearCacheRequest):
         return ClearCacheResponse(
             cleared_count=cleared_count,
             cache_types=cache_types,
-            message=f"成功清理 {cleared_count} 条缓存条目"
+            message=f"成功清理 {cleared_count} 条缓存条目",
         )
 
     except Exception as e:
@@ -188,7 +177,7 @@ async def clear_cache(request: ClearCacheRequest):
 @router.get("/stats", response_model=Dict[str, Any])
 async def get_cache_stats(
     cache_type: Optional[str] = Query(None, description="缓存类型"),
-    period: str = Query("1h", description="统计周期")
+    period: str = Query("1h", description="统计周期"),
 ):
     """
     获取缓存统计信息
@@ -214,8 +203,8 @@ async def get_cache_stats(
             "top_keys": [
                 {"key": "stock:SH.600000", "hits": 500},
                 {"key": "stock:SZ.000001", "hits": 450},
-                {"key": "market:overview", "hits": 400}
-            ]
+                {"key": "market:overview", "hits": 400},
+            ],
         }
 
         logger.info(f"获取缓存统计: {cache_type or 'all'}, 周期: {period}")
@@ -247,9 +236,9 @@ async def warmup_cache(
 
         return {
             "success": True,
-            "message": f"缓存预热成功",
+            "message": "缓存预热成功",
             "cache_types": cache_types,
-            "warmed_count": len(cache_types) * 50
+            "warmed_count": len(cache_types) * 50,
         }
 
     except Exception as e:
@@ -273,8 +262,8 @@ async def cache_health_check():
             "checks": {
                 "memory_cache": {"status": "healthy", "message": "Memory cache is working"},
                 "redis_cache": {"status": "healthy", "message": "Redis connection is active"},
-                "disk_cache": {"status": "disabled", "message": "Disk cache is disabled"}
-            }
+                "disk_cache": {"status": "disabled", "message": "Disk cache is disabled"},
+            },
         }
 
         logger.debug("缓存健康检查完成")
@@ -282,8 +271,4 @@ async def cache_health_check():
 
     except Exception as e:
         logger.error(f"缓存健康检查失败: {e}")
-        return {
-            "status": "unhealthy",
-            "timestamp": datetime.now().isoformat(),
-            "error": str(e)
-        }
+        return {"status": "unhealthy", "timestamp": datetime.now().isoformat(), "error": str(e)}

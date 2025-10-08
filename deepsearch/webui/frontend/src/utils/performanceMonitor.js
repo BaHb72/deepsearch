@@ -11,6 +11,10 @@
  * - 性能报告生成
  */
 
+import logger from '@/utils/logger'
+
+const performanceMonitorLogger = logger.child('utils:performance-monitor')
+
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 
 class PerformanceMonitor {
@@ -129,7 +133,7 @@ class PerformanceMonitor {
       }, this.config.reportInterval)
     )
     
-    console.log('Performance monitoring started')
+    performanceMonitorLogger.info('Performance monitoring started')
   }
   
   /**
@@ -146,7 +150,7 @@ class PerformanceMonitor {
     this.observers.forEach(observer => observer.disconnect())
     this.observers = []
     
-    console.log('Performance monitoring stopped')
+    performanceMonitorLogger.info('Performance monitoring stopped')
   }
   
   /**
@@ -204,7 +208,7 @@ class PerformanceMonitor {
    */
   startMemoryMonitoring() {
     if (!performance.memory) {
-      console.warn('Memory monitoring not supported in this browser')
+      performanceMonitorLogger.warn('Memory monitoring not supported in this browser')
       return
     }
     
@@ -250,7 +254,7 @@ class PerformanceMonitor {
         observer.observe({ entryTypes: ['measure', 'paint'] })
         this.observers.push(observer)
       } catch (error) {
-        console.error('Failed to setup rendering observer:', error)
+        performanceMonitorLogger.error('Failed to setup rendering observer:', error)
       }
     }
   }
@@ -280,7 +284,7 @@ class PerformanceMonitor {
   
   handlePaintPerformance(entry) {
     // 记录绘制性能
-    console.log(`Paint: ${entry.name} - ${entry.startTime}ms`)
+    performanceMonitorLogger.info(`Paint: ${entry.name} - ${entry.startTime}ms`)
   }
   
   /**
@@ -305,7 +309,7 @@ class PerformanceMonitor {
     // 监控输入延迟
     let inputStartTime = 0
     
-    document.addEventListener('input', (e) => {
+    document.addEventListener('input', (_event) => {
       if (!inputStartTime) {
         inputStartTime = performance.now()
         
@@ -375,7 +379,7 @@ class PerformanceMonitor {
         observer.observe({ entryTypes: ['resource'] })
         this.observers.push(observer)
       } catch (error) {
-        console.error('Failed to setup resource observer:', error)
+        performanceMonitorLogger.error('Failed to setup resource observer:', error)
       }
     }
   }
@@ -389,7 +393,7 @@ class PerformanceMonitor {
       name: entry.name,
       type: entry.initiatorType,
       duration: Math.round(duration),
-      size: size,
+      size,
       timestamp: Date.now()
     })
     
@@ -408,7 +412,7 @@ class PerformanceMonitor {
       this.metrics.errors.jsErrors++
       this.metrics.errors.totalErrors++
       
-      console.error('JS Error:', {
+      performanceMonitorLogger.error('JS Error:', {
         message: event.message,
         source: event.filename,
         line: event.lineno,
@@ -422,7 +426,7 @@ class PerformanceMonitor {
       this.metrics.errors.jsErrors++
       this.metrics.errors.totalErrors++
       
-      console.error('Unhandled Promise Rejection:', event.reason)
+      performanceMonitorLogger.error('Unhandled Promise Rejection:', event.reason)
     })
     
     // 资源加载错误
@@ -431,7 +435,7 @@ class PerformanceMonitor {
         this.metrics.errors.resourceErrors++
         this.metrics.errors.totalErrors++
         
-        console.error('Resource Error:', {
+        performanceMonitorLogger.error('Resource Error:', {
           type: event.target.tagName,
           source: event.target.src || event.target.href,
           message: 'Failed to load resource'
@@ -524,7 +528,7 @@ class PerformanceMonitor {
     }
     
     // 发送报告（可以发送到后端分析）
-    console.log('Performance Report:', report)
+    performanceMonitorLogger.info('Performance Report:', report)
     
     // 触发自定义事件
     window.dispatchEvent(new CustomEvent('performance-report', { detail: report }))
@@ -538,7 +542,7 @@ class PerformanceMonitor {
     const errors = this.metrics.errors.totalErrors
     
     let health = 'good'
-    let issues = []
+    const issues = []
     
     if (fps < 30) {
       health = 'poor'

@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
 import { ConfigProvider, theme as antdTheme, message } from 'antd'
-import { generate, presetPalettes } from '@ant-design/colors'
 import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
 import dayjs from 'dayjs'
@@ -55,15 +54,6 @@ const presetThemes = {
 }
 
 // 获取算法
-const getAlgorithm = (algorithmName) => {
-  const algorithms = {
-    defaultAlgorithm: antdTheme.defaultAlgorithm,
-    darkAlgorithm: antdTheme.darkAlgorithm,
-    compactAlgorithm: antdTheme.compactAlgorithm,
-  }
-  return algorithms[algorithmName] || antdTheme.defaultAlgorithm
-}
-
 // 主题提供者组件
 export const ThemeProvider = ({ children }) => {
   const [themeConfig, setThemeConfig] = useState(() => {
@@ -90,8 +80,6 @@ export const ThemeProvider = ({ children }) => {
   // 生成主题配置
   const antdConfig = useMemo(() => {
     const preset = presetThemes[themeConfig.theme] || presetThemes.default
-    const colors = generate(themeConfig.primaryColor || preset.primaryColor)
-    
     // 组合算法
     const algorithms = []
     if (preset.algorithm === 'darkAlgorithm' || isDark) {

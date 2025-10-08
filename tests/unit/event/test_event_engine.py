@@ -3,19 +3,15 @@
 
 测试EventEngine的核心功能
 """
-import pytest
-import asyncio
-import time
-import threading
-from unittest.mock import Mock, patch, MagicMock
-from typing import List
 
-from deepsearch.event.engine.engine import (
-    EventEngine, Event, HandlerManager, BatchHandler,
-    DEFAULT_PRIORITY, DEFAULT_ASYNC_FLAG,
-    DEFAULT_BATCH_SIZE, DEFAULT_BATCH_TIMEOUT
-)
-from deepsearch.event.const import EVENT_SYSTEM_EXIT
+import threading
+import time
+from typing import List
+from unittest.mock import Mock
+
+import pytest
+
+from deepsearch.event.engine.engine import BatchHandler, Event, EventEngine, HandlerManager
 
 
 class TestEvent:
@@ -75,10 +71,7 @@ class TestHandlerManager:
     def test_register_handler(self, handler_manager, mock_handler):
         """测试注册处理器"""
         handler_manager.register(
-            event_type="TEST_EVENT",
-            handler=mock_handler,
-            priority=10,
-            async_flag=False
+            event_type="TEST_EVENT", handler=mock_handler, priority=10, async_flag=False
         )
 
         specific, general = handler_manager.get_handlers("TEST_EVENT")
@@ -91,18 +84,12 @@ class TestHandlerManager:
     def test_register_duplicate_handler(self, handler_manager, mock_handler):
         """测试重复注册同一处理器"""
         handler_manager.register(
-            event_type="TEST_EVENT",
-            handler=mock_handler,
-            priority=10,
-            async_flag=False
+            event_type="TEST_EVENT", handler=mock_handler, priority=10, async_flag=False
         )
 
         # 再次注册相同的处理器（相同的async_flag）
         handler_manager.register(
-            event_type="TEST_EVENT",
-            handler=mock_handler,
-            priority=20,
-            async_flag=False
+            event_type="TEST_EVENT", handler=mock_handler, priority=20, async_flag=False
         )
 
         specific, _ = handler_manager.get_handlers("TEST_EVENT")
@@ -113,17 +100,11 @@ class TestHandlerManager:
     def test_register_handler_with_different_async_flag(self, handler_manager, mock_handler):
         """测试使用不同async_flag注册同一处理器"""
         handler_manager.register(
-            event_type="TEST_EVENT",
-            handler=mock_handler,
-            priority=10,
-            async_flag=False
+            event_type="TEST_EVENT", handler=mock_handler, priority=10, async_flag=False
         )
 
         handler_manager.register(
-            event_type="TEST_EVENT",
-            handler=mock_handler,
-            priority=20,
-            async_flag=True
+            event_type="TEST_EVENT", handler=mock_handler, priority=20, async_flag=True
         )
 
         specific, _ = handler_manager.get_handlers("TEST_EVENT")
@@ -133,26 +114,16 @@ class TestHandlerManager:
 
     def test_unregister_handler(self, handler_manager, mock_handler):
         """测试注销处理器"""
-        handler_manager.register(
-            event_type="TEST_EVENT",
-            handler=mock_handler
-        )
+        handler_manager.register(event_type="TEST_EVENT", handler=mock_handler)
 
-        handler_manager.unregister(
-            event_type="TEST_EVENT",
-            handler=mock_handler
-        )
+        handler_manager.unregister(event_type="TEST_EVENT", handler=mock_handler)
 
         specific, _ = handler_manager.get_handlers("TEST_EVENT")
         assert len(specific) == 0
 
     def test_register_general_handler(self, handler_manager, mock_handler):
         """测试注册通用处理器"""
-        handler_manager.register_general(
-            handler=mock_handler,
-            priority=15,
-            async_flag=True
-        )
+        handler_manager.register_general(handler=mock_handler, priority=15, async_flag=True)
 
         _, general = handler_manager.get_handlers("ANY_EVENT")
 
@@ -191,10 +162,7 @@ class TestHandlerManager:
         event_types = ["EVENT1", "EVENT2", "EVENT3"]
 
         handler_manager.register_batch_handler(
-            event_types=event_types,
-            handler=mock_handler,
-            priority=10,
-            async_flag=False
+            event_types=event_types, handler=mock_handler, priority=10, async_flag=False
         )
 
         for event_type in event_types:
@@ -246,10 +214,7 @@ class TestBatchHandler:
                 self.processed_events.extend(events)
 
         handler = TestBatchHandler()
-        events = [
-            Event(type="TEST1", data={"id": 1}),
-            Event(type="TEST2", data={"id": 2})
-        ]
+        events = [Event(type="TEST1", data={"id": 1}), Event(type="TEST2", data={"id": 2})]
 
         # 测试批处理
         handler.process_batch(events)
@@ -293,7 +258,7 @@ class TestEventEngine:
             max_workers=2,
             enable_batch_processing=True,
             batch_size=5,
-            batch_timeout=0.1
+            batch_timeout=0.1,
         )
         yield engine
         # 清理
@@ -433,11 +398,7 @@ class TestEventEngine:
             event_received.set()
 
         # 注册异步处理器
-        engine.register(
-            event_type="ASYNC_TEST",
-            handler=async_handler,
-            async_flag=True
-        )
+        engine.register(event_type="ASYNC_TEST", handler=async_handler, async_flag=True)
 
         engine.start()
 
@@ -511,10 +472,7 @@ class TestEventEngine:
 
         # 添加周期性任务（每0.1秒执行一次）
         task_id = engine.schedule(
-            event_type="SCHEDULED",
-            interval=0.1,
-            priority=5,
-            async_flag=False
+            event_type="SCHEDULED", interval=0.1, priority=5, async_flag=False
         )
 
         # 等待执行几次
@@ -543,11 +501,7 @@ class TestEventEngine:
         engine.start()
 
         # 添加任务
-        task_id = engine.schedule(
-            event_type="CANCELABLE",
-            interval=0.1,
-            priority=5
-        )
+        task_id = engine.schedule(event_type="CANCELABLE", interval=0.1, priority=5)
 
         # 等待一次执行
         time.sleep(0.15)

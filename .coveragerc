@@ -6,6 +6,7 @@ omit =
     */site-packages/*
     */.venv/*
     */migrations/*
+    deepsearch/infrastructure/providers/datafeed/qmt/scripts/*
     */conftest.py
     */config/*
     */cli/*

@@ -2,20 +2,23 @@
 请求处理器
 负责处理API请求、重试逻辑和响应处理
 """
+
 import asyncio
 import base64
 import json
 import time
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List
+
 import aiohttp
 from loguru import logger
 
 from deepsearch.config import get_config
-from deepsearch.core.utils.timeout_config import get_timeout_manager, TimeoutCategory
-from .worker_manager import WorkerManager
+from deepsearch.core.utils.timeout_config import get_timeout_manager
+
+from .akshare_api_mapping import AkShareAPIMapping
 from .cache_manager import get_cache_manager
 from .request_optimizer import RequestOptimizer, RequestPriority
-from .akshare_api_mapping import AkShareAPIMapping
+from .worker_manager import WorkerManager
 
 
 class RequestHandler:
@@ -34,8 +37,8 @@ class RequestHandler:
         # 获取配置
         config = get_config()
         self.auth_key = "akshare_proxy_auth_2024"
-        if config and hasattr(config, 'cloudflare_workers'):
-            if hasattr(config.cloudflare_workers, 'auth_key'):
+        if config and hasattr(config, "cloudflare_workers"):
+            if hasattr(config.cloudflare_workers, "auth_key"):
                 self.auth_key = config.cloudflare_workers.auth_key
 
         # 请求优化器
@@ -70,12 +73,12 @@ class RequestHandler:
             "X-Auth-Token": auth_token,
             "X-Timestamp": timestamp,
             "Content-Type": "application/json",
-            "User-Agent": "DeepSearch/1.0"
+            "User-Agent": "DeepSearch/1.0",
         }
 
     def _build_url(self, base: str, path: str) -> str:
         """构建完整URL"""
-        if not path.startswith('/'):
+        if not path.startswith("/"):
             path = f"/{path}"
         return f"{base}{path}"
 
@@ -100,25 +103,21 @@ class RequestHandler:
         headers = self._generate_auth_headers()
 
         # 准备请求数据
-        request_data = {
-            "api": path.replace("/api/", ""),
-            "params": params
-        }
+        request_data = {"api": path.replace("/api/", ""), "params": params}
 
         try:
             logger.debug(f"发送请求到 Worker: {url}")
 
             # 动态获取超时时间
             timeout = self.timeout_manager.get_timeout_for_api(
-                path.replace("/api/", ""),
-                is_batch="batch" in path or "all" in params
+                path.replace("/api/", ""), is_batch="batch" in path or "all" in params
             )
 
             async with self.session.post(
                 url,
                 json=request_data,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=timeout)
+                timeout=aiohttp.ClientTimeout(total=timeout),
             ) as response:
                 response_text = await response.text()
 
@@ -168,7 +167,9 @@ class RequestHandler:
                     raise Exception(f"Worker unavailable: {response.status}")
 
                 else:
-                    logger.error(f"Worker 返回错误状态码: {response.status}, 响应: {response_text[:200]}")
+                    logger.error(
+                        f"Worker 返回错误状态码: {response.status}, 响应: {response_text[:200]}"
+                    )
                     self.worker_manager.record_failure(worker_url)
                     raise Exception(f"Worker returned status {response.status}")
 
@@ -186,11 +187,7 @@ class RequestHandler:
             raise
 
     async def _fetch_with_fallback(
-        self,
-        api_name: str,
-        params: Dict[str, Any],
-        max_retries: int = 3,
-        use_cache: bool = True
+        self, api_name: str, params: Dict[str, Any], max_retries: int = 3, use_cache: bool = True
     ) -> Dict[str, Any]:
         """
         带重试和缓存的数据获取
@@ -231,7 +228,9 @@ class RequestHandler:
                 except asyncio.TimeoutError:
                     if attempt < max_retries - 1:
                         wait_time = (attempt + 1) * 2  # 指数退避
-                        logger.warning(f"超时，等待 {wait_time} 秒后重试 (尝试 {attempt + 2}/{max_retries})")
+                        logger.warning(
+                            f"超时，等待 {wait_time} 秒后重试 (尝试 {attempt + 2}/{max_retries})"
+                        )
                         await asyncio.sleep(wait_time)
                     else:
                         raise
@@ -262,12 +261,7 @@ class RequestHandler:
         priority = self._determine_priority(api_name)
 
         # 添加到优化器队列
-        return await self.request_optimizer.submit(
-            api_name,
-            params,
-            priority,
-            use_cache=True
-        )
+        return await self.request_optimizer.submit(api_name, params, priority, use_cache=True)
 
     def _determine_priority(self, api_name: str) -> RequestPriority:
         """
@@ -374,9 +368,7 @@ class RequestHandler:
             raise
 
     async def batch_call_api(
-        self,
-        requests: List[Dict[str, Any]],
-        max_concurrent: int = 5
+        self, requests: List[Dict[str, Any]], max_concurrent: int = 5
     ) -> List[Any]:
         """
         批量调用API

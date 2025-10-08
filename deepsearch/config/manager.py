@@ -7,6 +7,7 @@
 - 配置验证
 - 配置合并和覆盖
 """
+
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
@@ -19,6 +20,7 @@ from deepsearch.utils.system.singleton import Singleton
 
 class ConfigurationError(Exception):
     """配置错误异常类"""
+
     pass
 
 
@@ -34,7 +36,7 @@ class ConfigManager(metaclass=Singleton):
     def load(self, config_path: Optional[Union[str, Path]] = None) -> None:
         """
         加载配置文件
-        
+
         Args:
             config_path: 配置文件路径，如果为 None 则自动查找
         """
@@ -51,7 +53,7 @@ class ConfigManager(metaclass=Singleton):
         logger.info(f"加载配置文件: {self._config_path}")
 
         try:
-            with open(self._config_path, 'r', encoding='utf-8') as f:
+            with open(self._config_path, "r", encoding="utf-8") as f:
                 self._config = yaml.safe_load(f) or {}
 
             # 合并环境特定配置
@@ -84,16 +86,20 @@ class ConfigManager(metaclass=Singleton):
         return None
 
     def _merge_env_config(self) -> None:
-        """合并环境特定的配置"""
+        """合并环境特定配置"""
+        if self._config_path is None:
+            logger.debug("未指定配置文件路径，跳过环境配置合并")
+            return
         env_config_path = self._config_path.parent / f"settings.{self._env}.yaml"
-        if env_config_path.exists():
-            try:
-                with open(env_config_path, 'r', encoding='utf-8') as f:
-                    env_config = yaml.safe_load(f) or {}
-                    self._config = self._deep_merge(self._config, env_config)
-                    logger.info(f"合并环境配置: {env_config_path}")
-            except Exception as e:
-                logger.error(f"环境配置加载失败: {e}")
+        if not env_config_path.exists():
+            return
+        try:
+            with open(env_config_path, "r", encoding="utf-8") as f:
+                env_config = yaml.safe_load(f) or {}
+                self._config = self._deep_merge(self._config, env_config)
+                logger.info(f"合并环境配置: {env_config_path}")
+        except Exception as e:
+            logger.error(f"加载环境配置失败: {e}")
 
     def _deep_merge(self, base: dict, override: dict) -> dict:
         """深度合并两个字典"""
@@ -109,12 +115,7 @@ class ConfigManager(metaclass=Singleton):
 
     def _validate_config(self) -> None:
         """验证配置的有效性"""
-        required_keys = [
-            "app.name",
-            "log.level",
-            "webui.backend_port",
-            "message_bus.buses"
-        ]
+        required_keys = ["app.name", "log.level", "webui.backend_port", "message_bus.buses"]
 
         # 检查必需的配置项
         for key in required_keys:
@@ -151,39 +152,34 @@ class ConfigManager(metaclass=Singleton):
     def _load_defaults(self) -> None:
         """加载默认配置"""
         self._config = {
-            "system": {
-                "name": "DeepSearch",
-                "version": "0.1.0",
-                "mode": "production"
-            },
+            "system": {"name": "DeepSearch", "version": "0.1.0", "mode": "production"},
             "logging": {
                 "level": "INFO",
                 "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                "output": "console"
+                "output": "console",
             },
             "webui": {
-                "host": "0.0.0.0",
+                "backend_host": "127.0.0.1",
+                "backend_port": 8000,
+                "frontend_port": 3000,
+                "host": "127.0.0.1",
                 "port": 8000,
-                "frontend_port": 3000
             },
-            "monitoring": {
-                "enabled": True,
-                "interval": 60
-            }
+            "monitoring": {"enabled": True, "interval": 60},
         }
 
     def get(self, key: str, default: Any = None) -> Any:
         """
         获取配置值
-        
+
         Args:
             key: 配置键，支持点号分隔的嵌套键（如 'webui.port'）
             default: 默认值
-            
+
         Returns:
             配置值
         """
-        keys = key.split('.')
+        keys = key.split(".")
         value = self._config
 
         for k in keys:
@@ -202,7 +198,7 @@ class ConfigManager(metaclass=Singleton):
             key: 配置键，支持点号分隔的嵌套键
             value: 配置值
         """
-        keys = key.split('.')
+        keys = key.split(".")
         config = self._config
 
         # 创建嵌套路径
@@ -222,7 +218,7 @@ class ConfigManager(metaclass=Singleton):
     def save(self, path: Optional[Union[str, Path]] = None) -> None:
         """
         保存配置到文件
-        
+
         Args:
             path: 保存路径，如果为 None 则使用当前配置文件路径
         """
@@ -232,7 +228,7 @@ class ConfigManager(metaclass=Singleton):
             save_path = Path.cwd() / "config.yaml"
 
         try:
-            with open(save_path, 'w', encoding='utf-8') as f:
+            with open(save_path, "w", encoding="utf-8") as f:
                 yaml.dump(self._config, f, default_flow_style=False, allow_unicode=True)
             logger.info(f"配置已保存: {save_path}")
         except Exception as e:

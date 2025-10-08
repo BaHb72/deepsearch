@@ -1,7 +1,9 @@
 """
 Performance configuration models.
 """
+
 from typing import Optional
+
 from pydantic import BaseModel, Field
 
 from deepsearch.constants import (
@@ -13,6 +15,7 @@ from deepsearch.constants import (
 
 class EventEngineConfig(BaseModel):
     """事件引擎性能配置"""
+
     queue_size: int = Field(default=50000, description="事件队列大小")
     max_workers: Optional[int] = Field(default=None, description="线程池大小，None表示自动")
     batch_size: int = Field(default=200, description="批处理大小")
@@ -24,6 +27,7 @@ class EventEngineConfig(BaseModel):
 
 class MessageBusConfig(BaseModel):
     """消息总线性能配置"""
+
     enable_compression: bool = Field(default=True, description="启用消息压缩")
     compression_threshold: int = Field(default=1024, description="压缩阈值（字节）")
     enable_deduplication: bool = Field(default=True, description="启用消息去重")
@@ -33,6 +37,7 @@ class MessageBusConfig(BaseModel):
 
 class CacheConfig(BaseModel):
     """缓存性能配置"""
+
     max_memory_mb: int = Field(default=2048, description="内存缓存大小（MB）")
     enable_redis: bool = Field(default=True, description="启用Redis二级缓存")
     enable_query_cache: bool = Field(default=True, description="启用查询结果缓存")
@@ -42,6 +47,7 @@ class CacheConfig(BaseModel):
 
 class DatabasePerfConfig(BaseModel):
     """数据库性能配置"""
+
     pool_size: int = Field(default=50, description="连接池大小")
     max_overflow: int = Field(default=20, description="最大溢出连接数")
     pool_timeout: int = Field(default=30, description="连接池超时（秒）")
@@ -50,6 +56,7 @@ class DatabasePerfConfig(BaseModel):
 
 class WebSocketConfig(BaseModel):
     """WebSocket性能配置"""
+
     batch_enabled: bool = Field(default=True, description="启用批量发送")
     batch_size: int = Field(default=50, description="批量大小")
     batch_timeout: float = Field(default=0.1, description="批量超时（秒）")
@@ -60,6 +67,7 @@ class WebSocketConfig(BaseModel):
 
 class DataProviderConfig(BaseModel):
     """数据提供者性能配置"""
+
     request_batch_size: int = Field(default=20, description="请求批处理大小")
     request_batch_timeout: float = Field(default=0.2, description="请求批处理超时（秒）")
     circuit_breaker_threshold: int = Field(default=5, description="断路器阈值")
@@ -70,11 +78,12 @@ class DataProviderConfig(BaseModel):
 
 class PerformanceConfig(BaseModel):
     """Performance configuration."""
+
     # 保留原有字段以保持向后兼容
     max_workers: int = DEFAULT_MAX_WORKERS
     queue_size: int = DEFAULT_QUEUE_SIZE
     batch_size: int = DEFAULT_BATCH_SIZE
-    
+
     # 新增细分配置
     event_engine: EventEngineConfig = Field(default_factory=EventEngineConfig)
     message_bus: MessageBusConfig = Field(default_factory=MessageBusConfig)

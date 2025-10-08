@@ -7,16 +7,8 @@ import {
   UnorderedListOutlined,
   SettingOutlined,
   FileTextOutlined,
-  LineChartOutlined,
   DatabaseOutlined,
-  ApiOutlined,
-  EyeOutlined,
   FundOutlined,
-  AreaChartOutlined,
-  BarChartOutlined,
-  SyncOutlined,
-  UserOutlined,
-  GithubOutlined,
   MonitorOutlined,
   CloudServerOutlined,
   AlertOutlined,
@@ -196,7 +188,7 @@ const MainLayout = ({ children }) => {
         )}
         footerRender={() => (
           <div style={{ textAlign: 'center', color: 'rgba(0,0,0,0.45)' }}>
-            DeepSearch ©2025 | <GithubOutlined /> GitHub
+            DeepSearch ©2025
           </div>
         )}
       >

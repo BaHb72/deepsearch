@@ -3,13 +3,15 @@
 
 提供K线数据、技术指标、实时行情等图表相关功能
 """
-from typing import Optional, List, Dict, Any
+
 from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException, Query, Depends
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from loguru import logger
+from typing import Any, Dict, List, Optional, Union
+
 import pandas as pd
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
+from loguru import logger
+from pydantic import BaseModel
 
 from deepsearch.config import get_config
 from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceManager
@@ -19,6 +21,8 @@ router = APIRouter(prefix="/chart", tags=["图表数据管理"])
 
 # 全局数据源管理器实例
 _data_manager: Optional[DataSourceManager] = None
+
+IndicatorEntry = Dict[str, Union[float, str, None]]
 
 
 def get_data_manager() -> DataSourceManager:
@@ -33,6 +37,7 @@ def get_data_manager() -> DataSourceManager:
 # 请求和响应模型
 class ChartSeriesRequest(BaseModel):
     """图表序列数据请求"""
+
     symbol: str
     period: str = "1d"
     start_date: Optional[str] = None
@@ -43,6 +48,7 @@ class ChartSeriesRequest(BaseModel):
 
 class ChartSeriesResponse(BaseModel):
     """图表序列数据响应"""
+
     success: bool
     data: Dict[str, Any]
     message: Optional[str] = None
@@ -50,6 +56,7 @@ class ChartSeriesResponse(BaseModel):
 
 class TechnicalIndicatorRequest(BaseModel):
     """技术指标请求"""
+
     symbol: str
     indicator: str  # MA, MACD, RSI, KDJ, BOLL等
     period: str = "1d"
@@ -58,6 +65,7 @@ class TechnicalIndicatorRequest(BaseModel):
 
 class TechnicalIndicatorResponse(BaseModel):
     """技术指标响应"""
+
     success: bool
     indicator: str
     values: List[Dict[str, Any]]
@@ -72,7 +80,7 @@ async def get_chart_series(
     start_date: Optional[str] = Query(None, description="开始日期YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期YYYY-MM-DD"),
     limit: int = Query(100, description="数据条数", ge=1, le=5000),
-    data_manager: DataSourceManager = Depends(get_data_manager)
+    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> ChartSeriesResponse:
     """
     获取图表K线数据序列
@@ -86,16 +94,28 @@ async def get_chart_series(
         if not start_date:
             # 根据周期计算默认开始日期
             days_map = {
-                "1m": 1, "5m": 5, "15m": 7, "30m": 10, "60m": 20,
-                "1d": 100, "1w": 365, "1M": 365 * 3
+                "1m": 1,
+                "5m": 5,
+                "15m": 7,
+                "30m": 10,
+                "60m": 20,
+                "1d": 100,
+                "1w": 365,
+                "1M": 365 * 3,
             }
             days = days_map.get(period, 100)
             start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
         # 映射周期格式
         period_map = {
-            "1m": "1", "5m": "5", "15m": "15", "30m": "30", "60m": "60",
-            "1d": "daily", "1w": "weekly", "1M": "monthly"
+            "1m": "1",
+            "5m": "5",
+            "15m": "15",
+            "30m": "30",
+            "60m": "60",
+            "1d": "daily",
+            "1w": "weekly",
+            "1M": "monthly",
         }
         mapped_period = period_map.get(period, period)
 
@@ -106,27 +126,31 @@ async def get_chart_series(
                 period=mapped_period,
                 start_date=start_date,
                 end_date=end_date,
-                adjust=adjust
+                adjust=adjust,
             )
 
             if kline_data is None or kline_data.empty:
                 return ChartSeriesResponse(
-                    success=False,
-                    data={},
-                    message=f"未获取到{symbol}的K线数据"
+                    success=False, data={}, message=f"未获取到{symbol}的K线数据"
                 )
 
             # 转换数据格式
             series_data = []
             for index, row in kline_data.iterrows():
-                series_data.append({
-                    "date": index.strftime("%Y-%m-%d %H:%M:%S") if hasattr(index, 'strftime') else str(index),
-                    "open": float(row.get("开盘", row.get("open", 0))),
-                    "high": float(row.get("最高", row.get("high", 0))),
-                    "low": float(row.get("最低", row.get("low", 0))),
-                    "close": float(row.get("收盘", row.get("close", 0))),
-                    "volume": float(row.get("成交量", row.get("volume", 0)))
-                })
+                series_data.append(
+                    {
+                        "date": (
+                            index.strftime("%Y-%m-%d %H:%M:%S")
+                            if hasattr(index, "strftime")
+                            else str(index)
+                        ),
+                        "open": float(row.get("开盘", row.get("open", 0))),
+                        "high": float(row.get("最高", row.get("high", 0))),
+                        "low": float(row.get("最低", row.get("low", 0))),
+                        "close": float(row.get("收盘", row.get("close", 0))),
+                        "volume": float(row.get("成交量", row.get("volume", 0))),
+                    }
+                )
 
             # 限制返回数量
             if len(series_data) > limit:
@@ -141,8 +165,8 @@ async def get_chart_series(
                     "count": len(series_data),
                     "series": series_data,
                     "start_date": start_date,
-                    "end_date": end_date
-                }
+                    "end_date": end_date,
+                },
             )
 
         except Exception as e:
@@ -156,8 +180,8 @@ async def get_chart_series(
                     "adjust": adjust,
                     "count": 0,
                     "series": [],
-                    "message": f"数据获取失败，使用空数据: {str(e)}"
-                }
+                    "message": f"数据获取失败，使用空数据: {str(e)}",
+                },
             )
 
     except Exception as e:
@@ -167,8 +191,7 @@ async def get_chart_series(
 
 @router.post("/indicators")
 async def calculate_indicators(
-    request: TechnicalIndicatorRequest,
-    data_manager: DataSourceManager = Depends(get_data_manager)
+    request: TechnicalIndicatorRequest, data_manager: DataSourceManager = Depends(get_data_manager)
 ) -> TechnicalIndicatorResponse:
     """
     计算技术指标
@@ -185,19 +208,16 @@ async def calculate_indicators(
             period="daily",
             start_date=start_date,
             end_date=end_date,
-            adjust="qfq"
+            adjust="qfq",
         )
 
         if kline_data is None or kline_data.empty:
             return TechnicalIndicatorResponse(
-                success=False,
-                indicator=request.indicator,
-                values=[],
-                params=request.params or {}
+                success=False, indicator=request.indicator, values=[], params=request.params or {}
             )
 
         # 计算指标
-        indicator_values = []
+        indicator_values: List[IndicatorEntry] = []
         params = request.params or {}
 
         if request.indicator.upper() == "MA":
@@ -224,12 +244,16 @@ async def calculate_indicators(
 
             for index, row in kline_data.iterrows():
                 idx = kline_data.index.get_loc(index)
-                indicator_values.append({
-                    "date": str(index),
-                    "MACD": float(macd.iloc[idx]) if pd.notna(macd.iloc[idx]) else None,
-                    "signal": float(signal.iloc[idx]) if pd.notna(signal.iloc[idx]) else None,
-                    "histogram": float(histogram.iloc[idx]) if pd.notna(histogram.iloc[idx]) else None
-                })
+                indicator_values.append(
+                    {
+                        "date": str(index),
+                        "MACD": float(macd.iloc[idx]) if pd.notna(macd.iloc[idx]) else None,
+                        "signal": float(signal.iloc[idx]) if pd.notna(signal.iloc[idx]) else None,
+                        "histogram": (
+                            float(histogram.iloc[idx]) if pd.notna(histogram.iloc[idx]) else None
+                        ),
+                    }
+                )
 
         elif request.indicator.upper() == "RSI":
             # RSI指标
@@ -241,10 +265,9 @@ async def calculate_indicators(
             rsi = 100 - (100 / (1 + rs))
 
             for index, value in rsi.items():
-                indicator_values.append({
-                    "date": str(index),
-                    "RSI": float(value) if pd.notna(value) else None
-                })
+                indicator_values.append(
+                    {"date": str(index), "RSI": float(value) if pd.notna(value) else None}
+                )
 
         else:
             # 未实现的指标，返回空数据
@@ -254,7 +277,7 @@ async def calculate_indicators(
             success=True,
             indicator=request.indicator,
             values=indicator_values[-100:],  # 限制返回最近100条
-            params=params
+            params=params,
         )
 
     except Exception as e:
@@ -266,7 +289,7 @@ async def calculate_indicators(
 async def get_chip_distribution(
     symbol: str = Query(..., description="股票代码"),
     date: Optional[str] = Query(None, description="日期YYYY-MM-DD"),
-    data_manager: DataSourceManager = Depends(get_data_manager)
+    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> JSONResponse:
     """
     获取筹码分布数据
@@ -288,14 +311,10 @@ async def get_chip_distribution(
                 {"price": 10.5, "volume": 1500000, "percentage": 15.2},
                 {"price": 11.0, "volume": 2000000, "percentage": 20.3},
                 {"price": 11.5, "volume": 1800000, "percentage": 18.5},
-                {"price": 12.0, "volume": 1200000, "percentage": 12.4}
+                {"price": 12.0, "volume": 1200000, "percentage": 12.4},
             ],
-            "cost": {
-                "average": 10.85,
-                "concentration": 68.5,
-                "profit_ratio": 62.3
-            },
-            "message": "筹码分布功能正在完善中，当前为示例数据"
+            "cost": {"average": 10.85, "concentration": 68.5, "profit_ratio": 62.3},
+            "message": "筹码分布功能正在完善中，当前为示例数据",
         }
 
         return JSONResponse(chip_data)
@@ -308,7 +327,7 @@ async def get_chip_distribution(
 @router.get("/realtime")
 async def get_realtime_data(
     symbol: str = Query(..., description="股票代码"),
-    data_manager: DataSourceManager = Depends(get_data_manager)
+    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> JSONResponse:
     """
     获取实时行情数据
@@ -320,30 +339,34 @@ async def get_realtime_data(
         realtime_data = data_manager.get_realtime_quote(symbol)
 
         if realtime_data:
-            return JSONResponse({
-                "success": True,
-                "symbol": symbol,
-                "data": realtime_data,
-                "timestamp": datetime.now().isoformat()
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "symbol": symbol,
+                    "data": realtime_data,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
         else:
             # 返回模拟数据
-            return JSONResponse({
-                "success": True,
-                "symbol": symbol,
-                "data": {
-                    "price": 10.50,
-                    "change": 0.25,
-                    "change_percent": 2.44,
-                    "volume": 1500000,
-                    "amount": 15750000,
-                    "high": 10.80,
-                    "low": 10.20,
-                    "open": 10.30
-                },
-                "timestamp": datetime.now().isoformat(),
-                "message": "实时数据暂不可用，使用示例数据"
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "symbol": symbol,
+                    "data": {
+                        "price": 10.50,
+                        "change": 0.25,
+                        "change_percent": 2.44,
+                        "volume": 1500000,
+                        "amount": 15750000,
+                        "high": 10.80,
+                        "low": 10.20,
+                        "open": 10.30,
+                    },
+                    "timestamp": datetime.now().isoformat(),
+                    "message": "实时数据暂不可用，使用示例数据",
+                }
+            )
 
     except Exception as e:
         logger.error(f"获取实时数据失败: {e}")
@@ -353,7 +376,7 @@ async def get_realtime_data(
 @router.get("/market-depth")
 async def get_market_depth(
     symbol: str = Query(..., description="股票代码"),
-    data_manager: DataSourceManager = Depends(get_data_manager)
+    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> JSONResponse:
     """
     获取五档盘口数据
@@ -370,16 +393,16 @@ async def get_market_depth(
                 {"price": 10.47, "volume": 8000},
                 {"price": 10.46, "volume": 12000},
                 {"price": 10.45, "volume": 15000},
-                {"price": 10.44, "volume": 20000}
+                {"price": 10.44, "volume": 20000},
             ],
             "asks": [
                 {"price": 10.49, "volume": 3000},
                 {"price": 10.50, "volume": 7000},
                 {"price": 10.51, "volume": 10000},
                 {"price": 10.52, "volume": 13000},
-                {"price": 10.53, "volume": 18000}
+                {"price": 10.53, "volume": 18000},
             ],
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         return JSONResponse(depth_data)

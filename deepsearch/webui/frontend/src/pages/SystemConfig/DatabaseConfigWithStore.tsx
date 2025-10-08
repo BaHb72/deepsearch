@@ -16,7 +16,6 @@ import {
   InputNumber,
   Switch,
   Popconfirm,
-  message,
   Spin,
   Empty
 } from 'antd'
@@ -66,12 +65,22 @@ const DatabaseConfigWithStore: React.FC = () => {
   const [form] = Form.useForm()
 
   // 组件挂载时获取数据
+  const hasRequestedRef = React.useRef(false)
+
   React.useEffect(() => {
+    if (hasRequestedRef.current) {
+      return
+    }
+
+    if (loading) {
+      return
+    }
+
+    hasRequestedRef.current = true
     console.log('[DatabaseConfigWithStore] 组件挂载，获取数据')
     // Store 会自动处理缓存和去重，不用担心重复请求
     fetchConnections()
-  }, [fetchConnections])
-
+  }, [loading, fetchConnections])
   // 打开编辑弹窗
   const openEditModal = (record?: DatabaseConnection) => {
     if (record) {
@@ -86,7 +95,7 @@ const DatabaseConfigWithStore: React.FC = () => {
       // 新建模式
       form.resetFields()
       setEditModal({
-        visible: false,
+        visible: true,
         isEdit: false,
         editingId: null
       })

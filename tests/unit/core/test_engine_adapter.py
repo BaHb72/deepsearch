@@ -3,14 +3,18 @@
 
 验证适配器的向后兼容性和依赖延迟加载
 """
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
-import sys
 
 from deepsearch.core.runtime.engine_adapter import (
-    ConfigAdapter, LoggerAdapter, EventBusAdapter,
-    ComponentAdapter, MainEngine, create_engine
+    ComponentAdapter,
+    ConfigAdapter,
+    EventBusAdapter,
+    LoggerAdapter,
+    MainEngine,
+    create_engine,
 )
 
 
@@ -25,7 +29,7 @@ class TestConfigAdapter:
         assert adapter._config_cache is None
 
         # 模拟配置模块
-        with patch('deepsearch.core.runtime.engine_adapter.get_config') as mock_get_config:
+        with patch("deepsearch.core.runtime.engine_adapter.get_config") as mock_get_config:
             mock_config = MagicMock()
             mock_config.test_key = "test_value"
             mock_get_config.return_value = mock_config
@@ -46,7 +50,7 @@ class TestConfigAdapter:
         """测试获取嵌套配置"""
         adapter = ConfigAdapter()
 
-        with patch('deepsearch.core.runtime.engine_adapter.get_config') as mock_get_config:
+        with patch("deepsearch.core.runtime.engine_adapter.get_config") as mock_get_config:
             mock_config = MagicMock()
             mock_config.level1 = MagicMock()
             mock_config.level1.level2 = MagicMock()
@@ -71,7 +75,7 @@ class TestLoggerAdapter:
         # 初始时日志器为空
         assert adapter._logger is None
 
-        with patch('deepsearch.core.runtime.engine_adapter.logger_manager') as mock_logger_manager:
+        with patch("deepsearch.core.runtime.engine_adapter.logger_manager") as mock_logger_manager:
             mock_logger = MagicMock()
             mock_logger_manager.get_logger.return_value = mock_logger
 
@@ -85,7 +89,7 @@ class TestLoggerAdapter:
         """测试所有日志级别"""
         adapter = LoggerAdapter()
 
-        with patch('deepsearch.core.runtime.engine_adapter.logger_manager') as mock_logger_manager:
+        with patch("deepsearch.core.runtime.engine_adapter.logger_manager") as mock_logger_manager:
             mock_logger = MagicMock()
             mock_logger_manager.get_logger.return_value = mock_logger
 
@@ -108,12 +112,12 @@ class TestEventBusAdapter:
         """测试发布事件"""
         adapter = EventBusAdapter()
 
-        with patch('deepsearch.core.runtime.engine_adapter.EventEngine') as mock_event_engine_class:
+        with patch("deepsearch.core.runtime.engine_adapter.EventEngine") as mock_event_engine_class:
             mock_engine = MagicMock()
             mock_event_engine_class.return_value = mock_engine
 
             # 发布字典格式的事件
-            await adapter.publish({'type': 'TEST_EVENT', 'data': 'test'})
+            await adapter.publish({"type": "TEST_EVENT", "data": "test"})
 
             # 验证事件被转换并发布
             mock_engine.put.assert_called_once()
@@ -123,7 +127,7 @@ class TestEventBusAdapter:
         """测试订阅事件"""
         adapter = EventBusAdapter()
 
-        with patch('deepsearch.core.runtime.engine_adapter.EventEngine') as mock_event_engine_class:
+        with patch("deepsearch.core.runtime.engine_adapter.EventEngine") as mock_event_engine_class:
             mock_engine = MagicMock()
             mock_event_engine_class.return_value = mock_engine
 
@@ -222,8 +226,8 @@ class TestMainEngine:
         assert engine.running is False
         assert isinstance(engine.components, dict)
 
-    @patch('deepsearch.core.runtime.engine_adapter.EventEngineComponent')
-    @patch('deepsearch.core.runtime.engine_adapter.MessageBusComponent')
+    @patch("deepsearch.core.runtime.engine_adapter.EventEngineComponent")
+    @patch("deepsearch.core.runtime.engine_adapter.MessageBusComponent")
     def test_initialize_components(self, mock_message_bus_class, mock_event_engine_class):
         """测试初始化组件"""
         mock_event_engine = MagicMock()

@@ -1,18 +1,19 @@
 """
 测试AmazingData API连接和功能
 """
+
 import asyncio
-import sys
 import os
+import sys
 from datetime import datetime, timedelta
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import pandas as pd
+
 # 导入项目依赖
 from deepsearch.config import get_config
-from loguru import logger
-import pandas as pd
 
 
 def check_amazingdata_sdk():
@@ -23,17 +24,18 @@ def check_amazingdata_sdk():
 
     try:
         import AmazingData as ad
+
         print("[OK] AmazingData SDK已安装")
         print(f"  模块: {ad}")
-        if hasattr(ad, '__version__'):
+        if hasattr(ad, "__version__"):
             print(f"  版本: {ad.__version__}")
         return True
     except ImportError as e:
         print(f"[FAIL] AmazingData SDK未安装: {e}")
         print("\n需要安装AmazingData SDK:")
         print("  方法1: pip install AmazingData")
-        print("  方法2: 使用installer目录下的whl文件:")
-        print("         uv pip install installer/AmazingData-1.0.9-cp313-none-any.whl")
+        print("  方法2: 使用third_party目录下的whl文件:")
+        print("         uv pip install third_party/AmazingData-1.0.9-cp313-none-any.whl")
         return False
 
 
@@ -46,7 +48,7 @@ def check_amazingdata_config():
     config = get_config()
 
     # 检查配置是否存在
-    if not hasattr(config, 'amazingdata'):
+    if not hasattr(config, "amazingdata"):
         print("[FAIL] 配置文件中没有amazingdata配置项")
         return False
 
@@ -55,7 +57,7 @@ def check_amazingdata_config():
     print(f"  启用状态: {ad_config.enabled}")
 
     # 从connection配置获取主机和端口
-    if hasattr(ad_config, 'connection'):
+    if hasattr(ad_config, "connection"):
         print(f"  主机地址: {ad_config.connection.host}")
         print(f"  端口: {ad_config.connection.port}")
         print(f"  用户名: {'已配置' if ad_config.connection.username else '未配置'}")
@@ -64,21 +66,21 @@ def check_amazingdata_config():
         print(f"  自动重连: {ad_config.connection.auto_reconnect}")
     else:
         # 兼容旧配置格式
-        if hasattr(ad_config, 'host'):
+        if hasattr(ad_config, "host"):
             print(f"  主机地址: {getattr(ad_config, 'host', 'N/A')}")
-        if hasattr(ad_config, 'port'):
+        if hasattr(ad_config, "port"):
             print(f"  端口: {getattr(ad_config, 'port', 'N/A')}")
-        if hasattr(ad_config, 'username'):
+        if hasattr(ad_config, "username"):
             print(f"  用户名: {'已配置' if getattr(ad_config, 'username', '') else '未配置'}")
-        if hasattr(ad_config, 'password'):
+        if hasattr(ad_config, "password"):
             print(f"  密码: {'已配置' if getattr(ad_config, 'password', '') else '未配置'}")
-        if hasattr(ad_config, 'timeout'):
+        if hasattr(ad_config, "timeout"):
             print(f"  超时时间: {getattr(ad_config, 'timeout', 10)}秒")
-        if hasattr(ad_config, 'auto_reconnect'):
+        if hasattr(ad_config, "auto_reconnect"):
             print(f"  自动重连: {getattr(ad_config, 'auto_reconnect', True)}")
-        if hasattr(ad_config, 'use_local'):
+        if hasattr(ad_config, "use_local"):
             print(f"  使用本地数据: {getattr(ad_config, 'use_local', False)}")
-        if hasattr(ad_config, 'local_path'):
+        if hasattr(ad_config, "local_path"):
             print(f"  本地数据路径: {getattr(ad_config, 'local_path', 'N/A')}")
 
     if not ad_config.enabled:
@@ -88,12 +90,12 @@ def check_amazingdata_config():
     # 检查用户名密码
     username = None
     password = None
-    if hasattr(ad_config, 'connection'):
+    if hasattr(ad_config, "connection"):
         username = ad_config.connection.username
         password = ad_config.connection.password
     else:
-        username = getattr(ad_config, 'username', None)
-        password = getattr(ad_config, 'password', None)
+        username = getattr(ad_config, "username", None)
+        password = getattr(ad_config, "password", None)
 
     if not username or not password:
         print("\n[WARNING] AmazingData用户名或密码未配置")
@@ -110,10 +112,11 @@ async def test_amazingdata_provider():
 
     try:
         from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
-            AmazingDataProvider,
+            HAS_AMAZINGDATA,
             AmazingDataConfig,
-            HAS_AMAZINGDATA
+            AmazingDataProvider,
         )
+
         print("[OK] 成功导入AmazingDataProvider")
         print(f"  SDK状态: {'已安装' if HAS_AMAZINGDATA else '未安装'}")
 
@@ -129,7 +132,7 @@ async def test_amazingdata_provider():
     ad_config = config.amazingdata
 
     # 提取配置参数，兼容不同的配置格式
-    if hasattr(ad_config, 'connection'):
+    if hasattr(ad_config, "connection"):
         # 新格式：从connection子配置读取
         username = ad_config.connection.username or ""
         password = ad_config.connection.password or ""
@@ -141,24 +144,24 @@ async def test_amazingdata_provider():
         auto_reconnect = ad_config.connection.auto_reconnect
     else:
         # 旧格式：直接从根配置读取
-        username = getattr(ad_config, 'username', "")
-        password = getattr(ad_config, 'password', "")
-        host = getattr(ad_config, 'host', "localhost")
-        port = getattr(ad_config, 'port', 8888)
-        timeout = getattr(ad_config, 'timeout', 10)
-        max_retries = getattr(ad_config, 'max_retries', 3)
-        heartbeat_interval = getattr(ad_config, 'heartbeat_interval', 30)
-        auto_reconnect = getattr(ad_config, 'auto_reconnect', True)
+        username = getattr(ad_config, "username", "")
+        password = getattr(ad_config, "password", "")
+        host = getattr(ad_config, "host", "localhost")
+        port = getattr(ad_config, "port", 8888)
+        timeout = getattr(ad_config, "timeout", 10)
+        max_retries = getattr(ad_config, "max_retries", 3)
+        heartbeat_interval = getattr(ad_config, "heartbeat_interval", 30)
+        auto_reconnect = getattr(ad_config, "auto_reconnect", True)
 
     # 提取订阅配置
-    if hasattr(ad_config, 'subscription'):
+    if hasattr(ad_config, "subscription"):
         subscription_enabled = ad_config.subscription.enabled
         subscription_batch_size = ad_config.subscription.batch_size
         max_subscriptions = ad_config.subscription.max_symbols
     else:
-        subscription_enabled = getattr(ad_config, 'subscription_enabled', True)
-        subscription_batch_size = getattr(ad_config, 'subscription_batch_size', 100)
-        max_subscriptions = getattr(ad_config, 'max_subscriptions', 500)
+        subscription_enabled = getattr(ad_config, "subscription_enabled", True)
+        subscription_batch_size = getattr(ad_config, "subscription_batch_size", 100)
+        max_subscriptions = getattr(ad_config, "max_subscriptions", 500)
 
     # 创建Provider配置
     try:
@@ -173,7 +176,7 @@ async def test_amazingdata_provider():
             auto_reconnect=auto_reconnect,
             subscription_enabled=subscription_enabled,
             subscription_batch_size=subscription_batch_size,
-            max_subscriptions=max_subscriptions
+            max_subscriptions=max_subscriptions,
         )
         print("[OK] 创建Provider配置成功")
     except Exception as e:
@@ -206,14 +209,11 @@ async def test_amazingdata_provider():
         print("\n测试2: 获取股票列表...")
         from deepsearch.infrastructure.providers.interfaces.base import DataRequest
 
-        request = DataRequest(
-            data_type="stock_list",
-            params={}
-        )
+        request = DataRequest(data_type="stock_list", params={})
 
         stock_list = await provider.get_data(request)
         if stock_list:
-            print(f"[OK] 成功获取股票列表")
+            print("[OK] 成功获取股票列表")
             if isinstance(stock_list, list):
                 print(f"  共{len(stock_list)}只股票")
                 if stock_list:
@@ -226,14 +226,11 @@ async def test_amazingdata_provider():
     # 测试获取实时行情
     try:
         print("\n测试3: 获取实时行情...")
-        request = DataRequest(
-            data_type="realtime_quote",
-            params={"symbol": "000001.SZ"}
-        )
+        request = DataRequest(data_type="realtime_quote", params={"symbol": "000001.SZ"})
 
         quote = await provider.get_data(request)
         if quote:
-            print(f"[OK] 成功获取000001.SZ的实时行情")
+            print("[OK] 成功获取000001.SZ的实时行情")
             print(f"  数据: {quote}")
         else:
             print("[FAIL] 获取实时行情失败")
@@ -252,13 +249,13 @@ async def test_amazingdata_provider():
                 "symbol": "000001.SZ",
                 "period": "1d",
                 "start_date": start_date.strftime("%Y-%m-%d"),
-                "end_date": end_date.strftime("%Y-%m-%d")
-            }
+                "end_date": end_date.strftime("%Y-%m-%d"),
+            },
         )
 
         kline_data = await provider.get_data(request)
         if kline_data is not None:
-            print(f"[OK] 成功获取K线数据")
+            print("[OK] 成功获取K线数据")
             if isinstance(kline_data, pd.DataFrame):
                 print(f"  共{len(kline_data)}条记录")
                 if not kline_data.empty:
@@ -321,12 +318,12 @@ def main():
         # 检查用户名密码
         username = None
         password = None
-        if hasattr(config.amazingdata, 'connection'):
+        if hasattr(config.amazingdata, "connection"):
             username = config.amazingdata.connection.username
             password = config.amazingdata.connection.password
         else:
-            username = getattr(config.amazingdata, 'username', None)
-            password = getattr(config.amazingdata, 'password', None)
+            username = getattr(config.amazingdata, "username", None)
+            password = getattr(config.amazingdata, "password", None)
 
         if username and password:
             print("[OK] 用户凭证已配置")
@@ -335,7 +332,9 @@ def main():
 
     print("\n建议:")
     if not has_sdk:
-        print("1. 安装AmazingData SDK: uv pip install installer/AmazingData-1.0.9-cp313-none-any.whl")
+        print(
+            "1. 安装AmazingData SDK: uv pip install third_party/AmazingData-1.0.9-cp313-none-any.whl"
+        )
 
     if has_config:
         config = get_config()
@@ -345,12 +344,12 @@ def main():
         # 检查用户名密码
         username = None
         password = None
-        if hasattr(config.amazingdata, 'connection'):
+        if hasattr(config.amazingdata, "connection"):
             username = config.amazingdata.connection.username
             password = config.amazingdata.connection.password
         else:
-            username = getattr(config.amazingdata, 'username', None)
-            password = getattr(config.amazingdata, 'password', None)
+            username = getattr(config.amazingdata, "username", None)
+            password = getattr(config.amazingdata, "password", None)
 
         if not username or not password:
             print("3. 在配置文件中设置用户名和密码")

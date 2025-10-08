@@ -3,24 +3,27 @@
 
 提供高性能的数据库连接池管理，包括连接预热、健康检查和监控
 """
+
 import asyncio
-import logging
-from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
-from dataclasses import dataclass, field
 import time
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import asyncpg
 from asyncpg.pool import Pool
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy.pool import QueuePool
+
+from deepsearch.observability import get_logger
 
 
 @dataclass
 class PoolConfig:
     """连接池配置"""
+
     dsn: str  # 数据库连接字符串
     min_size: int = 50  # 最小连接数（从10提升到50）
     max_size: int = 100  # 最大连接数（从20提升到100）
@@ -37,6 +40,7 @@ class PoolConfig:
 @dataclass
 class PoolStatistics:
     """连接池统计信息"""
+
     created_at: datetime = field(default_factory=datetime.now)
     total_connections: int = 0
     active_connections: int = 0
@@ -46,7 +50,7 @@ class PoolStatistics:
     failed_queries: int = 0
     avg_query_time: float = 0.0
     max_query_time: float = 0.0
-    min_query_time: float = float('inf')
+    min_query_time: float = float("inf")
     connection_errors: int = 0
     last_error: Optional[str] = None
     last_error_time: Optional[datetime] = None
@@ -76,7 +80,7 @@ class OptimizedDatabasePool:
         self.engine: Optional[AsyncEngine] = None
         self.session_factory: Optional[sessionmaker] = None
         self.statistics = PoolStatistics()
-        self._logger = logging.getLogger("deepsearch.database.pool")
+        self._logger = get_logger("deepsearch.database.pool")
         self._initialized = False
         self._warmup_complete = False
 
@@ -94,25 +98,23 @@ class OptimizedDatabasePool:
                 max_queries=self.config.max_queries,
                 max_inactive_connection_lifetime=self.config.max_inactive_connection_lifetime,
                 command_timeout=self.config.command_timeout,
-                init=self._init_connection
+                init=self._init_connection,
             )
 
             # 创建 SQLAlchemy 引擎
             self.engine = create_async_engine(
-                self.config.dsn.replace('postgresql://', 'postgresql+asyncpg://'),
+                self.config.dsn.replace("postgresql://", "postgresql+asyncpg://"),
                 pool_size=self.config.min_size,
                 max_overflow=self.config.max_size - self.config.min_size,
                 pool_recycle=self.config.pool_recycle,
                 pool_pre_ping=self.config.pre_ping,
                 echo_pool=self.config.echo_pool,
-                poolclass=QueuePool
+                poolclass=QueuePool,
             )
 
             # 创建会话工厂
             self.session_factory = sessionmaker(
-                self.engine,
-                class_=AsyncSession,
-                expire_on_commit=False
+                self.engine, class_=AsyncSession, expire_on_commit=False
             )
 
             self._initialized = True
@@ -156,18 +158,24 @@ class OptimizedDatabasePool:
         # 准备常用查询语句
         statements = [
             ("get_stock_info", "SELECT * FROM stock_info WHERE symbol = $1"),
-            ("get_kline_data", """
+            (
+                "get_kline_data",
+                """
                 SELECT * FROM kline_data
                 WHERE symbol = $1 AND timestamp BETWEEN $2 AND $3
                 ORDER BY timestamp
-            """),
-            ("get_latest_price", """
+            """,
+            ),
+            (
+                "get_latest_price",
+                """
                 SELECT price, volume, timestamp
                 FROM market_data
                 WHERE symbol = $1
                 ORDER BY timestamp DESC
                 LIMIT 1
-            """),
+            """,
+            ),
         ]
 
         for name, sql in statements:
@@ -337,19 +345,12 @@ class OptimizedDatabasePool:
             # 使用移动平均
             alpha = 0.1  # 平滑因子
             self.statistics.avg_query_time = (
-                alpha * query_time +
-                (1 - alpha) * self.statistics.avg_query_time
+                alpha * query_time + (1 - alpha) * self.statistics.avg_query_time
             )
 
         # 更新最大/最小查询时间
-        self.statistics.max_query_time = max(
-            self.statistics.max_query_time,
-            query_time
-        )
-        self.statistics.min_query_time = min(
-            self.statistics.min_query_time,
-            query_time
-        )
+        self.statistics.max_query_time = max(self.statistics.max_query_time, query_time)
+        self.statistics.min_query_time = min(self.statistics.min_query_time, query_time)
 
     def get_statistics(self) -> Dict[str, Any]:
         """
@@ -379,15 +380,17 @@ class OptimizedDatabasePool:
                 "max_query_time_ms": self.statistics.max_query_time * 1000,
                 "min_query_time_ms": (
                     self.statistics.min_query_time * 1000
-                    if self.statistics.min_query_time != float('inf')
+                    if self.statistics.min_query_time != float("inf")
                     else 0
                 ),
                 "connection_errors": self.statistics.connection_errors,
                 "last_error": self.statistics.last_error,
                 "uptime_seconds": (
-                    datetime.now() - self.statistics.created_at
-                ).total_seconds() if self._initialized else 0,
-            }
+                    (datetime.now() - self.statistics.created_at).total_seconds()
+                    if self._initialized
+                    else 0
+                ),
+            },
         }
 
     async def close(self) -> None:

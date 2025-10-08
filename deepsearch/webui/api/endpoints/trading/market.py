@@ -2,9 +2,10 @@
 市场数据 API
 提供市场概览、板块行情、异动监控等接口
 """
+
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel
 
@@ -16,12 +17,13 @@ router = APIRouter(prefix="/api/market", tags=["市场数据"])
 _data_source_status_cache = {
     "data": None,
     "timestamp": 0,
-    "ttl": 60  # 增加到60秒缓存，减少查询频率
+    "ttl": 60,  # 增加到60秒缓存，减少查询频率
 }
 
 
 class MarketOverviewResponse(BaseModel):
     """市场概览响应"""
+
     indices: List[dict]  # 指数数据
     breadth: dict  # 市场宽度
     capital: dict  # 资金流向
@@ -32,6 +34,7 @@ class MarketOverviewResponse(BaseModel):
 
 class SectorResponse(BaseModel):
     """板块数据响应"""
+
     code: str
     name: str
     change_pct: float
@@ -43,6 +46,7 @@ class SectorResponse(BaseModel):
 
 class AnomalyResponse(BaseModel):
     """异动数据响应"""
+
     symbol: str
     name: str
     price: float
@@ -55,6 +59,7 @@ class AnomalyResponse(BaseModel):
 
 class DataSourceStatus(BaseModel):
     """数据源状态响应"""
+
     source: str  # 当前数据源
     mode: str  # 模式: workers/direct/cache
     worker_url: str = ""  # Worker URL(如果使用)
@@ -65,6 +70,7 @@ class DataSourceStatus(BaseModel):
 
 class MarketActivityResponse(BaseModel):
     """赚钱效应分析响应"""
+
     rise: int  # 上涨家数
     fall: int  # 下跌家数
     flat: int  # 平盘家数
@@ -83,6 +89,7 @@ class MarketActivityResponse(BaseModel):
 
 class StockChangeItem(BaseModel):
     """盘口异动项"""
+
     time: str  # 时间
     symbol: str  # 代码
     name: str  # 名称
@@ -93,6 +100,7 @@ class StockChangeItem(BaseModel):
 
 class ZTPoolItem(BaseModel):
     """涨停股池项"""
+
     rank: int  # 排名
     symbol: str  # 代码
     name: str  # 名称
@@ -110,10 +118,10 @@ class ZTPoolItem(BaseModel):
 
 
 @router.get("/overview", response_model=MarketOverviewResponse)
-async def get_market_overview(service = Depends(get_market_service)):
+async def get_market_overview(service=Depends(get_market_service)):
     """
     获取市场概览数据
-    
+
     包括：
     - 主要指数（上证、深证、创业板、北证）
     - 市场宽度（涨跌家数、涨停跌停数）
@@ -123,21 +131,23 @@ async def get_market_overview(service = Depends(get_market_service)):
         data = await service.get_market_overview()
 
         # 获取数据源信息
-        if hasattr(service, 'data_provider') and service.data_provider:
+        if hasattr(service, "data_provider") and service.data_provider:
             provider = service.data_provider
             # 获取最近成功的Worker或模式
-            if hasattr(provider, '_last_successful_worker') and provider._last_successful_worker:
-                data['data_source'] = f"workers:{provider._last_successful_worker}"
-            elif hasattr(provider, 'worker_urls') and provider.worker_urls:
+            if hasattr(provider, "_last_successful_worker") and provider._last_successful_worker:
+                data["data_source"] = f"workers:{provider._last_successful_worker}"
+            elif hasattr(provider, "worker_urls") and provider.worker_urls:
                 # 检查是否有健康的Worker
-                healthy_workers = [url for url in provider.worker_urls if provider.worker_health.get(url, False)]
+                healthy_workers = [
+                    url for url in provider.worker_urls if provider.worker_health.get(url, False)
+                ]
                 if healthy_workers:
-                    data['data_source'] = f"workers:{healthy_workers[0]}"
+                    data["data_source"] = f"workers:{healthy_workers[0]}"
                 else:
-                    data['data_source'] = "direct:akshare"
+                    data["data_source"] = "direct:akshare"
             else:
-                data['data_source'] = "unknown"
-        
+                data["data_source"] = "unknown"
+
         return data
     except Exception as e:
         logger.error(f"获取市场概览失败: {e}")
@@ -146,15 +156,20 @@ async def get_market_overview(service = Depends(get_market_service)):
 
 @router.get("/sectors", response_model=List[SectorResponse])
 async def get_sectors(
-        type: str = Query("industry", description="板块类型: industry(行业) / concept(概念) / region(地域)"),
-        limit: int = Query(20, description="返回数量", ge=1, le=100),
-        sort: str = Query("change_pct", description="排序字段: change_pct / amount / volume"),
-        level: str = Query("sw1", description="行业分级(仅industry时有效): sw1(申万一级) / sw2(申万二级) / sw3(申万三级)"),
-        service = Depends(get_market_service)
+    type: str = Query(
+        "industry", description="板块类型: industry(行业) / concept(概念) / region(地域)"
+    ),
+    limit: int = Query(20, description="返回数量", ge=1, le=100),
+    sort: str = Query("change_pct", description="排序字段: change_pct / amount / volume"),
+    level: str = Query(
+        "sw1",
+        description="行业分级(仅industry时有效): sw1(申万一级) / sw2(申万二级) / sw3(申万三级)",
+    ),
+    service=Depends(get_market_service),
 ):
     """
     获取板块排行数据
-    
+
     参数：
     - type: 板块类型（industry=行业板块, concept=概念板块, region=地域板块）
     - limit: 返回数量限制
@@ -163,10 +178,7 @@ async def get_sectors(
     """
     try:
         data = await service.get_sectors(
-            sector_type=type,
-            limit=limit,
-            sort_by=sort,
-            level=level if type == 'industry' else None
+            sector_type=type, limit=limit, sort_by=sort, level=level if type == "industry" else None
         )
         return data
     except Exception as e:
@@ -175,13 +187,16 @@ async def get_sectors(
 
 
 @router.get("/concept-ths/list")
-async def get_ths_concept_list(service = Depends(get_market_service)):
+async def get_ths_concept_list(service=Depends(get_market_service)):
     """
     获取同花顺概念板块列表
     """
     try:
         # 使用直连方式获取同花顺数据
-        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import get_ths_provider
+        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import (
+            get_ths_provider,
+        )
+
         provider = get_ths_provider()
         result = await provider.get_concept_list()
         if result["success"]:
@@ -189,7 +204,10 @@ async def get_ths_concept_list(service = Depends(get_market_service)):
         else:
             logger.error(f"获取失败: {result.get('error')}")
             # 尝试使用代理方式作为后备
-            from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
+            from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
+                AkShareProxyProvider,
+            )
+
             proxy_provider = AkShareProxyProvider()
             return await proxy_provider.call_api("stock_board_concept_name_ths", {})
     except Exception as e:
@@ -199,78 +217,81 @@ async def get_ths_concept_list(service = Depends(get_market_service)):
 
 @router.get("/concept-ths/{concept}/index")
 async def get_ths_concept_index(
-        concept: str,
-        start_date: str = Query("20240101", description="开始日期(YYYYMMDD)"),
-        end_date: str = Query("20241231", description="结束日期(YYYYMMDD)"),
-        service = Depends(get_market_service)
+    concept: str,
+    start_date: str = Query("20240101", description="开始日期(YYYYMMDD)"),
+    end_date: str = Query("20241231", description="结束日期(YYYYMMDD)"),
+    service=Depends(get_market_service),
 ):
     """
     获取同花顺概念板块指数历史数据
-    
+
     参数：
     - concept: 概念名称（如：阿里巴巴概念）
     - start_date: 开始日期
     - end_date: 结束日期
     """
     try:
-        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import get_ths_provider
+        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import (
+            get_ths_provider,
+        )
+
         provider = get_ths_provider()
         result = await provider.get_concept_index(concept, start_date, end_date)
         if result["success"]:
             return {"data": result["data"], "_data_source": result["source"]}
         else:
             logger.error(f"获取失败: {result.get('error')}")
-            raise HTTPException(status_code=500, detail=result.get('error', 'Failed to get data'))
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to get data"))
     except Exception as e:
         logger.error(f"获取同花顺概念板块指数失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/concept-ths/{concept}/info")
-async def get_ths_concept_info(
-        concept: str,
-        service = Depends(get_market_service)
-):
+async def get_ths_concept_info(concept: str, service=Depends(get_market_service)):
     """
     获取同花顺概念板块简介
-    
+
     参数：
     - concept: 概念名称（如：阿里巴巴概念）
     """
     try:
-        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import get_ths_provider
+        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import (
+            get_ths_provider,
+        )
+
         provider = get_ths_provider()
         result = await provider.get_concept_info(concept)
         if result["success"]:
             return {"data": result["data"], "_data_source": result["source"]}
         else:
             logger.error(f"获取失败: {result.get('error')}")
-            raise HTTPException(status_code=500, detail=result.get('error', 'Failed to get data'))
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to get data"))
     except Exception as e:
         logger.error(f"获取同花顺概念板块简介失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/concept-ths/{concept}/constituents")
-async def get_ths_concept_constituents(
-        concept: str,
-        service = Depends(get_market_service)
-):
+async def get_ths_concept_constituents(concept: str, service=Depends(get_market_service)):
     """
     获取同花顺概念板块成份股
-    
+
     参数：
     - concept: 概念名称（如：阿里巴巴概念）
     """
     try:
-        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import get_ths_provider
+        from deepsearch.infrastructure.providers.implementations.akshare.ths_direct import (
+            get_ths_provider,
+        )
+
         provider = get_ths_provider()
         result = await provider.get_concept_constituents(concept)
         if result["success"]:
             return {"data": result["data"], "_data_source": result["source"]}
         else:
             logger.error(f"获取失败: {result.get('error')}")
-            raise HTTPException(status_code=500, detail=result.get('error', 'Failed to get data'))
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to get data"))
     except Exception as e:
         logger.error(f"获取同花顺概念板块成份股失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -278,14 +299,16 @@ async def get_ths_concept_constituents(
 
 @router.get("/anomalies", response_model=List[AnomalyResponse])
 async def get_anomalies(
-        kind: str = Query("all", description="异动类型: all / limit_up / limit_down / price_surge / volume_spike"),
-        min_change: float = Query(0, description="最小涨跌幅过滤（%）"),
-        min_amount: float = Query(0, description="最小成交额过滤（元）"),
-        service = Depends(get_market_service)
+    kind: str = Query(
+        "all", description="异动类型: all / limit_up / limit_down / price_surge / volume_spike"
+    ),
+    min_change: float = Query(0, description="最小涨跌幅过滤（%）"),
+    min_amount: float = Query(0, description="最小成交额过滤（元）"),
+    service=Depends(get_market_service),
 ):
     """
     获取异动股票数据
-    
+
     参数：
     - kind: 异动类型
         - all: 全部异动
@@ -297,11 +320,7 @@ async def get_anomalies(
     - min_amount: 最小成交额过滤
     """
     try:
-        data = await service.get_anomalies(
-            kind=kind,
-            min_change=min_change,
-            min_amount=min_amount
-        )
+        data = await service.get_anomalies(kind=kind, min_change=min_change, min_amount=min_amount)
         return data
     except Exception as e:
         logger.error(f"获取异动数据失败: {e}")
@@ -310,54 +329,49 @@ async def get_anomalies(
 
 @router.get("/stocks/{symbol}/intraday")
 async def get_stock_intraday(
-        symbol: str,
-        period: int = Query(1, description="时间周期（分钟）", ge=1, le=60),
-        limit: int = Query(240, description="数据点数量", ge=1, le=1000),
-        service = Depends(get_market_service)
+    symbol: str,
+    period: int = Query(1, description="时间周期（分钟）", ge=1, le=60),
+    limit: int = Query(240, description="数据点数量", ge=1, le=1000),
+    service=Depends(get_market_service),
 ):
     """
     获取个股分时数据
-    
+
     参数：
     - symbol: 股票代码（如：000001）
     - period: 时间周期（1=1分钟线, 5=5分钟线, 等）
     - limit: 返回的数据点数量
     """
     try:
-        data = await service.get_stock_intraday(
-            symbol=symbol,
-            period=period,
-            limit=limit
-        )
-        return {
-            "symbol": symbol,
-            "period": period,
-            "data": data
-        }
+        data = await service.get_stock_intraday(symbol=symbol, period=period, limit=limit)
+        return {"symbol": symbol, "period": period, "data": data}
     except Exception as e:
         logger.error(f"获取分时数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/data-source", response_model=DataSourceStatus)
-async def get_data_source_status(service = Depends(get_market_service)):
+async def get_data_source_status(service=Depends(get_market_service)):
     """
     获取当前数据源状态
-    
+
     返回：
     - 当前数据源类型（Workers代理/直连/缓存）
     - Worker节点信息（如果使用代理）
     - 健康状态和性能统计
     """
     import time
-    
+
     # 检查缓存
     current_time = time.time()
-    if _data_source_status_cache["data"] and \
-       (current_time - _data_source_status_cache["timestamp"]) < _data_source_status_cache["ttl"]:
+    if (
+        _data_source_status_cache["data"]
+        and (current_time - _data_source_status_cache["timestamp"])
+        < _data_source_status_cache["ttl"]
+    ):
         logger.debug("使用缓存的数据源状态")
         return _data_source_status_cache["data"]
-    
+
     # 简化处理 - 直接返回默认状态，避免超时
     # 因为当前service可能没有初始化或者provider为空
     default_status = DataSourceStatus(
@@ -366,21 +380,21 @@ async def get_data_source_status(service = Depends(get_market_service)):
         worker_url="",
         healthy=True,
         latency=0,
-        statistics={"note": "Using default status to avoid timeout"}
+        statistics={"note": "Using default status to avoid timeout"},
     )
-    
+
     # 缓存默认结果
     _data_source_status_cache["data"] = default_status
     _data_source_status_cache["timestamp"] = current_time
-    
+
     return default_status
 
 
 @router.get("/stats")
-async def get_market_stats(service = Depends(get_market_service)):
+async def get_market_stats(service=Depends(get_market_service)):
     """
     获取市场服务统计信息
-    
+
     包括：
     - 总请求数
     - 缓存命中率
@@ -396,10 +410,10 @@ async def get_market_stats(service = Depends(get_market_service)):
 
 
 @router.get("/activity", response_model=MarketActivityResponse)
-async def get_market_activity(service = Depends(get_market_service)):
+async def get_market_activity(service=Depends(get_market_service)):
     """
     获取赚钱效应分析数据
-    
+
     返回：
     - 涨跌家数统计
     - 涨停跌停统计
@@ -408,15 +422,15 @@ async def get_market_activity(service = Depends(get_market_service)):
     """
     try:
         # 检查service是否有get_market_activity方法
-        if hasattr(service, 'get_market_activity'):
+        if hasattr(service, "get_market_activity"):
             data = await service.get_market_activity()
         else:
             # 如果没有，尝试创建AkShareDirectService
             # from deepsearch.application.services.market.akshare_direct_service import AkShareDirectService
             # akshare_service = AkShareDirectService()
             # data = await akshare_service.get_market_activity()
-            data = {'error': 'Service not available'}
-        
+            data = {"error": "Service not available"}
+
         return data
     except Exception as e:
         logger.error(f"获取赚钱效应数据失败: {e}")
@@ -425,12 +439,12 @@ async def get_market_activity(service = Depends(get_market_service)):
 
 @router.get("/stock-changes", response_model=List[StockChangeItem])
 async def get_stock_changes(
-        change_type: str = Query("大笔买入", description="异动类型"),
-        service = Depends(get_market_service)
+    change_type: str = Query("大笔买入", description="异动类型"),
+    service=Depends(get_market_service),
 ):
     """
     获取盘口异动数据
-    
+
     参数：
     - change_type: 异动类型，可选：
         - 买入信号：'火箭发射', '快速反弹', '大笔买入', '封涨停板', '打开跌停板', '有大买盘', '竞价上涨', '高开5日线', '向上缺口', '60日新高', '60日大幅上涨'
@@ -438,15 +452,15 @@ async def get_stock_changes(
     """
     try:
         # 检查service是否有get_stock_changes方法
-        if hasattr(service, 'get_stock_changes'):
+        if hasattr(service, "get_stock_changes"):
             data = await service.get_stock_changes(change_type)
         else:
             # 如果没有，尝试创建AkShareDirectService
             # from deepsearch.application.services.market.akshare_direct_service import AkShareDirectService
             # akshare_service = AkShareDirectService()
             # data = await akshare_service.get_stock_changes(change_type)
-            data = {'error': 'Service not available'}
-        
+            data = {"error": "Service not available"}
+
         return data
     except Exception as e:
         logger.error(f"获取盘口异动数据失败: {e}")
@@ -455,26 +469,25 @@ async def get_stock_changes(
 
 @router.get("/zt-pool", response_model=List[ZTPoolItem])
 async def get_zt_pool(
-        date: str = Query(None, description="日期，格式：20241231"),
-        service = Depends(get_market_service)
+    date: str = Query(None, description="日期，格式：20241231"), service=Depends(get_market_service)
 ):
     """
     获取涨停股池数据
-    
+
     参数：
     - date: 日期，格式为 YYYYMMDD，默认为今天
     """
     try:
         # 检查service是否有get_zt_pool方法
-        if hasattr(service, 'get_zt_pool'):
+        if hasattr(service, "get_zt_pool"):
             data = await service.get_zt_pool(date)
         else:
             # 如果没有，尝试创建AkShareDirectService
             # from deepsearch.application.services.market.akshare_direct_service import AkShareDirectService
             # akshare_service = AkShareDirectService()
             # data = await akshare_service.get_zt_pool(date)
-            data = {'error': 'Service not available'}
-        
+            data = {"error": "Service not available"}
+
         return data
     except Exception as e:
         logger.error(f"获取涨停股池失败: {e}")
@@ -483,12 +496,14 @@ async def get_zt_pool(
 
 @router.post("/refresh")
 async def refresh_market_data(
-        category: str = Query("all", description="刷新类别: all / overview / sectors / anomalies / activity"),
-        service = Depends(get_market_service)
+    category: str = Query(
+        "all", description="刷新类别: all / overview / sectors / anomalies / activity"
+    ),
+    service=Depends(get_market_service),
 ):
     """
     强制刷新市场数据（清除缓存）
-    
+
     参数：
     - category: 要刷新的数据类别
     """

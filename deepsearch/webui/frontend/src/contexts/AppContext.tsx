@@ -138,7 +138,7 @@ export const AppProvider = ({ children }) => {
       storage.set('token', token)
     }, []),
     
-    login: useCallback(async (credentials) => {
+    login: useCallback(async (_credentials) => {
       try {
         dispatch({ type: ActionTypes.SET_LOADING, payload: true })
         // 这里应该调用登录 API

@@ -7,8 +7,4 @@ from .amazingdata import AmazingDataProvider
 from .amazingdata_extended import AmazingDataExtended
 from .amazingdata_realtime import AmazingDataRealtime
 
-__all__ = [
-    "AmazingDataProvider",
-    "AmazingDataExtended",
-    "AmazingDataRealtime"
-]
+__all__ = ["AmazingDataProvider", "AmazingDataExtended", "AmazingDataRealtime"]

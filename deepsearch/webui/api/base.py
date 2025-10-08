@@ -3,10 +3,10 @@ WebUI API 基础模块
 
 提供统一的 API 错误处理、响应格式和通用工具。
 """
+
 import functools
-import logging
 from datetime import datetime
-from typing import Any, Callable, Dict, Optional, TypeVar
+from typing import Any, Callable, Dict, Optional, TypeVar, cast
 
 from fastapi import HTTPException, status
 from fastapi.responses import JSONResponse
@@ -14,95 +14,82 @@ from pydantic import BaseModel
 
 from deepsearch.core import MainEngine
 from deepsearch.core.interfaces.component import Component, ComponentStatus
+from deepsearch.observability import get_logger
 from deepsearch.webui.server import app_state
 
 # 类型变量
-F = TypeVar('F', bound=Callable[..., Any])
+F = TypeVar("F", bound=Callable[..., Any])
 
 # 获取logger
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class APIResponse(BaseModel):
     """统一的 API 响应格式"""
+
     success: bool
     data: Optional[Any] = None
     error: Optional[str] = None
-    timestamp: str = None
+    timestamp: Optional[str] = None
 
     def __init__(self, **data):
-        if 'timestamp' not in data:
-            data['timestamp'] = datetime.now().isoformat()
+        if "timestamp" not in data:
+            data["timestamp"] = datetime.now().isoformat()
         super().__init__(**data)
 
 
-def success_response(data: Any = None, message: str = None) -> JSONResponse:
+def success_response(data: Any = None, message: Optional[str] = None) -> JSONResponse:
     """
     创建成功响应
-    
+
     Args:
         data: 响应数据
         message: 成功消息
-    
+
     Returns:
         JSON响应
     """
-    response_data = {
-        "success": True,
-        "data": data
-    }
+    response_data = {"success": True, "data": data}
     if message:
         response_data["message"] = message
 
-    return JSONResponse(
-        content=APIResponse(**response_data).dict(),
-        status_code=status.HTTP_200_OK
-    )
+    return JSONResponse(content=APIResponse(**response_data).dict(), status_code=status.HTTP_200_OK)
 
 
 def error_response(
-        error: str,
-        status_code: int = status.HTTP_400_BAD_REQUEST,
-        details: Optional[Dict] = None
+    error: str, status_code: int = status.HTTP_400_BAD_REQUEST, details: Optional[Dict] = None
 ) -> JSONResponse:
     """
     创建错误响应
-    
+
     Args:
         error: 错误消息
         status_code: HTTP状态码
         details: 额外的错误详情
-    
+
     Returns:
         JSON响应
     """
-    response_data = {
-        "success": False,
-        "error": error
-    }
+    response_data = {"success": False, "error": error}
     if details:
         response_data["details"] = details
 
-    return JSONResponse(
-        content=APIResponse(**response_data).dict(),
-        status_code=status_code
-    )
+    return JSONResponse(content=APIResponse(**response_data).dict(), status_code=status_code)
 
 
 def get_engine() -> MainEngine:
     """
     获取引擎实例
-    
+
     Returns:
         MainEngine实例
-        
+
     Raises:
         HTTPException: 如果引擎未初始化
     """
     if not app_state.engine:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="系统引擎未初始化"
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="系统引擎未初始化"
         )
     return app_state.engine
 
@@ -110,70 +97,63 @@ def get_engine() -> MainEngine:
 def get_component(component_name: str) -> Component:
     """
     获取组件实例
-    
+
     Args:
         component_name: 组件名称
-        
+
     Returns:
         组件实例
-        
+
     Raises:
         HTTPException: 如果组件不存在或未初始化
     """
     engine = get_engine()
-    component_manager = engine._component_manager
+    components = engine.get_all_components()
 
-    if not component_manager.has_component(component_name):
+    if component_name not in components:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"组件 {component_name} 不存在"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"组件 {component_name} 不存在"
         )
 
-    component = component_manager.get_component(component_name)
-    if not component:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"组件 {component_name} 未初始化"
-        )
-
-    return component
+    return components[component_name]
 
 
 def require_component(component_name: str) -> Callable[[F], F]:
     """
     装饰器：要求特定组件必须存在且正在运行
-    
+
     Args:
         component_name: 组件名称
     """
 
     def decorator(func: F) -> F:
         @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             component = get_component(component_name)
             if component.status != ComponentStatus.RUNNING:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=f"组件 {component_name} 未运行"
+                    detail=f"组件 {component_name} 未运行",
                 )
             return await func(*args, **kwargs)
 
         @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             component = get_component(component_name)
             if component.status != ComponentStatus.RUNNING:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=f"组件 {component_name} 未运行"
+                    detail=f"组件 {component_name} 未运行",
                 )
             return func(*args, **kwargs)
 
         # 根据函数类型返回相应的包装器
         import asyncio
+
         if asyncio.iscoroutinefunction(func):
-            return async_wrapper
+            return cast(F, async_wrapper)
         else:
-            return sync_wrapper
+            return cast(F, sync_wrapper)
 
     return decorator
 
@@ -181,12 +161,12 @@ def require_component(component_name: str) -> Callable[[F], F]:
 def handle_api_errors(func: F) -> F:
     """
     装饰器：统一处理 API 错误
-    
+
     将异常转换为统一的错误响应格式
     """
 
     @functools.wraps(func)
-    async def async_wrapper(*args, **kwargs):
+    async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return await func(*args, **kwargs)
         except HTTPException:
@@ -194,38 +174,25 @@ def handle_api_errors(func: F) -> F:
             raise
         except ValueError as e:
             # 值错误通常是客户端错误
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e)
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         except PermissionError as e:
             # 权限错误
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=str(e)
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
         except FileNotFoundError as e:
             # 资源不存在
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e)
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
         except TimeoutError as e:
             # 超时错误
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail=str(e)
-            )
+            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=str(e))
         except Exception as e:
             # 其他未预期的错误
             logger.error(f"API错误: {e}", exc_info=True)
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="内部服务器错误"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="内部服务器错误"
             )
 
     @functools.wraps(func)
-    def sync_wrapper(*args, **kwargs):
+    def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return func(*args, **kwargs)
         except HTTPException:
@@ -233,48 +200,36 @@ def handle_api_errors(func: F) -> F:
             raise
         except ValueError as e:
             # 值错误通常是客户端错误
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e)
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         except PermissionError as e:
             # 权限错误
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=str(e)
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
         except FileNotFoundError as e:
             # 资源不存在
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e)
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
         except TimeoutError as e:
             # 超时错误
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail=str(e)
-            )
+            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=str(e))
         except Exception as e:
             # 其他未预期的错误
             logger.error(f"API错误: {e}", exc_info=True)
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="内部服务器错误"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="内部服务器错误"
             )
 
     # 根据函数类型返回相应的包装器
     import asyncio
+
     if asyncio.iscoroutinefunction(func):
-        return async_wrapper
+        return cast(F, async_wrapper)
     else:
-        return sync_wrapper
+        return cast(F, sync_wrapper)
 
 
 class BaseAPIRouter:
     """
     API 路由基类
-    
+
     提供通用的组件获取方法
     """
 
@@ -307,6 +262,7 @@ class BaseAPIRouter:
 # 导出常用的状态码
 class StatusCode:
     """HTTP 状态码常量"""
+
     OK = status.HTTP_200_OK
     CREATED = status.HTTP_201_CREATED
     ACCEPTED = status.HTTP_202_ACCEPTED

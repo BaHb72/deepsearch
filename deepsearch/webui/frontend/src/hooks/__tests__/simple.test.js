@@ -1,3 +1,5 @@
+import { describe, it, expect } from '@jest/globals'
+
 // 简单的测试文件，验证测试环境是否正常工作
 
 describe('测试环境验证', () => {

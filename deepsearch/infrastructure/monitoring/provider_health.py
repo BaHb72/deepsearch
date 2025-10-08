@@ -4,28 +4,35 @@ Provider Health Monitoring System
 监控数据提供者的健康状态，记录故障，触发告警，
 支持自动恢复和降级决策。
 """
+
 import asyncio
+import importlib
 import json
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from enum import Enum
-from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
-from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from typing import Any, Dict, List, Optional, cast
+
 from loguru import logger
+
+from deepsearch.observability.logger import logger_manager
 
 
 class ProviderStatus(Enum):
     """提供者状态枚举"""
-    HEALTHY = "healthy"           # 健康
-    DEGRADED = "degraded"          # 降级
-    RECOVERING = "recovering"      # 恢复中
-    FAILED = "failed"             # 失败
-    UNKNOWN = "unknown"           # 未知
+
+    HEALTHY = "healthy"  # 健康
+    DEGRADED = "degraded"  # 降级
+    RECOVERING = "recovering"  # 恢复中
+    FAILED = "failed"  # 失败
+    UNKNOWN = "unknown"  # 未知
 
 
 @dataclass
 class ProviderHealth:
     """提供者健康状态数据类"""
+
     name: str
     status: ProviderStatus
     last_check: datetime
@@ -43,10 +50,10 @@ class ProviderHealth:
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         data = asdict(self)
-        data['status'] = self.status.value
-        data['last_check'] = self.last_check.isoformat()
+        data["status"] = self.status.value
+        data["last_check"] = self.last_check.isoformat()
         if self.last_error_time:
-            data['last_error_time'] = self.last_error_time.isoformat()
+            data["last_error_time"] = self.last_error_time.isoformat()
         return data
 
 
@@ -58,11 +65,14 @@ class ProviderHealthMonitor:
     记录故障信息，触发告警，支持自动恢复。
     """
 
-    def __init__(self,
-                 check_interval: int = 60,  # 健康检查间隔（秒）
-                 max_consecutive_errors: int = 3,  # 最大连续错误次数
-                 recovery_cooldown: int = 300,  # 恢复冷却时间（秒）
-                 persist_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        check_interval: int = 60,  # 健康检查间隔（秒）
+        max_consecutive_errors: int = 3,  # 最大连续错误次数
+        recovery_cooldown: int = 300,  # 恢复冷却时间（秒）
+        persist_dir: Optional[Path] = None,
+        config: Optional[Dict[str, Any]] = None,
+    ):
         """
         初始化监控器
 
@@ -76,6 +86,7 @@ class ProviderHealthMonitor:
         self.max_consecutive_errors = max_consecutive_errors
         self.recovery_cooldown = recovery_cooldown
         self.persist_dir = persist_dir or Path("./monitoring_data")
+        self._config: Dict[str, Any] = config or {}
 
         # 健康状态存储
         self._health_status: Dict[str, ProviderHealth] = {}
@@ -91,6 +102,9 @@ class ProviderHealthMonitor:
             self.persist_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"ProviderHealthMonitor initialized | interval={check_interval}s")
+
+    def update_config(self, config: Optional[Dict[str, Any]]) -> None:
+        self._config = config or {}
 
     async def start_monitoring(self):
         """启动监控"""
@@ -143,9 +157,7 @@ class ProviderHealthMonitor:
         """
         if provider_name not in self._health_status:
             self._health_status[provider_name] = ProviderHealth(
-                name=provider_name,
-                status=ProviderStatus.UNKNOWN,
-                last_check=datetime.now()
+                name=provider_name, status=ProviderStatus.UNKNOWN, last_check=datetime.now()
             )
 
         health = self._health_status[provider_name]
@@ -155,9 +167,8 @@ class ProviderHealthMonitor:
         if success:
             health.consecutive_errors = 0
             health.average_latency_ms = (
-                (health.average_latency_ms * (health.total_requests - 1) + latency_ms)
-                / health.total_requests
-            )
+                health.average_latency_ms * (health.total_requests - 1) + latency_ms
+            ) / health.total_requests
         else:
             health.consecutive_errors += 1
             health.total_errors += 1
@@ -179,9 +190,7 @@ class ProviderHealthMonitor:
         """
         if provider_name not in self._health_status:
             self._health_status[provider_name] = ProviderHealth(
-                name=provider_name,
-                status=ProviderStatus.UNKNOWN,
-                last_check=datetime.now()
+                name=provider_name, status=ProviderStatus.UNKNOWN, last_check=datetime.now()
             )
 
         health = self._health_status[provider_name]
@@ -197,7 +206,7 @@ class ProviderHealthMonitor:
                 level="CRITICAL",
                 provider=provider_name,
                 message=f"SDK attempted to exit! Count: {health.sdk_exit_count}",
-                alert_type="SDK_EXIT"
+                alert_type="SDK_EXIT",
             )
 
         # 评估状态
@@ -234,7 +243,9 @@ class ProviderHealthMonitor:
         if old_status != health.status:
             self._on_status_change(provider_name, old_status, health.status)
 
-    def _on_status_change(self, provider_name: str, old_status: ProviderStatus, new_status: ProviderStatus):
+    def _on_status_change(
+        self, provider_name: str, old_status: ProviderStatus, new_status: ProviderStatus
+    ):
         """
         状态变化处理
 
@@ -243,7 +254,9 @@ class ProviderHealthMonitor:
             old_status: 旧状态
             new_status: 新状态
         """
-        logger.warning(f"Provider {provider_name} status changed: {old_status.value} -> {new_status.value}")
+        logger.warning(
+            f"Provider {provider_name} status changed: {old_status.value} -> {new_status.value}"
+        )
 
         # 触发告警
         if new_status == ProviderStatus.FAILED:
@@ -251,7 +264,7 @@ class ProviderHealthMonitor:
                 level="ERROR",
                 provider=provider_name,
                 message=f"Provider failed after {self._health_status[provider_name].consecutive_errors} errors",
-                alert_type="PROVIDER_FAILED"
+                alert_type="PROVIDER_FAILED",
             )
 
         elif new_status == ProviderStatus.DEGRADED:
@@ -259,7 +272,7 @@ class ProviderHealthMonitor:
                 level="WARNING",
                 provider=provider_name,
                 message=f"Provider degraded, errors: {self._health_status[provider_name].consecutive_errors}",
-                alert_type="PROVIDER_DEGRADED"
+                alert_type="PROVIDER_DEGRADED",
             )
 
         elif new_status == ProviderStatus.HEALTHY and old_status == ProviderStatus.FAILED:
@@ -267,7 +280,7 @@ class ProviderHealthMonitor:
                 level="INFO",
                 provider=provider_name,
                 message="Provider recovered",
-                alert_type="PROVIDER_RECOVERED"
+                alert_type="PROVIDER_RECOVERED",
             )
 
     def _trigger_alert(self, level: str, provider: str, message: str, alert_type: str):
@@ -285,7 +298,7 @@ class ProviderHealthMonitor:
             "level": level,
             "provider": provider,
             "message": message,
-            "type": alert_type
+            "type": alert_type,
         }
 
         self._alerts.append(alert)
@@ -314,10 +327,10 @@ class ProviderHealthMonitor:
             # 示例: websocket_manager.broadcast_alert(alert)
 
             # 2. 写入告警日志文件（可被外部系统监控）
-            alert_log_file = Path("logs/alerts.jsonl")
-            alert_log_file.parent.mkdir(parents=True, exist_ok=True)
+            alert_log_file = logger_manager.ensure_subdirectory("alerts") / "alerts.jsonl"
 
             import json
+
             with open(alert_log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(alert, ensure_ascii=False) + "\n")
 
@@ -328,10 +341,11 @@ class ProviderHealthMonitor:
             # 4. 调用Webhook（如果配置了）
             webhook_urls = self._config.get("alert_webhooks", [])
             if webhook_urls:
-                import requests
+                requests_module = importlib.import_module("requests")
+
                 for url in webhook_urls:
                     try:
-                        requests.post(url, json=alert, timeout=5)
+                        cast(Any, requests_module).post(url, json=alert, timeout=5)
                     except Exception as e:
                         logger.warning(f"Failed to send alert to webhook {url}: {e}")
 
@@ -360,10 +374,10 @@ class ProviderHealthMonitor:
             # 示例: await websocket_manager.broadcast_alert(alert)
 
             # 2. 写入告警日志文件（可被外部系统监控）
-            alert_log_file = Path("logs/alerts.jsonl")
-            alert_log_file.parent.mkdir(parents=True, exist_ok=True)
+            alert_log_file = logger_manager.ensure_subdirectory("alerts") / "alerts.jsonl"
 
             import json
+
             with open(alert_log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(alert, ensure_ascii=False) + "\n")
 
@@ -375,10 +389,12 @@ class ProviderHealthMonitor:
             webhook_urls = self._config.get("alert_webhooks", [])
             if webhook_urls:
                 import aiohttp
-                async with aiohttp.ClientSession() as session:
+
+                timeout = aiohttp.ClientTimeout(total=5)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
                     for url in webhook_urls:
                         try:
-                            await session.post(url, json=alert, timeout=5)
+                            await session.post(url, json=alert)
                         except Exception as e:
                             logger.warning(f"Failed to send alert to webhook {url}: {e}")
 
@@ -408,7 +424,9 @@ class ProviderHealthMonitor:
                 if time_since_error > self.recovery_cooldown:
                     health.status = ProviderStatus.RECOVERING
                     health.recovery_attempts += 1
-                    logger.info(f"Attempting recovery for {provider_name}, attempt #{health.recovery_attempts}")
+                    logger.info(
+                        f"Attempting recovery for {provider_name}, attempt #{health.recovery_attempts}"
+                    )
 
     async def _persist_status(self):
         """持久化健康状态"""
@@ -418,17 +436,14 @@ class ProviderHealthMonitor:
         try:
             # 保存健康状态
             health_file = self.persist_dir / "provider_health.json"
-            health_data = {
-                name: health.to_dict()
-                for name, health in self._health_status.items()
-            }
+            health_data = {name: health.to_dict() for name, health in self._health_status.items()}
 
-            with open(health_file, 'w', encoding='utf-8') as f:
+            with open(health_file, "w", encoding="utf-8") as f:
                 json.dump(health_data, f, indent=2, ensure_ascii=False)
 
             # 保存告警记录
             alerts_file = self.persist_dir / "alerts.json"
-            with open(alerts_file, 'w', encoding='utf-8') as f:
+            with open(alerts_file, "w", encoding="utf-8") as f:
                 json.dump(self._alerts, f, indent=2, ensure_ascii=False)
 
         except Exception as e:
@@ -442,9 +457,15 @@ class ProviderHealthMonitor:
             健康状态摘要
         """
         total_providers = len(self._health_status)
-        healthy_count = sum(1 for h in self._health_status.values() if h.status == ProviderStatus.HEALTHY)
-        degraded_count = sum(1 for h in self._health_status.values() if h.status == ProviderStatus.DEGRADED)
-        failed_count = sum(1 for h in self._health_status.values() if h.status == ProviderStatus.FAILED)
+        healthy_count = sum(
+            1 for h in self._health_status.values() if h.status == ProviderStatus.HEALTHY
+        )
+        degraded_count = sum(
+            1 for h in self._health_status.values() if h.status == ProviderStatus.DEGRADED
+        )
+        failed_count = sum(
+            1 for h in self._health_status.values() if h.status == ProviderStatus.FAILED
+        )
 
         return {
             "timestamp": datetime.now().isoformat(),
@@ -457,11 +478,11 @@ class ProviderHealthMonitor:
                     "status": health.status.value,
                     "success_rate": f"{health.success_rate:.2%}",
                     "consecutive_errors": health.consecutive_errors,
-                    "sdk_exits": health.sdk_exit_count
+                    "sdk_exits": health.sdk_exit_count,
                 }
                 for name, health in self._health_status.items()
             },
-            "recent_alerts": self._alerts[-10:] if self._alerts else []
+            "recent_alerts": self._alerts[-10:] if self._alerts else [],
         }
 
     def get_provider_health(self, provider_name: str) -> Optional[ProviderHealth]:

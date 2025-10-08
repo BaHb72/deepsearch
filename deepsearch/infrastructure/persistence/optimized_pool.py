@@ -7,26 +7,84 @@
 - 批量查询支持
 - 性能监控
 """
-from contextlib import asynccontextmanager
-from typing import Optional, List, Dict, Any, AsyncGenerator
+
+from __future__ import annotations
+
 import asyncio
 import time
-import logging
+from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
+from typing import Optional, TypedDict, cast
 
 import asyncpg
 from asyncpg.pool import Pool
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, AsyncEngine
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-logger = logging.getLogger(__name__)
+from deepsearch.infrastructure.persistence.types import DatabaseSessionManager, DatabaseSessionProtocol, RowDict, SQLParams
+from deepsearch.observability import get_logger
+
+logger = get_logger(__name__)
+
+
+class PoolStatisticsPayload(TypedDict):
+    """�Ż����ӳ�ͳ������"""
+
+    total_connections: int
+    active_connections: int
+    idle_connections: int
+    waiting_queries: int
+    total_queries: int
+    failed_queries: int
+    avg_query_time: float
+    max_query_time: float
+    error_rate: float
+    uptime_seconds: float
+    last_error: Optional[str]
+    last_error_time: Optional[str]
+
+
+class AsyncpgPoolStatus(TypedDict, total=False):
+    """asyncpg ���ӳ�״̬���"""
+
+    status: str
+    min_size: int
+    max_size: int
+    current_size: int
+    free_connections: int
+    used_connections: int
+    waiting_queries: int
+
+
+class OptimizedPoolStatisticsPayload(PoolStatisticsPayload):
+    """�Ż��� asyncpg ���ӳ�ͳ����Ϣ��"""
+
+    pool_status: AsyncpgPoolStatus
+
+
+class SqlAlchemyPoolStatus(TypedDict, total=False):
+    """SQLAlchemy ���ӳ�״̬���"""
+
+    status: str
+    size: int
+    checked_in: int
+    checked_out: int
+    overflow: int
+    total: int
+
+
+class SqlAlchemyPoolStatisticsPayload(PoolStatisticsPayload):
+    """SQLAlchemy ���ӳ�ͳ����Ϣ��"""
+
+    pool_status: SqlAlchemyPoolStatus
 
 
 @dataclass
 class PoolConfig:
     """连接池配置"""
+
     dsn: str
     min_size: int = 10
     max_size: int = 50
@@ -43,6 +101,7 @@ class PoolConfig:
 @dataclass
 class PoolStatistics:
     """连接池统计信息"""
+
     total_connections: int = 0
     active_connections: int = 0
     idle_connections: int = 0
@@ -55,8 +114,8 @@ class PoolStatistics:
     last_error_time: Optional[datetime] = None
     created_at: datetime = field(default_factory=datetime.now)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+    def to_dict(self) -> PoolStatisticsPayload:
+        """ת��Ϊ�ֵ�"""
         return {
             "total_connections": self.total_connections,
             "active_connections": self.active_connections,
@@ -69,7 +128,7 @@ class PoolStatistics:
             "error_rate": round(self.failed_queries / max(self.total_queries, 1) * 100, 2),
             "uptime_seconds": (datetime.now() - self.created_at).total_seconds(),
             "last_error": self.last_error,
-            "last_error_time": self.last_error_time.isoformat() if self.last_error_time else None
+            "last_error_time": self.last_error_time.isoformat() if self.last_error_time else None,
         }
 
 
@@ -81,9 +140,23 @@ class OptimizedDatabasePool:
         self.pool: Optional[Pool] = None
         self.statistics = PoolStatistics()
         self._lock = asyncio.Lock()
-        self._prepared_statements: Dict[str, str] = {}
-        self._query_times: List[float] = []
+        self._prepared_statements: dict[str, str] = {}
+        self._query_times: list[float] = []
         self._max_query_history = 1000
+
+    @staticmethod
+    def _coerce_to_int(value: object) -> int | None:
+        """尝试将查询结果转换为整数"""
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return None
+        return None
 
     async def initialize(self):
         """初始化连接池"""
@@ -93,7 +166,9 @@ class OptimizedDatabasePool:
                 return
 
             try:
-                logger.info(f"初始化数据库连接池: min={self.config.min_size}, max={self.config.max_size}")
+                logger.info(
+                    f"初始化数据库连接池: min={self.config.min_size}, max={self.config.max_size}"
+                )
 
                 self.pool = await asyncpg.create_pool(
                     self.config.dsn,
@@ -102,7 +177,7 @@ class OptimizedDatabasePool:
                     max_queries=self.config.max_queries,
                     max_inactive_connection_lifetime=self.config.max_inactive_lifetime,
                     command_timeout=self.config.command_timeout,
-                    init=self._init_connection
+                    init=self._init_connection,
                 )
 
                 # 预热连接池
@@ -169,7 +244,7 @@ class OptimizedDatabasePool:
                     low = EXCLUDED.low,
                     close = EXCLUDED.close,
                     volume = EXCLUDED.volume
-            """
+            """,
         }
 
         for name, sql in statements.items():
@@ -198,20 +273,21 @@ class OptimizedDatabasePool:
         """测试单个连接"""
         try:
             async with self.acquire() as conn:
-                result = await conn.fetchval("SELECT 1")
-                return result == 1
+                result_obj = await conn.fetchval("SELECT 1")
+                parsed = self._coerce_to_int(result_obj)
+                return parsed == 1
         except Exception as e:
             logger.error(f"连接测试失败: {e}")
             return False
 
     @asynccontextmanager
-    async def acquire(self) -> AsyncGenerator:
+    async def acquire(self) -> AsyncIterator[asyncpg.Connection]:
         """获取连接"""
         if not self.pool:
             raise RuntimeError("连接池未初始化")
 
         start_time = time.perf_counter()
-        conn = None
+        conn: asyncpg.Connection | None = None
 
         try:
             # 更新等待统计
@@ -252,7 +328,7 @@ class OptimizedDatabasePool:
 
         # 限制历史记录大小
         if len(self._query_times) > self._max_query_history:
-            self._query_times = self._query_times[-self._max_query_history:]
+            self._query_times = self._query_times[-self._max_query_history :]
 
         # 更新统计
         if self._query_times:
@@ -264,66 +340,57 @@ class OptimizedDatabasePool:
         timeout = timeout or self.config.command_timeout
 
         async with self.acquire() as conn:
-            return await asyncio.wait_for(
-                conn.execute(query, *args),
-                timeout=timeout
-            )
+            return await asyncio.wait_for(conn.execute(query, *args), timeout=timeout)
 
-    async def fetch(self, query: str, *args, timeout: Optional[float] = None) -> List:
+    async def fetch(self, query: str, *args, timeout: Optional[float] = None) -> list[asyncpg.Record]:
         """获取查询结果"""
         timeout = timeout or self.config.command_timeout
 
         async with self.acquire() as conn:
-            return await asyncio.wait_for(
-                conn.fetch(query, *args),
-                timeout=timeout
-            )
+            return await asyncio.wait_for(conn.fetch(query, *args), timeout=timeout)
 
-    async def fetchval(self, query: str, *args, timeout: Optional[float] = None) -> Any:
+    async def fetchval(self, query: str, *args, timeout: Optional[float] = None) -> object:
         """获取单个值"""
         timeout = timeout or self.config.command_timeout
 
         async with self.acquire() as conn:
-            return await asyncio.wait_for(
-                conn.fetchval(query, *args),
-                timeout=timeout
-            )
+            result = await asyncio.wait_for(conn.fetchval(query, *args), timeout=timeout)
+            return cast(object, result)
 
-    async def fetchrow(self, query: str, *args, timeout: Optional[float] = None) -> Optional[asyncpg.Record]:
+    async def fetchrow(
+        self, query: str, *args, timeout: Optional[float] = None
+    ) -> Optional[asyncpg.Record]:
         """获取单行"""
         timeout = timeout or self.config.command_timeout
 
         async with self.acquire() as conn:
-            return await asyncio.wait_for(
-                conn.fetchrow(query, *args),
-                timeout=timeout
-            )
+            return await asyncio.wait_for(conn.fetchrow(query, *args), timeout=timeout)
 
-    async def execute_batch(self, queries: List[tuple]) -> List[Any]:
+    async def execute_batch(self, queries: Sequence[tuple[object, ...]]) -> list[list[asyncpg.Record] | None]:
         """批量执行查询"""
-        results = []
+        results: list[list[asyncpg.Record] | None] = []
 
         async with self.acquire() as conn:
             async with conn.transaction():
                 for query_data in queries:
                     if len(query_data) == 1:
-                        query = query_data[0]
-                        params = []
+                        query = str(query_data[0])
+                        params: tuple[object, ...] = tuple()
                     else:
-                        query = query_data[0]
-                        params = query_data[1:]
+                        query = str(query_data[0])
+                        params = tuple(query_data[1:])
 
                     try:
                         result = await conn.fetch(query, *params)
                         results.append(result)
                     except Exception as e:
-                        logger.error(f"批量查询失败: {query[:100]}... - {e}")
+                        logger.error(f"������ѯʧ��: {query[:100]}... - {e}")
                         results.append(None)
-                        # 不中断事务，继续执行
+                        # ���ж����񣬼���ִ��
 
         return results
 
-    async def execute_many(self, query: str, args_list: List[tuple]) -> None:
+    async def execute_many(self, query: str, args_list: Sequence[tuple[object, ...]]) -> None:
         """执行多个相同的查询（不同参数）"""
         async with self.acquire() as conn:
             await conn.executemany(query, args_list)
@@ -332,9 +399,9 @@ class OptimizedDatabasePool:
         self,
         table_name: str,
         *,
-        records: List[tuple],
-        columns: List[str],
-        schema_name: Optional[str] = None
+        records: Sequence[tuple[object, ...]],
+        columns: Sequence[str],
+        schema_name: Optional[str] = None,
     ) -> int:
         """批量复制记录到表（高性能）"""
         if schema_name:
@@ -343,24 +410,21 @@ class OptimizedDatabasePool:
             table_ref = table_name
 
         async with self.acquire() as conn:
-            result = await conn.copy_records_to_table(
-                table_ref,
-                records=records,
-                columns=columns
-            )
-            return result
+            result = await conn.copy_records_to_table(table_ref, records=records, columns=columns)
+            return int(result)
 
     async def health_check(self) -> bool:
         """健康检查"""
         try:
-            result = await self.fetchval("SELECT 1", timeout=5.0)
-            return result == 1
+            result_obj = await self.fetchval("SELECT 1", timeout=5.0)
+            parsed = self._coerce_to_int(result_obj)
+            return parsed == 1
         except Exception as e:
             logger.error(f"健康检查失败: {e}")
             return False
 
-    def get_pool_status(self) -> Dict[str, Any]:
-        """获取连接池状态"""
+    def get_pool_status(self) -> AsyncpgPoolStatus:
+        """��ȡ���ӳ�״̬"""
         if not self.pool:
             return {"status": "未初始化"}
 
@@ -370,14 +434,19 @@ class OptimizedDatabasePool:
             "current_size": self.pool._size,
             "free_connections": self.pool._freesize,
             "used_connections": self.pool._size - self.pool._freesize,
-            "waiting_queries": len(self.pool._queue._waiters) if hasattr(self.pool._queue, '_waiters') else 0,
+            "waiting_queries": (
+                len(self.pool._queue._waiters) if hasattr(self.pool._queue, "_waiters") else 0
+            ),
         }
 
-    def get_statistics(self) -> Dict[str, Any]:
-        """获取统计信息"""
-        stats = self.statistics.to_dict()
-        stats["pool_status"] = self.get_pool_status()
-        return stats
+    def get_statistics(self) -> OptimizedPoolStatisticsPayload:
+        """��ȡͳ����Ϣ"""
+        stats_dict = self.statistics.to_dict()
+        snapshot = cast(
+            OptimizedPoolStatisticsPayload,
+            {**stats_dict, "pool_status": self.get_pool_status()},
+        )
+        return snapshot
 
     async def close(self):
         """关闭连接池"""
@@ -394,18 +463,45 @@ class SQLAlchemyOptimizedPool:
     def __init__(self, database_url: str, **kwargs):
         self.database_url = database_url
         self.engine: Optional[AsyncEngine] = None
-        self.session_factory: Optional[sessionmaker] = None
-        self.config = {
-            "pool_size": kwargs.get("pool_size", 20),
-            "max_overflow": kwargs.get("max_overflow", 10),
-            "pool_pre_ping": kwargs.get("pool_pre_ping", True),
-            "pool_recycle": kwargs.get("pool_recycle", 3600),
-            "echo": kwargs.get("echo", False),
-            "echo_pool": kwargs.get("echo_pool", False),
-            "pool_timeout": kwargs.get("pool_timeout", 30),
-            "connect_args": kwargs.get("connect_args", {})
+        self.session_factory: async_sessionmaker[AsyncSession] | None = None
+        pool_size = int(kwargs.get("pool_size", 20))
+        max_overflow = int(kwargs.get("max_overflow", 10))
+        pool_pre_ping = bool(kwargs.get("pool_pre_ping", True))
+        pool_recycle = int(kwargs.get("pool_recycle", 3600))
+        echo = bool(kwargs.get("echo", False))
+        echo_pool = bool(kwargs.get("echo_pool", False))
+        pool_timeout = int(kwargs.get("pool_timeout", 30))
+        connect_args_raw = kwargs.get("connect_args", {})
+        connect_args = dict(connect_args_raw) if isinstance(connect_args_raw, Mapping) else {}
+
+        self.config: dict[str, object] = {
+            "pool_size": pool_size,
+            "max_overflow": max_overflow,
+            "pool_pre_ping": pool_pre_ping,
+            "pool_recycle": pool_recycle,
+            "echo": echo,
+            "echo_pool": echo_pool,
+            "pool_timeout": pool_timeout,
+            "connect_args": connect_args,
         }
         self.statistics = PoolStatistics()
+
+    @staticmethod
+    def _normalize_params(params: SQLParams | None) -> SQLParams:
+        """统一 SQL 参数结构。"""
+        return {} if params is None else params
+
+    @staticmethod
+    def _row_to_dict(row: Mapping[str, object]) -> RowDict:
+        """将查询结果转换为普通字典。"""
+        normalized: RowDict = {key: row[key] for key in row}
+        return normalized
+
+    def _ensure_engine(self) -> AsyncEngine:
+        """确保引擎已初始化。"""
+        if self.engine is None:
+            raise RuntimeError("SQLAlchemy 引擎未初始化")
+        return self.engine
 
     async def initialize(self):
         """初始化SQLAlchemy引擎"""
@@ -415,9 +511,7 @@ class SQLAlchemyOptimizedPool:
 
         # 确保URL使用异步驱动
         if self.database_url.startswith("postgresql://"):
-            self.database_url = self.database_url.replace(
-                "postgresql://", "postgresql+asyncpg://"
-            )
+            self.database_url = self.database_url.replace("postgresql://", "postgresql+asyncpg://")
 
         # 创建异步引擎
         self.engine = create_async_engine(
@@ -428,14 +522,17 @@ class SQLAlchemyOptimizedPool:
             pool_recycle=self.config["pool_recycle"],
             echo=self.config["echo"],
             echo_pool=self.config["echo_pool"],
-            connect_args=self.config["connect_args"]
+            connect_args=self.config["connect_args"],
         )
 
         # 创建会话工厂
-        self.session_factory = sessionmaker(
-            self.engine,
+        engine = self._ensure_engine()
+        self.session_factory = async_sessionmaker(
+            engine,
             class_=AsyncSession,
-            expire_on_commit=False
+            expire_on_commit=False,
+            autoflush=False,
+            autocommit=False,
         )
 
         # 测试连接
@@ -445,43 +542,70 @@ class SQLAlchemyOptimizedPool:
 
     async def _test_connection(self):
         """测试数据库连接"""
-        async with self.engine.begin() as conn:
+        engine = self._ensure_engine()
+        async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
             logger.info("数据库连接测试成功")
 
     @asynccontextmanager
-    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
-        """获取数据库会话"""
+    async def _session_scope(self) -> AsyncIterator[DatabaseSessionProtocol]:
+        """Yield a typed SQLAlchemy session bound to the optimized pool."""
         if not self.session_factory:
-            raise RuntimeError("会话工厂未初始化")
+            raise RuntimeError('Session factory is not initialized')
 
-        async with self.session_factory() as session:
+        session_factory = self.session_factory
+        async with session_factory() as session:
+            typed_session = cast(DatabaseSessionProtocol, session)
             try:
-                yield session
-                await session.commit()
+                yield typed_session
+                await typed_session.commit()
             except Exception:
-                await session.rollback()
+                await typed_session.rollback()
                 raise
             finally:
-                await session.close()
+                await typed_session.close()
 
-    async def execute(self, sql: str, params: Optional[Dict] = None) -> Any:
+    def get_session(self) -> DatabaseSessionManager:
+        """Return the reusable session scope managed by this pool."""
+        return self._session_scope()
+
+    def transaction(self) -> DatabaseSessionManager:
+        """Compatibility alias exposing the session scope helper."""
+        return self._session_scope()
+
+    async def execute(self, sql: str, params: SQLParams | None = None) -> int:
         """执行SQL语句"""
-        async with self.engine.begin() as conn:
-            result = await conn.execute(text(sql), params or {})
-            return result
+        engine = self._ensure_engine()
+        async with engine.begin() as conn:
+            result = await conn.execute(text(sql), self._normalize_params(params))
+            rowcount = result.rowcount
+            return int(rowcount or 0)
 
-    async def fetch_all(self, sql: str, params: Optional[Dict] = None) -> List:
+    async def fetch_all(self, sql: str, params: SQLParams | None = None) -> list[RowDict]:
         """获取所有结果"""
-        async with self.engine.begin() as conn:
-            result = await conn.execute(text(sql), params or {})
-            return result.fetchall()
+        engine = self._ensure_engine()
+        async with engine.begin() as conn:
+            result = await conn.execute(text(sql), self._normalize_params(params))
+            return [self._row_to_dict(row) for row in result.mappings().all()]
 
-    async def fetch_one(self, sql: str, params: Optional[Dict] = None) -> Optional[Any]:
+    async def fetch_one(self, sql: str, params: SQLParams | None = None) -> Optional[RowDict]:
         """获取单条结果"""
-        async with self.engine.begin() as conn:
-            result = await conn.execute(text(sql), params or {})
-            return result.fetchone()
+        engine = self._ensure_engine()
+        async with engine.begin() as conn:
+            result = await conn.execute(text(sql), self._normalize_params(params))
+            mapping = result.mappings().first()
+            if mapping is None:
+                return None
+            return self._row_to_dict(mapping)
+
+    def get_statistics(self) -> SqlAlchemyPoolStatisticsPayload:
+        """��ȡͳ����Ϣ"""
+        stats_dict = self.statistics.to_dict()
+        snapshot = cast(
+            SqlAlchemyPoolStatisticsPayload,
+            {**stats_dict, "pool_status": self.get_pool_status()},
+        )
+        return snapshot
 
     async def close(self):
         """关闭引擎"""
@@ -491,16 +615,17 @@ class SQLAlchemyOptimizedPool:
             self.session_factory = None
             logger.info("SQLAlchemy引擎已关闭")
 
-    def get_pool_status(self) -> Dict[str, Any]:
-        """获取连接池状态"""
+    def get_pool_status(self) -> SqlAlchemyPoolStatus:
+        """��ȡ���ӳ�״̬"""
         if not self.engine:
             return {"status": "未初始化"}
 
-        pool = self.engine.pool
+        engine = self._ensure_engine()
+        pool = engine.pool
         return {
-            "size": pool.size() if hasattr(pool, 'size') else 0,
-            "checked_in": pool.checkedin() if hasattr(pool, 'checkedin') else 0,
-            "checked_out": pool.checkedout() if hasattr(pool, 'checkedout') else 0,
-            "overflow": pool.overflow() if hasattr(pool, 'overflow') else 0,
-            "total": pool.total() if hasattr(pool, 'total') else 0
+            "size": pool.size() if hasattr(pool, "size") else 0,
+            "checked_in": pool.checkedin() if hasattr(pool, "checkedin") else 0,
+            "checked_out": pool.checkedout() if hasattr(pool, "checkedout") else 0,
+            "overflow": pool.overflow() if hasattr(pool, "overflow") else 0,
+            "total": pool.total() if hasattr(pool, "total") else 0,
         }

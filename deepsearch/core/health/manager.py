@@ -3,31 +3,28 @@
 
 统一管理所有健康检查器，提供并发执行、超时保护等功能
 """
+
 import asyncio
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from loguru import logger
 
 from .checkers import (
     DatabaseHealthChecker,
-    RedisHealthChecker,
     EventEngineHealthChecker,
+    GatewayHealthChecker,
     MessageBusHealthChecker,
     MonitorHealthChecker,
-    GatewayHealthChecker
+    RedisHealthChecker,
 )
-from .interfaces import (
-    HealthChecker,
-    HealthCheckResult,
-    HealthStatus
-)
+from .interfaces import HealthChecker, HealthCheckResult, HealthStatus
 
 
 class HealthCheckManager:
     """
     健康检查管理器
-    
+
     负责：
     - 注册和管理健康检查器
     - 定期执行健康检查
@@ -38,7 +35,7 @@ class HealthCheckManager:
     def __init__(self, check_interval: float = 30.0, check_timeout: float = 5.0):
         """
         初始化健康检查管理器
-        
+
         Args:
             check_interval: 健康检查间隔（秒）
             check_timeout: 单个健康检查超时时间（秒）
@@ -60,7 +57,7 @@ class HealthCheckManager:
     def register_checker(self, checker: HealthChecker, enabled: bool = True) -> None:
         """
         注册健康检查器
-        
+
         Args:
             checker: 健康检查器实例
             enabled: 是否启用
@@ -95,26 +92,28 @@ class HealthCheckManager:
     def auto_register_checkers(self, components: Dict[str, Any]) -> None:
         """
         自动注册组件的健康检查器
-        
+
         Args:
             components: 组件字典 {name: component}
         """
-        checker_mapping = {
-            'database': DatabaseHealthChecker,
-            'cache': RedisHealthChecker,
-            'event_engine': EventEngineHealthChecker,
-            'message_bus': MessageBusHealthChecker,
-            'monitor': MonitorHealthChecker,
-            'gateway': GatewayHealthChecker
+        checker_factories: Dict[str, Callable[[], HealthChecker]] = {
+            "database": DatabaseHealthChecker,
+            "cache": RedisHealthChecker,
+            "event_engine": EventEngineHealthChecker,
+            "message_bus": MessageBusHealthChecker,
+            "monitor": MonitorHealthChecker,
+            "gateway": GatewayHealthChecker,
         }
-
         for name, component in components.items():
-            if name in checker_mapping:
+            if name in checker_factories:
                 try:
                     # 只为运行中的组件注册健康检查器
-                    if hasattr(component, 'status') and component.status.value in ['initialized', 'running']:
-                        checker_class = checker_mapping[name]
-                        checker = checker_class()
+                    if hasattr(component, "status") and component.status.value in [
+                        "initialized",
+                        "running",
+                    ]:
+                        checker_factory = checker_factories[name]
+                        checker = checker_factory()
                         checker.component = component
                         self.register_checker(checker)
                         logger.debug(f"自动注册健康检查器: {name}")
@@ -124,10 +123,10 @@ class HealthCheckManager:
     async def check_all(self, timeout: Optional[float] = None) -> Dict[str, HealthCheckResult]:
         """
         执行所有启用的健康检查
-        
+
         Args:
             timeout: 超时时间（秒），None表示使用默认值
-            
+
         Returns:
             检查结果字典
         """
@@ -153,14 +152,14 @@ class HealthCheckManager:
             except asyncio.TimeoutError:
                 results[name] = HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
-                    message=f"Health check timed out after {timeout}s"
+                    message=f"Health check timed out after {timeout}s",
                 )
                 logger.warning(f"健康检查超时: {name}")
             except Exception as e:
                 results[name] = HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
                     message=f"Health check failed: {str(e)}",
-                    errors=[str(e)]
+                    errors=[str(e)],
                 )
                 logger.error(f"健康检查失败 {name}: {e}")
 
@@ -172,43 +171,39 @@ class HealthCheckManager:
 
         return results
 
-    async def check_component(self, name: str, timeout: Optional[float] = None) -> HealthCheckResult:
+    async def check_component(
+        self, name: str, timeout: Optional[float] = None
+    ) -> HealthCheckResult:
         """
         检查特定组件
-        
+
         Args:
             name: 组件名称
             timeout: 超时时间（秒）
-            
+
         Returns:
             健康检查结果
         """
         if name not in self._checkers:
             return HealthCheckResult(
-                status=HealthStatus.UNKNOWN,
-                message=f"No health checker registered for {name}"
+                status=HealthStatus.UNKNOWN, message=f"No health checker registered for {name}"
             )
 
         if name not in self._enabled_checkers:
             return HealthCheckResult(
-                status=HealthStatus.UNKNOWN,
-                message=f"Health checker for {name} is disabled"
+                status=HealthStatus.UNKNOWN, message=f"Health checker for {name} is disabled"
             )
 
         checker = self._checkers[name]
         timeout = timeout or self._check_timeout
 
         try:
-            result = await asyncio.wait_for(
-                checker.perform_check(),
-                timeout=timeout
-            )
+            result = await asyncio.wait_for(checker.perform_check(), timeout=timeout)
             self._last_results[name] = result
             return result
         except asyncio.TimeoutError:
             result = HealthCheckResult(
-                status=HealthStatus.UNHEALTHY,
-                message=f"Health check timed out after {timeout}s"
+                status=HealthStatus.UNHEALTHY, message=f"Health check timed out after {timeout}s"
             )
             self._last_results[name] = result
             return result
@@ -216,7 +211,7 @@ class HealthCheckManager:
             result = HealthCheckResult(
                 status=HealthStatus.UNHEALTHY,
                 message=f"Health check failed: {str(e)}",
-                errors=[str(e)]
+                errors=[str(e)],
             )
             self._last_results[name] = result
             return result
@@ -306,27 +301,24 @@ class HealthCheckManager:
             "timestamp": datetime.now().isoformat(),
             "overall_status": self.get_overall_status().value,
             "components": {
-                name: {
-                    "status": result.status.value,
-                    "message": result.message
-                }
+                name: {"status": result.status.value, "message": result.message}
                 for name, result in results.items()
-            }
+            },
         }
 
         self._check_history.append(record)
 
         # 限制历史记录大小
         if len(self._check_history) > self._history_size:
-            self._check_history = self._check_history[-self._history_size:]
+            self._check_history = self._check_history[-self._history_size :]
 
     def get_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         获取健康检查历史
-        
+
         Args:
             limit: 限制返回的记录数
-            
+
         Returns:
             历史记录列表
         """
@@ -335,58 +327,55 @@ class HealthCheckManager:
         return self._check_history.copy()
 
     def get_statistics(self) -> Dict[str, Any]:
-        """获取健康检查统计信息"""
-        stats = {
+        """获取健康检查管理器的统计信息"""
+        stats: Dict[str, Any] = {
             "total_checkers": len(self._checkers),
             "enabled_checkers": len(self._enabled_checkers),
             "overall_status": self.get_overall_status().value,
-            "checkers": {}
         }
+        checker_details: Dict[str, Dict[str, Any]] = {}
 
-        # 每个检查器的统计
+        # 每个健康检查器的统计
         for name, checker in self._checkers.items():
-            checker_stats = {
+            checker_stats: Dict[str, Any] = {
                 "enabled": name in self._enabled_checkers,
                 "check_count": checker.check_count,
                 "failure_count": checker.failure_count,
                 "failure_rate": checker.failure_rate,
-                "last_status": None
+                "last_status": None,
+                "last_check": None,
             }
 
-            # 最后状态
+            # 最近状态
             if name in self._last_results:
                 result = self._last_results[name]
                 checker_stats["last_status"] = result.status.value
                 checker_stats["last_check"] = result.timestamp.isoformat()
 
-            stats["checkers"][name] = checker_stats
+            checker_details[name] = checker_stats
 
+        stats["checkers"] = checker_details
         return stats
 
     async def get_health_report(self) -> Dict[str, Any]:
-        """
-        获取完整的健康报告
-        
-        Returns:
-            包含所有健康信息的报告
-        """
-        # 执行一次健康检查
+        """获取完整的健康检查报告"""
+        # 执行一次健康检查以获取最新数据
         results = await self.check_all()
 
-        report = {
+        components_report: Dict[str, Dict[str, Any]] = {}
+        report: Dict[str, Any] = {
             "timestamp": datetime.now().isoformat(),
             "overall_status": self.get_overall_status().value,
             "summary": self._generate_summary(),
-            "components": {},
-            "statistics": self.get_statistics()
+            "components": components_report,
+            "statistics": self.get_statistics(),
         }
 
-        # 添加详细的组件信息
+        # 追加详细组件信息
         for name, result in results.items():
-            report["components"][name] = result.to_dict()
+            components_report[name] = result.to_dict()
 
         return report
-
     def _generate_summary(self) -> str:
         """生成健康状态摘要"""
         overall = self.get_overall_status()
@@ -395,13 +384,15 @@ class HealthCheckManager:
             return "All systems are operational"
         elif overall == HealthStatus.DEGRADED:
             degraded = [
-                name for name, result in self._last_results.items()
+                name
+                for name, result in self._last_results.items()
                 if result.status == HealthStatus.DEGRADED
             ]
             return f"System degraded: {', '.join(degraded)}"
         elif overall == HealthStatus.UNHEALTHY:
             unhealthy = [
-                name for name, result in self._last_results.items()
+                name
+                for name, result in self._last_results.items()
                 if result.status == HealthStatus.UNHEALTHY
             ]
             return f"System unhealthy: {', '.join(unhealthy)}"

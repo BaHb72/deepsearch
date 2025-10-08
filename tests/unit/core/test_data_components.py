@@ -3,13 +3,14 @@
 
 测试DatabaseComponent和CacheComponent的功能
 """
-import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from sqlalchemy import text
 
-from deepsearch.core.components.data_components import DatabaseComponent, CacheComponent
+import asyncio
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from deepsearch.core.components.data_components import CacheComponent, DatabaseComponent
 from deepsearch.core.utils.exceptions import ComponentLifecycleError
 
 
@@ -22,7 +23,7 @@ class TestDatabaseComponent:
         component = DatabaseComponent()
         yield component
         # 清理
-        if component._engine and hasattr(component._engine, 'dispose'):
+        if component._engine and hasattr(component._engine, "dispose"):
             if asyncio.iscoroutinefunction(component._engine.dispose):
                 await component._engine.dispose()
             else:
@@ -60,7 +61,9 @@ class TestDatabaseComponent:
     @pytest.mark.asyncio
     async def test_initialize_without_auto_connect(self, db_component, mock_config):
         """测试不自动连接的初始化"""
-        with patch('deepsearch.core.components.data_components.get_config', return_value=mock_config):
+        with patch(
+            "deepsearch.core.components.data_components.get_config", return_value=mock_config
+        ):
             await db_component._initialize()
 
             # 验证组件已初始化但未连接
@@ -77,8 +80,12 @@ class TestDatabaseComponent:
         mock_config.database.main.get_url.return_value = "postgresql://test:test@localhost/testdb"
         mock_config.app.env = "test"
 
-        with patch('deepsearch.core.components.data_components.get_config', return_value=mock_config):
-            with patch.object(db_component, 'connect_async', new_callable=AsyncMock) as mock_connect:
+        with patch(
+            "deepsearch.core.components.data_components.get_config", return_value=mock_config
+        ):
+            with patch.object(
+                db_component, "connect_async", new_callable=AsyncMock
+            ) as mock_connect:
                 await db_component._initialize()
 
                 # 验证调用了connect_async
@@ -96,8 +103,13 @@ class TestDatabaseComponent:
         mock_engine.begin = Mock(return_value=mock_conn)
         mock_engine.dispose = AsyncMock()
 
-        with patch('deepsearch.core.components.data_components.get_config', return_value=mock_config):
-            with patch('deepsearch.core.components.data_components.create_async_engine', return_value=mock_engine):
+        with patch(
+            "deepsearch.core.components.data_components.get_config", return_value=mock_config
+        ):
+            with patch(
+                "deepsearch.core.components.data_components.create_async_engine",
+                return_value=mock_engine,
+            ):
                 await db_component.connect_async()
 
                 # 验证引擎已创建
@@ -112,9 +124,14 @@ class TestDatabaseComponent:
         mock_engine.begin = AsyncMock(side_effect=asyncio.TimeoutError)
         mock_engine.dispose = AsyncMock()
 
-        with patch('deepsearch.core.components.data_components.get_config', return_value=mock_config):
-            with patch('deepsearch.core.components.data_components.create_async_engine', return_value=mock_engine):
-                with patch('asyncio.wait_for', side_effect=asyncio.TimeoutError):
+        with patch(
+            "deepsearch.core.components.data_components.get_config", return_value=mock_config
+        ):
+            with patch(
+                "deepsearch.core.components.data_components.create_async_engine",
+                return_value=mock_engine,
+            ):
+                with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
                     with pytest.raises(RuntimeError, match="数据库连接超时"):
                         await db_component.connect_async()
 
@@ -218,13 +235,7 @@ class TestDatabaseComponent:
 
         status = db_component._get_pool_status()
 
-        assert status == {
-            "size": 10,
-            "checked_in": 8,
-            "checked_out": 2,
-            "overflow": 0,
-            "total": 10
-        }
+        assert status == {"size": 10, "checked_in": 8, "checked_out": 2, "overflow": 0, "total": 10}
 
     def test_get_component_statistics(self, db_component):
         """测试获取组件统计信息"""
@@ -261,15 +272,15 @@ class TestCacheComponent:
         config = Mock()
         config.database.cache.enabled = True
         config.database.cache.model_dump.return_value = {
-            'enabled': True,
-            'host': 'localhost',
-            'port': 6379,
-            'db': 0,
-            'password': None,
-            'pool_size': 10,
-            'socket_keepalive': True,
-            'retry_on_timeout': True,
-            'health_check_interval': 30
+            "enabled": True,
+            "host": "localhost",
+            "port": 6379,
+            "db": 0,
+            "password": None,
+            "pool_size": 10,
+            "socket_keepalive": True,
+            "retry_on_timeout": True,
+            "health_check_interval": 30,
         }
         return config
 
@@ -279,7 +290,9 @@ class TestCacheComponent:
         mock_config = Mock()
         mock_config.database.cache.enabled = False
 
-        with patch('deepsearch.core.components.data_components.get_config', return_value=mock_config):
+        with patch(
+            "deepsearch.core.components.data_components.get_config", return_value=mock_config
+        ):
             await cache_component._initialize()
 
             assert cache_component._instance == cache_component
@@ -292,9 +305,11 @@ class TestCacheComponent:
         mock_redis = AsyncMock()
         mock_redis.ping = AsyncMock()
 
-        with patch('deepsearch.core.components.data_components.get_config', return_value=mock_redis_config):
-            with patch('redis.asyncio.ConnectionPool') as mock_pool:
-                with patch('redis.asyncio.Redis', return_value=mock_redis):
+        with patch(
+            "deepsearch.core.components.data_components.get_config", return_value=mock_redis_config
+        ):
+            with patch("redis.asyncio.ConnectionPool"):
+                with patch("redis.asyncio.Redis", return_value=mock_redis):
                     await cache_component._initialize()
 
                     assert cache_component._instance == cache_component
@@ -309,8 +324,8 @@ class TestCacheComponent:
         mock_redis = AsyncMock()
         mock_redis.ping = AsyncMock()
 
-        with patch('redis.asyncio.ConnectionPool') as mock_pool:
-            with patch('redis.asyncio.Redis', return_value=mock_redis):
+        with patch("redis.asyncio.ConnectionPool"):
+            with patch("redis.asyncio.Redis", return_value=mock_redis):
                 await cache_component._connect_to_redis()
 
                 assert cache_component._redis_client == mock_redis
@@ -323,9 +338,9 @@ class TestCacheComponent:
         """测试连接Redis超时"""
         cache_component._redis_config = mock_redis_config.database.cache.model_dump.return_value
 
-        with patch('redis.asyncio.ConnectionPool'):
-            with patch('redis.asyncio.Redis'):
-                with patch('asyncio.wait_for', side_effect=asyncio.TimeoutError):
+        with patch("redis.asyncio.ConnectionPool"):
+            with patch("redis.asyncio.Redis"):
+                with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
                     with pytest.raises(asyncio.TimeoutError):
                         await cache_component._connect_to_redis()
 
@@ -420,7 +435,7 @@ class TestCacheComponent:
             "max_connections": 10,
             "created_connections": 3,
             "available_connections": 2,
-            "in_use_connections": 1
+            "in_use_connections": 1,
         }
 
     @pytest.mark.asyncio

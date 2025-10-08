@@ -3,33 +3,35 @@ PerformanceAnalyzer - 性能分析器
 
 提供回测结果的深度分析功能
 """
-from typing import Dict, Any, List
+
+from typing import TYPE_CHECKING, Any, Dict, List
 
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    from deepsearch.backtest.utils.results import BacktestResult
 
 
 class PerformanceAnalyzer:
     """
     性能分析器
-    
+
     提供各种回测性能指标的计算和分析
     """
 
     @staticmethod
     def calculate_sharpe_ratio(
-            returns: pd.Series,
-            risk_free_rate: float = 0.03,
-            periods: int = 252
+        returns: pd.Series, risk_free_rate: float = 0.03, periods: int = 252
     ) -> float:
         """
         计算夏普比率
-        
+
         Args:
             returns: 收益率序列
             risk_free_rate: 无风险利率（年化）
             periods: 年化周期数（日:252, 周:52, 月:12）
-            
+
         Returns:
             夏普比率
         """
@@ -41,22 +43,20 @@ class PerformanceAnalyzer:
         if excess_returns.std() == 0:
             return 0
 
-        return np.sqrt(periods) * excess_returns.mean() / excess_returns.std()
+        return float(np.sqrt(periods) * excess_returns.mean() / excess_returns.std())
 
     @staticmethod
     def calculate_sortino_ratio(
-            returns: pd.Series,
-            risk_free_rate: float = 0.03,
-            periods: int = 252
+        returns: pd.Series, risk_free_rate: float = 0.03, periods: int = 252
     ) -> float:
         """
         计算索提诺比率
-        
+
         Args:
             returns: 收益率序列
             risk_free_rate: 无风险利率（年化）
             periods: 年化周期数
-            
+
         Returns:
             索提诺比率
         """
@@ -67,28 +67,28 @@ class PerformanceAnalyzer:
         downside_returns = excess_returns[excess_returns < 0]
 
         if len(downside_returns) == 0:
-            return float('inf')
+            return float("inf")
 
-        downside_std = np.sqrt(np.mean(downside_returns ** 2))
+        downside_std = np.sqrt(np.mean(downside_returns**2))
 
         if downside_std == 0:
             return 0
 
-        return np.sqrt(periods) * excess_returns.mean() / downside_std
+        return float(np.sqrt(periods) * excess_returns.mean() / downside_std)
 
     @staticmethod
     def calculate_max_drawdown(equity_curve: pd.Series) -> Dict[str, Any]:
         """
         计算最大回撤
-        
+
         Args:
             equity_curve: 权益曲线
-            
+
         Returns:
             包含最大回撤信息的字典
         """
         if len(equity_curve) == 0:
-            return {'max_drawdown': 0, 'max_drawdown_duration': 0}
+            return {"max_drawdown": 0, "max_drawdown_duration": 0}
 
         # 计算累计最大值
         cummax = equity_curve.expanding().max()
@@ -117,26 +117,22 @@ class PerformanceAnalyzer:
             duration = (equity_curve.index[-1] - drawdown_start).days
 
         return {
-            'max_drawdown': abs(max_drawdown),
-            'max_drawdown_duration': duration,
-            'drawdown_start': drawdown_start,
-            'recovery_date': recovery_date
+            "max_drawdown": abs(max_drawdown),
+            "max_drawdown_duration": duration,
+            "drawdown_start": drawdown_start,
+            "recovery_date": recovery_date,
         }
 
     @staticmethod
-    def calculate_calmar_ratio(
-            total_return: float,
-            max_drawdown: float,
-            years: float
-    ) -> float:
+    def calculate_calmar_ratio(total_return: float, max_drawdown: float, years: float) -> float:
         """
         计算卡尔玛比率
-        
+
         Args:
             total_return: 总收益率
             max_drawdown: 最大回撤
             years: 投资年数
-            
+
         Returns:
             卡尔玛比率
         """
@@ -144,59 +140,58 @@ class PerformanceAnalyzer:
             return 0
 
         annualized_return = (1 + total_return) ** (1 / years) - 1
-        return annualized_return / abs(max_drawdown)
+        return float(annualized_return / abs(max_drawdown))
 
     @staticmethod
     def calculate_win_rate(trades: List[Dict[str, Any]]) -> float:
         """
         计算胜率
-        
+
         Args:
             trades: 交易记录列表
-            
+
         Returns:
             胜率
         """
         if not trades:
             return 0
 
-        winning_trades = sum(1 for t in trades if t.get('pnl', 0) > 0)
+        winning_trades = sum(1 for t in trades if t.get("pnl", 0) > 0)
         return winning_trades / len(trades)
 
     @staticmethod
     def calculate_profit_factor(trades: List[Dict[str, Any]]) -> float:
         """
         计算盈亏比
-        
+
         Args:
             trades: 交易记录列表
-            
+
         Returns:
             盈亏比
         """
         if not trades:
             return 0
 
-        gross_profit = sum(t['pnl'] for t in trades if t.get('pnl', 0) > 0)
-        gross_loss = abs(sum(t['pnl'] for t in trades if t.get('pnl', 0) < 0))
+        gross_profit = sum(t["pnl"] for t in trades if t.get("pnl", 0) > 0)
+        gross_loss = abs(sum(t["pnl"] for t in trades if t.get("pnl", 0) < 0))
 
         if gross_loss == 0:
-            return float('inf') if gross_profit > 0 else 0
+            return float("inf") if gross_profit > 0 else 0
 
-        return gross_profit / gross_loss
+        return float(gross_profit / gross_loss)
 
     @staticmethod
     def calculate_risk_metrics(
-            returns: pd.Series,
-            confidence_level: float = 0.95
+        returns: pd.Series, confidence_level: float = 0.95
     ) -> Dict[str, float]:
         """
         计算风险指标
-        
+
         Args:
             returns: 收益率序列
             confidence_level: 置信水平
-            
+
         Returns:
             风险指标字典
         """
@@ -204,27 +199,26 @@ class PerformanceAnalyzer:
             return {}
 
         metrics = {
-            'volatility': returns.std() * np.sqrt(252),  # 年化波动率
-            'skewness': returns.skew(),  # 偏度
-            'kurtosis': returns.kurtosis(),  # 峰度
-            'var': returns.quantile(1 - confidence_level),  # 风险价值
-            'cvar': returns[returns <= returns.quantile(1 - confidence_level)].mean()  # 条件风险价值
+            "volatility": returns.std() * np.sqrt(252),  # 年化波动率
+            "skewness": returns.skew(),  # 偏度
+            "kurtosis": returns.kurtosis(),  # 峰度
+            "var": returns.quantile(1 - confidence_level),  # 风险价值
+            "cvar": returns[
+                returns <= returns.quantile(1 - confidence_level)
+            ].mean(),  # 条件风险价值
         }
 
         return metrics
 
     @staticmethod
-    def calculate_rolling_metrics(
-            equity_curve: pd.Series,
-            window: int = 30
-    ) -> pd.DataFrame:
+    def calculate_rolling_metrics(equity_curve: pd.Series, window: int = 30) -> pd.DataFrame:
         """
         计算滚动指标
-        
+
         Args:
             equity_curve: 权益曲线
             window: 滚动窗口大小
-            
+
         Returns:
             滚动指标 DataFrame
         """
@@ -236,26 +230,26 @@ class PerformanceAnalyzer:
         rolling_metrics = pd.DataFrame(index=equity_curve.index[window:])
 
         # 滚动收益率
-        rolling_metrics['rolling_return'] = returns.rolling(window).mean() * 252
+        rolling_metrics["rolling_return"] = returns.rolling(window).mean() * 252
 
         # 滚动波动率
-        rolling_metrics['rolling_volatility'] = returns.rolling(window).std() * np.sqrt(252)
+        rolling_metrics["rolling_volatility"] = returns.rolling(window).std() * np.sqrt(252)
 
         # 滚动夏普比率
-        rolling_metrics['rolling_sharpe'] = (
-                rolling_metrics['rolling_return'] / rolling_metrics['rolling_volatility']
+        rolling_metrics["rolling_sharpe"] = (
+            rolling_metrics["rolling_return"] / rolling_metrics["rolling_volatility"]
         )
 
         return rolling_metrics
 
     @staticmethod
-    def generate_report(result: 'BacktestResult') -> str:
+    def generate_report(result: "BacktestResult") -> str:
         """
         生成详细的分析报告
-        
+
         Args:
             result: 回测结果对象
-            
+
         Returns:
             分析报告字符串
         """
@@ -326,7 +320,7 @@ class PerformanceAnalyzer:
         return report
 
     @staticmethod
-    def _calculate_annualized_return(result: 'BacktestResult') -> float:
+    def _calculate_annualized_return(result: "BacktestResult") -> float:
         """计算年化收益率"""
         days = (result.end_date - result.start_date).days
         if days <= 0:
@@ -335,7 +329,7 @@ class PerformanceAnalyzer:
         return ((1 + result.total_return) ** (1 / years)) - 1 if years > 0 else 0
 
     @staticmethod
-    def _estimate_total_cost(result: 'BacktestResult') -> float:
+    def _estimate_total_cost(result: "BacktestResult") -> float:
         """估算总交易成本"""
         if not result.total_trades:
             return 0

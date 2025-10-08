@@ -10,7 +10,7 @@ import {
 import { copyToClipboard } from '@/utils/clipboard'
 import './index.scss'
 
-const { Paragraph, Text, Title } = Typography
+const { Paragraph, Text } = Typography
 const { Panel } = Collapse
 
 interface Props {

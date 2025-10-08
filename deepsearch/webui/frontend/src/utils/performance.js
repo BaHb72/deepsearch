@@ -2,6 +2,10 @@
  * 性能优化工具集
  */
 
+import logger from '@/utils/logger'
+
+const performanceLogger = logger.child('utils:performance')
+
 // 防抖函数
 export function debounce(func, wait = 300, immediate = false) {
   let timeout
@@ -318,7 +322,7 @@ export class PerformanceMonitor {
       try {
         const longTaskObserver = new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) {
-            console.warn('Long task detected:', {
+            performanceLogger.warn('Long task detected:', {
               duration: entry.duration,
               startTime: entry.startTime,
               name: entry.name
@@ -329,7 +333,7 @@ export class PerformanceMonitor {
         longTaskObserver.observe({ entryTypes: ['longtask'] })
         this.observers.push(longTaskObserver)
       } catch (e) {
-        console.log('Long task observer not supported')
+        performanceLogger.info('Long task observer not supported')
       }
       
       // 观察布局偏移
@@ -342,14 +346,14 @@ export class PerformanceMonitor {
             }
           }
           if (cls > 0.1) {
-            console.warn('High layout shift detected:', cls)
+            performanceLogger.warn('High layout shift detected:', cls)
           }
         })
         
         layoutShiftObserver.observe({ entryTypes: ['layout-shift'] })
         this.observers.push(layoutShiftObserver)
       } catch (e) {
-        console.log('Layout shift observer not supported')
+        performanceLogger.info('Layout shift observer not supported')
       }
     }
   }

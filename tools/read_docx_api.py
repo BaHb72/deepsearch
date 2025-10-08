@@ -3,12 +3,14 @@
 
 """读取35个API接口文档内容"""
 
-import docx
 from pathlib import Path
+
+import docx
+
 
 def read_api_document():
     """读取35个API接口详细内容.docx"""
-    doc_path = Path("installer/35API接口详细内容.docx")
+    doc_path = Path("third_party/35API接口详细内容.docx")
 
     if not doc_path.exists():
         print(f"文档不存在: {doc_path}")
@@ -34,6 +36,7 @@ def read_api_document():
                 row_data.append(cell.text.strip())
             if any(row_data):  # 只打印非空行
                 print(" | ".join(row_data))
+
 
 if __name__ == "__main__":
     read_api_document()

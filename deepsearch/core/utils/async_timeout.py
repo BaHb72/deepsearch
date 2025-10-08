@@ -1,127 +1,179 @@
-"""
-异步超时管理模块
+from __future__ import annotations
 
-提供异步操作的超时控制功能
-"""
 import asyncio
 import functools
-from typing import TypeVar, Callable, Any, Optional, Coroutine
+import inspect
 from contextlib import asynccontextmanager
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Optional,
+    ParamSpec,
+    TypeAlias,
+    TypeVar,
+    cast,
+    overload,
+)
 
 from loguru import logger
 
+from .timeout_config import TimeoutCategory, get_timeout_manager
 
-T = TypeVar('T')
+P = ParamSpec("P")
+T = TypeVar("T")
+
+TimeoutSpec: TypeAlias = float | int | TimeoutCategory
+
+CallableWithOptionalAwait = Callable[P, Awaitable[T] | T]
 
 
-async def with_timeout(
-    coro: Coroutine[Any, Any, T],
-    timeout: float,
-    default: Optional[T] = None
-) -> T:
-    """
-    为协程添加超时控制
+@overload
+def with_timeout(
+    awaitable: Awaitable[T],
+    timeout: TimeoutSpec,
+    default: Optional[T] = None,
+    *,
+    operation_name: str | None = None,
+) -> Coroutine[Any, Any, Optional[T]]:
+    ...
 
-    Args:
-        coro: 要执行的协程
-        timeout: 超时时间（秒）
-        default: 超时后返回的默认值
 
-    Returns:
-        协程的返回值，或超时后的默认值
-    """
-    try:
-        return await asyncio.wait_for(coro, timeout=timeout)
-    except asyncio.TimeoutError:
-        logger.warning(f"Coroutine timed out after {timeout} seconds")
-        return default
+@overload
+def with_timeout(
+    timeout: TimeoutSpec,
+    default: Optional[T] = None,
+    *,
+    operation_name: str | None = None,
+) -> Callable[[CallableWithOptionalAwait], Callable[P, Coroutine[Any, Any, Optional[T]]]]:
+    ...
+
+
+@overload
+def with_timeout(
+    func: CallableWithOptionalAwait,
+    timeout: TimeoutSpec,
+    default: Optional[T] = None,
+    *,
+    operation_name: str | None = None,
+) -> Callable[P, Coroutine[Any, Any, Optional[T]]]:
+    ...
+
+
+def with_timeout(*args: Any, **kwargs: Any) -> Any:
+    """Support three forms: awaitable, decorator factory, and direct decorator usage."""
+
+    timeout_kw = kwargs.pop("timeout", None)
+    default = kwargs.pop("default", None)
+    operation_name = kwargs.pop("operation_name", None)
+
+    if kwargs:
+        unexpected = ", ".join(sorted(kwargs))
+        raise TypeError(f"with_timeout got unexpected keyword arguments: {unexpected}")
+
+    first_arg = args[0] if args else None
+
+    if inspect.isawaitable(first_arg):
+        timeout_spec = timeout_kw if timeout_kw is not None else (args[1] if len(args) >= 2 else None)
+        if timeout_spec is None:
+            raise TypeError("with_timeout expects a timeout when used with awaitables")
+        seconds = _resolve_timeout_spec(cast(TimeoutSpec, timeout_spec))
+        return _await_with_timeout(cast(Awaitable[Any], first_arg), seconds, cast(Optional[Any], default), operation_name)
+
+    if callable(first_arg):
+        timeout_spec = timeout_kw if timeout_kw is not None else (args[1] if len(args) >= 2 else None)
+        if timeout_spec is not None:
+            seconds = _resolve_timeout_spec(cast(TimeoutSpec, timeout_spec))
+            return _wrap_callable(cast(CallableWithOptionalAwait, first_arg), seconds, cast(Optional[Any], default), operation_name)
+
+    timeout_spec = timeout_kw if timeout_kw is not None else first_arg
+    if timeout_spec is None:
+        raise TypeError("with_timeout requires an awaitable, callable, or timeout spec")
+    if len(args) > 1:
+        raise TypeError("with_timeout decorator form accepts only a single timeout spec")
+
+    seconds = _resolve_timeout_spec(cast(TimeoutSpec, timeout_spec))
+
+    def decorator(func: CallableWithOptionalAwait) -> Callable[P, Coroutine[Any, Any, Optional[Any]]]:
+        return _wrap_callable(func, seconds, cast(Optional[Any], default), operation_name)
+
+    return decorator
 
 
 async def run_with_timeout(
-    func: Callable[..., T],
-    *args,
-    timeout: float,
+    target: Any,
+    *args: Any,
+    timeout: TimeoutSpec | None = None,
     default: Optional[T] = None,
-    **kwargs
-) -> T:
-    """
-    在超时控制下运行同步函数
+    operation_name: str | None = None,
+    **kwargs: Any,
+) -> Optional[T]:
+    """Run an awaitable or callable with a timeout and optional default fallback."""
 
-    Args:
-        func: 要执行的同步函数
-        *args: 函数参数
-        timeout: 超时时间（秒）
-        default: 超时后返回的默认值
-        **kwargs: 函数关键字参数
+    timeout_spec = timeout
+    remaining_args = list(args)
+    if timeout_spec is None:
+        if remaining_args:
+            timeout_spec = cast(TimeoutSpec, remaining_args.pop(0))
+        else:
+            raise TypeError("run_with_timeout is missing a timeout value")
 
-    Returns:
-        函数的返回值，或超时后的默认值
-    """
-    loop = asyncio.get_running_loop()
-    executor_call = functools.partial(func, *args, **kwargs)
-    try:
-        return await asyncio.wait_for(
-            loop.run_in_executor(None, executor_call),
-            timeout=timeout
-        )
-    except asyncio.TimeoutError:
-        logger.warning(f"Function {func.__name__} timed out after {timeout} seconds")
-        return default
+    seconds = _resolve_timeout_spec(timeout_spec)
+    op_name = operation_name
+
+    if inspect.isawaitable(target):
+        awaited = await _await_with_timeout(cast(Awaitable[Any], target), seconds, cast(Optional[Any], default), op_name)
+        return cast(Optional[T], awaited)
+
+    if callable(target):
+        callable_target = cast(Callable[..., Any], target)
+        if op_name is None:
+            op_name = getattr(callable_target, "__name__", None)
+
+        if inspect.iscoroutinefunction(callable_target):
+            coroutine = cast(Awaitable[Any], callable_target(*remaining_args, **kwargs))
+            awaited = await _await_with_timeout(coroutine, seconds, cast(Optional[Any], default), op_name)
+            return cast(Optional[T], awaited)
+
+        loop = asyncio.get_running_loop()
+        bound_call = functools.partial(callable_target, *remaining_args, **kwargs)
+        try:
+            outcome = await asyncio.wait_for(loop.run_in_executor(None, bound_call), timeout=seconds)
+        except asyncio.TimeoutError:
+            _log_timeout(op_name, seconds)
+            return default
+
+        if inspect.isawaitable(outcome):
+            awaited = await _await_with_timeout(cast(Awaitable[Any], outcome), seconds, cast(Optional[Any], default), op_name)
+            return cast(Optional[T], awaited)
+
+        return cast(Optional[T], outcome)
+
+    raise TypeError("run_with_timeout requires an awaitable or callable target")
 
 
-def timeout_decorator(seconds: float, default: Any = None):
-    """
-    超时装饰器
+def timeout_decorator(seconds: float, default: Any = None) -> Callable[[CallableWithOptionalAwait], Callable[P, Coroutine[Any, Any, Optional[Any]]]]:
+    """Provide decorator-style usage for synchronous or asynchronous callables."""
 
-    Args:
-        seconds: 超时时间（秒）
-        default: 超时后返回的默认值
+    def decorator(func: CallableWithOptionalAwait) -> Callable[P, Coroutine[Any, Any, Optional[Any]]]:
+        return _wrap_callable(func, seconds, default, getattr(func, "__name__", None))
 
-    Returns:
-        装饰器函数
-    """
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            if asyncio.iscoroutinefunction(func):
-                return await with_timeout(
-                    func(*args, **kwargs),
-                    timeout=seconds,
-                    default=default
-                )
-            else:
-                return await run_with_timeout(
-                    func,
-                    *args,
-                    timeout=seconds,
-                    default=default,
-                    **kwargs
-                )
-        return wrapper
     return decorator
 
 
 @asynccontextmanager
-async def timeout_context(seconds: float):
-    """
-    超时上下文管理器
+async def timeout_context(seconds: float) -> AsyncIterator[None]:
+    """Context manager that cancels the current task when the timeout elapses."""
 
-    Args:
-        seconds: 超时时间（秒）
-
-    Usage:
-        async with timeout_context(10):
-            await some_long_operation()
-    """
     task = asyncio.current_task()
     if task is None:
-        raise RuntimeError("No current task in timeout_context")
+        raise RuntimeError("timeout_context requires an active asyncio task")
 
-    # 创建一个取消任务的回调
-    def timeout_callback():
+    def timeout_callback() -> None:
         task.cancel()
 
-    # 设置超时
     handle = asyncio.get_event_loop().call_later(seconds, timeout_callback)
 
     try:
@@ -131,30 +183,88 @@ async def timeout_context(seconds: float):
 
 
 class TimeoutError(Exception):
-    """超时异常"""
+    """Explicit timeout exception for callers that need a typed error."""
 
-    def __init__(self, message: str = "Operation timed out"):
+    def __init__(self, message: str = "Operation timed out") -> None:
         super().__init__(message)
         self.message = message
 
 
-# 为了兼容性，提供一些别名函数
 async def wait_for(coro: Coroutine[Any, Any, T], timeout: float) -> T:
-    """
-    等待协程完成，带超时控制（asyncio.wait_for的包装）
+    """Thin wrapper around asyncio.wait_for used in legacy call sites."""
 
-    Args:
-        coro: 要执行的协程
-        timeout: 超时时间（秒）
-
-    Returns:
-        协程的返回值
-
-    Raises:
-        asyncio.TimeoutError: 超时时抛出
-    """
     return await asyncio.wait_for(coro, timeout=timeout)
 
 
-# 导出timeout函数作为别名
 timeout = timeout_context
+
+
+def _resolve_timeout_spec(spec: TimeoutSpec) -> float:
+    """Convert TimeoutSpec variants into a float number of seconds."""
+
+    if isinstance(spec, TimeoutCategory):
+        manager = get_timeout_manager()
+        return manager.get_timeout(spec)
+
+    if isinstance(spec, (int, float)):
+        if spec <= 0:
+            raise ValueError("timeout seconds must be positive")
+        return float(spec)
+
+    raise TypeError(f"Unsupported timeout spec: {spec!r}")
+
+
+async def _await_with_timeout(
+    awaitable: Awaitable[Any],
+    seconds: float,
+    default: Optional[Any],
+    operation_name: str | None,
+) -> Optional[Any]:
+    """Await a coroutine with timeout handling and optional default fallback."""
+
+    try:
+        return await asyncio.wait_for(awaitable, timeout=seconds)
+    except asyncio.TimeoutError:
+        _log_timeout(operation_name, seconds)
+        return default
+
+
+def _wrap_callable(
+    func: CallableWithOptionalAwait,
+    seconds: float,
+    default: Optional[Any],
+    operation_name: str | None,
+) -> Callable[P, Coroutine[Any, Any, Optional[Any]]]:
+    """Wrap a callable so the returned coroutine applies timeout enforcement."""
+
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> Optional[Any]:
+        op_name = operation_name or getattr(func, "__name__", None)
+
+        if inspect.iscoroutinefunction(func):
+            coroutine = cast(Awaitable[Any], func(*args, **kwargs))
+            result = await _await_with_timeout(coroutine, seconds, default, op_name)
+            return result
+
+        loop = asyncio.get_running_loop()
+        bound_call = functools.partial(cast(Callable[..., Any], func), *args, **kwargs)
+        try:
+            outcome = await asyncio.wait_for(loop.run_in_executor(None, bound_call), timeout=seconds)
+        except asyncio.TimeoutError:
+            _log_timeout(op_name, seconds)
+            return default
+
+        if inspect.isawaitable(outcome):
+            return await _await_with_timeout(cast(Awaitable[Any], outcome), seconds, default, op_name)
+
+        return cast(Optional[Any], outcome)
+
+    return wrapper
+
+
+def _log_timeout(operation_name: str | None, seconds: float) -> None:
+    """Log timeout warnings with a consistent format."""
+
+    if operation_name:
+        logger.warning(f"Operation '{operation_name}' timed out after {seconds:.2f}s")
+    else:
+        logger.warning(f"Operation timed out after {seconds:.2f}s")

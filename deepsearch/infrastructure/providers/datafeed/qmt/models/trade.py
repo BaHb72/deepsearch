@@ -1,6 +1,7 @@
 """
 交易相关数据模型
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -9,12 +10,14 @@ from typing import Optional
 
 class OrderSide(Enum):
     """买卖方向"""
+
     BUY = "BUY"
     SELL = "SELL"
 
 
 class OrderType(Enum):
     """订单类型"""
+
     LIMIT = "LIMIT"  # 限价单
     MARKET = "MARKET"  # 市价单
     STOP = "STOP"  # 止损单
@@ -23,6 +26,7 @@ class OrderType(Enum):
 
 class OrderStatus(Enum):
     """订单状态"""
+
     PENDING = "PENDING"  # 待报
     SUBMITTED = "SUBMITTED"  # 已报
     PARTIALLY_FILLED = "PARTIALLY_FILLED"  # 部分成交
@@ -35,6 +39,7 @@ class OrderStatus(Enum):
 @dataclass
 class TradeData:
     """逐笔成交数据"""
+
     symbol: str
     exchange: str
     timestamp: float
@@ -49,22 +54,23 @@ class TradeData:
     def to_dict(self) -> dict:
         """转换为字典格式"""
         return {
-            'symbol': self.symbol,
-            'exchange': self.exchange,
-            'timestamp': self.timestamp,
-            'datetime': self.datetime.isoformat() if self.datetime else None,
-            'price': self.price,
-            'volume': self.volume,
-            'amount': self.amount,
-            'trade_id': self.trade_id,
-            'side': self.side.value,
-            'order_id': self.order_id,
+            "symbol": self.symbol,
+            "exchange": self.exchange,
+            "timestamp": self.timestamp,
+            "datetime": self.datetime.isoformat() if self.datetime else None,
+            "price": self.price,
+            "volume": self.volume,
+            "amount": self.amount,
+            "trade_id": self.trade_id,
+            "side": self.side.value,
+            "order_id": self.order_id,
         }
 
 
 @dataclass
 class OrderData:
     """订单数据"""
+
     # 必需字段（无默认值）
     symbol: str
     exchange: str
@@ -89,29 +95,30 @@ class OrderData:
     def to_dict(self) -> dict:
         """转换为字典格式"""
         return {
-            'symbol': self.symbol,
-            'exchange': self.exchange,
-            'order_id': self.order_id,
-            'client_order_id': self.client_order_id,
-            'side': self.side.value,
-            'order_type': self.order_type.value,
-            'status': self.status.value,
-            'price': self.price,
-            'volume': self.volume,
-            'filled_volume': self.filled_volume,
-            'filled_amount': self.filled_amount,
-            'avg_price': self.avg_price,
-            'create_time': self.create_time.isoformat() if self.create_time else None,
-            'update_time': self.update_time.isoformat() if self.update_time else None,
-            'commission': self.commission,
-            'slippage': self.slippage,
-            'reject_reason': self.reject_reason,
+            "symbol": self.symbol,
+            "exchange": self.exchange,
+            "order_id": self.order_id,
+            "client_order_id": self.client_order_id,
+            "side": self.side.value,
+            "order_type": self.order_type.value,
+            "status": self.status.value,
+            "price": self.price,
+            "volume": self.volume,
+            "filled_volume": self.filled_volume,
+            "filled_amount": self.filled_amount,
+            "avg_price": self.avg_price,
+            "create_time": self.create_time.isoformat() if self.create_time else None,
+            "update_time": self.update_time.isoformat() if self.update_time else None,
+            "commission": self.commission,
+            "slippage": self.slippage,
+            "reject_reason": self.reject_reason,
         }
 
 
 @dataclass
 class PositionData:
     """持仓数据"""
+
     symbol: str
     exchange: str
 
@@ -135,25 +142,26 @@ class PositionData:
     def to_dict(self) -> dict:
         """转换为字典格式"""
         return {
-            'symbol': self.symbol,
-            'exchange': self.exchange,
-            'total_volume': self.total_volume,
-            'available_volume': self.available_volume,
-            'frozen_volume': self.frozen_volume,
-            'avg_cost': self.avg_cost,
-            'last_price': self.last_price,
-            'market_value': self.market_value,
-            'pnl': self.pnl,
-            'pnl_ratio': self.pnl_ratio,
-            'today_buy_volume': self.today_buy_volume,
-            'today_sell_volume': self.today_sell_volume,
-            'today_pnl': self.today_pnl,
+            "symbol": self.symbol,
+            "exchange": self.exchange,
+            "total_volume": self.total_volume,
+            "available_volume": self.available_volume,
+            "frozen_volume": self.frozen_volume,
+            "avg_cost": self.avg_cost,
+            "last_price": self.last_price,
+            "market_value": self.market_value,
+            "pnl": self.pnl,
+            "pnl_ratio": self.pnl_ratio,
+            "today_buy_volume": self.today_buy_volume,
+            "today_sell_volume": self.today_sell_volume,
+            "today_pnl": self.today_pnl,
         }
 
 
 @dataclass
 class AccountData:
     """账户资金数据"""
+
     account_id: str
 
     # 资金信息
@@ -178,16 +186,16 @@ class AccountData:
     def to_dict(self) -> dict:
         """转换为字典格式"""
         return {
-            'account_id': self.account_id,
-            'total_assets': self.total_assets,
-            'available_cash': self.available_cash,
-            'frozen_cash': self.frozen_cash,
-            'market_value': self.market_value,
-            'total_pnl': self.total_pnl,
-            'today_pnl': self.today_pnl,
-            'position_pnl': self.position_pnl,
-            'closed_pnl': self.closed_pnl,
-            'risk_ratio': self.risk_ratio,
-            'margin_ratio': self.margin_ratio,
-            'update_time': self.update_time.isoformat() if self.update_time else None,
+            "account_id": self.account_id,
+            "total_assets": self.total_assets,
+            "available_cash": self.available_cash,
+            "frozen_cash": self.frozen_cash,
+            "market_value": self.market_value,
+            "total_pnl": self.total_pnl,
+            "today_pnl": self.today_pnl,
+            "position_pnl": self.position_pnl,
+            "closed_pnl": self.closed_pnl,
+            "risk_ratio": self.risk_ratio,
+            "margin_ratio": self.margin_ratio,
+            "update_time": self.update_time.isoformat() if self.update_time else None,
         }

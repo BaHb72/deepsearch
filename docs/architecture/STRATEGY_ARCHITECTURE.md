@@ -274,7 +274,7 @@ class MyStrategy(BaseStrategy):
 
 ```python
 from deepsearch.backtest import BacktestEngine
-from deepsearch.services.data_source_manager import get_data_source_manager
+from deepsearch.infrastructure.providers.managers.data_source_manager import get_data_source_manager
 
 # 获取数据源管理器（自动选择最优数据源）
 data_manager = await get_data_source_manager()

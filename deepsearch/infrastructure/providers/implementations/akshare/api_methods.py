@@ -2,8 +2,10 @@
 AkShare API方法实现
 提供各种金融数据API的具体实现
 """
-from typing import Dict, List, Any, Optional
+
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 from loguru import logger
 
@@ -25,10 +27,7 @@ class AkShareAPIMethods:
         self.request_handler = request_handler
         self.market_time_util = MarketTimeUtil()
 
-    @monitor_data_source(
-        source=DataSourceType.AKSHARE,
-        access_type=DataAccessType.REALTIME_QUOTE
-    )
+    @monitor_data_source(source=DataSourceType.AKSHARE, access_type=DataAccessType.REALTIME_QUOTE)
     async def get_realtime_data(self, symbols: List[str]) -> Dict[str, Any]:
         """
         获取实时行情数据
@@ -52,8 +51,8 @@ class AkShareAPIMethods:
             normalized_symbols = []
             for symbol in symbols:
                 # 移除市场后缀
-                if '.' in symbol:
-                    symbol = symbol.split('.')[0]
+                if "." in symbol:
+                    symbol = symbol.split(".")[0]
                 # 确保是6位代码
                 if len(symbol) < 6:
                     symbol = symbol.zfill(6)
@@ -63,8 +62,7 @@ class AkShareAPIMethods:
 
             # 调用 Worker API
             result = await self.request_handler.call_api(
-                "stock_zh_a_spot_em",
-                {"symbols": normalized_symbols}
+                "stock_zh_a_spot_em", {"symbols": normalized_symbols}
             )
 
             if not result:
@@ -84,24 +82,21 @@ class AkShareAPIMethods:
             return {
                 "success": True,
                 "data": processed_data,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
         except Exception as e:
             logger.error(f"获取实时数据失败: {e}")
             return {"error": str(e), "data": {}}
 
-    @monitor_data_source(
-        source=DataSourceType.AKSHARE,
-        access_type=DataAccessType.HISTORICAL_KLINE
-    )
+    @monitor_data_source(source=DataSourceType.AKSHARE, access_type=DataAccessType.HISTORICAL_KLINE)
     async def get_history_data(
         self,
         symbol: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         period: str = "daily",
-        adjust: str = ""
+        adjust: str = "",
     ) -> Optional[pd.DataFrame]:
         """
         获取历史K线数据
@@ -118,19 +113,15 @@ class AkShareAPIMethods:
         """
         try:
             # 标准化股票代码
-            if '.' in symbol:
-                symbol = symbol.split('.')[0]
+            if "." in symbol:
+                symbol = symbol.split(".")[0]
             if len(symbol) < 6:
                 symbol = symbol.zfill(6)
 
             logger.info(f"获取历史数据: {symbol}, 周期: {period}, 复权: {adjust or '不复权'}")
 
             # 准备参数
-            params = {
-                "symbol": symbol,
-                "period": period,
-                "adjust": adjust
-            }
+            params = {"symbol": symbol, "period": period, "adjust": adjust}
 
             if start_date:
                 params["start_date"] = start_date
@@ -138,10 +129,7 @@ class AkShareAPIMethods:
                 params["end_date"] = end_date
 
             # 调用API
-            result = await self.request_handler.call_api(
-                "stock_zh_a_hist",
-                params
-            )
+            result = await self.request_handler.call_api("stock_zh_a_hist", params)
 
             if not result:
                 logger.warning(f"未获取到 {symbol} 的历史数据")
@@ -159,7 +147,7 @@ class AkShareAPIMethods:
                     "close": "close",
                     "volume": "volume",
                     "amount": "amount",
-                    "turnover": "turnover"
+                    "turnover": "turnover",
                 }
                 df.rename(columns=column_mapping, inplace=True)
 
@@ -200,10 +188,7 @@ class AkShareAPIMethods:
     async def fetch_all_realtime_quotes(self) -> Any:
         """获取所有股票实时行情"""
         try:
-            result = await self.request_handler.call_api(
-                "stock_zh_a_spot_em",
-                {"fetch_all": True}
-            )
+            result = await self.request_handler.call_api("stock_zh_a_spot_em", {"fetch_all": True})
             return result
         except Exception as e:
             logger.error(f"获取全部实时行情失败: {e}")
@@ -213,14 +198,13 @@ class AkShareAPIMethods:
         """获取分时数据"""
         try:
             # 标准化股票代码
-            if '.' in symbol:
-                symbol = symbol.split('.')[0]
+            if "." in symbol:
+                symbol = symbol.split(".")[0]
             if len(symbol) < 6:
                 symbol = symbol.zfill(6)
 
             result = await self.request_handler.call_api(
-                "stock_zh_a_hist_min_em",
-                {"symbol": symbol, "period": "1"}
+                "stock_zh_a_hist_min_em", {"symbol": symbol, "period": "1"}
             )
             return result
         except Exception as e:
@@ -231,15 +215,12 @@ class AkShareAPIMethods:
         """获取盘口数据"""
         try:
             # 标准化股票代码
-            if '.' in symbol:
-                symbol = symbol.split('.')[0]
+            if "." in symbol:
+                symbol = symbol.split(".")[0]
             if len(symbol) < 6:
                 symbol = symbol.zfill(6)
 
-            result = await self.request_handler.call_api(
-                "stock_bid_ask_em",
-                {"symbol": symbol}
-            )
+            result = await self.request_handler.call_api("stock_bid_ask_em", {"symbol": symbol})
             return result
         except Exception as e:
             logger.error(f"获取盘口数据失败: {e}")
@@ -258,21 +239,17 @@ class AkShareAPIMethods:
         try:
             if symbol:
                 # 单个股票资金流
-                if '.' in symbol:
-                    symbol = symbol.split('.')[0]
+                if "." in symbol:
+                    symbol = symbol.split(".")[0]
                 if len(symbol) < 6:
                     symbol = symbol.zfill(6)
 
                 result = await self.request_handler.call_api(
-                    "stock_individual_fund_flow",
-                    {"symbol": symbol}
+                    "stock_individual_fund_flow", {"symbol": symbol}
                 )
             else:
                 # 全市场资金流
-                result = await self.request_handler.call_api(
-                    "stock_market_fund_flow",
-                    {}
-                )
+                result = await self.request_handler.call_api("stock_market_fund_flow", {})
 
             return result
         except Exception as e:
@@ -282,10 +259,7 @@ class AkShareAPIMethods:
     async def fetch_concept_data(self) -> Any:
         """获取概念板块数据"""
         try:
-            result = await self.request_handler.call_api(
-                "stock_board_concept_em",
-                {}
-            )
+            result = await self.request_handler.call_api("stock_board_concept_em", {})
             return result
         except Exception as e:
             logger.error(f"获取概念板块失败: {e}")
@@ -294,10 +268,7 @@ class AkShareAPIMethods:
     async def fetch_industry_data(self) -> Any:
         """获取行业板块数据"""
         try:
-            result = await self.request_handler.call_api(
-                "stock_board_industry_em",
-                {}
-            )
+            result = await self.request_handler.call_api("stock_board_industry_em", {})
             return result
         except Exception as e:
             logger.error(f"获取行业板块失败: {e}")
@@ -306,10 +277,7 @@ class AkShareAPIMethods:
     async def fetch_etf_data(self) -> Any:
         """获取ETF数据"""
         try:
-            result = await self.request_handler.call_api(
-                "fund_etf_spot_em",
-                {}
-            )
+            result = await self.request_handler.call_api("fund_etf_spot_em", {})
             return result
         except Exception as e:
             logger.error(f"获取ETF数据失败: {e}")
@@ -318,10 +286,7 @@ class AkShareAPIMethods:
     async def fetch_index_data(self) -> Any:
         """获取指数数据"""
         try:
-            result = await self.request_handler.call_api(
-                "stock_zh_index_spot",
-                {}
-            )
+            result = await self.request_handler.call_api("stock_zh_index_spot", {})
             return result
         except Exception as e:
             logger.error(f"获取指数数据失败: {e}")
@@ -342,10 +307,7 @@ class AkShareAPIMethods:
             if symbol:
                 params["symbol"] = symbol
 
-            result = await self.request_handler.call_api(
-                "futures_zh_spot",
-                params
-            )
+            result = await self.request_handler.call_api("futures_zh_spot", params)
             return result
         except Exception as e:
             logger.error(f"获取期货数据失败: {e}")
@@ -366,10 +328,7 @@ class AkShareAPIMethods:
             if symbol:
                 params["symbol"] = symbol
 
-            result = await self.request_handler.call_api(
-                "option_zh_spot",
-                params
-            )
+            result = await self.request_handler.call_api("option_zh_spot", params)
             return result
         except Exception as e:
             logger.error(f"获取期权数据失败: {e}")
@@ -388,8 +347,8 @@ class AkShareAPIMethods:
         """
         try:
             # 标准化股票代码
-            if '.' in symbol:
-                symbol = symbol.split('.')[0]
+            if "." in symbol:
+                symbol = symbol.split(".")[0]
             if len(symbol) < 6:
                 symbol = symbol.zfill(6)
 
@@ -397,15 +356,12 @@ class AkShareAPIMethods:
                 "main": "stock_financial_main_indicator",
                 "balance": "stock_financial_balance_sheet",
                 "income": "stock_financial_income_statement",
-                "cashflow": "stock_financial_cashflow_statement"
+                "cashflow": "stock_financial_cashflow_statement",
             }
 
             api_name = api_map.get(report_type, "stock_financial_main_indicator")
 
-            result = await self.request_handler.call_api(
-                api_name,
-                {"symbol": symbol}
-            )
+            result = await self.request_handler.call_api(api_name, {"symbol": symbol})
             return result
         except Exception as e:
             logger.error(f"获取财务数据失败: {e}")
@@ -423,15 +379,12 @@ class AkShareAPIMethods:
         """
         try:
             # 标准化股票代码
-            if '.' in symbol:
-                symbol = symbol.split('.')[0]
+            if "." in symbol:
+                symbol = symbol.split(".")[0]
             if len(symbol) < 6:
                 symbol = symbol.zfill(6)
 
-            result = await self.request_handler.call_api(
-                "stock_holder_em",
-                {"symbol": symbol}
-            )
+            result = await self.request_handler.call_api("stock_holder_em", {"symbol": symbol})
             return result
         except Exception as e:
             logger.error(f"获取股东数据失败: {e}")

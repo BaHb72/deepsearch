@@ -3,6 +3,10 @@
  * 捕获并上报所有前端错误，支持实时监控
  */
 
+import logger from '@/utils/logger'
+
+const errorTrackerLogger = logger.child('utils:error-tracker')
+
 class ErrorTracker {
     constructor() {
         this.errors = []
@@ -31,7 +35,7 @@ class ErrorTracker {
                     type: 'vue-error',
                     message: err.message,
                     stack: err.stack,
-                    info: info,
+                    info,
                     component: instance?.$options.name || 'Unknown',
                     componentStack: instance?.$options.__file
                 })
@@ -43,7 +47,7 @@ class ErrorTracker {
                     type: 'vue-warning',
                     message: msg,
                     component: instance?.$options.name || 'Unknown',
-                    trace: trace,
+                    trace,
                     level: 'warning'
                 })
             }
@@ -82,9 +86,9 @@ class ErrorTracker {
             })
         })
 
-        console.log('错误追踪系统已初始化')
+        errorTrackerLogger.info('错误追踪系统已初始化')
         } catch (error) {
-            console.error('错误追踪系统初始化失败:', error)
+            errorTrackerLogger.error('错误追踪系统初始化失败:', error)
         }
     }
 
@@ -146,23 +150,19 @@ class ErrorTracker {
 
         // 在控制台输出（开发环境）
             if (import.meta.env.DEV && errorInfo.type !== 'api-error') {
-            console.group(`🚨 ${error.type} - ${error.level}`)
-            console.error('错误信息:', error.message)
-            if (error.stack) {
-                console.error('堆栈:', error.stack)
+            const summary = `[DEV][${error.level}] ${error.type}`
+            const details = {
+                message: error.message,
+                timestamp: error.timestamp,
+                url: error.url,
+                component: error.component || 'N/A',
+                stack: error.stack
             }
-            console.table({
-                时间: error.timestamp,
-                类型: error.type,
-                级别: error.level,
-                URL: error.url,
-                组件: error.component || 'N/A'
-            })
-            console.groupEnd()
+            errorTrackerLogger.error(summary, details)
         }
         } catch (error) {
             // 防止错误追踪器本身的错误影响应用
-            console.error('错误追踪器内部错误:', error)
+            errorTrackerLogger.error('错误追踪器内部错误:', error)
         }
     }
 
@@ -237,7 +237,7 @@ class ErrorTracker {
                 }
                 // 只在开发环境下输出警告
                 if (import.meta.env.DEV) {
-                    console.warn('错误上报失败:', response.status, response.statusText)
+                    errorTrackerLogger.warn('错误上报失败:', response.status, response.statusText)
                 }
             }
         } catch (e) {
@@ -268,7 +268,7 @@ class ErrorTracker {
             try {
                 callback(error)
             } catch (e) {
-                console.error('错误监听器执行失败:', e)
+                errorTrackerLogger.error('错误监听器执行失败:', e)
             }
         })
     }
@@ -294,7 +294,7 @@ class ErrorTracker {
     logError(message, extra = {}) {
         this.captureError({
             type: 'manual',
-            message: message,
+            message,
             ...extra
         })
     }

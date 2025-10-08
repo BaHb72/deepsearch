@@ -1,6 +1,7 @@
 """
 数据提供者工具模块
 """
+
 from .cache import DataProviderCache, LRUCache, get_cache
 from .retry import (
     CircuitBreaker,
@@ -8,7 +9,7 @@ from .retry import (
     RetryConfig,
     RetryStrategy,
     SmartRetry,
-    retry
+    with_retry,
 )
 
 __all__ = [
@@ -22,5 +23,5 @@ __all__ = [
     "RetryConfig",
     "RetryStrategy",
     "SmartRetry",
-    "retry"
+    "with_retry",
 ]

@@ -4,8 +4,10 @@ MockErrorProvider - 错误处理兜底提供者
 当所有数据源都失败时，使用此提供者返回明确的错误信息，
 避免系统崩溃，同时记录访问日志用于监控。
 """
-from typing import Any, Dict, List, Optional
+
 from datetime import datetime
+from typing import Any, Dict, List
+
 import pandas as pd
 from loguru import logger
 
@@ -27,7 +29,7 @@ class MockErrorProvider:
         """
         self.failure_reason = failure_reason
         self.created_at = datetime.now()
-        self.access_log = []
+        self.access_log: List[Dict[str, Any]] = []
         self.access_count = 0
         logger.warning(f"MockErrorProvider created due to: {failure_reason}")
 
@@ -57,7 +59,7 @@ class MockErrorProvider:
         logger.error(f"MockErrorProvider: get_kline called for {symbol}")
 
         # 返回空的DataFrame，但包含正确的列结构
-        return pd.DataFrame(columns=['date', 'open', 'high', 'low', 'close', 'volume'])
+        return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume"])
 
     async def get_realtime_quote(self, symbols: List[str]) -> Dict[str, Any]:
         """
@@ -78,7 +80,7 @@ class MockErrorProvider:
             "reason": self.failure_reason,
             "provider": "MockErrorProvider",
             "symbols": symbols,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     async def get_financial_data(self, symbol: str, **kwargs) -> Dict[str, Any]:
@@ -101,7 +103,7 @@ class MockErrorProvider:
             "reason": self.failure_reason,
             "provider": "MockErrorProvider",
             "symbol": symbol,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     async def get_data(self, request_type: str, **kwargs) -> Any:
@@ -126,7 +128,7 @@ class MockErrorProvider:
             "request_type": request_type,
             "parameters": kwargs,
             "timestamp": datetime.now().isoformat(),
-            "suggestion": "Please check data provider configuration and network connectivity"
+            "suggestion": "Please check data provider configuration and network connectivity",
         }
 
     def _log_access(self, method: str, params: Dict[str, Any]):
@@ -143,7 +145,7 @@ class MockErrorProvider:
             "timestamp": datetime.now().isoformat(),
             "method": method,
             "params": params,
-            "count": self.access_count
+            "count": self.access_count,
         }
 
         self.access_log.append(access_record)
@@ -166,7 +168,7 @@ class MockErrorProvider:
         Returns:
             统计信息字典
         """
-        method_counts = {}
+        method_counts: Dict[str, int] = {}
         for record in self.access_log:
             method = record["method"]
             method_counts[method] = method_counts.get(method, 0) + 1
@@ -178,7 +180,7 @@ class MockErrorProvider:
             "total_access_count": self.access_count,
             "method_counts": method_counts,
             "recent_accesses": self.access_log[-10:] if self.access_log else [],
-            "uptime_seconds": (datetime.now() - self.created_at).total_seconds()
+            "uptime_seconds": (datetime.now() - self.created_at).total_seconds(),
         }
 
     def __repr__(self) -> str:

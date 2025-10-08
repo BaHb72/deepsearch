@@ -3,33 +3,39 @@ JSON sanitization utilities
 
 处理 NaN、Infinity 等非 JSON 兼容的值
 """
+from __future__ import annotations
+
+
 import math
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, cast
 
+np: Any
 try:
-    import numpy as np
-
-    HAS_NUMPY = True
+    import numpy as _np
 except ImportError:
     HAS_NUMPY = False
     np = None
+else:
+    HAS_NUMPY = True
+    np = _np
 
+pd: Any
 try:
-    import pandas as pd
-
-    HAS_PANDAS = True
+    import pandas as _pd
 except ImportError:
     HAS_PANDAS = False
     pd = None
-
+else:
+    HAS_PANDAS = True
+    pd = _pd
 
 def sanitize_for_json(data: Any) -> Any:
     """
     清理数据中的 NaN 和 Infinity 值，使其符合 JSON 规范
-    
+
     Args:
         data: 需要清理的数据
-        
+
     Returns:
         清理后的数据，NaN/Infinity 替换为 None
     """
@@ -38,9 +44,9 @@ def sanitize_for_json(data: Any) -> Any:
 
     # 处理 pandas DataFrame
     if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        # 将 NaN 替换为 None
-        import numpy as np
-        return data.replace({np.nan: None, float('inf'): None, float('-inf'): None}).to_dict(orient='records')
+        df_clean = data.replace([math.inf, -math.inf], None)
+        df_clean = df_clean.where(pd.notna(df_clean), None)
+        return df_clean.to_dict(orient="records")
 
     # 处理 pandas Series
     if HAS_PANDAS and isinstance(data, pd.Series):
@@ -81,40 +87,32 @@ def sanitize_for_json(data: Any) -> Any:
 def sanitize_data(data: Any) -> Any:
     """
     清理数据中的 NaN 和 Infinity 值（别名函数，用于向后兼容）
-    
+
     Args:
         data: 需要清理的数据
-        
+
     Returns:
         清理后的数据，NaN/Infinity 替换为 None
     """
     return sanitize_for_json(data)
 
 
-def clean_dataframe_for_json(df: "pd.DataFrame", orient: str = "records") -> Union[List[Dict], Dict]:
-    """
-    清理 DataFrame 并转换为 JSON 兼容格式
-    
-    Args:
-        df: pandas DataFrame
-        orient: 输出格式 ('records', 'dict', 'list', 'series', 'split', 'index')
-        
-    Returns:
-        清理后的数据
-    """
+def clean_dataframe_for_json(
+    df: Any, orient: str = "records"
+) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
+    """Convert a pandas DataFrame into JSON-friendly data."""
     if not HAS_PANDAS:
         return []
 
-    # 替换 NaN 和 Infinity
-    import numpy as np
-    df_clean = df.replace({
-        np.nan: None,
-        float('inf'): None,
-        float('-inf'): None
-    })
+    # Replace NaN and Infinity values
+    df_clean = df.replace([math.inf, -math.inf], None)
+    if HAS_NUMPY and np is not None:
+        df_clean = df_clean.replace({np.nan: None})
+    df_clean = df_clean.where(pd.notna(df_clean), None)
 
-    # 转换为指定格式
+    # Convert to the requested orientation
     result = df_clean.to_dict(orient=orient)
 
-    # 进一步清理
-    return sanitize_for_json(result)
+    # Final sanitation pass
+    sanitized = sanitize_for_json(result)
+    return cast(Union[List[Dict[str, Any]], Dict[str, Any]], sanitized)

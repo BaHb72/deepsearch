@@ -3,6 +3,10 @@
  * 提供自动重连和错误处理
  */
 
+import logger from '@/utils/logger'
+
+const websocketLogger = logger.child('utils:websocket')
+
 export class WebSocketManager {
     constructor(url, options = {}) {
         this.url = url
@@ -42,7 +46,7 @@ export class WebSocketManager {
 
         // 只在第一次连接时显示日志
         if (this.reconnectAttempts === 0) {
-            console.log('正在连接 WebSocket:', this.url)
+            websocketLogger.info('正在连接 WebSocket:', this.url)
         }
 
         try {
@@ -60,7 +64,7 @@ export class WebSocketManager {
      */
     setupEventHandlers() {
         this.ws.onopen = (event) => {
-            console.log('WebSocket 已连接')
+            websocketLogger.info('WebSocket 已连接')
             this.isConnecting = false
             this.isConnected = true
             this.reconnectAttempts = 0
@@ -73,7 +77,7 @@ export class WebSocketManager {
                 const data = JSON.parse(event.data)
                 this.emit('message', data)
             } catch (error) {
-                console.error('解析 WebSocket 消息失败:', error)
+                websocketLogger.error('解析 WebSocket 消息失败:', error)
             }
         }
 
@@ -92,7 +96,7 @@ export class WebSocketManager {
             // 静默处理错误，特别是连接失败的情况
             // 只在第一次连接失败时显示提示
             if (this.reconnectAttempts === 0) {
-                console.debug('WebSocket 连接失败，将自动重试')
+                websocketLogger.debug('WebSocket 连接失败，将自动重试')
             }
             this.emit('error', event)
         }
@@ -107,7 +111,7 @@ export class WebSocketManager {
             this.ws.send(message)
             return true
         }
-        console.warn('WebSocket 未连接，无法发送消息')
+        websocketLogger.warn('WebSocket 未连接，无法发送消息')
         return false
     }
 
@@ -144,7 +148,7 @@ export class WebSocketManager {
     scheduleReconnect() {
         if (!this.shouldReconnect || this.reconnectAttempts >= this.options.maxReconnectAttempts) {
             if (this.reconnectAttempts >= this.options.maxReconnectAttempts) {
-                console.debug('WebSocket: 已达到最大重连次数')
+                websocketLogger.debug('WebSocket: 已达到最大重连次数')
             }
             return
         }
@@ -161,7 +165,7 @@ export class WebSocketManager {
 
         // 只在前几次重连时显示日志
         if (this.reconnectAttempts <= 3) {
-            console.debug(`WebSocket: 将在 ${Math.round(delay / 1000)}秒后重连 (第${this.reconnectAttempts}次)`)
+            websocketLogger.debug(`WebSocket: 将在 ${Math.round(delay / 1000)}秒后重连 (第${this.reconnectAttempts}次)`)
         }
 
         this.reconnectTimer = setTimeout(() => {
@@ -217,7 +221,7 @@ export class WebSocketManager {
                 try {
                     handler(data)
                 } catch (error) {
-                    console.error(`事件处理器错误 (${event}):`, error)
+                    websocketLogger.error(`事件处理器错误 (${event}):`, error)
                 }
             })
         }

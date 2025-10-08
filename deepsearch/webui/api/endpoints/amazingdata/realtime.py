@@ -3,18 +3,15 @@ AmazingData 实时行情API模块
 包含各类证券的实时快照和K线订阅接口
 """
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
-from loguru import logger
 import asyncio
 import json
+from typing import Dict, List, Optional
 
-from .base import (
-    get_amazingdata_provider,
-    handle_api_error,
-    format_response
-)
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from loguru import logger
+from pydantic import BaseModel, Field
+
+from .base import JSONDict, format_response, get_amazingdata_provider, handle_api_error
 
 # 创建路由器
 router = APIRouter(tags=["AmazingData-实时行情"])
@@ -22,19 +19,23 @@ router = APIRouter(tags=["AmazingData-实时行情"])
 
 # ================== 请求模型 ==================
 
+
 class SubscribeRequest(BaseModel):
     """订阅请求基类"""
+
     code_list: List[str] = Field(..., description="代码列表")
     period: Optional[str] = Field(None, description="订阅周期")
 
 
 class KlineSubscribeRequest(BaseModel):
     """K线订阅请求"""
+
     code_list: List[str] = Field(..., description="代码列表")
     period: str = Field("1min", description="K线周期: 1min/5min/15min/30min/60min/daily")
 
 
 # ================== 全局订阅管理器 ==================
+
 
 class SubscriptionManager:
     """订阅管理器"""
@@ -45,12 +46,7 @@ class SubscriptionManager:
         self.active_tasks: Dict[str, asyncio.Task] = {}  # subscription_id -> task
 
     async def add_subscription(
-        self,
-        client_id: str,
-        subscription_type: str,
-        code_list: List[str],
-        callback=None,
-        **kwargs
+        self, client_id: str, subscription_type: str, code_list: List[str], callback=None, **kwargs
     ) -> str:
         """添加订阅"""
         subscription_id = f"{client_id}_{subscription_type}_{','.join(code_list)}"
@@ -65,7 +61,7 @@ class SubscriptionManager:
             "code_list": code_list,
             "callback": callback,
             "status": "active",
-            **kwargs
+            **kwargs,
         }
 
         logger.info(f"添加订阅: {subscription_id}")
@@ -86,8 +82,7 @@ class SubscriptionManager:
     async def remove_client_subscriptions(self, client_id: str):
         """移除客户端的所有订阅"""
         to_remove = [
-            sub_id for sub_id, info in self.subscriptions.items()
-            if info["client_id"] == client_id
+            sub_id for sub_id, info in self.subscriptions.items() if info["client_id"] == client_id
         ]
 
         for subscription_id in to_remove:
@@ -104,10 +99,10 @@ class SubscriptionManager:
                     "id": sub_id,
                     "type": info["type"],
                     "codes": info["code_list"],
-                    "status": info["status"]
+                    "status": info["status"],
                 }
                 for sub_id, info in self.subscriptions.items()
-            ]
+            ],
         }
 
 
@@ -117,8 +112,9 @@ subscription_manager = SubscriptionManager()
 
 # ================== API接口 ==================
 
+
 @router.post("/subscribe/index", summary="订阅指数实时快照")
-async def subscribe_index(request: SubscribeRequest):
+async def subscribe_index(request: SubscribeRequest) -> JSONDict:
     """
     订阅指数实时快照数据
 
@@ -141,14 +137,11 @@ async def subscribe_index(request: SubscribeRequest):
             client_id="api_client",
             subscription_type="index",
             code_list=request.code_list,
-            callback=on_snapshot
+            callback=on_snapshot,
         )
 
         # 调用SDK订阅
-        await provider.subscribe_index_snapshot(
-            code_list=request.code_list,
-            callback=on_snapshot
-        )
+        await provider.subscribe_index_snapshot(code_list=request.code_list, callback=on_snapshot)
 
         return format_response(
             success=True,
@@ -156,15 +149,15 @@ async def subscribe_index(request: SubscribeRequest):
                 "subscription_id": subscription_id,
                 "type": "index",
                 "code_list": request.code_list,
-                "status": "active"
-            }
+                "status": "active",
+            },
         )
     except Exception as e:
         return handle_api_error("subscribe_index", e)
 
 
 @router.post("/subscribe/stock", summary="订阅股票实时快照")
-async def subscribe_stock(request: SubscribeRequest):
+async def subscribe_stock(request: SubscribeRequest) -> JSONDict:
     """
     订阅股票实时快照数据
 
@@ -184,13 +177,10 @@ async def subscribe_stock(request: SubscribeRequest):
             client_id="api_client",
             subscription_type="stock",
             code_list=request.code_list,
-            callback=on_snapshot
+            callback=on_snapshot,
         )
 
-        await provider.subscribe_stock_snapshot(
-            code_list=request.code_list,
-            callback=on_snapshot
-        )
+        await provider.subscribe_stock_snapshot(code_list=request.code_list, callback=on_snapshot)
 
         return format_response(
             success=True,
@@ -198,15 +188,15 @@ async def subscribe_stock(request: SubscribeRequest):
                 "subscription_id": subscription_id,
                 "type": "stock",
                 "code_list": request.code_list,
-                "status": "active"
-            }
+                "status": "active",
+            },
         )
     except Exception as e:
         return handle_api_error("subscribe_stock", e)
 
 
 @router.post("/subscribe/future", summary="订阅期货实时快照")
-async def subscribe_future(request: SubscribeRequest):
+async def subscribe_future(request: SubscribeRequest) -> JSONDict:
     """
     订阅期货实时快照数据
 
@@ -226,13 +216,10 @@ async def subscribe_future(request: SubscribeRequest):
             client_id="api_client",
             subscription_type="future",
             code_list=request.code_list,
-            callback=on_snapshot
+            callback=on_snapshot,
         )
 
-        await provider.subscribe_future_snapshot(
-            code_list=request.code_list,
-            callback=on_snapshot
-        )
+        await provider.subscribe_future_snapshot(code_list=request.code_list, callback=on_snapshot)
 
         return format_response(
             success=True,
@@ -240,15 +227,15 @@ async def subscribe_future(request: SubscribeRequest):
                 "subscription_id": subscription_id,
                 "type": "future",
                 "code_list": request.code_list,
-                "status": "active"
-            }
+                "status": "active",
+            },
         )
     except Exception as e:
         return handle_api_error("subscribe_future", e)
 
 
 @router.post("/subscribe/etf", summary="订阅ETF实时快照")
-async def subscribe_etf(request: SubscribeRequest):
+async def subscribe_etf(request: SubscribeRequest) -> JSONDict:
     """
     订阅ETF实时快照数据
 
@@ -268,13 +255,10 @@ async def subscribe_etf(request: SubscribeRequest):
             client_id="api_client",
             subscription_type="etf",
             code_list=request.code_list,
-            callback=on_snapshot
+            callback=on_snapshot,
         )
 
-        await provider.subscribe_etf_snapshot(
-            code_list=request.code_list,
-            callback=on_snapshot
-        )
+        await provider.subscribe_etf_snapshot(code_list=request.code_list, callback=on_snapshot)
 
         return format_response(
             success=True,
@@ -282,15 +266,15 @@ async def subscribe_etf(request: SubscribeRequest):
                 "subscription_id": subscription_id,
                 "type": "etf",
                 "code_list": request.code_list,
-                "status": "active"
-            }
+                "status": "active",
+            },
         )
     except Exception as e:
         return handle_api_error("subscribe_etf", e)
 
 
 @router.post("/subscribe/kzz", summary="订阅可转债实时快照")
-async def subscribe_kzz(request: SubscribeRequest):
+async def subscribe_kzz(request: SubscribeRequest) -> JSONDict:
     """
     订阅可转债实时快照数据
 
@@ -310,13 +294,10 @@ async def subscribe_kzz(request: SubscribeRequest):
             client_id="api_client",
             subscription_type="kzz",
             code_list=request.code_list,
-            callback=on_snapshot
+            callback=on_snapshot,
         )
 
-        await provider.subscribe_kzz_snapshot(
-            code_list=request.code_list,
-            callback=on_snapshot
-        )
+        await provider.subscribe_kzz_snapshot(code_list=request.code_list, callback=on_snapshot)
 
         return format_response(
             success=True,
@@ -324,15 +305,15 @@ async def subscribe_kzz(request: SubscribeRequest):
                 "subscription_id": subscription_id,
                 "type": "kzz",
                 "code_list": request.code_list,
-                "status": "active"
-            }
+                "status": "active",
+            },
         )
     except Exception as e:
         return handle_api_error("subscribe_kzz", e)
 
 
 @router.post("/subscribe/hkt", summary="订阅港股通实时快照")
-async def subscribe_hkt(request: SubscribeRequest):
+async def subscribe_hkt(request: SubscribeRequest) -> JSONDict:
     """
     订阅港股通实时快照数据
 
@@ -352,13 +333,10 @@ async def subscribe_hkt(request: SubscribeRequest):
             client_id="api_client",
             subscription_type="hkt",
             code_list=request.code_list,
-            callback=on_snapshot
+            callback=on_snapshot,
         )
 
-        await provider.subscribe_hkt_snapshot(
-            code_list=request.code_list,
-            callback=on_snapshot
-        )
+        await provider.subscribe_hkt_snapshot(code_list=request.code_list, callback=on_snapshot)
 
         return format_response(
             success=True,
@@ -366,15 +344,15 @@ async def subscribe_hkt(request: SubscribeRequest):
                 "subscription_id": subscription_id,
                 "type": "hkt",
                 "code_list": request.code_list,
-                "status": "active"
-            }
+                "status": "active",
+            },
         )
     except Exception as e:
         return handle_api_error("subscribe_hkt", e)
 
 
 @router.post("/subscribe/kline", summary="订阅实时K线")
-async def subscribe_kline(request: KlineSubscribeRequest):
+async def subscribe_kline(request: KlineSubscribeRequest) -> JSONDict:
     """
     订阅实时K线数据
 
@@ -395,13 +373,11 @@ async def subscribe_kline(request: KlineSubscribeRequest):
             subscription_type="kline",
             code_list=request.code_list,
             callback=on_kline,
-            period=request.period
+            period=request.period,
         )
 
         await provider.subscribe_kline(
-            code_list=request.code_list,
-            period=request.period,
-            callback=on_kline
+            code_list=request.code_list, period=request.period, callback=on_kline
         )
 
         return format_response(
@@ -411,15 +387,15 @@ async def subscribe_kline(request: KlineSubscribeRequest):
                 "type": "kline",
                 "code_list": request.code_list,
                 "period": request.period,
-                "status": "active"
-            }
+                "status": "active",
+            },
         )
     except Exception as e:
         return handle_api_error("subscribe_kline", e)
 
 
 @router.post("/unsubscribe", summary="停止所有订阅")
-async def unsubscribe_all():
+async def unsubscribe_all() -> JSONDict:
     """
     停止所有实时数据订阅
 
@@ -441,17 +417,14 @@ async def unsubscribe_all():
 
         return format_response(
             success=True,
-            data={
-                "message": "All subscriptions stopped",
-                "cancelled_count": current_count
-            }
+            data={"message": "All subscriptions stopped", "cancelled_count": current_count},
         )
     except Exception as e:
         return handle_api_error("unsubscribe_all", e)
 
 
 @router.get("/subscription-status", summary="获取订阅状态")
-async def get_subscription_status():
+async def get_subscription_status() -> JSONDict:
     """
     获取当前所有订阅的状态
 
@@ -460,16 +433,13 @@ async def get_subscription_status():
     """
     try:
         status = subscription_manager.get_subscription_status()
-        return format_response(
-            success=True,
-            data=status
-        )
+        return format_response(success=True, data=status)
     except Exception as e:
         return handle_api_error("subscription_status", e)
 
 
 @router.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
+async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
     """
     WebSocket实时数据推送端点
 
@@ -493,31 +463,23 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
                 # 创建订阅回调
                 async def push_data(data):
-                    await websocket.send_json({
-                        "type": sub_type,
-                        "data": data
-                    })
+                    await websocket.send_json({"type": sub_type, "data": data})
 
                 # 添加订阅
                 await subscription_manager.add_subscription(
                     client_id=client_id,
                     subscription_type=sub_type,
                     code_list=code_list,
-                    callback=push_data
+                    callback=push_data,
                 )
 
                 # 发送确认消息
-                await websocket.send_json({
-                    "type": "subscription_confirmed",
-                    "codes": code_list
-                })
+                await websocket.send_json({"type": "subscription_confirmed", "codes": code_list})
 
             elif message.get("action") == "unsubscribe":
                 # 取消订阅
                 await subscription_manager.remove_client_subscriptions(client_id)
-                await websocket.send_json({
-                    "type": "unsubscribed"
-                })
+                await websocket.send_json({"type": "unsubscribed"})
 
     except WebSocketDisconnect:
         # 清理断开连接的客户端

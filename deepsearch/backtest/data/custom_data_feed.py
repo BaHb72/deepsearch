@@ -8,8 +8,8 @@ Version: 1.0.0
 
 import asyncio
 import threading
-from datetime import datetime
-from typing import Optional, Dict, Any
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -25,16 +25,16 @@ except ImportError:
 class DeepSearchLiveData(bt.DataBase):
     """
     DeepSearch实时数据源
-    
+
     继承Backtrader的DataBase，支持实时数据推送
     """
 
     params = (
-        ('symbol', None),  # 股票代码
-        ('source', 'auto'),  # 数据源
-        ('timeframe', '1m'),  # 时间周期
-        ('historical', True),  # 是否加载历史数据
-        ('backfill_days', 30),  # 历史数据回填天数
+        ("symbol", None),  # 股票代码
+        ("source", "auto"),  # 数据源
+        ("timeframe", "1m"),  # 时间周期
+        ("historical", True),  # 是否加载历史数据
+        ("backfill_days", 30),  # 历史数据回填天数
     )
 
     def __init__(self):
@@ -62,7 +62,7 @@ class DeepSearchLiveData(bt.DataBase):
             self._load_historical_data()
 
         # 启动实时数据线程
-        if self.p.timeframe in ['1m', '5m']:
+        if self.p.timeframe in ["1m", "5m"]:
             self._start_live_feed()
 
     def _load_historical_data(self):
@@ -83,7 +83,7 @@ class DeepSearchLiveData(bt.DataBase):
             start_date=start_date,
             end_date=end_date,
             timeframe=self.p.timeframe,
-            adjust='qfq'
+            adjust="qfq",
         )
 
         if not self.historical_data.empty:
@@ -133,19 +133,19 @@ class DeepSearchLiveData(bt.DataBase):
         import random
 
         if self.historical_data is not None and not self.historical_data.empty:
-            last_close = self.historical_data['close'].iloc[-1]
+            last_close = self.historical_data["close"].iloc[-1]
 
             # 生成随机波动
             change = random.uniform(-0.02, 0.02)  # 2%波动
             new_price = last_close * (1 + change)
 
             return {
-                'datetime': datetime.now(),
-                'open': new_price,
-                'high': new_price * 1.001,
-                'low': new_price * 0.999,
-                'close': new_price,
-                'volume': random.randint(10000, 100000)
+                "datetime": datetime.now(),
+                "open": new_price,
+                "high": new_price * 1.001,
+                "low": new_price * 0.999,
+                "close": new_price,
+                "volume": random.randint(10000, 100000),
             }
 
         return None
@@ -157,11 +157,11 @@ class DeepSearchLiveData(bt.DataBase):
             row = self.historical_data.iloc[self.current_index]
 
             self.lines.datetime[0] = bt.date2num(row.name)
-            self.lines.open[0] = row.get('open', 0)
-            self.lines.high[0] = row.get('high', 0)
-            self.lines.low[0] = row.get('low', 0)
-            self.lines.close[0] = row.get('close', 0)
-            self.lines.volume[0] = row.get('volume', 0)
+            self.lines.open[0] = row.get("open", 0)
+            self.lines.high[0] = row.get("high", 0)
+            self.lines.low[0] = row.get("low", 0)
+            self.lines.close[0] = row.get("close", 0)
+            self.lines.volume[0] = row.get("volume", 0)
 
             self.current_index += 1
             return False  # 还有数据
@@ -170,12 +170,12 @@ class DeepSearchLiveData(bt.DataBase):
             # 加载实时数据
             tick = self.live_data_queue.pop(0)
 
-            self.lines.datetime[0] = bt.date2num(tick['datetime'])
-            self.lines.open[0] = tick['open']
-            self.lines.high[0] = tick['high']
-            self.lines.low[0] = tick['low']
-            self.lines.close[0] = tick['close']
-            self.lines.volume[0] = tick['volume']
+            self.lines.datetime[0] = bt.date2num(tick["datetime"])
+            self.lines.open[0] = tick["open"]
+            self.lines.high[0] = tick["high"]
+            self.lines.low[0] = tick["low"]
+            self.lines.close[0] = tick["close"]
+            self.lines.volume[0] = tick["volume"]
 
             return False  # 还有数据
 
@@ -196,30 +196,27 @@ class DeepSearchLiveData(bt.DataBase):
 class DeepSearchCSVData(bt.feeds.GenericCSVData):
     """
     DeepSearch CSV数据源
-    
+
     支持从CSV文件加载数据，自动识别字段格式
     """
 
     params = (
-        ('nullvalue', float('NaN')),
-        ('dtformat', '%Y-%m-%d'),
-        ('tmformat', '%H:%M:%S'),
-
-        ('datetime', 0),  # 日期列索引
-        ('time', -1),  # 时间列索引
-        ('open', 1),
-        ('high', 2),
-        ('low', 3),
-        ('close', 4),
-        ('volume', 5),
-        ('openinterest', -1),
-
-        ('reverse', False),
-        ('header', 0),
-        ('separator', ','),
-
+        ("nullvalue", float("NaN")),
+        ("dtformat", "%Y-%m-%d"),
+        ("tmformat", "%H:%M:%S"),
+        ("datetime", 0),  # 日期列索引
+        ("time", -1),  # 时间列索引
+        ("open", 1),
+        ("high", 2),
+        ("low", 3),
+        ("close", 4),
+        ("volume", 5),
+        ("openinterest", -1),
+        ("reverse", False),
+        ("header", 0),
+        ("separator", ","),
         # 自动检测列名
-        ('autodetect', True),
+        ("autodetect", True),
     )
 
     def __init__(self):
@@ -235,56 +232,53 @@ class DeepSearchCSVData(bt.feeds.GenericCSVData):
 
         try:
             # 读取前几行进行检测
-            df = pd.read_csv(
-                self.p.dataname,
-                nrows=5,
-                sep=self.p.separator,
-                header=self.p.header
-            )
+            df = pd.read_csv(self.p.dataname, nrows=5, sep=self.p.separator, header=self.p.header)
 
             # 列名映射
             column_map = {
-                '日期': 'datetime',
-                'date': 'datetime',
-                'Date': 'datetime',
-                '开盘': 'open',
-                'open': 'open',
-                'Open': 'open',
-                '最高': 'high',
-                'high': 'high',
-                'High': 'high',
-                '最低': 'low',
-                'low': 'low',
-                'Low': 'low',
-                '收盘': 'close',
-                'close': 'close',
-                'Close': 'close',
-                '成交量': 'volume',
-                'volume': 'volume',
-                'Volume': 'volume',
+                "日期": "datetime",
+                "date": "datetime",
+                "Date": "datetime",
+                "开盘": "open",
+                "open": "open",
+                "Open": "open",
+                "最高": "high",
+                "high": "high",
+                "High": "high",
+                "最低": "low",
+                "low": "low",
+                "Low": "low",
+                "收盘": "close",
+                "close": "close",
+                "Close": "close",
+                "成交量": "volume",
+                "volume": "volume",
+                "Volume": "volume",
             }
 
             # 设置列索引
             for i, col in enumerate(df.columns):
                 if col in column_map:
                     param_name = column_map[col]
-                    if param_name == 'datetime':
+                    if param_name == "datetime":
                         self.p.datetime = i
-                    elif param_name == 'open':
+                    elif param_name == "open":
                         self.p.open = i
-                    elif param_name == 'high':
+                    elif param_name == "high":
                         self.p.high = i
-                    elif param_name == 'low':
+                    elif param_name == "low":
                         self.p.low = i
-                    elif param_name == 'close':
+                    elif param_name == "close":
                         self.p.close = i
-                    elif param_name == 'volume':
+                    elif param_name == "volume":
                         self.p.volume = i
 
-            logger.info(f"自动检测CSV格式: datetime={self.p.datetime}, "
-                        f"open={self.p.open}, high={self.p.high}, "
-                        f"low={self.p.low}, close={self.p.close}, "
-                        f"volume={self.p.volume}")
+            logger.info(
+                f"自动检测CSV格式: datetime={self.p.datetime}, "
+                f"open={self.p.open}, high={self.p.high}, "
+                f"low={self.p.low}, close={self.p.close}, "
+                f"volume={self.p.volume}"
+            )
 
         except Exception as e:
             logger.error(f"自动检测CSV格式失败: {e}")
@@ -293,7 +287,7 @@ class DeepSearchCSVData(bt.feeds.GenericCSVData):
 class MultiSourceData:
     """
     多数据源管理器
-    
+
     同时管理多个数据源，支持数据源切换和对比
     """
 
@@ -305,7 +299,7 @@ class MultiSourceData:
     def add_source(self, name: str, data_feed: bt.DataBase):
         """
         添加数据源
-        
+
         Args:
             name: 数据源名称
             data_feed: Backtrader数据源对象
@@ -320,7 +314,7 @@ class MultiSourceData:
     def switch_source(self, name: str):
         """
         切换活动数据源
-        
+
         Args:
             name: 数据源名称
         """
@@ -343,25 +337,24 @@ class MultiSourceData:
     def compare_sources(self, source_names: list) -> Dict[str, Any]:
         """
         对比多个数据源
-        
+
         Args:
             source_names: 数据源名称列表
-            
+
         Returns:
             对比结果
         """
-        comparison = {
-            'sources': {},
-            'differences': []
-        }
+        sources_info: Dict[str, Dict[str, Any]] = {}
+        differences: List[Dict[str, Any]] = []
+        comparison: Dict[str, Any] = {"sources": sources_info, "differences": differences}
 
         for name in source_names:
             if name in self.sources:
                 source = self.sources[name]
                 # 获取数据源信息
-                comparison['sources'][name] = {
-                    'type': type(source).__name__,
-                    'params': source.params._getkwargs()
+                sources_info[name] = {
+                    "type": type(source).__name__,
+                    "params": source.params._getkwargs(),
                 }
 
         # 实现更详细的数据对比
@@ -370,7 +363,7 @@ class MultiSourceData:
             base_name = source_names[0]
             base_source = self.sources.get(base_name)
 
-            if base_source and hasattr(base_source, 'data'):
+            if base_source and hasattr(base_source, "data"):
                 base_data = base_source.data
 
                 # 对比每个数据源与基准数据源
@@ -378,25 +371,25 @@ class MultiSourceData:
                     if name in self.sources:
                         compare_source = self.sources[name]
 
-                        if hasattr(compare_source, 'data'):
+                        if hasattr(compare_source, "data"):
                             compare_data = compare_source.data
 
                             # 对比数据差异
                             diff = self._calculate_data_differences(
-                                base_name, base_data,
-                                name, compare_data
+                                base_name, base_data, name, compare_data
                             )
 
                             if diff:
-                                comparison['differences'].append(diff)
+                                differences.append(diff)
 
             # 添加统计信息
-            comparison['statistics'] = self._calculate_comparison_stats(source_names)
+            comparison["statistics"] = self._calculate_comparison_stats(source_names)
 
         return comparison
 
-    def _calculate_data_differences(self, base_name: str, base_data,
-                                   compare_name: str, compare_data) -> Dict[str, Any]:
+    def _calculate_data_differences(
+        self, base_name: str, base_data, compare_name: str, compare_data
+    ) -> Dict[str, Any]:
         """
         计算两个数据源之间的差异
 
@@ -409,24 +402,23 @@ class MultiSourceData:
         Returns:
             差异信息
         """
-        diff_info = {
-            'base_source': base_name,
-            'compare_source': compare_name,
-            'differences': []
-        }
+        differences: List[Dict[str, Any]] = []
+        diff_info: Dict[str, Any] = {"base_source": base_name, "compare_source": compare_name, "differences": differences}
 
         try:
             # 对比数据长度
-            base_len = len(base_data) if hasattr(base_data, '__len__') else 0
-            compare_len = len(compare_data) if hasattr(compare_data, '__len__') else 0
+            base_len = len(base_data) if hasattr(base_data, "__len__") else 0
+            compare_len = len(compare_data) if hasattr(compare_data, "__len__") else 0
 
             if base_len != compare_len:
-                diff_info['differences'].append({
-                    'type': 'length',
-                    'base_length': base_len,
-                    'compare_length': compare_len,
-                    'diff': compare_len - base_len
-                })
+                differences.append(
+                    {
+                        "type": "length",
+                        "base_length": base_len,
+                        "compare_length": compare_len,
+                        "diff": compare_len - base_len,
+                    }
+                )
 
             # 如果都有数据，对比具体值
             if base_len > 0 and compare_len > 0:
@@ -437,38 +429,50 @@ class MultiSourceData:
                     base_item = base_data[i]
                     compare_item = compare_data[i] if i < compare_len else None
 
-                    if compare_item and hasattr(base_item, 'close') and hasattr(compare_item, 'close'):
+                    if (
+                        compare_item
+                        and hasattr(base_item, "close")
+                        and hasattr(compare_item, "close")
+                    ):
                         # 对比收盘价
                         if abs(base_item.close[0] - compare_item.close[0]) > 0.01:
-                            diff_info['differences'].append({
-                                'type': 'value',
-                                'index': i,
-                                'field': 'close',
-                                'base_value': float(base_item.close[0]),
-                                'compare_value': float(compare_item.close[0]),
-                                'diff': float(compare_item.close[0] - base_item.close[0])
-                            })
+                            differences.append(
+                                {
+                                    "type": "value",
+                                    "index": i,
+                                    "field": "close",
+                                    "base_value": float(base_item.close[0]),
+                                    "compare_value": float(compare_item.close[0]),
+                                    "diff": float(compare_item.close[0] - base_item.close[0]),
+                                }
+                            )
 
-                    if compare_item and hasattr(base_item, 'datetime') and hasattr(compare_item, 'datetime'):
+                    if (
+                        compare_item
+                        and hasattr(base_item, "datetime")
+                        and hasattr(compare_item, "datetime")
+                    ):
                         # 对比时间戳
                         base_dt = base_item.datetime.datetime(0)
                         compare_dt = compare_item.datetime.datetime(0)
 
                         if base_dt != compare_dt:
-                            diff_info['differences'].append({
-                                'type': 'timestamp',
-                                'index': i,
-                                'base_time': base_dt.isoformat(),
-                                'compare_time': compare_dt.isoformat()
-                            })
+                            differences.append(
+                                {
+                                    "type": "timestamp",
+                                    "index": i,
+                                    "base_time": base_dt.isoformat(),
+                                    "compare_time": compare_dt.isoformat(),
+                                }
+                            )
 
             # 统计差异数量
-            diff_info['diff_count'] = len(diff_info['differences'])
-            diff_info['has_differences'] = diff_info['diff_count'] > 0
+            diff_info["diff_count"] = len(diff_info["differences"])
+            diff_info["has_differences"] = diff_info["diff_count"] > 0
 
         except Exception as e:
             logger.error(f"计算数据差异失败: {e}")
-            diff_info['error'] = str(e)
+            diff_info["error"] = str(e)
 
         return diff_info
 
@@ -482,28 +486,24 @@ class MultiSourceData:
         Returns:
             统计信息
         """
-        stats = {
-            'total_sources': len(source_names),
-            'available_sources': 0,
-            'data_ranges': {}
-        }
+        stats: Dict[str, Any] = {"total_sources": len(source_names), "available_sources": 0, "data_ranges": {}}
 
         for name in source_names:
             if name in self.sources:
                 source = self.sources[name]
-                stats['available_sources'] += 1
+                stats["available_sources"] += 1
 
                 # 获取数据范围
-                if hasattr(source, 'data') and len(source.data) > 0:
+                if hasattr(source, "data") and len(source.data) > 0:
                     try:
                         first_data = source.data[0]
                         last_data = source.data[-1]
 
-                        if hasattr(first_data, 'datetime') and hasattr(last_data, 'datetime'):
-                            stats['data_ranges'][name] = {
-                                'start': first_data.datetime.datetime(0).isoformat(),
-                                'end': last_data.datetime.datetime(0).isoformat(),
-                                'count': len(source.data)
+                        if hasattr(first_data, "datetime") and hasattr(last_data, "datetime"):
+                            stats["data_ranges"][name] = {
+                                "start": first_data.datetime.datetime(0).isoformat(),
+                                "end": last_data.datetime.datetime(0).isoformat(),
+                                "count": len(source.data),
                             }
                     except Exception as e:
                         logger.debug(f"获取数据范围失败: {e}")

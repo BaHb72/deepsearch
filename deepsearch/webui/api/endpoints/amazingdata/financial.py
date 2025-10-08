@@ -3,16 +3,22 @@ AmazingData 财务数据API模块
 包含财务报表、业绩预告等财务数据接口
 """
 
-from fastapi import APIRouter, HTTPException
-from typing import Optional, List, Dict
+from typing import Optional
+
+import pandas as pd
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from loguru import logger
 
 from .base import (
-    get_amazingdata_provider,
+    JSONDict,
+    DEFAULT_LOCAL_PATH,
     dataframe_to_dict,
+    ensure_dataframe,
+    filter_dataframe_by_dates,
+    filter_dataframe_by_value,
+    format_response,
+    get_amazingdata_provider,
     handle_api_error,
-    format_response
 )
 
 # 创建路由器
@@ -21,283 +27,407 @@ router = APIRouter(tags=["AmazingData-财务数据"])
 
 # ================== 请求模型 ==================
 
+
 class FinancialReportRequest(BaseModel):
     """财务报表请求基类"""
-    code_list: List[str] = Field(..., description="股票代码列表")
+
+    code_list: list[str] = Field(..., description="股票代码列表")
     report_date: Optional[int] = Field(None, description="报告期，如20230331")
     report_type: str = Field("quarter", description="报表类型：quarter(季报)/year(年报)")
-    is_local: bool = Field(False, description="是否使用本地存储")
-    local_path: Optional[str] = Field(None, description="本地存储路径")
+    is_local: bool = Field(True, description="是否使用本地存储")
+    local_path: Optional[str] = Field(DEFAULT_LOCAL_PATH, description="本地存储路径")
 
 
 class ProfitNoticeRequest(BaseModel):
     """业绩预告请求"""
-    code_list: List[str] = Field(..., description="股票代码列表")
+
+    code_list: list[str] = Field(..., description="股票代码列表")
     start_date: Optional[int] = Field(None, description="开始日期")
     end_date: Optional[int] = Field(None, description="结束日期")
-    is_local: bool = Field(False, description="是否使用本地存储")
-    local_path: Optional[str] = Field(None, description="本地存储路径")
+    is_local: bool = Field(True, description="是否使用本地存储")
+    local_path: Optional[str] = Field(DEFAULT_LOCAL_PATH, description="本地存储路径")
 
 
 # ================== API接口 ==================
 
-@router.post("/balance-sheet", summary="获取资产负债表")
-async def get_balance_sheet(request: FinancialReportRequest):
+
+@router.post("/balance-sheet", summary="��ȡ�ʲ���ծ��")
+async def get_balance_sheet(request: FinancialReportRequest) -> JSONDict:
     """
-    获取资产负债表数据
+    ��ȡ�ʲ���ծ������
 
     Args:
-        request: 财务报表请求
+        request: ���񱨱�����
 
     Returns:
-        资产负债表数据
+        �ʲ���ծ������
     """
     try:
         provider = await get_amazingdata_provider()
+        local_path = request.local_path or DEFAULT_LOCAL_PATH
 
-        # 调用SDK获取资产负债表
-        result = await provider.get_balance_sheet(
+        raw_result = await provider.get_balance_sheet(
             code_list=request.code_list,
-            report_date=request.report_date,
-            report_type=request.report_type,
+            local_path=local_path,
             is_local=request.is_local,
-            local_path=request.local_path
         )
+        filtered_df = ensure_dataframe(raw_result)
+        if filtered_df is not None and request.report_date is not None:
+            filtered_df = filter_dataframe_by_dates(
+                filtered_df,
+                request.report_date,
+                request.report_date,
+                columns=("report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+            )
+        if filtered_df is not None:
+            filtered_df = filter_dataframe_by_value(
+                filtered_df,
+                request.report_type,
+                columns=("report_type", "REPORT_TYPE", "type", "TYPE"),
+            )
 
-        # 格式化响应
+        payload_source: object = filtered_df if filtered_df is not None else raw_result
+        payload = dataframe_to_dict(payload_source)
+
         return format_response(
             success=True,
-            data=dataframe_to_dict(result),
+            data=payload,
             code_count=len(request.code_list),
             report_date=request.report_date,
             report_type=request.report_type,
-            statement_type="balance_sheet"
+            statement_type="balance_sheet",
         )
     except Exception as e:
         return handle_api_error("get_balance_sheet", e)
 
 
-@router.post("/cash-flow", summary="获取现金流量表")
-async def get_cash_flow(request: FinancialReportRequest):
+@router.post("/cash-flow", summary="��ȡ�ֽ�����������")
+async def get_cash_flow(request: FinancialReportRequest) -> JSONDict:
     """
-    获取现金流量表数据
+    ��ȡ�ֽ�����������
 
     Args:
-        request: 财务报表请求
+        request: ���񱨱�����
 
     Returns:
-        现金流量表数据
+        �ֽ�����������
     """
     try:
         provider = await get_amazingdata_provider()
+        local_path = request.local_path or DEFAULT_LOCAL_PATH
 
-        # 调用SDK获取现金流量表
-        result = await provider.get_cash_flow(
+        raw_result = await provider.get_cash_flow(
             code_list=request.code_list,
-            report_date=request.report_date,
-            report_type=request.report_type,
+            local_path=local_path,
             is_local=request.is_local,
-            local_path=request.local_path
         )
+        filtered_df = ensure_dataframe(raw_result)
+        if filtered_df is not None and request.report_date is not None:
+            filtered_df = filter_dataframe_by_dates(
+                filtered_df,
+                request.report_date,
+                request.report_date,
+                columns=("report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+            )
+        if filtered_df is not None:
+            filtered_df = filter_dataframe_by_value(
+                filtered_df,
+                request.report_type,
+                columns=("report_type", "REPORT_TYPE", "type", "TYPE"),
+            )
 
-        # 格式化响应
+        payload_source: object = filtered_df if filtered_df is not None else raw_result
+        payload = dataframe_to_dict(payload_source)
+
         return format_response(
             success=True,
-            data=dataframe_to_dict(result),
+            data=payload,
             code_count=len(request.code_list),
             report_date=request.report_date,
             report_type=request.report_type,
-            statement_type="cash_flow"
+            statement_type="cash_flow",
         )
     except Exception as e:
         return handle_api_error("get_cash_flow", e)
 
 
-@router.post("/income", summary="获取利润表")
-async def get_income(request: FinancialReportRequest):
+@router.post("/income", summary="��ȡ�����")
+async def get_income(request: FinancialReportRequest) -> JSONDict:
     """
-    获取利润表数据
+    ��ȡ���������
 
     Args:
-        request: 财务报表请求
+        request: ���񱨱�����
 
     Returns:
-        利润表数据
+        ���������
     """
     try:
         provider = await get_amazingdata_provider()
+        local_path = request.local_path or DEFAULT_LOCAL_PATH
 
-        # 调用SDK获取利润表
-        result = await provider.get_income(
+        raw_result = await provider.get_income(
             code_list=request.code_list,
-            report_date=request.report_date,
-            report_type=request.report_type,
+            local_path=local_path,
             is_local=request.is_local,
-            local_path=request.local_path
         )
+        filtered_df = ensure_dataframe(raw_result)
+        if filtered_df is not None and request.report_date is not None:
+            filtered_df = filter_dataframe_by_dates(
+                filtered_df,
+                request.report_date,
+                request.report_date,
+                columns=("report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+            )
+        if filtered_df is not None:
+            filtered_df = filter_dataframe_by_value(
+                filtered_df,
+                request.report_type,
+                columns=("report_type", "REPORT_TYPE", "type", "TYPE"),
+            )
 
-        # 格式化响应
+        payload_source: object = filtered_df if filtered_df is not None else raw_result
+        payload = dataframe_to_dict(payload_source)
+
         return format_response(
             success=True,
-            data=dataframe_to_dict(result),
+            data=payload,
             code_count=len(request.code_list),
             report_date=request.report_date,
             report_type=request.report_type,
-            statement_type="income"
+            statement_type="income",
         )
     except Exception as e:
         return handle_api_error("get_income", e)
 
 
-@router.post("/profit-express", summary="获取业绩快报")
-async def get_profit_express(request: ProfitNoticeRequest):
+@router.post("/profit-express", summary="��ȡҵ���챨")
+async def get_profit_express(request: ProfitNoticeRequest) -> JSONDict:
     """
-    获取业绩快报数据
+    ��ȡҵ���챨����
 
     Args:
-        request: 业绩预告请求
+        request: ҵ��Ԥ������
 
     Returns:
-        业绩快报数据
+        ҵ���챨����
     """
     try:
         provider = await get_amazingdata_provider()
+        local_path = request.local_path or DEFAULT_LOCAL_PATH
 
-        # 调用SDK获取业绩快报
-        result = await provider.get_profit_express(
+        raw_result = await provider.get_profit_express(
             code_list=request.code_list,
-            start_date=request.start_date,
-            end_date=request.end_date,
+            local_path=local_path,
             is_local=request.is_local,
-            local_path=request.local_path
         )
+        filtered_df = ensure_dataframe(raw_result)
+        if filtered_df is not None:
+            if request.start_date and request.end_date:
+                filtered_df = filter_dataframe_by_dates(
+                    filtered_df,
+                    request.start_date,
+                    request.end_date,
+                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                )
+            elif request.start_date:
+                filtered_df = filter_dataframe_by_dates(
+                    filtered_df,
+                    request.start_date,
+                    request.start_date,
+                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                )
+            elif request.end_date:
+                filtered_df = filter_dataframe_by_dates(
+                    filtered_df,
+                    request.end_date,
+                    request.end_date,
+                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                )
 
-        # 格式化响应
+        payload_source = filtered_df if filtered_df is not None else raw_result
         return format_response(
             success=True,
-            data=dataframe_to_dict(result),
+            data=dataframe_to_dict(payload_source),
             code_count=len(request.code_list),
             date_range=f"{request.start_date}-{request.end_date}" if request.start_date else None,
-            report_type="profit_express"
+            report_type="profit_express",
         )
     except Exception as e:
         return handle_api_error("get_profit_express", e)
 
 
-@router.post("/profit-notice", summary="获取业绩预告")
-async def get_profit_notice(request: ProfitNoticeRequest):
+@router.post("/profit-notice", summary="��ȡҵ��Ԥ��")
+async def get_profit_notice(request: ProfitNoticeRequest) -> JSONDict:
     """
-    获取业绩预告数据
+    ��ȡҵ��Ԥ������
 
     Args:
-        request: 业绩预告请求
+        request: ҵ��Ԥ������
 
     Returns:
-        业绩预告数据
+        ҵ��Ԥ������
     """
     try:
         provider = await get_amazingdata_provider()
+        local_path = request.local_path or DEFAULT_LOCAL_PATH
 
-        # 调用SDK获取业绩预告
-        result = await provider.get_profit_notice(
+        raw_result = await provider.get_profit_notice(
             code_list=request.code_list,
-            start_date=request.start_date,
-            end_date=request.end_date,
+            local_path=local_path,
             is_local=request.is_local,
-            local_path=request.local_path
         )
+        filtered_df = ensure_dataframe(raw_result)
+        if filtered_df is not None:
+            if request.start_date and request.end_date:
+                filtered_df = filter_dataframe_by_dates(
+                    filtered_df,
+                    request.start_date,
+                    request.end_date,
+                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                )
+            elif request.start_date:
+                filtered_df = filter_dataframe_by_dates(
+                    filtered_df,
+                    request.start_date,
+                    request.start_date,
+                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                )
+            elif request.end_date:
+                filtered_df = filter_dataframe_by_dates(
+                    filtered_df,
+                    request.end_date,
+                    request.end_date,
+                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                )
 
-        # 格式化响应
+        payload_source = filtered_df if filtered_df is not None else raw_result
+
         return format_response(
             success=True,
-            data=dataframe_to_dict(result),
+            data=dataframe_to_dict(payload_source),
             code_count=len(request.code_list),
             date_range=f"{request.start_date}-{request.end_date}" if request.start_date else None,
-            report_type="profit_notice"
+            report_type="profit_notice",
         )
     except Exception as e:
         return handle_api_error("get_profit_notice", e)
 
 
-@router.post("/financial-summary", summary="获取财务摘要")
-async def get_financial_summary(code: str):
+@router.post("/financial-summary", summary="��ȡ����ժҪ")
+async def get_financial_summary(code: str) -> JSONDict:
     """
-    获取单个股票的财务摘要信息
+    ��ȡ������Ʊ�Ĳ���ժҪ��Ϣ
 
     Args:
-        code: 股票代码
+        code: ��Ʊ����
 
     Returns:
-        财务摘要数据
+        ����ժҪ����
     """
     try:
         provider = await get_amazingdata_provider()
-        summary = {}
+        summary: dict[str, object | None] = {}
+        local_path = DEFAULT_LOCAL_PATH
 
-        # 获取最新的财务报表
         try:
-            balance = await provider.get_balance_sheet(
+            balance_raw = await provider.get_balance_sheet(
                 code_list=[code],
-                report_type="quarter"
+                local_path=local_path,
+                is_local=True,
             )
-            if balance is not None and not balance.empty:
+            balance = ensure_dataframe(balance_raw)
+            if balance is not None:
+                balance = filter_dataframe_by_value(
+                    balance,
+                    "quarter",
+                    columns=("report_type", "REPORT_TYPE", "type", "TYPE"),
+                )
+            if isinstance(balance, pd.DataFrame) and not balance.empty:
+                balance_row = balance.iloc[0]
                 summary["balance_sheet"] = {
-                    "total_assets": float(balance.iloc[0].get("total_assets", 0)),
-                    "total_liabilities": float(balance.iloc[0].get("total_liab", 0)),
-                    "total_equity": float(balance.iloc[0].get("total_hldr_eqy", 0)),
-                    "report_date": str(balance.iloc[0].get("report_date", ""))
+                    "total_assets": float(balance_row.get("total_assets", 0)),
+                    "total_liabilities": float(balance_row.get("total_liab", 0)),
+                    "total_equity": float(balance_row.get("total_hldr_eqy", 0)),
+                    "report_date": str(balance_row.get("report_date", "")),
                 }
-        except:
+            else:
+                summary["balance_sheet"] = None
+        except Exception:
             summary["balance_sheet"] = None
 
         try:
-            income = await provider.get_income(
+            income_raw = await provider.get_income(
                 code_list=[code],
-                report_type="quarter"
+                local_path=local_path,
+                is_local=True,
             )
-            if income is not None and not income.empty:
+            income = ensure_dataframe(income_raw)
+            if income is not None:
+                income = filter_dataframe_by_value(
+                    income,
+                    "quarter",
+                    columns=("report_type", "REPORT_TYPE", "type", "TYPE"),
+                )
+            if isinstance(income, pd.DataFrame) and not income.empty:
+                income_row = income.iloc[0]
                 summary["income"] = {
-                    "revenue": float(income.iloc[0].get("revenue", 0)),
-                    "net_profit": float(income.iloc[0].get("net_profit", 0)),
-                    "operating_profit": float(income.iloc[0].get("operate_profit", 0)),
-                    "report_date": str(income.iloc[0].get("report_date", ""))
+                    "revenue": float(income_row.get("revenue", 0)),
+                    "net_profit": float(income_row.get("net_profit", 0)),
+                    "operating_profit": float(income_row.get("operate_profit", 0)),
+                    "report_date": str(income_row.get("report_date", "")),
                 }
-        except:
+            else:
+                summary["income"] = None
+        except Exception:
             summary["income"] = None
 
         try:
-            cash_flow = await provider.get_cash_flow(
+            cash_flow_raw = await provider.get_cash_flow(
                 code_list=[code],
-                report_type="quarter"
+                local_path=local_path,
+                is_local=True,
             )
-            if cash_flow is not None and not cash_flow.empty:
+            cash_flow = ensure_dataframe(cash_flow_raw)
+            if cash_flow is not None:
+                cash_flow = filter_dataframe_by_value(
+                    cash_flow,
+                    "quarter",
+                    columns=("report_type", "REPORT_TYPE", "type", "TYPE"),
+                )
+            if isinstance(cash_flow, pd.DataFrame) and not cash_flow.empty:
+                cash_row = cash_flow.iloc[0]
                 summary["cash_flow"] = {
-                    "operating_cash_flow": float(cash_flow.iloc[0].get("n_cashflow_act", 0)),
-                    "investing_cash_flow": float(cash_flow.iloc[0].get("n_cashflow_inv", 0)),
-                    "financing_cash_flow": float(cash_flow.iloc[0].get("n_cashflow_fnc", 0)),
-                    "report_date": str(cash_flow.iloc[0].get("report_date", ""))
+                    "operating_cash_flow": float(cash_row.get("n_cashflow_act", 0)),
+                    "investing_cash_flow": float(cash_row.get("n_cashflow_inv", 0)),
+                    "financing_cash_flow": float(cash_row.get("n_cashflow_fnc", 0)),
+                    "report_date": str(cash_row.get("report_date", "")),
                 }
-        except:
+            else:
+                summary["cash_flow"] = None
+        except Exception:
             summary["cash_flow"] = None
 
-        # 计算财务指标
-        if summary.get("balance_sheet") and summary.get("income"):
-            bs = summary["balance_sheet"]
-            inc = summary["income"]
+        balance_data = summary.get("balance_sheet")
+        income_data = summary.get("income")
 
-            # ROE = 净利润 / 净资产
-            if bs["total_equity"] > 0:
+        if isinstance(balance_data, dict) and isinstance(income_data, dict):
+            total_equity = float(balance_data.get("total_equity", 0))
+            total_assets = float(balance_data.get("total_assets", 0))
+            total_liabilities = float(balance_data.get("total_liabilities", 0))
+            net_profit = float(income_data.get("net_profit", 0))
+            revenue = float(income_data.get("revenue", 0))
+
+            if total_equity > 0:
                 summary["indicators"] = {
-                    "roe": inc["net_profit"] / bs["total_equity"] * 100,
-                    "asset_liability_ratio": bs["total_liabilities"] / bs["total_assets"] * 100,
-                    "net_profit_margin": inc["net_profit"] / inc["revenue"] * 100 if inc["revenue"] > 0 else 0
+                    "roe": net_profit / total_equity * 100,
+                    "asset_liability_ratio": (
+                        total_liabilities / total_assets * 100 if total_assets else 0
+                    ),
+                    "net_profit_margin": (net_profit / revenue * 100 if revenue else 0),
                 }
 
-        return format_response(
-            success=True,
-            data=summary,
-            code=code
-        )
+        return format_response(success=True, data=summary, code=code)
 
     except Exception as e:
         return handle_api_error("get_financial_summary", e)

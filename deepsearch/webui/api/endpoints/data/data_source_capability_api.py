@@ -3,55 +3,107 @@
 
 提供数据源能力查询、对比和推荐功能
 """
-from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Query, HTTPException
+from __future__ import annotations
+
+from typing import Final, Mapping, cast
+
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-from deepsearch.infrastructure.providers.interfaces.capabilities import (
-    DataCapability,
-    get_capable_providers,
-    check_provider_capability
+from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
+from deepsearch.webui.api.models import (
+    CAPABILITY_STATUS_SUCCESS,
+    CapabilityAlternative,
+    CapabilityAvailabilityData,
+    CapabilityAvailabilityResponse,
+    CapabilityCategoryMeta,
+    CapabilityCategorySummary,
+    CapabilityComparisonEntry,
+    CapabilityComparisonResponse,
+    CapabilityDescriptor,
+    CapabilityDiffStats,
+    CapabilityInfo,
+    CapabilityItem,
+    CapabilityMatrix,
+    CapabilityMatrixResponse,
+    CapabilityRecommendation,
+    CapabilityRecommendationResponse,
+    CapabilitySourceInfo,
+    CapabilitySummary,
+    CapabilitySummaryData,
+    CapabilitySummaryResponse,
+    DataSourceSlug,
+    SourceCapabilitySummary,
+    SourceMetadata,
+    SourceOverview,
 )
-from deepsearch.infrastructure.providers.interfaces.base import DataSourceType
 
 router = APIRouter(prefix="/api/datasource", tags=["datasource_capability"])
 
 # 数据源能力映射
-DATA_SOURCE_CAPABILITIES = {
-    DataSourceType.AMAZINGDATA: {
-        DataCapability.STOCK_LIST,
-        DataCapability.REALTIME_QUOTE,
-        DataCapability.KLINE_DATA,
-        DataCapability.STOCK_INFO,
-        DataCapability.ORDER_BOOK,
-        DataCapability.TRADE_DETAIL,
-        DataCapability.FINANCIAL_DATA,
-        DataCapability.NEWS,
-        DataCapability.ANNOUNCEMENT
-    },
-    DataSourceType.AKSHARE: {
-        DataCapability.STOCK_LIST,
-        DataCapability.KLINE_DATA,
-        DataCapability.STOCK_INFO,
-        DataCapability.FINANCIAL_DATA
-    },
-    DataSourceType.QMT: {
-        DataCapability.REALTIME_QUOTE,
-        DataCapability.ORDER_BOOK,
-        DataCapability.TRADE_DETAIL,
-        DataCapability.KLINE_DATA
-    },
-    DataSourceType.CLOUDFLARE: {
-        DataCapability.STOCK_LIST,
-        DataCapability.KLINE_DATA,
-        DataCapability.STOCK_INFO
-    }
+DATA_SOURCE_CAPABILITIES: Final[dict[DataSourceSlug, frozenset[DataCapability]]] = {
+    "amazingdata": frozenset(
+        {
+            DataCapability.STOCK_LIST,
+            DataCapability.REALTIME_QUOTE,
+            DataCapability.KLINE_DATA,
+            DataCapability.STOCK_INFO,
+            DataCapability.ORDER_BOOK,
+            DataCapability.TRADE_DETAIL,
+            DataCapability.FINANCIAL_DATA,
+            DataCapability.NEWS,
+            DataCapability.ANNOUNCEMENT,
+            DataCapability.MARGIN_TRADING,
+            DataCapability.NORTH_FLOW,
+            DataCapability.KEY_INDICATORS,
+            DataCapability.SHAREHOLDER_INFO,
+            DataCapability.TRADING_CALENDAR,
+            DataCapability.ADJUSTMENT_FACTOR,
+        }
+    ),
+    "akshare": frozenset(
+        {
+            DataCapability.STOCK_LIST,
+            DataCapability.KLINE_DATA,
+            DataCapability.STOCK_INFO,
+            DataCapability.FINANCIAL_DATA,
+            DataCapability.TRADING_CALENDAR,
+            DataCapability.ADJUSTMENT_FACTOR,
+        }
+    ),
+    "qmt": frozenset(
+        {
+            DataCapability.REALTIME_QUOTE,
+            DataCapability.ORDER_BOOK,
+            DataCapability.TRADE_DETAIL,
+            DataCapability.KLINE_DATA,
+            DataCapability.LEVEL2_DATA,
+            DataCapability.TICK_DATA,
+        }
+    ),
+    "miniqmt": frozenset(
+        {
+            DataCapability.REALTIME_QUOTE,
+            DataCapability.ORDER_BOOK,
+            DataCapability.KLINE_DATA,
+        }
+    ),
+    "cloudflare": frozenset(
+        {
+            DataCapability.STOCK_LIST,
+            DataCapability.KLINE_DATA,
+            DataCapability.STOCK_INFO,
+            DataCapability.TRADING_CALENDAR,
+        }
+    ),
 }
 
+EMPTY_CAPABILITIES: Final[frozenset[DataCapability]] = frozenset()
+
 # 数据源元数据
-DATA_SOURCE_METADATA = {
+DATA_SOURCE_METADATA: Final[dict[DataSourceSlug, SourceMetadata]] = {
     "amazingdata": {
         "name": "AmazingData",
         "label": "企业级数据",
@@ -64,11 +116,11 @@ DATA_SOURCE_METADATA = {
             "北向资金流",
             "完整财务指标",
             "股东变动追踪",
-            "Level2深度数据"
+            "Level2深度数据",
         ],
         "connection_type": "remote",
         "requires_auth": True,
-        "cost": "paid"
+        "cost": "paid",
     },
     "qmt": {
         "name": "QMT",
@@ -77,15 +129,10 @@ DATA_SOURCE_METADATA = {
         "badge": "Level2",
         "color": "blue",
         "priority": 2,
-        "unique_features": [
-            "Level2逐笔数据",
-            "实时盘口",
-            "逐笔成交明细",
-            "完整筹码分布"
-        ],
+        "unique_features": ["Level2逐笔数据", "实时盘口", "逐笔成交明细", "完整筹码分布"],
         "connection_type": "local",
         "requires_auth": True,
-        "cost": "paid"
+        "cost": "paid",
     },
     "miniqmt": {
         "name": "MiniQMT",
@@ -94,15 +141,10 @@ DATA_SOURCE_METADATA = {
         "badge": "基础版",
         "color": "green",
         "priority": 3,
-        "unique_features": [
-            "实时行情",
-            "盘口数据",
-            "筹码分布",
-            "异动监控"
-        ],
+        "unique_features": ["实时行情", "盘口数据", "筹码分布", "异动监控"],
         "connection_type": "local",
         "requires_auth": True,
-        "cost": "free"
+        "cost": "free",
     },
     "akshare": {
         "name": "AKShare",
@@ -111,20 +153,64 @@ DATA_SOURCE_METADATA = {
         "badge": "免费版",
         "color": "gray",
         "priority": 4,
-        "unique_features": [
-            "历史数据",
-            "基础行情",
-            "财务数据",
-            "北向资金"
-        ],
+        "unique_features": ["历史数据", "基础行情", "财务数据", "北向资金"],
         "connection_type": "remote",
         "requires_auth": False,
-        "cost": "free"
-    }
+        "cost": "free",
+    },
+    "cloudflare": {
+        "name": "Cloudflare Workers",
+        "label": "边缘代理",
+        "description": "Cloudflare 边缘节点提供的缓存与代理能力",
+        "badge": "辅助源",
+        "color": "orange",
+        "priority": 5,
+        "unique_features": ["边缘加速", "代理转发", "灾备兜底"],
+        "connection_type": "remote",
+        "requires_auth": False,
+        "cost": "free",
+    },
 }
 
+DEFAULT_METADATA: Final[SourceMetadata] = {
+    "name": "未知数据源",
+    "label": "未登记",
+    "description": "当前未在能力矩阵中登记的数据源",
+    "badge": "未知",
+    "color": "silver",
+    "priority": 999,
+    "unique_features": [],
+    "connection_type": "remote",
+    "requires_auth": False,
+    "cost": "free",
+}
+
+
+def _normalize_source_slug(source: str) -> str:
+    """将用户输入的来源规范化为内部使用的 key。"""
+    normalized = source.strip().lower()
+    return normalized
+
+
+def _iter_capable_sources(capability: DataCapability) -> list[DataSourceSlug]:
+    """根据能力返回所有支持的数据源 ID。"""
+    return [
+        source_id
+        for source_id, capability_set in DATA_SOURCE_CAPABILITIES.items()
+        if capability in capability_set
+    ]
+
+
+def _is_capability_supported(source: str, capability: DataCapability) -> bool:
+    """判断指定来源是否支持某项能力。"""
+    normalized = _normalize_source_slug(source)
+    if normalized not in DATA_SOURCE_CAPABILITIES:
+        return False
+    capability_set = DATA_SOURCE_CAPABILITIES[cast(DataSourceSlug, normalized)]
+    return capability in capability_set
+
 # 能力分类元数据
-CAPABILITY_CATEGORIES = {
+CAPABILITY_CATEGORIES: Final[dict[str, CapabilityCategoryMeta]] = {
     "market": {
         "name": "市场数据",
         "capabilities": [
@@ -132,8 +218,8 @@ CAPABILITY_CATEGORIES = {
             DataCapability.MARKET_BREADTH,
             DataCapability.CAPITAL_FLOW,
             DataCapability.SECTOR_DATA,
-            DataCapability.ANOMALY_DETECTION
-        ]
+            DataCapability.ANOMALY_DETECTION,
+        ],
     },
     "quote": {
         "name": "行情数据",
@@ -141,16 +227,16 @@ CAPABILITY_CATEGORIES = {
             DataCapability.REALTIME_QUOTES,
             DataCapability.KLINE_DATA,
             DataCapability.TICK_DATA,
-            DataCapability.MINUTE_DATA
-        ]
+            DataCapability.MINUTE_DATA,
+        ],
     },
     "depth": {
         "name": "深度数据",
         "capabilities": [
             DataCapability.ORDER_BOOK,
             DataCapability.LEVEL2_DATA,
-            DataCapability.TRANSACTION_DATA
-        ]
+            DataCapability.TRANSACTION_DATA,
+        ],
     },
     "special": {
         "name": "特色数据",
@@ -159,8 +245,8 @@ CAPABILITY_CATEGORIES = {
             DataCapability.DRAGON_TIGER,
             DataCapability.BLOCK_TRADE,
             DataCapability.MARGIN_TRADING,
-            DataCapability.NORTH_FLOW
-        ]
+            DataCapability.NORTH_FLOW,
+        ],
     },
     "fundamental": {
         "name": "基础信息",
@@ -169,20 +255,17 @@ CAPABILITY_CATEGORIES = {
             DataCapability.FINANCIAL_DATA,
             DataCapability.ANNOUNCEMENT,
             DataCapability.KEY_INDICATORS,
-            DataCapability.SHAREHOLDER_INFO
-        ]
+            DataCapability.SHAREHOLDER_INFO,
+        ],
     },
     "utility": {
         "name": "工具数据",
-        "capabilities": [
-            DataCapability.TRADING_CALENDAR,
-            DataCapability.ADJUSTMENT_FACTOR
-        ]
-    }
+        "capabilities": [DataCapability.TRADING_CALENDAR, DataCapability.ADJUSTMENT_FACTOR],
+    },
 }
 
 # 能力中文名称映射
-CAPABILITY_NAMES = {
+CAPABILITY_NAMES: Final[dict[DataCapability, str]] = {
     DataCapability.MARKET_OVERVIEW: "市场概览",
     DataCapability.MARKET_BREADTH: "市场宽度",
     DataCapability.CAPITAL_FLOW: "资金流向",
@@ -206,116 +289,133 @@ CAPABILITY_NAMES = {
     DataCapability.KEY_INDICATORS: "关键指标",
     DataCapability.SHAREHOLDER_INFO: "股东信息",
     DataCapability.TRADING_CALENDAR: "交易日历",
-    DataCapability.ADJUSTMENT_FACTOR: "复权因子"
+    DataCapability.ADJUSTMENT_FACTOR: "复权因子",
 }
 
 
 @router.get("/capabilities/matrix")
 async def get_capability_matrix():
     """
-    获取完整的数据源能力矩阵
-    
+    获取全量数据源能力矩阵
+
     Returns:
-        包含所有数据源能力对比的矩阵
+        各数据源能力对比矩阵
     """
     try:
-        # 构建能力矩阵
-        matrix = {}
-        
+        matrix: CapabilityMatrix = {"sources": {}, "categories": {}}
+        sources = matrix["sources"]
+
         for source_id, metadata in DATA_SOURCE_METADATA.items():
-            capabilities = DATA_SOURCE_CAPABILITIES.get(source_id, {})
-            
-            # 统计能力数量
-            supported_count = sum(1 for v in capabilities.values() if v)
+            capabilities = DATA_SOURCE_CAPABILITIES.get(source_id, EMPTY_CAPABILITIES)
+
+            supported_count = len(capabilities)
             total_count = len(DataCapability)
-            
-            matrix[source_id] = {
+
+            capability_details: dict[str, CapabilityInfo] = {
+                cap.value: {
+                    "supported": cap in capabilities,
+                    "name": CAPABILITY_NAMES.get(cap, cap.value),
+                }
+                for cap in DataCapability
+            }
+
+            sources[source_id] = {
                 **metadata,
                 "supported_count": supported_count,
                 "total_count": total_count,
-                "coverage_rate": f"{(supported_count/total_count)*100:.1f}%",
-                "capabilities": {
-                    cap.value: {
-                        "supported": capabilities.get(cap, False),
-                        "name": CAPABILITY_NAMES.get(cap, cap.value)
-                    }
-                    for cap in DataCapability
-                }
+                "coverage_rate": f"{(supported_count / total_count) * 100:.1f}%",
+                "capabilities": capability_details,
             }
-        
-        return JSONResponse(content={
-            "status": "success",
-            "data": {
-                "sources": matrix,
-                "categories": {
-                    cat_id: {
-                        "name": cat_info["name"],
-                        "capabilities": [
-                            {
-                                "id": cap.value,
-                                "name": CAPABILITY_NAMES.get(cap, cap.value)
-                            }
-                            for cap in cat_info["capabilities"]
-                        ]
-                    }
-                    for cat_id, cat_info in CAPABILITY_CATEGORIES.items()
-                }
+
+        matrix["categories"] = {
+            cat_id: {
+                "name": cat_info["name"],
+                "capabilities": [
+                    {"id": cap.value, "name": CAPABILITY_NAMES.get(cap, cap.value)}
+                    for cap in cat_info["capabilities"]
+                ],
             }
-        })
+            for cat_id, cat_info in CAPABILITY_CATEGORIES.items()
+        }
+
+        payload: CapabilityMatrixResponse = {
+            "status": CAPABILITY_STATUS_SUCCESS,
+            "data": matrix,
+        }
+
+        return JSONResponse(content=payload)
     except Exception as e:
         logger.error(f"获取能力矩阵失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/capabilities/{source}")
 async def get_source_capabilities(source: str):
     """
     获取特定数据源的能力
-    
+
     Args:
         source: 数据源ID
-        
+
     Returns:
         数据源的详细能力信息
     """
     try:
-        if source not in DATA_SOURCE_CAPABILITIES:
+        normalized_source = _normalize_source_slug(source)
+
+        if normalized_source not in DATA_SOURCE_CAPABILITIES:
             raise HTTPException(status_code=404, detail=f"数据源 {source} 不存在")
-        
-        capabilities = DATA_SOURCE_CAPABILITIES[source]
-        metadata = DATA_SOURCE_METADATA.get(source, {})
-        
+
+        source_slug = cast(DataSourceSlug, normalized_source)
+
+        capabilities = DATA_SOURCE_CAPABILITIES[source_slug]
+        metadata = DATA_SOURCE_METADATA.get(source_slug, DEFAULT_METADATA)
+
         # 按类别组织能力
-        categorized = {}
+        categorized: dict[str, CapabilityCategorySummary] = {}
         for cat_id, cat_info in CAPABILITY_CATEGORIES.items():
-            cat_capabilities = []
+            cat_capabilities: list[CapabilityItem] = []
             for cap in cat_info["capabilities"]:
-                if cap in capabilities:
-                    cat_capabilities.append({
+                supported = cap in capabilities
+                cat_capabilities.append(
+                    {
                         "id": cap.value,
                         "name": CAPABILITY_NAMES.get(cap, cap.value),
-                        "supported": capabilities[cap]
-                    })
-            
+                        "supported": supported,
+                    }
+                )
+
             if cat_capabilities:
+                support_count = sum(1 for item in cat_capabilities if item["supported"])
+                support_rate = (
+                    f"{(support_count / len(cat_capabilities)) * 100:.0f}%"
+                    if cat_capabilities
+                    else "0%"
+                )
                 categorized[cat_id] = {
                     "name": cat_info["name"],
                     "capabilities": cat_capabilities,
-                    "support_rate": f"{sum(1 for c in cat_capabilities if c['supported'])/len(cat_capabilities)*100:.0f}%"
+                    "support_rate": support_rate,
                 }
-        
-        return JSONResponse(content={
-            "status": "success",
-            "data": {
-                **metadata,
-                "categorized_capabilities": categorized,
-                "summary": {
-                    "total": len(capabilities),
-                    "supported": sum(1 for v in capabilities.values() if v),
-                    "unsupported": sum(1 for v in capabilities.values() if not v)
-                }
-            }
-        })
+
+        total_count = len(DataCapability)
+        supported_count = len(capabilities)
+
+        summary: CapabilitySummary = {
+            "total": total_count,
+            "supported": supported_count,
+            "unsupported": max(total_count - supported_count, 0),
+        }
+        response_data: CapabilitySummaryData = {
+            **metadata,
+            "categorized_capabilities": categorized,
+            "summary": summary,
+        }
+        payload: CapabilitySummaryResponse = {
+            "status": CAPABILITY_STATUS_SUCCESS,
+            "data": response_data,
+        }
+
+        return JSONResponse(content=payload)
     except HTTPException:
         raise
     except Exception as e:
@@ -329,82 +429,90 @@ async def compare_capabilities(
 ):
     """
     对比多个数据源的能力差异
-    
+
     Args:
         sources: 逗号分隔的数据源ID列表
-        
+
     Returns:
         数据源能力对比结果
     """
     try:
-        source_list = [s.strip() for s in sources.split(",")]
-        
+        raw_sources = [s.strip() for s in sources.split(",") if s.strip()]
+        source_slugs: list[DataSourceSlug] = []
+
         # 验证数据源
-        for source in source_list:
-            if source not in DATA_SOURCE_CAPABILITIES:
-                raise HTTPException(status_code=400, detail=f"数据源 {source} 不存在")
-        
+        for raw_source in raw_sources:
+            normalized = _normalize_source_slug(raw_source)
+            if normalized not in DATA_SOURCE_CAPABILITIES:
+                raise HTTPException(status_code=400, detail=f"数据源 {normalized} 不存在")
+            source_slugs.append(cast(DataSourceSlug, normalized))
+
         # 构建对比结果
-        comparison = {}
-        
+        comparison: dict[str, CapabilityComparisonEntry] = {}
+
         # 按能力对比
         for cap in DataCapability:
-            cap_comparison = {
+            cap_comparison: CapabilityComparisonEntry = {
                 "name": CAPABILITY_NAMES.get(cap, cap.value),
-                "sources": {}
+                "sources": {},
+                "diff_type": "none_support",
             }
-            
-            for source in source_list:
+
+            for source in source_slugs:
                 capabilities = DATA_SOURCE_CAPABILITIES[source]
-                cap_comparison["sources"][source] = capabilities.get(cap, False)
-            
+                cap_comparison["sources"][source] = cap in capabilities
+
             # 判断差异类型
             support_count = sum(1 for v in cap_comparison["sources"].values() if v)
-            if support_count == len(source_list):
+            if support_count == len(source_slugs):
                 cap_comparison["diff_type"] = "all_support"
             elif support_count == 0:
                 cap_comparison["diff_type"] = "none_support"
             else:
                 cap_comparison["diff_type"] = "partial_support"
-            
+
             comparison[cap.value] = cap_comparison
-        
+
         # 计算差异统计
-        diff_stats = {
+        diff_stats: CapabilityDiffStats = {
             "all_support": [],
             "partial_support": [],
             "none_support": [],
-            "unique_features": {}
+            "unique_features": {},
         }
-        
+
         for cap_id, cap_comp in comparison.items():
             diff_type = cap_comp["diff_type"]
             diff_stats[diff_type].append(cap_id)
-            
+
             # 找出独有功能
             if diff_type == "partial_support":
-                for source in source_list:
+                for source in source_slugs:
                     if cap_comp["sources"][source]:
                         # 检查是否只有这个数据源支持
                         others_support = any(
-                            cap_comp["sources"][s] for s in source_list if s != source
+                            cap_comp["sources"][s] for s in source_slugs if s != source
                         )
                         if not others_support:
-                            if source not in diff_stats["unique_features"]:
-                                diff_stats["unique_features"][source] = []
-                            diff_stats["unique_features"][source].append(cap_id)
-        
-        return JSONResponse(content={
-            "status": "success",
+                            features = diff_stats["unique_features"].setdefault(source, [])
+                            features.append(cap_id)
+
+        sources_info: dict[DataSourceSlug, SourceOverview] = {}
+        for source in source_slugs:
+            metadata = DATA_SOURCE_METADATA.get(source, DEFAULT_METADATA)
+            source_overview: SourceOverview = {**metadata, "id": source}
+            sources_info[source] = source_overview
+
+        payload: CapabilityComparisonResponse = {
+            "status": CAPABILITY_STATUS_SUCCESS,
             "data": {
-                "sources": {
-                    source: DATA_SOURCE_METADATA.get(source, {"name": source})
-                    for source in source_list
-                },
+                "sources": sources_info,
                 "comparison": comparison,
-                "statistics": diff_stats
-            }
-        })
+                "statistics": diff_stats,
+            },
+        }
+
+        return JSONResponse(content=payload)
     except HTTPException:
         raise
     except Exception as e:
@@ -414,16 +522,15 @@ async def compare_capabilities(
 
 @router.get("/capabilities/recommend")
 async def recommend_source(
-    capability: str,
-    prefer_free: bool = Query(False, description="优先推荐免费数据源")
+    capability: str, prefer_free: bool = Query(False, description="优先推荐免费数据源")
 ):
     """
     根据能力需求推荐数据源
-    
+
     Args:
         capability: 能力ID
         prefer_free: 是否优先推荐免费数据源
-        
+
     Returns:
         推荐的数据源列表
     """
@@ -433,65 +540,69 @@ async def recommend_source(
             cap = DataCapability(capability)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"无效的能力ID: {capability}")
-        
-        # 获取支持该能力的数据源
-        capable_sources = get_capable_providers(cap)
-        
+        capability_descriptor: CapabilityDescriptor = {
+            "id": capability,
+            "name": CAPABILITY_NAMES.get(cap, capability),
+        }
+
+        # ��ȡ֧�ָ�����������Դ
+        capable_sources = _iter_capable_sources(cap)
+
         if not capable_sources:
-            return JSONResponse(content={
-                "status": "success",
+            payload: CapabilityRecommendationResponse = {
+                "status": CAPABILITY_STATUS_SUCCESS,
                 "data": {
-                    "capability": {
-                        "id": capability,
-                        "name": CAPABILITY_NAMES.get(cap, capability)
-                    },
+                    "capability": capability_descriptor,
                     "recommendations": [],
-                    "message": "没有数据源支持此功能"
-                }
-            })
-        
+                    "best_choice": None,
+                    "message": "û������Դ֧�ִ˹���",
+                },
+            }
+            return JSONResponse(content=payload)
+
         # 构建推荐列表
-        recommendations = []
+        recommendations: list[CapabilityRecommendation] = []
         for source in capable_sources:
-            metadata = DATA_SOURCE_METADATA.get(source, {})
-            
+            metadata = DATA_SOURCE_METADATA.get(source, DEFAULT_METADATA)
+
             # 计算推荐分数
             score = 100
-            
+
             # 优先级影响分数
             priority = metadata.get("priority", 99)
             score -= priority * 10
-            
+
             # 免费偏好
             if prefer_free:
                 if metadata.get("cost") == "free":
                     score += 50
                 else:
                     score -= 20
-            
-            recommendations.append({
-                "source": source,
-                "name": metadata.get("name", source),
-                "label": metadata.get("label", ""),
-                "cost": metadata.get("cost", "unknown"),
-                "score": score,
-                "reason": self._get_recommendation_reason(source, cap, metadata)
-            })
-        
+
+            recommendations.append(
+                {
+                    "source": source,
+                    "name": metadata.get("name", source),
+                    "label": metadata.get("label", ""),
+                    "cost": metadata.get("cost", "unknown"),
+                    "score": score,
+                    "reason": _get_recommendation_reason(source, cap, metadata),
+                }
+            )
+
         # 按分数排序
-        recommendations.sort(key=lambda x: x["score"], reverse=True)
-        
-        return JSONResponse(content={
-            "status": "success",
-            "data": {
-                "capability": {
-                    "id": capability,
-                    "name": CAPABILITY_NAMES.get(cap, capability)
+        recommendations.sort(key=lambda item: item["score"], reverse=True)
+
+        return JSONResponse(
+            content={
+                "status": CAPABILITY_STATUS_SUCCESS,
+                "data": {
+                    "capability": {"id": capability, "name": CAPABILITY_NAMES.get(cap, capability)},
+                    "recommendations": recommendations,
+                    "best_choice": recommendations[0] if recommendations else None,
                 },
-                "recommendations": recommendations,
-                "best_choice": recommendations[0] if recommendations else None
             }
-        })
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -500,63 +611,74 @@ async def recommend_source(
 
 
 @router.get("/capabilities/check")
-async def check_feature_availability(
-    source: str,
-    feature: str
-):
+async def check_feature_availability(source: str, feature: str):
     """
     检查特定功能在数据源上的可用性
-    
+
     Args:
         source: 数据源ID
         feature: 功能/能力ID
-        
+
     Returns:
         功能可用性信息
     """
     try:
         # 验证数据源
-        if source not in DATA_SOURCE_CAPABILITIES:
+        normalized_source = _normalize_source_slug(source)
+
+        if normalized_source not in DATA_SOURCE_CAPABILITIES:
             raise HTTPException(status_code=404, detail=f"数据源 {source} 不存在")
-        
+
+        source_slug = cast(DataSourceSlug, normalized_source)
+
         # 验证能力
         try:
             cap = DataCapability(feature)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"无效的功能ID: {feature}")
-        
+
         # 检查可用性
-        available = check_provider_capability(source, cap)
-        
+        available = _is_capability_supported(source_slug, cap)
+
         # 如果不可用，提供替代方案
-        alternatives = []
+        alternatives: list[CapabilityAlternative] = []
         if not available:
-            capable_sources = get_capable_providers(cap)
+            capable_sources = _iter_capable_sources(cap)
             alternatives = [
                 {
-                    "source": s,
-                    "name": DATA_SOURCE_METADATA.get(s, {}).get("name", s),
-                    "cost": DATA_SOURCE_METADATA.get(s, {}).get("cost", "unknown")
+                    "source": slug,
+                    "name": DATA_SOURCE_METADATA.get(slug, DEFAULT_METADATA).get("name", slug),
+                    "cost": DATA_SOURCE_METADATA.get(slug, DEFAULT_METADATA).get("cost", "unknown"),
                 }
-                for s in capable_sources if s != source
+                for slug in capable_sources
+                if slug != source_slug
             ]
-        
-        return JSONResponse(content={
-            "status": "success",
-            "data": {
-                "source": {
-                    "id": source,
-                    "name": DATA_SOURCE_METADATA.get(source, {}).get("name", source)
-                },
-                "feature": {
-                    "id": feature,
-                    "name": CAPABILITY_NAMES.get(cap, feature)
-                },
-                "available": available,
-                "alternatives": alternatives,
-                "message": f"{'功能可用' if available else '功能不可用，请切换到支持的数据源'}"
-            }
-        })
+
+        source_info: CapabilitySourceInfo = {
+            "id": source_slug,
+            "name": DATA_SOURCE_METADATA.get(source_slug, DEFAULT_METADATA).get("name", source_slug),
+        }
+        feature_descriptor: CapabilityDescriptor = {
+            "id": feature,
+            "name": CAPABILITY_NAMES.get(cap, feature),
+        }
+        availability_message = (
+            "功能可用" if available else "功能不可用，请切换到支持的数据源"
+        )
+
+        data: CapabilityAvailabilityData = {
+            "source": source_info,
+            "feature": feature_descriptor,
+            "available": available,
+            "alternatives": alternatives,
+            "message": availability_message,
+        }
+        payload: CapabilityAvailabilityResponse = {
+            "status": CAPABILITY_STATUS_SUCCESS,
+            "data": data,
+        }
+
+        return JSONResponse(content=payload)
     except HTTPException:
         raise
     except Exception as e:
@@ -564,25 +686,32 @@ async def check_feature_availability(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _get_recommendation_reason(source: str, capability: DataCapability, metadata: Dict) -> str:
+def _get_recommendation_reason(
+    source: str, capability: DataCapability, metadata: Mapping[str, object]
+) -> str:
     """生成推荐理由"""
     reasons = []
-    
+
+    normalized_source = _normalize_source_slug(source)
+
     # 根据数据源特点生成理由
-    if source == "amazingdata":
+    if normalized_source == "amazingdata":
         reasons.append("最全面的数据覆盖")
         if capability in [DataCapability.MARGIN_TRADING, DataCapability.KEY_INDICATORS]:
             reasons.append("独家提供此功能")
-    elif source == "qmt":
+    elif normalized_source == "qmt":
         if capability in [DataCapability.LEVEL2_DATA, DataCapability.TICK_DATA]:
             reasons.append("支持Level2深度数据")
         reasons.append("本地部署，延迟最低")
-    elif source == "miniqmt":
+    elif normalized_source == "miniqmt":
         reasons.append("轻量级，资源占用少")
         if metadata.get("cost") == "free":
             reasons.append("免费使用")
-    elif source == "akshare":
+    elif normalized_source == "akshare":
         reasons.append("开源免费")
         reasons.append("易于集成")
-    
+    elif normalized_source == "cloudflare":
+        reasons.append("边缘加速")
+        reasons.append("减少源站压力")
+
     return "，".join(reasons) if reasons else "支持此功能"

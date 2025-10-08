@@ -40,7 +40,7 @@ Worker 作为纯 HTTP 代理，不处理业务逻辑：
 - ✅ 请求头清理，保护隐私
 - ✅ 自动重试机制
 
-### 支持的数据源（27个白名单域名）
+### 支持的数据源（29个白名单域名）
 
 #### 主要数据源
 - **新浪财经**: finance.sina.com.cn, hq.sinajs.cn, money.finance.sina.com.cn
@@ -154,6 +154,9 @@ CACHE_TTL = "300"  # 缓存时间（秒）
 DEBUG = "false"  # 调试模式
 ```
 
+生产环境调用时需通过 HTTP 请求头 `X-API-Key` 或查询参数 `api_key` 提供密钥，否则 Worker 会返回 401。
+
+
 ### 设置 API 密钥（可选）
 
 ```bash
@@ -170,9 +173,9 @@ wrangler secret put API_KEY
 
 根据数据类型自动应用不同缓存时间：
 - **实时数据**：5秒缓存
-- **分钟数据**：60秒缓存  
+- **分钟数据**：60秒缓存
 - **日线数据**：300秒缓存
-- **历史数据**：3600秒缓存
+- **其他数据**：60秒缓存（默认策略）
 
 ### CloudFlare 优化设置
 
@@ -254,7 +257,7 @@ curl "https://your-worker.workers.dev/proxy?url=https://httpbin.org/headers"
 - 新增 4 个东方财富和新浪财经域名
 - 支持涨停池、公告等新 API
 - 优化缓存策略
-- 总白名单域名增至 27 个
+- 总白名单域名增至 29 个
 
 ### v1.5.0 (2024-08)
 - 简化为纯代理模式
@@ -278,8 +281,17 @@ GET /health
 {
   "status": "healthy",
   "version": "2.0.0",
-  "allowed_hosts_count": 27,
-  "cache_enabled": true
+  "mode": "proxy-only",
+  "timestamp": "2025-09-22T00:00:00.000Z",
+  "features": {
+    "proxy": true,
+    "cache": true,
+    "whitelist": true,
+    "retry": true
+  },
+  "cache_enabled": true,
+  "allowed_hosts_count": 29,
+  "auth_enabled": false
 }
 ```
 

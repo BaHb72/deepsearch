@@ -3,6 +3,7 @@ FastAPI 服务器主应用
 
 提供 REST API 和 WebSocket 端点，为前端提供数据接口。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -10,11 +11,11 @@ import json
 import math
 import sys
 import threading
-import zlib
 import time
+import zlib
 from collections import deque
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any, Awaitable, Callable, Dict, List, Optional, TYPE_CHECKING, cast
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
@@ -23,23 +24,33 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
-from deepsearch.core import MainEngine
+from deepsearch.config import Settings, get_config
+from deepsearch.core.runtime.engine import MainEngine
 from deepsearch.debug.diagnostics import diagnostic_logger, log_diagnostic
 from deepsearch.observability.monitoring.event_monitor import EventSystemMonitor
 from deepsearch.observability.monitoring.monitor_api import MonitorAPI
+
+if TYPE_CHECKING:
+    from deepsearch.event.engine.engine import EventEngine
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 # Windows 兼容性：psycopg3 需要 SelectorEventLoop
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # 记录模块导入
-log_diagnostic("MODULE_IMPORT", "server.py", {
-    "imports": ["MainEngine", "EventSystemMonitor", "MonitorAPI", "FastAPI"],
-    "platform": sys.platform
-})
+log_diagnostic(
+    "MODULE_IMPORT",
+    "server.py",
+    {
+        "imports": ["MainEngine", "EventSystemMonitor", "MonitorAPI", "FastAPI"],
+        "platform": sys.platform,
+    },
+)
 
 
-def safe_json_encoder(obj):
+def safe_json_encoder(obj: Any) -> Any:
     """
     Custom JSON encoder that handles NaN, infinity, and other non-JSON-compliant values
     """
@@ -54,7 +65,7 @@ def safe_json_encoder(obj):
     return jsonable_encoder(obj)
 
 
-def sanitize_data(data):
+def sanitize_data(data: Any) -> Any:
     """
     Recursively sanitize data to handle NaN and infinity values
     """
@@ -75,44 +86,52 @@ class SafeJSONResponse(JSONResponse):
     """
     Custom JSON response that safely handles NaN and infinity values
     """
-    def render(self, content) -> bytes:
+
+    def render(self, content: Any) -> bytes:
         # Sanitize the content before rendering
         safe_content = sanitize_data(content)
-        return super().render(safe_content)
+        rendered = super().render(safe_content)
+        if isinstance(rendered, bytes):
+            return rendered
+        if isinstance(rendered, str):
+            return rendered.encode("utf-8")
+        return cast(bytes, rendered)
 
 
 class MessageBatcher:
     """消息批处理器"""
-    
+
     def __init__(self, batch_size: int = 50, batch_timeout: float = 0.1):
-        self.batch_size = batch_size
-        self.batch_timeout = batch_timeout
-        self.message_queue = deque()
-        self.last_flush_time = time.time()
-        self.lock = asyncio.Lock()
-    
+        self.batch_size: int = batch_size
+        self.batch_timeout: float = batch_timeout
+        self.message_queue: deque[Dict[str, Any]] = deque()
+        self.last_flush_time: float = time.time()
+        self.lock: asyncio.Lock = asyncio.Lock()
+
     async def add_message(self, message: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
         """
         添加消息到批处理队列
-        
+
         Returns:
             如果需要发送，返回消息列表；否则返回None
         """
         async with self.lock:
             self.message_queue.append(message)
-            
+
             # 检查是否需要发送
             current_time = time.time()
-            if (len(self.message_queue) >= self.batch_size or 
-                current_time - self.last_flush_time >= self.batch_timeout):
-                
+            if (
+                len(self.message_queue) >= self.batch_size
+                or current_time - self.last_flush_time >= self.batch_timeout
+            ):
+
                 messages = list(self.message_queue)
                 self.message_queue.clear()
                 self.last_flush_time = current_time
                 return messages
-        
+
         return None
-    
+
     async def flush(self) -> List[Dict[str, Any]]:
         """强制发送所有待发送消息"""
         async with self.lock:
@@ -127,29 +146,29 @@ class WebSocketManager:
 
     def __init__(self, enable_compression: bool = True, enable_batching: bool = True):
         self._connections: list[WebSocket] = []
-        self._connections_lock = asyncio.Lock()  # 添加异步锁保护连接列表
-        self._broadcast_task: Optional[asyncio.Task] = None
+        self._connections_lock: asyncio.Lock = asyncio.Lock()  # 添加异步锁保护连接列表
+        self._broadcast_task: Optional[asyncio.Task[None]] = None
         self._monitor_api: Optional[MonitorAPI] = None
         self._base_broadcast_interval: float = 2.0
         self._broadcast_interval: float = 2.0
         self._last_data_hash: Optional[int] = None  # 用于检测数据变化
         self._slow_connections_count: int = 0  # 慢连接计数
         self._send_timeout: float = 0.5  # 单连接发送超时（500ms）
-        
+
         # 批处理和压缩配置
-        self.enable_compression = enable_compression
-        self.enable_batching = enable_batching
-        self.message_batcher = MessageBatcher() if enable_batching else None
-        self.compression_threshold = 1024  # 压缩阈值（1KB）
-        
+        self.enable_compression: bool = enable_compression
+        self.enable_batching: bool = enable_batching
+        self.message_batcher: Optional[MessageBatcher] = MessageBatcher() if enable_batching else None
+        self.compression_threshold: int = 1024  # 压缩阈值（1KB）
+
         # 统计信息
-        self.stats = {
-            'messages_sent': 0,
-            'messages_compressed': 0,
-            'bytes_sent': 0,
-            'bytes_saved': 0,
-            'batches_sent': 0,
-            'connection_errors': 0
+        self.stats: dict[str, int] = {
+            "messages_sent": 0,
+            "messages_compressed": 0,
+            "bytes_sent": 0,
+            "bytes_saved": 0,
+            "batches_sent": 0,
+            "connection_errors": 0,
         }
 
     async def accept_connection(self, websocket: WebSocket) -> None:
@@ -168,95 +187,89 @@ class WebSocketManager:
                 connection_count = len(self._connections)
                 logger.debug(f"WebSocket 连接已断开（连接数：{connection_count}）")
 
-    async def broadcast_message(self, message: dict) -> None:
+    async def broadcast_message(self, message: Dict[str, Any]) -> None:
         """向所有客户端广播消息（支持批处理和压缩）"""
         # 批处理逻辑
+        message_to_send: Dict[str, Any]
         if self.enable_batching and self.message_batcher:
             messages = await self.message_batcher.add_message(message)
             if messages is None:
                 # 消息已加入队列，等待批处理
                 return
             # 批量发送
-            message_to_send = {
-                'type': 'batch',
-                'messages': messages,
-                'count': len(messages)
-            }
-            self.stats['batches_sent'] += 1
+            message_to_send = {"type": "batch", "messages": messages, "count": len(messages)}
+            self.stats["batches_sent"] += 1
         else:
             message_to_send = message
-        
+
         # 获取连接副本，避免长时间持有锁
         async with self._connections_lock:
             if not self._connections:
                 return
-            connections_copy = self._connections.copy()
-        
+            connections_copy: list[WebSocket] = self._connections.copy()
+
         # 序列化消息
         message_text = json.dumps(message_to_send, ensure_ascii=False)
-        original_size = len(message_text.encode('utf-8'))
-        
+        original_size = len(message_text.encode("utf-8"))
+
         # 压缩消息（如果启用且超过阈值）
-        is_compressed = False
         if self.enable_compression and original_size > self.compression_threshold:
-            compressed_data = zlib.compress(message_text.encode('utf-8'), level=1)
+            compressed_data = zlib.compress(message_text.encode("utf-8"), level=1)
             if len(compressed_data) < original_size:
                 # 构建压缩消息
                 compressed_message = {
-                    'type': 'compressed',
-                    'data': compressed_data.hex(),  # 转换为十六进制字符串
-                    'original_size': original_size,
-                    'compressed_size': len(compressed_data)
+                    "type": "compressed",
+                    "data": compressed_data.hex(),  # 转换为十六进制字符串
+                    "original_size": original_size,
+                    "compressed_size": len(compressed_data),
                 }
                 message_text = json.dumps(compressed_message)
-                is_compressed = True
-                
+
                 # 更新统计
-                self.stats['messages_compressed'] += 1
-                self.stats['bytes_saved'] += original_size - len(compressed_data)
-        
-        self.stats['messages_sent'] += 1
-        self.stats['bytes_sent'] += len(message_text.encode('utf-8'))
-        
-        failed_connections = []
+                self.stats["messages_compressed"] += 1
+                self.stats["bytes_saved"] += original_size - len(compressed_data)
+
+        self.stats["messages_sent"] += 1
+        self.stats["bytes_sent"] += len(message_text.encode("utf-8"))
+
+        failed_connections: list[WebSocket] = []
 
         # 并发发送消息
-        tasks = []
-        for conn in connections_copy:
-            tasks.append(self._send_to_connection(conn, message_text, failed_connections))
+        tasks = [
+            self._send_to_connection(conn, message_text, failed_connections)
+            for conn in connections_copy
+        ]
 
         await asyncio.gather(*tasks, return_exceptions=True)
+
 
         # 清理失败的连接
         for conn in failed_connections:
             await self.remove_connection(conn)
-            self.stats['connection_errors'] += 1
+            self.stats["connection_errors"] += 1
 
-    async def _send_to_connection(self, conn: WebSocket, message: str, failed_list: list) -> None:
+    async def _send_to_connection(self, conn: WebSocket, message: str, failed_list: list[WebSocket]) -> None:
         """发送消息到单个连接（带超时控制）"""
         try:
             # 使用超时控制，避免慢连接阻塞
-            await asyncio.wait_for(
-                conn.send_text(message),
-                timeout=self._send_timeout
-            )
+            await asyncio.wait_for(conn.send_text(message), timeout=self._send_timeout)
         except asyncio.TimeoutError:
-            logger.debug(f"消息发送超时，标记为慢连接")
+            logger.debug("消息发送超时，标记为慢连接")
             self._slow_connections_count += 1
             failed_list.append(conn)
         except Exception as e:
             logger.debug(f"消息发送失败: {e}")
             failed_list.append(conn)
-    
+
     def get_statistics(self) -> Dict[str, Any]:
         """获取WebSocket统计信息"""
         return {
             **self.stats,
-            'active_connections': len(self._connections),
-            'slow_connections': self._slow_connections_count,
-            'compression_enabled': self.enable_compression,
-            'batching_enabled': self.enable_batching,
-            'broadcast_interval': self._broadcast_interval
+            "active_connections": len(self._connections),
+            "slow_connections": self._slow_connections_count,
+            "compression_enabled": self.enable_compression,
+            "batching_enabled": self.enable_batching,
+            "broadcast_interval": self._broadcast_interval,
         }
 
     async def start_monitoring_broadcast(self, monitor_api: MonitorAPI) -> None:
@@ -271,13 +284,9 @@ class WebSocketManager:
         if self.message_batcher:
             messages = await self.message_batcher.flush()
             if messages:
-                batch_message = {
-                    'type': 'batch',
-                    'messages': messages,
-                    'count': len(messages)
-                }
+                batch_message = {"type": "batch", "messages": messages, "count": len(messages)}
                 await self.broadcast_message(batch_message)
-        
+
         if self._broadcast_task and not self._broadcast_task.done():
             self._broadcast_task.cancel()
             try:
@@ -313,7 +322,7 @@ class WebSocketManager:
                         data = {
                             "type": "monitor_update",
                             "data": monitor_data,
-                            "interval": self._broadcast_interval  # 告知客户端当前间隔
+                            "interval": self._broadcast_interval,  # 告知客户端当前间隔
                         }
                         await self.broadcast_message(data)
 
@@ -355,7 +364,7 @@ class WebSocketManager:
             new_interval = min(new_interval, 10.0)  # 最长10秒
 
         # 平滑过渡，避免间隔突变
-        if hasattr(self, '_broadcast_interval'):
+        if hasattr(self, "_broadcast_interval"):
             # 渐进式调整，每次最多改变50%
             diff = new_interval - self._broadcast_interval
             self._broadcast_interval += diff * 0.5
@@ -378,7 +387,7 @@ class WebSocketManager:
         try:
             await conn.close()
         except Exception:
-            pass
+            logger.opt(exception=True).debug("关闭 WebSocket 连接失败")
 
 
 # 应用状态管理
@@ -387,39 +396,51 @@ class AppState:
     """应用全局状态"""
 
     def __init__(self):
-        log_diagnostic("APP_STATE_INIT", "AppState.__init__", {
-            "thread": threading.current_thread().name,
-            "instance_id": id(self)
-        })
-        self.websocket_manager = WebSocketManager()
+        log_diagnostic(
+            "APP_STATE_INIT",
+            "AppState.__init__",
+            {"thread": threading.current_thread().name, "instance_id": id(self)},
+        )
+        self.websocket_manager: WebSocketManager = WebSocketManager()
         self.engine: Optional[MainEngine] = None
         self.monitor: Optional[EventSystemMonitor] = None
         self.monitor_api: Optional[MonitorAPI] = None
+        self.module_settings: Dict[str, Dict[str, Any]] = {}
+        self.module_settings_lock = threading.RLock()
 
     @diagnostic_logger.diagnostic_method
     def set_engine(self, engine: MainEngine) -> None:
         """设置引擎实例"""
-        log_diagnostic("SET_ENGINE_START", "AppState.set_engine", {
-            "engine": str(engine),
-            "engine_type": type(engine).__name__,
-            "engine_id": id(engine),
-            "has_engine_before": self.engine is not None,
-            "old_engine_id": id(self.engine) if self.engine else None,
-            "instance_id": id(self)
-        })
-        
+        log_diagnostic(
+            "SET_ENGINE_START",
+            "AppState.set_engine",
+            {
+                "engine": str(engine),
+                "engine_type": type(engine).__name__,
+                "engine_id": id(engine),
+                "has_engine_before": self.engine is not None,
+                "old_engine_id": id(self.engine) if self.engine else None,
+                "instance_id": id(self),
+            },
+        )
+
         self.engine = engine
         logger.debug(f"引擎实例已设置：{engine}")
 
-        log_diagnostic("SET_ENGINE_AFTER", "AppState.set_engine", {
-            "self.engine": str(self.engine),
-            "self.engine_id": id(self.engine),
-            "engine_is_set": self.engine is not None,
-            "same_object": self.engine is engine
-        })
+        log_diagnostic(
+            "SET_ENGINE_AFTER",
+            "AppState.set_engine",
+            {
+                "self.engine": str(self.engine),
+                "self.engine_id": id(self.engine),
+                "engine_is_set": self.engine is not None,
+                "same_object": self.engine is engine,
+            },
+        )
 
         # 同时注册到应用上下文
         from deepsearch.core.runtime.context import get_context
+
         context = get_context()
         context.set_engine(engine)
 
@@ -429,23 +450,33 @@ class AppState:
             raise RuntimeError("引擎未设置")
 
         # 获取或创建监控器
-        if hasattr(self.engine, '_monitor') and self.engine._monitor:
+        if hasattr(self.engine, "_monitor") and self.engine._monitor:
             self.monitor = self.engine._monitor
         else:
             # 从引擎获取事件引擎组件
             from deepsearch.core.components import EventEngineComponent
-            event_engine_component = self.engine.get_component(EventEngineComponent)
-            if event_engine_component and event_engine_component.resource:
-                event_engine = event_engine_component.resource
+
+            component = self.engine.get_component(EventEngineComponent)
+            event_engine: Optional["EventEngine"] = None
+
+            if component is None:
+                logger.warning("无法获取事件引擎组件，监控功能将被禁用")
+            elif isinstance(component, EventEngineComponent):
+                event_engine = component.resource
+                if event_engine is None:
+                    logger.warning("事件引擎资源为空，监控功能将被禁用")
+            else:
+                logger.warning("事件引擎组件类型不匹配：%s", type(component).__name__)
+
+            if event_engine is not None:
                 self.monitor = EventSystemMonitor(event_engine)
             else:
-                logger.warning("无法获取事件引擎组件，监控功能将不可用")
                 self.monitor = None
 
         if self.monitor:
             self.monitor_api = MonitorAPI(self.monitor)
             # 确保监控器已启动
-            if not hasattr(self.monitor, '_monitoring') or not self.monitor._monitoring:
+            if not hasattr(self.monitor, "_monitoring") or not self.monitor._monitoring:
                 self.monitor.start()
             self.monitor_api.start()
         else:
@@ -453,25 +484,26 @@ class AppState:
 
 
 # 全局应用状态
-log_diagnostic("CREATE_APP_STATE", "server.py", {
-    "location": "global",
-    "before_creation": True
-})
-app_state = AppState()
-log_diagnostic("CREATE_APP_STATE", "server.py", {
-    "location": "global",
-    "after_creation": True,
-    "app_state_id": id(app_state),
-    "app_state": str(app_state),
-    "has_engine": hasattr(app_state, 'engine'),
-    "engine_value": str(getattr(app_state, 'engine', None))
-})
+log_diagnostic("CREATE_APP_STATE", "server.py", {"location": "global", "before_creation": True})
+app_state: AppState = AppState()
+log_diagnostic(
+    "CREATE_APP_STATE",
+    "server.py",
+    {
+        "location": "global",
+        "after_creation": True,
+        "app_state_id": id(app_state),
+        "app_state": str(app_state),
+        "has_engine": hasattr(app_state, "engine"),
+        "engine_value": str(getattr(app_state, "engine", None)),
+    },
+)
 
 
-def create_startup_handler(app_state: AppState):
+def create_startup_handler(app_state: AppState) -> Callable[[], Awaitable[None]]:
     """创建启动处理函数"""
 
-    async def startup_handler():
+    async def startup_handler() -> None:
         """应用启动处理"""
         logger.debug("启动 Web UI 服务...")
 
@@ -499,10 +531,10 @@ def create_startup_handler(app_state: AppState):
     return startup_handler
 
 
-def create_shutdown_handler(app_state: AppState):
+def create_shutdown_handler(app_state: AppState) -> Callable[[], Awaitable[None]]:
     """创建关闭处理函数"""
 
-    async def shutdown_handler():
+    async def shutdown_handler() -> None:
         """应用关闭处理"""
         logger.debug("关闭 Web UI 服务...")
 
@@ -542,7 +574,7 @@ def create_app() -> FastAPI:
         title="DeepSearch Web UI",
         description="DeepSearch 量化交易系统 Web 界面",
         version="0.1.0",
-        default_response_class=SafeJSONResponse
+        default_response_class=SafeJSONResponse,
     )
 
     # 存储全局应用状态
@@ -551,15 +583,16 @@ def create_app() -> FastAPI:
     # 设置全局异常处理器
     try:
         from deepsearch.webui.api.exception_handlers import setup_global_exception_handlers
+
         setup_global_exception_handlers(app)
         logger.info("全局异常处理器已配置")
     except ImportError as e:
         logger.warning(f"无法导入异常处理器: {e}")
-    
+
     # 添加请求限流和去重中间件
     try:
-        from deepsearch.webui.api.middleware import RateLimitMiddleware, DeduplicationMiddleware
-        
+        from deepsearch.webui.api.middleware import DeduplicationMiddleware, RateLimitMiddleware
+
         # 添加去重中间件（先去重，再限流）
         app.add_middleware(
             DeduplicationMiddleware,
@@ -568,18 +601,18 @@ def create_app() -> FastAPI:
                 "/api/qmt/orderbook",
                 "/api/chart/series",
                 "/api/data/realtime",
-                "/api/market"
-            }
+                "/api/market",
+            },
         )
-        
+
         # 添加限流中间件
         app.add_middleware(
             RateLimitMiddleware,
             requests_per_second=20,  # 每秒最多20个请求
             burst_size=50,  # 突发最多50个请求
-            exclude_paths={"/docs", "/openapi.json", "/api/health"}
+            exclude_paths={"/docs", "/openapi.json", "/api/health"},
         )
-        
+
         logger.info("请求限流和去重中间件已配置")
     except ImportError as e:
         logger.warning(f"无法导入中间件: {e}")
@@ -589,11 +622,11 @@ def create_app() -> FastAPI:
     app.add_event_handler("shutdown", create_shutdown_handler(app_state))
 
     # 配置 CORS（根据环境区分）
-    from deepsearch.config import get_config
-    config = get_config()
+    settings: Settings = get_config()
+    app.state.settings = settings
 
     # 根据环境配置CORS
-    if config.app.env == "dev":
+    if settings.app.env == "dev":
         # 开发环境允许所有来源
         cors_origins = ["*"]
     else:
@@ -606,12 +639,12 @@ def create_app() -> FastAPI:
             "http://127.0.0.1:3000",
             "http://127.0.0.1:3001",
             "http://127.0.0.1:3002",
-            "http://127.0.0.1:3003"
+            "http://127.0.0.1:3003",
         ]
-        cors_origins = getattr(config.webui, "cors_origins", default_origins)
+        cors_origins = getattr(settings.webui, "cors_origins", default_origins)
         if isinstance(cors_origins, str):
             cors_origins = [cors_origins]
-    
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
@@ -622,87 +655,92 @@ def create_app() -> FastAPI:
     )
 
     # 挂载静态文件
-    static_dir = Path(__file__).parent / "static"
-    if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    if STATIC_DIR.exists():
+        app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     # 导入并注册所有路由
-    from deepsearch.webui.api.database import router as database
-    from deepsearch.webui.api.endpoints.monitoring.cache_api import router as cache_api
-    from deepsearch.webui.api.endpoints.system.system import router as system
-    from deepsearch.webui.api.endpoints.system.health import router as health
-    from deepsearch.webui.api.errors import router as errors
-    from deepsearch.webui.api.endpoints.monitor.monitor_api import router as monitor_api
-    from deepsearch.webui.api.endpoints.system.config import router as config
-    from deepsearch.webui.api.endpoints.system.logs import router as logs
-    from deepsearch.webui.api.endpoints.data.data import router as data
-    from deepsearch.webui.api.endpoints.data.data_source import router as data_source
-    from deepsearch.webui.api.proxy import router as proxy
-    from deepsearch.webui.api.endpoints.system.system_info import router as system_info
-    from deepsearch.webui.api.endpoints.trading.market import router as market
-    from deepsearch.webui.api.endpoints.trading.chart import router as chart
-    from deepsearch.webui.api.endpoints.qmt.qmt import router as qmt
-    from deepsearch.webui.api.endpoints.data.data_unified import router as data_unified
-    from deepsearch.webui.api.endpoints.monitoring.analytics import router as analytics
-    from deepsearch.webui.api.endpoints.qmt.qmt_subscription import router as qmt_subscription
-    from deepsearch.webui.api.endpoints.trading.market_overview import router as market_overview
-    from deepsearch.webui.api.stock_comment import router as stock_comment
-    from deepsearch.webui.api.endpoints.data.akshare_apis import router as akshare_apis
+    from deepsearch.webui.api.database import router as database_router
+    from deepsearch.webui.api.endpoints.data.akshare_apis import router as akshare_apis_router
+    from deepsearch.webui.api.endpoints.data.data_source import router as data_source_endpoints_router
+    from deepsearch.webui.api.endpoints.data.data_unified import router as data_unified_router
+    from deepsearch.webui.api.endpoints.monitor.monitor_api import router as monitor_api_router
+    from deepsearch.webui.api.endpoints.monitoring.analytics import router as monitoring_analytics_router
+    from deepsearch.webui.api.endpoints.monitoring.cache_api import router as monitoring_cache_router
+    from deepsearch.webui.api.endpoints.notifications.push import router as notification_push_router
+    from deepsearch.webui.api.endpoints.qmt.qmt import router as qmt_router
+    from deepsearch.webui.api.endpoints.qmt.qmt_subscription import router as qmt_subscription_router
+
     # AmazingData API已移动到第819行单独注册，避免重复注册
     # from deepsearch.webui.api.endpoints.amazingdata import router as amazingdata_api
-    from deepsearch.webui.api.endpoints.route_adapter import router as route_adapter
+    from deepsearch.webui.api.endpoints.route_adapter import router as route_adapter_router
+    from deepsearch.webui.api.endpoints.system.config import router as system_config_router
+    from deepsearch.webui.api.endpoints.system.health import router as system_health_router
+    from deepsearch.webui.api.endpoints.system.logs import router as system_logs_router
+    from deepsearch.webui.api.endpoints.system.system import router as system_router
+    from deepsearch.webui.api.endpoints.system.system_info import router as system_info_router
+    from deepsearch.webui.api.endpoints.trading.chart import router as trading_chart_router
+    from deepsearch.webui.api.endpoints.trading.market import router as trading_market_router
+    from deepsearch.webui.api.endpoints.trading.market_overview import router as trading_market_overview_router
+    from deepsearch.webui.api.errors import router as frontend_errors_router
+    from deepsearch.webui.api.proxy import router as workers_proxy_router
+    from deepsearch.webui.api.stock_comment import router as stock_comment_router
 
-    app.include_router(monitor_api, prefix="/api/monitor", tags=["Monitor"])
-    app.include_router(config, prefix="/api/system/config", tags=["Config"])
-    app.include_router(system, prefix="/api/system", tags=["System"])
-    app.include_router(system_info)  # 系统信息路由
-    app.include_router(logs, prefix="/api/system/logs", tags=["Logs"])
-    app.include_router(data, prefix="/api/data", tags=["Data"])
-    app.include_router(data_source, tags=["DataSource"])  # 已包含 /api/data-source 前缀
-    app.include_router(database, prefix="/api/database", tags=["Database"])
-    app.include_router(cache_api, prefix="/api/cache", tags=["Cache"])
-    app.include_router(health, prefix="/api/health", tags=["Health"])
-    app.include_router(errors, prefix="/api/frontend", tags=["Frontend Errors"])
-    app.include_router(proxy, tags=["Workers Proxy"])  # 已包含 /api/workers 前缀
-    app.include_router(market, tags=["Market"])  # 市场数据路由，已包含 /api/market 前缀
-    app.include_router(chart, tags=["Chart"])  # 图表数据路由，已包含 /api/chart 前缀
-    app.include_router(qmt, tags=["QMT"])  # QMT数据路由，已包含 /api/qmt 前缀
-    app.include_router(qmt_subscription, tags=["QMT Subscription"])  # QMT订阅管理路由
-    app.include_router(data_unified, tags=["UnifiedData"])  # 统一数据API，已包含 /api/data 前缀
-    app.include_router(analytics, tags=["Analytics"])  # 分析API，已包含 /api/analytics 前缀
-    app.include_router(market_overview, tags=["MarketOverview"])  # 市场总貌API
-    app.include_router(stock_comment, tags=["StockComment"])  # 千股千评API
-    app.include_router(akshare_apis, tags=["AkShareAPIs"])  # AkShare API列表
+    app.include_router(monitor_api_router, prefix="/api/monitor", tags=["Monitor"])
+    app.include_router(system_config_router, prefix="/api/system/config", tags=["Config"])
+    app.include_router(system_router, prefix="/api/system", tags=["System"])
+    app.include_router(system_info_router)  # 系统信息路由
+    app.include_router(system_logs_router, prefix="/api/system/logs", tags=["Logs"])
+
+    app.include_router(data_source_endpoints_router, tags=["DataSource"])  # 已包含 /api/data-source 前缀
+    app.include_router(database_router, prefix="/api/database", tags=["Database"])
+    app.include_router(monitoring_cache_router, prefix="/api/cache", tags=["Cache"])
+    app.include_router(system_health_router, prefix="/api/health", tags=["Health"])
+    app.include_router(frontend_errors_router, prefix="/api/frontend", tags=["Frontend Errors"])
+    app.include_router(workers_proxy_router, tags=["Workers Proxy"])  # 已包含 /api/workers 前缀
+    app.include_router(trading_market_router, tags=["Market"])  # 市场数据路由，已包含 /api/market 前缀
+    app.include_router(trading_chart_router, tags=["Chart"])  # 图表数据路由，已包含 /api/chart 前缀
+    app.include_router(qmt_router, tags=["QMT"])  # QMT数据路由，已包含 /api/qmt 前缀
+    app.include_router(qmt_subscription_router, tags=["QMT Subscription"])  # QMT订阅管理路由
+    app.include_router(data_unified_router, tags=["UnifiedData"])  # 统一数据API，已包含 /api/data 前缀
+    app.include_router(monitoring_analytics_router, tags=["Analytics"])  # 分析API，已包含 /api/analytics 前缀
+    app.include_router(trading_market_overview_router, tags=["MarketOverview"])  # 市场总貌API
+    app.include_router(stock_comment_router, tags=["StockComment"])  # 千股千评API
+    app.include_router(notification_push_router, tags=["Notification"])  # 通知配置与推送API
+    app.include_router(akshare_apis_router, tags=["AkShareAPIs"])  # AkShare API列表
     # AmazingData API已移至第819行使用模块化版本注册
 
     # 数据源状态管理API
-    try:
-        from deepsearch.webui.api.endpoints.data.data_source_status import router as data_source_status
-        app.include_router(data_source_status, tags=["DataSource"])  # 数据源管理API
-        logger.info("数据源状态API已注册")
-    except ImportError as e:
-        logger.warning(f"数据源状态API模块加载失败: {e}")
-    
     # 数据源监控API
     try:
-        from deepsearch.webui.api.endpoints.data.data_source_monitor_api import router as data_source_monitor_api
-        app.include_router(data_source_monitor_api, tags=["DataSourceMonitor"])  # 数据源监控API
+        from deepsearch.webui.api.endpoints.data.data_source_monitor_api import (
+            router as data_source_monitor_router,
+        )
+
+        app.include_router(data_source_monitor_router, tags=["DataSourceMonitor"])  # 数据源监控API
         logger.info("数据源监控API已注册")
     except ImportError as e:
         logger.warning(f"数据源监控API模块加载失败: {e}")
-    
+
     # 数据源能力对比API
     try:
-        from deepsearch.webui.api.endpoints.data.data_source_capability_api import router as data_source_capability_api
-        app.include_router(data_source_capability_api, tags=["DataSourceCapability"])  # 数据源能力API
+        from deepsearch.webui.api.endpoints.data.data_source_capability_api import (
+            router as data_source_capability_router,
+        )
+
+        app.include_router(
+            data_source_capability_router, tags=["DataSourceCapability"]
+        )  # 数据源能力API
         logger.info("数据源能力对比API已注册")
     except ImportError as e:
         logger.warning(f"数据源能力API模块加载失败: {e}")
-    
+
     # 数据源配置管理API
     try:
-        from deepsearch.webui.api.endpoints.data.data_source_config_api import router as data_source_config_api
-        app.include_router(data_source_config_api, tags=["DataSourceConfig"])  # 数据源配置API
+        from deepsearch.webui.api.endpoints.data.data_source_config_api import (
+            router as data_source_config_router,
+        )
+
+        app.include_router(data_source_config_router, tags=["DataSourceConfig"])  # 数据源配置API
         # data_source_config_api.setup_callbacks()  # 设置配置回调 - router对象没有这个方法
         logger.info("数据源配置API已注册")
     except ImportError as e:
@@ -720,115 +758,134 @@ def create_app() -> FastAPI:
 
     # MiniQMT API
     try:
-        from deepsearch.webui.api.endpoints.qmt.miniqmt import router as miniqmt
-        app.include_router(miniqmt, tags=["MiniQMT"])  # MiniQMT数据路由，已包含 /api/miniqmt 前缀
+        from deepsearch.webui.api.endpoints.qmt.miniqmt import router as miniqmt_router
+
+        app.include_router(miniqmt_router, tags=["MiniQMT"])  # MiniQMT数据路由，已包含 /api/miniqmt 前缀
     except ImportError:
         logger.warning("MiniQMT API 模块未找到，跳过注册")
 
     # 数据库连接管理API
     try:
-        from deepsearch.webui.api.endpoints.system.database_manager import router as database_manager
-        app.include_router(database_manager, prefix="/api/system/database", tags=["Database Management"])
+        from deepsearch.webui.api.endpoints.system.database_manager import (
+            register_database_connection_monitor,
+        )
+        from deepsearch.webui.api.endpoints.system.database_manager import (
+            router as database_manager_router,
+        )
+
+        app.include_router(
+            database_manager_router, prefix="/api/system/database", tags=["Database Management"]
+        )
+        register_database_connection_monitor(app)
         logger.info("数据库连接管理API已注册")
     except ImportError as e:
         logger.warning(f"数据库连接管理API模块加载失败: {e}")
-    
+
     # 数据源CRUD管理API
     try:
         from deepsearch.webui.api.endpoints.datasources.datasource_manager import (
-            router as datasource_manager,
-            data_source_router
+            data_source_router as datasource_compatibility_router,
         )
-        app.include_router(datasource_manager, tags=["DataSource Management"])
-        app.include_router(data_source_router, tags=["DataSource Compatibility"])
+        from deepsearch.webui.api.endpoints.datasources.datasource_manager import (
+            router as datasource_manager_router,
+        )
+
+        app.include_router(datasource_manager_router, tags=["DataSource Management"])
+        app.include_router(datasource_compatibility_router, tags=["DataSource Compatibility"])
         logger.info("数据源CRUD管理API已注册")
     except ImportError as e:
         logger.warning(f"数据源CRUD管理API模块加载失败: {e}")
-    
+
     # AKShare数据源集成API
     try:
-        from deepsearch.webui.api.endpoints.datasources.akshare_integration import router as akshare_api
-        app.include_router(akshare_api, tags=["AKShare Integration"])
+        from deepsearch.webui.api.endpoints.datasources.akshare_integration import (
+            router as akshare_integration_router,
+        )
+
+        app.include_router(akshare_integration_router, tags=["AKShare Integration"])
         logger.info("AKShare数据源API已注册")
     except ImportError as e:
         logger.warning(f"AKShare数据源API模块加载失败: {e}")
-    
+
     # Backtest API
     try:
-        from deepsearch.webui.api.endpoints.trading.backtest_api import router as backtest_api
-        app.include_router(backtest_api, tags=["Backtest"])  # 回测API，已包含 /api/backtest 前缀
+        from deepsearch.webui.api.endpoints.trading.backtest_api import router as backtest_router
+
+        app.include_router(backtest_router, tags=["Backtest"])  # 回测API，已包含 /api/backtest 前缀
         logger.info("回测API已注册")
     except ImportError as e:
         logger.warning(f"回测API模块加载失败: {e}")
-    
+
     # Data Source Monitor API
     try:
-        from deepsearch.webui.api.monitor.data_source_api import router as data_source_api
-        app.include_router(data_source_api, tags=["DataSourceMonitor"])  # 数据源监控API
+        from deepsearch.webui.api.monitor.data_source_api import router as monitor_data_source_router
+
+        app.include_router(monitor_data_source_router, tags=["DataSourceMonitor"])  # 数据源监控API
         logger.info("数据源监控API已注册")
     except ImportError as e:
         logger.warning(f"数据源监控API模块加载失败: {e}")
 
-    # Data Source Management API (新增)
-    try:
-        from deepsearch.webui.api.endpoints.datasources.datasource_management_api import router as datasource_management_api
-        app.include_router(datasource_management_api, tags=["DataSource Management"])
-        logger.info("数据源管理API已注册")
-    except ImportError as e:
-        logger.warning(f"数据源管理API模块加载失败: {e}")
-
     # 注册缓存管理API
     try:
-        from deepsearch.webui.api.endpoints.cache import router as cache_api
-        app.include_router(cache_api, prefix="/api", tags=["Cache Management"])
+        from deepsearch.webui.api.endpoints.cache import router as cache_management_router
+
+        app.include_router(cache_management_router, prefix="/api", tags=["Cache Management"])
         logger.info("缓存管理API已注册")
     except ImportError as e:
         logger.warning(f"缓存管理API模块加载失败: {e}")
 
     # 注册图表数据API
     try:
-        from deepsearch.webui.api.endpoints.chart import router as chart_api
-        app.include_router(chart_api, prefix="/api", tags=["Chart Data"])
+        from deepsearch.webui.api.endpoints.chart import router as chart_data_router
+
+        app.include_router(chart_data_router, prefix="/api", tags=["Chart Data"])
         logger.info("图表数据API已注册")
     except ImportError as e:
         logger.warning(f"图表数据API模块加载失败: {e}")
 
     # 注册市场分析API
     try:
-        from deepsearch.webui.api.endpoints.market import router as market_api
-        app.include_router(market_api, prefix="/api", tags=["Market Analysis"])
+        from deepsearch.webui.api.endpoints.market import router as market_analysis_router
+
+        app.include_router(market_analysis_router, prefix="/api", tags=["Market Analysis"])
         logger.info("市场分析API已注册")
     except ImportError as e:
         logger.warning(f"市场分析API模块加载失败: {e}")
 
     # 注册市场数据API
     try:
-        from deepsearch.webui.api.endpoints.data.market_data_api import router as market_data_api
-        app.include_router(market_data_api, tags=["Market Data"])
+        from deepsearch.webui.api.endpoints.data.market_data_api import router as market_data_router
+
+        app.include_router(market_data_router, tags=["Market Data"])
         logger.info("市场数据API已注册")
     except ImportError as e:
         logger.warning(f"市场数据API模块加载失败: {e}")
 
     # 注册市场概览和排行榜API
     try:
-        from deepsearch.webui.api.endpoints.data.market_overview_api import router as market_overview_api
-        app.include_router(market_overview_api, tags=["Market Overview"])
+        from deepsearch.webui.api.endpoints.data.market_overview_api import (
+            router as market_overview_api_router,
+        )
+
+        app.include_router(market_overview_api_router, tags=["Market Overview"])
         logger.info("市场概览和排行榜API已注册")
     except ImportError as e:
         logger.warning(f"市场概览API模块加载失败: {e}")
 
     # 注册AmazingData API (P4级新增)
     try:
-        from deepsearch.webui.api.endpoints.amazingdata import main_router as amazingdata_router
-        app.include_router(amazingdata_router, tags=["AmazingData"])
+        from deepsearch.webui.api.endpoints.amazingdata import main_router as amazingdata_main_router
+
+        app.include_router(amazingdata_main_router, tags=["AmazingData"])
         logger.info("AmazingData API已注册（37个接口）")
     except ImportError as e:
         logger.warning(f"AmazingData API模块加载失败: {e}")
 
     # 注册监控指标API
     try:
-        from deepsearch.webui.api.endpoints.monitoring.metrics_api import router as metrics_api
-        app.include_router(metrics_api, tags=["Metrics"])
+        from deepsearch.webui.api.endpoints.monitoring.metrics_api import router as metrics_router
+
+        app.include_router(metrics_router, tags=["Metrics"])
         logger.info("监控指标API已注册")
     except ImportError as e:
         logger.warning(f"监控指标API模块加载失败: {e}")
@@ -837,7 +894,7 @@ def create_app() -> FastAPI:
     # Cloudflare Tunnel 已移除（使用 Workers 代理方案）
 
     # 注册路由适配器（必须放在最后，作为catch-all路由）
-    app.include_router(route_adapter, tags=["RouteAdapter"])
+    app.include_router(route_adapter_router, tags=["RouteAdapter"])
     logger.info("API路由适配器已注册，处理前后端API不匹配问题")
 
     return app
@@ -847,35 +904,35 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-
-
 @app.get("/")
 async def root():
     """根路径，返回前端页面或API信息。"""
     try:
-        # 检查是否定义了static_dir
-        if 'static_dir' in globals():
-            index_file = static_dir / "index.html"
+        # 检查是否存在静态目录
+        if STATIC_DIR.exists():
+            index_file = STATIC_DIR / "index.html"
             if index_file.exists():
                 return FileResponse(str(index_file))
     except Exception as e:
         logger.debug(f"无法加载静态文件: {e}")
-    
+
     # 返回API信息而不是错误
-    return JSONResponse({
-        "message": "DeepSearch Web UI Backend",
-        "version": "0.1.0",
-        "api_docs": "/docs",
-        "health_check": "/api/health",
-        "note": "Frontend is running separately on port 3000"
-    })
+    return JSONResponse(
+        {
+            "message": "DeepSearch Web UI Backend",
+            "version": "0.1.0",
+            "api_docs": "/docs",
+            "health_check": "/api/health",
+            "note": "Frontend is running separately on port 3000",
+        }
+    )
 
 
 @app.websocket("/ws/monitor")
 async def websocket_monitor(websocket: WebSocket):
     """监控数据 WebSocket 端点"""
     await app_state.websocket_manager.accept_connection(websocket)
-    
+
     try:
         while True:
             # 保持连接，等待客户端消息
@@ -887,7 +944,9 @@ async def websocket_monitor(websocket: WebSocket):
             elif data == "get_status":
                 status = {
                     "type": "status",
-                    "data": app_state.monitor_api.get_health_status() if app_state.monitor_api else {}
+                    "data": (
+                        app_state.monitor_api.get_health_status() if app_state.monitor_api else {}
+                    ),
                 }
                 await websocket.send_json(status)
 
@@ -906,18 +965,20 @@ async def health_check():
         health_status = app_state.monitor_api.get_health_status()
         return {
             "status": "healthy" if health_status.get("status") == "healthy" else "unhealthy",
-            "details": health_status
+            "details": health_status,
         }
     return {"status": "starting", "details": {}}
 
 
 @app.post("/api/frontend/errors")
-async def report_frontend_error(error: dict):
-    """前端错误报告端点"""
-    # 只在开发环境记录详细错误
-    if get_config().env == "dev":
+async def report_frontend_error(error: Dict[str, Any]) -> Dict[str, Any]:
+    """前端错误上报接口"""
+    # 仅在开发环境记录详细信息
+    settings: Optional[Settings] = getattr(app.state, "settings", None)
+    if settings and settings.app.env == "dev":
         logger.warning(f"Frontend error: {error}")
     return {"success": True, "message": "Error reported"}
+
 
 
 # 向后兼容的函数
@@ -943,9 +1004,9 @@ def get_monitor_api() -> Optional[MonitorAPI]:
 
 if __name__ == "__main__":
     import uvicorn
+
     from .server_manager import get_server_manager
-    from deepsearch.config import get_config
-    
+
     # 开发环境运行
     config = get_config()
     manager = get_server_manager()
@@ -954,5 +1015,10 @@ if __name__ == "__main__":
         host=config.webui.backend_host,
         port=config.webui.backend_port,
         reload=config.webui.reload,
-        log_level="info"
+        log_level="info",
     )
+
+
+
+
+

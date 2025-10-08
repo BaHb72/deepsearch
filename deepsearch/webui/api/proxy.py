@@ -2,14 +2,15 @@
 简化的 Workers 代理 API
 直接从配置文件读取和保存配置
 """
+
 import os
 from datetime import datetime
-from typing import List
+from typing import Any, NotRequired, TypedDict, cast
 
 import yaml
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from deepsearch.config import get_config
 from deepsearch.webui.api.providers import get_akshare_provider
@@ -18,10 +19,75 @@ from deepsearch.webui.api.providers import get_akshare_provider
 router = APIRouter(prefix="/api/workers", tags=["Workers Proxy"])
 
 
+class WorkersConfig(TypedDict):
+    enabled: bool
+    workers: list[str]
+    api_key: str
+    timeout: int
+    retry_count: int
+    fallback_to_direct: bool
+    cache_enabled: bool
+    cache_ttl: int
+
+
+class WorkerStats(TypedDict, total=False):
+    total_requests: int
+    success_count: int
+    fail_count: int
+    fail_streak: int
+    success_streak: int
+    avg_latency: float
+    last_check: NotRequired[str | None]
+    last_transition: NotRequired[int]
+    success_rate: NotRequired[float]
+
+
+class WorkerDetail(TypedDict):
+    url: str
+    state: str
+    healthy: bool
+    total_requests: int
+    success_count: int
+    fail_count: int
+    fail_streak: int
+    success_streak: int
+    avg_latency: float
+    last_check: str | None
+    last_transition: int
+    stats: WorkerStats
+
+
+class WorkersStatusData(TypedDict, total=False):
+    enabled: bool
+    status: str
+    config: WorkersConfig
+    statistics: dict[str, Any]
+    workers: list[WorkerDetail]
+    cache_size: int
+    cache_stats: dict[str, Any]
+
+
+class WorkersStatusResponse(TypedDict):
+    success: bool
+    data: WorkersStatusData
+
+
+class MessageResponse(TypedDict, total=False):
+    success: bool
+    message: str
+    enabled: NotRequired[bool]
+
+
+class WorkerTestResponse(TypedDict):
+    success: bool
+    data: dict[str, Any]
+
+
 class WorkersConfigRequest(BaseModel):
     """Workers 配置请求"""
+
     enabled: bool = False
-    workers: List[str] = []  # Worker URLs 列表
+    workers: list[str] = Field(default_factory=list, description="Worker URLs 列表")
     api_key: str = ""
     timeout: int = 30
     retry_count: int = 3
@@ -31,84 +97,86 @@ class WorkersConfigRequest(BaseModel):
 
 
 @router.get("/status")
-async def get_status():
+async def get_status() -> WorkersStatusResponse:
     """获取 Workers 代理状态和配置"""
     try:
-        # 使用单例provider实例
         provider = await get_akshare_provider()
 
-        # 从 settings 读取配置
-        config = {
-            "enabled": True,  # 默认启用
+        config: WorkersConfig = {
+            "enabled": True,
             "workers": [],
             "api_key": "",
             "timeout": 30,
             "retry_count": 3,
             "fallback_to_direct": True,
             "cache_enabled": True,
-            "cache_ttl": 300
+            "cache_ttl": 300,
         }
 
-        # 读取 Cloudflare 配置
         config_obj = get_config()
-        if config_obj and hasattr(config_obj, 'cloudflare') and config_obj.cloudflare:
-            cloudflare = config_obj.cloudflare
-
-            # 优先读取 workers 列表
-            if hasattr(cloudflare, 'workers') and cloudflare.workers:
-                # 过滤掉空字符串和None
-                valid_workers = [w for w in cloudflare.workers if w and w.strip()]
-                if valid_workers:
-                    # 确保包含完整的 URL
-                    config["workers"] = [
-                        w if w.startswith('http') else f"https://{w}"
-                        for w in valid_workers
-                    ]
+        cloudflare = getattr(config_obj, "cloudflare", None)
+        if cloudflare:
+            workers = [w for w in getattr(cloudflare, "workers", []) if w and w.strip()]
+            if workers:
+                config["workers"] = [
+                    w if w.startswith("http") else f"https://{w}" for w in workers
+                ]
+            else:
+                worker_url = getattr(cloudflare, "worker_url", "")
+                if worker_url:
+                    if not worker_url.startswith("http"):
+                        worker_url = f"https://{worker_url}"
+                    config["workers"] = [worker_url]
                 else:
                     config["workers"] = ["https://akshare-proxy.934073514.workers.dev"]
-            # 兼容单个 worker_url
-            elif hasattr(cloudflare, 'worker_url') and cloudflare.worker_url:
-                worker_url = cloudflare.worker_url
-                if not worker_url.startswith('http'):
-                    worker_url = f"https://{worker_url}"
-                config["workers"] = [worker_url]
-            else:
-                # 默认值
-                config["workers"] = ["https://akshare-proxy.934073514.workers.dev"]
 
-            # 读取其他配置
-            if hasattr(cloudflare, 'api_key'):
-                config["api_key"] = cloudflare.api_key if cloudflare.api_key else ""
-            if hasattr(cloudflare, 'timeout'):
-                config["timeout"] = cloudflare.timeout
-            if hasattr(cloudflare, 'retry_count'):
-                config["retry_count"] = cloudflare.retry_count
+            config["api_key"] = getattr(cloudflare, "api_key", "") or ""
+            config["timeout"] = int(getattr(cloudflare, "timeout", config["timeout"]))
+            config["retry_count"] = int(
+                getattr(cloudflare, "retry_count", config["retry_count"])
+            )
         else:
-            # 使用默认配置
             config["workers"] = ["https://akshare-proxy.934073514.workers.dev"]
 
-        # 获取真实统计数据
-        statistics = provider.get_statistics()
+        statistics: dict[str, Any]
+        try:
+            statistics = cast(dict[str, Any], provider.get_statistics())
+        except Exception as error:
+            logger.warning(f"获取 Workers 统计信息失败: {error}")
+            statistics = {}
 
-        # 获取每个Worker的详细状态
-        workers_detail = []
-        for url in provider.worker_urls:
-            stats = provider.worker_stats.get(url, {})
-            workers_detail.append({
-                "url": url,
-                "state": stats.get("state", "unknown"),
-                "healthy": provider.worker_health.get(url, False),
-                "total_requests": stats.get("total_requests", 0),
-                "success_count": stats.get("success_count", 0),
-                "fail_count": stats.get("fail_count", 0),
-                "fail_streak": stats.get("fail_streak", 0),
-                "success_streak": stats.get("success_streak", 0),
-                "avg_latency": stats.get("avg_latency", 0),
-                "last_check": stats.get("last_check").isoformat() if stats.get("last_check") else None,
-                "last_transition": stats.get("last_transition", 0)
-            })
+        workers_detail: list[WorkerDetail] = []
+        for url in getattr(provider, "worker_urls", []):
+            stats_raw = getattr(provider, "worker_stats", {}).get(url, {})
+            last_check = stats_raw.get("last_check")
+            stats: WorkerStats = {
+                "total_requests": int(stats_raw.get("total_requests", 0)),
+                "success_count": int(stats_raw.get("success_count", 0)),
+                "fail_count": int(stats_raw.get("fail_count", 0)),
+                "fail_streak": int(stats_raw.get("fail_streak", 0)),
+                "success_streak": int(stats_raw.get("success_streak", 0)),
+                "avg_latency": float(stats_raw.get("avg_latency", 0.0)),
+                "last_check": last_check.isoformat() if hasattr(last_check, "isoformat") else None,
+                "last_transition": int(stats_raw.get("last_transition", 0)),
+            }
+            workers_detail.append(
+                {
+                    "url": url,
+                    "state": str(stats_raw.get("state", "unknown")),
+                    "healthy": bool(getattr(provider, "worker_health", {}).get(url, False)),
+                    "total_requests": stats["total_requests"],
+                    "success_count": stats["success_count"],
+                    "fail_count": stats["fail_count"],
+                    "fail_streak": stats["fail_streak"],
+                    "success_streak": stats["success_streak"],
+                    "avg_latency": stats["avg_latency"],
+                    "last_check": stats["last_check"],
+                    "last_transition": stats.get("last_transition", 0),
+                    "stats": stats,
+                }
+            )
 
-        return {
+        response: WorkersStatusResponse = {
             "success": True,
             "data": {
                 "enabled": config["enabled"],
@@ -116,10 +184,11 @@ async def get_status():
                 "config": config,
                 "statistics": statistics,
                 "workers": workers_detail,
-                "cache_size": statistics.get("cache_size", 0),
-                "cache_stats": statistics.get("cache_stats", {})
-            }
+                "cache_size": int(statistics.get("cache_size", 0)),
+                "cache_stats": statistics.get("cache_stats", {}),
+            },
         }
+        return response
 
     except Exception as e:
         logger.error(f"获取 Workers 状态失败: {e}")
@@ -127,53 +196,49 @@ async def get_status():
 
 
 @router.post("/config")
-async def update_config(request: WorkersConfigRequest):
+async def update_config(request: WorkersConfigRequest) -> MessageResponse:
     """更新代理配置"""
     try:
         # 读取当前配置文件
-        config_path = os.path.join(
-            os.path.dirname(__file__),
-            "../../config/settings.prod.yaml"
-        )
+        config_path = os.path.join(os.path.dirname(__file__), "../../config/settings.prod.yaml")
 
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             config_data = yaml.safe_load(f)
+        if not isinstance(config_data, dict):
+            config_data = {}
 
         # 更新 Cloudflare 配置
-        if 'cloudflare' not in config_data:
-            config_data['cloudflare'] = {}
+        if "cloudflare" not in config_data:
+            config_data["cloudflare"] = {}
 
         # 处理 workers 列表，确保格式正确
         processed_workers = []
         for worker in request.workers:
             if worker and worker.strip():
                 # 确保包含完整的 URL
-                if not worker.startswith('http'):
+                if not worker.startswith("http"):
                     worker = f"https://{worker}"
                 processed_workers.append(worker)
 
         # 更新 workers 列表
-        config_data['cloudflare']['workers'] = processed_workers
+        config_data["cloudflare"]["workers"] = processed_workers
 
         # 如果只有一个 worker，同时更新 worker_url（向后兼容）
         if len(processed_workers) == 1:
-            config_data['cloudflare']['worker_url'] = processed_workers[0]
+            config_data["cloudflare"]["worker_url"] = processed_workers[0]
 
         # 更新其他配置
-        config_data['cloudflare']['api_key'] = request.api_key
-        config_data['cloudflare']['timeout'] = request.timeout
-        config_data['cloudflare']['retry_count'] = request.retry_count
+        config_data["cloudflare"]["api_key"] = request.api_key
+        config_data["cloudflare"]["timeout"] = request.timeout
+        config_data["cloudflare"]["retry_count"] = request.retry_count
 
         # 写回配置文件
-        with open(config_path, 'w', encoding='utf-8') as f:
+        with open(config_path, "w", encoding="utf-8") as f:
             yaml.dump(config_data, f, allow_unicode=True, default_flow_style=False)
 
         logger.info(f"Workers 配置已更新: {len(request.workers)} 个节点")
 
-        return {
-            "success": True,
-            "message": "配置已保存"
-        }
+        return {"success": True, "message": "配置已保存"}
 
     except Exception as e:
         logger.error(f"更新配置失败: {e}")
@@ -181,18 +246,13 @@ async def update_config(request: WorkersConfigRequest):
 
 
 @router.post("/toggle")
-async def toggle_proxy():
+async def toggle_proxy() -> MessageResponse:
     """切换代理开关（简化实现）"""
-    # 这里简化实现，总是返回启用状态
-    return {
-        "success": True,
-        "enabled": True,
-        "message": "代理已启用"
-    }
+    return {"success": True, "enabled": True, "message": "代理已启用"}
 
 
 @router.get("/test")
-async def test_connection():
+async def test_connection() -> WorkerTestResponse:
     """测试 Workers 连接"""
     try:
         # 简化实现，返回模拟结果
@@ -205,8 +265,8 @@ async def test_connection():
                 "message": "连接成功",
                 "workers_version": "1.0.0",
                 "error": None,
-                "timestamp": "2025-08-11T10:00:00"
-            }
+                "timestamp": "2025-08-11T10:00:00",
+            },
         }
     except Exception as e:
         logger.error(f"测试连接失败: {e}")
@@ -214,65 +274,75 @@ async def test_connection():
 
 
 @router.post("/clear-cache")
-async def clear_cache():
+async def clear_cache() -> MessageResponse:
     """清空缓存"""
-    return {
-        "success": True,
-        "message": "缓存已清空"
-    }
+    return {"success": True, "message": "缓存已清空"}
 
 
 @router.post("/reset-statistics")
-async def reset_statistics():
+async def reset_statistics() -> MessageResponse:
     """重置统计信息"""
-    return {
-        "success": True,
-        "message": "统计已重置"
-    }
+    return {"success": True, "message": "统计已重置"}
 
 
 @router.get("/workers")
-async def list_workers():
+async def list_workers() -> dict[str, Any]:
     """列出所有Worker及其状态"""
     try:
-        from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
+        from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
+            AkShareProxyProvider,
+        )
+
         provider = AkShareProxyProvider()
 
-        workers = []
-        for url in provider.worker_urls:
-            stats = provider.worker_stats.get(url, {})
-            workers.append({
-                "id": url.replace("https://", "").replace("/", "_"),
-                "url": url,
-                "state": stats.get("state", "unknown"),
-                "healthy": provider.worker_health.get(url, False),
-                "enabled": True,  # 可以添加启用/禁用逻辑
-                "stats": {
-                    "total_requests": stats.get("total_requests", 0),
-                    "success_rate": (
-                        stats.get("success_count", 0) / stats.get("total_requests", 1)
-                        if stats.get("total_requests", 0) > 0 else 0
-                    ),
-                    "avg_latency": stats.get("avg_latency", 0),
-                    "fail_streak": stats.get("fail_streak", 0),
-                    "last_check": stats.get("last_check").isoformat() if stats.get("last_check") else None
-                }
-            })
+        workers: list[WorkerDetail] = []
+        for url in getattr(provider, "worker_urls", []):
+            stats_raw = getattr(provider, "worker_stats", {}).get(url, {})
+            total_requests = int(stats_raw.get("total_requests", 0))
+            success_count = int(stats_raw.get("success_count", 0))
+            success_rate = success_count / total_requests if total_requests else 0.0
+            last_check = stats_raw.get("last_check")
+            stats: WorkerStats = {
+                "total_requests": total_requests,
+                "success_count": success_count,
+                "fail_count": int(stats_raw.get("fail_count", 0)),
+                "fail_streak": int(stats_raw.get("fail_streak", 0)),
+                "success_streak": int(stats_raw.get("success_streak", 0)),
+                "avg_latency": float(stats_raw.get("avg_latency", 0.0)),
+                "last_check": last_check.isoformat() if hasattr(last_check, "isoformat") else None,
+            }
 
-        return {
-            "success": True,
-            "data": workers
-        }
+            workers.append(
+                {
+                    "url": url,
+                    "state": str(stats_raw.get("state", "unknown")),
+                    "healthy": bool(getattr(provider, "worker_health", {}).get(url, False)),
+                    "total_requests": stats["total_requests"],
+                    "success_count": stats["success_count"],
+                    "fail_count": stats["fail_count"],
+                    "fail_streak": stats["fail_streak"],
+                    "success_streak": stats["success_streak"],
+                    "avg_latency": stats["avg_latency"],
+                    "last_check": stats["last_check"],
+                    "last_transition": int(stats_raw.get("last_transition", 0)),
+                    "stats": stats | {"success_rate": success_rate},
+                }
+            )
+
+        return {"success": True, "data": workers}
     except Exception as e:
         logger.error(f"获取Workers列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/workers/{worker_id}/test")
-async def test_worker(worker_id: str):
+async def test_worker(worker_id: str) -> WorkerTestResponse:
     """测试特定Worker"""
     try:
-        from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
+        from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
+            AkShareProxyProvider,
+        )
+
         provider = AkShareProxyProvider()
 
         # 将ID转换回URL
@@ -290,8 +360,8 @@ async def test_worker(worker_id: str):
                 "url": worker_url,
                 "healthy": result,
                 "message": "Worker is healthy" if result else "Worker is unhealthy",
-                "timestamp": datetime.now().isoformat()
-            }
+                "timestamp": datetime.now().isoformat(),
+            },
         }
     except HTTPException:
         raise
@@ -301,10 +371,13 @@ async def test_worker(worker_id: str):
 
 
 @router.post("/workers/{worker_id}/reset")
-async def reset_worker(worker_id: str):
+async def reset_worker(worker_id: str) -> MessageResponse:
     """重置Worker为半开状态进行探测"""
     try:
-        from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
+        from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
+            AkShareProxyProvider,
+        )
+
         provider = AkShareProxyProvider()
 
         # 将ID转换回URL
@@ -321,10 +394,7 @@ async def reset_worker(worker_id: str):
             provider.worker_stats[worker_url]["next_retry_time"] = 0
             provider.worker_health[worker_url] = True
 
-        return {
-            "success": True,
-            "message": f"Worker {worker_url} has been reset to suspect state"
-        }
+        return {"success": True, "message": f"Worker {worker_url} has been reset to suspect state"}
     except HTTPException:
         raise
     except Exception as e:
@@ -336,7 +406,10 @@ async def reset_worker(worker_id: str):
 async def get_strategy():
     """获取当前选路策略"""
     try:
-        from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
+        from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
+            AkShareProxyProvider,
+        )
+
         provider = AkShareProxyProvider()
 
         return {
@@ -344,8 +417,8 @@ async def get_strategy():
             "data": {
                 "strategy": provider.strategy,
                 "worker_count": len(provider.worker_urls),
-                "healthy_count": sum(1 for h in provider.worker_health.values() if h)
-            }
+                "healthy_count": sum(1 for h in provider.worker_health.values() if h),
+            },
         }
     except Exception as e:
         logger.error(f"获取策略失败: {e}")

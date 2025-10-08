@@ -3,20 +3,40 @@ WebUI 服务器管理器
 
 统一管理服务器的生命周期、关闭处理和平台特定功能。
 """
+
+from __future__ import annotations
+
 import asyncio
-import logging
 import sys
 from contextlib import asynccontextmanager
-from typing import Optional, Set, Dict
+from typing import AsyncIterator, Optional, TYPE_CHECKING
 
-from uvicorn.config import Config
+from uvicorn.config import Config, LOGGING_CONFIG
 from uvicorn.server import Server
+from starlette.types import ASGIApp
+
+from deepsearch.observability import get_logger
+from deepsearch.webui.api.models import WebServerConfig
+
+
+if TYPE_CHECKING:
+    from asyncio import WindowsProactorEventLoopPolicy as WindowsEventLoopPolicyBase
+elif hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
+    WindowsEventLoopPolicyBase = asyncio.WindowsProactorEventLoopPolicy
+else:  # pragma: no cover - 非 Windows 平台兜底
+
+    class _WindowsEventLoopPolicyFallback(asyncio.DefaultEventLoopPolicy):
+        """Windows 专用策略在非 Windows 平台的无操作实现"""
+
+        pass
+
+    WindowsEventLoopPolicyBase = _WindowsEventLoopPolicyFallback
 
 
 class ServerManager:
     """
     统一的服务器管理器
-    
+
     负责：
     - 服务器生命周期管理
     - 优雅关闭处理
@@ -25,11 +45,11 @@ class ServerManager:
     """
 
     def __init__(self):
-        self.logger = logging.getLogger(__name__)
-        self._servers: Dict[str, Server] = {}
-        self._tasks: Set[asyncio.Task] = set()
+        self.logger = get_logger(__name__)
+        self._servers: dict[str, Server] = {}
+        self._tasks: set[asyncio.Task] = set()
         self._shutdown_event = asyncio.Event()
-        self._is_shutting_down = False
+        self._is_shutting_down: bool = False
 
     def setup_platform_specific(self):
         """设置平台特定的配置"""
@@ -46,10 +66,11 @@ class ServerManager:
         # 设置控制台处理器
         try:
             import ctypes
+
             kernel32 = ctypes.windll.kernel32
             kernel32.SetConsoleCtrlHandler(None, False)
         except Exception:
-            pass
+            self.logger.debug("无法设置 Windows 控制台信号处理", exc_info=True)
 
     def _setup_unix(self):
         """Unix/Linux 平台特定设置"""
@@ -57,60 +78,83 @@ class ServerManager:
         pass
 
     def create_server_config(
-            self,
-            app,
-            host: str = "0.0.0.0",
-            port: Optional[int] = None,
-            **kwargs
+        self,
+        app: ASGIApp,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        **overrides: object,
     ) -> Config:
         """
         创建统一的服务器配置
-        
+
         Args:
             app: ASGI 应用
-            host: 监听地址
+            host: 绑定地址
             port: 监听端口
             **kwargs: 其他配置选项
-            
+
         Returns:
             uvicorn.Config 实例
         """
-        # 如果没有指定端口，从配置读取
-        if port is None:
+        if host is None or port is None:
             from deepsearch.config import get_config
-            config = get_config()
-            port = config.webui.backend_port
-            
-        default_config = {
-            "host": host,
-            "port": port,
-            "log_level": "info",
-            "access_log": False,
-            "ws": "websockets",
-            "loop": "asyncio",
-            "lifespan": "on",
-            "timeout_graceful_shutdown": 5
+
+            settings = get_config()
+            if host is None:
+                host = settings.webui.backend_host
+            if port is None:
+                port = settings.webui.backend_port
+
+        log_config_override = "log_config" in overrides
+
+        config_model = WebServerConfig(host=host, port=port)
+        if overrides:
+            config_model.apply_overrides(overrides)
+
+        config_kwargs: dict[str, object] = {
+            "host": config_model.host,
+            "port": config_model.port,
+            "log_level": config_model.log_level,
+            "access_log": config_model.access_log,
+            "ws": config_model.ws,
+            "loop": config_model.loop,
+            "lifespan": config_model.lifespan,
+            "timeout_graceful_shutdown": config_model.timeout_graceful_shutdown,
+            "reload": config_model.reload,
+            "log_config": (
+                config_model.log_config if log_config_override else LOGGING_CONFIG
+            ),
         }
 
-        # 合并用户配置
-        default_config.update(kwargs)
+        if config_model.ssl_certfile is not None:
+            config_kwargs["ssl_certfile"] = config_model.ssl_certfile
+        if config_model.ssl_keyfile is not None:
+            config_kwargs["ssl_keyfile"] = config_model.ssl_keyfile
+        if config_model.ssl_keyfile_password is not None:
+            config_kwargs["ssl_keyfile_password"] = config_model.ssl_keyfile_password
+        if config_model.headers is not None:
+            config_kwargs["headers"] = [tuple(header) for header in config_model.headers]
 
-        return Config(app=app, **default_config)
+        config = Config(app=app, **config_kwargs)
 
-    async def start_server(
-            self,
-            app,
-            name: str = "main",
-            **config_kwargs
-    ) -> Server:
+        if config_model.extras:
+            for key, value in config_model.extras.items():
+                if hasattr(config, key):
+                    setattr(config, key, value)
+                else:
+                    self.logger.debug("忽略未识别的 uvicorn.Config 参数：%s", key)
+
+        return config
+
+    async def start_server(self, app: ASGIApp, name: str = "main", **config_kwargs) -> Server:
         """
         启动服务器
-        
+
         Args:
             app: ASGI 应用
             name: 服务器名称（用于管理多个服务器）
             **config_kwargs: 服务器配置
-            
+
         Returns:
             Server 实例
         """
@@ -148,14 +192,13 @@ class ServerManager:
         shutdown_tasks = []
         for name, server in self._servers.items():
             self.logger.info(f"关闭服务器: {name}")
-            if hasattr(server, 'shutdown'):
+            if hasattr(server, "shutdown"):
                 shutdown_tasks.append(server.shutdown())
 
         if shutdown_tasks:
             try:
                 await asyncio.wait_for(
-                    asyncio.gather(*shutdown_tasks, return_exceptions=True),
-                    timeout=timeout
+                    asyncio.gather(*shutdown_tasks, return_exceptions=True), timeout=timeout
                 )
             except asyncio.TimeoutError:
                 self.logger.warning("服务器关闭超时")
@@ -179,8 +222,7 @@ class ServerManager:
         # 等待任务完成
         try:
             await asyncio.wait_for(
-                asyncio.gather(*self._tasks, return_exceptions=True),
-                timeout=timeout
+                asyncio.gather(*self._tasks, return_exceptions=True), timeout=timeout
             )
         except asyncio.TimeoutError:
             self.logger.warning("任务取消超时")
@@ -200,8 +242,8 @@ class GracefulShutdownServer(Server):
 
     def _setup_logger(self):
         """确保 logger 存在"""
-        if not hasattr(self, 'logger'):
-            self.logger = logging.getLogger('uvicorn.error')
+        if not hasattr(self, "logger"):
+            self.logger = get_logger("uvicorn.error")
 
     async def shutdown(self, sockets=None):
         """优雅关闭服务器"""
@@ -237,10 +279,10 @@ class GracefulShutdownServer(Server):
             try:
                 await self.shutdown(sockets)
             except Exception:
-                pass
+                self.logger.debug("关闭服务器时忽略了异常", exc_info=True)
 
 
-class WindowsEventLoopPolicy(asyncio.WindowsProactorEventLoopPolicy):
+class WindowsEventLoopPolicy(WindowsEventLoopPolicyBase):
     """Windows 平台的事件循环策略"""
 
     def new_event_loop(self):
@@ -249,8 +291,8 @@ class WindowsEventLoopPolicy(asyncio.WindowsProactorEventLoopPolicy):
 
         # 设置异常处理器
         def exception_handler(loop, context):
-            exception = context.get('exception')
-            message = context.get('message', '')
+            exception = context.get("exception")
+            message = context.get("message", "")
 
             # 过滤无害的异常
             if self._should_ignore_exception(exception, message, context):
@@ -278,7 +320,7 @@ class WindowsEventLoopPolicy(asyncio.WindowsProactorEventLoopPolicy):
             return True
 
         # Lifespan 相关
-        if "lifespan" in str(context.get('task', '')):
+        if "lifespan" in str(context.get("task", "")):
             return True
 
         # Starlette 路由错误
@@ -302,10 +344,10 @@ def get_server_manager() -> ServerManager:
 
 
 @asynccontextmanager
-async def managed_lifespan(app):
+async def managed_lifespan(app: ASGIApp) -> AsyncIterator[None]:
     """
     统一的 lifespan 管理器
-    
+
     处理应用的启动和关闭，包括异常处理。
     """
     manager = get_server_manager()

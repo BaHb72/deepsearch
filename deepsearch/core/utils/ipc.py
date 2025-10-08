@@ -4,11 +4,12 @@
 提供主进程（Engine）和 WebUI 进程之间的通信机制。
 利用现有的消息总线和缓存系统实现高效的进程间通信。
 """
+
 import asyncio
 import json
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Callable, Dict, Optional, cast
 
 from deepsearch.messaging.bus import MessageBus
 from deepsearch.observability.logger import logger
@@ -28,11 +29,11 @@ class IPCMessage:
             "id": self.id,
             "type": self.type,
             "data": self.data,
-            "timestamp": self.timestamp.isoformat()
+            "timestamp": self.timestamp.isoformat(),
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'IPCMessage':
+    def from_dict(cls, data: dict) -> "IPCMessage":
         msg = cls(data["type"], data["data"], data["id"])
         msg.timestamp = datetime.fromisoformat(data["timestamp"])
         return msg
@@ -41,7 +42,7 @@ class IPCMessage:
 class EngineIPCServer:
     """
     引擎端的 IPC 服务器
-    
+
     负责：
     - 监听来自 WebUI 的命令
     - 发布引擎状态更新
@@ -63,24 +64,23 @@ class EngineIPCServer:
         self._register_default_handlers()
 
         # 订阅 WebUI 命令
-        await self.message_bus.subscribe_async(
-            "webui.commands.*",
-            self._handle_command
-        )
+        await self.message_bus.subscribe_async("webui.commands.*", self._handle_command)
 
         logger.info("Engine IPC Server initialized")
 
     def _register_default_handlers(self):
         """注册默认的命令处理器"""
-        self._handlers.update({
-            "get_status": self._handle_get_status,
-            "get_component_status": self._handle_get_component_status,
-            "start_component": self._handle_start_component,
-            "stop_component": self._handle_stop_component,
-            "restart_component": self._handle_restart_component,
-            "get_config": self._handle_get_config,
-            "get_metrics": self._handle_get_metrics
-        })
+        self._handlers.update(
+            {
+                "get_status": self._handle_get_status,
+                "get_component_status": self._handle_get_component_status,
+                "start_component": self._handle_start_component,
+                "stop_component": self._handle_stop_component,
+                "restart_component": self._handle_restart_component,
+                "get_config": self._handle_get_config,
+                "get_metrics": self._handle_get_metrics,
+            }
+        )
 
     async def _handle_command(self, topic: str, data: dict):
         """处理来自 WebUI 的命令"""
@@ -92,37 +92,33 @@ class EngineIPCServer:
             if handler:
                 result = await handler(msg.data)
                 # 发送响应
-                response = IPCMessage("response", {
-                    "success": True,
-                    "result": result
-                }, request_id=msg.id)
+                response = IPCMessage(
+                    "response", {"success": True, "result": result}, request_id=msg.id
+                )
 
                 await self.message_bus.publish_async(
-                    f"engine.responses.{msg.id}",
-                    response.to_dict()
+                    f"engine.responses.{msg.id}", response.to_dict()
                 )
             else:
                 logger.warning(f"Unknown IPC command: {msg.type}")
-                response = IPCMessage("response", {
-                    "success": False,
-                    "error": f"Unknown command: {msg.type}"
-                }, request_id=msg.id)
+                response = IPCMessage(
+                    "response",
+                    {"success": False, "error": f"Unknown command: {msg.type}"},
+                    request_id=msg.id,
+                )
 
                 await self.message_bus.publish_async(
-                    f"engine.responses.{msg.id}",
-                    response.to_dict()
+                    f"engine.responses.{msg.id}", response.to_dict()
                 )
 
         except Exception as e:
             logger.error(f"Error handling IPC command: {e}")
-            response = IPCMessage("response", {
-                "success": False,
-                "error": str(e)
-            }, request_id=data.get("id"))
+            response = IPCMessage(
+                "response", {"success": False, "error": str(e)}, request_id=data.get("id")
+            )
 
             await self.message_bus.publish_async(
-                f"engine.responses.{data.get('id')}",
-                response.to_dict()
+                f"engine.responses.{data.get('id')}", response.to_dict()
             )
 
     async def _handle_get_status(self, data: dict) -> dict:
@@ -132,12 +128,9 @@ class EngineIPCServer:
             "mode": self.engine._mode,
             "start_time": self.engine._start_time.isoformat() if self.engine._start_time else None,
             "components": {
-                name: {
-                    "status": comp.status.value,
-                    "type": comp.__class__.__name__
-                }
+                name: {"status": comp.status.value, "type": comp.__class__.__name__}
                 for name, comp in self.engine._components.items()
-            }
+            },
         }
 
     async def _handle_get_component_status(self, data: dict) -> dict:
@@ -149,7 +142,7 @@ class EngineIPCServer:
             return {
                 "name": component_name,
                 "status": component.get_status().value,
-                "info": await component.get_info() if hasattr(component, 'get_info') else {}
+                "info": await component.get_info() if hasattr(component, "get_info") else {},
             }
         else:
             raise ValueError(f"Component not found: {component_name}")
@@ -157,35 +150,32 @@ class EngineIPCServer:
     async def _handle_start_component(self, data: dict) -> dict:
         """启动组件"""
         component_name = data.get("component")
-        await self.engine.start_component(component_name)
+        await self.engine.start_component_async(component_name)
         return {"message": f"Component {component_name} started"}
 
     async def _handle_stop_component(self, data: dict) -> dict:
         """停止组件"""
         component_name = data.get("component")
-        await self.engine.stop_component(component_name)
+        await self.engine.stop_component_async(component_name)
         return {"message": f"Component {component_name} stopped"}
 
     async def _handle_restart_component(self, data: dict) -> dict:
         """重启组件"""
         component_name = data.get("component")
-        await self.engine.restart_component(component_name)
+        await self.engine.restart_component_async(component_name)
         return {"message": f"Component {component_name} restarted"}
 
     async def _handle_get_config(self, data: dict) -> dict:
         """获取配置信息"""
         from deepsearch.config import get_config
+
         config = get_config()
-        return config.dict()
+        return cast(Dict[str, Any], config.dict())
 
     async def _handle_get_metrics(self, data: dict) -> dict:
         """获取系统指标"""
         # 目前返回空指标，后续可根据需要实现
-        return {
-            "cpu_usage": 0,
-            "memory_usage": 0,
-            "component_metrics": {}
-        }
+        return {"cpu_usage": 0, "memory_usage": 0, "component_metrics": {}}
 
     async def start_async(self) -> None:
         """启动 IPC 服务器"""
@@ -210,16 +200,11 @@ class EngineIPCServer:
         while True:
             try:
                 status = await self._handle_get_status({})
-                await self.cache.set(
-                    "engine:status",
-                    json.dumps(status),
-                    ttl=60  # 60秒过期
-                )
+                await self.cache.set("engine:status", json.dumps(status), ttl=60)  # 60秒过期
 
                 # 发布状态更新事件
                 await self.message_bus.publish_async(
-                    "engine.status.updated",
-                    IPCMessage("status_update", status).to_dict()
+                    "engine.status.updated", IPCMessage("status_update", status).to_dict()
                 )
 
                 await asyncio.sleep(5)  # 每5秒更新一次
@@ -238,7 +223,7 @@ class EngineIPCServer:
 class WebUIIPCClient:
     """
     WebUI 端的 IPC 客户端
-    
+
     负责：
     - 发送命令到引擎
     - 订阅引擎状态更新
@@ -257,16 +242,10 @@ class WebUIIPCClient:
             return
 
         # 订阅引擎响应
-        await self.message_bus.subscribe_async(
-            "engine.responses.*",
-            self._handle_response
-        )
+        await self.message_bus.subscribe_async("engine.responses.*", self._handle_response)
 
         # 订阅状态更新
-        await self.message_bus.subscribe_async(
-            "engine.status.*",
-            self._handle_status_update
-        )
+        await self.message_bus.subscribe_async("engine.status.*", self._handle_status_update)
 
         self._initialized = True
         logger.info("WebUI IPC Client initialized")
@@ -284,36 +263,33 @@ class WebUIIPCClient:
         # 可以在这里触发 WebSocket 广播等
         logger.debug(f"Received status update: {topic}")
 
-    async def send_command(self, command: str, data: dict = None, timeout: float = 30.0) -> dict:
+    async def send_command(self, command: str, data: Optional[dict] = None, timeout: float = 30.0) -> dict:
         """
         发送命令到引擎并等待响应
-        
+
         Args:
             command: 命令类型
             data: 命令数据
             timeout: 超时时间（秒）
-            
+
         Returns:
             响应数据
         """
         msg = IPCMessage(command, data or {})
 
         # 创建响应 Future
-        future = asyncio.Future()
+        future: asyncio.Future[Dict[str, Any]] = asyncio.Future()
         self._response_futures[msg.id] = future
 
         try:
             # 发送命令
-            await self.message_bus.publish_async(
-                "webui.commands.control",
-                msg.to_dict()
-            )
+            await self.message_bus.publish_async("webui.commands.control", msg.to_dict())
 
             # 等待响应
             result = await asyncio.wait_for(future, timeout=timeout)
 
             if result.get("success"):
-                return result.get("result", {})
+                return cast(Dict[str, Any], result.get("result", {}))
             else:
                 raise Exception(result.get("error", "Unknown error"))
 
@@ -327,7 +303,7 @@ class WebUIIPCClient:
         """从缓存获取引擎状态（快速）"""
         status_json = await self.cache.get("engine:status")
         if status_json:
-            return json.loads(status_json)
+            return cast(Dict[str, Any], json.loads(status_json))
         return None
 
     async def get_status(self) -> dict:

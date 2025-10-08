@@ -3,6 +3,10 @@
  * 统一管理后端服务的可用性状态
  */
 
+import logger from '@/utils/logger'
+
+const backendLogger = logger.child('utils:backend-status')
+
 class BackendStatusManager {
     constructor() {
         this.isAvailable = true  // 默认假设后端可用，避免一开始就阻止所有请求
@@ -59,21 +63,21 @@ class BackendStatusManager {
             }
         } catch (error) {
             // 区分不同类型的错误
-            console.debug('[BackendStatus] 健康检查异常:', error.message)
+            backendLogger.debug('[BackendStatus] 健康检查异常:', error.message)
 
             // 模块导入错误 - 不算作后端不可用
             if (error.message?.includes('import') || error.message?.includes('Cannot read')) {
-                console.debug('[BackendStatus] API模块尚未就绪，稍后重试')
+                backendLogger.debug('[BackendStatus] API模块尚未就绪，稍后重试')
                 // 不调用 handleFailure，保持当前状态
             }
             // 网络连接错误或服务器错误 - 真正的后端问题
             else if (error.response?.status >= 500 || error.code === 'ECONNREFUSED' || error.message?.includes('503')) {
-                console.warn('[BackendStatus] 后端服务错误:', error.response?.status || error.code)
+                backendLogger.warn('[BackendStatus] 后端服务错误:', error.response?.status || error.code)
                 this.handleFailure('server_error')
             }
             // 其他错误 - 记录但不判定为不可用
             else {
-                console.debug('[BackendStatus] 其他错误，不影响后端状态判断')
+                backendLogger.debug('[BackendStatus] 其他错误，不影响后端状态判断')
             }
         } finally {
             this.isChecking = false
@@ -90,22 +94,20 @@ class BackendStatusManager {
         // 只有真正的服务器错误才累计失败次数
         if (errorType === 'server_error' || errorType === 'connection_failed') {
             this.consecutiveFailures++
-            console.debug(`[BackendStatus] 服务器错误累计: ${this.consecutiveFailures}/${this.maxConsecutiveFailures}`)
+            backendLogger.debug(`[BackendStatus] 服务器错误累计: ${this.consecutiveFailures}/${this.maxConsecutiveFailures}`)
 
             if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
                 this.setAvailable(false)
             }
         } else {
-            console.debug(`[BackendStatus] 错误类型 ${errorType} 不影响失败计数`)
+            backendLogger.debug(`[BackendStatus] 错误类型 ${errorType} 不影响失败计数`)
         }
     }
 
     /**
      * 设置可用性状态
      */
-    setAvailable(available) {
-        const previousState = this.isAvailable
-        
+    setAvailable(available) {        
         if (this.isAvailable !== available) {
             this.isAvailable = available
             
@@ -117,12 +119,12 @@ class BackendStatusManager {
 
             if (!available) {
                 if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
-                    console.error(`[BackendStatus] 后端服务确认不可用 (连续${this.consecutiveFailures}次失败)`)
+                    backendLogger.error(`[BackendStatus] 后端服务确认不可用 (连续${this.consecutiveFailures}次失败)`)
                     // 启动恢复机制
                     this.startRecoveryProcess()
                 }
             } else {
-                console.info('[BackendStatus] ✅ 后端服务正常')
+                backendLogger.info('[BackendStatus] ✅ 后端服务正常')
                 // 停止恢复机制
                 this.stopRecoveryProcess()
                 // 重置计数器
@@ -143,7 +145,7 @@ class BackendStatusManager {
     recordStatusHistory(available) {
         this.statusHistory.push({
             timestamp: Date.now(),
-            available: available
+            available
         })
         
         // 限制历史记录长度
@@ -161,12 +163,12 @@ class BackendStatusManager {
             return
         }
         
-        console.log('启动后端恢复进程...')
+        backendLogger.info('启动后端恢复进程...')
         this.recoveryAttempts = 0
         
         this.recoveryTimer = setInterval(async () => {
             this.recoveryAttempts++
-            console.log(`尝试恢复后端连接 (${this.recoveryAttempts}/${this.maxRecoveryAttempts})`)
+            backendLogger.info(`尝试恢复后端连接 (${this.recoveryAttempts}/${this.maxRecoveryAttempts})`)
             
             try {
                 const response = await fetch('/api/system/status', {
@@ -175,18 +177,18 @@ class BackendStatusManager {
                 })
                 
                 if (response.ok) {
-                    console.log('后端恢复成功！')
+                    backendLogger.info('后端恢复成功！')
                     this.setAvailable(true)
                     this.stopRecoveryProcess()
                 }
             } catch (error) {
                 // 恢复失败，继续尝试
-                console.debug('恢复尝试失败，将继续尝试...')
+                backendLogger.debug('恢复尝试失败，将继续尝试...')
             }
             
             // 达到最大尝试次数后，延长检查间隔
             if (this.recoveryAttempts >= this.maxRecoveryAttempts) {
-                console.log('达到最大恢复尝试次数，延长检查间隔')
+                backendLogger.info('达到最大恢复尝试次数，延长检查间隔')
                 this.stopRecoveryProcess()
                 // 30秒后再次尝试
                 setTimeout(() => {
@@ -205,7 +207,7 @@ class BackendStatusManager {
         if (this.recoveryTimer) {
             clearInterval(this.recoveryTimer)
             this.recoveryTimer = null
-            console.log('停止后端恢复进程')
+            backendLogger.info('停止后端恢复进程')
         }
     }
 
@@ -231,7 +233,7 @@ class BackendStatusManager {
             try {
                 callback(available)
             } catch (error) {
-                console.error('后端状态监听器执行失败:', error)
+                backendLogger.error('后端状态监听器执行失败:', error)
             }
         })
     }
@@ -246,7 +248,7 @@ class BackendStatusManager {
         
         // 如果后端被标记为不可用，但有请求成功，可能后端已恢复
         if (!this.isAvailable && this.successfulRequests > 2) {
-            console.log('检测到请求成功，尝试恢复后端状态')
+            backendLogger.info('检测到请求成功，尝试恢复后端状态')
             this.setAvailable(true) // 直接设置为可用，不需要再次检查
             this.successfulRequests = 0 // 重置计数
         }
@@ -269,7 +271,7 @@ class BackendStatusManager {
         // 只有在明显失败多于成功时才检查状态
         const netFailures = this.failedRequests - this.successfulRequests
         if (this.isAvailable && netFailures > 5) {
-            console.log(`检测到净失败数过多(${netFailures})，检查后端状态`)
+            backendLogger.info(`检测到净失败数过多(${netFailures})，检查后端状态`)
             this.checkStatus()
         }
     }
@@ -293,7 +295,7 @@ class BackendStatusManager {
      * 可以由用户界面或其他组件调用
      */
     async manualRecovery() {
-        console.log('手动触发后端恢复尝试')
+        backendLogger.info('手动触发后端恢复尝试')
         this.consecutiveFailures = 0
         this.failedRequests = 0
         this.successfulRequests = 0
@@ -319,7 +321,7 @@ class BackendStatusManager {
         this.successfulRequests = 0
         this.failedRequests = 0
         this.recoveryAttempts = 0
-        console.log('重置所有计数器')
+        backendLogger.info('重置所有计数器')
     }
     
     /**
@@ -353,3 +355,4 @@ if (typeof window !== 'undefined') {
 }
 
 export default backendStatus
+

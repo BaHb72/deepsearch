@@ -3,15 +3,17 @@
 
 提供引擎生命周期的上下文管理，确保资源的正确初始化和清理。
 """
+
 import asyncio
 import logging
 import signal
 from contextlib import contextmanager
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
-from deepsearch.core.runtime.engine import MainEngine
-from deepsearch.core.runtime.async_runner import AsyncRunner
 from deepsearch.core.managers.process_manager import process_manager
+from deepsearch.core.runtime.async_runner import AsyncRunner
+from deepsearch.core.runtime.engine import MainEngine, RuntimeModeInput
+from deepsearch.observability import get_logger
 
 
 def _log_debug(logger: logging.Logger, message: str) -> None:
@@ -41,7 +43,7 @@ class EngineContext:
     ```
     """
 
-    def __init__(self, mode: str = 'full', config: Optional[Dict[str, Any]] = None):
+    def __init__(self, mode: RuntimeModeInput = "full", config: Optional[Dict[str, Any]] = None):
         """
         初始化引擎上下文
 
@@ -49,10 +51,10 @@ class EngineContext:
             mode: 运行模式 ('full', 'engine', 'webui')
             config: 额外的配置参数
         """
-        self.mode = mode
+        self.mode: RuntimeModeInput = mode
         self.config = config or {}
         self.engine: Optional[MainEngine] = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(__name__)
         self._original_sigint = None
         self._original_sigterm = None
         self._stop_requested = False
@@ -60,7 +62,10 @@ class EngineContext:
 
     def __enter__(self) -> MainEngine:
         """进入上下文，创建并启动引擎"""
-        _log_debug(self.logger, f"[EngineContext.__enter__] 进入引擎上下文, mode={self.mode}, config={self.config}")
+        _log_debug(
+            self.logger,
+            f"[EngineContext.__enter__] 进入引擎上下文, mode={self.mode}, config={self.config}",
+        )
 
         if self.engine is not None:
             raise RuntimeError("EngineContext is not reentrant; engine is already running")
@@ -88,7 +93,7 @@ class EngineContext:
 
             _log_debug(
                 self.logger,
-                f"[EngineContext.__enter__] 引擎上下文设置完成, engine.is_running()={self.engine.is_running()}"
+                f"[EngineContext.__enter__] 引擎上下文设置完成, engine.is_running()={self.engine.is_running()}",
             )
             return self.engine
 
@@ -139,7 +144,7 @@ class EngineContext:
             engine = None
             if self.engine is not None:
                 engine = self.engine
-            elif self._runner and getattr(self._runner, 'engine', None):
+            elif self._runner and getattr(self._runner, "engine", None):
                 engine = self._runner.engine
             if engine and self._runner:
                 if engine.is_running():
@@ -157,8 +162,10 @@ class EngineContext:
                 self._runner.engine = None
             self._runner = None
             self._stop_requested = False
+
+
 @contextmanager
-def managed_engine(mode: str = 'full', **kwargs):
+def managed_engine(mode: RuntimeModeInput = "full", **kwargs: Any):
     """
     便捷的上下文管理器函数
 
@@ -185,16 +192,19 @@ class AsyncEngineContext:
     用于异步环境下的引擎管理。
     """
 
-    def __init__(self, mode: str = 'full', config: Optional[Dict[str, Any]] = None):
-        self.mode = mode
+    def __init__(self, mode: RuntimeModeInput = "full", config: Optional[Dict[str, Any]] = None):
+        self.mode: RuntimeModeInput = mode
         self.config = config or {}
         self.engine: Optional[MainEngine] = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(__name__)
         self._runner: Optional[AsyncRunner] = None
 
     async def __aenter__(self) -> MainEngine:
         """异步进入上下文"""
-        _log_debug(self.logger, f"[AsyncEngineContext.__aenter__] 进入上下文, mode={self.mode}, config={self.config}")
+        _log_debug(
+            self.logger,
+            f"[AsyncEngineContext.__aenter__] 进入上下文, mode={self.mode}, config={self.config}",
+        )
         self._runner = AsyncRunner()
         self.engine = await self._runner.initialize_engine(self.mode, self.config)
         await self._runner.start_engine(self.mode, self.config)

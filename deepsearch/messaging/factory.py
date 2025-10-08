@@ -1,6 +1,7 @@
 """
 Message bus factory for creating different bus implementations.
 """
+
 from typing import Any, Dict
 
 from .bus import MessageBus
@@ -17,14 +18,14 @@ class MessageBusFactory:
     def create(bus_type: str, config: Dict[str, Any]) -> MessageBus:
         """
         Create a message bus instance based on the specified type.
-        
+
         Args:
             bus_type: Type of message bus to create ("inmem", "zmq", "timeseries")
             config: Configuration dictionary for the bus
-            
+
         Returns:
             MessageBus instance
-            
+
         Raises:
             ValueError: If bus_type is unknown
             NotImplementedError: If bus_type is not yet implemented
@@ -39,7 +40,7 @@ class MessageBusFactory:
                 host=config.get("host", "127.0.0.1"),
                 pub_port=config.get("pub_port", 5556),
                 sub_port=config.get("sub_port", 5557),
-                verbose=config.get("verbose", True)
+                verbose=config.get("verbose", True),
             )
 
         elif bus_type == "timeseries":

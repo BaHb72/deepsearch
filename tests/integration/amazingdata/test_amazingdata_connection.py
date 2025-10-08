@@ -4,27 +4,27 @@
 
 用于验证测试连接功能是否正常工作
 """
-import asyncio
 import sys
-sys.path.insert(0, 'D:\\Stock\\code\\deepsearch')
+
+sys.path.insert(0, "D:\\Stock\\code\\deepsearch")
 
 from deepsearch.webui.api.endpoints.datasources.amazingdata_test_helper import (
     test_amazingdata_connection,
-    validate_amazingdata_config
+    validate_amazingdata_config,
 )
 
 
 def test_direct_connection():
     """直接测试AmazingData连接"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("开始测试AmazingData连接")
-    print("="*60)
+    print("=" * 60)
 
     # 测试配置
     test_config = {
         "username": "",  # 需要填写实际用户名
         "password": "",  # 需要填写实际密码
-        "networkProvider": "telecom"
+        "networkProvider": "telecom",
     }
 
     # 验证配置
@@ -36,9 +36,7 @@ def test_direct_connection():
 
     # 执行测试
     result = test_amazingdata_connection(
-        username=test_config["username"],
-        password=test_config["password"],
-        test_type="realtime"
+        username=test_config["username"], password=test_config["password"], test_type="realtime"
     )
 
     # 显示结果
@@ -46,14 +44,14 @@ def test_direct_connection():
     print("-" * 40)
     print(f"成功: {result.get('success')}")
     print(f"消息: {result.get('message')}")
-    if result.get('error'):
+    if result.get("error"):
         print(f"错误: {result.get('error')}")
-    if result.get('details'):
+    if result.get("details"):
         print(f"详情: {result.get('details')}")
     print(f"延迟: {result.get('latency_ms', 0):.2f}ms")
 
     # 检查是否有历史错误信息
-    if result.get('error') == "AmazingData provider does not support realtime data":
+    if result.get("error") == "AmazingData provider does not support realtime data":
         print("\n[WARNING] 检测到历史错误信息！")
         print("这个错误不应该出现，说明还有地方返回了旧的错误消息")
 
@@ -62,15 +60,15 @@ def test_direct_connection():
 
 def test_mock_error_replacement():
     """测试错误信息替换逻辑"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("测试错误信息替换")
-    print("="*60)
+    print("=" * 60)
 
     # 模拟包含历史错误的响应
     mock_errors = [
         "AmazingData provider does not support realtime data",
         "Provider does not support realtime",
-        "Normal error message"
+        "Normal error message",
     ]
 
     for error in mock_errors:

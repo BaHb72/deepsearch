@@ -1,11 +1,13 @@
 """
 监控配置模型。
 """
+
 from pydantic import BaseModel, Field
 
 
 class MonitoringConfig(BaseModel):
     """监控配置。"""
+
     enable_metrics: bool = Field(False, description="是否启用监控指标")
     metrics_port: int = Field(9090, description="指标服务端口（为未来 Web UI 预留）")
 

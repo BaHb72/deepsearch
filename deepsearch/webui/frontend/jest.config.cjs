@@ -1,3 +1,5 @@
+const baseBabelConfig = require('./babel.config.cjs')
+
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'jsdom',
@@ -9,17 +11,13 @@ module.exports = {
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
       tsconfig: {
-        jsx: 'react',
+        jsx: 'react-jsx',
         esModuleInterop: true,
         allowSyntheticDefaultImports: true
-      }
+      },
+      babelConfig: baseBabelConfig
     }],
-    '^.+\\.(js|jsx)$': ['babel-jest', {
-      presets: [
-        ['@babel/preset-env', { targets: { node: 'current' } }],
-        ['@babel/preset-react', { runtime: 'automatic' }]
-      ]
-    }]
+    '^.+\\.(js|jsx)$': ['babel-jest', baseBabelConfig]
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',

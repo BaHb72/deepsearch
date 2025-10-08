@@ -3,20 +3,19 @@ Strategy API Endpoints
 
 FastAPI routes for strategy management and backtesting.
 """
-from typing import Dict, Any, List
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from typing import Any, Dict, List
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from deepsearch.strategies import (
-    get_strategy_manager
-)
+from deepsearch.strategies import get_strategy_manager
 from deepsearch.strategies.services.backtest_service import get_backtest_service
 from deepsearch.strategy.strategies import (
-    MovingAverageStrategy,
     MeanReversionStrategy,
-    MomentumStrategy
+    MomentumStrategy,
+    MovingAverageStrategy,
 )
 
 # API Router
@@ -26,6 +25,7 @@ router = APIRouter(prefix="/api/strategy", tags=["strategy"])
 # Request/Response Models
 class StrategyConfig(BaseModel):
     """Strategy configuration model"""
+
     strategy_type: str = Field(..., description="Strategy type (MA, MeanReversion, Momentum)")
     params: Dict[str, Any] = Field(default_factory=dict, description="Strategy parameters")
     auto_start: bool = Field(False, description="Auto start after adding")
@@ -33,6 +33,7 @@ class StrategyConfig(BaseModel):
 
 class BacktestRequest(BaseModel):
     """Backtest request model"""
+
     strategy_type: str = Field(..., description="Strategy type")
     symbols: List[str] = Field(..., description="List of symbols")
     start_date: str = Field(..., description="Start date (YYYY-MM-DD)")
@@ -44,6 +45,7 @@ class BacktestRequest(BaseModel):
 
 class CompareRequest(BaseModel):
     """Strategy comparison request"""
+
     strategies: List[Dict[str, Any]] = Field(..., description="List of strategies to compare")
     symbols: List[str] = Field(..., description="Symbols to test")
     start_date: str = Field(..., description="Start date")
@@ -53,10 +55,10 @@ class CompareRequest(BaseModel):
 
 # Strategy type mapping
 STRATEGY_TYPES = {
-    'MA': MovingAverageStrategy,
-    'MovingAverage': MovingAverageStrategy,
-    'MeanReversion': MeanReversionStrategy,
-    'Momentum': MomentumStrategy
+    "MA": MovingAverageStrategy,
+    "MovingAverage": MovingAverageStrategy,
+    "MeanReversion": MeanReversionStrategy,
+    "Momentum": MomentumStrategy,
 }
 
 
@@ -64,42 +66,78 @@ STRATEGY_TYPES = {
 async def get_strategy_types():
     """Get available strategy types"""
     return {
-        'strategies': [
+        "strategies": [
             {
-                'type': 'MA',
-                'name': 'Moving Average',
-                'description': 'Classic trend-following strategy using MA crossovers',
-                'params': {
-                    'short_period': {'type': 'int', 'default': 10, 'description': 'Short MA period'},
-                    'long_period': {'type': 'int', 'default': 30, 'description': 'Long MA period'},
-                    'position_size': {'type': 'int', 'default': 100, 'description': 'Position size'},
-                    'max_positions': {'type': 'int', 'default': 5, 'description': 'Max positions'}
-                }
+                "type": "MA",
+                "name": "Moving Average",
+                "description": "Classic trend-following strategy using MA crossovers",
+                "params": {
+                    "short_period": {
+                        "type": "int",
+                        "default": 10,
+                        "description": "Short MA period",
+                    },
+                    "long_period": {"type": "int", "default": 30, "description": "Long MA period"},
+                    "position_size": {
+                        "type": "int",
+                        "default": 100,
+                        "description": "Position size",
+                    },
+                    "max_positions": {"type": "int", "default": 5, "description": "Max positions"},
+                },
             },
             {
-                'type': 'MeanReversion',
-                'name': 'Mean Reversion',
-                'description': 'Statistical arbitrage based on price mean reversion',
-                'params': {
-                    'lookback_period': {'type': 'int', 'default': 20, 'description': 'Lookback period'},
-                    'std_multiplier': {'type': 'float', 'default': 2.0, 'description': 'Std multiplier'},
-                    'rsi_period': {'type': 'int', 'default': 14, 'description': 'RSI period'},
-                    'rsi_oversold': {'type': 'int', 'default': 30, 'description': 'RSI oversold'},
-                    'rsi_overbought': {'type': 'int', 'default': 70, 'description': 'RSI overbought'}
-                }
+                "type": "MeanReversion",
+                "name": "Mean Reversion",
+                "description": "Statistical arbitrage based on price mean reversion",
+                "params": {
+                    "lookback_period": {
+                        "type": "int",
+                        "default": 20,
+                        "description": "Lookback period",
+                    },
+                    "std_multiplier": {
+                        "type": "float",
+                        "default": 2.0,
+                        "description": "Std multiplier",
+                    },
+                    "rsi_period": {"type": "int", "default": 14, "description": "RSI period"},
+                    "rsi_oversold": {"type": "int", "default": 30, "description": "RSI oversold"},
+                    "rsi_overbought": {
+                        "type": "int",
+                        "default": 70,
+                        "description": "RSI overbought",
+                    },
+                },
             },
             {
-                'type': 'Momentum',
-                'name': 'Momentum',
-                'description': 'Breakout trading with momentum confirmation',
-                'params': {
-                    'momentum_period': {'type': 'int', 'default': 20, 'description': 'Momentum period'},
-                    'volume_period': {'type': 'int', 'default': 20, 'description': 'Volume period'},
-                    'breakout_period': {'type': 'int', 'default': 50, 'description': 'Breakout period'},
-                    'momentum_threshold': {'type': 'float', 'default': 0.05, 'description': 'Momentum threshold'},
-                    'stop_loss_pct': {'type': 'float', 'default': 0.02, 'description': 'Stop loss %'}
-                }
-            }
+                "type": "Momentum",
+                "name": "Momentum",
+                "description": "Breakout trading with momentum confirmation",
+                "params": {
+                    "momentum_period": {
+                        "type": "int",
+                        "default": 20,
+                        "description": "Momentum period",
+                    },
+                    "volume_period": {"type": "int", "default": 20, "description": "Volume period"},
+                    "breakout_period": {
+                        "type": "int",
+                        "default": 50,
+                        "description": "Breakout period",
+                    },
+                    "momentum_threshold": {
+                        "type": "float",
+                        "default": 0.05,
+                        "description": "Momentum threshold",
+                    },
+                    "stop_loss_pct": {
+                        "type": "float",
+                        "default": 0.02,
+                        "description": "Stop loss %",
+                    },
+                },
+            },
         ]
     }
 
@@ -113,18 +151,20 @@ async def list_strategies():
     strategies = []
     for strategy_id, status in all_status.items():
         strategy = manager.get_strategy(strategy_id)
-        strategies.append({
-            'id': strategy_id,
-            'class': status['class'],
-            'status': status['status'],
-            'created_at': status['created_at'].isoformat() if status['created_at'] else None,
-            'started_at': status['started_at'].isoformat() if status['started_at'] else None,
-            'error': status['error'],
-            'metrics': status['metrics'],
-            'params': strategy.params if strategy else {}
-        })
+        strategies.append(
+            {
+                "id": strategy_id,
+                "class": status["class"],
+                "status": status["status"],
+                "created_at": status["created_at"].isoformat() if status["created_at"] else None,
+                "started_at": status["started_at"].isoformat() if status["started_at"] else None,
+                "error": status["error"],
+                "metrics": status["metrics"],
+                "params": strategy.params if strategy else {},
+            }
+        )
 
-    return {'strategies': strategies}
+    return {"strategies": strategies}
 
 
 @router.post("/add")
@@ -135,21 +175,20 @@ async def add_strategy(config: StrategyConfig):
     # Get strategy class
     strategy_class = STRATEGY_TYPES.get(config.strategy_type)
     if not strategy_class:
-        raise HTTPException(status_code=400,
-                            detail=f"Unknown strategy type: {config.strategy_type}")
+        raise HTTPException(
+            status_code=400, detail=f"Unknown strategy type: {config.strategy_type}"
+        )
 
     try:
         # Add strategy
         strategy_id = manager.add_strategy(
-            strategy_class=strategy_class,
-            params=config.params,
-            auto_start=config.auto_start
+            strategy_class=strategy_class, params=config.params, auto_start=config.auto_start
         )
 
         return {
-            'success': True,
-            'strategy_id': strategy_id,
-            'message': f"Strategy {strategy_id} added successfully"
+            "success": True,
+            "strategy_id": strategy_id,
+            "message": f"Strategy {strategy_id} added successfully",
         }
 
     except Exception as e:
@@ -164,10 +203,7 @@ async def start_strategy(strategy_id: str):
 
     try:
         manager.start_strategy(strategy_id)
-        return {
-            'success': True,
-            'message': f"Strategy {strategy_id} started"
-        }
+        return {"success": True, "message": f"Strategy {strategy_id} started"}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -182,10 +218,7 @@ async def stop_strategy(strategy_id: str):
 
     try:
         manager.stop_strategy(strategy_id)
-        return {
-            'success': True,
-            'message': f"Strategy {strategy_id} stopped"
-        }
+        return {"success": True, "message": f"Strategy {strategy_id} stopped"}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -200,10 +233,7 @@ async def pause_strategy(strategy_id: str):
 
     try:
         manager.pause_strategy(strategy_id)
-        return {
-            'success': True,
-            'message': f"Strategy {strategy_id} paused"
-        }
+        return {"success": True, "message": f"Strategy {strategy_id} paused"}
     except Exception as e:
         logger.error(f"Failed to pause strategy: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -216,10 +246,7 @@ async def resume_strategy(strategy_id: str):
 
     try:
         manager.resume_strategy(strategy_id)
-        return {
-            'success': True,
-            'message': f"Strategy {strategy_id} resumed"
-        }
+        return {"success": True, "message": f"Strategy {strategy_id} resumed"}
     except Exception as e:
         logger.error(f"Failed to resume strategy: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -232,10 +259,7 @@ async def remove_strategy(strategy_id: str, force: bool = False):
 
     try:
         manager.remove_strategy(strategy_id, force=force)
-        return {
-            'success': True,
-            'message': f"Strategy {strategy_id} removed"
-        }
+        return {"success": True, "message": f"Strategy {strategy_id} removed"}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:
@@ -294,8 +318,9 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
     # Get strategy class
     strategy_class = STRATEGY_TYPES.get(request.strategy_type)
     if not strategy_class:
-        raise HTTPException(status_code=400,
-                            detail=f"Unknown strategy type: {request.strategy_type}")
+        raise HTTPException(
+            status_code=400, detail=f"Unknown strategy type: {request.strategy_type}"
+        )
 
     try:
         # Get backtest service
@@ -310,7 +335,7 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
             initial_capital=request.initial_capital,
             strategy_params=request.strategy_params,
             commission=request.commission,
-            plot=True
+            plot=True,
         )
 
         return result.to_dict()
@@ -330,17 +355,21 @@ async def compare_strategies(request: CompareRequest):
         # Prepare strategy configurations
         strategies = []
         for strategy_config in request.strategies:
-            strategy_type = strategy_config.get('type')
-            strategy_class = STRATEGY_TYPES.get(strategy_type)
+            strategy_type_value = strategy_config.get("type")
+            if not isinstance(strategy_type_value, str):
+                raise ValueError(f"Unknown strategy type: {strategy_type_value!r}")
+            strategy_class = STRATEGY_TYPES.get(strategy_type_value)
 
             if not strategy_class:
-                raise ValueError(f"Unknown strategy type: {strategy_type}")
+                raise ValueError(f"Unknown strategy type: {strategy_type_value}")
 
-            strategies.append({
-                'class': strategy_class,
-                'params': strategy_config.get('params', {}),
-                'name': strategy_config.get('name', strategy_type)
-            })
+            strategies.append(
+                {
+                    "class": strategy_class,
+                    "params": strategy_config.get("params", {}),
+                    "name": strategy_config.get("name", strategy_type_value),
+                }
+            )
 
         # Run comparison
         results = await service.compare_strategies(
@@ -348,12 +377,10 @@ async def compare_strategies(request: CompareRequest):
             symbols=request.symbols,
             start_date=request.start_date,
             end_date=request.end_date,
-            initial_capital=request.initial_capital
+            initial_capital=request.initial_capital,
         )
 
-        return {
-            'results': [result.to_dict() for result in results]
-        }
+        return {"results": [result.to_dict() for result in results]}
 
     except Exception as e:
         logger.error(f"Strategy comparison failed: {e}")

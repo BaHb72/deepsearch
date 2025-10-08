@@ -3,42 +3,44 @@
 
 提供统一的异步运行环境，解决事件循环管理问题。
 """
+
 import asyncio
-import logging
 import signal
 import sys
-import time
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Any, Dict, Mapping, Optional
 
 from deepsearch.config import get_config
-from deepsearch.core.runtime.engine import MainEngine
 from deepsearch.core.managers.process_manager import process_manager
+from deepsearch.core.runtime.engine import MainEngine, RuntimeModeInput
+from deepsearch.observability import get_logger
 
 
 class AsyncRunner:
     """
     异步运行器
-    
+
     管理主事件循环和引擎的生命周期
     """
 
     def __init__(self):
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(__name__)
         self.engine: Optional[MainEngine] = None
         self._shutdown_event = asyncio.Event()
         self._main_task: Optional[asyncio.Task] = None
+        self.config: Dict[str, Any] = {}
 
-    async def initialize_engine(self, mode: str = 'full', config: dict = None):
+    async def initialize_engine(
+        self, mode: RuntimeModeInput = "full", config: Optional[Mapping[str, Any]] = None
+    ) -> MainEngine:
         """初始化引擎"""
-        config = config or {}
+        config_dict: Dict[str, Any] = dict(config) if config is not None else {}
+        self.config = config_dict
 
         # 创建引擎
-        self.engine = MainEngine()
+        self.engine = MainEngine(mode=mode)
 
         # 设置模式
-        self.engine._mode = mode
-
         # 注册到 ProcessManager
         process_manager.register_engine(self.engine)
 
@@ -47,27 +49,38 @@ class AsyncRunner:
 
         return self.engine
 
-    async def start_engine(self, mode: str = 'full', config: dict = None):
+    async def start_engine(
+        self, mode: RuntimeModeInput = "full", config: Optional[Mapping[str, Any]] = None
+    ) -> None:
         """启动引擎"""
-        config = config or {}
+        if config is None:
+            config_dict = self.config
+        else:
+            config_dict = dict(config)
+            self.config = config_dict
 
-        if mode == 'full':
-            await self._start_full_mode(config)
-        elif mode == 'engine':
-            await self._start_engine_mode(config)
-        elif mode == 'webui':
-            await self._start_webui_mode(config)
+        if mode == "full":
+            await self._start_full_mode(config_dict)
+        elif mode == "engine":
+            await self._start_engine_mode(config_dict)
+        elif mode == "webui":
+            await self._start_webui_mode(config_dict)
         else:
             raise ValueError(f"未知的运行模式: {mode}")
 
-    async def _start_full_mode(self, config: dict):
-        """启动完整模式"""
-        include_frontend = not config.get('no_frontend', False)
+    def _require_engine(self) -> MainEngine:
+        """Return the initialized engine or raise if missing."""
+        if self.engine is None:
+            raise RuntimeError("AsyncRunner engine is not initialized")
+        return self.engine
 
-        await self.engine._start_phased_async(
-            include_business=True,
-            include_webui=True,
-            include_frontend=include_frontend
+    async def _start_full_mode(self, config: Mapping[str, Any]) -> None:
+        """启动完整模式"""
+        include_frontend = not config.get("no_frontend", False)
+
+        engine = self._require_engine()
+        await engine._start_phased_async(
+            include_business=True, include_webui=True, include_frontend=include_frontend
         )
 
         # 显示启动信息
@@ -76,23 +89,23 @@ class AsyncRunner:
         if not include_frontend:
             self.logger.info("提示：前端需要单独启动 - cd deepsearch/webui/frontend && npm run dev")
 
-    async def _start_engine_mode(self, config: dict):
+    async def _start_engine_mode(self, config: Mapping[str, Any]) -> None:
         """仅启动引擎模式"""
-        await self.engine._start_phased_async(
-            include_business=True,
-            include_webui=False,
-            include_frontend=False
+        engine = self._require_engine()
+        await engine._start_phased_async(
+            include_business=True, include_webui=False, include_frontend=False
         )
 
-    async def _start_webui_mode(self, config: dict):
+    async def _start_webui_mode(self, config: Mapping[str, Any]) -> None:
         """WebUI 模式"""
-        infrastructure_only = config.get('infrastructure_only', True)
-        include_frontend = config.get('include_frontend', False)
-        include_webui = config.get('include_webui', False)
-        await self.engine._start_phased_async(
+        infrastructure_only = config.get("infrastructure_only", True)
+        include_frontend = config.get("include_frontend", False)
+        include_webui = config.get("include_webui", False)
+        engine = self._require_engine()
+        await engine._start_phased_async(
             include_business=not infrastructure_only,
             include_webui=include_webui,
-            include_frontend=include_frontend
+            include_frontend=include_frontend,
         )
 
     async def run_until_complete(self):
@@ -107,6 +120,7 @@ class AsyncRunner:
                         sig, lambda s=sig: asyncio.create_task(self._handle_signal())
                     )
             else:
+
                 def _windows_signal_handler(signum, frame):
                     if loop.is_closed():
                         return
@@ -127,14 +141,15 @@ class AsyncRunner:
                 for sig, handler in previous_signal_handlers.items():
                     signal.signal(sig, handler)
 
-
     async def _handle_signal(self):
         """处理信号"""
         self.logger.info("收到停止信号")
         self._shutdown_event.set()
 
     @classmethod
-    async def run(cls, mode: str = 'full', config: dict = None):
+    async def run(
+        cls, mode: RuntimeModeInput = "full", config: Optional[Mapping[str, Any]] = None
+    ) -> None:
         """运行引擎的便捷方法"""
         runner = cls()
 
@@ -158,10 +173,12 @@ class AsyncRunner:
 
 
 @asynccontextmanager
-async def async_engine_context(mode: str = 'full', config: dict = None):
+async def async_engine_context(
+    mode: RuntimeModeInput = "full", config: Optional[Mapping[str, Any]] = None
+):
     """
     异步引擎上下文管理器
-    
+
     使用方式：
     ```python
     async with async_engine_context('full') as engine:
@@ -188,10 +205,10 @@ async def async_engine_context(mode: str = 'full', config: dict = None):
             process_manager.unregister_engine(runner.engine)
 
 
-def run_async_engine(mode: str = 'full', config: dict = None):
+def run_async_engine(mode: str = "full", config: Optional[Mapping[str, Any]] = None) -> None:
     """
     同步包装器，用于运行异步引擎
-    
+
     这个函数会创建并管理整个事件循环
     """
 

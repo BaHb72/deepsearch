@@ -524,3 +524,8 @@ async def benchmark_event_engine():
 - 先保证正确性，再优化性能
 - 保持代码简单清晰
 - 文档化你的设计决策
+## 9. 文档更新清单
+
+- **更新概览索引**：新增或迁移文档后，记得同步维护 `docs/overview/document_index.md` 与 `docs/modules/README.md`，确保团队能快速定位内容。
+- **API 文档生成**：涉及后端接口的改动需执行 `python tools/generate_api_documentation.py`，同时检查 `docs/api/` 是否生成新版本。
+- **数据源文档**：调整数据源行为时，补充 `docs/datasources/` 下的对应说明，并在 PR 描述写明测试与降级策略。

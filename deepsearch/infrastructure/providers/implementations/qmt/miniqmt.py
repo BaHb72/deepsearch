@@ -3,29 +3,29 @@ MiniQMT 数据提供者
 
 提供 MiniQMT 量化终端的数据接入功能
 """
+
 import asyncio
 import json
 import socket
 import struct
 import time
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from loguru import logger
-
-from .base import (
-    DataProvider,
-    DataProviderConfig,
-    DataRequest,
+from deepsearch.infrastructure.providers.interfaces.base import (
+    DataResponse,
     DataSourceType,
-    DataProviderError
 )
+from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
+
+from .base import DataProvider, DataProviderConfig, DataProviderError, DataRequest
 
 
 class MiniQMTProvider(DataProvider):
     """
     MiniQMT 数据提供者
-    
+
     功能：
     - 连接 MiniQMT 终端获取实时和历史数据
     - 支持股票、期货、期权等多品种
@@ -39,7 +39,7 @@ class MiniQMTProvider(DataProvider):
             # 创建默认配置
             config = DataProviderConfig(
                 name="miniqmt",
-                # source_type不是DataProviderConfig的参数
+                source_type=DataSourceType.QMT,
                 enabled=True,
                 timeout=10,
                 config={
@@ -48,8 +48,8 @@ class MiniQMTProvider(DataProvider):
                     "retry_times": 3,
                     "retry_delay": 1.0,
                     "cache_enabled": True,
-                    "cache_ttl": 60  # 1分钟缓存
-                }
+                    "cache_ttl": 60,  # 1分钟缓存
+                },
             )
 
         super().__init__(config)
@@ -79,20 +79,32 @@ class MiniQMTProvider(DataProvider):
         self.receive_task = None
         self.data_queue = asyncio.Queue(maxsize=10000)
 
+    def get_capabilities(self) -> set[DataCapability]:
+        """返回 MiniQMT 支持的数据能力集合。"""
+
+        return {
+            DataCapability.REALTIME_QUOTE,
+            DataCapability.REALTIME_QUOTES,
+            DataCapability.TICK_DATA,
+            DataCapability.MINUTE_DATA,
+            DataCapability.KLINE_DATA,
+        }
+
     async def _initialize_source(self) -> None:
         """初始化 MiniQMT 数据源"""
         # 从配置加载连接参数
         from deepsearch.config import get_config
+
         config = get_config()
 
-        if hasattr(config, 'miniqmt'):
+        if hasattr(config, "miniqmt"):
             miniqmt_config = config.miniqmt
-            if hasattr(miniqmt_config, 'connection'):
+            if hasattr(miniqmt_config, "connection"):
                 conn = miniqmt_config.connection
-                self.host = getattr(conn, 'host', self.host)
-                self.port = getattr(conn, 'port', self.port)
-                self.username = getattr(conn, 'username', self.username)
-                self.password = getattr(conn, 'password', self.password)
+                self.host = getattr(conn, "host", self.host)
+                self.port = getattr(conn, "port", self.port)
+                self.username = getattr(conn, "username", self.username)
+                self.password = getattr(conn, "password", self.password)
 
         logger.info(f"MiniQMT 配置: {self.host}:{self.port}")
 
@@ -149,17 +161,17 @@ class MiniQMTProvider(DataProvider):
             # 发送认证信息
             if self.username:
                 auth_msg = {
-                    'type': 'AUTH',
-                    'username': self.username,
-                    'password': self.password,
-                    'client': 'DeepSearch',
-                    'version': '1.0.0'
+                    "type": "AUTH",
+                    "username": self.username,
+                    "password": self.password,
+                    "client": "DeepSearch",
+                    "version": "1.0.0",
                 }
 
                 if await self._send_message(auth_msg):
                     # 等待认证响应
                     response = await self._receive_message()
-                    if response and response.get('status') == 'OK':
+                    if response and response.get("status") == "OK":
                         self.connected = True
                         self.reconnect_attempts = 0
                         logger.info(f"成功连接到 MiniQMT 服务器 {self.host}:{self.port}")
@@ -184,9 +196,9 @@ class MiniQMTProvider(DataProvider):
         if self.socket:
             try:
                 # 发送断开消息
-                disconnect_msg = {'type': 'DISCONNECT'}
+                disconnect_msg = {"type": "DISCONNECT"}
                 await self._send_message(disconnect_msg)
-            except:
+            except Exception:
                 pass
 
             self.socket.close()
@@ -225,12 +237,10 @@ class MiniQMTProvider(DataProvider):
             return False
 
         try:
-            data = json.dumps(msg).encode('utf-8')
-            length = struct.pack('!I', len(data))
+            data = json.dumps(msg).encode("utf-8")
+            length = struct.pack("!I", len(data))
 
-            await asyncio.get_event_loop().run_in_executor(
-                None, self.socket.sendall, length + data
-            )
+            await asyncio.get_event_loop().run_in_executor(None, self.socket.sendall, length + data)
 
             return True
 
@@ -246,20 +256,16 @@ class MiniQMTProvider(DataProvider):
 
         try:
             # 读取消息长度
-            length_data = await asyncio.get_event_loop().run_in_executor(
-                None, self.socket.recv, 4
-            )
+            length_data = await asyncio.get_event_loop().run_in_executor(None, self.socket.recv, 4)
             if not length_data:
                 return None
 
-            length = struct.unpack('!I', length_data)[0]
+            length = struct.unpack("!I", length_data)[0]
 
             # 读取消息内容
-            data = await asyncio.get_event_loop().run_in_executor(
-                None, self.socket.recv, length
-            )
+            data = await asyncio.get_event_loop().run_in_executor(None, self.socket.recv, length)
 
-            return json.loads(data.decode('utf-8'))
+            return json.loads(data.decode("utf-8"))
 
         except Exception as e:
             logger.error(f"接收消息失败: {e}")
@@ -273,10 +279,7 @@ class MiniQMTProvider(DataProvider):
 
                 if self.connected:
                     # 发送心跳
-                    heartbeat_msg = {
-                        'type': 'HEARTBEAT',
-                        'timestamp': time.time()
-                    }
+                    heartbeat_msg = {"type": "HEARTBEAT", "timestamp": time.time()}
 
                     if not await self._send_message(heartbeat_msg):
                         # 心跳失败，尝试重连
@@ -313,21 +316,21 @@ class MiniQMTProvider(DataProvider):
 
     async def _process_message(self, msg: Dict) -> None:
         """处理接收到的消息"""
-        msg_type = msg.get('type')
+        msg_type = msg.get("type")
 
-        if msg_type == 'TICK':
+        if msg_type == "TICK":
             # 处理 tick 数据
-            await self._process_tick_data(msg.get('data'))
-        elif msg_type == 'KLINE':
+            await self._process_tick_data(msg.get("data"))
+        elif msg_type == "KLINE":
             # 处理 K线数据
-            await self._process_kline_data(msg.get('data'))
-        elif msg_type == 'ORDERBOOK':
+            await self._process_kline_data(msg.get("data"))
+        elif msg_type == "ORDERBOOK":
             # 处理盘口数据
-            await self._process_orderbook_data(msg.get('data'))
-        elif msg_type == 'HEARTBEAT':
+            await self._process_orderbook_data(msg.get("data"))
+        elif msg_type == "HEARTBEAT":
             # 心跳响应
             self.last_heartbeat = time.time()
-        elif msg_type == 'ERROR':
+        elif msg_type == "ERROR":
             # 错误消息
             logger.error(f"MiniQMT 错误: {msg.get('message')}")
 
@@ -337,14 +340,10 @@ class MiniQMTProvider(DataProvider):
             return
 
         # 将数据放入队列
-        await self.data_queue.put({
-            'type': 'tick',
-            'data': data,
-            'timestamp': time.time()
-        })
+        await self.data_queue.put({"type": "tick", "data": data, "timestamp": time.time()})
 
         # 触发回调
-        symbol = data.get('symbol')
+        symbol = data.get("symbol")
         if symbol in self.symbol_callbacks:
             for callback in self.symbol_callbacks[symbol]:
                 await callback(data)
@@ -355,11 +354,7 @@ class MiniQMTProvider(DataProvider):
             return
 
         # 将数据放入队列
-        await self.data_queue.put({
-            'type': 'kline',
-            'data': data,
-            'timestamp': time.time()
-        })
+        await self.data_queue.put({"type": "kline", "data": data, "timestamp": time.time()})
 
     async def _process_orderbook_data(self, data: Dict) -> None:
         """处理盘口数据"""
@@ -367,11 +362,7 @@ class MiniQMTProvider(DataProvider):
             return
 
         # 将数据放入队列
-        await self.data_queue.put({
-            'type': 'orderbook',
-            'data': data,
-            'timestamp': time.time()
-        })
+        await self.data_queue.put({"type": "orderbook", "data": data, "timestamp": time.time()})
 
     async def _subscribe_symbols(self, symbols: List[str]) -> bool:
         """订阅股票行情"""
@@ -380,9 +371,9 @@ class MiniQMTProvider(DataProvider):
 
         # 发送订阅请求
         subscribe_msg = {
-            'type': 'SUBSCRIBE',
-            'symbols': symbols,
-            'data_types': ['tick', 'orderbook']  # 订阅 tick 和盘口数据
+            "type": "SUBSCRIBE",
+            "symbols": symbols,
+            "data_types": ["tick", "orderbook"],  # 订阅 tick 和盘口数据
         }
 
         if await self._send_message(subscribe_msg):
@@ -399,10 +390,7 @@ class MiniQMTProvider(DataProvider):
             return False
 
         # 发送取消订阅请求
-        unsubscribe_msg = {
-            'type': 'UNSUBSCRIBE',
-            'symbols': symbols
-        }
+        unsubscribe_msg = {"type": "UNSUBSCRIBE", "symbols": symbols}
 
         if await self._send_message(unsubscribe_msg):
             # 更新订阅列表
@@ -416,10 +404,10 @@ class MiniQMTProvider(DataProvider):
     async def _fetch_data(self, request: DataRequest) -> pd.DataFrame:
         """
         获取数据的具体实现
-        
+
         Args:
             request: 数据请求
-            
+
         Returns:
             数据 DataFrame
         """
@@ -446,10 +434,7 @@ class MiniQMTProvider(DataProvider):
             return pd.DataFrame()
 
         # 发送实时数据请求
-        query_msg = {
-            'type': 'QUERY_REALTIME',
-            'symbols': symbols
-        }
+        query_msg = {"type": "QUERY_REALTIME", "symbols": symbols}
 
         if not await self._send_message(query_msg):
             raise DataProviderError("发送请求失败")
@@ -457,13 +442,12 @@ class MiniQMTProvider(DataProvider):
         # 等待响应（超时处理）
         try:
             response = await asyncio.wait_for(
-                self._wait_for_response('REALTIME_DATA'),
-                timeout=self.config.timeout
+                self._wait_for_response("REALTIME_DATA"), timeout=self.config.timeout
             )
 
-            if response and 'data' in response:
+            if response and "data" in response:
                 # 转换为 DataFrame
-                df = pd.DataFrame(response['data'])
+                df = pd.DataFrame(response["data"])
                 return df
 
         except asyncio.TimeoutError:
@@ -478,11 +462,11 @@ class MiniQMTProvider(DataProvider):
 
         # 发送分钟数据请求
         query_msg = {
-            'type': 'QUERY_MINUTE',
-            'symbol': request.symbol,
-            'period': request.period,
-            'start_date': str(request.start_date) if request.start_date else None,
-            'end_date': str(request.end_date) if request.end_date else None
+            "type": "QUERY_MINUTE",
+            "symbol": request.symbol,
+            "period": request.period,
+            "start_date": str(request.start_date) if request.start_date else None,
+            "end_date": str(request.end_date) if request.end_date else None,
         }
 
         if not await self._send_message(query_msg):
@@ -491,16 +475,15 @@ class MiniQMTProvider(DataProvider):
         # 等待响应
         try:
             response = await asyncio.wait_for(
-                self._wait_for_response('MINUTE_DATA'),
-                timeout=self.config.timeout
+                self._wait_for_response("MINUTE_DATA"), timeout=self.config.timeout
             )
 
-            if response and 'data' in response:
+            if response and "data" in response:
                 # 转换为 DataFrame
-                df = pd.DataFrame(response['data'])
-                if 'datetime' in df.columns:
-                    df['datetime'] = pd.to_datetime(df['datetime'])
-                    df.set_index('datetime', inplace=True)
+                df = pd.DataFrame(response["data"])
+                if "datetime" in df.columns:
+                    df["datetime"] = pd.to_datetime(df["datetime"])
+                    df.set_index("datetime", inplace=True)
                 return df
 
         except asyncio.TimeoutError:
@@ -515,11 +498,11 @@ class MiniQMTProvider(DataProvider):
 
         # 发送日线数据请求
         query_msg = {
-            'type': 'QUERY_DAILY',
-            'symbol': request.symbol,
-            'start_date': str(request.start_date) if request.start_date else None,
-            'end_date': str(request.end_date) if request.end_date else None,
-            'adjust': request.adjust
+            "type": "QUERY_DAILY",
+            "symbol": request.symbol,
+            "start_date": str(request.start_date) if request.start_date else None,
+            "end_date": str(request.end_date) if request.end_date else None,
+            "adjust": request.adjust,
         }
 
         if not await self._send_message(query_msg):
@@ -528,16 +511,15 @@ class MiniQMTProvider(DataProvider):
         # 等待响应
         try:
             response = await asyncio.wait_for(
-                self._wait_for_response('DAILY_DATA'),
-                timeout=self.config.timeout
+                self._wait_for_response("DAILY_DATA"), timeout=self.config.timeout
             )
 
-            if response and 'data' in response:
+            if response and "data" in response:
                 # 转换为 DataFrame
-                df = pd.DataFrame(response['data'])
-                if 'date' in df.columns:
-                    df['date'] = pd.to_datetime(df['date'])
-                    df.set_index('date', inplace=True)
+                df = pd.DataFrame(response["data"])
+                if "date" in df.columns:
+                    df["date"] = pd.to_datetime(df["date"])
+                    df.set_index("date", inplace=True)
                 return df
 
         except asyncio.TimeoutError:
@@ -555,7 +537,7 @@ class MiniQMTProvider(DataProvider):
 
             # 接收消息
             msg = await self._receive_message()
-            if msg and msg.get('type') == response_type:
+            if msg and msg.get("type") == response_type:
                 return msg
 
             await asyncio.sleep(0.1)
@@ -567,10 +549,10 @@ class MiniQMTProvider(DataProvider):
     async def subscribe(self, symbols: List[str]) -> bool:
         """
         订阅股票行情
-        
+
         Args:
             symbols: 股票代码列表
-            
+
         Returns:
             是否成功
         """
@@ -579,19 +561,37 @@ class MiniQMTProvider(DataProvider):
     async def unsubscribe(self, symbols: List[str]) -> bool:
         """
         取消订阅股票行情
-        
+
         Args:
             symbols: 股票代码列表
-            
+
         Returns:
             是否成功
         """
         return await self._unsubscribe_symbols(symbols)
 
+    async def get_data(self, request: DataRequest) -> DataResponse:
+        """按照 `DataRequest` 获取数据并封装响应。"""
+
+        metadata = {
+            "source": self.config.name or "miniqmt",
+            "request_type": request.request_type,
+        }
+
+        try:
+            dataframe = await self._fetch_data(request)
+        except DataProviderError as exc:
+            return DataResponse(success=False, error=str(exc), metadata=metadata)
+        except Exception as exc:  # pragma: no cover - 防御日志
+            logger.exception("MiniQMT 获取数据异常: %s", exc)
+            return DataResponse(success=False, error=str(exc), metadata=metadata)
+
+        return DataResponse(success=True, data=dataframe, metadata=metadata)
+
     def add_symbol_callback(self, symbol: str, callback) -> None:
         """
         添加股票数据回调
-        
+
         Args:
             symbol: 股票代码
             callback: 回调函数
@@ -603,7 +603,7 @@ class MiniQMTProvider(DataProvider):
     def remove_symbol_callback(self, symbol: str, callback) -> None:
         """
         移除股票数据回调
-        
+
         Args:
             symbol: 股票代码
             callback: 回调函数
@@ -617,11 +617,11 @@ class MiniQMTProvider(DataProvider):
     def get_connection_status(self) -> Dict[str, Any]:
         """获取连接状态"""
         return {
-            'connected': self.connected,
-            'host': self.host,
-            'port': self.port,
-            'subscribed_symbols': list(self.subscribed_symbols),
-            'last_heartbeat': self.last_heartbeat,
-            'reconnect_attempts': self.reconnect_attempts,
-            'queue_size': self.data_queue.qsize()
+            "connected": self.connected,
+            "host": self.host,
+            "port": self.port,
+            "subscribed_symbols": list(self.subscribed_symbols),
+            "last_heartbeat": self.last_heartbeat,
+            "reconnect_attempts": self.reconnect_attempts,
+            "queue_size": self.data_queue.qsize(),
         }

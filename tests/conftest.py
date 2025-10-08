@@ -1,11 +1,12 @@
 """
 Pytest configuration and fixtures for DeepSearch tests.
 """
-import pytest
+
 import asyncio
 import gc
-from typing import Generator, AsyncGenerator
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, Mock
+
+import pytest
 
 
 @pytest.fixture(scope="function")
@@ -67,7 +68,9 @@ def mock_config():
     config.database.cache.enabled = True
     config.data_providers.amazingdata.enabled = True
     config.data_providers.qmt.enabled = True
-    config.data_providers.cloudflare_proxy.enabled = True
+    config.data_providers.akshare.enabled = True
+    config.data_providers.akshare.config = {"mode": "worker", "proxy": {"enabled": True}}
+    config.data_providers.cloudflare.enabled = True
     config.webui.enabled = True  # 添加WebUI配置
     config.webui.backend_port = 8000
     config.webui.frontend_port = 3000
@@ -145,15 +148,17 @@ async def mock_redis():
 def test_data_provider():
     """Mock data provider for testing."""
     provider = AsyncMock()
-    provider.get_realtime_quote = AsyncMock(return_value={
-        "symbol": "000001",
-        "name": "平安银行",
-        "price": 10.5,
-        "change": 0.5,
-        "change_pct": 5.0,
-        "volume": 1000000,
-        "timestamp": "2025-09-13 10:00:00"
-    })
+    provider.get_realtime_quote = AsyncMock(
+        return_value={
+            "symbol": "000001",
+            "name": "平安银行",
+            "price": 10.5,
+            "change": 0.5,
+            "change_pct": 5.0,
+            "volume": 1000000,
+            "timestamp": "2025-09-13 10:00:00",
+        }
+    )
     provider.get_kline_data = AsyncMock(return_value=[])
     provider.is_connected = Mock(return_value=True)
     return provider

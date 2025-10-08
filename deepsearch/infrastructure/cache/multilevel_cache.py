@@ -3,29 +3,30 @@
 
 提供 L1（内存）、L2（Redis）、L3（数据库）三级缓存
 """
+
 import asyncio
 import hashlib
 import json
 import pickle
 import time
-from datetime import datetime, timedelta
-from typing import Any, Optional, Callable, Dict, List, Tuple
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
-import logging
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import redis.asyncio as aioredis
-from cachetools import TTLCache, LRUCache
-from sqlalchemy import Column, String, LargeBinary, DateTime, Integer, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from cachetools import TTLCache
+from sqlalchemy import Column, DateTime, Integer, LargeBinary, String, select
 from sqlalchemy.ext.declarative import declarative_base
 
+from deepsearch.observability import get_logger
 
 Base = declarative_base()
 
 
 class CacheLevel(Enum):
     """缓存级别"""
+
     L1_MEMORY = "L1_MEMORY"
     L2_REDIS = "L2_REDIS"
     L3_DATABASE = "L3_DATABASE"
@@ -35,6 +36,7 @@ class CacheLevel(Enum):
 @dataclass
 class CacheStatistics:
     """缓存统计信息"""
+
     l1_hits: int = 0
     l1_misses: int = 0
     l2_hits: int = 0
@@ -83,7 +85,8 @@ class CacheStatistics:
 
 class CacheEntry(Base):
     """数据库缓存表模型"""
-    __tablename__ = 'cache_entries'
+
+    __tablename__ = "cache_entries"
 
     key = Column(String(255), primary_key=True)
     value = Column(LargeBinary)
@@ -96,6 +99,7 @@ class CacheEntry(Base):
 @dataclass
 class CacheConfig:
     """缓存配置"""
+
     # L1 配置
     l1_enabled: bool = True
     l1_max_size: int = 10000
@@ -143,14 +147,11 @@ class MultiLevelCache:
         """
         self.config = config
         self.db_session_factory = db_session_factory
-        self._logger = logging.getLogger("deepsearch.cache.multilevel")
+        self._logger = get_logger("deepsearch.cache.multilevel")
 
         # L1: 内存缓存
         if config.l1_enabled:
-            self.l1_cache = TTLCache(
-                maxsize=config.l1_max_size,
-                ttl=config.l1_ttl_seconds
-            )
+            self.l1_cache = TTLCache(maxsize=config.l1_max_size, ttl=config.l1_ttl_seconds)
         else:
             self.l1_cache = None
 
@@ -173,7 +174,7 @@ class MultiLevelCache:
                     password=self.config.l2_password,
                     encoding="utf-8",
                     decode_responses=False,
-                    max_connections=self.config.l2_max_connections
+                    max_connections=self.config.l2_max_connections,
                 )
                 # 测试连接
                 await self.l2_cache.ping()
@@ -208,10 +209,7 @@ class MultiLevelCache:
         return f"{namespace}:{hash_key}"
 
     async def get(
-        self,
-        namespace: str,
-        key: Any,
-        fetcher: Optional[Callable] = None
+        self, namespace: str, key: Any, fetcher: Optional[Callable] = None
     ) -> Tuple[Optional[Any], CacheLevel]:
         """
         获取缓存数据
@@ -300,13 +298,7 @@ class MultiLevelCache:
         self._update_get_time(start_time)
         return None, CacheLevel.MISS
 
-    async def set(
-        self,
-        namespace: str,
-        key: Any,
-        value: Any,
-        ttl: Optional[int] = None
-    ) -> None:
+    async def set(self, namespace: str, key: Any, value: Any, ttl: Optional[int] = None) -> None:
         """
         设置缓存数据
 
@@ -333,11 +325,7 @@ class MultiLevelCache:
         if self.l2_cache is not None:
             try:
                 serialized = pickle.dumps(value)
-                await self.l2_cache.setex(
-                    cache_key,
-                    ttl or self.config.l2_ttl_seconds,
-                    serialized
-                )
+                await self.l2_cache.setex(cache_key, ttl or self.config.l2_ttl_seconds, serialized)
             except Exception as e:
                 self._logger.debug(f"L2 写入失败: {e}")
 
@@ -419,9 +407,7 @@ class MultiLevelCache:
             try:
                 cursor = 0
                 while True:
-                    cursor, keys = await self.l2_cache.scan(
-                        cursor, match=pattern, count=100
-                    )
+                    cursor, keys = await self.l2_cache.scan(cursor, match=pattern, count=100)
                     if keys:
                         await self.l2_cache.delete(*keys)
                         count += len(keys)
@@ -443,8 +429,7 @@ class MultiLevelCache:
         """从 L3 数据库获取数据"""
         async with self.db_session_factory() as session:
             stmt = select(CacheEntry).where(
-                CacheEntry.key == key,
-                CacheEntry.expires_at > datetime.now()
+                CacheEntry.key == key, CacheEntry.expires_at > datetime.now()
             )
             result = await session.execute(stmt)
             entry = result.scalar_one_or_none()
@@ -477,11 +462,7 @@ class MultiLevelCache:
                 entry.last_accessed = datetime.now()
             else:
                 # 创建新记录
-                entry = CacheEntry(
-                    key=key,
-                    value=serialized,
-                    expires_at=expires_at
-                )
+                entry = CacheEntry(key=key, value=serialized, expires_at=expires_at)
                 session.add(entry)
 
             await session.commit()
@@ -501,7 +482,7 @@ class MultiLevelCache:
         """失效 L3 中的键"""
         async with self.db_session_factory() as session:
             # 使用 LIKE 查询
-            like_pattern = pattern.replace('*', '%')
+            like_pattern = pattern.replace("*", "%")
             stmt = select(CacheEntry).where(CacheEntry.key.like(like_pattern))
             result = await session.execute(stmt)
             entries = result.scalars().all()
@@ -518,11 +499,7 @@ class MultiLevelCache:
         if self.l2_cache is not None:
             try:
                 serialized = pickle.dumps(value)
-                await self.l2_cache.setex(
-                    key,
-                    self.config.l2_ttl_seconds,
-                    serialized
-                )
+                await self.l2_cache.setex(key, self.config.l2_ttl_seconds, serialized)
             except Exception as e:
                 self._logger.debug(f"提升到 L2 失败: {e}")
 
@@ -570,8 +547,7 @@ class MultiLevelCache:
             # 使用移动平均
             alpha = 0.1
             self.statistics.avg_get_time_ms = (
-                alpha * elapsed_ms +
-                (1 - alpha) * self.statistics.avg_get_time_ms
+                alpha * elapsed_ms + (1 - alpha) * self.statistics.avg_get_time_ms
             )
 
     def _update_set_time(self, start_time: float) -> None:
@@ -586,8 +562,7 @@ class MultiLevelCache:
             # 使用移动平均
             alpha = 0.1
             self.statistics.avg_set_time_ms = (
-                alpha * elapsed_ms +
-                (1 - alpha) * self.statistics.avg_set_time_ms
+                alpha * elapsed_ms + (1 - alpha) * self.statistics.avg_set_time_ms
             )
 
     def get_statistics(self) -> Optional[Dict[str, Any]]:
@@ -613,13 +588,9 @@ class MultiLevelCache:
             "l3_hits": self.statistics.l3_hits,
             "avg_get_time_ms": round(self.statistics.avg_get_time_ms, 2),
             "avg_set_time_ms": round(self.statistics.avg_set_time_ms, 2),
-            "uptime_seconds": (
-                datetime.now() - self.statistics.created_at
-            ).total_seconds(),
+            "uptime_seconds": (datetime.now() - self.statistics.created_at).total_seconds(),
             "last_cleanup": (
-                self.statistics.last_cleanup.isoformat()
-                if self.statistics.last_cleanup
-                else None
+                self.statistics.last_cleanup.isoformat() if self.statistics.last_cleanup else None
             ),
         }
 

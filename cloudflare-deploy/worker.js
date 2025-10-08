@@ -126,6 +126,7 @@ export default {
 async function handleProxy(request, env, ctx) {
     try {
         const url = new URL(request.url);
+        const config = getConfig(env);
         let targetUrl = url.searchParams.get('url') ||
             url.searchParams.get('target');
 
@@ -140,6 +141,19 @@ async function handleProxy(request, env, ctx) {
         targetUrl = decodeURIComponent(targetUrl);
         if (!targetUrl.match(/^https?:\/\//i)) {
             targetUrl = 'https://' + targetUrl;
+        }
+
+        if (config.AUTH_ENABLED) {
+            const providedKey = request.headers.get('X-API-Key') ||
+                url.searchParams.get('api_key') ||
+                url.searchParams.get('apikey');
+
+            if (!providedKey || providedKey !== config.API_KEY) {
+                return jsonResponse({
+                    error: 'Unauthorized',
+                    message: 'Invalid or missing API key'
+                }, 401);
+            }
         }
 
         const targetUrlObj = new URL(targetUrl);
@@ -166,7 +180,7 @@ async function handleProxy(request, env, ctx) {
         // 复制原始请求头（排除敏感信息）
         const blockedHeaders = [
             'host', 'cf-connecting-ip', 'cf-ipcountry', 'cf-ray',
-            'x-forwarded-for', 'x-real-ip', 'cookie'
+            'x-forwarded-for', 'x-real-ip', 'cookie', 'x-api-key'
         ];
 
         for (const [key, value] of request.headers.entries()) {
@@ -220,10 +234,12 @@ async function handleProxy(request, env, ctx) {
         }
 
         // 构建缓存键
-        const cacheKey = new Request(
-            `https://cache.local/proxy/${targetHost}${targetUrlObj.pathname}?${targetUrlObj.search}`,
-            {method: 'GET'}
-        );
+        const cacheKeyUrl = new URL(`https://cache.local/proxy/${targetHost}${targetUrlObj.pathname}`);
+        const cacheSearch = targetUrlObj.searchParams.toString();
+        if (cacheSearch) {
+            cacheKeyUrl.search = cacheSearch;
+        }
+        const cacheKey = new Request(cacheKeyUrl.toString(), {method: 'GET'});
 
         // 检查缓存
         const cache = caches.default;
@@ -366,7 +382,8 @@ function handleHealthCheck(env) {
             whitelist: true,
             retry: true
         },
-        allowed_hosts_count: ALLOWED_HOSTS.length,  // 现在是27个域名
+        cache_enabled: true,
+        allowed_hosts_count: ALLOWED_HOSTS.length,
         auth_enabled: config.AUTH_ENABLED
     });
 }

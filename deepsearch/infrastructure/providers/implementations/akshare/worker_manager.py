@@ -2,20 +2,50 @@
 Worker节点管理器
 负责管理Cloudflare Worker节点的健康检查、状态管理和节点选择
 """
+
 import asyncio
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Union, Any
+from typing import Any, Dict, List, Optional, TypedDict, Union
+
 import aiohttp
 from loguru import logger
 
 
 class WorkerState(Enum):
     """Worker 节点状态枚举"""
-    HEALTHY = "healthy"         # 健康状态
-    SUSPICIOUS = "suspect"       # 可疑状态（有失败但仍可尝试）
-    UNHEALTHY = "unhealthy"     # 不健康状态（熔断）
+
+    HEALTHY = "healthy"  # 健康状态
+    SUSPICIOUS = "suspect"  # 可疑状态（有失败但仍可尝试）
+    UNHEALTHY = "unhealthy"  # 不健康状态（熔断）
+
+
+class _SessionCloseProxy:
+    """临时代理，允许在会话释放后验证调用情况"""
+
+    def __init__(self, session):
+        self._session = session
+        self.used = False
+
+    def __getattr__(self, item):
+        return getattr(self._session, item)
+
+
+
+
+class WorkerInfo(TypedDict):
+    """Worker 节点的状态记录结构"""
+
+    state: WorkerState
+    requests: int
+    errors: int
+    last_error: Optional[datetime]
+    last_success: datetime
+    last_check: Optional[datetime]
+    response_time: float
+    success_rate: float
 
 
 class WorkerManager:
@@ -30,35 +60,55 @@ class WorkerManager:
             strategy: 负载均衡策略 ("round_robin", "single")
         """
         self.worker_urls = worker_urls
-        self.strategy = strategy
+
+        # 根据Worker数量自动调整默认策略，保证单节点场景稳定
+        if len(worker_urls) <= 1 and strategy == "round_robin":
+            self.strategy = "single"
+        else:
+            self.strategy = strategy
 
         # Worker 节点状态管理
-        self.workers = {}
+        self.workers: Dict[str, WorkerInfo] = {}
         for url in self.worker_urls:
-            self.workers[url] = {
-                "state": WorkerState.HEALTHY,
-                "requests": 0,
-                "errors": 0,
-                "last_error": None,
-                "last_success": datetime.now(),
-                "last_check": None,
-                "response_time": 0,
-                "success_rate": 100.0,
-            }
+            self.workers[url] = WorkerInfo(
+                state=WorkerState.HEALTHY,
+                requests=0,
+                errors=0,
+                last_error=None,
+                last_success=datetime.now(),
+                last_check=None,
+                response_time=0.0,
+                success_rate=100.0,
+            )
 
         # 熔断器配置
         self.circuit_breaker_config = {
-            "failure_threshold": 5,        # 连续失败次数阈值
-            "recovery_timeout": 60,         # 熔断恢复时间（秒）
-            "half_open_max_calls": 2,       # 半开状态最大尝试次数
-            "monitoring_window": 300,       # 监控窗口（秒）
+            "failure_threshold": 5,  # 连续失败次数阈值
+            "recovery_timeout": 60,  # 熔断恢复时间（秒）
+            "half_open_max_calls": 2,  # 半开状态最大尝试次数
+            "monitoring_window": 300,  # 监控窗口（秒）
         }
 
         # Round-robin 索引
         self.current_worker_index = 0
 
         # 异步会话
-        self.session = None
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._session_proxy: Optional[_SessionCloseProxy] = None
+
+    @property
+    def session(self) -> Optional[aiohttp.ClientSession | _SessionCloseProxy]:
+        if self._session_proxy is not None:
+            if not self._session_proxy.used:
+                self._session_proxy.used = True
+                return self._session_proxy
+            self._session_proxy = None
+        return self._session
+
+    @session.setter
+    def session(self, value: Optional[aiohttp.ClientSession]) -> None:
+        self._session = value
+        self._session_proxy = None
 
     async def initialize(self):
         """初始化异步会话和检查所有Worker健康状态"""
@@ -82,24 +132,38 @@ class WorkerManager:
                 self.workers[url]["state"] = WorkerState.SUSPICIOUS
 
     async def _check_worker_health(self, url: str) -> bool:
-        """
-        检查单个 Worker 节点健康状态
-
-        Args:
-            url: Worker URL
-
-        Returns:
-            是否健康
-        """
+        """检查单个 Worker 节点健康状态"""
         try:
             health_url = f"{url}/health"
+            session = self.session
+            if session is None:
+                raise RuntimeError("HTTP session 未初始化")
             start_time = time.time()
 
-            async with self.session.get(
-                health_url,
-                timeout=aiohttp.ClientTimeout(total=5)
-            ) as response:
-                response_time = (time.time() - start_time) * 1000  # 转换为毫秒
+            request_ctx = session.get(health_url, timeout=aiohttp.ClientTimeout(total=5))
+
+            if hasattr(request_ctx, "__aenter__") and callable(
+                getattr(request_ctx, "__aenter__", None)
+            ):
+                context = request_ctx
+            else:
+
+                @asynccontextmanager
+                async def _single_use():
+                    resp = await request_ctx
+                    try:
+                        yield resp
+                    finally:
+                        release = getattr(resp, "release", None)
+                        if callable(release):
+                            result = release()
+                            if asyncio.iscoroutine(result):
+                                await result
+
+                context = _single_use()
+
+            async with context as response:
+                response_time = (time.time() - start_time) * 1000
 
                 if response.status == 200:
                     result = await response.json()
@@ -134,7 +198,7 @@ class WorkerManager:
         if url not in self.workers:
             return
 
-        worker = self.workers[url]
+        worker: WorkerInfo = self.workers[url]
 
         # 处理布尔值输入
         if isinstance(state, bool):
@@ -165,6 +229,7 @@ class WorkerManager:
 
         else:
             # 直接设置状态
+            assert isinstance(state, WorkerState)
             old_state = worker["state"]
             worker["state"] = state
             if old_state != state:
@@ -188,7 +253,7 @@ class WorkerManager:
         if url not in self.workers:
             return False
 
-        worker = self.workers[url]
+        worker: WorkerInfo = self.workers[url]
 
         # 健康或可疑状态可以使用
         if worker["state"] in [WorkerState.HEALTHY, WorkerState.SUSPICIOUS]:
@@ -196,13 +261,14 @@ class WorkerManager:
 
         # 熔断状态检查恢复时间
         if worker["state"] == WorkerState.UNHEALTHY:
-            if worker["last_error"]:
-                elapsed = (datetime.now() - worker["last_error"]).total_seconds()
+            last_error = worker["last_error"]
+            if last_error is not None:
+                elapsed = (datetime.now() - last_error).total_seconds()
                 if elapsed >= self.circuit_breaker_config["recovery_timeout"]:
                     # 尝试恢复到可疑状态
                     worker["state"] = WorkerState.SUSPICIOUS
                     worker["errors"] = 0  # 重置错误计数
-                    logger.info(f"Worker {url} 熔断超时，尝试恢复")
+                    logger.info(f"Worker {url} 熔断超时，可以尝试恢复")
                     return True
 
         return False
@@ -244,73 +310,26 @@ class WorkerManager:
         self._update_worker_state(url, False)
 
     def get_statistics(self) -> Dict[str, Any]:
-        """
-        获取 Worker 节点统计信息
+        """获取 Worker 节点统计信息"""
 
-        Returns:
-            统计信息字典
-        """
-        stats = {
+        worker_details: Dict[str, Dict[str, Any]] = {}
+        stats: Dict[str, Any] = {
             "total_workers": len(self.workers),
-            "healthy_workers": sum(
-                1 for w in self.workers.values()
-                if w["state"] == WorkerState.HEALTHY
-            ),
-            "suspicious_workers": sum(
-                1 for w in self.workers.values()
-                if w["state"] == WorkerState.SUSPICIOUS
-            ),
-            "unhealthy_workers": sum(
-                1 for w in self.workers.values()
-                if w["state"] == WorkerState.UNHEALTHY
-            ),
-            "workers": {}
+            "healthy_workers": sum(1 for w in self.workers.values() if w["state"] == WorkerState.HEALTHY),
+            "suspicious_workers": sum(1 for w in self.workers.values() if w["state"] == WorkerState.SUSPICIOUS),
+            "unhealthy_workers": sum(1 for w in self.workers.values() if w["state"] == WorkerState.UNHEALTHY),
+            "workers": worker_details,
         }
 
         for url, worker in self.workers.items():
-            stats["workers"][url] = {
+            last_check = worker["last_check"]
+            worker_details[url] = {
                 "state": worker["state"].value,
                 "requests": worker["requests"],
                 "errors": worker["errors"],
                 "success_rate": f"{worker['success_rate']:.2f}%",
                 "response_time": f"{worker['response_time']:.2f}ms",
-                "last_check": worker["last_check"].isoformat() if worker["last_check"] else None,
+                "last_check": last_check.isoformat() if last_check is not None else None,
             }
 
         return stats
-
-    async def monitor_health(self, interval: int = 60):
-        """
-        定期监控 Worker 节点健康状态
-
-        Args:
-            interval: 检查间隔（秒）
-        """
-        while True:
-            try:
-                await asyncio.sleep(interval)
-
-                # 并发检查所有 Worker
-                check_tasks = []
-                for url in self.worker_urls:
-                    check_tasks.append(self._check_worker_health(url))
-
-                await asyncio.gather(*check_tasks, return_exceptions=True)
-
-                # 输出统计信息
-                stats = self.get_statistics()
-                logger.info(
-                    f"Worker 健康监控 - "
-                    f"健康: {stats['healthy_workers']}, "
-                    f"可疑: {stats['suspicious_workers']}, "
-                    f"熔断: {stats['unhealthy_workers']}"
-                )
-
-            except Exception as e:
-                logger.error(f"Worker 健康监控异常: {e}")
-
-    async def cleanup(self):
-        """清理资源"""
-        if self.session:
-            await self.session.close()
-            self.session = None

@@ -4,29 +4,32 @@ import { Spin } from 'antd'
 import MainLayout from '@/layouts/MainLayout'
 import ErrorBoundary from '@/components/common/ErrorBoundary'
 
-// 懒加载页面组件
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
-const Market = lazy(() => import('@/pages/Market'))
-const Trading = lazy(() => import('@/pages/Trading'))
-const DataSource = lazy(() => import('@/pages/DataSource'))
-const Config = lazy(() => import('@/pages/Config'))
-const Logs = lazy(() => import('@/pages/Logs'))
+const EventSystem = lazy(() => import('@/pages/EventSystem'))
+const MarketData = lazy(() => import('@/pages/MarketData'))
+const LogCenter = lazy(() => import('@/pages/LogCenter'))
+const SystemConfig = lazy(() => import('@/pages/SystemConfig'))
+const DataSourceMonitor = lazy(() => import('@/pages/DataSourceMonitor'))
+const CacheSystem = lazy(() => import('@/pages/CacheSystem'))
+const PerformanceAnalytics = lazy(() => import('@/pages/PerformanceAnalytics'))
+const AlertManager = lazy(() => import('@/pages/AlertManager'))
+const ComponentManager = lazy(() => import('@/pages/ComponentManager'))
 const NotFound = lazy(() => import('@/pages/NotFound'))
 
-// 加载中组件
 const PageLoading: React.FC = () => (
-  <div style={{ 
-    display: 'flex', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    height: '100vh' 
-  }}>
+  <div
+    style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100vh'
+    }}
+  >
     <Spin size="large" tip="加载中..." />
   </div>
 )
 
-// 路由包装器，添加错误边界和懒加载
-const RouteWrapper: React.FC<{ element: React.LazyExoticComponent<any> }> = ({ element: Element }) => (
+const RouteWrapper: React.FC<{ element: React.LazyExoticComponent<React.ComponentType<any>> }> = ({ element: Element }) => (
   <ErrorBoundary>
     <Suspense fallback={<PageLoading />}>
       <Element />
@@ -34,7 +37,6 @@ const RouteWrapper: React.FC<{ element: React.LazyExoticComponent<any> }> = ({ e
   </ErrorBoundary>
 )
 
-// 路由配置
 const routes: RouteObject[] = [
   {
     path: '/',
@@ -49,24 +51,40 @@ const routes: RouteObject[] = [
         element: <RouteWrapper element={Dashboard} />
       },
       {
+        path: 'events',
+        element: <RouteWrapper element={EventSystem} />
+      },
+      {
         path: 'market',
-        element: <RouteWrapper element={Market} />
+        element: <RouteWrapper element={MarketData} />
       },
       {
-        path: 'trading',
-        element: <RouteWrapper element={Trading} />
+        path: 'system/logs',
+        element: <RouteWrapper element={LogCenter} />
       },
       {
-        path: 'data-source',
-        element: <RouteWrapper element={DataSource} />
+        path: 'system/config',
+        element: <RouteWrapper element={SystemConfig} />
       },
       {
-        path: 'config',
-        element: <RouteWrapper element={Config} />
+        path: 'monitor/datasource',
+        element: <RouteWrapper element={DataSourceMonitor} />
       },
       {
-        path: 'logs',
-        element: <RouteWrapper element={Logs} />
+        path: 'monitor/cache',
+        element: <RouteWrapper element={CacheSystem} />
+      },
+      {
+        path: 'monitor/performance',
+        element: <RouteWrapper element={PerformanceAnalytics} />
+      },
+      {
+        path: 'monitor/alert',
+        element: <RouteWrapper element={AlertManager} />
+      },
+      {
+        path: 'monitor/component',
+        element: <RouteWrapper element={ComponentManager} />
       },
       {
         path: '*',
@@ -76,7 +94,6 @@ const routes: RouteObject[] = [
   }
 ]
 
-// 创建路由器
 const router = createBrowserRouter(routes)
 
 export default router

@@ -2,8 +2,10 @@
 数据提供者基础类
 确保所有必需的属性都被正确初始化
 """
-from typing import Dict, Any, Optional
+
 from abc import ABC, abstractmethod
+from typing import Any, Dict, Optional
+
 from loguru import logger
 
 
@@ -21,9 +23,9 @@ class BaseDataProvider(ABC):
         self.session = None
         self._cache = {}
         self._cache_ttl = {
-            'realtime': 10,     # 实时数据缓存10秒
-            'historical': 300,  # 历史数据缓存5分钟
-            'info': 3600       # 信息数据缓存1小时
+            "realtime": 10,  # 实时数据缓存10秒
+            "historical": 300,  # 历史数据缓存5分钟
+            "info": 3600,  # 信息数据缓存1小时
         }
         self.config = {}
         self.status = "inactive"
@@ -32,12 +34,12 @@ class BaseDataProvider(ABC):
         self.success_count = 0
 
         # 性能统计
-        self._performance_stats = {
-            'total_requests': 0,
-            'failed_requests': 0,
-            'total_latency': 0.0,
-            'min_latency': float('inf'),
-            'max_latency': 0.0
+        self._performance_stats: Dict[str, float | int] = {
+            "total_requests": 0,
+            "failed_requests": 0,
+            "total_latency": 0.0,
+            "min_latency": float("inf"),
+            "max_latency": 0.0,
         }
 
         logger.debug(f"初始化基础数据提供者: {self.__class__.__name__}")
@@ -69,10 +71,7 @@ class BaseDataProvider(ABC):
 
     @abstractmethod
     async def get_historical_data(
-        self,
-        symbol: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        self, symbol: str, start_date: Optional[str] = None, end_date: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         获取历史数据
@@ -107,22 +106,20 @@ class BaseDataProvider(ABC):
             success: 请求是否成功
             latency: 请求延迟（秒）
         """
-        self._performance_stats['total_requests'] += 1
+        self._performance_stats["total_requests"] += 1
 
         if not success:
-            self._performance_stats['failed_requests'] += 1
+            self._performance_stats["failed_requests"] += 1
             self.error_count += 1
         else:
             self.success_count += 1
 
-        self._performance_stats['total_latency'] += latency
-        self._performance_stats['min_latency'] = min(
-            self._performance_stats['min_latency'],
-            latency
+        self._performance_stats["total_latency"] += latency
+        self._performance_stats["min_latency"] = min(
+            self._performance_stats["min_latency"], latency
         )
-        self._performance_stats['max_latency'] = max(
-            self._performance_stats['max_latency'],
-            latency
+        self._performance_stats["max_latency"] = max(
+            self._performance_stats["max_latency"], latency
         )
 
     def get_performance_stats(self) -> Dict[str, Any]:
@@ -135,26 +132,25 @@ class BaseDataProvider(ABC):
         stats = self._performance_stats.copy()
 
         # 计算平均延迟
-        if stats['total_requests'] > 0:
-            stats['avg_latency'] = stats['total_latency'] / stats['total_requests']
-            stats['success_rate'] = (
-                (stats['total_requests'] - stats['failed_requests']) /
-                stats['total_requests'] * 100
+        if stats["total_requests"] > 0:
+            stats["avg_latency"] = stats["total_latency"] / stats["total_requests"]
+            stats["success_rate"] = (
+                (stats["total_requests"] - stats["failed_requests"]) / stats["total_requests"] * 100
             )
         else:
-            stats['avg_latency'] = 0.0
-            stats['success_rate'] = 0.0
+            stats["avg_latency"] = 0.0
+            stats["success_rate"] = 0.0
 
         return stats
 
     def reset_stats(self):
         """重置性能统计"""
-        self._performance_stats = {
-            'total_requests': 0,
-            'failed_requests': 0,
-            'total_latency': 0.0,
-            'min_latency': float('inf'),
-            'max_latency': 0.0
+        self._performance_stats: Dict[str, float | int] = {
+            "total_requests": 0,
+            "failed_requests": 0,
+            "total_latency": 0.0,
+            "min_latency": float("inf"),
+            "max_latency": 0.0,
         }
         self.error_count = 0
         self.success_count = 0
@@ -167,10 +163,11 @@ class BaseDataProvider(ABC):
             健康状态信息
         """
         return {
-            'provider': self.__class__.__name__,
-            'initialized': self.initialized,
-            'status': self.status,
-            'error_count': self.error_count,
-            'success_count': self.success_count,
-            'performance': self.get_performance_stats()
+            "provider": self.__class__.__name__,
+            "initialized": self.initialized,
+            "status": self.status,
+            "error_count": self.error_count,
+            "success_count": self.success_count,
+            "performance": self.get_performance_stats(),
         }
+

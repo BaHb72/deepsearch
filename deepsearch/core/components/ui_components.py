@@ -4,14 +4,17 @@ UI组件模块
 负责Web管理界面
 从原unified_components.py拆分而来
 """
+
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Any, Dict
 
 from deepsearch.config import get_config
+
 from ..async_component import AsyncComponent
-from ..utils.exceptions import error_context
+from ..component_state import ComponentLifecycle
 from ..interfaces import ComponentType
-from ..utils.timeout_config import TimeoutManager, TimeoutCategory
+from ..utils.exceptions import error_context
+from ..utils.timeout_config import TimeoutCategory, TimeoutManager
 
 
 class WebUIComponent(AsyncComponent):
@@ -25,27 +28,58 @@ class WebUIComponent(AsyncComponent):
 
         # 获取配置
         config = get_config()
-        self._backend_port = config.webui.backend_port if config and config.webui else 8000
-        self._frontend_port = config.webui.frontend_port if config and config.webui else 3000
-        self._enabled = config.webui.enabled if config and config.webui else True
+        backend_port = config.webui.backend_port if config and config.webui else 8000
+        frontend_port = config.webui.frontend_port if config and config.webui else 3000
+        enabled = config.webui.enabled if config and config.webui else True
+        self._backend_port: int = int(backend_port)
+        self._frontend_port: int = int(frontend_port)
+        self._enabled: bool = bool(enabled)
+
+    @property
+    def _instance(self):
+        return self.resource
+
+    @_instance.setter
+    def _instance(self, value):
+        if value is None:
+            self._state_manager.state.clear_resource()
+        else:
+            self._state_manager.state.set_resource(value)
+
+    @_instance.deleter
+    def _instance(self):
+        self._state_manager.state.clear_resource()
+
+    async def stop(self) -> None:
+        # 允许在未进入生命周期时释放测试注入的实例
+        if self.state.lifecycle == ComponentLifecycle.CREATED and self._instance:
+            try:
+                await self._do_stop()
+            finally:
+                del self._instance
+            return
+        await super().stop()
 
     async def _do_initialize(self) -> None:
         """初始化WebUI"""
         with error_context(self.name, "initialize"):
             if not self._enabled:
                 self._logger.info("WebUI组件已禁用")
-                return self
+                return None
 
             # 使用超时控制进行初始化
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_INIT)
             try:
+
                 async def _init_webui():
                     # WebUI的初始化在启动时进行
                     # 这里只做基本准备工作
-                    self._logger.info(f"WebUI组件已初始化，后端端口: {self._backend_port}, 前端端口: {self._frontend_port}")
+                    self._logger.info(
+                        f"WebUI组件已初始化，后端端口: {self._backend_port}, 前端端口: {self._frontend_port}"
+                    )
 
                 await asyncio.wait_for(_init_webui(), timeout=timeout)
-                return self
+                return None
             except asyncio.TimeoutError:
                 raise RuntimeError(f"WebUI initialization timeout after {timeout} seconds")
 
@@ -58,10 +92,11 @@ class WebUIComponent(AsyncComponent):
             # 使用超时控制进行启动
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_START)
             try:
+
                 async def _start_webui():
                     # WebUI 服务器现在由 MainEngine 的异步任务管理
                     # 这里只记录启动信息
-                    self._logger.info(f"WebUI组件已准备就绪")
+                    self._logger.info("WebUI组件已准备就绪")
                     self._logger.info(f"后端访问地址: http://localhost:{self._backend_port}")
                     self._logger.info(f"前端访问地址: http://localhost:{self._frontend_port}")
 
@@ -78,6 +113,7 @@ class WebUIComponent(AsyncComponent):
             # 使用超时控制进行停止
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_STOP)
             try:
+
                 async def _stop_webui():
                     # 停止前端进程（如果有）
                     if self._frontend_process:
@@ -95,6 +131,7 @@ class WebUIComponent(AsyncComponent):
                     self._logger.info("WebUI服务已停止")
 
                 await asyncio.wait_for(_stop_webui(), timeout=timeout)
+                self._instance = None
             except asyncio.TimeoutError:
                 self._logger.warning(f"WebUI stop timeout after {timeout} seconds, forcing stop")
                 # 强制停止
@@ -117,15 +154,19 @@ class WebUIComponent(AsyncComponent):
 
         timeout = self._timeout_manager.get_timeout(TimeoutCategory.COMPONENT_HEALTH)
         try:
+
             async def _check():
                 # 可以尝试访问健康检查端点
                 import aiohttp
+
                 try:
                     async with aiohttp.ClientSession() as session:
                         url = f"http://localhost:{self._backend_port}/api/health"
-                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                        async with session.get(
+                            url, timeout=aiohttp.ClientTimeout(total=5)
+                        ) as response:
                             return response.status == 200
-                except:
+                except Exception:
                     return False
 
             return await asyncio.wait_for(_check(), timeout=timeout)
@@ -143,7 +184,7 @@ class WebUIComponent(AsyncComponent):
             "backend_port": self._backend_port,
             "frontend_port": self._frontend_port,
             "backend_url": f"http://localhost:{self._backend_port}",
-            "frontend_url": f"http://localhost:{self._frontend_port}"
+            "frontend_url": f"http://localhost:{self._frontend_port}",
         }
 
         # 添加服务状态
@@ -178,18 +219,22 @@ class WebUIComponent(AsyncComponent):
 
         timeout = self._timeout_manager.get_timeout(TimeoutCategory.NETWORK_HEALTH)
         try:
+
             async def _get_status():
                 import aiohttp
+
                 status = {
                     "backend": {"port": self._backend_port, "status": "unknown"},
-                    "frontend": {"port": self._frontend_port, "status": "unknown"}
+                    "frontend": {"port": self._frontend_port, "status": "unknown"},
                 }
 
                 # 检查后端状态
                 try:
                     async with aiohttp.ClientSession() as session:
                         url = f"http://localhost:{self._backend_port}/api/health"
-                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                        async with session.get(
+                            url, timeout=aiohttp.ClientTimeout(total=5)
+                        ) as response:
                             if response.status == 200:
                                 data = await response.json()
                                 status["backend"]["status"] = "healthy"
@@ -204,7 +249,9 @@ class WebUIComponent(AsyncComponent):
                 try:
                     async with aiohttp.ClientSession() as session:
                         url = f"http://localhost:{self._frontend_port}/"
-                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                        async with session.get(
+                            url, timeout=aiohttp.ClientTimeout(total=5)
+                        ) as response:
                             if response.status == 200:
                                 status["frontend"]["status"] = "healthy"
                             else:
@@ -225,6 +272,7 @@ class WebUIComponent(AsyncComponent):
     def set_server_instance(self, server):
         """设置服务器实例（由MainEngine调用）"""
         self._server = server
+        self._instance = server
 
     def set_frontend_process(self, process):
         """设置前端进程（由启动脚本调用）"""

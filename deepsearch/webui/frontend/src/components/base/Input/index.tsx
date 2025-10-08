@@ -345,13 +345,19 @@ const Input = forwardRef(({
       )
     }
     
+    const resolvedStep = (
+      step ?? (type === 'number' && typeof precision === 'number' && precision >= 0
+        ? Math.pow(10, -precision)
+        : undefined)
+    )
+
     return (
       <input
         {...inputProps}
         type={getInputType()}
         min={min}
         max={max}
-        step={step}
+        step={resolvedStep}
         maxLength={maxLength}
       />
     )

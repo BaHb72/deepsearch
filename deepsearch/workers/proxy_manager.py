@@ -3,44 +3,52 @@ Cloudflare Workers 代理管理器
 
 管理通过 Cloudflare Workers 代理的 API 请求
 """
+
 import asyncio
 import json
 import time
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional, TypedDict
 
 import aiohttp
 from loguru import logger
 
-from .models import (
-    WorkersConfig,
-    ProxyStatus,
-    ProxyStatistics,
-    ProxyTestResult,
-    AkShareResponse
-)
+from .models import AkShareResponse, ProxyStatistics, ProxyStatus, ProxyTestResult, WorkersConfig
+
+
+class CacheEntry(TypedDict):
+    data: Any
+    status: str
+    timestamp: datetime
+    ttl: int
+
+
 
 
 class WorkersProxyManager:
     """
     Cloudflare Workers 代理管理器
-    
+
     负责管理和路由通过 Workers 的 API 请求
     """
 
     def __init__(self, config: Optional[WorkersConfig] = None):
         """
         初始化代理管理器
-        
+
         Args:
             config: Workers 配置
         """
-        self.config = config or WorkersConfig()
-        self.statistics = ProxyStatistics()
+        if config is None:
+            self.config = WorkersConfig.model_validate({})
+        else:
+            self.config = config
+
+        self.statistics = ProxyStatistics.model_validate({})
         self.status = ProxyStatus.DISABLED if not self.config.enabled else ProxyStatus.ENABLED
 
         # 缓存存储
-        self._cache: Dict[str, tuple[Any, datetime]] = {}
+        self._cache: Dict[str, CacheEntry | tuple[Any, datetime]] = {}
 
         # HTTP 会话
         self._session: Optional[aiohttp.ClientSession] = None
@@ -55,14 +63,18 @@ class WorkersProxyManager:
     @property
     def is_enabled(self) -> bool:
         """是否启用代理"""
-        return self.config.enabled and self.status == ProxyStatus.ENABLED
+        return bool(self.config.enabled) and self.status == ProxyStatus.ENABLED
+
+    async def _ensure_session(self) -> aiohttp.ClientSession:
+        """Ensure aiohttp client session exists"""
+        if self._session is None:
+            timeout = aiohttp.ClientTimeout(total=self.config.timeout)
+            self._session = aiohttp.ClientSession(timeout=timeout)
+        return self._session
 
     async def initialize(self) -> None:
         """初始化管理器"""
-        # 创建 HTTP 会话
-        if not self._session:
-            timeout = aiohttp.ClientTimeout(total=self.config.timeout)
-            self._session = aiohttp.ClientSession(timeout=timeout)
+        await self._ensure_session()
 
         # 如果启用，测试连接
         if self.config.enabled:
@@ -96,12 +108,12 @@ class WorkersProxyManager:
             self.disable()
         else:
             self.enable()
-        return self.config.enabled
+        return bool(self.config.enabled)
 
     async def test_connection(self) -> ProxyTestResult:
         """
         测试 Workers 连接
-        
+
         Returns:
             测试结果
         """
@@ -116,14 +128,17 @@ class WorkersProxyManager:
                 status_code=None,
                 message="Workers URL not configured",
                 error="Please configure a valid Cloudflare Workers URL",
-                timestamp=datetime.now()
+                workers_version=None,
+                timestamp=datetime.now(),
             )
             self.status = ProxyStatus.ERROR
             self.logger.error("Workers test failed: URL not configured")
             return result
 
         # 验证URL格式
-        if not self.config.url.endswith('.workers.dev') and not self.config.url.endswith('.pages.dev'):
+        if not self.config.url.endswith(".workers.dev") and not self.config.url.endswith(
+            ".pages.dev"
+        ):
             self.logger.warning(f"URL may not be a valid Workers domain: {self.config.url}")
 
         try:
@@ -133,18 +148,19 @@ class WorkersProxyManager:
             health_url = f"https://{self.config.url}/health"
 
             # 发送请求
-            if not self._session:
-                await self.initialize()
+            session = await self._ensure_session()
 
             # 总是发送 API key header，即使为空
             # 这样可以正确测试端点是否需要认证
             headers = {}
             api_key = self.config.api_key if self.config.api_key else ""
-            headers['X-API-Key'] = api_key
+            headers["X-API-Key"] = api_key
 
             # 先尝试业务API测试
             try:
-                async with self._session.get(test_url, headers=headers, params={"symbol": "000001"}) as test_response:
+                async with session.get(
+                    test_url, headers=headers, params={"symbol": "000001"}
+                ) as test_response:
                     if test_response.status == 200:
                         response_time = (time.time() - start_time) * 1000
                         data = await test_response.json()
@@ -156,25 +172,38 @@ class WorkersProxyManager:
                                 response_time=response_time,
                                 status_code=test_response.status,
                                 message="Workers proxy is healthy (business API tested)",
-                                workers_version=data.get('version') if isinstance(data, dict) else None,
-                                timestamp=datetime.now()
+                                workers_version=(
+                                    data.get("version") if isinstance(data, dict) else None
+                                ),
+                                error=None,
+                                timestamp=datetime.now(),
                             )
-                            self.status = ProxyStatus.ENABLED if self.config.enabled else ProxyStatus.DISABLED
-                            self.logger.info(f"Workers business API test successful (time={response_time:.2f}ms)")
+                            self.status = (
+                                ProxyStatus.ENABLED if self.config.enabled else ProxyStatus.DISABLED
+                            )
+                            self.logger.info(
+                                f"Workers business API test successful (time={response_time:.2f}ms)"
+                            )
                             return result
-            except:
-                pass  # 如果业务API测试失败，继续尝试健康检查
+            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                self.logger.opt(exception=exc).warning(
+                    "Workers 业务 API 测试失败，将退回健康检查"
+                )
+            except Exception as exc:
+                self.logger.opt(exception=exc).error(
+                    "Workers 业务 API 测试出现意外异常，将退回健康检查"
+                )
 
             # 降级到基础健康检查
-            async with self._session.get(health_url, headers=headers) as response:
+            async with session.get(health_url, headers=headers) as response:
                 response_time = (time.time() - start_time) * 1000  # 转换为毫秒
 
                 if response.status == 200:
                     data = await response.json()
 
                     # 检查端点是否需要认证
-                    requires_auth = data.get('requires_auth', False)
-                    authenticated = data.get('authenticated', None)
+                    requires_auth = data.get("requires_auth", False)
+                    authenticated = data.get("authenticated", None)
 
                     # 如果端点需要认证但没有提供有效的 API 密钥
                     if requires_auth and not api_key:
@@ -183,8 +212,9 @@ class WorkersProxyManager:
                             response_time=response_time,
                             status_code=response.status,
                             message="Authentication required",
+                            workers_version=None,
                             error="This endpoint requires an API key but none was provided",
-                            timestamp=datetime.now()
+                            timestamp=datetime.now(),
                         )
                         self.status = ProxyStatus.ERROR
                         self.logger.error("Workers test failed: API key required but not provided")
@@ -199,8 +229,9 @@ class WorkersProxyManager:
                                 response_time=response_time,
                                 status_code=response.status,
                                 message="API key validation failed",
+                                workers_version=None,
                                 error="Invalid or unauthorized API key",
-                                timestamp=datetime.now()
+                                timestamp=datetime.now(),
                             )
                             self.status = ProxyStatus.ERROR
                             self.logger.error("Workers test failed: Invalid API key")
@@ -223,27 +254,33 @@ class WorkersProxyManager:
                         response_time=response_time,
                         status_code=response.status,
                         message="Workers proxy is healthy" + auth_msg,
-                        workers_version=data.get('version'),
-                        timestamp=datetime.now()
+                        workers_version=data.get("version"),
+                        error=None,
+                        timestamp=datetime.now(),
                     )
 
-                    self.status = ProxyStatus.ENABLED if self.config.enabled else ProxyStatus.DISABLED
+                    self.status = (
+                        ProxyStatus.ENABLED if self.config.enabled else ProxyStatus.DISABLED
+                    )
                     self.logger.info(f"Workers test successful (time={response_time:.2f}ms)")
 
                 elif response.status == 401:
                     # 明确的认证失败
-                    error_msg = "API key required but not provided" if not api_key else "Invalid API key"
+                    error_msg = (
+                        "API key required but not provided" if not api_key else "Invalid API key"
+                    )
                     result = ProxyTestResult(
                         success=False,
                         response_time=response_time,
                         status_code=response.status,
                         message="Authentication failed",
+                        workers_version=None,
                         error=error_msg,
-                        timestamp=datetime.now()
+                        timestamp=datetime.now(),
                     )
 
                     self.status = ProxyStatus.ERROR
-                    self.logger.error(f"Workers test failed: Authentication error (HTTP 401)")
+                    self.logger.error("Workers test failed: Authentication error (HTTP 401)")
 
                 else:
                     result = ProxyTestResult(
@@ -251,8 +288,9 @@ class WorkersProxyManager:
                         response_time=response_time,
                         status_code=response.status,
                         message=f"HTTP {response.status}",
+                        workers_version=None,
                         error=await response.text(),
-                        timestamp=datetime.now()
+                        timestamp=datetime.now(),
                     )
 
                     self.status = ProxyStatus.ERROR
@@ -266,9 +304,11 @@ class WorkersProxyManager:
             result = ProxyTestResult(
                 success=False,
                 response_time=response_time,
+                status_code=None,
                 message="Connection timeout",
+                workers_version=None,
                 error="Request timed out",
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
 
             self.status = ProxyStatus.ERROR
@@ -281,9 +321,11 @@ class WorkersProxyManager:
             result = ProxyTestResult(
                 success=False,
                 response_time=response_time,
+                status_code=None,
                 message="Connection failed",
+                workers_version=None,
                 error=str(e),
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
 
             self.status = ProxyStatus.ERROR
@@ -291,19 +333,16 @@ class WorkersProxyManager:
             return result
 
     async def request_akshare(
-            self,
-            function: str,
-            params: Optional[Dict[str, Any]] = None,
-            use_cache: bool = True
+        self, function: str, params: Optional[Dict[str, Any]] = None, use_cache: bool = True
     ) -> AkShareResponse:
         """
         通过 Workers 请求 AkShare API
-        
+
         Args:
             function: AkShare 函数名
             params: 函数参数
             use_cache: 是否使用缓存
-            
+
         Returns:
             API 响应
         """
@@ -325,7 +364,8 @@ class WorkersProxyManager:
                     source="cache",
                     response_time=0,
                     cached=True,
-                    timestamp=datetime.now()
+                    error=None,
+                    timestamp=datetime.now(),
                 )
 
         # 决定使用 Workers 还是直连
@@ -336,12 +376,16 @@ class WorkersProxyManager:
                     # 只缓存有效的成功响应
                     if use_cache and self.config.cache_enabled:
                         # 验证数据不为空
-                        if response.data and (isinstance(response.data, list) and len(response.data) > 0 or
-                                              isinstance(response.data, dict) and response.data):
+                        if response.data and (
+                            isinstance(response.data, list)
+                            and len(response.data) > 0
+                            or isinstance(response.data, dict)
+                            and response.data
+                        ):
                             self._set_cached(
                                 self._get_cache_key(function, params),
                                 response.data,
-                                status="success"
+                                status="success",
                             )
                         else:
                             # 空数据使用短TTL负缓存
@@ -349,7 +393,7 @@ class WorkersProxyManager:
                                 self._get_cache_key(function, params),
                                 response.data,
                                 status="empty",
-                                ttl=60  # 60秒负缓存
+                                ttl=60,  # 60秒负缓存
                             )
                 elif not response.success:
                     # 失败不缓存
@@ -371,18 +415,14 @@ class WorkersProxyManager:
             # 直接连接
             return await self._request_direct(function, params)
 
-    async def _request_via_workers(
-            self,
-            function: str,
-            params: Dict[str, Any]
-    ) -> AkShareResponse:
+    async def _request_via_workers(self, function: str, params: Dict[str, Any]) -> AkShareResponse:
         """
         通过 Workers 发送请求
-        
+
         Args:
             function: 函数名
             params: 参数
-            
+
         Returns:
             响应
         """
@@ -393,26 +433,18 @@ class WorkersProxyManager:
             url = f"https://{self.config.url}/api/akshare/{function}"
 
             # 准备请求
-            headers = {
-                'Content-Type': 'application/json'
-            }
+            headers = {"Content-Type": "application/json"}
             # 总是发送 API key header 以正确处理认证
             api_key = self.config.api_key if self.config.api_key else ""
-            headers['X-API-Key'] = api_key
+            headers["X-API-Key"] = api_key
 
             # 发送请求
-            if not self._session:
-                await self.initialize()
-
             # 重试逻辑（带指数退避）
             last_error = None
             for attempt in range(self.config.retry_count):
                 try:
-                    async with self._session.post(
-                            url,
-                            json=params,
-                            headers=headers
-                    ) as response:
+                    session = await self._ensure_session()
+                    async with session.post(url, json=params, headers=headers) as response:
                         response_time = (time.time() - start_time) * 1000
 
                         # 更新统计
@@ -429,11 +461,12 @@ class WorkersProxyManager:
 
                             return AkShareResponse(
                                 success=True,
-                                data=data.get('data'),
+                                data=data.get("data"),
                                 source="workers",
                                 response_time=response_time,
                                 cached=False,
-                                timestamp=datetime.now()
+                                error=None,
+                                timestamp=datetime.now(),
                             )
                         else:
                             error_text = await response.text()
@@ -442,7 +475,7 @@ class WorkersProxyManager:
 
                             if attempt < self.config.retry_count - 1:
                                 # 指数退避，最多等待10秒
-                                wait_time = min(2 ** attempt * self.config.retry_delay, 10)
+                                wait_time = min(2**attempt * self.config.retry_delay, 10)
                                 self.logger.debug(f"Retrying after {wait_time}s...")
                                 await asyncio.sleep(wait_time)
                                 continue
@@ -452,20 +485,23 @@ class WorkersProxyManager:
 
                             return AkShareResponse(
                                 success=False,
+                                data=None,
                                 error=error_text,
                                 source="workers",
                                 response_time=response_time,
                                 cached=False,
-                                timestamp=datetime.now()
+                                timestamp=datetime.now(),
                             )
 
                 except asyncio.TimeoutError:
                     last_error = "Request timeout"
-                    self.logger.warning(f"Request timeout (attempt {attempt + 1}/{self.config.retry_count})")
+                    self.logger.warning(
+                        f"Request timeout (attempt {attempt + 1}/{self.config.retry_count})"
+                    )
 
                     # DNS/TLS类错误减少重试次数
                     if attempt < min(2, self.config.retry_count - 1):  # 最多重试2次
-                        wait_time = min(2 ** attempt, 5)  # 超时后等待时间更短
+                        wait_time = min(2**attempt, 5)  # 超时后等待时间更短
                         self.logger.debug(f"Retrying after {wait_time}s...")
                         await asyncio.sleep(wait_time)
                         continue
@@ -479,11 +515,12 @@ class WorkersProxyManager:
 
             return AkShareResponse(
                 success=False,
+                data=None,
                 error=last_error or "All retries failed",
                 source="workers",
                 response_time=response_time,
                 cached=False,
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
 
         except Exception as e:
@@ -495,25 +532,22 @@ class WorkersProxyManager:
 
             return AkShareResponse(
                 success=False,
+                data=None,
                 error=str(e),
                 source="workers",
                 response_time=response_time,
                 cached=False,
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
 
-    async def _request_direct(
-            self,
-            function: str,
-            params: Dict[str, Any]
-    ) -> AkShareResponse:
+    async def _request_direct(self, function: str, params: Dict[str, Any]) -> AkShareResponse:
         """
         直接调用 AkShare（不通过 Workers）
-        
+
         Args:
             function: 函数名
             params: 参数
-            
+
         Returns:
             响应
         """
@@ -537,8 +571,8 @@ class WorkersProxyManager:
             response_time = (time.time() - start_time) * 1000
 
             # 转换 DataFrame 到 dict
-            if hasattr(result, 'to_dict'):
-                data = result.to_dict('records')
+            if hasattr(result, "to_dict"):
+                data = result.to_dict("records")
             else:
                 data = result
 
@@ -551,7 +585,8 @@ class WorkersProxyManager:
                 source="direct",
                 response_time=response_time,
                 cached=False,
-                timestamp=datetime.now()
+                error=None,
+                timestamp=datetime.now(),
             )
 
         except Exception as e:
@@ -563,11 +598,12 @@ class WorkersProxyManager:
 
             return AkShareResponse(
                 success=False,
+                data=None,
                 error=str(e),
                 source="direct",
                 response_time=response_time,
                 cached=False,
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
 
     def _get_cache_key(self, function: str, params: Dict[str, Any]) -> str:
@@ -603,20 +639,29 @@ class WorkersProxyManager:
                     del self._cache[key]
         return None
 
-    def _set_cached(self, key: str, data: Any, status: str = "success", ttl: Optional[int] = None) -> None:
+    def _set_cached(
+        self, key: str, data: Any, status: str = "success", ttl: Optional[int] = None
+    ) -> None:
         """设置缓存数据（带元数据）"""
         cache_ttl = ttl if ttl is not None else self.config.cache_ttl
         self._cache[key] = {
             "data": data,
             "status": status,  # success, empty, error
             "timestamp": datetime.now(),
-            "ttl": cache_ttl
+            "ttl": cache_ttl,
         }
 
         # 限制缓存大小（简单的 LRU）
         if len(self._cache) > 100:
             # 删除最旧的缓存项
-            oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k][1])
+            def _entry_timestamp(entry: CacheEntry | tuple[Any, datetime]) -> datetime:
+                if isinstance(entry, dict):
+                    return entry.get("timestamp", datetime.min)
+                if isinstance(entry, tuple) and len(entry) >= 2 and isinstance(entry[1], datetime):
+                    return entry[1]
+                return datetime.min
+
+            oldest_key = min(self._cache.keys(), key=lambda k: _entry_timestamp(self._cache[k]))
             del self._cache[oldest_key]
 
     def _update_avg_response_time(self, response_time: float) -> None:
@@ -626,10 +671,9 @@ class WorkersProxyManager:
         else:
             # 移动平均
             self.statistics.avg_response_time = (
-                                                        self.statistics.avg_response_time * (
-                                                        self.statistics.successful_requests - 1) +
-                                                        response_time
-                                                ) / self.statistics.successful_requests
+                self.statistics.avg_response_time * (self.statistics.successful_requests - 1)
+                + response_time
+            ) / self.statistics.successful_requests
 
     def clear_cache(self) -> None:
         """清空缓存"""
@@ -640,8 +684,8 @@ class WorkersProxyManager:
         """获取管理器状态"""
         # 获取配置字典并隐藏敏感信息
         config_dict = self.config.dict()
-        if config_dict.get('api_key'):
-            config_dict['api_key'] = '******'  # 隐藏实际的 API 密钥值
+        if config_dict.get("api_key"):
+            config_dict["api_key"] = "******"  # 隐藏实际的 API 密钥值
 
         return {
             "enabled": self.config.enabled,
@@ -649,7 +693,7 @@ class WorkersProxyManager:
             "url": self.config.url,
             "statistics": self.statistics.dict(),
             "cache_size": len(self._cache),
-            "config": config_dict
+            "config": config_dict,
         }
 
     def update_config(self, config: WorkersConfig) -> None:
@@ -660,7 +704,9 @@ class WorkersProxyManager:
         # 更新状态
         if config.enabled != old_enabled:
             self.status = ProxyStatus.ENABLED if config.enabled else ProxyStatus.DISABLED
-            self.logger.info(f"Proxy {'enabled' if config.enabled else 'disabled'} via config update")
+            self.logger.info(
+                f"Proxy {'enabled' if config.enabled else 'disabled'} via config update"
+            )
 
     def reset_statistics(self) -> None:
         """重置统计信息"""

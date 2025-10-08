@@ -4,8 +4,11 @@ Mock Data Provider Tests
 此文件展示如何在pytest测试中正确使用Mock数据。
 Mock数据仅限于测试环境（env=test）使用。
 """
+
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+
 from deepsearch.config import get_config
 
 
@@ -28,7 +31,7 @@ class MockDataProvider:
             "price": 100.0,
             "mock": True,
             "test_only": True,
-            "environment": "test"
+            "environment": "test",
         }
 
     def get_realtime_quote(self, symbol: str):
@@ -40,7 +43,7 @@ class MockDataProvider:
             "change_pct": 1.0,
             "volume": 1000000,
             "mock": True,
-            "test_only": True
+            "test_only": True,
         }
 
     def get_kline_data(self, symbol: str, period: str = "1d"):
@@ -54,7 +57,7 @@ class MockDataProvider:
                 "close": 102.0,
                 "volume": 1000000,
                 "mock": True,
-                "test_only": True
+                "test_only": True,
             }
         ]
 
@@ -62,7 +65,7 @@ class MockDataProvider:
 @pytest.fixture
 def mock_config():
     """确保测试在test环境中运行"""
-    with patch('deepsearch.config.get_config') as mock_get_config:
+    with patch("deepsearch.config.get_config") as mock_get_config:
         config = MagicMock()
         config.app.env = "test"
         mock_get_config.return_value = config
@@ -80,7 +83,7 @@ class TestMockDataProvider:
 
     def test_mock_provider_only_in_test_env(self):
         """测试Mock Provider只能在测试环境中创建"""
-        with patch('deepsearch.config.get_config') as mock_get_config:
+        with patch("deepsearch.config.get_config") as mock_get_config:
             # 模拟生产环境
             config = MagicMock()
             config.app.env = "prod"
@@ -135,7 +138,7 @@ class TestAPIWithMockData:
         provider = await DataProviderFactory.get_provider_async("amazingdata")
 
         # 验证返回的是MockProvider
-        assert hasattr(provider, 'test_connection')
+        assert hasattr(provider, "test_connection")
         result = await provider.test_connection()
         assert result["mock"] is True
         assert result["test_only"] is True
@@ -143,7 +146,7 @@ class TestAPIWithMockData:
     @pytest.mark.asyncio
     async def test_api_fallback_in_production(self):
         """测试生产环境中API降级到真实数据源"""
-        with patch('deepsearch.config.get_config') as mock_get_config:
+        with patch("deepsearch.config.get_config") as mock_get_config:
             # 模拟生产环境
             config = MagicMock()
             config.app.env = "prod"
@@ -155,7 +158,9 @@ class TestAPIWithMockData:
             DataProviderFactory.clear_all()
 
             # 在生产环境中应该降级到AkShareProxyProvider
-            with patch('deepsearch.infrastructure.providers.implementations.akshare.akshare.AkShareProxyProvider') as MockAkShare:
+            with patch(
+                "deepsearch.infrastructure.providers.implementations.akshare.akshare.AkShareProxyProvider"
+            ) as MockAkShare:
                 mock_instance = MagicMock()
                 MockAkShare.return_value = mock_instance
 

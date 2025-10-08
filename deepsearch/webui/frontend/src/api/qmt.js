@@ -212,7 +212,7 @@ export class QmtWebSocket {
 
         this.ws.send(JSON.stringify({
             action: 'subscribe',
-            symbols: symbols
+            symbols
         }))
     }
 
@@ -230,7 +230,7 @@ export class QmtWebSocket {
 
         this.ws.send(JSON.stringify({
             action: 'unsubscribe',
-            symbols: symbols
+            symbols
         }))
     }
 

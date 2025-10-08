@@ -7,17 +7,18 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Optional, Any
+from typing import Any, Callable, Optional
 
 from deepsearch.constants import (
-    EVENT_TICK,
-    EVENT_ORDER,
-    EVENT_TRADE,
     EVENT_ERROR,
     EVENT_LOG,
+    EVENT_ORDER,
+    EVENT_TICK,
+    EVENT_TRADE,
 )
 from deepsearch.event.engine.engine import Event
-from deepsearch.messaging.bus import CompositeMessageBus
+from deepsearch.messaging.bus import MessageBus
+from deepsearch.observability import get_logger
 
 # ==============================================================================
 # Constants
@@ -37,7 +38,7 @@ THREAD_SHUTDOWN_TIMEOUT = 5.0
 # Logging
 # ==============================================================================
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ==============================================================================
@@ -62,6 +63,7 @@ class GatewayStatus(Enum):
     :ivar CLOSED: 网关连接已关闭的状态。
     :type CLOSED: int
     """
+
     DISCONNECTED = 0
     CONNECTING = 1
     CONNECTED = 2
@@ -82,7 +84,7 @@ class BaseGateway(ABC):
     通过继承该类可以实现具体的网关逻辑，如连接交易所、推送交易相关事件、管理订单等。
 
     :ivar message_bus: 消息总线，用于通信及事件处理。
-    :type message_bus: CompositeMessageBus
+    :type message_bus: MessageBus
     :ivar gateway_name: 网关名称，用于标识实例。
     :type gateway_name: str
     :ivar status: 网关当前状态，枚举类型 GatewayStatus，初始状态为 DISCONNECTED。
@@ -94,11 +96,11 @@ class BaseGateway(ABC):
     # ==========================================================================
     # Initialization
     # ==========================================================================
-    
+
     def __init__(
-            self,
-            message_bus: CompositeMessageBus,
-            gateway_name: str,
+        self,
+        message_bus: MessageBus[Any],
+        gateway_name: str,
     ) -> None:
         """
         表示网关初始化的构造函数。
@@ -106,7 +108,7 @@ class BaseGateway(ABC):
         此构造函数通过消息总线初始化网关，同时设置网关名称和初始状态。
 
         :param message_bus: 消息总线实例，用于通信及事件处理
-        :type message_bus: CompositeMessageBus
+        :type message_bus: MessageBus
         :param gateway_name: 网关的名称，用于标识实例
         :type gateway_name: str
         """
@@ -115,8 +117,8 @@ class BaseGateway(ABC):
             raise ValueError("message_bus cannot be None")
         if not gateway_name:
             raise ValueError("gateway_name cannot be empty")
-            
-        self.message_bus: CompositeMessageBus = message_bus
+
+        self.message_bus: MessageBus[Any] = message_bus
         self.gateway_name: str = gateway_name
 
         # Gateway state
@@ -127,6 +129,7 @@ class BaseGateway(ABC):
         self._heartbeat_enabled: bool = False
         self._heartbeat_interval: Optional[float] = None
         self._heartbeat_thread: Optional[threading.Thread] = None
+        self._heartbeat_bus_handler: Optional[Callable[[str, Any], None]] = None
         self._reconnecting: bool = False
         self._reconnect_lock = threading.Lock()
 
@@ -134,7 +137,7 @@ class BaseGateway(ABC):
         self._shutdown: bool = False
 
         # Initialize logger
-        self.logger = logging.getLogger(f"gateway.{gateway_name}")
+        self.logger = get_logger(f"gateway.{gateway_name}")
         self.logger.info(f"交易网关 [{gateway_name}] 启动成功")
 
     # ==========================================================================
@@ -147,7 +150,7 @@ class BaseGateway(ABC):
             return
 
         # 检查消息总线是否已启动
-        if not self.message_bus or not hasattr(self.message_bus, 'is_running'):
+        if not self.message_bus or not hasattr(self.message_bus, "is_running"):
             self.logger.debug(f"消息总线未就绪，跳过发布事件 {etype}")
             return
 
@@ -214,19 +217,28 @@ class BaseGateway(ABC):
             # Stop existing heartbeat if any
             if self._heartbeat_enabled:
                 self.stop_heartbeat()
-                
+
             # Initialize executor if needed
             if not self._executor:
                 self._executor = concurrent.futures.ThreadPoolExecutor(
-                    max_workers=DEFAULT_MAX_WORKERS,
-                    thread_name_prefix=f"{self.gateway_name}-bg"
+                    max_workers=DEFAULT_MAX_WORKERS, thread_name_prefix=f"{self.gateway_name}-bg"
                 )
 
             # Subscribe to heartbeat events
+            def _heartbeat_wrapper(_topic: str, payload: Any) -> None:
+                if isinstance(payload, Event):
+                    self._heartbeat_task(payload)
+                else:
+                    self.logger.debug(
+                        "Received heartbeat payload with unexpected type: %s",
+                        type(payload).__name__,
+                    )
+
             self.message_bus.subscribe(
                 topic=HEARTBEAT_EVENT_TYPE,
-                handler=self._heartbeat_task,
+                handler=_heartbeat_wrapper,
             )
+            self._heartbeat_bus_handler = _heartbeat_wrapper
 
             # Start heartbeat thread
             self._heartbeat_enabled = True
@@ -244,13 +256,18 @@ class BaseGateway(ABC):
 
     def _schedule_heartbeat(self, interval: float) -> None:
         """调度心跳任务"""
+
         def heartbeat_loop():
             while self._heartbeat_enabled and not self._shutdown:
                 try:
                     time.sleep(interval)
                     if self._heartbeat_enabled and not self._shutdown:
                         # 检查消息总线是否正在运行
-                        if self.message_bus and hasattr(self.message_bus, '_running') and self.message_bus._running:
+                        if (
+                            self.message_bus
+                            and hasattr(self.message_bus, "_running")
+                            and self.message_bus._running
+                        ):
                             event = Event(HEARTBEAT_EVENT_TYPE, {"gateway": self.gateway_name})
                             self.message_bus.publish(HEARTBEAT_EVENT_TYPE, event)
                 except Exception as exc:
@@ -280,9 +297,10 @@ class BaseGateway(ABC):
 
             # Unsubscribe from heartbeat events
             try:
-                self.message_bus.unsubscribe(
+                if self._heartbeat_bus_handler:
+                    self.message_bus.unsubscribe(
                     topic=HEARTBEAT_EVENT_TYPE,
-                    handler=self._heartbeat_task,
+                    handler=self._heartbeat_bus_handler,
                 )
             except Exception as e:
                 self.logger.debug(f"取消心跳订阅失败：{e}")
@@ -291,6 +309,7 @@ class BaseGateway(ABC):
         finally:
             self._heartbeat_enabled = False
             self._heartbeat_interval = None
+            self._heartbeat_bus_handler = None
 
     # ==========================================================================
     # Heartbeat Task Processing
@@ -304,7 +323,7 @@ class BaseGateway(ABC):
         # Check if this heartbeat is for this gateway
         if isinstance(evt.data, dict) and evt.data.get("gateway") != self.gateway_name:
             return
-            
+
         try:
             self.heartbeat()
         except Exception as exc:
@@ -350,7 +369,7 @@ class BaseGateway(ABC):
     # ==========================================================================
     # Connection Lifecycle Abstract Methods
     # ==========================================================================
-    
+
     @abstractmethod
     async def connect_async(self) -> None:
         """异步连接实现"""
@@ -367,7 +386,7 @@ class BaseGateway(ABC):
             raise RuntimeError("Cannot connect on shutdown gateway")
 
         self.status = GatewayStatus.CONNECTING
-        
+
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -435,6 +454,7 @@ class BaseGateway(ABC):
         if self._executor:
             try:
                 import sys
+
                 # Python 3.9+ 支持 cancel_futures 参数
                 if sys.version_info >= (3, 9):
                     # 使用 cancel_futures 来取消待处理的任务
@@ -445,7 +465,7 @@ class BaseGateway(ABC):
 
                 # 等待一小段时间让线程清理
                 time.sleep(0.1)
-                
+
             except Exception as e:
                 self.logger.warning(f"关闭线程池失败：{e}")
                 try:
@@ -469,22 +489,25 @@ class BaseGateway(ABC):
 class Gateway(BaseGateway):
     """
     简单的网关实现，用于测试和演示。
-    
+
     这是一个模拟网关，实现了 BaseGateway 的所有抽象方法。
     在实际使用中，应该为每个具体的交易所创建专门的网关实现。
     """
 
-    def __init__(self, engine=None, message_bus: Optional[CompositeMessageBus] = None, gateway_name: str = "MockGateway"):
+    def __init__(
+        self,
+        engine=None,
+        message_bus: Optional[MessageBus[Any]] = None,
+        gateway_name: str = "MockGateway",
+    ):
         """初始化网关"""
 
         if message_bus is None:
             from deepsearch.messaging.implementations.inmemory import InMemoryMessageBus
+
             message_bus = InMemoryMessageBus()
 
-        super().__init__(
-            message_bus=message_bus,
-            gateway_name=gateway_name
-        )
+        super().__init__(message_bus=message_bus, gateway_name=gateway_name)
         self.engine = engine
         self._connected = False
 
@@ -517,15 +540,12 @@ class Gateway(BaseGateway):
 
         # 生成模拟订单ID
         import uuid
+
         order_id = str(uuid.uuid4())[:8]
         self.write_log(f"订单已发送: {order_id}")
 
         # 发布订单事件
-        self.on_order({
-            "order_id": order_id,
-            "status": "submitted",
-            "data": order_req
-        })
+        self.on_order({"order_id": order_id, "status": "submitted", "data": order_req})
 
         return order_id
 
@@ -537,10 +557,7 @@ class Gateway(BaseGateway):
         self.write_log(f"订单取消请求已发送: {order_id}")
 
         # 发布订单取消事件
-        self.on_order({
-            "order_id": order_id,
-            "status": "cancelled"
-        })
+        self.on_order({"order_id": order_id, "status": "cancelled"})
 
     def start(self) -> None:
         """启动网关"""
@@ -548,7 +565,7 @@ class Gateway(BaseGateway):
         if self._shutdown:
             self.reset()
             self._connected = False
-        
+
         self.connect()
         self.start_heartbeat()
 

@@ -3,10 +3,12 @@ BacktestEngine - 回测引擎
 
 核心回测执行引擎，管理回测流程
 """
+
 import asyncio
-import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Type
+from typing import Any, Dict, List, Optional, Type
+
+from deepsearch.observability import get_logger
 
 try:
     import backtrader as bt
@@ -16,16 +18,18 @@ except ImportError:
     HAS_BACKTRADER = False
     bt = None
 
+from ..adapters.unified_backtrader_adapter import (
+    UnifiedBacktraderAdapter as BacktraderStrategyAdapter,
+)
 from ..data.data_feed import DeepSearchDataFeed
 from ..interfaces.strategy import BaseStrategy
-from ..adapters.unified_backtrader_adapter import UnifiedBacktraderAdapter as BacktraderStrategyAdapter
 from ..utils.results import BacktestResult
 
 
 class BacktestEngine:
     """
     回测引擎
-    
+
     负责：
     1. 配置和运行回测
     2. 管理数据源和策略
@@ -36,7 +40,7 @@ class BacktestEngine:
     def __init__(self, data_provider=None, event_engine=None):
         """
         初始化回测引擎
-        
+
         Args:
             data_provider: 数据提供者
             event_engine: 事件引擎（可选，用于发送回测事件）
@@ -44,7 +48,7 @@ class BacktestEngine:
         if not HAS_BACKTRADER:
             raise ImportError("请先安装 backtrader: pip install backtrader")
 
-        self.logger = logging.getLogger(f"deepsearch.{self.__class__.__name__}")
+        self.logger = get_logger(f"deepsearch.{self.__class__.__name__}")
         self.data_provider = data_provider
         self.event_engine = event_engine
 
@@ -65,23 +69,23 @@ class BacktestEngine:
         # 运行状态
         self.is_running = False
         self.is_cancelled = False
-        self.result = None
+        self.result: Optional[BacktestResult] = None
 
     async def configure(
-            self,
-            strategy_class: Type[BaseStrategy],
-            symbol: str,
-            start_date: datetime,
-            end_date: datetime,
-            initial_cash: float = 100000,
-            commission: float = 0.001,
-            slippage: float = 0.001,
-            strategy_params: Optional[Dict[str, Any]] = None,
-            **kwargs
+        self,
+        strategy_class: Type[BaseStrategy],
+        symbol: str,
+        start_date: datetime,
+        end_date: datetime,
+        initial_cash: float = 100000,
+        commission: float = 0.001,
+        slippage: float = 0.001,
+        strategy_params: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ):
         """
         配置回测参数
-        
+
         Args:
             strategy_class: 策略类
             symbol: 交易标的
@@ -136,8 +140,8 @@ class BacktestEngine:
             symbol=self.symbol,
             start_date=self.start_date,
             end_date=self.end_date,
-            timeframe='1d',
-            adjust='qfq'
+            timeframe="1d",
+            adjust="qfq",
         )
 
         # 创建 Backtrader 数据源
@@ -154,9 +158,7 @@ class BacktestEngine:
         strategy_instance = self.strategy_class(self.strategy_params)
 
         # 创建 Backtrader 策略适配器
-        bt_strategy = BacktraderStrategyAdapter.create_backtrader_strategy(
-            strategy_instance
-        )
+        bt_strategy = BacktraderStrategyAdapter.create_backtrader_strategy(strategy_instance)
 
         # 添加到 Cerebro
         self.cerebro.addstrategy(bt_strategy)
@@ -166,29 +168,29 @@ class BacktestEngine:
     def _add_analyzers(self):
         """添加分析器"""
         # 收益率分析
-        self.cerebro.addanalyzer(bt.analyzers.Returns, _name='returns')
+        self.cerebro.addanalyzer(bt.analyzers.Returns, _name="returns")
 
         # 夏普比率
-        self.cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
+        self.cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe")
 
         # 最大回撤
-        self.cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')
+        self.cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
 
         # 交易统计
-        self.cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='trades')
+        self.cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
 
         # 年化收益
-        self.cerebro.addanalyzer(bt.analyzers.AnnualReturn, _name='annual')
+        self.cerebro.addanalyzer(bt.analyzers.AnnualReturn, _name="annual")
 
         # 累计收益
-        self.cerebro.addanalyzer(bt.analyzers.TimeReturn, _name='timereturn')
+        self.cerebro.addanalyzer(bt.analyzers.TimeReturn, _name="timereturn")
 
         self.logger.info("添加分析器完成")
 
     def run(self) -> BacktestResult:
         """
         同步运行回测
-        
+
         Returns:
             BacktestResult: 回测结果
         """
@@ -216,9 +218,7 @@ class BacktestEngine:
             strategy = results[0]
 
             # 创建回测结果
-            self.result = self._create_result(
-                strategy, start_value, end_value
-            )
+            self.result = self._create_result(strategy, start_value, end_value)
 
             sharpe_value = self.result.sharpe_ratio if self.result.sharpe_ratio else 0
             self.logger.info(
@@ -247,7 +247,7 @@ class BacktestEngine:
     async def run_async(self) -> BacktestResult:
         """
         异步运行回测
-        
+
         Returns:
             BacktestResult: 回测结果
         """
@@ -260,25 +260,20 @@ class BacktestEngine:
         self.is_cancelled = True
         self.logger.info("回测已取消")
 
-    def _create_result(
-            self,
-            strategy,
-            start_value: float,
-            end_value: float
-    ) -> BacktestResult:
+    def _create_result(self, strategy, start_value: float, end_value: float) -> BacktestResult:
         """
         创建回测结果
-        
+
         Args:
             strategy: Backtrader 策略实例
             start_value: 初始资金
             end_value: 最终资金
-            
+
         Returns:
             BacktestResult: 回测结果对象
         """
         # 提取分析器结果
-        returns = strategy.analyzers.returns.get_analysis()
+        strategy.analyzers.returns.get_analysis()
         sharpe = strategy.analyzers.sharpe.get_analysis()
         drawdown = strategy.analyzers.drawdown.get_analysis()
         trades = strategy.analyzers.trades.get_analysis()
@@ -294,38 +289,43 @@ class BacktestEngine:
             initial_cash=start_value,
             final_cash=end_value,
             total_return=(end_value - start_value) / start_value,
-            sharpe_ratio=sharpe.get('sharperatio', 0) if sharpe.get('sharperatio') is not None else 0,
-            max_drawdown=drawdown.get('max', {}).get('drawdown', 0) / 100 if drawdown.get('max', {}).get(
-                'drawdown') else 0,
+            sharpe_ratio=(
+                sharpe.get("sharperatio", 0) if sharpe.get("sharperatio") is not None else 0
+            ),
+            max_drawdown=(
+                drawdown.get("max", {}).get("drawdown", 0) / 100
+                if drawdown.get("max", {}).get("drawdown")
+                else 0
+            ),
             win_rate=self._calculate_win_rate(trades),
-            total_trades=trades.get('total', {}).get('total', 0),
-            profit_trades=trades.get('won', {}).get('total', 0),
-            loss_trades=trades.get('lost', {}).get('total', 0),
+            total_trades=trades.get("total", {}).get("total", 0),
+            profit_trades=trades.get("won", {}).get("total", 0),
+            loss_trades=trades.get("lost", {}).get("total", 0),
             annual_returns=annual,
             commission=self.commission,
-            slippage=self.slippage
+            slippage=self.slippage,
         )
 
         # 添加详细的交易记录
         result.trades = self._extract_trades(strategy)
 
         # 添加每日收益率
-        if hasattr(strategy.analyzers, 'timereturn'):
+        if hasattr(strategy.analyzers, "timereturn"):
             result.daily_returns = strategy.analyzers.timereturn.get_analysis()
 
         return result
 
     def _calculate_win_rate(self, trades: Dict) -> float:
         """计算胜率"""
-        total = trades.get('total', {}).get('total', 0)
+        total = trades.get("total", {}).get("total", 0)
         if total == 0:
             return 0
-        won = trades.get('won', {}).get('total', 0)
-        return won / total
+        won = trades.get("won", {}).get("total", 0)
+        return float(won) / float(total)
 
     def _extract_trades(self, strategy) -> List[Dict[str, Any]]:
         """提取交易记录"""
-        trades = []
+        trades: List[Dict[str, Any]] = []
 
         # 这里需要从 Backtrader 的交易记录中提取
         # 具体实现依赖于 Backtrader 的内部结构
@@ -336,13 +336,14 @@ class BacktestEngine:
         """发送回测完成事件"""
         if self.event_engine and self.result:
             from deepsearch.event.engine.engine import Event
+
             event = Event(
                 type="BACKTEST_ENGINE_COMPLETE",
                 data={
-                    'symbol': self.symbol,
-                    'strategy': self.strategy_class.__name__,
-                    'result': self.result.to_dict()
-                }
+                    "symbol": self.symbol,
+                    "strategy": self.strategy_class.__name__,
+                    "result": self.result.to_dict(),
+                },
             )
             self.event_engine.put(event)
 
@@ -350,20 +351,21 @@ class BacktestEngine:
         """发送回测错误事件"""
         if self.event_engine:
             from deepsearch.event.engine.engine import Event
+
             event = Event(
                 type="BACKTEST_ENGINE_ERROR",
                 data={
-                    'symbol': self.symbol,
-                    'strategy': self.strategy_class.__name__,
-                    'error': error_message
-                }
+                    "symbol": self.symbol,
+                    "strategy": self.strategy_class.__name__,
+                    "error": error_message,
+                },
             )
             self.event_engine.put(event)
 
     def plot(self, **kwargs):
         """
         绘制回测结果图表
-        
+
         Args:
             **kwargs: 传递给 Cerebro.plot 的参数
         """

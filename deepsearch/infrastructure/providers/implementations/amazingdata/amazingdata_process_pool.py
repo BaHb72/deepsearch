@@ -4,17 +4,151 @@ AmazingData进程池管理器
 为每个数据源维护独立的工作进程，实现完全隔离。
 
 Author: DeepSearch Team
-Version: 2.0.0
-Date: 2025-01-21
+Version: 2.1.0
+Date: 2025-10-11
 """
 
+from __future__ import annotations
+
+import multiprocessing as mp
+import subprocess
 import threading
 import time
-from typing import Dict, Optional, Any, Tuple
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from typing import Any, Dict, Mapping, Optional, Tuple, TypedDict, cast
+
+from typing_extensions import NotRequired
+
 from loguru import logger
 
 from .amazingdata_process_proxy import AmazingDataProcessProxy
+
+# ---------------------------------------------------------------------------
+# 类型定义
+# ---------------------------------------------------------------------------
+
+WorkerProcess = mp.Process | subprocess.Popen[bytes] | None
+
+
+class ProcessStatusEntry(TypedDict, total=False):
+    """单个进程的运行状态快照。"""
+
+    pid: int | None
+    is_running: bool
+    created_at: float
+    last_used: float
+    uptime_seconds: float
+    restart_count: int
+    requests_completed: int
+    requests_failed: int
+    auto_cleanup: bool
+    reuse_count: NotRequired[int]
+    is_test: NotRequired[bool]
+
+
+class ProcessPoolStatus(TypedDict):
+    """进程池总体状态。"""
+
+    total_processes: int
+    max_processes: int
+    processes: Dict[str, ProcessStatusEntry]
+
+
+@dataclass
+class ProcessHandle:
+    """保存进程代理及其元数据。"""
+
+    datasource_id: str
+    proxy: AmazingDataProcessProxy
+    created_at: float
+    last_used: float
+    auto_cleanup: bool = False
+    cleanup_delay: float = 60.0
+    config: dict[str, Any] = field(default_factory=dict)
+    restart_count: int = 0
+    total_requests: int = 0
+    failed_requests: int = 0
+    reuse_count: int = 0
+    reuse_window: float | None = None
+    is_test: bool = False
+
+    def mark_used(self) -> None:
+        """更新最后使用时间。"""
+        self.last_used = time.time()
+
+    def should_reuse(self, now: float) -> bool:
+        """测试进程是否仍在复用窗口内。"""
+        if not self.is_test:
+            return True
+        if self.reuse_window is None:
+            return True
+        return now - self.created_at <= self.reuse_window
+
+    def uptime(self, now: float) -> float:
+        """返回进程存活时长（秒）。"""
+        return max(0.0, now - self.created_at)
+
+    def clone_config(self) -> dict[str, Any]:
+        """创建配置副本，防止引用共享。"""
+        return dict(self.config)
+
+
+# ---------------------------------------------------------------------------
+# 辅助函数
+# ---------------------------------------------------------------------------
+
+def _get_worker_process(proxy: AmazingDataProcessProxy) -> WorkerProcess:
+    return cast(WorkerProcess, proxy.worker_process)
+
+
+def _get_worker_pid(proxy: AmazingDataProcessProxy) -> int | None:
+    process = _get_worker_process(proxy)
+    if process is None:
+        return None
+    pid = getattr(process, "pid", None)
+    try:
+        return int(pid) if pid is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_worker_alive(process: WorkerProcess) -> bool:
+    if process is None:
+        return False
+    if isinstance(process, mp.Process):
+        return process.is_alive()
+    if isinstance(process, subprocess.Popen):
+        return process.poll() is None
+    return False
+
+
+def _terminate_worker(process: WorkerProcess, *, force: bool) -> None:
+    if process is None:
+        return
+    try:
+        if force:
+            if hasattr(process, "kill"):
+                process.kill()
+            else:
+                process.terminate()
+        else:
+            process.terminate()
+    except Exception as exc:
+        logger.debug(f"[ProcessPool] 终止进程异常: {exc}")
+
+
+def _safe_int(payload: Mapping[str, Any], key: str) -> int:
+    value = payload.get(key, 0)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+# ---------------------------------------------------------------------------
+# 进程池实现
+# ---------------------------------------------------------------------------
 
 
 class AmazingDataProcessPool:
@@ -36,18 +170,21 @@ class AmazingDataProcessPool:
             max_processes: 最大进程数限制
         """
         self.max_processes = max_processes
-        self.processes: Dict[str, AmazingDataProcessProxy] = {}
-        self.process_info: Dict[str, Dict[str, Any]] = {}
+        self._handles: Dict[str, ProcessHandle] = {}
         self.lock = threading.Lock()
         self.executor = ThreadPoolExecutor(max_workers=3)
 
         # 启动健康检查
         self._start_health_monitor()
 
+    # ------------------------------------------------------------------ #
+    # 对外接口
+    # ------------------------------------------------------------------ #
+
     def get_test_process(
         self,
         datasource_type: str = "amazingdata",
-        reuse_window: float = 30.0
+        reuse_window: float = 30.0,
     ) -> Tuple[AmazingDataProcessProxy, str]:
         """
         获取测试专用进程（支持时间窗口内复用）
@@ -63,58 +200,66 @@ class AmazingDataProcessPool:
         test_process_id = f"{datasource_type}_test"
 
         with self.lock:
-            # 检查是否存在可复用的测试进程
-            if test_process_id in self.processes:
-                proxy = self.processes[test_process_id]
-                info = self.process_info[test_process_id]
+            handle = self._handles.get(test_process_id)
+            if handle:
+                proxy = handle.proxy
+                handle.reuse_window = reuse_window
+                time_since_created = current_time - handle.created_at
 
-                # 检查进程是否健康且在复用时间窗口内
-                time_since_created = current_time - info.get("created_at", 0)
-
-                if proxy.is_running and time_since_created <= reuse_window:
-                    # 复用现有进程
-                    info["last_used"] = current_time
-                    info["reuse_count"] = info.get("reuse_count", 0) + 1
-                    logger.info(f"[ProcessPool] Reusing test process {test_process_id} "
-                              f"(age: {time_since_created:.1f}s, reuse_count: {info['reuse_count']})")
+                if proxy.is_running and handle.should_reuse(current_time):
+                    handle.reuse_count += 1
+                    handle.mark_used()
+                    pid = _get_worker_pid(proxy)
+                    pid_info = pid if pid is not None else "unknown"
+                    logger.info(
+                        f"[ProcessPool] Reusing test process {test_process_id} "
+                        f"(age: {time_since_created:.1f}s, reuse_count: {handle.reuse_count}, pid={pid_info})"
+                    )
                     return proxy, test_process_id
+
+                if time_since_created > reuse_window:
+                    logger.info(
+                        f"[ProcessPool] Test process expired "
+                        f"(age: {time_since_created:.1f}s > {reuse_window}s)"
+                    )
                 else:
-                    # 进程过期或已死，清理并创建新的
-                    if time_since_created > reuse_window:
-                        logger.info(f"[ProcessPool] Test process expired "
-                                  f"(age: {time_since_created:.1f}s > {reuse_window}s)")
-                    else:
-                        logger.warning(f"[ProcessPool] Test process dead, creating new one")
+                    logger.warning(f"[ProcessPool] Test process dead, creating new one")
 
-                    # 停止旧进程（带logout）
-                    self.stop(test_process_id, with_logout=True)
+        # 复用失败或不存在，先清理再创建
+        self.stop(test_process_id, with_logout=True)
 
-            # 创建新的测试进程
-            logger.info(f"[ProcessPool] Creating new test process {test_process_id}")
-            proxy = AmazingDataProcessProxy(restart_on_crash=False)
+        logger.info(f"[ProcessPool] Creating new test process {test_process_id}")
+        proxy = AmazingDataProcessProxy(restart_on_crash=False)
 
-            if not proxy.start():
-                raise Exception(f"Failed to start test process")
+        if not proxy.start():
+            raise RuntimeError("Failed to start test process")
 
-            # 注册进程
-            self.processes[test_process_id] = proxy
-            self.process_info[test_process_id] = {
-                "created_at": current_time,
-                "last_used": current_time,
-                "is_test": True,
-                "reuse_count": 0,
-                "reuse_window": reuse_window
-            }
+        handle = ProcessHandle(
+            datasource_id=test_process_id,
+            proxy=proxy,
+            created_at=current_time,
+            last_used=current_time,
+            auto_cleanup=False,
+            cleanup_delay=0.0,
+            config={},
+            is_test=True,
+            reuse_window=reuse_window,
+        )
 
-            logger.info(f"[ProcessPool] Test process created (PID: {proxy.worker_process.pid})")
-            return proxy, test_process_id
+        with self.lock:
+            self._handles[test_process_id] = handle
+
+        pid = _get_worker_pid(proxy)
+        pid_info = pid if pid is not None else "unknown"
+        logger.info(f"[ProcessPool] Test process created (PID: {pid_info})")
+        return proxy, test_process_id
 
     def get_or_create(
         self,
         datasource_id: str,
         auto_cleanup: bool = False,
         cleanup_delay: float = 60.0,
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Mapping[str, Any]] = None,
     ) -> AmazingDataProcessProxy:
         """
         获取或创建数据源专属进程
@@ -129,54 +274,62 @@ class AmazingDataProcessPool:
             进程代理实例
 
         Raises:
-            Exception: 进程创建失败
+            RuntimeError: 进程创建失败
         """
-        with self.lock:
-            # 检查进程数量限制
-            if len(self.processes) >= self.max_processes:
-                self._cleanup_idle_processes()
 
-            # 检查现有进程
-            if datasource_id in self.processes:
-                proxy = self.processes[datasource_id]
+        # 为避免锁重入，空闲清理在锁外执行
+        self._cleanup_idle_processes()
+
+        with self.lock:
+            handle = self._handles.get(datasource_id)
+            if handle:
+                proxy = handle.proxy
                 if proxy.is_running:
-                    # 更新最后使用时间
-                    self.process_info[datasource_id]["last_used"] = time.time()
+                    handle.mark_used()
                     logger.info(f"[ProcessPool] Reusing process for {datasource_id}")
                     return proxy
-                else:
-                    # 进程已死，清理并重建
-                    logger.warning(f"[ProcessPool] Dead process detected for {datasource_id}")
-                    self._remove_process(datasource_id)
 
-            # 创建新进程
+                logger.warning(f"[ProcessPool] Dead process detected for {datasource_id}")
+
+            if len(self._handles) >= self.max_processes:
+                logger.debug("[ProcessPool] Max processes reached, attempting idle cleanup")
+
+        if handle:
+            # 在锁外执行停机，避免重入
+            self.stop(datasource_id)
+
+        with self.lock:
+            if len(self._handles) >= self.max_processes:
+                # 再次检查，若仍超限直接拒绝
+                raise RuntimeError(
+                    f"Reached max process limit ({self.max_processes}), cannot create {datasource_id}"
+                )
+
             logger.info(f"[ProcessPool] Creating new process for {datasource_id}")
-            proxy = AmazingDataProcessProxy(
-                restart_on_crash=not auto_cleanup
-            )
+            proxy = AmazingDataProcessProxy(restart_on_crash=not auto_cleanup)
 
             if not proxy.start():
-                raise Exception(f"Failed to start process for {datasource_id}")
+                raise RuntimeError(f"Failed to start process for {datasource_id}")
 
-            # 注册进程
-            self.processes[datasource_id] = proxy
-            self.process_info[datasource_id] = {
-                "created_at": time.time(),
-                "last_used": time.time(),
-                "auto_cleanup": auto_cleanup,
-                "cleanup_delay": cleanup_delay,
-                "config": config or {},
-                "restart_count": 0,
-                "total_requests": 0,
-                "failed_requests": 0
-            }
+            now = time.time()
+            handle = ProcessHandle(
+                datasource_id=datasource_id,
+                proxy=proxy,
+                created_at=now,
+                last_used=now,
+                auto_cleanup=auto_cleanup,
+                cleanup_delay=cleanup_delay,
+                config=dict(config or {}),
+            )
+            self._handles[datasource_id] = handle
 
-            # 设置自动清理
-            if auto_cleanup:
-                self.executor.submit(self._schedule_cleanup, datasource_id, cleanup_delay)
+        if auto_cleanup:
+            self.executor.submit(self._schedule_cleanup, datasource_id, cleanup_delay)
 
-            logger.info(f"[ProcessPool] Process created for {datasource_id} (PID: {proxy.worker_process.pid})")
-            return proxy
+        pid = _get_worker_pid(proxy)
+        pid_info = pid if pid is not None else "unknown"
+        logger.info(f"[ProcessPool] Process created for {datasource_id} (PID: {pid_info})")
+        return proxy
 
     def stop(self, datasource_id: str, force: bool = False, with_logout: bool = True) -> bool:
         """
@@ -191,33 +344,33 @@ class AmazingDataProcessPool:
             是否成功停止
         """
         with self.lock:
-            if datasource_id not in self.processes:
+            handle = self._handles.get(datasource_id)
+            if not handle:
                 return True
 
-            logger.info(f"[ProcessPool] Stopping process for {datasource_id} (with_logout={with_logout})")
-            proxy = self.processes[datasource_id]
+        proxy = handle.proxy
+        logger.info(f"[ProcessPool] Stopping process for {datasource_id} (with_logout={with_logout})")
 
-            # 尝试优雅停止（包含logout）
-            success = proxy.stop(
+        success = bool(
+            proxy.stop(
                 timeout=5.0 if not force else 1.0,
-                with_logout=with_logout
+                with_logout=with_logout,
             )
+        )
 
-            if not success and force:
-                # 强制终止
-                logger.warning(f"[ProcessPool] Force killing process for {datasource_id}")
-                if proxy.worker_process and proxy.worker_process.is_alive():
-                    proxy.worker_process.kill()
+        if not success and force:
+            logger.warning(f"[ProcessPool] Force killing process for {datasource_id}")
+            _terminate_worker(_get_worker_process(proxy), force=True)
 
-            # 清理记录
-            self._remove_process(datasource_id)
-            return success
+        with self.lock:
+            self._handles.pop(datasource_id, None)
 
-    def stop_all(self, force: bool = False):
-        """停止所有进程"""
+        return success
+
+    def stop_all(self, force: bool = False) -> None:
+        """停止所有进程。"""
         logger.info("[ProcessPool] Stopping all processes")
-        datasource_ids = list(self.processes.keys())
-
+        datasource_ids = self._snapshot_ids()
         for datasource_id in datasource_ids:
             self.stop(datasource_id, force=force)
 
@@ -233,25 +386,29 @@ class AmazingDataProcessPool:
         """
         logger.info(f"[ProcessPool] Restarting process for {datasource_id}")
 
-        # 保存配置
-        config = None
-        if datasource_id in self.process_info:
-            config = self.process_info[datasource_id].get("config")
+        with self.lock:
+            handle = self._handles.get(datasource_id)
+            stored_config = handle.clone_config() if handle else {}
+            auto_cleanup = handle.auto_cleanup if handle else False
 
-        # 停止旧进程
         self.stop(datasource_id)
 
-        # 创建新进程
         try:
-            proxy = self.get_or_create(datasource_id, auto_cleanup=False, config=config)
-            if datasource_id in self.process_info:
-                self.process_info[datasource_id]["restart_count"] += 1
+            proxy = self.get_or_create(
+                datasource_id,
+                auto_cleanup=auto_cleanup,
+                config=stored_config,
+            )
+            with self.lock:
+                new_handle = self._handles.get(datasource_id)
+                if new_handle:
+                    new_handle.restart_count += 1
             return proxy is not None
-        except Exception as e:
-            logger.error(f"[ProcessPool] Failed to restart process: {e}")
+        except Exception as exc:
+            logger.error(f"[ProcessPool] Failed to restart process: {exc}")
             return False
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> ProcessPoolStatus:
         """
         获取进程池状态
 
@@ -259,65 +416,86 @@ class AmazingDataProcessPool:
             状态信息字典
         """
         with self.lock:
-            status = {
-                "total_processes": len(self.processes),
-                "max_processes": self.max_processes,
-                "processes": {}
+            handles_snapshot = list(self._handles.items())
+
+        process_entries: Dict[str, ProcessStatusEntry] = {}
+        now = time.time()
+
+        for datasource_id, handle in handles_snapshot:
+            proxy = handle.proxy
+            stats = proxy.get_stats()
+            pid = _get_worker_pid(proxy)
+
+            entry: ProcessStatusEntry = {
+                "pid": pid,
+                "is_running": proxy.is_running and _is_worker_alive(_get_worker_process(proxy)),
+                "created_at": handle.created_at,
+                "last_used": handle.last_used,
+                "uptime_seconds": handle.uptime(now),
+                "restart_count": handle.restart_count,
+                "requests_completed": _safe_int(stats, "requests_completed"),
+                "requests_failed": _safe_int(stats, "requests_failed"),
+                "auto_cleanup": handle.auto_cleanup,
             }
 
-            for datasource_id, proxy in self.processes.items():
-                info = self.process_info.get(datasource_id, {})
-                proxy_stats = proxy.get_stats()
+            if handle.is_test:
+                entry["is_test"] = True
+            if handle.reuse_count:
+                entry["reuse_count"] = handle.reuse_count
 
-                status["processes"][datasource_id] = {
-                    "pid": proxy.worker_process.pid if proxy.worker_process else None,
-                    "is_running": proxy.is_running,
-                    "created_at": info.get("created_at"),
-                    "last_used": info.get("last_used"),
-                    "uptime_seconds": time.time() - info.get("created_at", time.time()),
-                    "restart_count": info.get("restart_count", 0),
-                    "requests_completed": proxy_stats.get("requests_completed", 0),
-                    "requests_failed": proxy_stats.get("requests_failed", 0),
-                    "auto_cleanup": info.get("auto_cleanup", False)
-                }
+            process_entries[datasource_id] = entry
 
-            return status
+        return {
+            "total_processes": len(process_entries),
+            "max_processes": self.max_processes,
+            "processes": process_entries,
+        }
 
-    def _remove_process(self, datasource_id: str):
-        """内部方法：移除进程记录"""
-        if datasource_id in self.processes:
-            del self.processes[datasource_id]
-        if datasource_id in self.process_info:
-            del self.process_info[datasource_id]
+    # ------------------------------------------------------------------ #
+    # 内部工具
+    # ------------------------------------------------------------------ #
 
-    def _cleanup_idle_processes(self):
-        """清理空闲进程"""
-        current_time = time.time()
+    def _snapshot_ids(self) -> list[str]:
+        with self.lock:
+            return list(self._handles.keys())
+
+    def _cleanup_idle_processes(self) -> None:
+        """清理长时间未使用的进程。"""
         idle_threshold = 300  # 5分钟
-
-        for datasource_id, info in list(self.process_info.items()):
-            if info.get("auto_cleanup"):
-                continue
-
-            last_used = info.get("last_used", current_time)
-            if current_time - last_used > idle_threshold:
-                logger.info(f"[ProcessPool] Cleaning idle process: {datasource_id}")
-                self.stop(datasource_id)
-
-    def _schedule_cleanup(self, datasource_id: str, delay: float):
-        """调度自动清理任务"""
-        time.sleep(delay)
+        current_time = time.time()
+        candidates: list[Tuple[str, float]] = []
 
         with self.lock:
-            if datasource_id in self.process_info:
-                info = self.process_info[datasource_id]
-                if info.get("auto_cleanup"):
-                    logger.info(f"[ProcessPool] Auto-cleanup triggered for {datasource_id}")
-                    self.stop(datasource_id)
+            for datasource_id, handle in list(self._handles.items()):
+                if handle.auto_cleanup:
+                    continue
+                elapsed = current_time - handle.last_used
+                if elapsed > idle_threshold:
+                    candidates.append((datasource_id, elapsed))
 
-    def _start_health_monitor(self):
+        for datasource_id, elapsed in candidates:
+            logger.info(
+                f"[ProcessPool] Cleaning idle process: {datasource_id} (idle {elapsed:.0f}s)"
+            )
+            self.stop(datasource_id)
+
+    def _schedule_cleanup(self, datasource_id: str, delay: float) -> None:
+        """调度自动清理任务"""
+        time.sleep(delay)
+        should_cleanup = False
+        with self.lock:
+            handle = self._handles.get(datasource_id)
+            if handle and handle.auto_cleanup:
+                should_cleanup = True
+
+        if should_cleanup:
+            logger.info(f"[ProcessPool] Auto-cleanup triggered for {datasource_id}")
+            self.stop(datasource_id)
+
+    def _start_health_monitor(self) -> None:
         """启动健康监控线程"""
-        def monitor():
+
+        def monitor() -> None:
             while True:
                 time.sleep(30)  # 每30秒检查一次
                 self._check_process_health()
@@ -325,18 +503,28 @@ class AmazingDataProcessPool:
         thread = threading.Thread(target=monitor, daemon=True)
         thread.start()
 
-    def _check_process_health(self):
+    def _check_process_health(self) -> None:
         """检查所有进程健康状态"""
+        unhealthy: list[str] = []
         with self.lock:
-            for datasource_id, proxy in list(self.processes.items()):
-                if not proxy.health_check():
-                    logger.warning(f"[ProcessPool] Unhealthy process detected: {datasource_id}")
-                    # 尝试重启
-                    self.restart(datasource_id)
+            for datasource_id, handle in list(self._handles.items()):
+                proxy = handle.proxy
+                try:
+                    healthy = proxy.health_check()
+                except Exception as exc:  # pragma: no cover - 容错
+                    logger.warning(f"[ProcessPool] Health check raised for {datasource_id}: {exc}")
+                    healthy = False
+
+                if not healthy:
+                    unhealthy.append(datasource_id)
+
+        for datasource_id in unhealthy:
+            logger.warning(f"[ProcessPool] Unhealthy process detected: {datasource_id}")
+            self.restart(datasource_id)
 
 
 # 全局进程池实例
-_global_pool = None
+_global_pool: Optional[AmazingDataProcessPool] = None
 
 
 def get_global_pool() -> AmazingDataProcessPool:
@@ -347,7 +535,7 @@ def get_global_pool() -> AmazingDataProcessPool:
     return _global_pool
 
 
-def shutdown_pool():
+def shutdown_pool() -> None:
     """关闭进程池"""
     global _global_pool
     if _global_pool:

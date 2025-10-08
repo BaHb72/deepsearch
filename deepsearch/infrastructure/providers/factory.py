@@ -2,31 +2,36 @@
 数据提供者工厂
 基于策略模式和工厂模式，智能创建和管理数据提供者
 """
-import asyncio
-from typing import Dict, Any, Optional, List, Type
-from enum import Enum
-from loguru import logger
-from datetime import datetime, timedelta
 
-from .registry import get_registry, ProviderType
-from .base.provider_base import BaseDataProvider
-from deepsearch.core.utils.async_timeout import run_with_timeout
+import asyncio
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, Optional
+
+from loguru import logger
+
+from deepsearch.core.utils.async_timeout import run_with_timeout, with_timeout
 from deepsearch.core.utils.timeout_config import TimeoutCategory
+
+from .base.provider_base import BaseDataProvider
+from .registry import ProviderType, get_registry
 
 
 class SelectionStrategy(Enum):
     """数据源选择策略"""
-    PRIORITY = "priority"          # 基于优先级
-    ROUND_ROBIN = "round_robin"    # 轮询
-    FAILOVER = "failover"          # 故障转移
-    PERFORMANCE = "performance"    # 基于性能
-    HYBRID = "hybrid"              # 混合策略
+
+    PRIORITY = "priority"  # 基于优先级
+    ROUND_ROBIN = "round_robin"  # 轮询
+    FAILOVER = "failover"  # 故障转移
+    PERFORMANCE = "performance"  # 基于性能
+    HYBRID = "hybrid"  # 混合策略
 
 
 class CircuitBreakerState(Enum):
     """熔断器状态"""
-    CLOSED = "closed"    # 正常
-    OPEN = "open"        # 熔断
+
+    CLOSED = "closed"  # 正常
+    OPEN = "open"  # 熔断
     HALF_OPEN = "half_open"  # 半开
 
 
@@ -38,10 +43,7 @@ class CircuitBreaker:
     """
 
     def __init__(
-        self,
-        failure_threshold: int = 5,
-        recovery_timeout: int = 60,
-        success_threshold: int = 2
+        self, failure_threshold: int = 5, recovery_timeout: int = 60, success_threshold: int = 2
     ):
         """
         初始化熔断器
@@ -109,7 +111,7 @@ class DataProviderFactory:
     def __init__(
         self,
         strategy: SelectionStrategy = SelectionStrategy.HYBRID,
-        enable_circuit_breaker: bool = True
+        enable_circuit_breaker: bool = True,
     ):
         """
         初始化工厂
@@ -135,9 +137,7 @@ class DataProviderFactory:
         self._performance_stats: Dict[str, Dict[str, Any]] = {}
 
     async def get_provider(
-        self,
-        provider_type: Optional[ProviderType] = None,
-        provider_name: Optional[str] = None
+        self, provider_type: Optional[ProviderType] = None, provider_name: Optional[str] = None
     ) -> Optional[BaseDataProvider]:
         """
         获取数据提供者
@@ -184,16 +184,23 @@ class DataProviderFactory:
         # 创建新实例
         provider = self.registry.get_provider_instance(name)
         if provider:
-            # 初始化
-            if hasattr(provider, 'initialize'):
+            init_method = getattr(provider, "initialize", None)
+            if callable(init_method):
                 try:
                     from deepsearch.core.utils.timeout_config import get_timeout_manager
+
                     timeout_manager = get_timeout_manager()
                     timeout_value = timeout_manager.get_timeout(TimeoutCategory.COMPONENT_INIT)
-                    await run_with_timeout(
-                        provider.initialize,  # 传递函数，不是协程
-                        timeout=timeout_value
-                    )
+
+                    if asyncio.iscoroutinefunction(init_method):
+                        await with_timeout(init_method(), timeout=timeout_value)
+                    else:
+                        init_result = init_method()
+                        if asyncio.iscoroutine(init_result):
+                            await with_timeout(init_result, timeout=timeout_value)
+                        else:
+                            await run_with_timeout(init_method, timeout=timeout_value)
+
                     self._providers[name] = provider
                     return provider
                 except Exception as e:
@@ -206,8 +213,7 @@ class DataProviderFactory:
         return None
 
     async def _get_by_priority(
-        self,
-        provider_type: Optional[ProviderType] = None
+        self, provider_type: Optional[ProviderType] = None
     ) -> Optional[BaseDataProvider]:
         """
         基于优先级获取提供者
@@ -241,8 +247,7 @@ class DataProviderFactory:
         return None
 
     async def _get_by_round_robin(
-        self,
-        provider_type: Optional[ProviderType] = None
+        self, provider_type: Optional[ProviderType] = None
     ) -> Optional[BaseDataProvider]:
         """
         轮询方式获取提供者
@@ -277,8 +282,7 @@ class DataProviderFactory:
         return None
 
     async def _get_by_failover(
-        self,
-        provider_type: Optional[ProviderType] = None
+        self, provider_type: Optional[ProviderType] = None
     ) -> Optional[BaseDataProvider]:
         """
         故障转移方式获取提供者
@@ -294,8 +298,7 @@ class DataProviderFactory:
         return await self._get_by_priority(provider_type)
 
     async def _get_by_performance(
-        self,
-        provider_type: Optional[ProviderType] = None
+        self, provider_type: Optional[ProviderType] = None
     ) -> Optional[BaseDataProvider]:
         """
         基于性能获取提供者
@@ -319,7 +322,7 @@ class DataProviderFactory:
             if provider_info.name in self._performance_stats:
                 stats = self._performance_stats[provider_info.name]
                 # 分数 = 成功率 * (1 / 平均延迟)
-                score = stats.get('success_rate', 0) / max(stats.get('avg_latency', 1), 0.01)
+                score = stats.get("success_rate", 0) / max(stats.get("avg_latency", 1), 0.01)
             else:
                 # 新提供者给予初始分数
                 score = 50.0
@@ -341,8 +344,7 @@ class DataProviderFactory:
         return None
 
     async def _get_by_hybrid(
-        self,
-        provider_type: Optional[ProviderType] = None
+        self, provider_type: Optional[ProviderType] = None
     ) -> Optional[BaseDataProvider]:
         """
         混合策略获取提供者
@@ -369,7 +371,7 @@ class DataProviderFactory:
             # 性能加成
             if provider_info.name in self._performance_stats:
                 stats = self._performance_stats[provider_info.name]
-                performance_bonus = stats.get('success_rate', 0) * 0.5
+                performance_bonus = stats.get("success_rate", 0) * 0.5
                 score += performance_bonus
 
             # 熔断器惩罚
@@ -412,11 +414,7 @@ class DataProviderFactory:
 
         return self._circuit_breakers[provider_name].can_attempt()
 
-    async def _check_provider_health(
-        self,
-        name: str,
-        provider: BaseDataProvider
-    ) -> bool:
+    async def _check_provider_health(self, name: str, provider: BaseDataProvider) -> bool:
         """
         检查提供者健康状态
 
@@ -427,19 +425,19 @@ class DataProviderFactory:
         Returns:
             是否健康
         """
-        if hasattr(provider, 'health_check'):
+        if hasattr(provider, "health_check"):
             try:
                 from deepsearch.core.utils.timeout_config import get_timeout_manager
+
                 timeout_manager = get_timeout_manager()
                 timeout_value = timeout_manager.get_timeout(TimeoutCategory.COMPONENT_HEALTH)
                 from deepsearch.core.utils.async_timeout import with_timeout
+
                 health = await with_timeout(
-                    provider.health_check(),
-                    timeout=timeout_value,
-                    default={'status': 'timeout'}
+                    provider.health_check(), timeout=timeout_value, default={"status": "timeout"}
                 )
-                return health.get('status') != 'error'
-            except:
+                return health.get("status") != "error"
+            except Exception:
                 return False
         return True
 
@@ -458,20 +456,19 @@ class DataProviderFactory:
         # 更新性能统计
         if provider_name not in self._performance_stats:
             self._performance_stats[provider_name] = {
-                'total_requests': 0,
-                'failed_requests': 0,
-                'total_latency': 0.0,
-                'success_rate': 100.0,
-                'avg_latency': 0.0
+                "total_requests": 0,
+                "failed_requests": 0,
+                "total_latency": 0.0,
+                "success_rate": 100.0,
+                "avg_latency": 0.0,
             }
 
         stats = self._performance_stats[provider_name]
-        stats['total_requests'] += 1
-        stats['total_latency'] += latency
-        stats['avg_latency'] = stats['total_latency'] / stats['total_requests']
-        stats['success_rate'] = (
-            (stats['total_requests'] - stats['failed_requests']) /
-            stats['total_requests'] * 100
+        stats["total_requests"] += 1
+        stats["total_latency"] += latency
+        stats["avg_latency"] = stats["total_latency"] / stats["total_requests"]
+        stats["success_rate"] = (
+            (stats["total_requests"] - stats["failed_requests"]) / stats["total_requests"] * 100
         )
 
     def report_failure(self, provider_name: str):
@@ -488,19 +485,18 @@ class DataProviderFactory:
         # 更新性能统计
         if provider_name not in self._performance_stats:
             self._performance_stats[provider_name] = {
-                'total_requests': 0,
-                'failed_requests': 0,
-                'total_latency': 0.0,
-                'success_rate': 0.0,
-                'avg_latency': 0.0
+                "total_requests": 0,
+                "failed_requests": 0,
+                "total_latency": 0.0,
+                "success_rate": 0.0,
+                "avg_latency": 0.0,
             }
 
         stats = self._performance_stats[provider_name]
-        stats['total_requests'] += 1
-        stats['failed_requests'] += 1
-        stats['success_rate'] = (
-            (stats['total_requests'] - stats['failed_requests']) /
-            stats['total_requests'] * 100
+        stats["total_requests"] += 1
+        stats["failed_requests"] += 1
+        stats["success_rate"] = (
+            (stats["total_requests"] - stats["failed_requests"]) / stats["total_requests"] * 100
         )
 
     def get_statistics(self) -> Dict[str, Any]:
@@ -511,12 +507,11 @@ class DataProviderFactory:
             统计信息
         """
         return {
-            'providers': len(self._providers),
-            'circuit_breakers': {
-                name: breaker.state.value
-                for name, breaker in self._circuit_breakers.items()
+            "providers": len(self._providers),
+            "circuit_breakers": {
+                name: breaker.state.value for name, breaker in self._circuit_breakers.items()
             },
-            'performance': self._performance_stats
+            "performance": self._performance_stats,
         }
 
 
@@ -524,9 +519,7 @@ class DataProviderFactory:
 _factory = None
 
 
-def get_factory(
-    strategy: SelectionStrategy = SelectionStrategy.HYBRID
-) -> DataProviderFactory:
+def get_factory(strategy: SelectionStrategy = SelectionStrategy.HYBRID) -> DataProviderFactory:
     """
     获取全局数据提供者工厂实例
 

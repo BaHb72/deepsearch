@@ -3,11 +3,13 @@
 
 负责从PostgreSQL同步数据到DuckDB进行分析
 """
+
 import asyncio
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
-from loguru import logger
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
+from loguru import logger
 
 
 class DataSyncService:
@@ -80,9 +82,12 @@ class DataSyncService:
         except Exception as e:
             logger.error(f"同步所有表失败: {e}")
 
-    async def sync_kline_history(self, start_date: Optional[str] = None,
-                                 end_date: Optional[str] = None,
-                                 symbols: Optional[List[str]] = None):
+    async def sync_kline_history(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        symbols: Optional[List[str]] = None,
+    ):
         """
         同步K线历史数据
 
@@ -123,31 +128,34 @@ class DataSyncService:
                 conditions.append(f"symbol IN ({placeholders})")
                 params.extend(symbols)
 
-            where_clause = " AND ".join(conditions) if conditions else "1=1"
+            " AND ".join(conditions) if conditions else "1=1"
 
             # 从PostgreSQL读取数据 (这里使用模拟数据，实际应该从database_component获取)
             # 在实际实现中，应该使用 self._database_component 获取数据
 
             # 创建模拟数据用于测试
             import numpy as np
-            dates = pd.date_range(start=start_date or "2024-01-01",
-                                 end=end_date or datetime.now(),
-                                 freq='D')
+
+            dates = pd.date_range(
+                start=start_date or "2024-01-01", end=end_date or datetime.now(), freq="D"
+            )
 
             sample_data = []
-            for symbol in (symbols or ["000001", "000002", "600000"]):
+            for symbol in symbols or ["000001", "000002", "600000"]:
                 for date in dates:
                     base_price = 10 + np.random.rand() * 50
-                    sample_data.append({
-                        "symbol": symbol,
-                        "time": date,
-                        "open": base_price + np.random.randn(),
-                        "high": base_price + abs(np.random.randn()) * 2,
-                        "low": base_price - abs(np.random.randn()) * 2,
-                        "close": base_price + np.random.randn(),
-                        "volume": int(1000000 * (1 + np.random.rand())),
-                        "amount": int(10000000 * (1 + np.random.rand()))
-                    })
+                    sample_data.append(
+                        {
+                            "symbol": symbol,
+                            "time": date,
+                            "open": base_price + np.random.randn(),
+                            "high": base_price + abs(np.random.randn()) * 2,
+                            "low": base_price - abs(np.random.randn()) * 2,
+                            "close": base_price + np.random.randn(),
+                            "volume": int(1000000 * (1 + np.random.rand())),
+                            "amount": int(10000000 * (1 + np.random.rand())),
+                        }
+                    )
 
             df = pd.DataFrame(sample_data)
 
@@ -170,7 +178,7 @@ class DataSyncService:
                             for _, row in df.iterrows():
                                 self._analytics_db.conn.execute(
                                     "DELETE FROM kline_history WHERE symbol = ? AND time = ?",
-                                    (row['symbol'], row['time'])
+                                    (row["symbol"], row["time"]),
                                 )
                             await self._analytics_db.import_from_dataframe(
                                 df, "kline_history", if_exists="append"
@@ -192,22 +200,26 @@ class DataSyncService:
             # 这里应该从database_component获取股票信息
             # 暂时使用模拟数据
 
-            stock_info = pd.DataFrame([
-                {"symbol": "000001", "name": "平安银行", "market": "SZ", "sector": "金融"},
-                {"symbol": "000002", "name": "万科A", "market": "SZ", "sector": "房地产"},
-                {"symbol": "600000", "name": "浦发银行", "market": "SH", "sector": "金融"},
-            ])
+            stock_info = pd.DataFrame(
+                [
+                    {"symbol": "000001", "name": "平安银行", "market": "SZ", "sector": "金融"},
+                    {"symbol": "000002", "name": "万科A", "market": "SZ", "sector": "房地产"},
+                    {"symbol": "600000", "name": "浦发银行", "market": "SH", "sector": "金融"},
+                ]
+            )
 
             # 创建股票信息表（如果不存在）
-            if self._analytics_db and hasattr(self._analytics_db, 'conn'):
-                self._analytics_db.conn.execute("""
+            if self._analytics_db and hasattr(self._analytics_db, "conn"):
+                self._analytics_db.conn.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS stock_info (
                         symbol VARCHAR PRIMARY KEY,
                         name VARCHAR,
                         market VARCHAR,
                         sector VARCHAR
                     )
-                """)
+                """
+                )
 
                 # 导入数据
                 await self._analytics_db.import_from_dataframe(
@@ -249,8 +261,9 @@ class DataSyncService:
         except Exception as e:
             logger.error(f"增量同步 {table_name} 失败: {e}")
 
-    async def sync_historical_data(self, start_date: str, end_date: str,
-                                  symbols: Optional[List[str]] = None):
+    async def sync_historical_data(
+        self, start_date: str, end_date: str, symbols: Optional[List[str]] = None
+    ):
         """
         同步历史数据
 
@@ -271,7 +284,7 @@ class DataSyncService:
                 for table, time in self._last_sync_time.items()
             },
             "analytics_db_connected": self._analytics_db is not None,
-            "database_connected": self._database_component is not None
+            "database_connected": self._database_component is not None,
         }
 
     async def sync_now(self) -> Dict[str, Any]:
@@ -281,7 +294,7 @@ class DataSyncService:
         return {
             "status": "completed",
             "sync_time": datetime.now().isoformat(),
-            "tables_synced": list(self._last_sync_time.keys())
+            "tables_synced": list(self._last_sync_time.keys()),
         }
 
 

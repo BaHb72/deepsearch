@@ -2,23 +2,27 @@
 
 用于初始化数据库表结构和 TimescaleDB 配置
 """
-import asyncio
 
-from deepsearch.core.components import DatabaseComponent
-from deepsearch.observability.logger import logger
+import asyncio
+from typing import List, cast
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from deepsearch.core.component_factory import DatabaseComponentFactory
 from deepsearch.infrastructure.persistence.database import DatabaseService
+from deepsearch.observability.logger import logger
 
 
 async def init_database(drop_existing: bool = False) -> None:
     """初始化数据库
-    
+
     Args:
         drop_existing: 是否删除现有表（危险操作）
     """
     logger.info("开始初始化数据库...")
 
     # 创建数据库组件
-    db_component = DatabaseComponent()
+    db_component = DatabaseComponentFactory.create()
 
     try:
         # 初始化连接
@@ -30,7 +34,6 @@ async def init_database(drop_existing: bool = False) -> None:
 
         if drop_existing:
             logger.warning("删除现有表结构...")
-            from sqlalchemy import text
             from .models.base import Base
 
             async with db_component.engine.begin() as conn:
@@ -57,25 +60,26 @@ async def init_database(drop_existing: bool = False) -> None:
 
 async def create_sample_data() -> None:
     """创建示例数据（用于测试）"""
+    import random
     from datetime import datetime, timedelta
     from decimal import Decimal
-    import random
 
-    from .models.market import MarketTick, Market1Min
+    from .models.market import Market1Min, MarketTick
 
     logger.info("创建示例数据...")
 
-    db_component = DatabaseComponent()
+    db_component = DatabaseComponentFactory.create()
     await db_component.initialize_async()
 
     db_service = DatabaseService(db_component)
 
     async with db_service.get_session() as session:
+        db_session: AsyncSession = cast(AsyncSession, session)
         # 创建一些示例 tick 数据
         base_time = datetime.now()
         symbols = ["000001.SZ", "000002.SZ", "600000.SH"]
 
-        ticks = []
+        ticks: List[MarketTick] = []
         for i in range(100):
             for symbol in symbols:
                 tick = MarketTick(
@@ -87,16 +91,16 @@ async def create_sample_data() -> None:
                     bid_prices=[Decimal(f"{random.uniform(9, 10):.2f}") for _ in range(5)],
                     ask_prices=[Decimal(f"{random.uniform(10, 11):.2f}") for _ in range(5)],
                     bid_volumes=[random.randint(100, 1000) for _ in range(5)],
-                    ask_volumes=[random.randint(100, 1000) for _ in range(5)]
+                    ask_volumes=[random.randint(100, 1000) for _ in range(5)],
                 )
                 ticks.append(tick)
 
-        session.add_all(ticks)
-        await session.commit()
+        db_session.add_all(ticks)
+        await db_session.commit()
         logger.info(f"创建了 {len(ticks)} 条 tick 数据")
 
         # 创建一些 1 分钟 K 线数据
-        klines = []
+        klines: List[Market1Min] = []
         for i in range(60):
             for symbol in symbols:
                 kline = Market1Min(
@@ -107,12 +111,12 @@ async def create_sample_data() -> None:
                     low=Decimal(f"{random.uniform(5, 15):.2f}"),
                     close=Decimal(f"{random.uniform(10, 20):.2f}"),
                     volume=random.randint(10000, 100000),
-                    turnover=Decimal(f"{random.uniform(100000, 1000000):.2f}")
+                    turnover=Decimal(f"{random.uniform(100000, 1000000):.2f}"),
                 )
                 klines.append(kline)
 
-        session.add_all(klines)
-        await session.commit()
+        db_session.add_all(klines)
+        await db_session.commit()
         logger.info(f"创建了 {len(klines)} 条 K 线数据")
 
     await db_component.stop_async()
@@ -139,3 +143,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

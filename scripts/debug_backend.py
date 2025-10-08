@@ -4,28 +4,28 @@
 用于启动后端并输出详细的调试信息
 """
 
-import sys
-import os
-import time
 import asyncio
+import os
+import sys
+import time
 from datetime import datetime
 from pathlib import Path
+
+from loguru import logger
 
 # 添加项目路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from loguru import logger
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 # 配置详细日志
 logger.remove()  # 移除默认处理器
 logger.add(
     sys.stdout,
     format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-    level="DEBUG"
+    level="DEBUG",
 )
+
 
 def debug_system_status_endpoint():
     """
@@ -43,15 +43,18 @@ def debug_system_status_endpoint():
         # 检查 app_state
         try:
             from deepsearch.webui.server import app_state
+
             logger.debug(f"[DEBUG] app_state = {app_state}")
             logger.debug(f"[DEBUG] app_state.engine = {getattr(app_state, 'engine', 'NO_ATTR')}")
 
-            if hasattr(app_state, 'engine'):
+            if hasattr(app_state, "engine"):
                 engine = app_state.engine
                 logger.debug(f"[DEBUG] engine is None = {engine is None}")
                 if engine:
                     logger.debug(f"[DEBUG] engine type = {type(engine).__name__}")
-                    logger.debug(f"[DEBUG] engine.is_running() = {engine.is_running() if hasattr(engine, 'is_running') else 'NO_METHOD'}")
+                    logger.debug(
+                        f"[DEBUG] engine.is_running() = {engine.is_running() if hasattr(engine, 'is_running') else 'NO_METHOD'}"
+                    )
         except Exception as e:
             logger.error(f"[DEBUG] 检查 app_state 失败: {e}")
 
@@ -91,7 +94,9 @@ def track_requests():
 
             # 记录响应
             duration = (time.time() - start_time) * 1000
-            logger.info(f"[RESPONSE] {request.method} {request.url.path} - {response.status_code} ({duration:.2f}ms)")
+            logger.info(
+                f"[RESPONSE] {request.method} {request.url.path} - {response.status_code} ({duration:.2f}ms)"
+            )
 
             return response
 
@@ -107,8 +112,8 @@ async def run_debug_server():
     logger.info("=" * 60)
 
     # 设置环境变量
-    os.environ['LOG__LEVEL'] = 'DEBUG'
-    os.environ['WEBUI__BACKEND_PORT'] = '8000'
+    os.environ["LOG__LEVEL"] = "DEBUG"
+    os.environ["WEBUI__BACKEND_PORT"] = "8000"
 
     # 导入并配置服务器
     from deepsearch.webui.server import create_app
@@ -134,7 +139,7 @@ async def run_debug_server():
         port=8000,
         log_level="debug",
         access_log=True,
-        reload=False  # 调试时不自动重载
+        reload=False,  # 调试时不自动重载
     )
 
     server = uvicorn.Server(config)
@@ -159,6 +164,7 @@ def main():
     except Exception as e:
         logger.error(f"启动失败: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

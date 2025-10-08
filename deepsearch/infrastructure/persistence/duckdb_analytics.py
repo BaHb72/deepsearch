@@ -3,14 +3,17 @@ DuckDB 分析数据库管理器
 
 提供高性能的 OLAP 分析能力，用于历史数据分析、技术指标计算和回测
 """
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any, List, Optional
 
 import duckdb
 import pandas as pd
 from loguru import logger
+
+from .duckdb_path import resolve_duckdb_path
 
 
 class DuckDBAnalytics:
@@ -19,17 +22,21 @@ class DuckDBAnalytics:
     def __init__(self, db_path: Optional[str] = None, memory_limit: str = "4GB", threads: int = 4):
         """
         初始化 DuckDB 分析数据库
-        
+
         Args:
             db_path: 数据库文件路径，None 表示内存数据库
             memory_limit: 内存限制
             threads: 线程数
         """
-        self.db_path = db_path or str(Path(__file__).parent.parent / "data" / "analytics" / "market.duckdb")
+        default_path = db_path or str(
+            Path(__file__).parent.parent / "data" / "analytics" / "market.duckdb"
+        )
+        self.db_path = resolve_duckdb_path(default_path)
         self.memory_limit = memory_limit
         self.threads = threads
         self.conn = None
         self._executor = ThreadPoolExecutor(max_workers=2)
+        self._schema_initialized = False
 
         # 确保目录存在
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -41,6 +48,7 @@ class DuckDBAnalytics:
         """初始化数据库连接"""
         try:
             self.conn = duckdb.connect(self.db_path)
+            self._schema_initialized = False
 
             # 设置配置
             self.conn.execute(f"SET memory_limit='{self.memory_limit}'")
@@ -58,9 +66,13 @@ class DuckDBAnalytics:
 
     def init_schema(self):
         """初始化数据库模式"""
+        if self._schema_initialized:
+            return
+
         try:
             # 创建历史K线表
-            self.conn.execute("""
+            self.conn.execute(
+                """
                               CREATE TABLE IF NOT EXISTS kline_history
                               (
                                   symbol
@@ -104,10 +116,12 @@ class DuckDBAnalytics:
                                   time
                               )
                                   )
-                              """)
+                              """
+            )
 
             # 创建Tick归档表
-            self.conn.execute("""
+            self.conn.execute(
+                """
                               CREATE TABLE IF NOT EXISTS tick_archive
                               (
                                   symbol
@@ -148,10 +162,12 @@ class DuckDBAnalytics:
                                   time
                               )
                                   )
-                              """)
+                              """
+            )
 
             # 创建技术指标表
-            self.conn.execute("""
+            self.conn.execute(
+                """
                               CREATE TABLE IF NOT EXISTS indicators
                               (
                                   symbol
@@ -180,10 +196,12 @@ class DuckDBAnalytics:
                                   indicator_name
                               )
                                   )
-                              """)
+                              """
+            )
 
             # 创建回测结果表
-            self.conn.execute("""
+            self.conn.execute(
+                """
                               CREATE TABLE IF NOT EXISTS backtest_results
                               (
                                   strategy_id
@@ -229,10 +247,12 @@ class DuckDBAnalytics:
                                   run_time
                               )
                                   )
-                              """)
+                              """
+            )
 
             # 创建数据同步日志表
-            self.conn.execute("""
+            self.conn.execute(
+                """
                               CREATE TABLE IF NOT EXISTS sync_log
                               (
                                   sync_id
@@ -258,18 +278,22 @@ class DuckDBAnalytics:
                                   error_message
                                   TEXT
                               )
-                              """)
+                              """
+            )
 
+            self._schema_initialized = True
             logger.info("DuckDB 模式初始化完成")
 
         except Exception as e:
             logger.error(f"初始化模式失败: {e}")
             raise
 
-    async def import_from_dataframe(self, df: pd.DataFrame, table_name: str, if_exists: str = "append"):
+    async def import_from_dataframe(
+        self, df: pd.DataFrame, table_name: str, if_exists: str = "append"
+    ):
         """
         从 DataFrame 导入数据
-        
+
         Args:
             df: Pandas DataFrame
             table_name: 目标表名
@@ -294,11 +318,11 @@ class DuckDBAnalytics:
     async def query(self, sql: str, params: Optional[tuple] = None) -> pd.DataFrame:
         """
         执行查询并返回 DataFrame
-        
+
         Args:
             sql: SQL 查询语句
             params: 查询参数
-            
+
         Returns:
             查询结果 DataFrame
         """
@@ -314,21 +338,17 @@ class DuckDBAnalytics:
         return await loop.run_in_executor(self._executor, _query)
 
     async def calculate_indicators(
-            self,
-            symbol: str,
-            start_date: str,
-            end_date: str,
-            indicators: List[str]
+        self, symbol: str, start_date: str, end_date: str, indicators: List[str]
     ) -> pd.DataFrame:
         """
         计算技术指标
-        
+
         Args:
             symbol: 股票代码
             start_date: 开始日期
             end_date: 结束日期
             indicators: 指标列表 ['MA_20', 'RSI_14', 'MACD']
-            
+
         Returns:
             包含指标的 DataFrame
         """
@@ -348,59 +368,55 @@ class DuckDBAnalytics:
         for indicator in indicators:
             if indicator.startswith("MA_"):
                 period = int(indicator.split("_")[1])
-                df[indicator] = df['close'].rolling(window=period).mean()
+                df[indicator] = df["close"].rolling(window=period).mean()
 
             elif indicator.startswith("RSI_"):
                 period = int(indicator.split("_")[1])
-                delta = df['close'].diff()
-                gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-                loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+                close_series = df["close"].astype("float64")
+                delta = close_series.diff()
+                gain = delta.clip(lower=0.0).rolling(window=period).mean()
+                loss = (-delta.clip(upper=0.0)).rolling(window=period).mean()
                 rs = gain / loss
                 df[indicator] = 100 - (100 / (1 + rs))
 
             elif indicator == "MACD":
-                exp1 = df['close'].ewm(span=12, adjust=False).mean()
-                exp2 = df['close'].ewm(span=26, adjust=False).mean()
-                df['MACD'] = exp1 - exp2
-                df['MACD_signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
-                df['MACD_hist'] = df['MACD'] - df['MACD_signal']
+                exp1 = df["close"].ewm(span=12, adjust=False).mean()
+                exp2 = df["close"].ewm(span=26, adjust=False).mean()
+                df["MACD"] = exp1 - exp2
+                df["MACD_signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
+                df["MACD_hist"] = df["MACD"] - df["MACD_signal"]
 
         return df
 
     async def aggregate_klines(
-            self,
-            symbol: str,
-            source_period: str,
-            target_period: str,
-            start_date: str,
-            end_date: str
+        self, symbol: str, source_period: str, target_period: str, start_date: str, end_date: str
     ) -> pd.DataFrame:
         """
         聚合K线数据
-        
+
         Args:
             symbol: 股票代码
             source_period: 源周期 (1m, 5m, 1d)
             target_period: 目标周期 (1h, 1d, 1w, 1M)
             start_date: 开始日期
             end_date: 结束日期
-            
+
         Returns:
             聚合后的K线数据
         """
         # 将周期转换为 DuckDB INTERVAL 格式
         period_map = {
-            '1m': '1 MINUTE',
-            '5m': '5 MINUTES',
-            '15m': '15 MINUTES',
-            '30m': '30 MINUTES',
-            '1h': '1 HOUR',
-            '1d': '1 DAY',
-            '1w': '1 WEEK',
-            '1M': '1 MONTH'
+            "1m": "1 MINUTE",
+            "5m": "5 MINUTES",
+            "15m": "15 MINUTES",
+            "30m": "30 MINUTES",
+            "1h": "1 HOUR",
+            "1d": "1 DAY",
+            "1w": "1 WEEK",
+            "1M": "1 MONTH",
         }
 
-        interval_str = period_map.get(target_period, '5 MINUTES')
+        interval_str = period_map.get(target_period, "5 MINUTES")
 
         # 使用 DuckDB 的时间窗口函数进行高效聚合
         sql = f"""
@@ -424,18 +440,20 @@ class DuckDBAnalytics:
     async def export_to_parquet(self, table_name: str, output_path: str):
         """
         导出表到 Parquet 文件
-        
+
         Args:
             table_name: 表名
             output_path: 输出路径
         """
 
         def _export():
-            self.conn.execute(f"""
+            self.conn.execute(
+                f"""
                 COPY {table_name} 
                 TO '{output_path}' 
                 (FORMAT PARQUET, COMPRESSION 'SNAPPY')
-            """)
+            """
+            )
 
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(self._executor, _export)
@@ -444,18 +462,20 @@ class DuckDBAnalytics:
     async def query_parquet(self, parquet_path: str, sql: str) -> pd.DataFrame:
         """
         直接查询 Parquet 文件
-        
+
         Args:
             parquet_path: Parquet 文件路径
             sql: SQL 查询语句（使用 'parquet_data' 作为表名）
-            
+
         Returns:
             查询结果
         """
 
         def _query():
             # 创建临时视图
-            self.conn.execute(f"CREATE OR REPLACE VIEW parquet_data AS SELECT * FROM '{parquet_path}'")
+            self.conn.execute(
+                f"CREATE OR REPLACE VIEW parquet_data AS SELECT * FROM '{parquet_path}'"
+            )
             # 执行查询
             result = self.conn.execute(sql)
             return result.df()
@@ -463,28 +483,28 @@ class DuckDBAnalytics:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self._executor, _query)
 
-    async def get_statistics(self) -> Dict[str, Any]:
+    async def get_statistics(self) -> dict[str, object]:
         """获取数据库统计信息"""
-        stats = {}
+        stats: dict[str, object] = {}
 
         # 获取各表记录数
-        tables = ['kline_history', 'tick_archive', 'indicators', 'backtest_results']
+        tables = ["kline_history", "tick_archive", "indicators", "backtest_results"]
         for table in tables:
             try:
                 count_df = await self.query(f"SELECT COUNT(*) as count FROM {table}")
-                stats[f"{table}_count"] = int(count_df['count'][0]) if not count_df.empty else 0
-            except:
+                stats[f"{table}_count"] = int(count_df["count"][0]) if not count_df.empty else 0
+            except Exception:
                 stats[f"{table}_count"] = 0
 
         # 获取数据库文件大小
         if self.db_path and Path(self.db_path).exists():
-            stats['database_size'] = Path(self.db_path).stat().st_size
+            stats["database_size"] = Path(self.db_path).stat().st_size
         else:
-            stats['database_size'] = 0
+            stats["database_size"] = 0
 
         # 获取内存使用
-        stats['memory_limit'] = self.memory_limit
-        stats['threads'] = self.threads
+        stats["memory_limit"] = self.memory_limit
+        stats["threads"] = self.threads
 
         return stats
 
@@ -492,17 +512,21 @@ class DuckDBAnalytics:
         """异步初始化表结构"""
         self.init_schema()
 
-    async def close(self):
-        """异步关闭数据库连接"""
+    def _close_connection(self):
         if self.conn:
             self.conn.close()
+            self.conn = None
             logger.info("DuckDB 连接已关闭")
+
+    async def close(self):
+        """异步关闭数据库连接"""
+        self._close_connection()
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+        self._close_connection()
 
     async def __aenter__(self):
         return self
@@ -516,17 +540,13 @@ _analytics_instance: Optional[DuckDBAnalytics] = None
 
 
 def get_analytics_db(
-        db_path: Optional[str] = None,
-        memory_limit: str = "4GB",
-        threads: int = 4
+    db_path: Optional[str] = None, memory_limit: str = "4GB", threads: int = 4
 ) -> DuckDBAnalytics:
     """获取全局 DuckDB 分析实例"""
     global _analytics_instance
     if _analytics_instance is None:
         _analytics_instance = DuckDBAnalytics(
-            db_path=db_path,
-            memory_limit=memory_limit,
-            threads=threads
+            db_path=db_path, memory_limit=memory_limit, threads=threads
         )
         _analytics_instance.init_schema()
     return _analytics_instance

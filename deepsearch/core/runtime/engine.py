@@ -4,43 +4,68 @@
 使用依赖注入容器管理组件，实现了松耦合的架构。
 遵循SOLID原则，特别是依赖倒置原则。
 """
+
 import asyncio
-import logging
+import inspect
 import signal
 import sys
 import threading
 import time
 from concurrent.futures import TimeoutError
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Literal, Optional, Type, TypeVar, cast
+
+_T = TypeVar("_T")
+
+
+RuntimeMode = Literal["all", "engine", "webui"]
+RuntimeModeInput = Literal["all", "engine", "webui", "full"]
+
+VALID_RUNTIME_MODES: tuple[RuntimeMode, ...] = ("all", "engine", "webui")
+
 
 from deepsearch.config import get_config
-from deepsearch.constants import EVENT_SYSTEM_READY, EVENT_SYSTEM_EXIT
+from deepsearch.constants import EVENT_SYSTEM_EXIT, EVENT_SYSTEM_READY
 from deepsearch.event.engine.engine import Event
+from deepsearch.observability import get_logger
 from deepsearch.observability.logger import logger_manager
 from deepsearch.utils.system.port_checker import PortChecker
+
+from ..components import (
+    AnalyticsComponent,
+    BacktestComponent,
+    CacheComponent,
+    DatabaseComponent,
+    EventEngineComponent,
+    GatewayComponent,
+    MessageBusComponent,
+    QMTGatewayComponent,
+    WebUIComponent,
+)
+from ..health.manager import HealthCheckManager
+from ..interfaces import Component, ComponentStatus, ComponentType
 from ..managers.component_manager import ComponentManager
 from ..utils.container import AsyncContainer, ServiceProvider
-from .context import get_context
 from ..utils.exceptions import error_context
-from ..health.manager import HealthCheckManager
-from ..interfaces import Component, ComponentStatus
 from ..utils.ipc import EngineIPCServer
-from ..components import (
-    EventEngineComponent, MessageBusComponent, DatabaseComponent,
-    CacheComponent, GatewayComponent, WebUIComponent, QMTGatewayComponent,
-    AnalyticsComponent, BacktestComponent
-)
-
-
+from .context import get_context
 
 # Cloudflare Tunnel 组件已移除（使用 Workers 代理方案）
+
+
+def normalize_runtime_mode(mode: RuntimeModeInput) -> RuntimeMode:
+    """将外部传入的运行模式标准化为引擎内部可识别的取值。"""
+    if mode == "full":
+        return "all"
+    if mode not in VALID_RUNTIME_MODES:
+        raise ValueError(f"Unsupported runtime mode: {mode}")
+    return cast(RuntimeMode, mode)
 
 
 class MainEngine:
     """
     重构后的主引擎
-    
+
     使用依赖注入容器管理所有组件，实现了：
     1. 松耦合的组件管理
     2. 清晰的依赖关系
@@ -48,26 +73,37 @@ class MainEngine:
     4. 更好的可测试性
     """
 
-    def __init__(self, container: Optional[AsyncContainer] = None):
+    def __init__(
+        self,
+        container: Optional[AsyncContainer] = None,
+        mode: Optional[RuntimeModeInput] = None,
+    ) -> None:
         """
         初始化主引擎
-        
+
         Args:
             container: 依赖注入容器，如果不提供则创建默认容器
         """
         # 先初始化基本属性
-        self._logger = logging.getLogger(f"deepsearch.{self.__class__.__name__}")
+        self._logger = get_logger(f"deepsearch.{self.__class__.__name__}")
         self._running = False
         self._stop_event = asyncio.Event()
         self._components: Dict[str, Component] = {}
+        self._component_manager: Optional[ComponentManager] = None
         self._provider: Optional[ServiceProvider] = None
 
-        # 运行模式 - 默认为 "all"
-        self._mode = "all"
+        runtime_mode_input = self._resolve_runtime_mode(mode)
+        normalized_mode = normalize_runtime_mode(runtime_mode_input)
+
+        # 运行模式
+        self._mode: RuntimeMode = normalized_mode
         self._start_time: Optional[datetime] = None
 
+        # 基础设施运行标记
+        self._infrastructure_running = False
+
         # IPC 服务器
-        self._ipc_server = None
+        self._ipc_server: Optional[EngineIPCServer] = None
 
         # 健康检查管理器
         self._health_check_manager: Optional[HealthCheckManager] = None
@@ -76,56 +112,109 @@ class MainEngine:
         self._tasks: List[asyncio.Task] = []
         self._webui_task: Optional[asyncio.Task] = None
         self._actual_webui_port: Optional[int] = None  # 存储实际使用的 WebUI 端口
-        
+
         # 信号处理
-        self._original_sigint = None
-        self._original_sigterm = None
+        self._original_sigint: signal.Handlers | None = None
+        self._original_sigterm: signal.Handlers | None = None
 
         # 创建容器 - 在所有依赖属性设置后
         self._container = container or self._create_default_container()
 
+    def _resolve_runtime_mode(
+        self, explicit_mode: Optional[RuntimeModeInput]
+    ) -> RuntimeModeInput:
+        """根据显式参数或配置解析运行模式。"""
+
+        if explicit_mode is not None:
+            return explicit_mode
+
+        fallback: RuntimeModeInput = "full"
+
+        try:
+            config = get_config()
+        except Exception as exc:  # pragma: no cover - 配置读取失败时降级
+            self._logger.debug(f"加载配置以确定运行模式失败: {exc}")
+            return fallback
+
+        runtime_config = getattr(config, "runtime", None)
+        config_mode = getattr(runtime_config, "mode", None) if runtime_config else None
+
+        if isinstance(config_mode, str):
+            if config_mode == "full":
+                return "full"
+            if config_mode in VALID_RUNTIME_MODES:
+                return cast(RuntimeModeInput, config_mode)
+            self._logger.warning(
+                f"配置中的运行模式 '{config_mode}' 不受支持，将回退到 '{fallback}'"
+            )
+
+        return fallback
+
+    @property
+    def mode(self) -> RuntimeMode:
+        """返回标准化后的运行模式。"""
+
+        return self._mode
+
     def _create_default_container(self) -> AsyncContainer:
-        """创建默认的依赖注入容器"""
+        """Build the default dependency container."""
         container = AsyncContainer()
 
-        # 注册基础设施组件
-        # 设置默认的事件引擎参数
-        config = get_config()
-        queue_size = getattr(config.performance, 'queue_size', 10000) if config and hasattr(config, 'performance') else 10000
-        max_workers = getattr(config.performance, 'max_workers', 32) if config and hasattr(config, 'performance') else 32
-        batch_size = getattr(config.performance, 'batch_size', 100) if config and hasattr(config, 'performance') else 100
+        def register_component(
+            component_cls: type[Any],
+            *,
+            factory: Callable[[], Any] | None = None,
+        ) -> None:
+            if factory is not None:
+                container.register_singleton(cast(type[Any], component_cls), factory=factory)
+            else:
+                container.register_singleton(cast(type[Any], component_cls))
 
-        container.register_singleton(
-            EventEngineComponent,
-            factory=lambda: EventEngineComponent(
-                queue_size=queue_size,
-                max_workers=max_workers,
-                batch_size=batch_size
-            )
+        config = get_config()
+        queue_size = (
+            getattr(config.performance, "queue_size", 10000)
+            if config and hasattr(config, "performance")
+            else 10000
+        )
+        max_workers = (
+            getattr(config.performance, "max_workers", 32)
+            if config and hasattr(config, "performance")
+            else 32
+        )
+        batch_size = (
+            getattr(config.performance, "batch_size", 100)
+            if config and hasattr(config, "performance")
+            else 100
         )
 
-        container.register_singleton(MessageBusComponent)
-        container.register_singleton(DatabaseComponent)
-        container.register_singleton(CacheComponent)
-        container.register_singleton(AnalyticsComponent)  # 注册分析组件
+        register_component(
+            EventEngineComponent,
+            factory=lambda: cast(Any, EventEngineComponent)(
+                queue_size=queue_size, max_workers=max_workers, batch_size=batch_size
+            ),
+        )
+        register_component(MessageBusComponent)
+        register_component(DatabaseComponent)
+        register_component(CacheComponent)
+        register_component(AnalyticsComponent)  # 注册分析组件
 
-        # Cloudflare Tunnel 组件已移除（使用 Workers 代理方案）
-
-        # 注册支持组件 - 暂时不注册 MonitorComponent，因为它依赖 EventEngine
-        # MonitorComponent 需要在 EventEngine 初始化后手动设置
-
-        # 注册业务组件
         if self._should_load_business_components():
-            # 暂时简化注册
-            container.register_singleton(GatewayComponent)
-            container.register_singleton(QMTGatewayComponent)
-            container.register_singleton(BacktestComponent)
+            register_component(GatewayComponent)
+            register_component(QMTGatewayComponent)
+            register_component(BacktestComponent)
 
-        # 注册界面组件
         if self._should_load_interface_components():
-            container.register_singleton(WebUIComponent)
+            register_component(WebUIComponent)
 
         return container
+
+    def _require_provider(self) -> ServiceProvider:
+        """Return the ServiceProvider or raise if it is missing."""
+        if self._provider is None:
+            raise RuntimeError("Service provider is not initialized")
+        return self._provider
+
+
 
     def _should_load_business_components(self) -> bool:
         """判断是否应该加载业务组件"""
@@ -139,18 +228,22 @@ class MainEngine:
         """内部的异步初始化方法"""
         with error_context("MainEngine", "initialize"):
             # 使用标准化日志
-            from deepsearch.observability.log_standard import LogTemplates, LogStandard
+            from deepsearch.observability.log_standard import LogStandard, LogTemplates
+
             start_time = time.time()
-            
+
             self._logger.info(
                 LogTemplates.SYSTEM_START.format(
                     mode=self._mode,
-                    version=getattr(get_config().app, 'version', '0.1.0') if get_config() else '0.1.0'
+                    version=(
+                        getattr(get_config().app, "version", "0.1.0") if get_config() else "0.1.0"
+                    ),
                 )
             )
 
             # 构建服务提供者
-            self._provider = self._container.build()
+            provider = self._container.build()
+            self._provider = provider
 
             # 暂时跳过依赖验证 - 容器的依赖分析有问题
             # errors = self._container.validate_dependencies()
@@ -177,98 +270,190 @@ class MainEngine:
 
             # 记录启动完成和耗时
             elapsed = time.time() - start_time
-            duration_str = LogStandard.format_duration(start_time)
-            self._logger.info(
-                LogTemplates.SYSTEM_READY.format(elapsed=elapsed)
-            )
+            LogStandard.format_duration(start_time)
+            self._logger.info(LogTemplates.SYSTEM_READY.format(elapsed=elapsed))
 
     def _load_components(self) -> None:
-        """从容器加载所有组件"""
-        # 创建并注册组件管理器到应用上下文
+        """加载容器中的组件并注册到组件管理器."""
+
         context = get_context()
         component_manager = ComponentManager()
+        self._component_manager = component_manager
         context.set_component_manager(component_manager)
-        context.set_engine(self)  # 设置引擎引用
-        
-        # 直接加载已知的组件类型
+        context.set_engine(self)
+
         component_types = [
             EventEngineComponent,
             MessageBusComponent,
             DatabaseComponent,
             CacheComponent,
-            AnalyticsComponent,  # 添加分析组件
+            AnalyticsComponent,  # 注册分析组件
             GatewayComponent,
             QMTGatewayComponent,
-            BacktestComponent,  # 添加回测组件
-            WebUIComponent
+            BacktestComponent,
+            WebUIComponent,
         ]
 
-        # Cloudflare Tunnel 组件已移除（使用 Workers 代理方案）
-
+        provider = self._require_provider()
         for component_type in component_types:
             try:
-                component = self._provider.get_service(component_type)
+                component = provider.get_service(cast(Type[Any], component_type))
                 if component:
                     self._components[component.name] = component
-                    # 注册到组件管理器
                     component_manager.register_component(
                         component=component,
                         display_name=component.name,
                         description=f"{component_type.__name__} component",
                         dependencies=set(),
-                        config={}
+                        config={},
                     )
-                    # 减少噪音，只在出错时记录
-                    pass  # 组件加载成功不需要记录
-            except Exception as e:
-                # 只记录真正的错误，跳过未注册的组件
-                if "not registered" not in str(e):
-                    self._logger.warning(f"Component {component_type.__name__} failed to load: {e}")
+            except Exception as exc:
+                if "not registered" not in str(exc):
+                    self._logger.warning(
+                        f"Component {component_type.__name__} failed to load: {exc}"
+                    )
+
+    def _ensure_component_manager(self) -> ComponentManager:
+        """确保组件管理器已经初始化."""
+
+        if self._component_manager is None:
+            raise RuntimeError("Component manager is not initialized")
+        return self._component_manager
+
+    def get_component_manager(self) -> ComponentManager:
+        """获取组件管理器."""
+
+        return self._ensure_component_manager()
+
+    def _run_coroutine_from_sync(self, coro: Coroutine[Any, Any, _T]) -> _T:
+        """在同步环境中执行协程；异步环境请直接 await."""
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        raise RuntimeError(
+            "Operation requires awaiting in asynchronous context; use the '*_async' variant."
+        )
+
+    async def start_component_async(self, name: str) -> None:
+        """异步启动指定组件."""
+
+        manager = self._ensure_component_manager()
+        await manager.start_component(name)
+
+    def start_component(self, name: str) -> None:
+        """同步启动指定组件（异步环境请使用 async 版本）。"""
+
+        self._run_coroutine_from_sync(self.start_component_async(name))
+
+    async def stop_component_async(self, name: str) -> None:
+        """异步停止指定组件."""
+
+        manager = self._ensure_component_manager()
+        await manager.stop_component(name)
+
+    def stop_component(self, name: str) -> None:
+        """同步停止指定组件（异步环境请使用 async 版本）。"""
+
+        self._run_coroutine_from_sync(self.stop_component_async(name))
+
+    async def restart_component_async(self, name: str) -> None:
+        """异步重启指定组件."""
+
+        await self.stop_component_async(name)
+        await self.start_component_async(name)
+
+    def restart_component(self, name: str) -> None:
+        """同步重启指定组件（异步环境请使用 async 版本）。"""
+
+        self._run_coroutine_from_sync(self.restart_component_async(name))
+
+    async def start_business_components_async(self) -> None:
+        """异步启动所有业务组件."""
+
+        manager = self._ensure_component_manager()
+        await manager.start_all(ComponentType.BUSINESS)
+
+    def start_business_components(self) -> None:
+        """同步启动所有业务组件（异步环境请使用 async 版本）。"""
+
+        self._run_coroutine_from_sync(self.start_business_components_async())
+
+    async def stop_business_components_async(self) -> None:
+        """异步停止所有业务组件."""
+
+        manager = self._ensure_component_manager()
+        await manager.stop_all(ComponentType.BUSINESS)
+
+    def stop_business_components(self) -> None:
+        """同步停止所有业务组件（异步环境请使用 async 版本）。"""
+
+        self._run_coroutine_from_sync(self.stop_business_components_async())
+
+    async def restart_business_components_async(self) -> None:
+        """异步重启所有业务组件."""
+
+        await self.stop_business_components_async()
+        await self.start_business_components_async()
+
+    def restart_business_components(self) -> None:
+        """同步重启所有业务组件（异步环境请使用 async 版本）。"""
+
+        self._run_coroutine_from_sync(self.restart_business_components_async())
+
+    def is_infrastructure_running(self) -> bool:
+        """基础设施是否处于运行状态."""
+
+        return self._infrastructure_running
 
     def _get_service_type_by_name(self, name: str):
         """根据名称获取服务类型"""
         # 这是一个简化的实现，实际可能需要更复杂的查找逻辑
         import sys
+
         module = sys.modules[__name__]
         return getattr(module, name, None)
-    
+
     def _initialize_debug_modules(self):
         """初始化调试模块（仅在开发模式下）"""
         try:
             self._logger.debug("Initializing debug modules for development mode...")
-            
+
             # 动态导入调试模块
-            from deepsearch.core.utils.error_handler import error_handler
             from deepsearch.debug.performance_profiler import profiler
+            from deepsearch.infrastructure.persistence.query_optimizer import (
+                query_optimizer,
+                setup_query_monitoring,
+            )
             from deepsearch.memory.smart_memory import memory_manager
-            from deepsearch.infrastructure.persistence.query_optimizer import query_optimizer, setup_query_monitoring
-            
+
             # 错误处理器已通过全局注入自动激活
             self._logger.debug("Enhanced error handler active")
-            
+
             # 启用性能分析器
             profiler.enable()
             profiler.set_threshold(100)  # 100ms慢操作阈值
             self._logger.debug("Performance profiler enabled")
-            
+
             # 配置内存管理器
             memory_manager.auto_cleanup = True
             memory_manager.monitor_interval = 30  # 30秒检查一次
             self._logger.debug("Smart memory manager configured")
-            
+
             # 设置查询优化器
             query_optimizer.set_slow_threshold(1.0)  # 1秒慢查询阈值
-            
+
             # 如果有数据库组件，设置监控
-            database_component = self._components.get('database')
-            if database_component and hasattr(database_component, 'get_engine'):
+            database_component = self._components.get("database")
+            if database_component and hasattr(database_component, "get_engine"):
                 engine = database_component.get_engine()
                 if engine:
                     setup_query_monitoring(engine)
                     self._logger.debug("Query monitoring enabled")
-            
+
             self._logger.debug("Debug modules initialized")
-            
+
         except Exception as e:
             self._logger.warning(f"Failed to initialize debug modules: {e}")
             # 调试模块是可选的，失败不影响主系统
@@ -281,41 +466,46 @@ class MainEngine:
             config = get_config()
             if config and config.app.env == "dev":
                 self._initialize_debug_modules()
-            
+
             # 使用容器的异步初始化功能
-            await self._container.initialize_async_services(self._provider)
+            await self._container.initialize_async_services(self._require_provider())
 
             # 设置QMT网关的依赖
-            qmt_gateway = self._components.get('qmt_gateway')
-            if qmt_gateway and hasattr(qmt_gateway, 'set_dependencies'):
-                event_engine = self._components.get('event_engine')
-                message_bus = self._components.get('message_bus')
+            qmt_gateway = self._components.get("qmt_gateway")
+            if qmt_gateway and hasattr(qmt_gateway, "set_dependencies"):
+                event_engine = self._components.get("event_engine")
+                message_bus = self._components.get("message_bus")
                 if event_engine and message_bus:
                     # 获取实际的实例
-                    event_engine_instance = event_engine._instance if hasattr(event_engine, '_instance') else None
-                    message_bus_instance = message_bus._instance if hasattr(message_bus, '_instance') else None
+                    event_engine_instance = (
+                        event_engine._instance if hasattr(event_engine, "_instance") else None
+                    )
+                    message_bus_instance = (
+                        message_bus._instance if hasattr(message_bus, "_instance") else None
+                    )
                     if event_engine_instance and message_bus_instance:
                         qmt_gateway.set_dependencies(event_engine_instance, message_bus_instance)
                         self._logger.debug("QMT网关依赖已设置")
 
             # 设置分析组件的数据库依赖
-            analytics_component = self._components.get('analytics')
-            if analytics_component and hasattr(analytics_component, 'set_database_component'):
-                database_component = self._components.get('database')
+            analytics_component = self._components.get("analytics")
+            if analytics_component and hasattr(analytics_component, "set_database_component"):
+                database_component = self._components.get("database")
                 if database_component:
                     analytics_component.set_database_component(database_component)
                     self._logger.debug("分析组件数据库依赖已设置")
 
             # 设置回测组件的依赖
-            backtest_component = self._components.get('backtest')
-            if backtest_component and hasattr(backtest_component, 'set_dependencies'):
-                event_engine = self._components.get('event_engine')
-                message_bus = self._components.get('message_bus')
+            backtest_component = self._components.get("backtest")
+            if backtest_component and hasattr(backtest_component, "set_dependencies"):
+                event_engine = self._components.get("event_engine")
+                message_bus = self._components.get("message_bus")
 
                 # 获取数据提供者实例
                 data_provider = None
                 try:
                     from deepsearch.infrastructure.providers.factory import get_factory
+
                     factory = get_factory()
                     # 异步获取提供者，需要在异步上下文中运行
                     data_provider = await factory.get_provider()
@@ -345,7 +535,7 @@ class MainEngine:
         for name in reversed(initialized_components):
             try:
                 component = self._components.get(name)
-                if component and hasattr(component, 'stop_async'):
+                if component and hasattr(component, "stop_async"):
                     await component.stop_async()
                     self._logger.debug(f"Rolled back component: {name}")
             except Exception as e:
@@ -358,22 +548,26 @@ class MainEngine:
             message_bus = self.get_component(MessageBusComponent)
             cache = self.get_component(CacheComponent)
 
-            if message_bus and cache:
-                # 创建 IPC 服务器
-                self._ipc_server = EngineIPCServer(
-                    self,
-                    message_bus.get_instance(),
-                    cache.resource  # CacheComponent使用resource属性
-                )
+            if isinstance(message_bus, MessageBusComponent) and isinstance(cache, CacheComponent):
+                message_bus_instance = message_bus.get_instance()
+                if message_bus_instance is None:
+                    self._logger.warning("Cannot initialize IPC server: message bus instance unavailable")
+                    return
 
-                # 初始化并启动 IPC 服务器
-                await self._ipc_server.initialize_async()
-                await self._ipc_server.start_async()
+                ipc_server = EngineIPCServer(
+                    self,
+                    message_bus_instance,
+                    cache.resource,  # CacheComponentʹ��resource����
+                )
+                self._ipc_server = ipc_server
+
+                await ipc_server.initialize_async()
+                await ipc_server.start_async()
 
                 self._logger.info("[OK] IPC Server initialized and started")
             else:
                 self._logger.warning("Cannot initialize IPC server: missing message bus or cache")
-                
+
         except Exception as e:
             self._logger.error(f"Failed to initialize IPC server: {e}")
             # IPC 服务器是可选的，失败不影响主系统
@@ -382,10 +576,7 @@ class MainEngine:
         """初始化健康检查管理器"""
         try:
             # 创建健康检查管理器
-            self._health_check_manager = HealthCheckManager(
-                check_interval=30.0,
-                check_timeout=5.0
-            )
+            self._health_check_manager = HealthCheckManager(check_interval=30.0, check_timeout=5.0)
 
             # 自动注册所有组件的健康检查器
             self._health_check_manager.auto_register_checkers(self._components)
@@ -411,7 +602,7 @@ class MainEngine:
                 self._setup_signal_handlers()
 
                 # 启动所有组件
-                await self._container.start_async_services(self._provider)
+                await self._container.start_async_services(self._require_provider())
 
                 # 记录启动成功的组件
                 for name, component in self._components.items():
@@ -428,13 +619,21 @@ class MainEngine:
                 self._running = True
 
                 # 发送系统就绪事件
-                event_engine = self.get_component(EventEngineComponent)
-                if event_engine and event_engine.resource:
-                    event = Event(EVENT_SYSTEM_READY, {
-                        "timestamp": datetime.now(),
-                        "mode": self._mode
-                    })
-                    event_engine.resource.put(event)
+                event_engine_component = self.get_component(EventEngineComponent)
+                event_engine_resource = (
+                    getattr(event_engine_component, "resource", None)
+                    if event_engine_component is not None
+                    else None
+                )
+                if (
+                    event_engine_component
+                    and event_engine_resource is not None
+                    and hasattr(event_engine_resource, "put")
+                ):
+                    event = Event(
+                        EVENT_SYSTEM_READY, {"timestamp": datetime.now(), "mode": self._mode}
+                    )
+                    event_engine_resource.put(event)
 
                 self._logger.info("[OK] DeepSearch System started successfully")
                 self._logger.info(f"System is running in {self._mode} mode")
@@ -447,7 +646,7 @@ class MainEngine:
 
     async def _validate_startup(self) -> None:
         """验证关键组件是否启动成功"""
-        critical_components = ['event_engine', 'message_bus']
+        critical_components = ["event_engine", "message_bus"]
 
         for name in critical_components:
             component = self.get_component_by_name(name)
@@ -460,7 +659,7 @@ class MainEngine:
         for name in reversed(started_components):
             try:
                 component = self._components.get(name)
-                if component and hasattr(component, 'stop_async'):
+                if component and hasattr(component, "stop_async"):
                     await component.stop_async()
                     self._logger.debug(f"Stopped component: {name}")
             except Exception as e:
@@ -470,7 +669,7 @@ class MainEngine:
         """运行引擎直到收到停止信号"""
         if not self._running:
             await self.start()
-        
+
         try:
             # 等待停止信号
             await self._stop_event.wait()
@@ -515,19 +714,37 @@ class MainEngine:
                 self._restore_signal_handlers()
 
                 self._running = False
+                self._infrastructure_running = False
                 shutdown_time = (datetime.now() - shutdown_start).total_seconds()
                 self._logger.info(f"[OK] DeepSearch System stopped (took {shutdown_time:.2f}s)")
 
     async def _shutdown_phase_events(self, timeout: float) -> None:
         """关闭阶段1: 发送系统退出事件"""
         try:
-            event_engine = self.get_component(EventEngineComponent)
-            if event_engine and event_engine.status == ComponentStatus.RUNNING and event_engine.resource:
-                event = Event(EVENT_SYSTEM_EXIT, {
-                    "timestamp": datetime.now(),
-                    "uptime": (datetime.now() - self._start_time).total_seconds() if self._start_time else 0
-                })
-                event_engine.resource.put(event)
+            event_engine_component = self.get_component(EventEngineComponent)
+            event_engine_resource = (
+                getattr(event_engine_component, "resource", None)
+                if event_engine_component is not None
+                else None
+            )
+            if (
+                event_engine_component
+                and event_engine_component.status == ComponentStatus.RUNNING
+                and event_engine_resource is not None
+                and hasattr(event_engine_resource, "put")
+            ):
+                event = Event(
+                    EVENT_SYSTEM_EXIT,
+                    {
+                        "timestamp": datetime.now(),
+                        "uptime": (
+                            (datetime.now() - self._start_time).total_seconds()
+                            if self._start_time
+                            else 0
+                        ),
+                    },
+                )
+                event_engine_resource.put(event)
                 await asyncio.wait_for(asyncio.sleep(0.5), timeout=timeout)
         except asyncio.TimeoutError:
             self._logger.warning("Event notification phase timed out")
@@ -538,10 +755,7 @@ class MainEngine:
         """关闭阶段2: 停止健康检查"""
         try:
             if self._health_check_manager:
-                await asyncio.wait_for(
-                    self._health_check_manager.stop(),
-                    timeout=timeout
-                )
+                await asyncio.wait_for(self._health_check_manager.stop(), timeout=timeout)
         except asyncio.TimeoutError:
             self._logger.warning("Health check shutdown timed out")
         except Exception as e:
@@ -550,10 +764,7 @@ class MainEngine:
     async def _shutdown_phase_tasks(self, timeout: float) -> None:
         """关闭阶段3: 取消异步任务"""
         try:
-            await asyncio.wait_for(
-                self._cancel_all_tasks(),
-                timeout=timeout
-            )
+            await asyncio.wait_for(self._cancel_all_tasks(), timeout=timeout)
         except asyncio.TimeoutError:
             self._logger.warning("Task cancellation timed out")
         except Exception as e:
@@ -563,10 +774,7 @@ class MainEngine:
         """关闭阶段4: 停止IPC服务器"""
         try:
             if self._ipc_server:
-                await asyncio.wait_for(
-                    self._ipc_server.stop_async(),
-                    timeout=timeout
-                )
+                await asyncio.wait_for(self._ipc_server.stop_async(), timeout=timeout)
                 self._logger.info("IPC Server stopped")
         except asyncio.TimeoutError:
             self._logger.warning("IPC server shutdown timed out")
@@ -576,9 +784,13 @@ class MainEngine:
     async def _shutdown_phase_components(self, timeout: float) -> None:
         """关闭阶段5: 停止所有组件"""
         try:
+            provider = self._provider
+            if provider is None:
+                self._logger.debug("Service provider is not initialized; skipping component shutdown")
+                return
+
             await asyncio.wait_for(
-                self._container.stop_async_services(self._provider),
-                timeout=timeout
+                self._container.stop_async_services(provider), timeout=timeout
             )
         except asyncio.TimeoutError:
             self._logger.warning("Component shutdown timed out")
@@ -591,7 +803,6 @@ class MainEngine:
             return
 
         self._logger.info(f"Cancelling {len(self._tasks)} async tasks...")
-
 
         # Cancel outstanding tasks and, where possible, wait for them on this loop
         try:
@@ -625,8 +836,7 @@ class MainEngine:
             results: List[Any] = []
             if pending_same_loop:
                 results = await asyncio.wait_for(
-                    asyncio.gather(*pending_same_loop, return_exceptions=True),
-                    timeout=5.0
+                    asyncio.gather(*pending_same_loop, return_exceptions=True), timeout=5.0
                 )
             # 记录任何异常
             for i, result in enumerate(results):
@@ -673,14 +883,14 @@ class MainEngine:
             self._stop_event.set()
             # 如果在异步环境中，尝试创建任务
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 asyncio.create_task(self._signal_handler())
             except RuntimeError:
                 # 不在异步环境中，直接设置停止标志
                 pass
 
-        self._original_sigint = signal.signal(signal.SIGINT, signal_handler)
-        self._original_sigterm = signal.signal(signal.SIGTERM, signal_handler)
+        self._original_sigint = cast(signal.Handlers, signal.signal(signal.SIGINT, signal_handler))
+        self._original_sigterm = cast(signal.Handlers, signal.signal(signal.SIGTERM, signal_handler))
 
     def _restore_signal_handlers(self) -> None:
         """恢复原始信号处理器"""
@@ -709,11 +919,13 @@ class MainEngine:
         try:
             # 获取 WebUI 组件配置
             from deepsearch.config import get_config
+
             config = get_config()
 
             # 创建并启动 WebUI 服务器
-            from deepsearch.webui.server import app
             import uvicorn
+
+            from deepsearch.webui.server import app
 
             # 设置引擎到 app_state（通过 app.state 访问）
             app.state.app_state.set_engine(self)
@@ -732,15 +944,20 @@ class MainEngine:
                 # 尝试获取占用进程信息
                 try:
                     import psutil
+
                     for conn in psutil.net_connections():
-                        if hasattr(conn, 'laddr') and conn.laddr.port == port and conn.status == 'LISTEN':
+                        if (
+                            hasattr(conn, "laddr")
+                            and conn.laddr.port == port
+                            and conn.status == "LISTEN"
+                        ):
                             try:
                                 proc = psutil.Process(conn.pid)
                                 self._logger.error(f"占用进程: {proc.name()} (PID: {conn.pid})")
-                            except:
+                            except Exception:
                                 self._logger.error(f"占用进程 PID: {conn.pid}")
                             break
-                except:
+                except Exception:
                     pass
 
                 raise RuntimeError(
@@ -766,7 +983,7 @@ class MainEngine:
             server = uvicorn.Server(server_config)
 
             # 如果server有install_signal_handlers属性，将其设置为False
-            if hasattr(server, 'install_signal_handlers'):
+            if hasattr(server, "install_signal_handlers"):
                 server.install_signal_handlers = lambda: None
 
             self._logger.info("WebUI server starting...")
@@ -774,7 +991,8 @@ class MainEngine:
             # 添加详细的异常处理
             try:
                 self._logger.debug(
-                    f"Calling server.serve() with config: host=0.0.0.0, port={config.webui.backend_port}")
+                    f"Calling server.serve() with config: host=0.0.0.0, port={config.webui.backend_port}"
+                )
                 await server.serve()
                 self._logger.info("WebUI server stopped normally")
             except asyncio.CancelledError:
@@ -789,11 +1007,14 @@ class MainEngine:
                 self._logger.error(f"OSError in server.serve(): {e}")
                 if "Address already in use" in str(e):
                     self._logger.error(f"Port {port} is already in use despite our checks!")
-                    self._logger.error("This might happen if another process grabbed the port between check and bind")
+                    self._logger.error(
+                        "This might happen if another process grabbed the port between check and bind"
+                    )
                 raise
             except Exception as e:
                 self._logger.error(f"Unexpected error in server.serve(): {type(e).__name__}: {e}")
                 import traceback
+
                 self._logger.error(f"Traceback: {traceback.format_exc()}")
                 raise
 
@@ -812,9 +1033,13 @@ class MainEngine:
 
     # ==================== 组件访问 ====================
 
-    def get_component(self, component_type: type) -> Optional[Component]:
+    def get_component(self, component_type: type[Any]) -> Optional[Component]:
         """通过类型获取组件"""
-        return self._provider.get_service(component_type) if self._provider else None
+        provider = self._provider
+        if provider is None:
+            return None
+        component = provider.get_service(cast(Type[Any], component_type))
+        return cast(Optional[Component], component)
 
     def get_component_by_name(self, name: str) -> Optional[Component]:
         """通过名称获取组件"""
@@ -828,35 +1053,39 @@ class MainEngine:
 
     def get_status(self) -> Dict[str, Any]:
         """获取引擎状态"""
-        status = {
+        components_info: Dict[str, Any] = {}
+        status: Dict[str, Any] = {
             "running": self._running,
             "mode": self._mode,
             "start_time": self._start_time.isoformat() if self._start_time else None,
-            "uptime": (datetime.now() - self._start_time).total_seconds() if self._start_time else 0,
-            "webui_port": self._actual_webui_port,  # 包含实际使用的 WebUI 端口
-            "components": {}
+            "uptime": (
+                (datetime.now() - self._start_time).total_seconds() if self._start_time else 0
+            ),
+            "webui_port": self._actual_webui_port,  # ����ʵ��ʹ�õ� WebUI �˿�
+            "components": components_info,
         }
 
         for name, component in self._components.items():
-            status["components"][name] = {
+            components_info[name] = {
                 "status": component.status.value,
                 "type": component.component_type.value,
-                "info": component.get_status_info()
+                "info": component.get_status_info(),
             }
 
         return status
 
     def health_check(self) -> Dict[str, Any]:
         """健康检查"""
-        health = {
+        components_health: Dict[str, Any] = {}
+        health: Dict[str, Any] = {
             "healthy": True,
             "timestamp": datetime.now().isoformat(),
-            "components": {}
+            "components": components_health,
         }
 
-        # 如果有健康检查管理器，使用它获取更详细的信息
+        # ����н�������������ʹ������ȡ����ϸ����Ϣ
         if self._health_check_manager:
-            # 使用缓存的结果，避免同步调用异步方法
+            # ʹ�û���Ľ��������ͬ�������첽����
             last_results = self._health_check_manager.get_last_results()
             overall_status = self._health_check_manager.get_overall_status()
 
@@ -864,19 +1093,19 @@ class MainEngine:
             health["overall_status"] = overall_status.value
 
             for name, result in last_results.items():
-                health["components"][name] = {
+                components_health[name] = {
                     "healthy": result.status.value == "healthy",
                     "status": result.status.value,
                     "message": result.message,
-                    "last_check": result.timestamp.isoformat()
+                    "last_check": result.timestamp.isoformat(),
                 }
         else:
-            # 使用传统方式
+            # ʹ�ô�ͳ��ʽ
             for name, component in self._components.items():
                 component_health = component.health_check()
-                health["components"][name] = {
+                components_health[name] = {
                     "healthy": component_health,
-                    "status": component.status.value
+                    "status": component.status.value,
                 }
 
                 if not component_health:
@@ -889,7 +1118,7 @@ class MainEngine:
         if self._health_check_manager:
             # 执行完整的健康检查
             report = await self._health_check_manager.get_health_report()
-            return report
+            return cast(Dict[str, Any], report)
         else:
             # 返回同步版本的结果
             return self.health_check()
@@ -928,17 +1157,19 @@ class MainEngine:
 
         asyncio.run(self.initialize_async())
 
-
     async def initialize_async(self) -> None:
         """异步初始化（调用内部的异步方法）"""
         await self._initialize_internal()
 
-    def start_phased(self, include_business: bool = True,
-                     include_webui: bool = True,
-                     include_frontend: bool = True) -> None:
+    def start_phased(
+        self,
+        include_business: bool = True,
+        include_webui: bool = True,
+        include_frontend: bool = True,
+    ) -> None:
         """分阶段启动引擎（同步包装器）"""
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # 在异步环境中不能调用同步方法
             raise RuntimeError(
                 "Cannot call synchronous start_phased() from async context. "
@@ -950,23 +1181,29 @@ class MainEngine:
             # 没有运行的循环，使用 asyncio.run
             asyncio.run(self._start_phased_async(include_business, include_webui, include_frontend))
 
-    async def _start_phased_async(self, include_business: bool,
-                                  include_webui: bool,
-                                  include_frontend: bool) -> None:
+    async def _start_phased_async(
+        self, include_business: bool, include_webui: bool, include_frontend: bool
+    ) -> None:
         """分阶段启动引擎的异步实现"""
         # 总是启动基础设施组件
-        infrastructure_components = ['event_engine', 'message_bus', 'database', 'cache']
+        infrastructure_components = ["event_engine", "message_bus", "database", "cache"]
 
         # 根据参数决定启动哪些组件
         components_to_start = infrastructure_components.copy()
 
         if include_business:
-            components_to_start.extend(['monitor', 'gateway', 'qmt_gateway'])
+            components_to_start.extend(["monitor", "gateway", "qmt_gateway"])
 
         # 启动非 WebUI 组件
         for name, component in self._components.items():
             if name in components_to_start:
-                await component.start_async()
+                start_async = getattr(component, "start_async", None)
+                if callable(start_async):
+                    await cast(Callable[[], Awaitable[None]], start_async)()
+                else:
+                    start_result = component.start()
+                    if inspect.isawaitable(start_result):
+                        await cast(Awaitable[None], start_result)
                 self._logger.info(f"启动组件: {name}")
 
         # WebUI 作为异步任务启动
@@ -984,11 +1221,21 @@ class MainEngine:
                 self._logger.error("无法在当前上下文中创建 WebUI 任务")
 
         self._running = True
+        self._infrastructure_running = True
+
         self._start_time = datetime.now()
 
+    async def start_infrastructure_async(self) -> None:
+        """异步启动基础设施组件。"""
+
+        await self._start_phased_async(
+            include_business=False, include_webui=False, include_frontend=False
+        )
+
     def start_infrastructure(self) -> None:
-        """仅启动基础设施组件"""
-        self.start_phased(include_business=False, include_webui=False, include_frontend=False)
+        """同步启动基础设施组件。"""
+
+        self._run_coroutine_from_sync(self.start_infrastructure_async())
 
     def stop(self) -> None:
         """同步停止方法（向后兼容）"""
@@ -996,9 +1243,7 @@ class MainEngine:
             loop = asyncio.get_running_loop()
             # 如果在异步环境中，创建任务并返回
             # 使用call_soon_threadsafe确保线程安全
-            future = asyncio.run_coroutine_threadsafe(
-                self.stop_async(), loop
-            )
+            future = asyncio.run_coroutine_threadsafe(self.stop_async(), loop)
             # 等待完成，但设置超时避免永久阻塞
             try:
                 future.result(timeout=30)
@@ -1015,29 +1260,33 @@ class MainEngine:
 
 # ==================== 工厂函数 ====================
 
-def create_engine(mode: Optional[str] = None, container: Optional[AsyncContainer] = None) -> MainEngine:
+
+def create_engine(
+    mode: Optional[str] = None, container: Optional[AsyncContainer] = None
+) -> MainEngine:
     """
     创建引擎实例
-    
+
     Args:
-        mode: 运行模式 (all, engine, webui)
+        mode: 运行模式 (all, engine, webui)，默认为配置文件中的值
         container: 自定义依赖注入容器
-    
+
     Returns:
         MainEngine: 引擎实例
     """
-    if mode:
-        config = get_config()
-        if config:
-            config.mode = mode
+    runtime_mode_input = cast(Optional[RuntimeModeInput], mode)
 
-    return MainEngine(container)
+    return MainEngine(container=container, mode=runtime_mode_input)
 
 
-async def run_engine(mode: Optional[str] = None, container: Optional[AsyncContainer] = None):
+
+async def run_engine(
+    mode: Optional[RuntimeModeInput] = None,
+    container: Optional[AsyncContainer] = None,
+) -> None:
     """
     运行引擎
-    
+
     Args:
         mode: 运行模式
         container: 自定义依赖注入容器
@@ -1045,7 +1294,7 @@ async def run_engine(mode: Optional[str] = None, container: Optional[AsyncContai
     engine = create_engine(mode, container)
 
     try:
-        await engine.initialize()
+        await engine.initialize_async()
         await engine.run()
     except Exception as e:
         logger_manager.get_logger(__name__).error(f"Engine failed: {e}")
@@ -1053,3 +1302,4 @@ async def run_engine(mode: Optional[str] = None, container: Optional[AsyncContai
     finally:
         if engine.is_running():
             await engine.stop_async()
+

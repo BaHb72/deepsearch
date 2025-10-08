@@ -4,6 +4,7 @@ Event System Monitoring Module
 This module provides comprehensive monitoring and observability features for the event system,
 including metrics collection, performance tracking, and health monitoring.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,11 +16,12 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple, Deque
+from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 from deepsearch.core.interfaces.component import MonitoringHook
 from deepsearch.event.engine.engine import Event, EventEngine
 from deepsearch.messaging.bus import MessageBus as AbstractMessageBus
+from deepsearch.observability import get_logger
 
 # ==============================================================================
 # Constants
@@ -35,11 +37,12 @@ METRICS_EXPORT_INTERVAL = 60  # 1 minute
 # Type Definitions and Logger
 # ==============================================================================
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class MetricType(str, Enum):
     """Types of metrics"""
+
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
@@ -48,6 +51,7 @@ class MetricType(str, Enum):
 
 class HealthStatus(str, Enum):
     """Health check status"""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
@@ -61,6 +65,7 @@ class HealthStatus(str, Enum):
 @dataclass
 class MetricPoint:
     """Single metric data point"""
+
     timestamp: float
     value: float
     labels: Dict[str, str] = field(default_factory=dict)
@@ -69,12 +74,13 @@ class MetricPoint:
 @dataclass
 class EventMetrics:
     """Metrics for a specific event type"""
+
     event_type: str
     total_count: int = 0
     success_count: int = 0
     failure_count: int = 0
     total_processing_time: float = 0.0
-    min_processing_time: float = float('inf')
+    min_processing_time: float = float("inf")
     max_processing_time: float = 0.0
     last_event_time: Optional[float] = None
 
@@ -103,6 +109,7 @@ class EventMetrics:
 @dataclass
 class SlowEventRecord:
     """Record of a slow event"""
+
     event_type: str
     processing_time: float
     timestamp: float
@@ -118,7 +125,7 @@ class SlowEventRecord:
 class MetricsCollector:
     """Collects and aggregates event system metrics"""
 
-    def __init__(self, window_size: int = DEFAULT_METRICS_WINDOW):
+    def __init__(self, window_size: int = DEFAULT_METRICS_WINDOW) -> None:
         self._window_size = window_size
         self._metrics: Dict[str, EventMetrics] = {}
         self._time_series: Dict[str, Deque[MetricPoint]] = defaultdict(lambda: deque(maxlen=1000))
@@ -127,12 +134,12 @@ class MetricsCollector:
         self._lock = threading.RLock()
 
     def record_event(
-            self,
-            event_type: str,
-            processing_time: float,
-            success: bool,
-            handler_name: Optional[str] = None,
-            labels: Optional[Dict[str, str]] = None
+        self,
+        event_type: str,
+        processing_time: float,
+        success: bool,
+        handler_name: Optional[str] = None,
+        labels: Optional[Dict[str, str]] = None,
     ) -> None:
         """Record an event execution"""
         timestamp = time.time()
@@ -167,12 +174,14 @@ class MetricsCollector:
 
             # Track slow events
             if processing_time > 1.0:  # Events taking more than 1 second
-                self._slow_events.append(SlowEventRecord(
-                    event_type=event_type,
-                    processing_time=processing_time,
-                    timestamp=timestamp,
-                    handler_name=handler_name or "unknown"
-                ))
+                self._slow_events.append(
+                    SlowEventRecord(
+                        event_type=event_type,
+                        processing_time=processing_time,
+                        timestamp=timestamp,
+                        handler_name=handler_name or "unknown",
+                    )
+                )
 
     def get_metrics(self, event_type: Optional[str] = None) -> Dict[str, EventMetrics]:
         """Get metrics for specific event type or all types"""
@@ -184,12 +193,14 @@ class MetricsCollector:
     def get_handler_metrics(self) -> Dict[str, Dict[str, float]]:
         """Get metrics grouped by handler"""
         with self._lock:
-            result = {}
+            result: Dict[str, Dict[str, float]] = {}
             for handler, metrics in self._handler_metrics.items():
                 result[handler] = {
                     "count": metrics["count"],
                     "total_time": metrics["total_time"],
-                    "average_time": metrics["total_time"] / metrics["count"] if metrics["count"] > 0 else 0
+                    "average_time": (
+                        metrics["total_time"] / metrics["count"] if metrics["count"] > 0 else 0
+                    ),
                 }
             return result
 
@@ -201,7 +212,9 @@ class MetricsCollector:
                 events = events[-limit:]
             return events
 
-    def get_time_series(self, metric_name: str, start_time: Optional[float] = None) -> List[MetricPoint]:
+    def get_time_series(
+        self, metric_name: str, start_time: Optional[float] = None
+    ) -> List[MetricPoint]:
         """Get time series data for a metric"""
         with self._lock:
             points = list(self._time_series.get(metric_name, []))
@@ -209,7 +222,9 @@ class MetricsCollector:
                 points = [p for p in points if p.timestamp >= start_time]
             return points
 
-    def calculate_percentiles(self, event_type: str, percentiles: List[float]) -> Dict[float, float]:
+    def calculate_percentiles(
+        self, event_type: str, percentiles: List[float]
+    ) -> Dict[float, float]:
         """Calculate percentiles for event processing times"""
         metric_name = f"{event_type}_processing_time"
         points = self.get_time_series(metric_name)
@@ -218,7 +233,7 @@ class MetricsCollector:
             return {p: 0.0 for p in percentiles}
 
         values = sorted([p.value for p in points])
-        result = {}
+        result: Dict[float, float] = {}
 
         for percentile in percentiles:
             index = int(len(values) * percentile / 100)
@@ -247,7 +262,7 @@ class MetricsCollectorHook(MonitoringHook):
     监控钩子实现，用于收集事件处理的性能指标
     """
 
-    def __init__(self, collector: MetricsCollector):
+    def __init__(self, collector: MetricsCollector) -> None:
         self._collector = collector
 
     def on_handler_start(self, handler_name: str, event_type: str) -> None:
@@ -255,7 +270,13 @@ class MetricsCollectorHook(MonitoringHook):
         # 可以在这里记录开始时间或其他预处理
         pass
 
-    def on_handler_complete(self, handler_name: str, event_type: str, duration: float, error: Exception = None) -> None:
+    def on_handler_complete(
+        self,
+        handler_name: str,
+        event_type: str,
+        duration: float,
+        error: Exception | None = None,
+    ) -> None:
         """处理器执行完成时的钩子"""
         success = error is None
 
@@ -264,7 +285,7 @@ class MetricsCollectorHook(MonitoringHook):
             event_type=event_type,
             processing_time=duration,
             success=success,
-            handler_name=handler_name
+            handler_name=handler_name,
         )
 
         # 如果有错误，记录错误信息
@@ -280,7 +301,7 @@ class MetricsCollectorHook(MonitoringHook):
 class PerformanceMonitor:
     """Monitors event system performance"""
 
-    def __init__(self, engine: EventEngine, collector: MetricsCollector):
+    def __init__(self, engine: EventEngine, collector: MetricsCollector) -> None:
         self._engine = engine
         self._collector = collector
         self._monitoring = False
@@ -318,7 +339,7 @@ class PerformanceMonitor:
         return {
             "monitoring": self._monitoring,
             "collector_stats": self._collector.get_metrics() if self._collector else {},
-            "handler_metrics": self._collector.get_handler_metrics() if self._collector else {}
+            "handler_metrics": self._collector.get_handler_metrics() if self._collector else {},
         }
 
 
@@ -330,6 +351,7 @@ class PerformanceMonitor:
 @dataclass
 class HealthCheck:
     """Health check configuration"""
+
     name: str
     check_func: Callable[[], Tuple[bool, Optional[str]]]
     critical: bool = False
@@ -339,7 +361,7 @@ class HealthCheck:
 class HealthMonitor:
     """Monitors event system health"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._checks: List[HealthCheck] = []
         self._last_results: Dict[str, Tuple[bool, Optional[str], float]] = {}
         self._monitoring = False
@@ -413,7 +435,7 @@ class HealthMonitor:
                     "success": success,
                     "message": message,
                     "duration": duration,
-                    "critical": check.critical
+                    "critical": check.critical,
                 }
 
                 if not success:
@@ -439,7 +461,7 @@ class HealthMonitor:
 class EventSystemMonitor:
     """Comprehensive monitoring for the event system"""
 
-    def __init__(self, engine: EventEngine, bus: Optional[AbstractMessageBus] = None):
+    def __init__(self, engine: EventEngine, bus: Optional[AbstractMessageBus] = None) -> None:
         self._engine = engine
         self._bus = bus
         self._collector = MetricsCollector()
@@ -454,33 +476,27 @@ class EventSystemMonitor:
     def _setup_default_health_checks(self) -> None:
         """Setup default health checks"""
         # Engine health check
-        self._health_monitor.add_check(HealthCheck(
-            name="engine_running",
-            check_func=self._check_engine_health,
-            critical=True
-        ))
+        self._health_monitor.add_check(
+            HealthCheck(name="engine_running", check_func=self._check_engine_health, critical=True)
+        )
 
         # Message bus health check (if available)
         if self._bus:
-            self._health_monitor.add_check(HealthCheck(
-                name="message_bus",
-                check_func=self._check_bus_health,
-                critical=True
-            ))
+            self._health_monitor.add_check(
+                HealthCheck(name="message_bus", check_func=self._check_bus_health, critical=True)
+            )
 
         # Queue size check
-        self._health_monitor.add_check(HealthCheck(
-            name="queue_size",
-            check_func=self._check_queue_size,
-            critical=False
-        ))
+        self._health_monitor.add_check(
+            HealthCheck(name="queue_size", check_func=self._check_queue_size, critical=False)
+        )
 
         # Processing latency check
-        self._health_monitor.add_check(HealthCheck(
-            name="processing_latency",
-            check_func=self._check_processing_latency,
-            critical=False
-        ))
+        self._health_monitor.add_check(
+            HealthCheck(
+                name="processing_latency", check_func=self._check_processing_latency, critical=False
+            )
+        )
 
     def _check_engine_health(self) -> Tuple[bool, Optional[str]]:
         """Check if engine is running"""
@@ -496,7 +512,7 @@ class EventSystemMonitor:
         try:
             # 简单的连通性检查 - 不发布事件，只检查总线状态
             # 检查是否有可用的总线实例
-            if hasattr(self._bus, '_buses'):
+            if hasattr(self._bus, "_buses"):
                 if self._bus._buses:
                     return True, None
                 else:
@@ -562,7 +578,7 @@ class EventSystemMonitor:
         """Export metrics periodically"""
         # 初始化延迟，避免启动时的竞争条件
         time.sleep(5)
-        
+
         while self._monitoring:
             try:
                 self._export_metrics()
@@ -580,7 +596,7 @@ class EventSystemMonitor:
         """安全的JSON序列化方法"""
         seen = set()  # 防止循环引用
 
-        def clean_for_json(item, depth=0):
+        def clean_for_json(item: Any, depth: int = 0) -> Any:
             """递归清理对象以便 JSON 序列化"""
             # 限制递归深度
             if depth > 10:
@@ -630,8 +646,8 @@ class EventSystemMonitor:
 
                 try:
                     # 方法2: 使用 __dict__ 属性
-                    if hasattr(item, '__dict__'):
-                        d = getattr(item, '__dict__', None)
+                    if hasattr(item, "__dict__"):
+                        d = getattr(item, "__dict__", None)
                         if isinstance(d, dict):
                             result = {str(k): clean_for_json(v, depth + 1) for k, v in d.items()}
                             seen.discard(obj_id)
@@ -653,11 +669,11 @@ class EventSystemMonitor:
             # 如果仍然失败，记录错误并使用最保守的方法
             logger.debug(f"JSON serialization failed: {repr(e)}")
             return json.dumps({"error": "Unable to serialize metrics"}, indent=2)
-    
+
     def _export_metrics(self) -> None:
         """导出指标（占位符，用于实际导出逻辑）"""
         # 使用线程锁保护
-        if not hasattr(self, '_export_lock'):
+        if not hasattr(self, "_export_lock"):
             self._export_lock = threading.Lock()
 
         with self._export_lock:
@@ -666,7 +682,8 @@ class EventSystemMonitor:
                 logger.debug("_export_metrics: Getting summary")
                 metrics = self.get_summary()
                 logger.debug(
-                    f"_export_metrics: Got summary with keys: {list(metrics.keys()) if isinstance(metrics, dict) else 'not a dict'}")
+                    f"_export_metrics: Got summary with keys: {list(metrics.keys()) if isinstance(metrics, dict) else 'not a dict'}"
+                )
 
                 # 使用安全的序列化方法
                 logger.debug("_export_metrics: Starting serialization")
@@ -704,9 +721,9 @@ class EventSystemMonitor:
                             logger.debug("KeyError type: %s", type(e))
                             # 使用安全的方式记录 __dict__，避免其内容导致格式化错误
                             try:
-                                dict_info = repr(getattr(e, '__dict__', 'no __dict__'))
+                                dict_info = repr(getattr(e, "__dict__", "no __dict__"))
                                 logger.debug("KeyError __dict__: %s", dict_info)
-                            except:
+                            except Exception:
                                 logger.debug("KeyError __dict__: <unable to retrieve>")
                         else:
                             logger.error(f"KeyError in export_metrics: {error_msg}")
@@ -715,13 +732,15 @@ class EventSystemMonitor:
 
                 except Exception as inner_e:
                     # 如果连获取异常信息都失败了
-                    logger.error(f"Failed to export metrics and also failed to log error: {repr(inner_e)}")
+                    logger.error(
+                        f"Failed to export metrics and also failed to log error: {repr(inner_e)}"
+                    )
 
                 # 总是记录完整的堆栈跟踪以便调试
                 try:
                     tb = traceback.format_exc()
                     logger.debug("Export metrics traceback:\n%s", tb)
-                except:
+                except Exception:
                     pass  # 忽略日志错误
 
     def get_summary(self) -> Dict[str, Any]:
@@ -759,7 +778,7 @@ class EventSystemMonitor:
             slow_events = []
 
         # 构建返回的字典，每一步都进行错误处理
-        result = {}
+        result: Dict[str, Any] = {}
 
         try:
             result["timestamp"] = datetime.now().isoformat()
@@ -769,24 +788,29 @@ class EventSystemMonitor:
 
         try:
             result["health"] = {
-                "status": health_status.value if hasattr(health_status, 'value') else str(health_status),
-                "checks": health_details
+                "status": (
+                    health_status.value if hasattr(health_status, "value") else str(health_status)
+                ),
+                "checks": health_details,
             }
         except Exception as e:
             logger.error(f"Error setting health: {repr(e)}")
             result["health"] = {"status": "error", "checks": {}}
 
         try:
-            events_dict = {}
+            events_dict: Dict[str, Dict[str, Any]] = {}
             for event_type, metrics in event_metrics.items():
                 try:
                     events_dict[event_type] = {
                         "total": metrics.total_count,
                         "success_rate": metrics.success_rate,
                         "avg_processing_time": metrics.average_processing_time,
-                        "min_processing_time": metrics.min_processing_time if metrics.min_processing_time != float(
-                            'inf') else 0,
-                        "max_processing_time": metrics.max_processing_time
+                        "min_processing_time": (
+                            metrics.min_processing_time
+                            if metrics.min_processing_time != float("inf")
+                            else 0
+                        ),
+                        "max_processing_time": metrics.max_processing_time,
                     }
                 except Exception as e:
                     logger.error(f"Error processing event metrics for {event_type}: {repr(e)}")
@@ -803,15 +827,17 @@ class EventSystemMonitor:
             result["handlers"] = {}
 
         try:
-            slow_events_list = []
-            for e in slow_events:
+            slow_events_list: List[Dict[str, Any]] = []
+            for slow_event in slow_events:
                 try:
-                    slow_events_list.append({
-                        "event_type": e.event_type,
-                        "processing_time": e.processing_time,
-                        "handler": e.handler_name,
-                        "timestamp": datetime.fromtimestamp(e.timestamp).isoformat()
-                    })
+                    slow_events_list.append(
+                        {
+                            "event_type": slow_event.event_type,
+                            "processing_time": slow_event.processing_time,
+                            "handler": slow_event.handler_name,
+                            "timestamp": datetime.fromtimestamp(slow_event.timestamp).isoformat(),
+                        }
+                    )
                 except Exception as ex:
                     logger.error(f"Error processing slow event: {repr(ex)}")
             result["slow_events"] = slow_events_list
@@ -829,15 +855,10 @@ class EventSystemMonitor:
     def get_statistics(self) -> Dict[str, Any]:
         """
         获取事件系统监控的统计信息
-        
+
         :return: 包含所有监控子系统统计信息的字典
         """
-        stats = {
-            "monitoring": self._monitoring,
-            "performance": {},
-            "health": {},
-            "metrics": {}
-        }
+        stats = {"monitoring": self._monitoring, "performance": {}, "health": {}, "metrics": {}}
 
         # 获取性能监控统计
         if self._performance_monitor:
@@ -850,7 +871,7 @@ class EventSystemMonitor:
             health_stats = {
                 "monitoring": self._health_monitor._monitoring,
                 "status": health_status.value,
-                "checks": health_details
+                "checks": health_details,
             }
             stats["health"] = health_stats
 
@@ -859,7 +880,7 @@ class EventSystemMonitor:
             metrics_summary = {
                 "event_metrics": self._collector.get_metrics(),
                 "handler_metrics": self._collector.get_handler_metrics(),
-                "slow_events_count": len(self._collector.get_slow_events())
+                "slow_events_count": len(self._collector.get_slow_events()),
             }
             stats["metrics"] = metrics_summary
 
@@ -871,11 +892,11 @@ class EventSystemMonitor:
 # ==============================================================================
 
 
-def monitored_handler(event_type: str, monitor: EventSystemMonitor):
+def monitored_handler(event_type: str, monitor: EventSystemMonitor) -> Callable[[Callable[[Event], Any]], Callable[[Event], Any]]:
     """Decorator to automatically monitor event handlers"""
 
-    def decorator(func):
-        def wrapper(event: Event):
+    def decorator(func: Callable[[Event], Any]) -> Callable[[Event], Any]:
+        def wrapper(event: Event) -> Any:
             collector = monitor.get_metrics_collector()
             start_time = time.time()
             success = True
@@ -883,7 +904,7 @@ def monitored_handler(event_type: str, monitor: EventSystemMonitor):
             try:
                 result = func(event)
                 return result
-            except Exception as e:
+            except Exception:
                 success = False
                 raise
             finally:
@@ -892,7 +913,7 @@ def monitored_handler(event_type: str, monitor: EventSystemMonitor):
                     event_type=event_type,
                     processing_time=processing_time,
                     success=success,
-                    handler_name=func.__name__
+                    handler_name=func.__name__,
                 )
 
         return wrapper
@@ -948,3 +969,5 @@ Usage Example:
     def handle_tick(event: Event):
         process_tick(event.data)
 """
+
+

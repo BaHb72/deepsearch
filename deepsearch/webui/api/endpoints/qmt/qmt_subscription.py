@@ -3,8 +3,9 @@ QMT股票订阅管理API
 
 提供动态管理QMT客户端订阅股票列表的功能
 """
+
 import time
-from typing import List, Dict, Any, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/api/qmt/subscription", tags=["QMT订阅管理"])
 
 class SubscriptionRequest(BaseModel):
     """订阅请求模型"""
+
     symbols: List[str] = Field(..., description="股票代码列表")
     action: str = Field("add", description="操作类型: add/remove/replace")
     client_id: Optional[str] = Field(None, description="客户端ID，None表示所有客户端")
@@ -22,6 +24,7 @@ class SubscriptionRequest(BaseModel):
 
 class SubscriptionResponse(BaseModel):
     """订阅响应模型"""
+
     success: bool
     message: str
     data: Optional[Dict[str, Any]] = None
@@ -29,6 +32,7 @@ class SubscriptionResponse(BaseModel):
 
 class SubscriptionManager:
     """订阅管理器（单例）"""
+
     _instance = None
 
     def __new__(cls):
@@ -56,10 +60,10 @@ class SubscriptionManager:
 
         # 统计信息
         self.stats = {
-            'total_symbols': 0,
-            'total_clients': 0,
-            'last_update_time': None,
-            'update_count': 0
+            "total_symbols": 0,
+            "total_clients": 0,
+            "last_update_time": None,
+            "update_count": 0,
         }
 
         self._initialized = True
@@ -68,7 +72,7 @@ class SubscriptionManager:
     def add_client(self, client_id: str, client_info: Dict) -> None:
         """
         添加客户端
-        
+
         Args:
             client_id: 客户端ID
             client_info: 客户端信息
@@ -79,13 +83,13 @@ class SubscriptionManager:
         if client_id not in self.subscriptions:
             self.subscriptions[client_id] = set(self.default_symbols)
 
-        self.stats['total_clients'] = len(self.connected_clients)
+        self.stats["total_clients"] = len(self.connected_clients)
         logger.info(f"添加QMT客户端: {client_id}")
 
     def remove_client(self, client_id: str) -> None:
         """
         移除客户端
-        
+
         Args:
             client_id: 客户端ID
         """
@@ -95,23 +99,20 @@ class SubscriptionManager:
         if client_id in self.pending_updates:
             del self.pending_updates[client_id]
 
-        self.stats['total_clients'] = len(self.connected_clients)
+        self.stats["total_clients"] = len(self.connected_clients)
         logger.info(f"移除QMT客户端: {client_id}")
 
     def update_subscription(
-            self,
-            symbols: List[str],
-            action: str = "add",
-            client_id: Optional[str] = None
+        self, symbols: List[str], action: str = "add", client_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         更新订阅列表
-        
+
         Args:
             symbols: 股票代码列表
             action: 操作类型 (add/remove/replace)
             client_id: 客户端ID，None表示全局
-            
+
         Returns:
             更新结果
         """
@@ -163,10 +164,10 @@ class SubscriptionManager:
 
         # 创建更新消息
         update_msg = {
-            'type': 'SUBSCRIPTION_UPDATE',
-            'action': action,
-            'symbols': list(symbols_set),
-            'timestamp': time.time()
+            "type": "SUBSCRIPTION_UPDATE",
+            "action": action,
+            "symbols": list(symbols_set),
+            "timestamp": time.time(),
         }
 
         # 添加到待推送队列
@@ -176,24 +177,24 @@ class SubscriptionManager:
             self.pending_updates[cid].append(update_msg)
 
         # 更新统计
-        self.stats['total_symbols'] = len(self.global_symbols)
-        self.stats['last_update_time'] = time.time()
-        self.stats['update_count'] += 1
+        self.stats["total_symbols"] = len(self.global_symbols)
+        self.stats["last_update_time"] = time.time()
+        self.stats["update_count"] += 1
 
         return {
-            'affected_clients': affected_clients,
-            'action': action,
-            'symbols_count': len(symbols_set),
-            'total_symbols': sum(len(s) for s in self.subscriptions.values())
+            "affected_clients": affected_clients,
+            "action": action,
+            "symbols_count": len(symbols_set),
+            "total_symbols": sum(len(s) for s in self.subscriptions.values()),
         }
 
     def get_client_symbols(self, client_id: str) -> List[str]:
         """
         获取客户端的订阅列表
-        
+
         Args:
             client_id: 客户端ID
-            
+
         Returns:
             股票代码列表
         """
@@ -211,10 +212,10 @@ class SubscriptionManager:
     def get_pending_updates(self, client_id: str) -> List[Dict]:
         """
         获取并清空客户端的待推送更新
-        
+
         Args:
             client_id: 客户端ID
-            
+
         Returns:
             更新消息列表
         """
@@ -227,23 +228,20 @@ class SubscriptionManager:
     def get_status(self) -> Dict[str, Any]:
         """
         获取订阅管理器状态
-        
+
         Returns:
             状态信息
         """
         return {
-            'global_symbols': list(self.global_symbols),
-            'global_symbols_count': len(self.global_symbols),
-            'total_clients': len(self.connected_clients),
-            'active_subscriptions': {
-                cid: {
-                    'symbols_count': len(symbols),
-                    'symbols': list(symbols)[:10]  # 只显示前10个
-                }
+            "global_symbols": list(self.global_symbols),
+            "global_symbols_count": len(self.global_symbols),
+            "total_clients": len(self.connected_clients),
+            "active_subscriptions": {
+                cid: {"symbols_count": len(symbols), "symbols": list(symbols)[:10]}  # 只显示前10个
                 for cid, symbols in self.subscriptions.items()
             },
-            'pending_updates_count': sum(len(updates) for updates in self.pending_updates.values()),
-            'stats': self.stats
+            "pending_updates_count": sum(len(updates) for updates in self.pending_updates.values()),
+            "stats": self.stats,
         }
 
 
@@ -255,7 +253,7 @@ subscription_manager = SubscriptionManager()
 async def update_subscription(request: SubscriptionRequest):
     """
     更新股票订阅列表
-    
+
     支持三种操作：
     - add: 添加股票到订阅列表
     - remove: 从订阅列表移除股票
@@ -263,15 +261,13 @@ async def update_subscription(request: SubscriptionRequest):
     """
     try:
         result = subscription_manager.update_subscription(
-            symbols=request.symbols,
-            action=request.action,
-            client_id=request.client_id
+            symbols=request.symbols, action=request.action, client_id=request.client_id
         )
 
         return SubscriptionResponse(
             success=True,
             message=f"成功更新订阅，影响 {len(result['affected_clients'])} 个客户端",
-            data=result
+            data=result,
         )
 
     except Exception as e:
@@ -283,7 +279,7 @@ async def update_subscription(request: SubscriptionRequest):
 async def get_subscription_list(client_id: Optional[str] = Query(None, description="客户端ID")):
     """
     获取订阅列表
-    
+
     Args:
         client_id: 客户端ID，None返回全局订阅列表
     """
@@ -291,17 +287,17 @@ async def get_subscription_list(client_id: Optional[str] = Query(None, descripti
         if client_id:
             symbols = subscription_manager.get_client_symbols(client_id)
             return {
-                'success': True,
-                'client_id': client_id,
-                'symbols': symbols,
-                'count': len(symbols)
+                "success": True,
+                "client_id": client_id,
+                "symbols": symbols,
+                "count": len(symbols),
             }
         else:
             return {
-                'success': True,
-                'global_symbols': list(subscription_manager.global_symbols),
-                'default_symbols': subscription_manager.default_symbols,
-                'count': len(subscription_manager.global_symbols)
+                "success": True,
+                "global_symbols": list(subscription_manager.global_symbols),
+                "default_symbols": subscription_manager.default_symbols,
+                "count": len(subscription_manager.global_symbols),
             }
 
     except Exception as e:
@@ -314,10 +310,7 @@ async def get_subscription_status():
     """获取订阅管理器状态"""
     try:
         status = subscription_manager.get_status()
-        return {
-            'success': True,
-            'data': status
-        }
+        return {"success": True, "data": status}
 
     except Exception as e:
         logger.error(f"获取状态失败: {e}")
@@ -328,7 +321,7 @@ async def get_subscription_status():
 async def batch_update_subscriptions(updates: List[SubscriptionRequest]):
     """
     批量更新订阅
-    
+
     Args:
         updates: 批量更新请求列表
     """
@@ -337,16 +330,14 @@ async def batch_update_subscriptions(updates: List[SubscriptionRequest]):
 
         for update in updates:
             result = subscription_manager.update_subscription(
-                symbols=update.symbols,
-                action=update.action,
-                client_id=update.client_id
+                symbols=update.symbols, action=update.action, client_id=update.client_id
             )
             results.append(result)
 
         return {
-            'success': True,
-            'message': f"成功处理 {len(updates)} 个更新请求",
-            'results': results
+            "success": True,
+            "message": f"成功处理 {len(updates)} 个更新请求",
+            "results": results,
         }
 
     except Exception as e:
@@ -360,18 +351,16 @@ async def get_connected_clients():
     try:
         clients = []
         for client_id, client_info in subscription_manager.connected_clients.items():
-            clients.append({
-                'client_id': client_id,
-                'info': client_info,
-                'symbols_count': len(subscription_manager.subscriptions.get(client_id, [])),
-                'has_pending_updates': client_id in subscription_manager.pending_updates
-            })
+            clients.append(
+                {
+                    "client_id": client_id,
+                    "info": client_info,
+                    "symbols_count": len(subscription_manager.subscriptions.get(client_id, [])),
+                    "has_pending_updates": client_id in subscription_manager.pending_updates,
+                }
+            )
 
-        return {
-            'success': True,
-            'clients': clients,
-            'total': len(clients)
-        }
+        return {"success": True, "clients": clients, "total": len(clients)}
 
     except Exception as e:
         logger.error(f"获取客户端列表失败: {e}")
@@ -382,19 +371,14 @@ async def get_connected_clients():
 async def get_client_updates(client_id: str):
     """
     获取客户端的待推送更新
-    
+
     Args:
         client_id: 客户端ID
     """
     try:
         updates = subscription_manager.get_pending_updates(client_id)
 
-        return {
-            'success': True,
-            'client_id': client_id,
-            'updates': updates,
-            'count': len(updates)
-        }
+        return {"success": True, "client_id": client_id, "updates": updates, "count": len(updates)}
 
     except Exception as e:
         logger.error(f"获取更新失败: {e}")

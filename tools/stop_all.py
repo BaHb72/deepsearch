@@ -13,13 +13,13 @@ def stop_all_deepsearch():
 
     killed_count = 0
 
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
             # 检查是否是Python进程
-            if proc.info['name'] and 'python' in proc.info['name'].lower():
+            if proc.info["name"] and "python" in proc.info["name"].lower():
                 # 检查命令行参数是否包含main.py
-                cmdline = proc.info.get('cmdline')
-                if cmdline and any('main.py' in arg for arg in cmdline):
+                cmdline = proc.info.get("cmdline")
+                if cmdline and any("main.py" in arg for arg in cmdline):
                     print(f"发现进程 PID: {proc.info['pid']}")
                     print(f"  命令行: {' '.join(cmdline)}")
 
@@ -27,11 +27,11 @@ def stop_all_deepsearch():
                     try:
                         proc.terminate()
                         proc.wait(timeout=3)
-                        print(f"  ✓ 已终止")
+                        print("  ✓ 已终止")
                         killed_count += 1
                     except psutil.TimeoutExpired:
                         proc.kill()
-                        print(f"  ✓ 已强制终止")
+                        print("  ✓ 已强制终止")
                         killed_count += 1
                     except Exception as e:
                         print(f"  ✗ 终止失败: {e}")
@@ -47,7 +47,7 @@ def stop_all_deepsearch():
     # 检查端口是否已释放
     print("\n检查8000端口...")
     for conn in psutil.net_connections():
-        if conn.laddr.port == 8000 and conn.status == 'LISTEN':
+        if conn.laddr.port == 8000 and conn.status == "LISTEN":
             print(f"警告: 端口8000仍被占用 (PID: {conn.pid})")
             return False
 

@@ -4,11 +4,12 @@
 测试不同的AmazingData服务器
 """
 
-import sys
 import os
+import sys
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 
 def test_servers():
     print("\n" + "=" * 60)
@@ -17,23 +18,24 @@ def test_servers():
 
     try:
         import AmazingData as ad
+
         print("[OK] AmazingData SDK已导入")
     except ImportError as e:
         print(f"[FAIL] SDK未安装: {e}")
         return
 
     # 测试账号
-    username = '212200038719'
-    password = '212200038719@2025'
+    username = "212200038719"
+    password = "212200038719@2025"
 
     # 多个服务器地址
     servers = [
-        ('电信线路1', '120.86.124.106', 8600),
-        ('电信线路2', '101.230.159.234', 8600),
-        ('联通线路', '140.206.44.234', 8600),
+        ("电信线路1", "120.86.124.106", 8600),
+        ("电信线路2", "101.230.159.234", 8600),
+        ("联通线路", "140.206.44.234", 8600),
     ]
 
-    print(f"\n账号信息：")
+    print("\n账号信息：")
     print(f"  用户名: {username}")
     print(f"  密码: {password}")
 
@@ -42,7 +44,7 @@ def test_servers():
         print("-" * 40)
 
         try:
-            print(f"正在连接...")
+            print("正在连接...")
             result = ad.login(username, password, host, port)
 
             if result == 0 or result is True:
@@ -72,6 +74,7 @@ def test_servers():
     print("3. 服务器是否在维护")
 
     return False
+
 
 if __name__ == "__main__":
     test_servers()

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useMemo, useRef } from 'react'
 import { 
   Table, 
   Card, 
@@ -8,16 +8,12 @@ import {
   Dropdown, 
   Checkbox,
   Tooltip,
-  Badge,
-  Tag,
   message
 } from 'antd'
 import {
-  SearchOutlined,
   ReloadOutlined,
   SettingOutlined,
   DownloadOutlined,
-  FilterOutlined,
   FullscreenOutlined,
   FullscreenExitOutlined,
   ColumnHeightOutlined,
@@ -291,10 +287,10 @@ const DataTable = ({
   return (
     <div ref={tableRef} className={`data-table-wrapper ${isFullscreen ? 'fullscreen' : ''}`}>
       <Card
-        bordered={bordered}
+        variant={bordered ? 'outlined' : 'borderless'}
         title={title}
         extra={renderToolbar()}
-        bodyStyle={{ padding: 0 }}
+        styles={{ body: { padding: 0 } }}
       >
         <Table
           columns={processedColumns}

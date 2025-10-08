@@ -3,11 +3,13 @@ import { Tabs } from 'antd'
 import {
   DatabaseOutlined,
   ApiOutlined,
-  AppstoreOutlined
+  AppstoreOutlined,
+  BellOutlined
 } from '@ant-design/icons'
-import DatabaseConfig from './DatabaseConfig'
+import DatabaseConfigWithStore from './DatabaseConfigWithStore'
 import DataSourceConfig from './DataSourceConfig'
 import SystemModules from './SystemModules'
+import NotificationConfig from './NotificationConfig'
 
 /**
  * 系统配置主页面
@@ -25,7 +27,7 @@ const SystemConfig = () => {
           数据库配置
         </span>
       ),
-      children: <DatabaseConfig />
+      children: <DatabaseConfigWithStore />
     },
     {
       key: 'datasource',
@@ -36,6 +38,16 @@ const SystemConfig = () => {
         </span>
       ),
       children: <DataSourceConfig />
+    },
+    {
+      key: 'notification',
+      label: (
+        <span>
+          <BellOutlined />
+          通知配置
+        </span>
+      ),
+      children: <NotificationConfig />
     },
     {
       key: 'modules',

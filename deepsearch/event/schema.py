@@ -4,18 +4,20 @@ Event Schema Management Module
 This module provides a comprehensive schema validation system for events in the DeepSearch platform.
 It enables type safety, automatic validation, and clear documentation of event structures.
 """
+
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 
-from pydantic import BaseModel, Field, validator, ValidationError
+from pydantic import BaseModel, Field, ValidationError, validator
 from pydantic.json_schema import JsonSchemaValue
 
-from .const import EVENT_TICK, EVENT_ORDER, EVENT_TRADE, EVENT_POSITION, EVENT_ACCOUNT
+from deepsearch.observability import get_logger
+
+from .const import EVENT_ACCOUNT, EVENT_ORDER, EVENT_POSITION, EVENT_TICK, EVENT_TRADE
 from .engine import Event
 
 # ==============================================================================
@@ -30,7 +32,7 @@ VALIDATION_ERROR_LIMIT = 10
 # Type Variables and Logger
 # ==============================================================================
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -99,8 +101,7 @@ class SchemaRegistry:
     def export_schemas(self) -> Dict[str, JsonSchemaValue]:
         """Export all schemas as JSON Schema"""
         return {
-            event_type: schema.model_json_schema()
-            for event_type, schema in self._schemas.items()
+            event_type: schema.model_json_schema() for event_type, schema in self._schemas.items()
         }
 
 
@@ -118,9 +119,7 @@ class BaseEventSchema(BaseModel):
     correlation_id: Optional[str] = Field(None, description="Correlation ID for event tracking")
 
     class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+        json_encoders = {datetime: lambda v: v.isoformat()}
 
 
 class MarketDataSchema(BaseEventSchema):
@@ -163,6 +162,7 @@ class TickSchema(MarketDataSchema):
 
 class OrderStatus(str, Enum):
     """Order status enumeration"""
+
     PENDING = "pending"
     SUBMITTED = "submitted"
     PARTIAL = "partial"
@@ -173,6 +173,7 @@ class OrderStatus(str, Enum):
 
 class OrderType(str, Enum):
     """Order type enumeration"""
+
     MARKET = "market"
     LIMIT = "limit"
     STOP = "stop"
@@ -181,6 +182,7 @@ class OrderType(str, Enum):
 
 class OrderSide(str, Enum):
     """Order side enumeration"""
+
     BUY = "buy"
     SELL = "sell"
 
@@ -267,11 +269,17 @@ def schema_validated(event_type: str, schema: Type[BaseModel]):
             try:
                 validated_data = schema(**event.data)
                 # Create new event with validated data
-                validated_event = Event(
-                    type=event.type,
-                    data=validated_data.model_dump(),
-                    timestamp=event.timestamp
-                )
+                ts_value = getattr(event, "ts", None)
+                if ts_value is None and hasattr(event, "timestamp"):
+                    maybe_ts = getattr(event, "timestamp")
+                    if isinstance(maybe_ts, (int, float)):
+                        ts_value = maybe_ts
+                if ts_value is None:
+                    validated_event = Event(type=event.type, data=validated_data.model_dump())
+                else:
+                    validated_event = Event(
+                        type=event.type, data=validated_data.model_dump(), ts=ts_value
+                    )
                 return func(validated_event)
             except ValidationError as e:
                 logger.error(f"Schema validation failed for {event_type}: {e}")
@@ -299,19 +307,14 @@ class SchemaBuilder:
         self._base = base
 
     def add_field(
-            self,
-            name: str,
-            type_: Type,
-            default: Any = ...,
-            description: str = "",
-            **kwargs
+        self, name: str, type_: Type, default: Any = ..., description: str = "", **kwargs
     ) -> "SchemaBuilder":
         """Add a field to the schema"""
         field_info = Field(default, description=description, **kwargs)
         self._fields[name] = (type_, field_info)
         return self
 
-    def add_validator(self, field: str, func: callable) -> "SchemaBuilder":
+    def add_validator(self, field: str, func: Callable[..., Any]) -> "SchemaBuilder":
         """Add a validator for a field"""
         self._validators[f"validate_{field}"] = validator(field)(func)
         return self
@@ -319,10 +322,13 @@ class SchemaBuilder:
     def build(self) -> Type[BaseModel]:
         """Build the schema class"""
         # Create class attributes
+        annotations = {name: type_ for name, (type_, _) in self._fields.items()}
+        field_definitions = {name: field for name, (_, field) in self._fields.items()}
         attrs = {
             "__module__": __name__,
-            **self._fields,
-            **self._validators
+            "__annotations__": annotations,
+            **field_definitions,
+            **self._validators,
         }
 
         # Create the schema class

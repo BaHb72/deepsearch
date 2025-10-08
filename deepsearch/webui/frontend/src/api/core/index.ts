@@ -116,9 +116,9 @@ export const api = {
   
   // 数据源管理
   dataSource: {
-    getList: () => get('/data-source/list', null, { category: ApiCategory.DATA_SOURCE }),
-    getStatus: () => get('/data-source/status', null, { category: ApiCategory.DATA_SOURCE }),
-    test: (config: any) => post('/data-source/test', config, { category: ApiCategory.DATA_SOURCE })
+    getList: () => get('/data-sources/list', null, { category: ApiCategory.DATA_SOURCE }),
+    getStatus: () => get('/data-sources/status', null, { category: ApiCategory.DATA_SOURCE }),
+    test: (source: string, payload?: any) => post(`/data-sources/test/${encodeURIComponent(source)}`, payload, { category: ApiCategory.DATA_SOURCE })
   },
   
   // 监控

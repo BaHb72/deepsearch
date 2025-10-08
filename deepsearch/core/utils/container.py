@@ -4,24 +4,27 @@
 实现控制反转(IoC)容器，用于管理组件的创建和依赖关系。
 遵循依赖倒置原则，使高层模块不依赖于低层模块。
 """
+
 import asyncio
 import inspect
 from enum import Enum
-from typing import Dict, Type, Any, Optional, Callable, List, TypeVar, Union, get_args, get_origin
+from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union, cast, get_args, get_origin
 
 from loguru import logger
 
-from .exceptions import (
-    ComponentNotFoundError, ComponentAlreadyExistsError,
-    ComponentDependencyError
-)
 from ..interfaces import Component, ComponentType
+from .exceptions import (
+    ComponentAlreadyExistsError,
+    ComponentDependencyError,
+    ComponentNotFoundError,
+)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ServiceLifetime(Enum):
     """服务生命周期"""
+
     SINGLETON = "singleton"  # 单例，整个应用程序共享一个实例
     SCOPED = "scoped"  # 作用域，每个作用域一个实例
     TRANSIENT = "transient"  # 瞬态，每次请求创建新实例
@@ -30,12 +33,14 @@ class ServiceLifetime(Enum):
 class ServiceDescriptor:
     """服务描述符"""
 
-    def __init__(self,
-                 service_type: Type,
-                 implementation: Optional[Type] = None,
-                 factory: Optional[Callable] = None,
-                 instance: Optional[Any] = None,
-                 lifetime: ServiceLifetime = ServiceLifetime.SINGLETON):
+    def __init__(
+        self,
+        service_type: Type,
+        implementation: Optional[Type] = None,
+        factory: Optional[Callable] = None,
+        instance: Optional[Any] = None,
+        lifetime: ServiceLifetime = ServiceLifetime.SINGLETON,
+    ):
         self.service_type = service_type
         self.implementation = implementation or service_type
         self.factory = factory
@@ -55,7 +60,7 @@ class ServiceDescriptor:
             sig = inspect.signature(self.implementation.__init__)
 
         for name, param in sig.parameters.items():
-            if name == 'self':
+            if name == "self":
                 continue
             if param.annotation != inspect.Parameter.empty:
                 # 处理 Optional 类型注解
@@ -81,11 +86,13 @@ class ServiceDescriptor:
 class ServiceProvider:
     """服务提供者 - 负责解析和创建服务实例"""
 
-    def __init__(self, services: Dict[Type, ServiceDescriptor], parent: Optional['ServiceProvider'] = None):
+    def __init__(
+        self, services: Dict[Type, ServiceDescriptor], parent: Optional["ServiceProvider"] = None
+    ):
         self._services = services
         self._parent = parent
-        self._singletons: Dict[Type, Any] = {}
-        self._scoped_instances: Dict[Type, Any] = {}
+        self._singletons: Dict[Type[Any], Any] = {}
+        self._scoped_instances: Dict[Type[Any], Any] = {}
 
     def get_service(self, service_type: Type[T]) -> Optional[T]:
         """获取服务实例"""
@@ -100,26 +107,29 @@ class ServiceProvider:
         # 根据生命周期返回实例
         if descriptor.lifetime == ServiceLifetime.SINGLETON:
             if service_type not in self._singletons:
-                self._singletons[service_type] = self._create_instance(descriptor)
-            return self._singletons[service_type]
+                instance = self._create_instance(descriptor)
+                self._singletons[service_type] = instance
+            singleton_instance = cast(T, self._singletons[service_type])
+            return singleton_instance
 
-        elif descriptor.lifetime == ServiceLifetime.SCOPED:
+        if descriptor.lifetime == ServiceLifetime.SCOPED:
             if service_type not in self._scoped_instances:
-                self._scoped_instances[service_type] = self._create_instance(descriptor)
-            return self._scoped_instances[service_type]
+                instance = self._create_instance(descriptor)
+                self._scoped_instances[service_type] = instance
+            scoped_instance = cast(T, self._scoped_instances[service_type])
+            return scoped_instance
 
-        else:  # TRANSIENT
-            return self._create_instance(descriptor)
+        transient_instance = self._create_instance(descriptor)
+        return cast(T, transient_instance)
 
     def get_required_service(self, service_type: Type[T]) -> T:
         """获取必需的服务实例"""
         service = self.get_service(service_type)
         if not service:
             raise ComponentNotFoundError(
-                service_type.__name__,
-                f"Service {service_type.__name__} is not registered"
+                service_type.__name__, f"Service {service_type.__name__} is not registered"
             )
-        return service
+        return cast(T, service)
 
     def _create_instance(self, descriptor: ServiceDescriptor) -> Any:
         """创建服务实例"""
@@ -128,7 +138,7 @@ class ServiceProvider:
             return descriptor.instance
 
         # 解析依赖
-        dependencies = {}
+        dependencies: Dict[str, Any] = {}
         for dep_type in descriptor.dependencies:
             dep_instance = self.get_required_service(dep_type)
             # 获取参数名
@@ -154,7 +164,7 @@ class ServiceProvider:
                 return name
         return None
 
-    def create_scope(self) -> 'ServiceProvider':
+    def create_scope(self) -> "ServiceProvider":
         """创建子作用域"""
         return ServiceProvider(self._services, parent=self)
 
@@ -162,7 +172,7 @@ class ServiceProvider:
 class Container:
     """
     依赖注入容器
-    
+
     管理服务的注册和解析，支持：
     - 单例、作用域和瞬态生命周期
     - 自动依赖解析
@@ -176,47 +186,53 @@ class Container:
 
     # ==================== 服务注册 ====================
 
-    def register_singleton(self, service_type: Type[T],
-                           implementation: Optional[Type[T]] = None,
-                           factory: Optional[Callable[..., T]] = None,
-                           instance: Optional[T] = None) -> 'Container':
+    def register_singleton(
+        self,
+        service_type: Type[T],
+        implementation: Optional[Type[T]] = None,
+        factory: Optional[Callable[..., T]] = None,
+        instance: Optional[T] = None,
+    ) -> "Container":
         """注册单例服务"""
         return self._register(
-            service_type, implementation, factory, instance,
-            ServiceLifetime.SINGLETON
+            service_type, implementation, factory, instance, ServiceLifetime.SINGLETON
         )
 
-    def register_scoped(self, service_type: Type[T],
-                        implementation: Optional[Type[T]] = None,
-                        factory: Optional[Callable[..., T]] = None) -> 'Container':
+    def register_scoped(
+        self,
+        service_type: Type[T],
+        implementation: Optional[Type[T]] = None,
+        factory: Optional[Callable[..., T]] = None,
+    ) -> "Container":
         """注册作用域服务"""
-        return self._register(
-            service_type, implementation, factory, None,
-            ServiceLifetime.SCOPED
-        )
+        return self._register(service_type, implementation, factory, None, ServiceLifetime.SCOPED)
 
-    def register_transient(self, service_type: Type[T],
-                           implementation: Optional[Type[T]] = None,
-                           factory: Optional[Callable[..., T]] = None) -> 'Container':
+    def register_transient(
+        self,
+        service_type: Type[T],
+        implementation: Optional[Type[T]] = None,
+        factory: Optional[Callable[..., T]] = None,
+    ) -> "Container":
         """注册瞬态服务"""
         return self._register(
-            service_type, implementation, factory, None,
-            ServiceLifetime.TRANSIENT
+            service_type, implementation, factory, None, ServiceLifetime.TRANSIENT
         )
 
-    def _register(self, service_type: Type, implementation: Optional[Type],
-                  factory: Optional[Callable], instance: Optional[Any],
-                  lifetime: ServiceLifetime) -> 'Container':
+    def _register(
+        self,
+        service_type: Type,
+        implementation: Optional[Type],
+        factory: Optional[Callable],
+        instance: Optional[Any],
+        lifetime: ServiceLifetime,
+    ) -> "Container":
         """内部注册方法"""
         if service_type in self._services:
             raise ComponentAlreadyExistsError(
-                service_type.__name__,
-                f"Service {service_type.__name__} is already registered"
+                service_type.__name__, f"Service {service_type.__name__} is already registered"
             )
 
-        descriptor = ServiceDescriptor(
-            service_type, implementation, factory, instance, lifetime
-        )
+        descriptor = ServiceDescriptor(service_type, implementation, factory, instance, lifetime)
 
         # 检测循环依赖
         self._check_circular_dependency(service_type, descriptor)
@@ -236,9 +252,7 @@ class Container:
 
             if current_type == service_type and len(path) > 0:
                 raise ComponentDependencyError(
-                    service_type.__name__,
-                    path[0],
-                    f"Circular dependency detected: {path_str}"
+                    service_type.__name__, path[0], f"Circular dependency detected: {path_str}"
                 )
 
             visited.add(current_type)
@@ -271,15 +285,12 @@ class Container:
 
     # ==================== 组件注册（兼容现有系统） ====================
 
-    def register_component(self, component: Component) -> 'Container':
+    def register_component(self, component: Component) -> "Container":
         """注册组件（兼容现有组件系统）"""
         # 组件总是单例
-        return self.register_singleton(
-            type(component),
-            instance=component
-        )
+        return self.register_singleton(type(component), instance=component)
 
-    def register_components(self, components: List[Component]) -> 'Container':
+    def register_components(self, components: List[Component]) -> "Container":
         """批量注册组件"""
         for component in components:
             self.register_component(component)
@@ -295,7 +306,7 @@ class Container:
                 "implementation": descriptor.implementation.__name__,
                 "lifetime": descriptor.lifetime.value,
                 "dependencies": [dep.__name__ for dep in descriptor.dependencies],
-                "has_instance": descriptor.instance is not None
+                "has_instance": descriptor.instance is not None,
             }
         return result
 
@@ -317,7 +328,7 @@ class Container:
 class AsyncContainer(Container):
     """
     异步依赖注入容器
-    
+
     支持异步服务的创建和初始化
     """
 
@@ -328,7 +339,7 @@ class AsyncContainer(Container):
         for service_type, descriptor in self._services.items():
             if descriptor.lifetime == ServiceLifetime.SINGLETON:
                 service = provider.get_service(service_type)
-                if service and hasattr(service, 'initialize_async'):
+                if service and hasattr(service, "initialize_async"):
                     tasks.append(service.initialize_async())
 
         if tasks:
@@ -346,10 +357,10 @@ class AsyncContainer(Container):
         }
 
         infrastructure_order = {
-            'event_engine': 0,
-            'message_bus': 1,
-            'database': 2,
-            'cache': 3,
+            "event_engine": 0,
+            "message_bus": 1,
+            "database": 2,
+            "cache": 3,
         }
 
         for service_type, descriptor in self._services.items():
@@ -357,11 +368,11 @@ class AsyncContainer(Container):
                 continue
 
             service = provider.get_service(service_type)
-            if not service or not hasattr(service, 'start_async'):
+            if not service or not hasattr(service, "start_async"):
                 continue
 
-            component_type = getattr(service, 'component_type', None)
-            service_name = getattr(service, 'name', service_type.__name__)
+            component_type = getattr(service, "component_type", None)
+            service_name = getattr(service, "name", service_type.__name__)
             priority = infrastructure_order.get(service_name.lower(), len(infrastructure_order))
 
             if component_type in infrastructure_types:
@@ -369,7 +380,9 @@ class AsyncContainer(Container):
             else:
                 business_entries.append((service_name, service))
 
-        for _, service_name, service in sorted(infrastructure_entries, key=lambda item: (item[0], item[1])):
+        for _, service_name, service in sorted(
+            infrastructure_entries, key=lambda item: (item[0], item[1])
+        ):
             try:
                 await service.start_async()
                 logger.debug(f"Started infrastructure service: {service_name}")
@@ -393,7 +406,7 @@ class AsyncContainer(Container):
             descriptor = self._services[service_type]
             if descriptor.lifetime == ServiceLifetime.SINGLETON:
                 service = provider.get_service(service_type)
-                if service and hasattr(service, 'stop_async'):
+                if service and hasattr(service, "stop_async"):
                     tasks.append(service.stop_async())
 
         if tasks:
@@ -402,10 +415,11 @@ class AsyncContainer(Container):
 
 # ==================== 装饰器 ====================
 
+
 def injectable(cls: Type[T]) -> Type[T]:
     """
     标记类为可注入
-    
+
     使用示例：
         @injectable
         class MyService:
@@ -413,14 +427,14 @@ def injectable(cls: Type[T]) -> Type[T]:
                 self.database = database
     """
     # 这里可以添加元数据或验证逻辑
-    setattr(cls, '_injectable', True)
+    setattr(cls, "_injectable", True)
     return cls
 
 
 def inject(**dependencies):
     """
     显式指定依赖注入
-    
+
     使用示例：
         @inject(db=DatabaseComponent, cache=CacheComponent)
         class MyService:
@@ -430,7 +444,7 @@ def inject(**dependencies):
     """
 
     def decorator(cls: Type[T]) -> Type[T]:
-        setattr(cls, '_inject_dependencies', dependencies)
+        setattr(cls, "_inject_dependencies", dependencies)
         return cls
 
     return decorator

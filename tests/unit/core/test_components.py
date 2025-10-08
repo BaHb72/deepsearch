@@ -8,17 +8,18 @@
 - ui_components
 - backtest_components
 """
+
+from unittest.mock import Mock
+
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import Dict, Any
+
+from deepsearch.core.components.analytics_components import AnalyticsComponent
+from deepsearch.core.components.backtest_components import BacktestComponent
+from deepsearch.core.components.gateway_components import GatewayComponent, QMTGatewayComponent
 
 # 导入要测试的组件
 from deepsearch.core.components.monitoring_components import MonitorComponent
-from deepsearch.core.components.gateway_components import GatewayComponent, QMTGatewayComponent
-from deepsearch.core.components.analytics_components import AnalyticsComponent
 from deepsearch.core.components.ui_components import WebUIComponent
-from deepsearch.core.components.backtest_components import BacktestComponent
 
 
 class TestMonitorComponent:
@@ -279,11 +280,7 @@ class TestBacktestComponent:
         mock_message_bus = Mock()
         mock_data_provider = Mock()
 
-        backtest_component.set_dependencies(
-            mock_event_engine,
-            mock_message_bus,
-            mock_data_provider
-        )
+        backtest_component.set_dependencies(mock_event_engine, mock_message_bus, mock_data_provider)
 
         assert backtest_component._event_engine == mock_event_engine
         assert backtest_component._message_bus == mock_message_bus
@@ -340,12 +337,12 @@ class TestComponentIntegration:
     async def test_all_components_import(self):
         """测试所有组件可以正常导入"""
         from deepsearch.core.components import (
-            MonitorComponent,
-            GatewayComponent,
-            QMTGatewayComponent,
             AnalyticsComponent,
+            BacktestComponent,
+            GatewayComponent,
+            MonitorComponent,
+            QMTGatewayComponent,
             WebUIComponent,
-            BacktestComponent
         )
 
         # 验证所有组件类都存在
@@ -359,20 +356,10 @@ class TestComponentIntegration:
     @pytest.mark.asyncio
     async def test_backward_compatibility(self):
         """测试向后兼容性"""
-        from deepsearch.core.unified_components import (
-            MonitorComponent,
-            GatewayComponent,
-            QMTGatewayComponent,
-            AnalyticsComponent,
-            WebUIComponent,
-            BacktestComponent
-        )
-
         # 验证从unified_components导入的组件与从components导入的是同一个
-        from deepsearch.core.components import (
-            MonitorComponent as NewMonitor,
-            GatewayComponent as NewGateway
-        )
+        from deepsearch.core.components import GatewayComponent as NewGateway
+        from deepsearch.core.components import MonitorComponent as NewMonitor
+        from deepsearch.core.unified_components import GatewayComponent, MonitorComponent
 
         assert MonitorComponent is NewMonitor
         assert GatewayComponent is NewGateway
@@ -391,10 +378,10 @@ class TestComponentIntegration:
         component.set_event_engine(mock_engine)
 
         # 生命周期方法应该存在
-        assert hasattr(component, '_initialize')
-        assert hasattr(component, '_start')
-        assert hasattr(component, '_stop')
-        assert hasattr(component, '_health_check')
+        assert hasattr(component, "_initialize")
+        assert hasattr(component, "_start")
+        assert hasattr(component, "_stop")
+        assert hasattr(component, "_health_check")
 
     @pytest.mark.asyncio
     async def test_timeout_integration(self):
@@ -402,11 +389,11 @@ class TestComponentIntegration:
         component = WebUIComponent()
 
         # 所有组件都应该有超时管理器
-        assert hasattr(component, '_timeout_manager')
+        assert hasattr(component, "_timeout_manager")
         assert component._timeout_manager is not None
 
         # 健康检查应该支持超时
-        assert hasattr(component, 'health_check_async')
+        assert hasattr(component, "health_check_async")
 
 
 if __name__ == "__main__":

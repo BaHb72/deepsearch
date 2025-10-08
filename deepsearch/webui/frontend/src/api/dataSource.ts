@@ -1,140 +1,241 @@
 /**
- * 数据源API客户端
- * 提供数据源管理、监控和状态信息
+ * 数据源 API 客户端
+ * 统一封装数据源管理、监控相关请求
  */
-import request from './request';
+import request from './request'
+
+export type DataSourceLifecycleStatus =
+  | 'draft'
+  | 'pending_test'
+  | 'testing'
+  | 'ready'
+  | 'active'
+  | 'degraded'
+  | 'error'
+  | 'offline'
 
 export interface DataSource {
-  name: string;
-  type: string;
-  status: 'online' | 'offline' | 'degraded';
-  priority: number;
-  is_available: boolean;
-  capabilities?: string[];
-  config?: any;
+  id?: string
+  name: string
+  type: string
+  status: DataSourceLifecycleStatus
+  priority: number
+  available?: boolean
+  is_available?: boolean
+  enabled?: boolean
+  lastTestTime?: string
+  lastTransition?: string
+  reason?: string
+  capabilities?: string[]
+  config?: any
+  metrics?: {
+    totalRequests?: number
+    successRate?: number
+    errorRate?: number
+    avgLatency?: number | null
+    recentErrorRate?: number
+  }
+  requests?: number
+  errors?: number
+  latency?: number | null
+  lastCheck?: string | null
 }
 
 export interface DataSourceStatus {
-  source: string;
-  status: 'online' | 'offline' | 'degraded';
-  latency: number;
-  success_rate: number;
-  last_check: string;
-  error_count: number;
-  request_count: number;
+  source: string
+  status: DataSourceLifecycleStatus
+  latency?: number
+  success_rate?: number
+  successRate?: number
+  last_check?: string
+  lastCheck?: string
+  error_count?: number
+  request_count?: number
+  available?: boolean
+  reason?: string
+  last_transition?: string
+  lastTransition?: string
+  [key: string]: any
+}
+
+export interface DataSourceStatusReport {
+  initialized?: boolean
+  sources: Record<string, DataSourceStatus>
+  availableCount?: number
+  available_count?: number
 }
 
 export interface DataSourceMetrics {
-  totalRequests: number;
-  avgLatency: number;
-  successRate: number;
-  errorRate: number;
-  requestsPerMinute: number;
-  bytesTransferred: number;
-  cacheHitRate: number;
-  activeConnections: number;
+  totalRequests: number
+  avgLatency: number | null
+  successRate: number
+  errorRate: number
+  requestsPerMinute: number
+  bytesTransferred: number
+  cacheHitRate: number
+  activeConnections: number
+}
+
+export interface DataSourceMonitorTimelineItem {
+  time: string
+  source?: string
+  accessType?: string
+  symbol?: string
+  requests: number
+  latency: number | null
+  errors: number
+  success?: boolean
+}
+
+export interface DataSourceMonitorAlert {
+  level: 'info' | 'warning' | 'error'
+  message: string
+  timestamp?: string | null
+  source?: string
 }
 
 export interface DataSourceMonitor {
-  overview: DataSourceMetrics;
-  sources: DataSourceStatus[];
-  timeline: {
-    time: string;
-    requests: number;
-    latency: number;
-    errors: number;
-  }[];
-  alerts: {
-    level: 'info' | 'warning' | 'error';
-    message: string;
-    timestamp: string;
-    source?: string;
-  }[];
+  overview: DataSourceMetrics
+  sources: DataSource[]
+  statusSummary?: Record<string, number>
+  timeline: DataSourceMonitorTimelineItem[]
+  alerts: DataSourceMonitorAlert[]
+}
+
+interface ApiEnvelope<T> {
+  success?: boolean
+  data?: T
+  message?: string
+  code?: number
+}
+
+function unwrapResponse<T>(payload: T | ApiEnvelope<T> | null | undefined): T {
+  if (payload == null) {
+    return payload as T
+  }
+  if (typeof payload === 'object' && 'data' in (payload as ApiEnvelope<T>)) {
+    const envelope = payload as ApiEnvelope<T>
+    return (envelope.data ?? undefined) as T
+  }
+  return payload as T
+}
+
+async function get<T>(url: string, config?: Record<string, unknown>): Promise<T> {
+  const response = await request.get<T | ApiEnvelope<T>>(url, config)
+  return unwrapResponse<T>(response)
+}
+
+async function post<T>(url: string, data?: unknown, config?: Record<string, unknown>): Promise<T> {
+  const response = await request.post<T | ApiEnvelope<T>>(url, data, config)
+  return unwrapResponse<T>(response)
+}
+
+async function put<T>(url: string, data?: unknown, config?: Record<string, unknown>): Promise<T> {
+  const response = await request.put<T | ApiEnvelope<T>>(url, data, config)
+  return unwrapResponse<T>(response)
 }
 
 export const dataSourceAPI = {
   /**
    * 获取所有数据源
    */
-  getDataSources: () =>
-    request.get<DataSource[]>('/data-sources/list'),
+  async getDataSources(): Promise<DataSource[]> {
+    return get<DataSource[]>('/data-sources/list')
+  },
 
   /**
    * 获取数据源状态
    */
-  getDataSourceStatus: () =>
-    request.get<Record<string, string>>('/data-sources/status'),
+  async getDataSourceStatus(): Promise<DataSourceStatusReport> {
+    return get<DataSourceStatusReport>('/data-sources/status')
+  },
 
   /**
    * 获取数据源监控信息
    */
-  getDataSourceMonitor: () =>
-    request.get<DataSourceMonitor>('/data-sources/monitor'),
+  async getDataSourceMonitor(): Promise<DataSourceMonitor> {
+    return get<DataSourceMonitor>('/data-sources/monitor')
+  },
 
   /**
    * 获取数据源指标
    */
-  getDataSourceMetrics: (source?: string) =>
-    request.get<DataSourceMetrics>('/data-sources/metrics', {
-      params: { source }
-    }),
+  async getDataSourceMetrics(source?: string): Promise<DataSourceMetrics | DataSourceMetrics[]> {
+    return get<DataSourceMetrics | DataSourceMetrics[]>('/data-sources/metrics', {
+      params: { source },
+    })
+  },
 
   /**
-   * 切换数据源
+   * 切换主数据源
    */
-  switchDataSource: (sourceName: string) =>
-    request.post('/data-sources/switch', { source: sourceName }),
+  async switchDataSource(sourceName: string): Promise<{ source: string }> {
+    return post<{ source: string }>('/data-sources/switch', { source: sourceName })
+  },
 
   /**
-   * 测试数据源连接
+   * 触发数据源自检
    */
-  testDataSource: (sourceName: string) =>
-    request.post(`/data-sources/test/${sourceName}`),
+  async testDataSource(sourceName: string): Promise<{ success: boolean; source: string; latency_ms: number; data: unknown }> {
+    const url = `/data-sources/test/${encodeURIComponent(sourceName)}`
+    return post<{ success: boolean; source: string; latency_ms: number; data: unknown }>(url)
+  },
 
   /**
-   * 获取数据源配置
+   * 读取数据源配置
    */
-  getDataSourceConfig: (sourceName: string) =>
-    request.get(`/data-sources/config/${sourceName}`),
+  async getDataSourceConfig(sourceName: string): Promise<Record<string, unknown>> {
+    const url = `/data-sources/config/${encodeURIComponent(sourceName)}`
+    return get<Record<string, unknown>>(url)
+  },
 
   /**
    * 更新数据源配置
    */
-  updateDataSourceConfig: (sourceName: string, config: any) =>
-    request.put(`/data-sources/config/${sourceName}`, config),
+  async updateDataSourceConfig(sourceName: string, config: unknown): Promise<Record<string, unknown>> {
+    const url = `/data-sources/config/${encodeURIComponent(sourceName)}`
+    return put<Record<string, unknown>>(url, config)
+  },
 
   /**
    * 获取数据源能力列表
    */
-  getDataSourceCapabilities: (sourceName: string) =>
-    request.get<string[]>(`/data-sources/capabilities/${sourceName}`),
+  async getDataSourceCapabilities(sourceName: string): Promise<string[]> {
+    const url = `/data-sources/capabilities/${encodeURIComponent(sourceName)}`
+    return get<string[]>(url)
+  },
 
   /**
-   * 刷新数据源缓存
-   */
-  refreshDataSourceCache: (sourceName?: string) =>
-    request.post('/data-sources/cache/refresh', { source: sourceName }),
+   * 刷新缓存
+  */
+  async refreshDataSourceCache(sourceName?: string): Promise<{ cacheStats: Record<string, unknown> }> {
+    return post<{ cacheStats: Record<string, unknown> }>('/data-sources/cache/refresh', { source: sourceName })
+  },
 
   /**
-   * 获取数据源历史记录
+   * 获取访问历史
    */
-  getDataSourceHistory: (params?: {
-    source?: string;
-    start_time?: string;
-    end_time?: string;
-    limit?: number;
-  }) =>
-    request.get('/data-sources/history', { params }),
+  async getDataSourceHistory(params?: {
+    source?: string
+    start_time?: string
+    end_time?: string
+    limit?: number
+  }): Promise<{ records: unknown[] }> {
+    return get<{ records: unknown[] }>('/data-sources/history', { params })
+  },
 
   /**
-   * 获取数据源错误日志
+   * 获取错误记录
    */
-  getDataSourceErrors: (params?: {
-    source?: string;
-    level?: string;
-    limit?: number;
-  }) =>
-    request.get('/data-sources/errors', { params }),
-};
+  async getDataSourceErrors(params?: { source?: string; level?: string; limit?: number }): Promise<{ records: unknown[] }> {
+    return get<{ records: unknown[] }>('/data-sources/errors', { params })
+  },
+}
 
-export default dataSourceAPI;
+export default dataSourceAPI
+
+
+
+
+
+

@@ -7,15 +7,29 @@ Author: DeepSearch Team
 Version: 1.0.0
 Date: 2025-09-20
 """
+
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union, cast
+
+import pandas as pd
+
 from loguru import logger
 
-from .amazingdata_process_proxy import (
-    AmazingDataProcessProxy,
-    RequestType
-)
 from .amazingdata_process_pool import get_global_pool
+from .amazingdata_process_proxy import (
+    HealthCheckPayload,
+    MappingPayload,
+    ProxyResponse,
+    ProxyResultPayload,
+    RequestType,
+    SubscribeResultPayload,
+)
+from deepsearch.infrastructure.providers.interfaces.runtime import (
+    ProviderCallStats,
+    ProviderSDKProtocol,
+    ProviderStatsReport,
+    ProxyRuntimeStats,
+)
 
 
 class AmazingDataSafeWrapper:
@@ -36,7 +50,7 @@ class AmazingDataSafeWrapper:
         auto_restart: bool = True,
         max_retries: int = 3,
         default_timeout: float = 30.0,
-        auto_cleanup: bool = False
+        auto_cleanup: bool = False,
     ):
         """
         初始化安全包装器
@@ -56,23 +70,21 @@ class AmazingDataSafeWrapper:
 
         # 从进程池获取专属进程
         pool = get_global_pool()
-        self.proxy = pool.get_or_create(
-            datasource_id,
-            auto_cleanup=auto_cleanup,
-            cleanup_delay=60.0 if auto_cleanup else 0
+        self.proxy: ProviderSDKProtocol = pool.get_or_create(
+            datasource_id, auto_cleanup=auto_cleanup, cleanup_delay=60.0 if auto_cleanup else 0
         )
 
         # 连接状态
         self.is_connected = False
-        self.login_info = None
+        self.login_info: Optional[Dict[str, object]] = None
 
         # 统计
-        self.stats = {
+        self.stats: ProviderCallStats = {
             "total_calls": 0,
             "successful_calls": 0,
             "failed_calls": 0,
             "retries": 0,
-            "crashes_handled": 0
+            "crashes_handled": 0,
         }
 
     def safe_login(
@@ -81,7 +93,7 @@ class AmazingDataSafeWrapper:
         password: str,
         host: str = "101.230.159.234",
         port: int = 8600,
-        timeout: float = 30.0
+        timeout: float = 30.0,
     ) -> Tuple[bool, Optional[str]]:
         """
         安全的登录方法
@@ -120,18 +132,21 @@ class AmazingDataSafeWrapper:
         for attempt in range(self.max_retries):
             if attempt > 0:
                 logger.info(f"[SafeWrapper] Retry attempt {attempt + 1}/{self.max_retries}")
-                time.sleep(2 ** attempt)  # 指数退避
+                time.sleep(2**attempt)  # 指数退避
 
             try:
                 # 通过进程代理执行登录
-                response = self.proxy.execute(
-                    "login",
-                    username,
-                    password,
-                    host,
-                    port,
-                    request_type=RequestType.LOGIN,
-                    timeout=timeout
+                response = cast(
+                    ProxyResponse,
+                    self.proxy.execute(
+                        "login",
+                        username,
+                        password,
+                        host,
+                        port,
+                        request_type=RequestType.LOGIN,
+                        timeout=timeout,
+                    ),
                 )
 
                 if response.success:
@@ -141,7 +156,7 @@ class AmazingDataSafeWrapper:
                         "username": username,
                         "host": host,
                         "port": port,
-                        "login_time": time.time()
+                        "login_time": time.time(),
                     }
                     self.stats["successful_calls"] += 1
                     return True, None
@@ -208,7 +223,7 @@ class AmazingDataSafeWrapper:
         self.stats["failed_calls"] += 1
         return False, "所有重试均失败"
 
-    def safe_logout(self, username: str = None) -> bool:
+    def safe_logout(self, username: Optional[str] = None) -> bool:
         """
         安全的登出方法
 
@@ -225,11 +240,7 @@ class AmazingDataSafeWrapper:
         return True
 
     def safe_get_data(
-        self,
-        method: str,
-        *args,
-        timeout: Optional[float] = None,
-        **kwargs
+        self, method: str, *args, timeout: Optional[float] = None, **kwargs
     ) -> Tuple[bool, Any, Optional[str]]:
         """
         安全的数据获取方法
@@ -252,17 +263,17 @@ class AmazingDataSafeWrapper:
         self.stats["total_calls"] += 1
 
         try:
-            response = self.proxy.execute(
-                method,
-                *args,
-                request_type=RequestType.GET_DATA,
-                timeout=timeout,
-                **kwargs
+            response = cast(
+                ProxyResponse,
+                self.proxy.execute(
+                    method, *args, request_type=RequestType.GET_DATA, timeout=timeout, **kwargs
+                ),
             )
 
             if response.success:
                 self.stats["successful_calls"] += 1
-                return True, response.result, None
+                converted = self._convert_payload(response.result)
+                return True, converted, None
             else:
                 self.stats["failed_calls"] += 1
 
@@ -291,19 +302,23 @@ class AmazingDataSafeWrapper:
         Returns:
             是否健康
         """
-        return self.proxy.health_check()
+        result = self.proxy.health_check()
+        return bool(result)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> ProviderStatsReport:
         """
         获取统计信息
 
         Returns:
             统计数据
         """
-        stats = self.stats.copy()
-        stats["proxy_stats"] = self.proxy.get_stats()
-        stats["is_connected"] = self.is_connected
-        return stats
+        report = cast(ProviderStatsReport, dict(self.stats))
+        proxy_stats: Optional[ProxyRuntimeStats] = None
+        if self.proxy and hasattr(self.proxy, "get_stats"):
+            proxy_stats = cast(ProxyRuntimeStats, self.proxy.get_stats())
+        report["proxy_stats"] = proxy_stats
+        report["is_connected"] = self.is_connected
+        return report
 
     def reset_stats(self):
         """重置统计信息"""
@@ -312,8 +327,49 @@ class AmazingDataSafeWrapper:
             "successful_calls": 0,
             "failed_calls": 0,
             "retries": 0,
-            "crashes_handled": 0
+            "crashes_handled": 0,
         }
+
+    @staticmethod
+    def _convert_payload(payload: ProxyResultPayload) -> Any:
+        if isinstance(payload, dict):
+            if "data" in payload and isinstance(payload["data"], dict):
+                converted: Dict[str, Any] = {}
+                for key, value in payload["data"].items():
+                    converted[str(key)] = AmazingDataSafeWrapper._records_to_dataframe(value)
+                return converted if len(converted) > 1 else next(iter(converted.values()), {})
+            if "rows" in payload and isinstance(payload["rows"], list):
+                return pd.DataFrame(payload["rows"])
+            if "value" in payload:
+                return payload["value"]
+            if "healthy" in payload or "status" in payload:
+                return payload
+        return payload
+
+    @staticmethod
+    def _records_to_dataframe(value: Any) -> pd.DataFrame:
+        if isinstance(value, list):
+            return pd.DataFrame(value)
+        if isinstance(value, dict):
+            if "value" in value and len(value) == 1:
+                return pd.DataFrame([value])
+            return pd.DataFrame([value])
+        if value is None:
+            return pd.DataFrame()
+        return pd.DataFrame([{"value": value}])
+
+    @staticmethod
+    def _extract_message(payload: ProxyResultPayload) -> Optional[str]:
+        if isinstance(payload, dict):
+            message = payload.get("message")
+            if isinstance(message, str):
+                return message
+            data = payload.get("data")
+            if isinstance(data, dict):
+                for value in data.values():
+                    if isinstance(value, dict) and isinstance(value.get("message"), str):
+                        return cast(str, value["message"])
+        return None
 
 
 # 全局包装器实例
@@ -334,10 +390,7 @@ def get_safe_wrapper() -> AmazingDataSafeWrapper:
 
 
 def test_connection(
-    username: str,
-    password: str,
-    host: str = "101.230.159.234",
-    port: int = 8600
+    username: str, password: str, host: str = "101.230.159.234", port: int = 8600
 ) -> Dict[str, Any]:
     """
     测试AmazingData连接（便捷方法）
@@ -360,7 +413,7 @@ def test_connection(
         "success": success,
         "error": error,
         "latency_ms": (time.time() - start_time) * 1000,
-        "stats": wrapper.get_stats()
+        "stats": wrapper.get_stats(),
     }
 
     # 登录成功后自动登出（实际跳过）
@@ -375,7 +428,7 @@ def test_connection_with_datasource(
     username: str,
     password: str,
     host: str = "101.230.159.234",
-    port: int = 8600
+    port: int = 8600,
 ) -> Dict[str, Any]:
     """
     测试指定数据源的连接（使用独立进程）
@@ -397,10 +450,7 @@ def test_connection_with_datasource(
 
     # 创建临时wrapper
     wrapper = AmazingDataSafeWrapper(
-        datasource_id=test_id,
-        auto_restart=False,
-        max_retries=2,
-        auto_cleanup=True  # 启用自动清理
+        datasource_id=test_id, auto_restart=False, max_retries=2, auto_cleanup=True  # 启用自动清理
     )
 
     start_time = time.time()
@@ -415,7 +465,7 @@ def test_connection_with_datasource(
             "datasource_id": datasource_id,
             "test_id": test_id,
             "latency_ms": (time.time() - start_time) * 1000,
-            "stats": wrapper.get_stats()
+            "stats": wrapper.get_stats(),
         }
 
         return result
@@ -432,7 +482,7 @@ def test_connection_with_reuse(
     password: str,
     host: str = "101.230.159.234",
     port: int = 8600,
-    reuse_window: float = 30.0
+    reuse_window: float = 30.0,
 ) -> Dict[str, Any]:
     """
     测试连接（支持进程复用，适合连续测试）
@@ -458,45 +508,40 @@ def test_connection_with_reuse(
     try:
         # 获取测试进程（可能复用）
         proxy, process_id = pool.get_test_process(
-            datasource_type="amazingdata",
-            reuse_window=reuse_window
+            datasource_type="amazingdata", reuse_window=reuse_window
         )
 
         logger.info(f"[Test] Using process {process_id} for testing")
 
         # 执行登录测试
-        response = proxy.execute(
-            "login",
-            username,
-            password,
-            host,
-            port,
-            timeout=30.0,
-            request_type=RequestType.LOGIN
+        response = cast(
+            ProxyResponse,
+            proxy.execute(
+                "login", username, password, host, port, timeout=30.0, request_type=RequestType.LOGIN
+            ),
         )
 
         if response.success:
-            login_result = response.result
-            success = login_result == 0 or login_result is True
-
             result = {
-                "success": success,
-                "error": None if success else f"登录失败，返回码: {login_result}",
+                "success": True,
+                "error": None,
                 "process_id": process_id,
                 "latency_ms": (time.time() - start_time) * 1000,
-                "stats": proxy.get_stats()
+                "stats": proxy.get_stats(),
             }
         else:
             result = {
                 "success": False,
-                "error": response.error or "登录失败",
+                "error": response.error or AmazingDataSafeWrapper._extract_message(response.result) or "登录失败",
                 "process_id": process_id,
                 "latency_ms": (time.time() - start_time) * 1000,
-                "stats": proxy.get_stats()
+                "stats": proxy.get_stats(),
             }
 
-        logger.info(f"[Test] Test completed: success={result['success']}, "
-                   f"latency={result['latency_ms']:.0f}ms")
+        logger.info(
+            f"[Test] Test completed: success={result['success']}, "
+            f"latency={result['latency_ms']:.0f}ms"
+        )
 
         # 测试成功后，进程会被保留供后续复用
         # 超过时间窗口后会自动清理
@@ -509,5 +554,5 @@ def test_connection_with_reuse(
             "success": False,
             "error": str(e),
             "process_id": None,
-            "latency_ms": (time.time() - start_time) * 1000
+            "latency_ms": (time.time() - start_time) * 1000,
         }

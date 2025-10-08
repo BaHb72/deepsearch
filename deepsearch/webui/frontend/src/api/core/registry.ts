@@ -157,7 +157,7 @@ export class ApiRegistry {
     // ========== 数据源管理端点 ==========
     this.register({
       id: 'datasource.list',
-      path: '/data-source/list',
+      path: '/data-sources/list',
       method: HttpMethod.GET,
       category: ApiCategory.DATA_SOURCE,
       name: '数据源列表',
@@ -170,7 +170,7 @@ export class ApiRegistry {
     
     this.register({
       id: 'datasource.status',
-      path: '/data-source/status',
+      path: '/data-sources/status',
       method: HttpMethod.GET,
       category: ApiCategory.DATA_SOURCE,
       name: '数据源状态',
@@ -183,7 +183,7 @@ export class ApiRegistry {
     
     this.register({
       id: 'datasource.test',
-      path: '/data-source/test',
+      path: '/data-sources/test/{source}',
       method: HttpMethod.POST,
       category: ApiCategory.DATA_SOURCE,
       name: '测试数据源',

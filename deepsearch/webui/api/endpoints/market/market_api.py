@@ -3,16 +3,32 @@
 
 提供市场概览、板块分析、涨跌排行、资金流向等市场分析功能
 """
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException, Query, Depends
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from loguru import logger
+
 import random
+from datetime import datetime
+from typing import Any, Dict, List, Optional, cast
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
+from loguru import logger
+from pydantic import BaseModel
 
 from deepsearch.config import get_config
 from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceManager
+
+
+
+def _demo_uniform(a: float, b: float) -> float:
+    """非安全上下文使用的随机数，仅用于演示数据"""
+    return random.uniform(a, b)  # nosec B311 - 仅用于生成模拟行情
+
+def _demo_randint(a: int, b: int) -> int:
+    """非安全上下文使用的随机整数，仅用于演示数据"""
+    return random.randint(a, b)  # nosec B311 - 仅用于生成模拟行情
+
+def _demo_choice(seq):
+    """非安全上下文使用的随机选择，仅用于演示数据"""
+    return random.choice(seq)  # nosec B311 - 仅用于生成模拟行情
 
 # 创建路由器
 router = APIRouter(prefix="/market", tags=["市场数据管理"])
@@ -33,6 +49,7 @@ def get_data_manager() -> DataSourceManager:
 # 请求和响应模型
 class MarketOverviewResponse(BaseModel):
     """市场概览响应"""
+
     success: bool
     data: Dict[str, Any]
     timestamp: str
@@ -41,6 +58,7 @@ class MarketOverviewResponse(BaseModel):
 
 class SectorData(BaseModel):
     """板块数据"""
+
     sector_name: str
     sector_code: str
     change_percent: float
@@ -51,6 +69,7 @@ class SectorData(BaseModel):
 
 class TopListResponse(BaseModel):
     """排行榜响应"""
+
     success: bool
     category: str  # gainers, losers, volume, amount
     data: List[Dict[str, Any]]
@@ -59,6 +78,7 @@ class TopListResponse(BaseModel):
 
 class MoneyFlowResponse(BaseModel):
     """资金流向响应"""
+
     success: bool
     net_inflow: float
     main_inflow: float
@@ -70,7 +90,7 @@ class MoneyFlowResponse(BaseModel):
 
 @router.get("/overview")
 async def get_market_overview(
-    data_manager: DataSourceManager = Depends(get_data_manager)
+    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> MarketOverviewResponse:
     """
     获取市场总览数据
@@ -85,7 +105,7 @@ async def get_market_overview(
             "000001": "上证指数",
             "399001": "深证成指",
             "399006": "创业板指",
-            "000688": "科创50"
+            "000688": "科创50",
         }
 
         index_data = {}
@@ -100,20 +120,20 @@ async def get_market_overview(
                         "change": quote.get("change", 0),
                         "change_percent": quote.get("change_percent", 0),
                         "volume": quote.get("volume", 0),
-                        "amount": quote.get("amount", 0)
+                        "amount": quote.get("amount", 0),
                     }
             except Exception as e:
                 logger.warning(f"获取指数{code}失败: {e}")
                 # 使用模拟数据
                 base_price = 3000 if code == "000001" else 2000
-                change_pct = random.uniform(-3, 3)
+                change_pct = _demo_uniform(-3, 3)
                 index_data[code] = {
                     "name": name,
-                    "current": base_price * (1 + change_pct/100),
-                    "change": base_price * change_pct/100,
+                    "current": base_price * (1 + change_pct / 100),
+                    "change": base_price * change_pct / 100,
                     "change_percent": change_pct,
-                    "volume": random.randint(100000000, 500000000),
-                    "amount": random.randint(1000000000, 5000000000)
+                    "volume": _demo_randint(100000000, 500000000),
+                    "amount": _demo_randint(1000000000, 5000000000),
                 }
 
         # 市场统计
@@ -121,34 +141,32 @@ async def get_market_overview(
             "total_stocks": 5200,
             "trading_stocks": 4950,
             "suspended_stocks": 250,
-            "rising": random.randint(2000, 3000),
-            "falling": random.randint(1500, 2500),
-            "flat": random.randint(200, 500),
-            "limit_up": random.randint(20, 100),
-            "limit_down": random.randint(10, 50),
-            "total_volume": random.randint(500000000000, 800000000000),
-            "total_amount": random.randint(800000000000, 1200000000000)
+            "rising": _demo_randint(2000, 3000),
+            "falling": _demo_randint(1500, 2500),
+            "flat": _demo_randint(200, 500),
+            "limit_up": _demo_randint(20, 100),
+            "limit_down": _demo_randint(10, 50),
+            "total_volume": _demo_randint(500000000000, 800000000000),
+            "total_amount": _demo_randint(800000000000, 1200000000000),
         }
 
         # 市场情绪指标
         sentiment = {
-            "fear_greed_index": random.randint(30, 70),  # 0-100，50为中性
-            "market_temperature": random.uniform(35, 65),  # 市场温度
-            "volume_ratio": random.uniform(0.8, 1.2),  # 量比
-            "advance_decline_ratio": market_stats["rising"] / max(market_stats["falling"], 1)
+            "fear_greed_index": _demo_randint(30, 70),  # 0-100，50为中性
+            "market_temperature": _demo_uniform(35, 65),  # 市场温度
+            "volume_ratio": _demo_uniform(0.8, 1.2),  # 量比
+            "advance_decline_ratio": market_stats["rising"] / max(market_stats["falling"], 1),
         }
 
         overview_data = {
             "indices": index_data,
             "statistics": market_stats,
             "sentiment": sentiment,
-            "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
         return MarketOverviewResponse(
-            success=True,
-            data=overview_data,
-            timestamp=datetime.now().isoformat()
+            success=True, data=overview_data, timestamp=datetime.now().isoformat()
         )
 
     except Exception as e:
@@ -160,7 +178,7 @@ async def get_market_overview(
 async def get_market_sectors(
     sort_by: str = Query("change_percent", description="排序字段：change_percent, volume, amount"),
     limit: int = Query(20, description="返回数量", ge=1, le=100),
-    data_manager: DataSourceManager = Depends(get_data_manager)
+    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> JSONResponse:
     """
     获取板块数据
@@ -170,46 +188,66 @@ async def get_market_sectors(
     try:
         # 模拟板块数据
         sectors = [
-            "新能源", "半导体", "人工智能", "医药生物", "金融",
-            "房地产", "汽车", "消费电子", "军工", "传媒",
-            "钢铁", "有色金属", "化工", "农业", "旅游",
-            "电力", "煤炭", "银行", "保险", "证券"
+            "新能源",
+            "半导体",
+            "人工智能",
+            "医药生物",
+            "金融",
+            "房地产",
+            "汽车",
+            "消费电子",
+            "军工",
+            "传媒",
+            "钢铁",
+            "有色金属",
+            "化工",
+            "农业",
+            "旅游",
+            "电力",
+            "煤炭",
+            "银行",
+            "保险",
+            "证券",
         ]
 
         sector_data = []
         for sector in sectors:
-            change_pct = random.uniform(-5, 5)
-            sector_data.append({
-                "sector_name": sector,
-                "sector_code": f"BK{random.randint(1000, 9999)}",
-                "change_percent": round(change_pct, 2),
-                "volume": random.randint(10000000, 100000000),
-                "amount": random.randint(100000000, 1000000000),
-                "stock_count": random.randint(20, 200),
-                "rising_count": random.randint(10, 150),
-                "falling_count": random.randint(10, 100),
-                "leading_stock": {
-                    "code": f"{random.randint(100000, 999999):06d}",
-                    "name": f"{sector}龙头",
-                    "change_percent": round(change_pct * 1.5, 2)
-                },
-                "net_inflow": random.randint(-500000000, 500000000)
-            })
+            change_pct = _demo_uniform(-5, 5)
+            sector_data.append(
+                {
+                    "sector_name": sector,
+                    "sector_code": f"BK{_demo_randint(1000, 9999)}",
+                    "change_percent": round(change_pct, 2),
+                    "volume": _demo_randint(10000000, 100000000),
+                    "amount": _demo_randint(100000000, 1000000000),
+                    "stock_count": _demo_randint(20, 200),
+                    "rising_count": _demo_randint(10, 150),
+                    "falling_count": _demo_randint(10, 100),
+                    "leading_stock": {
+                        "code": f"{_demo_randint(100000, 999999):06d}",
+                        "name": f"{sector}龙头",
+                        "change_percent": round(change_pct * 1.5, 2),
+                    },
+                    "net_inflow": _demo_randint(-500000000, 500000000),
+                }
+            )
 
         # 排序
         if sort_by == "change_percent":
-            sector_data.sort(key=lambda x: x["change_percent"], reverse=True)
+            sector_data.sort(key=lambda x: cast(float, x.get("change_percent", 0.0)), reverse=True)
         elif sort_by == "volume":
-            sector_data.sort(key=lambda x: x["volume"], reverse=True)
+            sector_data.sort(key=lambda x: cast(float, x.get("volume", 0.0)), reverse=True)
         elif sort_by == "amount":
-            sector_data.sort(key=lambda x: x["amount"], reverse=True)
+            sector_data.sort(key=lambda x: cast(float, x.get("amount", 0.0)), reverse=True)
 
-        return JSONResponse({
-            "success": True,
-            "data": sector_data[:limit],
-            "total": len(sector_data),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "data": sector_data[:limit],
+                "total": len(sector_data),
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
     except Exception as e:
         logger.error(f"获取板块数据失败: {e}")
@@ -221,7 +259,7 @@ async def get_market_ranking(
     rank_type: str,
     limit: int = Query(20, description="返回数量", ge=1, le=100),
     market: Optional[str] = Query(None, description="市场：sh, sz, cyb, kcb"),
-    data_manager: DataSourceManager = Depends(get_data_manager)
+    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> TopListResponse:
     """
     获取市场排行榜
@@ -243,43 +281,40 @@ async def get_market_ranking(
         stocks = []
         for i in range(limit):
             if rank_type == "gainers":
-                change_pct = random.uniform(5, 10)
+                change_pct = _demo_uniform(5, 10)
             elif rank_type == "losers":
-                change_pct = random.uniform(-10, -5)
+                change_pct = _demo_uniform(-10, -5)
             else:
-                change_pct = random.uniform(-3, 3)
+                change_pct = _demo_uniform(-3, 3)
 
             stock = {
-                "code": f"{random.randint(100000, 999999):06d}",
+                "code": f"{_demo_randint(100000, 999999):06d}",
                 "name": f"股票{i+1}",
-                "price": round(random.uniform(5, 100), 2),
-                "change": round(random.uniform(-5, 5), 2),
+                "price": round(_demo_uniform(5, 100), 2),
+                "change": round(_demo_uniform(-5, 5), 2),
                 "change_percent": round(change_pct, 2),
-                "volume": random.randint(1000000, 100000000),
-                "amount": random.randint(10000000, 1000000000),
-                "turnover_rate": round(random.uniform(0.5, 20), 2),
-                "pe_ratio": round(random.uniform(10, 100), 2),
-                "market_cap": random.randint(1000000000, 100000000000)
+                "volume": _demo_randint(1000000, 100000000),
+                "amount": _demo_randint(10000000, 1000000000),
+                "turnover_rate": round(_demo_uniform(0.5, 20), 2),
+                "pe_ratio": round(_demo_uniform(10, 100), 2),
+                "market_cap": _demo_randint(1000000000, 100000000000),
             }
             stocks.append(stock)
 
         # 根据类型排序
         if rank_type == "gainers":
-            stocks.sort(key=lambda x: x["change_percent"], reverse=True)
+            stocks.sort(key=lambda x: cast(float, x.get("change_percent", 0.0)), reverse=True)
         elif rank_type == "losers":
-            stocks.sort(key=lambda x: x["change_percent"])
+            stocks.sort(key=lambda x: cast(float, x.get("change_percent", 0.0)))
         elif rank_type == "volume":
-            stocks.sort(key=lambda x: x["volume"], reverse=True)
+            stocks.sort(key=lambda x: cast(float, x.get("volume", 0.0)), reverse=True)
         elif rank_type == "amount":
-            stocks.sort(key=lambda x: x["amount"], reverse=True)
+            stocks.sort(key=lambda x: cast(float, x.get("amount", 0.0)), reverse=True)
         elif rank_type == "turnover":
-            stocks.sort(key=lambda x: x["turnover_rate"], reverse=True)
+            stocks.sort(key=lambda x: cast(float, x.get("turnover_rate", 0.0)), reverse=True)
 
         return TopListResponse(
-            success=True,
-            category=rank_type,
-            data=stocks,
-            timestamp=datetime.now().isoformat()
+            success=True, category=rank_type, data=stocks, timestamp=datetime.now().isoformat()
         )
 
     except HTTPException:
@@ -292,7 +327,7 @@ async def get_market_ranking(
 @router.get("/money-flow")
 async def get_money_flow(
     period: str = Query("today", description="时间周期：today, 5d, 10d, 20d"),
-    data_manager: DataSourceManager = Depends(get_data_manager)
+    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> MoneyFlowResponse:
     """
     获取市场资金流向
@@ -304,15 +339,15 @@ async def get_money_flow(
         total_amount = 1000000000000  # 1万亿基准
 
         # 主力资金（占60-70%）
-        main_ratio = random.uniform(0.6, 0.7)
+        main_ratio = _demo_uniform(0.6, 0.7)
         main_total = total_amount * main_ratio
-        main_inflow_ratio = random.uniform(0.45, 0.55)
+        main_inflow_ratio = _demo_uniform(0.45, 0.55)
         main_inflow = main_total * main_inflow_ratio
         main_outflow = main_total * (1 - main_inflow_ratio)
 
         # 散户资金（占30-40%）
         retail_total = total_amount * (1 - main_ratio)
-        retail_inflow_ratio = random.uniform(0.45, 0.55)
+        retail_inflow_ratio = _demo_uniform(0.45, 0.55)
         retail_inflow = retail_total * retail_inflow_ratio
         retail_outflow = retail_total * (1 - retail_inflow_ratio)
 
@@ -326,7 +361,7 @@ async def get_money_flow(
             main_outflow=round(main_outflow, 2),
             retail_inflow=round(retail_inflow, 2),
             retail_outflow=round(retail_outflow, 2),
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.now().isoformat(),
         )
 
     except Exception as e:
@@ -338,7 +373,7 @@ async def get_money_flow(
 async def get_hot_stocks(
     category: str = Query("all", description="分类：all, concept, industry"),
     limit: int = Query(10, description="返回数量", ge=1, le=50),
-    data_manager: DataSourceManager = Depends(get_data_manager)
+    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> JSONResponse:
     """
     获取热门股票
@@ -353,34 +388,38 @@ async def get_hot_stocks(
         for i in range(limit):
             stock = {
                 "rank": i + 1,
-                "code": f"{random.randint(100000, 999999):06d}",
+                "code": f"{_demo_randint(100000, 999999):06d}",
                 "name": f"热门股{i+1}",
-                "price": round(random.uniform(10, 200), 2),
-                "change_percent": round(random.uniform(-5, 10), 2),
-                "volume": random.randint(50000000, 200000000),
-                "heat_score": random.randint(70, 100),  # 热度分数
-                "concept": random.choice(concepts),
-                "reason": random.choice([
-                    "主力资金大幅流入",
-                    "突破重要技术位",
-                    "业绩超预期",
-                    "获得机构调研",
-                    "行业利好政策"
-                ]),
-                "discussion_count": random.randint(1000, 50000)  # 讨论数
+                "price": round(_demo_uniform(10, 200), 2),
+                "change_percent": round(_demo_uniform(-5, 10), 2),
+                "volume": _demo_randint(50000000, 200000000),
+                "heat_score": _demo_randint(70, 100),  # 热度分数
+                "concept": _demo_choice(concepts),
+                "reason": _demo_choice(
+                    [
+                        "主力资金大幅流入",
+                        "突破重要技术位",
+                        "业绩超预期",
+                        "获得机构调研",
+                        "行业利好政策",
+                    ]
+                ),
+                "discussion_count": _demo_randint(1000, 50000),  # 讨论数
             }
             hot_stocks.append(stock)
 
         # 按热度排序
         hot_stocks.sort(key=lambda x: x["heat_score"], reverse=True)
 
-        return JSONResponse({
-            "success": True,
-            "category": category,
-            "data": hot_stocks,
-            "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "category": category,
+                "data": hot_stocks,
+                "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
     except Exception as e:
         logger.error(f"获取热门股票失败: {e}")
@@ -390,7 +429,7 @@ async def get_hot_stocks(
 @router.get("/market-calendar")
 async def get_market_calendar(
     date: Optional[str] = Query(None, description="日期YYYY-MM-DD"),
-    data_manager: DataSourceManager = Depends(get_data_manager)
+    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> JSONResponse:
     """
     获取市场日历
@@ -408,43 +447,22 @@ async def get_market_calendar(
             "is_trading_day": datetime.now().weekday() < 5,  # 周一到周五
             "market_status": "trading" if datetime.now().weekday() < 5 else "closed",
             "events": [
-                {
-                    "time": "09:00",
-                    "type": "economic",
-                    "title": "PMI数据发布",
-                    "importance": "high"
-                },
+                {"time": "09:00", "type": "economic", "title": "PMI数据发布", "importance": "high"},
                 {
                     "time": "14:00",
                     "type": "company",
                     "title": "重要公司财报发布",
-                    "importance": "medium"
-                }
+                    "importance": "medium",
+                },
             ],
             "holidays": [],
-            "ipo": [
-                {
-                    "code": "688XXX",
-                    "name": "新股申购",
-                    "price": 28.88,
-                    "pe_ratio": 35.6
-                }
-            ],
-            "dividends": [
-                {
-                    "code": "600000",
-                    "name": "浦发银行",
-                    "amount": 0.5,
-                    "ex_date": date
-                }
-            ]
+            "ipo": [{"code": "688XXX", "name": "新股申购", "price": 28.88, "pe_ratio": 35.6}],
+            "dividends": [{"code": "600000", "name": "浦发银行", "amount": 0.5, "ex_date": date}],
         }
 
-        return JSONResponse({
-            "success": True,
-            "data": calendar_data,
-            "timestamp": datetime.now().isoformat()
-        })
+        return JSONResponse(
+            {"success": True, "data": calendar_data, "timestamp": datetime.now().isoformat()}
+        )
 
     except Exception as e:
         logger.error(f"获取市场日历失败: {e}")

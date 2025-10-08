@@ -2,17 +2,23 @@
 数据相关组件
 包含数据库和缓存等数据存储组件
 """
+
 import re
-from typing import Dict, Any, Optional
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 from deepsearch.config import get_config
 from deepsearch.core.async_component import AsyncComponent
-from deepsearch.core.utils.exceptions import error_context, ComponentLifecycleError
 from deepsearch.core.interfaces import ComponentType
-from deepsearch.core.utils.timeout_config import get_timeout_manager, TimeoutCategory
+from deepsearch.core.utils.exceptions import ComponentLifecycleError, error_context
+from deepsearch.core.utils.timeout_config import TimeoutCategory, get_timeout_manager
+from deepsearch.infrastructure.persistence.runtime_state.database_status_store import (
+    get_database_status_store,
+)
 
 
 class DatabaseComponent(AsyncComponent[Any]):
@@ -24,6 +30,40 @@ class DatabaseComponent(AsyncComponent[Any]):
         self._session_factory = None
         self._is_timescale_enabled = False
         self._timeout_manager = get_timeout_manager()
+
+        self._instance = self
+
+    @property
+    def _instance(self):
+        return self.resource or self
+
+    @_instance.setter
+    def _instance(self, value):
+        if value is None:
+            self._state_manager.state.clear_resource()
+        else:
+            self._state_manager.state.set_resource(value)
+
+    @_instance.deleter
+    def _instance(self):
+        self._state_manager.state.clear_resource()
+
+    async def _initialize(self) -> Optional[Any]:
+        result = await self._do_initialize()
+        if result is None:
+            self._instance = self
+            return None
+        self._instance = result
+        return result
+
+    async def _stop(self) -> None:
+        await self._do_stop()
+
+    def _get_store_and_key(self):
+        store = get_database_status_store()
+        active_id = store.get_active_connection_id()
+        key = str(active_id) if active_id is not None else "primary"
+        return store, key
 
     @staticmethod
     def validate_table_name(table_name: str) -> bool:
@@ -37,7 +77,7 @@ class DatabaseComponent(AsyncComponent[Any]):
             bool: 表名是否有效
         """
         # 只允许字母、数字、下划线
-        pattern = r'^[a-zA-Z_][a-zA-Z0-9_]*$'
+        pattern = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
         return bool(re.match(pattern, table_name))
 
     async def _do_initialize(self) -> Optional[Any]:
@@ -48,6 +88,8 @@ class DatabaseComponent(AsyncComponent[Any]):
 
             # 检查是否应该自动连接
             if not db_config.main.auto_connect:
+                store, key = self._get_store_and_key()
+                store.save_connectivity_status(key, {"state": "disconnected", "retrying": False})
                 self._logger.info("数据库组件已初始化（未连接）- auto_connect=false")
                 return None  # 返回None表示没有资源
 
@@ -84,7 +126,7 @@ class DatabaseComponent(AsyncComponent[Any]):
         """提供额外的状态信息"""
         return {
             "connected": self._engine is not None,
-            "timescale_enabled": self._is_timescale_enabled
+            "timescale_enabled": self._is_timescale_enabled,
         }
 
     def _health_check(self) -> bool:
@@ -92,14 +134,13 @@ class DatabaseComponent(AsyncComponent[Any]):
         if not self._engine:
             return False
 
-        try:
-            sync_engine = getattr(self._engine, 'sync_engine', None)
-            if sync_engine is None:
-                self._logger.warning("Async engine does not expose sync_engine for health check")
-                return False
+        engine_for_check = self._engine
 
-            with sync_engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
+        try:
+            conn = engine_for_check.connect()
+            conn.execute(text("SELECT 1"))
+            if hasattr(conn, "close"):
+                conn.close()
             return True
         except Exception as exc:
             self._logger.error(f"数据库健康检查失败: {exc}")
@@ -112,6 +153,7 @@ class DatabaseComponent(AsyncComponent[Any]):
 
         try:
             import asyncio
+
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.DB_HEALTH)
 
             async def _check():
@@ -134,7 +176,7 @@ class DatabaseComponent(AsyncComponent[Any]):
             "connected": self.is_connected(),
             "engine_type": type(self._engine).__name__ if self._engine else None,
             "timescale_enabled": self._is_timescale_enabled,
-            "pool_status": self._get_pool_status() if self._engine else None
+            "pool_status": self._get_pool_status() if self._engine else None,
         }
 
     def _get_pool_status(self) -> Dict[str, Any]:
@@ -144,11 +186,11 @@ class DatabaseComponent(AsyncComponent[Any]):
 
         pool = self._engine.pool
         return {
-            "size": pool.size() if hasattr(pool, 'size') else 0,
-            "checked_in": pool.checkedin() if hasattr(pool, 'checkedin') else 0,
-            "checked_out": pool.checkedout() if hasattr(pool, 'checkedout') else 0,
-            "overflow": pool.overflow() if hasattr(pool, 'overflow') else 0,
-            "total": pool.total() if hasattr(pool, 'total') else 0
+            "size": pool.size() if hasattr(pool, "size") else 0,
+            "checked_in": pool.checkedin() if hasattr(pool, "checkedin") else 0,
+            "checked_out": pool.checkedout() if hasattr(pool, "checkedout") else 0,
+            "overflow": pool.overflow() if hasattr(pool, "overflow") else 0,
+            "total": pool.total() if hasattr(pool, "total") else 0,
         }
 
     async def connect_async(self) -> None:
@@ -157,8 +199,17 @@ class DatabaseComponent(AsyncComponent[Any]):
 
         用于在 auto_connect=false 或需要重新连接时手动建立连接
         """
+        store, key = self._get_store_and_key()
         if self._engine is not None:
-            # 已经连接
+            store.save_connectivity_status(
+                key,
+                {
+                    "state": "connected",
+                    "last_success_at": datetime.now(timezone.utc),
+                    "last_error": None,
+                    "retrying": False,
+                },
+            )
             self._logger.info("数据库已经连接")
             return
 
@@ -181,9 +232,11 @@ class DatabaseComponent(AsyncComponent[Any]):
         # 获取连接超时配置
         connect_timeout = self._timeout_manager.get_timeout(TimeoutCategory.DB_CONNECT)
 
+        store.save_connectivity_status(key, {"state": "connecting", "retrying": False})
+
         self._engine = create_async_engine(
             db_url,
-            echo=(config.app.env == "dev"),
+            echo=(db_config.main.echo if db_config else False),
             pool_size=20,
             max_overflow=10,
             pool_pre_ping=True,
@@ -191,18 +244,16 @@ class DatabaseComponent(AsyncComponent[Any]):
             connect_args={
                 "server_settings": {
                     "application_name": "deepsearch",
-                    "jit": "off"  # 关闭JIT以提高稳定性
+                    "jit": "off",  # 关闭JIT以提高稳定性
                 },
                 "timeout": connect_timeout,
-                "command_timeout": connect_timeout
-            }
+                "command_timeout": connect_timeout,
+            },
         )
 
         # 创建会话工厂
         self._session_factory = sessionmaker(
-            self._engine,
-            class_=AsyncSession,
-            expire_on_commit=False
+            self._engine, class_=AsyncSession, expire_on_commit=False
         )
 
         # 测试连接（带超时）
@@ -221,6 +272,14 @@ class DatabaseComponent(AsyncComponent[Any]):
                 await self._engine.dispose()
             self._engine = None
             self._session_factory = None
+            store.save_connectivity_status(
+                key,
+                {
+                    "state": "error",
+                    "last_error": f"数据库连接超时 ({connect_timeout}秒)",
+                    "retrying": False,
+                },
+            )
             raise RuntimeError(f"数据库连接超时 ({connect_timeout}秒)")
         except Exception as e:
             # 连接失败，清理资源
@@ -228,7 +287,22 @@ class DatabaseComponent(AsyncComponent[Any]):
                 await self._engine.dispose()
             self._engine = None
             self._session_factory = None
+            store.save_connectivity_status(
+                key, {"state": "error", "last_error": str(e), "retrying": False}
+            )
             raise RuntimeError(f"数据库连接失败: {e}")
+
+        store.save_connectivity_status(
+            key,
+            {
+                "state": "connected",
+                "last_success_at": datetime.now(timezone.utc),
+                "last_error": None,
+                "retrying": False,
+            },
+        )
+
+        self._instance = self
 
         # 不需要设置_instance，基类会管理资源
 
@@ -236,11 +310,17 @@ class DatabaseComponent(AsyncComponent[Any]):
         """
         断开数据库连接
         """
+        store, key = self._get_store_and_key()
         if self._engine:
             await self._engine.dispose()
             self._engine = None
             self._session_factory = None
             self._logger.info("数据库连接已断开")
+            store.save_connectivity_status(
+                key, {"state": "disconnected", "last_error": None, "retrying": False}
+            )
+        else:
+            store.save_connectivity_status(key, {"state": "disconnected", "retrying": False})
 
     def get_status_info(self) -> Dict[str, Any]:
         """获取详细状态信息"""
@@ -248,17 +328,17 @@ class DatabaseComponent(AsyncComponent[Any]):
 
         # 添加数据库连接信息
         if self._engine:
-            info['connection_status'] = 'connected'
+            info["connection_status"] = "connected"
             config = get_config()
             if config and config.database:
-                info['connection_info'] = {
-                    'type': config.database.main.type,
-                    'host': config.database.main.host,
-                    'port': config.database.main.port,
-                    'database': config.database.main.database,
+                info["connection_info"] = {
+                    "type": config.database.main.type,
+                    "host": config.database.main.host,
+                    "port": config.database.main.port,
+                    "database": config.database.main.database,
                 }
         else:
-            info['connection_status'] = 'disconnected'
+            info["connection_status"] = "disconnected"
 
         return info
 
@@ -275,6 +355,34 @@ class CacheComponent(AsyncComponent[Any]):
         self._connection_error = None
         self._timeout_manager = get_timeout_manager()
 
+        self._instance = self
+
+    @property
+    def _instance(self):
+        return self.resource or self
+
+    @_instance.setter
+    def _instance(self, value):
+        if value is None:
+            self._state_manager.state.clear_resource()
+        else:
+            self._state_manager.state.set_resource(value)
+
+    @_instance.deleter
+    def _instance(self):
+        self._state_manager.state.clear_resource()
+
+    async def _initialize(self) -> Optional[Any]:
+        result = await self._do_initialize()
+        if result is None:
+            self._instance = self
+            return None
+        self._instance = result
+        return result
+
+    async def _stop(self) -> None:
+        await self._do_stop()
+
     async def _do_initialize(self) -> Optional[Any]:
         """初始化缓存连接"""
         with error_context(self.name, "initialize"):
@@ -290,10 +398,11 @@ class CacheComponent(AsyncComponent[Any]):
             # 获取Redis配置
             redis_config = cache_config.model_dump()
             self._redis_config = {
-                'host': redis_config.get('host', 'localhost'),
-                'port': redis_config.get('port', 6379),
-                'db': redis_config.get('db', 0),
-                'password': redis_config.get('password'),
+                "host": redis_config.get("host", "localhost"),
+                "port": redis_config.get("port", 6379),
+                "db": redis_config.get("db", 0),
+                "username": redis_config.get("username"),
+                "password": redis_config.get("password"),
             }
 
             # 尝试建立连接（可选，失败不影响系统）
@@ -311,21 +420,23 @@ class CacheComponent(AsyncComponent[Any]):
     async def _connect_to_redis(self) -> None:
         """建立Redis连接（带超时保护）"""
         try:
-            import redis.asyncio as aioredis
             import asyncio
+
+            import redis.asyncio as aioredis
 
             # 获取连接超时配置
             connect_timeout = self._timeout_manager.get_timeout(TimeoutCategory.CACHE_GET)
 
             # 创建连接池
             pool = aioredis.ConnectionPool(
-                host=self._redis_config['host'],
-                port=self._redis_config['port'],
-                db=self._redis_config['db'],
-                password=self._redis_config.get('password'),
+                host=self._redis_config["host"],
+                port=self._redis_config["port"],
+                db=self._redis_config["db"],
+                username=self._redis_config.get("username"),
+                password=self._redis_config.get("password"),
                 decode_responses=True,
-                max_connections=self._redis_config.get('pool_size', 10),
-                socket_keepalive=self._redis_config.get('socket_keepalive', True),
+                max_connections=self._redis_config.get("pool_size", 10),
+                socket_keepalive=self._redis_config.get("socket_keepalive", True),
                 socket_keepalive_options={
                     1: 1,  # TCP_KEEPIDLE
                     2: 1,  # TCP_KEEPINTVL
@@ -333,8 +444,8 @@ class CacheComponent(AsyncComponent[Any]):
                 },
                 socket_connect_timeout=connect_timeout,
                 socket_timeout=connect_timeout,
-                retry_on_timeout=self._redis_config.get('retry_on_timeout', True),
-                health_check_interval=self._redis_config.get('health_check_interval', 30)
+                retry_on_timeout=self._redis_config.get("retry_on_timeout", True),
+                health_check_interval=self._redis_config.get("health_check_interval", 30),
             )
 
             self._redis_client = aioredis.Redis(connection_pool=pool)
@@ -347,12 +458,14 @@ class CacheComponent(AsyncComponent[Any]):
 
             self._connected = True
             self._connection_error = None
-            self._logger.info(f"成功连接到 Redis {self._redis_config['host']}:{self._redis_config['port']}")
+            self._logger.info(
+                f"成功连接到 Redis {self._redis_config['host']}:{self._redis_config['port']}"
+            )
 
         except asyncio.TimeoutError:
             self._connected = False
             self._connection_error = f"连接超时 ({connect_timeout}秒)"
-            self._logger.error(f"Redis 连接超时")
+            self._logger.error("Redis 连接超时")
             raise
         except Exception as e:
             self._connected = False
@@ -373,13 +486,13 @@ class CacheComponent(AsyncComponent[Any]):
         """停止缓存服务"""
         if self._redis_client:
             try:
-                if hasattr(self._redis_client, 'close'):
+                if hasattr(self._redis_client, "close"):
                     await self._redis_client.close()
-                    if hasattr(self._redis_client, 'wait_closed'):
+                    if hasattr(self._redis_client, "wait_closed"):
                         await self._redis_client.wait_closed()
                     else:
                         await self._redis_client.aclose()
-                elif hasattr(self._redis_client, 'aclose'):
+                elif hasattr(self._redis_client, "aclose"):
                     await self._redis_client.aclose()
             except Exception as e:
                 self._logger.error(f"关闭 Redis 连接时出错: {e}")
@@ -392,22 +505,26 @@ class CacheComponent(AsyncComponent[Any]):
         """提供额外的状态信息"""
         config_info = self._redis_config.copy() if self._redis_config else {}
         # 隐藏密码
-        if 'password' in config_info:
-            config_info['password'] = '***' if config_info['password'] else None
+        if "password" in config_info:
+            config_info["password"] = "***" if config_info["password"] else None
 
         return {
-            "enabled": get_config().database.cache.enabled if get_config() and hasattr(get_config().database, 'cache') else False,
+            "enabled": (
+                get_config().database.cache.enabled
+                if get_config() and hasattr(get_config().database, "cache")
+                else False
+            ),
             "connected": self._connected,
             "config": config_info,
             "error": self._connection_error,
-            "has_client": self._redis_client is not None
+            "has_client": self._redis_client is not None,
         }
 
     def _health_check(self) -> bool:
         """检查缓存健康状态"""
         # 如果禁用了缓存，认为是健康的
         config = get_config()
-        if config and hasattr(config.database, 'cache') and not config.database.cache.enabled:
+        if config and hasattr(config.database, "cache") and not config.database.cache.enabled:
             return True
 
         # 检查是否已连接
@@ -420,6 +537,7 @@ class CacheComponent(AsyncComponent[Any]):
 
         try:
             import asyncio
+
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.CACHE_GET)
 
             async def _ping():
@@ -428,7 +546,7 @@ class CacheComponent(AsyncComponent[Any]):
 
             return await asyncio.wait_for(_ping(), timeout=timeout)
         except asyncio.TimeoutError:
-            self._logger.error(f"Redis 健康检查超时")
+            self._logger.error("Redis 健康检查超时")
             self._connected = False
             self._connection_error = "健康检查超时"
             return False
@@ -440,15 +558,21 @@ class CacheComponent(AsyncComponent[Any]):
 
     async def get_pool_stats(self) -> Dict[str, Any]:
         """获取连接池统计信息"""
-        if not self._redis_client or not hasattr(self._redis_client, 'connection_pool'):
+        if not self._redis_client or not hasattr(self._redis_client, "connection_pool"):
             return {}
 
         pool = self._redis_client.connection_pool
         return {
             "max_connections": pool.max_connections,
-            "created_connections": len(pool._created_connections) if hasattr(pool, '_created_connections') else 0,
-            "available_connections": len(pool._available_connections) if hasattr(pool, '_available_connections') else 0,
-            "in_use_connections": len(pool._in_use_connections) if hasattr(pool, '_in_use_connections') else 0,
+            "created_connections": (
+                len(pool._created_connections) if hasattr(pool, "_created_connections") else 0
+            ),
+            "available_connections": (
+                len(pool._available_connections) if hasattr(pool, "_available_connections") else 0
+            ),
+            "in_use_connections": (
+                len(pool._in_use_connections) if hasattr(pool, "_in_use_connections") else 0
+            ),
         }
 
     async def get_status(self) -> Dict[str, Any]:
@@ -457,11 +581,13 @@ class CacheComponent(AsyncComponent[Any]):
             "connected": self._connected,
             "error": self._connection_error,
             "config": {
-                "host": self._redis_config.get('host') if self._redis_config else None,
-                "port": self._redis_config.get('port') if self._redis_config else None,
-                "db": self._redis_config.get('db') if self._redis_config else None,
-                "pool_size": self._redis_config.get('pool_size', 10) if self._redis_config else None
-            }
+                "host": self._redis_config.get("host") if self._redis_config else None,
+                "port": self._redis_config.get("port") if self._redis_config else None,
+                "db": self._redis_config.get("db") if self._redis_config else None,
+                "pool_size": (
+                    self._redis_config.get("pool_size", 10) if self._redis_config else None
+                ),
+            },
         }
 
         if self._connected:
@@ -471,6 +597,7 @@ class CacheComponent(AsyncComponent[Any]):
             # 获取 Redis 服务器信息（带超时）
             try:
                 import asyncio
+
                 timeout = self._timeout_manager.get_timeout(TimeoutCategory.CACHE_GET)
 
                 async def _get_info():
@@ -485,7 +612,7 @@ class CacheComponent(AsyncComponent[Any]):
                     "used_memory_peak_human": info.get("used_memory_peak_human"),
                 }
             except asyncio.TimeoutError:
-                self._logger.error(f"获取 Redis 信息超时")
+                self._logger.error("获取 Redis 信息超时")
             except Exception as e:
                 self._logger.error(f"获取 Redis 信息失败: {e}")
 
@@ -499,6 +626,7 @@ class CacheComponent(AsyncComponent[Any]):
 
         try:
             import asyncio
+
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.CACHE_GET)
 
             async def _get():
@@ -516,6 +644,7 @@ class CacheComponent(AsyncComponent[Any]):
 
         try:
             import asyncio
+
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.CACHE_SET)
 
             async def _set():
@@ -525,7 +654,9 @@ class CacheComponent(AsyncComponent[Any]):
         except Exception as e:
             error_msg = str(e)
             if "Connection refused" in error_msg or "Connection closed" in error_msg:
-                self._logger.warning(f"Redis connection failed (SET operation): {error_msg}. Cache disabled for this operation.")
+                self._logger.warning(
+                    f"Redis connection failed (SET operation): {error_msg}. Cache disabled for this operation."
+                )
             else:
                 self._logger.error(f"Redis SET operation failed: {error_msg}")
             return False
@@ -537,6 +668,7 @@ class CacheComponent(AsyncComponent[Any]):
 
         try:
             import asyncio
+
             timeout = self._timeout_manager.get_timeout(TimeoutCategory.CACHE_DELETE)
 
             async def _delete():

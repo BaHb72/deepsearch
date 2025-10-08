@@ -1,210 +1,189 @@
 """
-AmazingData 历史数据API模块
-包含历史快照和K线查询接口
+AmazingData 历史行情 API 模块
+覆盖历史快照与 K 线查询接口
 """
+from collections.abc import Mapping
+
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
-from typing import Optional, List, Dict
+import pandas as pd
 from pydantic import BaseModel, Field
-from loguru import logger
 
 from .base import (
-    get_amazingdata_provider,
+    JSONDict,
     dataframe_to_dict,
-    handle_api_error,
+    filter_dataframe_by_dates,
+    format_response,
+    get_amazingdata_provider,
     validate_date_range,
-    format_response
 )
 
-# 创建路由器
 router = APIRouter(tags=["AmazingData-历史数据"])
 
 
-# ================== 请求模型 ==================
-
 class QuerySnapshotRequest(BaseModel):
-    """历史快照查询请求"""
-    code_list: List[str] = Field(..., description="代码列表")
-    begin_date: int = Field(..., description="开始日期")
-    end_date: int = Field(..., description="结束日期")
-    is_local: bool = Field(False, description="是否使用本地存储")
-    local_path: Optional[str] = Field(None, description="本地存储路径")
+    """历史快照查询参数"""
+
+    code_list: List[str] = Field(..., description="证券代码列表")
+    begin_date: int = Field(..., description="起始日期 YYYYMMDD")
+    end_date: int = Field(..., description="结束日期 YYYYMMDD")
 
 
 class QueryKlineRequest(BaseModel):
-    """历史K线查询请求"""
-    code_list: List[str] = Field(..., description="代码列表")
-    begin_date: int = Field(..., description="开始日期")
-    end_date: int = Field(..., description="结束日期")
-    period: str = Field("daily", description="K线周期：1min/5min/15min/30min/60min/daily/weekly/monthly")
-    adjust_type: str = Field("none", description="复权类型：none(不复权)/forward(前复权)/backward(后复权)")
-    is_local: bool = Field(False, description="是否使用本地存储")
-    local_path: Optional[str] = Field(None, description="本地存储路径")
+    """历史 K 线查询参数"""
+
+    code_list: List[str] = Field(..., description="证券代码列表")
+    begin_date: int = Field(..., description="起始日期 YYYYMMDD")
+    end_date: int = Field(..., description="结束日期 YYYYMMDD")
+    period: str = Field(
+        "daily",
+        description="K 线周期：1min/5min/15min/30min/60min/daily/weekly/monthly",
+    )
 
 
-# ================== API接口 ==================
+def _filter_history_mapping(
+    data: Mapping[str, Optional[pd.DataFrame]] | None, begin_date: int, end_date: int
+) -> dict[str, pd.DataFrame]:
+    """对返回的代码->DataFrame 映射执行日期过滤"""
+    if data is None:
+        return {}
+    filtered: dict[str, pd.DataFrame] = {}
+    for code, value in data.items():
+        if isinstance(value, pd.DataFrame):
+            narrowed = filter_dataframe_by_dates(value, begin_date, end_date)
+            if isinstance(narrowed, pd.DataFrame):
+                filtered[code] = narrowed
+            else:
+                filtered[code] = value
+    return filtered
+
 
 @router.post("/query-snapshot", summary="查询历史快照")
-async def query_snapshot(request: QuerySnapshotRequest):
-    """
-    查询历史快照数据
-
-    Args:
-        request: 历史快照查询请求
-
-    Returns:
-        历史快照数据
-    """
-    # 验证日期范围
+async def query_snapshot(request: QuerySnapshotRequest) -> JSONDict:
+    """批量查询历史逐日快照信息"""
     if not validate_date_range(request.begin_date, request.end_date):
         raise HTTPException(status_code=400, detail="Invalid date range")
 
     try:
         provider = await get_amazingdata_provider()
-
-        # 调用SDK查询历史快照
-        result = await provider.query_snapshot(
+        raw = await provider.query_snapshot(
             code_list=request.code_list,
             begin_date=request.begin_date,
             end_date=request.end_date,
-            is_local=request.is_local,
-            local_path=request.local_path
         )
-
-        # 格式化响应
+        filtered = _filter_history_mapping(raw, request.begin_date, request.end_date)
         return format_response(
             success=True,
-            data=dataframe_to_dict(result),
+            data=dataframe_to_dict(filtered),
             code_count=len(request.code_list),
             date_range=f"{request.begin_date}-{request.end_date}",
-            query_type="snapshot"
+            query_type="snapshot",
         )
-    except Exception as e:
-        return handle_api_error("query_snapshot", e)
+    except Exception as exc:  # pragma: no cover
+        return format_response(success=False, error=str(exc), code_list=request.code_list)
 
 
-@router.post("/query-kline", summary="查询历史K线")
-async def query_kline(request: QueryKlineRequest):
-    """
-    查询历史K线数据
-
-    Args:
-        request: 历史K线查询请求
-
-    Returns:
-        历史K线数据
-    """
-    # 验证日期范围
+@router.post("/query-kline", summary="查询历史 K 线")
+async def query_kline(request: QueryKlineRequest) -> JSONDict:
+    """批量查询历史 K 线数据"""
     if not validate_date_range(request.begin_date, request.end_date):
         raise HTTPException(status_code=400, detail="Invalid date range")
 
-    # 验证K线周期
-    valid_periods = ["1min", "5min", "15min", "30min", "60min", "daily", "weekly", "monthly"]
+    valid_periods = {
+        "1min",
+        "5min",
+        "15min",
+        "30min",
+        "60min",
+        "daily",
+        "weekly",
+        "monthly",
+    }
     if request.period not in valid_periods:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid period. Must be one of: {valid_periods}"
-        )
-
-    # 验证复权类型
-    valid_adjust_types = ["none", "forward", "backward"]
-    if request.adjust_type not in valid_adjust_types:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid adjust_type. Must be one of: {valid_adjust_types}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid period. Must be one of: {sorted(valid_periods)}")
 
     try:
         provider = await get_amazingdata_provider()
-
-        # 调用SDK查询K线
-        result = await provider.query_kline(
+        raw = await provider.query_kline(
             code_list=request.code_list,
             begin_date=request.begin_date,
             end_date=request.end_date,
             period=request.period,
-            adjust_type=request.adjust_type,
-            is_local=request.is_local,
-            local_path=request.local_path
         )
-
-        # 处理结果
-        if result is None:
+        if raw is None:
             return format_response(
                 success=False,
                 error="No data found for the specified parameters",
-                code_list=request.code_list
+                code_list=request.code_list,
             )
 
-        # 格式化响应
+        filtered = _filter_history_mapping(raw, request.begin_date, request.end_date)
         return format_response(
             success=True,
-            data=dataframe_to_dict(result),
+            data=dataframe_to_dict(filtered),
             code_count=len(request.code_list),
             date_range=f"{request.begin_date}-{request.end_date}",
             period=request.period,
-            adjust_type=request.adjust_type,
-            query_type="kline"
+            query_type="kline",
         )
-    except Exception as e:
-        return handle_api_error("query_kline", e)
+    except Exception as exc:  # pragma: no cover
+        return format_response(success=False, error=str(exc), code_list=request.code_list)
 
 
-@router.post("/batch-query-kline", summary="批量查询K线")
-async def batch_query_kline(requests: List[QueryKlineRequest]):
-    """
-    批量查询多个股票的K线数据
-
-    Args:
-        requests: K线查询请求列表
-
-    Returns:
-        批量K线数据
-    """
-    results = []
-    errors = []
+@router.post("/batch-query-kline", summary="批量查询 K 线")
+async def batch_query_kline(requests: List[QueryKlineRequest]) -> JSONDict:
+    """批量查询多组参数的 K 线数据"""
+    results: List[Dict[str, object]] = []
+    errors: List[Dict[str, object]] = []
 
     try:
         provider = await get_amazingdata_provider()
 
         for idx, request in enumerate(requests):
-            try:
-                # 验证日期范围
-                if not validate_date_range(request.begin_date, request.end_date):
-                    errors.append({
+            if not validate_date_range(request.begin_date, request.end_date):
+                errors.append({"index": idx, "codes": request.code_list, "error": "Invalid date range"})
+                continue
+
+            valid_periods = {
+                "1min",
+                "5min",
+                "15min",
+                "30min",
+                "60min",
+                "daily",
+                "weekly",
+                "monthly",
+            }
+            if request.period not in valid_periods:
+                errors.append(
+                    {
                         "index": idx,
                         "codes": request.code_list,
-                        "error": "Invalid date range"
-                    })
-                    continue
+                        "error": f"Invalid period. Must be one of: {sorted(valid_periods)}",
+                    }
+                )
+                continue
 
-                # 查询K线
-                result = await provider.query_kline(
+            try:
+                raw = await provider.query_kline(
                     code_list=request.code_list,
                     begin_date=request.begin_date,
                     end_date=request.end_date,
                     period=request.period,
-                    adjust_type=request.adjust_type,
-                    is_local=request.is_local,
-                    local_path=request.local_path
                 )
+                filtered = _filter_history_mapping(raw, request.begin_date, request.end_date)
+                results.append(
+                    {
+                        "index": idx,
+                        "codes": request.code_list,
+                        "data": dataframe_to_dict(filtered),
+                        "period": request.period,
+                    }
+                )
+            except Exception as exc:  # pragma: no cover
+                errors.append({"index": idx, "codes": request.code_list, "error": str(exc)})
 
-                results.append({
-                    "index": idx,
-                    "codes": request.code_list,
-                    "data": dataframe_to_dict(result),
-                    "period": request.period,
-                    "adjust_type": request.adjust_type
-                })
-
-            except Exception as e:
-                errors.append({
-                    "index": idx,
-                    "codes": request.code_list,
-                    "error": str(e)
-                })
-
-        # 返回批量结果
         return format_response(
             success=len(errors) == 0,
             data={
@@ -212,9 +191,8 @@ async def batch_query_kline(requests: List[QueryKlineRequest]):
                 "errors": errors,
                 "total": len(requests),
                 "success_count": len(results),
-                "error_count": len(errors)
-            }
+                "error_count": len(errors),
+            },
         )
-
-    except Exception as e:
-        return handle_api_error("batch_query_kline", e)
+    except Exception as exc:  # pragma: no cover
+        return format_response(success=False, error=str(exc))

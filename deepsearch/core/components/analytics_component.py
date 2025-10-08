@@ -3,14 +3,20 @@
 
 管理 DuckDB 分析数据库的生命周期
 """
-from typing import Optional, Dict, Any
 
-from ..async_component import AsyncComponent
+import inspect
+from typing import Any, Dict, Optional
+
 from loguru import logger
 
 from deepsearch.config import get_config
-from deepsearch.infrastructure.providers.managers.data_sync_service import DataSyncService, get_sync_service
 from deepsearch.infrastructure.persistence.duckdb_analytics import DuckDBAnalytics, get_analytics_db
+from deepsearch.infrastructure.providers.managers.data_sync_service import (
+    DataSyncService,
+    get_sync_service,
+)
+
+from ..async_component import AsyncComponent
 
 
 class AnalyticsComponent(AsyncComponent):
@@ -24,6 +30,7 @@ class AnalyticsComponent(AsyncComponent):
             database_component: 主数据库组件（用于数据同步）
         """
         from ..interfaces import ComponentType
+
         super().__init__("Analytics", ComponentType.SUPPORTING)
         self.config = get_config()
         self.analytics_config = self.config.database.analytics
@@ -54,7 +61,7 @@ class AnalyticsComponent(AsyncComponent):
             self.analytics_db = get_analytics_db(
                 db_path=self.analytics_config.path,
                 memory_limit=self.analytics_config.memory_limit,
-                threads=self.analytics_config.threads
+                threads=self.analytics_config.threads,
             )
 
             # 初始化表结构
@@ -67,7 +74,9 @@ class AnalyticsComponent(AsyncComponent):
                 # 设置DuckDB实例到同步服务
                 self.sync_service.set_analytics_db(self.analytics_db)
                 await self.sync_service.start()
-                logger.info(f"数据同步服务已启动，同步间隔: {self.analytics_config.sync_interval}秒")
+                logger.info(
+                    f"数据同步服务已启动，同步间隔: {self.analytics_config.sync_interval}秒"
+                )
 
             logger.info("分析组件启动成功")
 
@@ -78,7 +87,7 @@ class AnalyticsComponent(AsyncComponent):
 
     async def _do_stop(self):
         """停止组件"""
-        logger.info("正在停止分析组件...")
+        logger.info("开始停止分析组件...")
 
         try:
             # 停止同步服务
@@ -98,16 +107,15 @@ class AnalyticsComponent(AsyncComponent):
     async def health_check(self) -> Dict[str, Any]:
         """健康检查"""
         if not self.analytics_config.enabled:
-            return {
-                "healthy": True,
-                "status": "disabled",
-                "message": "分析数据库已禁用"
-            }
+            return {"healthy": True, "status": "disabled", "message": "分析数据库已禁用"}
 
         try:
             if self.analytics_db:
-                # 执行简单查询测试连接
-                stats = await self.analytics_db.get_statistics()
+                stats_result = self.analytics_db.get_statistics()
+                if inspect.isawaitable(stats_result):
+                    stats = await stats_result
+                else:
+                    stats = stats_result
 
                 # 检查同步状态
                 sync_status = None
@@ -121,29 +129,25 @@ class AnalyticsComponent(AsyncComponent):
                         "path": self.analytics_config.path,
                         "memory_limit": self.analytics_config.memory_limit,
                         "threads": self.analytics_config.threads,
-                        "statistics": stats
+                        "statistics": stats,
                     },
-                    "sync": sync_status
+                    "sync": sync_status,
                 }
             else:
                 return {
                     "healthy": False,
                     "status": self.status.value,
-                    "error": "分析数据库未初始化"
+                    "error": "分析数据库未初始化",
                 }
 
         except Exception as e:
             logger.error(f"分析组件健康检查失败: {e}")
-            return {
-                "healthy": False,
-                "status": "error",
-                "error": str(e)
-            }
+            return {"healthy": False, "status": "error", "error": str(e)}
 
     async def trigger_sync(self, start_date: Optional[str] = None, end_date: Optional[str] = None):
         """
         手动触发数据同步
-        
+
         Args:
             start_date: 开始日期
             end_date: 结束日期
@@ -157,7 +161,7 @@ class AnalyticsComponent(AsyncComponent):
         """优化数据库"""
         if self.analytics_db:
             # 执行VACUUM和ANALYZE操作
-            if hasattr(self.analytics_db, 'conn'):
+            if hasattr(self.analytics_db, "conn"):
                 self.analytics_db.conn.execute("PRAGMA optimize")
             logger.info("分析数据库优化完成")
 
@@ -170,11 +174,11 @@ class AnalyticsComponent(AsyncComponent):
         """
         if self.analytics_db:
             from datetime import datetime, timedelta
+
             cutoff_date = (datetime.now() - timedelta(days=days_to_keep)).strftime("%Y-%m-%d")
             # 清理K线历史数据
             await self.analytics_db.query(
-                "DELETE FROM kline_history WHERE time < ?",
-                (cutoff_date,)
+                "DELETE FROM kline_history WHERE time < ?", (cutoff_date,)
             )
             logger.info(f"已清理 {days_to_keep} 天前的数据")
 

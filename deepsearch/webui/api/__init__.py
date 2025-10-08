@@ -1,6 +1,7 @@
 """
 Web UI API 路由模块。
 """
+
 import sys
 from pathlib import Path
 
@@ -14,12 +15,12 @@ def check_config_files():
 
     if not config_dir.exists():
         print(f"[错误] 配置目录不存在: {config_dir}", file=sys.stderr)
-        print(f"[信息] 请创建配置目录并添加配置文件", file=sys.stderr)
+        print("[信息] 请创建配置目录并添加配置文件", file=sys.stderr)
         return False
 
     if not dev_config.exists() and not prod_config.exists():
-        print(f"[错误] 未找到任何配置文件", file=sys.stderr)
-        print(f"[信息] 请至少创建以下配置文件之一：", file=sys.stderr)
+        print("[错误] 未找到任何配置文件", file=sys.stderr)
+        print("[信息] 请至少创建以下配置文件之一：", file=sys.stderr)
         print(f"  - {dev_config}", file=sys.stderr)
         print(f"  - {prod_config}", file=sys.stderr)
         return False

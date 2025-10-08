@@ -17,7 +17,7 @@ class ErrorBoundary extends React.Component {
     }
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError(_error) {
     // 更新 state 使下一次渲染能够显示降级后的 UI
     return { hasError: true }
   }

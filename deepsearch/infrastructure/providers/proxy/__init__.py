@@ -5,13 +5,7 @@
 """
 
 from .manager import ProxyManager
-from .pool import ProxyPool, ProxyInfo, ProxyStatus
+from .pool import ProxyInfo, ProxyPool, ProxyStatus
 from .validator import ProxyValidator
 
-__all__ = [
-    'ProxyManager',
-    'ProxyPool',
-    'ProxyInfo',
-    'ProxyStatus',
-    'ProxyValidator'
-]
+__all__ = ["ProxyManager", "ProxyPool", "ProxyInfo", "ProxyStatus", "ProxyValidator"]

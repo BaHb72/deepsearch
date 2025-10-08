@@ -4,19 +4,20 @@
 提供高性能的图表数据接口，支持K线、分时、技术指标等
 """
 
-from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Depends
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/chart", tags=["Chart Data"])
 
 
 class ChartPeriod(str, Enum):
     """图表周期"""
+
     MIN_1 = "1min"
     MIN_5 = "5min"
     MIN_15 = "15min"
@@ -29,6 +30,7 @@ class ChartPeriod(str, Enum):
 
 class ChartType(str, Enum):
     """图表类型"""
+
     KLINE = "kline"
     LINE = "line"
     BAR = "bar"
@@ -38,6 +40,7 @@ class ChartType(str, Enum):
 
 class IndicatorType(str, Enum):
     """技术指标类型"""
+
     MA = "ma"
     EMA = "ema"
     MACD = "macd"
@@ -51,6 +54,7 @@ class IndicatorType(str, Enum):
 
 class KlineData(BaseModel):
     """K线数据"""
+
     timestamp: int = Field(description="时间戳")
     open: float = Field(description="开盘价")
     high: float = Field(description="最高价")
@@ -63,12 +67,14 @@ class KlineData(BaseModel):
 
 class IndicatorData(BaseModel):
     """指标数据"""
+
     timestamp: int = Field(description="时间戳")
     values: Dict[str, float] = Field(description="指标值")
 
 
 class ChartDataResponse(BaseModel):
     """图表数据响应"""
+
     symbol: str = Field(description="股票代码")
     period: str = Field(description="数据周期")
     data_type: str = Field(description="数据类型")
@@ -85,7 +91,7 @@ async def get_kline_data(
     end_date: Optional[str] = Query(None, description="结束日期"),
     limit: int = Query(500, ge=1, le=5000, description="数据条数"),
     adjust: str = Query("qfq", description="复权类型: qfq前复权, hfq后复权, none不复权"),
-    indicators: Optional[List[IndicatorType]] = Query(None, description="技术指标")
+    indicators: Optional[List[IndicatorType]] = Query(None, description="技术指标"),
 ):
     """
     获取K线数据
@@ -111,16 +117,18 @@ async def get_kline_data(
         for i in range(limit):
             timestamp = int((now - timedelta(days=i)).timestamp() * 1000)
             base_price = 100 + i * 0.1
-            kline_data.append({
-                "timestamp": timestamp,
-                "open": base_price,
-                "high": base_price * 1.02,
-                "low": base_price * 0.98,
-                "close": base_price * 1.01,
-                "volume": 1000000 + i * 1000,
-                "amount": base_price * 1000000,
-                "turnover": 2.5
-            })
+            kline_data.append(
+                {
+                    "timestamp": timestamp,
+                    "open": base_price,
+                    "high": base_price * 1.02,
+                    "low": base_price * 0.98,
+                    "close": base_price * 1.01,
+                    "volume": 1000000 + i * 1000,
+                    "amount": base_price * 1000000,
+                    "turnover": 2.5,
+                }
+            )
 
         # 生成指标数据
         indicator_data = {}
@@ -131,7 +139,7 @@ async def get_kline_data(
                     indicator_data[indicator.value].append(
                         IndicatorData(
                             timestamp=kline["timestamp"],
-                            values={indicator.value: kline["close"] * 1.01}
+                            values={indicator.value: kline["close"] * 1.01},
                         )
                     )
 
@@ -144,8 +152,8 @@ async def get_kline_data(
             metadata={
                 "adjust": adjust,
                 "count": len(kline_data),
-                "update_time": datetime.now().isoformat()
-            }
+                "update_time": datetime.now().isoformat(),
+            },
         )
 
         logger.info(f"获取K线数据: {symbol}, 周期: {period.value}, 数据条数: {len(kline_data)}")
@@ -159,7 +167,7 @@ async def get_kline_data(
 @router.get("/realtime", response_model=Dict[str, Any])
 async def get_realtime_data(
     symbol: str = Query(..., description="股票代码"),
-    fields: Optional[List[str]] = Query(None, description="需要的字段")
+    fields: Optional[List[str]] = Query(None, description="需要的字段"),
 ):
     """
     获取实时行情数据
@@ -188,7 +196,7 @@ async def get_realtime_data(
             "bid": [[100.49, 100], [100.48, 200]],
             "ask": [[100.51, 150], [100.52, 300]],
             "timestamp": int(datetime.now().timestamp() * 1000),
-            "update_time": datetime.now().isoformat()
+            "update_time": datetime.now().isoformat(),
         }
 
         # 过滤字段
@@ -210,7 +218,7 @@ async def get_realtime_data(
 async def get_tick_data(
     symbol: str = Query(..., description="股票代码"),
     date: Optional[str] = Query(None, description="日期，默认今天"),
-    limit: int = Query(1000, ge=1, le=10000, description="数据条数")
+    limit: int = Query(1000, ge=1, le=10000, description="数据条数"),
 ):
     """
     获取分笔数据
@@ -230,19 +238,21 @@ async def get_tick_data(
 
         for i in range(min(limit, 100)):
             tick_time = base_time + timedelta(seconds=i * 3)
-            tick_data.append({
-                "time": tick_time.strftime("%H:%M:%S"),
-                "price": 100.00 + i * 0.01,
-                "volume": 100 + i * 10,
-                "type": "buy" if i % 2 == 0 else "sell",
-                "amount": (100.00 + i * 0.01) * (100 + i * 10)
-            })
+            tick_data.append(
+                {
+                    "time": tick_time.strftime("%H:%M:%S"),
+                    "price": 100.00 + i * 0.01,
+                    "volume": 100 + i * 10,
+                    "type": "buy" if i % 2 == 0 else "sell",
+                    "amount": (100.00 + i * 0.01) * (100 + i * 10),
+                }
+            )
 
         response = {
             "symbol": symbol,
             "date": date or datetime.now().strftime("%Y-%m-%d"),
             "data": tick_data,
-            "count": len(tick_data)
+            "count": len(tick_data),
         }
 
         logger.info(f"获取分笔数据: {symbol}, 日期: {date}, 数据条数: {len(tick_data)}")
@@ -256,7 +266,7 @@ async def get_tick_data(
 @router.get("/minute", response_model=Dict[str, Any])
 async def get_minute_data(
     symbol: str = Query(..., description="股票代码"),
-    date: Optional[str] = Query(None, description="日期，默认今天")
+    date: Optional[str] = Query(None, description="日期，默认今天"),
 ):
     """
     获取分时数据
@@ -280,19 +290,21 @@ async def get_minute_data(
             if minute_time.hour == 12:
                 continue  # 跳过午休
 
-            minute_data.append({
-                "time": minute_time.strftime("%H:%M"),
-                "price": base_price + (i - 120) * 0.01,
-                "volume": 10000 + i * 100,
-                "amount": (base_price + (i - 120) * 0.01) * (10000 + i * 100),
-                "avg_price": base_price
-            })
+            minute_data.append(
+                {
+                    "time": minute_time.strftime("%H:%M"),
+                    "price": base_price + (i - 120) * 0.01,
+                    "volume": 10000 + i * 100,
+                    "amount": (base_price + (i - 120) * 0.01) * (10000 + i * 100),
+                    "avg_price": base_price,
+                }
+            )
 
         response = {
             "symbol": symbol,
             "date": date or datetime.now().strftime("%Y-%m-%d"),
             "pre_close": base_price,
-            "data": minute_data
+            "data": minute_data,
         }
 
         logger.info(f"获取分时数据: {symbol}, 日期: {date}")
@@ -308,7 +320,7 @@ async def calculate_indicators(
     symbol: str = Query(..., description="股票代码"),
     indicators: List[IndicatorType] = Query(..., description="指标列表"),
     period: ChartPeriod = Query(ChartPeriod.DAILY, description="数据周期"),
-    params: Optional[Dict[str, Any]] = None
+    params: Optional[Dict[str, Any]] = None,
 ):
     """
     计算技术指标
@@ -324,11 +336,7 @@ async def calculate_indicators(
     """
     try:
         # TODO: 实现实际的指标计算逻辑
-        result = {
-            "symbol": symbol,
-            "period": period.value,
-            "indicators": {}
-        }
+        result = {"symbol": symbol, "period": period.value, "indicators": {}}
 
         for indicator in indicators:
             # 生成示例指标数据
@@ -345,10 +353,7 @@ async def calculate_indicators(
                 else:
                     values = {"value": 50 + i % 50}
 
-                indicator_values.append({
-                    "timestamp": timestamp,
-                    "values": values
-                })
+                indicator_values.append({"timestamp": timestamp, "values": values})
 
             result["indicators"][indicator.value] = indicator_values
 

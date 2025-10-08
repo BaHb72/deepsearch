@@ -17,7 +17,6 @@ import {
   Row,
   Col,
   Alert,
-  Slider,
   App as AntApp
 } from 'antd'
 import {
@@ -25,27 +24,46 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  SyncOutlined,
   ThunderboltOutlined,
   CloudOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons'
-import { useModal, useAsyncData } from '@/hooks'
+import { useModal } from '@/hooks'
 import {
-  fetchDataSources,
   createDataSource,
   updateDataSource,
   deleteDataSource,
   testDataSource,
   toggleDataSource,
-  fetchDataSourceHealth,
-  refreshDataSources,
-  updateDataSourceConfig
+  updateDataSourceConfig,
+  fetchGlobalDataSourceConfig
 } from '@/api/systemConfig'
+import { DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary } from '@/utils/dataSourceStatus'
+import { useDataSourceStatus } from '@/stores'
 
 const { Option } = Select
+
+const padZero = (value: number) => value.toString().padStart(2, '0')
+
+const formatDateTime = (input?: string | number | Date | null) => {
+  if (!input) {
+    return '未记录'
+  }
+
+  const date = input instanceof Date ? input : new Date(input)
+  if (Number.isNaN(date.getTime())) {
+    return String(input)
+  }
+
+  const year = date.getFullYear()
+  const month = padZero(date.getMonth() + 1)
+  const day = padZero(date.getDate())
+  const hours = padZero(date.getHours())
+  const minutes = padZero(date.getMinutes())
+  const seconds = padZero(date.getSeconds())
+
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+}
 
 /**
  * @typedef {import('@/types/systemConfig').DataSource} DataSource
@@ -62,31 +80,179 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
   const [sourceType, setSourceType] = React.useState(initialValues?.type || 'akshare')
   const [testing, setTesting] = React.useState(false)
 
+  const hasSavedCredential = Boolean(
+    initialValues?.hasSavedCredential ?? initialValues?.has_saved_credential
+  )
+  const [credentialEditable, setCredentialEditable] = React.useState(!hasSavedCredential)
+
+  const lastTestTime = initialValues?.lastTestTime || initialValues?.last_test_time || null
+  const testSummary = normalizeTestSummary(
+    initialValues?.testSummary ?? initialValues?.test_summary ?? null
+  )
+
+  React.useEffect(() => {
+    setSourceType(initialValues?.type || 'akshare')
+    setCredentialEditable(!hasSavedCredential)
+    form.resetFields()
+  }, [form, initialValues?.id, initialValues?.type, hasSavedCredential])
+
+  const buildDataSourcePayload = React.useCallback(
+    (rawValues: Record<string, any>) => {
+      const payload = { ...rawValues }
+
+      if (payload.config) {
+        payload.config = { ...payload.config }
+        if (!credentialEditable && hasSavedCredential) {
+          delete payload.config.password
+        } else if (payload.config.password === '' || payload.config.password == null) {
+          delete payload.config.password
+        }
+      }
+
+      return payload
+    },
+    [credentialEditable, hasSavedCredential]
+  )
+
   const handleTest = async () => {
     try {
+      const validatedValues = await form.validateFields()
       setTesting(true)
-      const values = form.getFieldsValue()
-      const response = await testDataSource(values)
+      const values = form.getFieldsValue(true)
+      const mergedValues = {
+        ...values,
+        ...validatedValues,
+        config: {
+          ...(values?.config || {}),
+          ...(validatedValues?.config || {}),
+        },
+      }
+      const payload = buildDataSourcePayload(mergedValues)
+      const response = await testDataSource(payload)
       if (response?.success) {
         message.success('数据源连接成功！')
-        // 调用测试成功回调
         if (onTestSuccess) {
           onTestSuccess(response?.datasource)
         }
       } else {
-        message.error(response?.message || '数据源连接失败')
+        message.error(response?.message || '数据源测试失败')
       }
     } catch (error) {
-      message.error('测试失败: ' + error.message)
+      if (error?.errorFields) {
+        message.warning('请先完成必填项')
+      } else {
+        message.error('测试失败: ' + (error?.message || '未知错误'))
+      }
     } finally {
       setTesting(false)
     }
   }
 
+  const handleFinish = (values: Record<string, any>) => {
+
+    const payload = buildDataSourcePayload(values)
+
+    onSubmit(payload)
+
+  }
+
+
+
+  const handleEnableCredentialInput = () => {
+
+    setCredentialEditable(true)
+
+    form.setFieldsValue({
+
+      config: {
+
+        ...(form.getFieldValue('config') || {}),
+
+        password: undefined,
+
+      },
+
+    })
+
+  }
+
+
+
+  const handleCancelCredentialEdit = () => {
+
+    if (!hasSavedCredential) {
+
+      return
+
+    }
+
+    setCredentialEditable(false)
+
+    form.setFieldsValue({
+
+      config: {
+
+        ...(form.getFieldValue('config') || {}),
+
+        password: undefined,
+
+      },
+
+    })
+
+  }
+
+
+
+  const renderTestInfo = () => {
+
+    if (!initialValues || (!lastTestTime && !testSummary)) {
+
+      return null
+
+    }
+
+
+
+    return (
+
+      <Alert
+
+        type={initialValues.status === 'error' ? 'error' : 'info'}
+
+        message="最近测试信息"
+
+        description={
+
+          <div style={{ lineHeight: 1.4 }}>
+
+            <div>最近测试: {formatDateTime(lastTestTime)}</div>
+
+            {testSummary && <div style={{ marginTop: 4 }}>{testSummary}</div>}
+
+          </div>
+
+        }
+
+        showIcon
+
+        style={{ marginBottom: 16 }}
+
+      />
+
+    )
+
+  }
+
+
+
   return (
-    <Form
+    <>
+      {renderTestInfo()}
+      <Form
       form={form}
       layout="vertical"
+      key={initialValues?.id ?? 'create'}
       initialValues={{
         enabled: true,
         priority: 1,
@@ -98,7 +264,7 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
           ...initialValues?.config
         }
       }}
-      onFinish={onSubmit}
+      onFinish={handleFinish}
     >
       <Row gutter={16}>
         <Col span={12}>
@@ -203,14 +369,63 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
               </Form.Item>
             </Col>
             <Col span={12}>
+              {credentialEditable ? (
+
+            <>
+
               <Form.Item
+
                 name={['config', 'password']}
+
                 label="密码"
+
                 rules={[{ required: true, message: '请输入密码' }]}
+
               >
+
                 <Input.Password placeholder="请输入密码" />
+
               </Form.Item>
-            </Col>
+
+              {hasSavedCredential && (
+
+                <Form.Item colon={false} label=" " style={{ marginTop: -16, marginBottom: 8 }}>
+
+                  <Button type="link" onClick={handleCancelCredentialEdit} style={{ paddingLeft: 0 }}>
+
+                    保留已保存的凭证
+
+                  </Button>
+
+                </Form.Item>
+
+              )}
+
+            </>
+
+          ) : (
+
+            <Form.Item label="密码">
+
+              <Space>
+
+                <Tag color="blue" style={{ margin: 0 }}>已保存</Tag>
+
+                <span style={{ color: '#8c8c8c' }}>系统已保存凭证，如需修改请点击更新。</span>
+
+                <Button type="link" onClick={handleEnableCredentialInput}>
+
+                  更新凭证
+
+                </Button>
+
+              </Space>
+
+            </Form.Item>
+
+          )}
+
+           </Col>
           </Row>
         </>
       )}
@@ -269,6 +484,7 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
         </Space>
       </Form.Item>
     </Form>
+    </>
   )
 }
 
@@ -281,15 +497,25 @@ const RateLimitEditor = ({ value, onChange }) => {
   const [editing, setEditing] = React.useState(false)
   const [tempValue, setTempValue] = React.useState(value)
 
+  React.useEffect(() => {
+    setTempValue(value)
+  }, [value])
+
   const handleSave = async () => {
     try {
-      // 调用后端API更新速率限制
-      await updateDataSourceConfig({ global_rate_limit: tempValue })
-      onChange(tempValue)
+      const payload = { global_rate_limit: Number(tempValue) }
+      const result = await updateDataSourceConfig(payload)
+      const updatedRateLimit = typeof result?.global_rate_limit === 'number'
+        ? result.global_rate_limit
+        : Number(tempValue)
+
+      onChange(updatedRateLimit)
+      setTempValue(updatedRateLimit)
       setEditing(false)
       message.success('速率限制已更新')
     } catch (error) {
-      message.error('更新失败: ' + error.message)
+      const errorMessage = error?.message || '未知错误'
+      message.error('更新失败: ' + errorMessage)
     }
   }
 
@@ -342,83 +568,63 @@ const DataSourceConfig = () => {
     }
   }, [])
   
-  // 包装fetch函数以添加日志
-  const fetchDataSourcesWithLog = React.useCallback(async () => {
-    console.log('\n📡 [DataSourceConfig] 开始获取数据源列表...')
-    console.log('API URL: /api/data-sources/list')
-    try {
-      const result = await fetchDataSources()
-      console.log('✅ [DataSourceConfig] 获取数据源成功:', result)
-      return result
-    } catch (err) {
-      console.error('❌ [DataSourceConfig] 获取数据源失败:', err)
-      console.error('错误详情:', {
-        message: err.message,
-        response: err.response,
-        stack: err.stack
-      })
-      throw err
-    }
-  }, [])
-  
   const {
-    data: dataSources,
+    dataSources,
+    summary,
+    health,
     loading,
-    refresh,
-    error
-  } = useAsyncData(
-    fetchDataSourcesWithLog,
-    { 
-      immediate: true,
-      showError: false,
-      pollingInterval: 5000, // 5秒自动刷新
-      onError: (err) => {
-        console.error('🔴 [DataSourceConfig] useAsyncData onError:', err)
-      }
-    }
-  )
-  
-  // 监控加载状态
-  React.useEffect(() => {
-    console.log('🔄 [DataSourceConfig] 状态更新:', {
-      loading,
-      hasData: !!dataSources,
-      dataCount: dataSources?.length || 0,
-      error: error?.message
-    })
-  }, [loading, dataSources, error])
+    error,
+    fetchStatus,
+    refreshStatus,
+  } = useDataSourceStatus()
 
-  // 包装health fetch函数
-  const fetchHealthWithLog = React.useCallback(async () => {
-    console.log('🎯 [DataSourceConfig] 获取数据源健康状态...')
-    try {
-      const result = await fetchDataSourceHealth()
-      console.log('✅ [DataSourceConfig] 健康状态:', result)
-      return result
-    } catch (err) {
-      console.error('❌ [DataSourceConfig] 获取健康状态失败:', err)
-      throw err
+  React.useEffect(() => {
+    fetchStatus().catch(() => undefined)
+  }, [fetchStatus])
+
+  React.useEffect(() => {
+    let mounted = true
+
+    fetchGlobalDataSourceConfig()
+      .then(config => {
+        if (!mounted) {
+          return
+        }
+        const rateLimit = Number(config?.global_rate_limit)
+        if (!Number.isNaN(rateLimit) && rateLimit > 0) {
+          setGlobalRateLimit(rateLimit)
+        }
+      })
+      .catch(error => {
+        console.error('加载全局数据源配置失败:', error)
+        message.warning('加载全局数据源配置失败，已使用默认值')
+      })
+
+    return () => {
+      mounted = false
     }
-  }, [])
-  
-  const {
-    data: healthData,
-    refresh: refreshHealth
-  } = useAsyncData(
-    fetchHealthWithLog,
-    {
-      immediate: true,
-      showError: false,
-      pollingInterval: 5000 // 5秒自动刷新
+  }, [message])
+
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      refreshStatus().catch(() => undefined)
+    }, 5000)
+
+    return () => {
+      clearInterval(timer)
     }
-  )
+  }, [refreshStatus])
+
+  const refreshAll = React.useCallback(async () => {
+    await refreshStatus()
+  }, [refreshStatus])
 
   const handleCreate = async (values) => {
     try {
       await createDataSource(values)
       message.success('创建成功')
       editModal.close()
-      refresh()
+      await refreshAll()
     } catch (error) {
       message.error('创建失败: ' + error.message)
     }
@@ -430,7 +636,7 @@ const DataSourceConfig = () => {
       await updateDataSource(editModal.data.id, values)
       message.success('保存成功')
       editModal.close()
-      refresh()
+      await refreshAll()
     } catch (error) {
       message.error('保存失败: ' + error.message)
     }
@@ -440,49 +646,41 @@ const DataSourceConfig = () => {
     try {
       await deleteDataSource(id)
       message.success('删除成功')
-      refresh()
+      await refreshAll()
     } catch (error) {
       message.error('删除失败: ' + error.message)
     }
   }
 
   const handleToggle = async (id, enabled) => {
-    // 显示loading状态
     const loadingKey = `toggle-${id}`
+    const sourceInfo = dataSources.find(item => item.id === id || item.type === id)
 
-    // 设置按钮loading状态
     setToggleLoading(prev => ({ ...prev, [id]: true }))
 
     if (enabled) {
       message.loading({
-        content: '正在测试数据源连接...',
+        content: '正在启用并测试数据源...',
         key: loadingKey,
-        duration: 0  // 不自动关闭
+        duration: 0,
       })
     }
 
     try {
       const response = await toggleDataSource(id, enabled)
+      const toggleSuccess = response?.success !== false
 
-      // 检查响应结构
-      if (response?.data?.success || response?.success) {
-        message.success({
-          content: enabled ? '数据源已启用' : '数据源已禁用',
-          key: loadingKey
-        })
-      } else {
-        // 处理测试失败的情况
-        const errorMsg = response?.data?.message || response?.message || '操作失败'
-        const testDetails = response?.data?.data?.test_details || response?.data?.test_details
+      if (!toggleSuccess) {
+        const errorMsg = response?.message || '操作失败'
+        const testDetails = response?.data?.test_details || response?.data?.details
 
-        // 如果是启用失败，显示详细错误
         if (enabled) {
           message.error({
             content: (
               <div>
                 <div>{errorMsg}</div>
                 {testDetails && Object.keys(testDetails).length > 0 && (
-                  <div style={{ fontSize: '12px', marginTop: '4px', opacity: 0.8 }}>
+                  <div style={{ fontSize: '12px', marginTop: 4, opacity: 0.8 }}>
                     {testDetails.error ? `错误: ${testDetails.error}` : ''}
                     {testDetails.note ? `提示: ${testDetails.note}` : ''}
                   </div>
@@ -490,30 +688,322 @@ const DataSourceConfig = () => {
               </div>
             ),
             key: loadingKey,
-            duration: 8
+            duration: 8,
           })
         } else {
           message.error({
             content: errorMsg,
-            key: loadingKey
+            key: loadingKey,
           })
         }
+        return
       }
 
-      // 无论成功失败都刷新列表
-      refresh()
+      if (!enabled) {
+        message.success({
+          content: '数据源已禁用',
+          key: loadingKey,
+        })
+        return
+      }
+
+      try {
+        const testResult = await testDataSource({
+          id,
+          type: sourceInfo?.type ?? id,
+          config: sourceInfo?.config,
+        })
+
+        if (testResult?.success) {
+          const latency = typeof testResult.latency_ms === 'number'
+            ? `${Math.round(testResult.latency_ms)}ms`
+            : '成功'
+          message.success({
+            content: `数据源已启用，连通性测试通过（${latency}）`,
+            key: loadingKey,
+          })
+        } else {
+          const warningMsg = testResult?.message || '数据源已启用，但连通性测试失败'
+          message.warning({
+            content: warningMsg,
+            key: loadingKey,
+            duration: 8,
+          })
+        }
+      } catch (testError) {
+        console.error('自动测试数据源失败:', testError)
+        message.warning({
+          content: '数据源已启用，但测试请求失败，请手动测试',
+          key: loadingKey,
+          duration: 8,
+        })
+      }
     } catch (error) {
       console.error('Toggle datasource error:', error)
       message.error({
         content: '操作失败: ' + (error.response?.data?.message || error.message),
-        key: loadingKey
+        key: loadingKey,
       })
-      refresh()
     } finally {
-      // 清除loading状态
+      await refreshAll()
       setToggleLoading(prev => ({ ...prev, [id]: false }))
     }
   }
+
+  const statusSummary = React.useMemo(() => {
+    const counts = DATA_SOURCE_STATUS_ORDER.reduce((acc, status) => {
+      acc[status] = summary?.counts?.[status] ?? 0
+      return acc
+    }, {} as Record<string, number>)
+    let total = summary?.total ?? 0
+    let derivedAvailableCount = summary?.availableCount ?? 0
+
+    const accumulate = (entry: any) => {
+      const meta = getDataSourceStatusMeta(entry?.status)
+      if (Object.prototype.hasOwnProperty.call(counts, meta.value)) {
+        counts[meta.value] += 1
+      }
+      if (typeof entry?.available === 'boolean' && entry.available) {
+        derivedAvailableCount += 1
+      }
+      total += 1
+    }
+
+    if (total === 0 && health?.sources && typeof health.sources === 'object') {
+      Object.values(health.sources).forEach(accumulate)
+    }
+
+    if (total === 0 && Array.isArray(dataSources)) {
+      dataSources.forEach(accumulate)
+    }
+
+    const availableCountRaw =
+      typeof health?.availableCount === 'number'
+        ? health.availableCount
+        : typeof health?.available_count === 'number'
+          ? health.available_count
+          : undefined
+
+    return {
+      counts,
+      total,
+      availableCount: availableCountRaw ?? derivedAvailableCount,
+    }
+  }, [summary, health, dataSources])
+
+  const resolveSourceStatus = React.useCallback(
+    (record: any) => {
+      if (!record) {
+        return {
+          statusValue: undefined,
+          available: undefined,
+          reason: undefined,
+          hasSavedCredential: undefined,
+          lastTestTime: undefined,
+          testSummary: undefined,
+          healthEntry: undefined,
+        }
+      }
+
+      const sourcesMap =
+        health?.sources && typeof health.sources === 'object'
+          ? (health.sources as Record<string, any>)
+          : undefined
+
+      let healthEntry: Record<string, any> | undefined
+      if (sourcesMap) {
+        const normalizedType = record.type ? String(record.type).toLowerCase() : undefined
+        const candidateKeys = Array.from(
+          new Set(
+            [
+              record.id,
+              record.name,
+              record.key,
+              record.identifier,
+              record.config?.name,
+              record.type,
+              normalizedType,
+            ]
+              .filter(value => value !== undefined && value !== null)
+              .map(value => String(value))
+          )
+        )
+
+        for (const key of candidateKeys) {
+          if (Object.prototype.hasOwnProperty.call(sourcesMap, key)) {
+            healthEntry = sourcesMap[key]
+            break
+          }
+
+          const lowerKey = key.toLowerCase()
+          if (Object.prototype.hasOwnProperty.call(sourcesMap, lowerKey)) {
+            healthEntry = sourcesMap[lowerKey]
+            break
+          }
+
+          const matched = Object.entries(sourcesMap).find(
+            ([mapKey]) => mapKey.toLowerCase() === lowerKey
+          )
+          if (matched) {
+            healthEntry = matched[1]
+            break
+          }
+        }
+      }
+
+      const rawStatus =
+        (typeof record.status === 'string' && record.status) ||
+        (typeof healthEntry?.status === 'string' && healthEntry.status) ||
+        undefined
+      const statusMeta = getDataSourceStatusMeta(rawStatus)
+
+      const available =
+        typeof record.available === 'boolean'
+          ? record.available
+          : typeof record.is_available === 'boolean'
+            ? record.is_available
+            : typeof healthEntry?.available === 'boolean'
+              ? healthEntry.available
+              : undefined
+
+      const reason =
+        record.reason ||
+        record.degradedReason ||
+        healthEntry?.degradedReason ||
+        (healthEntry?.reason && healthEntry.reason !== 'from_provider' ? healthEntry.reason : undefined)
+
+      const hasSavedCredential =
+        typeof record.hasSavedCredential === 'boolean'
+          ? record.hasSavedCredential
+          : typeof record.has_saved_credential === 'boolean'
+            ? record.has_saved_credential
+            : typeof healthEntry?.hasSavedCredential === 'boolean'
+              ? healthEntry.hasSavedCredential
+              : typeof healthEntry?.has_saved_credential === 'boolean'
+                ? healthEntry.has_saved_credential
+                : undefined
+
+      const lastTestTime =
+        record.lastTestTime ??
+        record.last_test_time ??
+        healthEntry?.lastTestTime ??
+        healthEntry?.last_test_time ??
+        null
+
+      const testSummaryRaw =
+        record.testSummary ??
+        record.test_summary ??
+        healthEntry?.testSummary ??
+        healthEntry?.test_summary ??
+        null
+      const testSummary = normalizeTestSummary(testSummaryRaw)
+
+      return {
+        statusValue: statusMeta.value,
+        available,
+        reason,
+        hasSavedCredential,
+        lastTestTime,
+        testSummary,
+        healthEntry,
+      }
+    },
+    [health]
+  )
+
+  const totalSources = statusSummary.total || (Array.isArray(dataSources) ? dataSources.length : 0)
+  const availableSources = statusSummary.availableCount ?? 0
+
+  const previousStatusesRef = React.useRef<Record<string, string | undefined>>({})
+  const activeAlertsRef = React.useRef<Record<string, { status: string; messageKey: string }>>({})
+
+  React.useEffect(() => {
+    if (!Array.isArray(dataSources) || dataSources.length === 0) {
+      Object.values(activeAlertsRef.current).forEach(alert => {
+        message.destroy(alert.messageKey)
+      })
+      activeAlertsRef.current = {}
+      previousStatusesRef.current = {}
+      return
+    }
+
+    const seenKeys = new Set<string>()
+
+    dataSources.forEach((record, index) => {
+      const { statusValue } = resolveSourceStatus(record)
+      const identifier =
+        record.id != null
+          ? String(record.id)
+          : record.name
+            ? `name:${record.name}`
+            : record.type
+              ? `type:${record.type}`
+              : `idx:${index}`
+      seenKeys.add(identifier)
+
+      const prevStatus = previousStatusesRef.current[identifier]
+      const existingAlert = activeAlertsRef.current[identifier]
+
+      if (statusValue) {
+        const isDegraded = statusValue === 'degraded'
+        const isError = statusValue === 'error'
+        const hasAlert = Boolean(existingAlert)
+        const readableName = record.name || record.type || record.id || identifier
+        const alertKey = existingAlert?.messageKey || `ds-alert-${identifier}`
+
+        if (isDegraded || isError) {
+          const shouldNotify =
+            (!hasAlert && prevStatus && ['active', 'ready'].includes(prevStatus)) ||
+            (hasAlert && existingAlert.status !== statusValue)
+
+          if (shouldNotify) {
+            const content = isDegraded
+              ? `数据源「${readableName}」状态降级，请重新测试查看诊断`
+              : `数据源「${readableName}」出现错误，请检查配置并重新测试`
+
+            message.open({
+              key: alertKey,
+              type: isError ? 'error' : 'warning',
+              content,
+              duration: 0,
+            })
+
+            activeAlertsRef.current[identifier] = { status: statusValue, messageKey: alertKey }
+          } else if (!hasAlert && !prevStatus && (isDegraded || isError)) {
+            // 首次检测到异常时也提示，便于首次进入即看到告警
+            const content = isDegraded
+              ? `数据源「${readableName}」状态降级，请重新测试查看诊断`
+              : `数据源「${readableName}」出现错误，请检查配置并重新测试`
+
+            message.open({
+              key: alertKey,
+              type: isError ? 'error' : 'warning',
+              content,
+              duration: 0,
+            })
+
+            activeAlertsRef.current[identifier] = { status: statusValue, messageKey: alertKey }
+          }
+        } else if ((statusValue === 'ready' || statusValue === 'active') && hasAlert) {
+          message.destroy(existingAlert.messageKey)
+          delete activeAlertsRef.current[identifier]
+        }
+      }
+
+      previousStatusesRef.current[identifier] = statusValue || prevStatus
+    })
+
+    Object.keys(previousStatusesRef.current).forEach(key => {
+      if (!seenKeys.has(key)) {
+        delete previousStatusesRef.current[key]
+        const alert = activeAlertsRef.current[key]
+        if (alert) {
+          message.destroy(alert.messageKey)
+          delete activeAlertsRef.current[key]
+        }
+      }
+    })
+  }, [dataSources, resolveSourceStatus, message])
 
   const getTypeIcon = (type) => {
     switch (type) {
@@ -548,49 +1038,47 @@ const DataSourceConfig = () => {
       width: 80,
       sorter: (a, b) => a.priority - b.priority,
       defaultSortOrder: 'ascend',
-      render: (priority) => (
-        <Tag color={priority === 1 ? 'green' : priority <= 3 ? 'blue' : 'default'}>
-          {priority}
-        </Tag>
-      )
+      render: priority => (
+        <Tag color={priority === 1 ? 'green' : priority <= 3 ? 'blue' : 'default'}>{priority}</Tag>
+      ),
     },
     {
       title: '数据源名称',
       dataIndex: 'name',
       key: 'name',
-      width: 200,
+      width: 220,
       render: (text, record) => (
         <Space>
           {getTypeIcon(record.type)}
           <span>{text}</span>
-          <Tag color="blue" style={{ fontSize: 10 }}>
-            {record.type.toUpperCase()}
-          </Tag>
+          <Tag color="blue" style={{ fontSize: 10 }}>{record.type?.toUpperCase()}</Tag>
         </Space>
-      )
+      ),
     },
     {
       title: '连接地址',
       key: 'address',
       ellipsis: true,
-      width: 250,
+      width: 260,
       render: (_, record) => (
         <Tooltip title={getConnectionAddress(record)}>
-          <span style={{ 
-            display: 'block',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}>
+          <span
+            style={{
+              display: 'block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {getConnectionAddress(record)}
           </span>
         </Tooltip>
-      )
+      ),
     },
     {
       title: '性能',
       key: 'performance',
-      width: 150,
+      width: 160,
       render: (_, record) => (
         <Space size="small">
           {record.successRate > 0 && (
@@ -606,42 +1094,121 @@ const DataSourceConfig = () => {
             </Tooltip>
           )}
         </Space>
-      )
+      ),
+    },
+    {
+      title: '测试信息',
+      key: 'test',
+      width: 220,
+      render: (_, record) => {
+        const { lastTestTime, testSummary } = resolveSourceStatus(record)
+        const timeText = lastTestTime ? formatDateTime(lastTestTime) : '未执行测试'
+        const summaryNode = testSummary ? (
+          <Tooltip title={testSummary}>
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 12,
+                color: '#8c8c8c',
+                maxWidth: 200,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {testSummary}
+            </div>
+          </Tooltip>
+        ) : (
+          <div style={{ marginTop: 4, fontSize: 12, color: '#bfbfbf' }}>暂无摘要</div>
+        )
+
+        return (
+          <div style={{ lineHeight: 1.4 }}>
+            <div style={{ fontSize: 12, color: '#595959' }}>最近: {timeText}</div>
+            {summaryNode}
+          </div>
+        )
+      },
     },
     {
       title: '启用',
       dataIndex: 'enabled',
       key: 'enabled',
       width: 100,
-      render: (enabled, record) => (
-        <Switch
-          checked={enabled}
-          loading={toggleLoading[record.id]}
-          onChange={(checked) => handleToggle(record.id, checked)}
-          checkedChildren="启用"
-          unCheckedChildren="禁用"
-          disabled={toggleLoading[record.id]}
-        />
-      )
+      render: (enabled, record) => {
+        // 优先以后端配置(config.enabled)为准，避免旧字段或代理映射导致的误判
+        const effectiveEnabled =
+          typeof record?.config?.enabled === 'boolean'
+            ? record.config.enabled
+            : Boolean(enabled)
+
+        return (
+          <Switch
+            checked={effectiveEnabled}
+            loading={toggleLoading[record.id]}
+            onChange={checked => handleToggle(record.id, checked)}
+            checkedChildren="启用"
+            unCheckedChildren="禁用"
+            disabled={toggleLoading[record.id]}
+          />
+        )
+      },
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
-      render: (status) => {
-        const statusMap = {
-          online: { status: 'success', text: '已连接' },
-          offline: { status: 'error', text: '未连接' },
-          error: { status: 'error', text: '错误' },
-          degraded: { status: 'warning', text: '降级' },
-          unknown: { status: 'default', text: '未知' },
-          untested: { status: 'default', text: '未测试' },
-          disabled: { status: 'default', text: '已禁用' }
+      width: 180,
+      render: (_, record) => {
+        const { statusValue, available, reason, hasSavedCredential, lastTestTime, testSummary } =
+          resolveSourceStatus(record)
+        const meta = getDataSourceStatusMeta(statusValue)
+
+        const tooltipLines = [meta.description]
+        if (testSummary) {
+          tooltipLines.push(`结果: ${testSummary}`)
         }
-        const config = statusMap[status] || { status: 'default', text: '未知' }
-        return <Badge status={config.status} text={config.text} />
-      }
+        if (lastTestTime) {
+          tooltipLines.push(`最近测试: ${formatDateTime(lastTestTime)}`)
+        } else if (record.lastTransition) {
+          tooltipLines.push(`最近变更: ${formatDateTime(record.lastTransition)}`)
+        }
+        if (reason) {
+          tooltipLines.push(`原因: ${reason}`)
+        }
+        if (hasSavedCredential) {
+          tooltipLines.push('凭证: 已保存')
+        }
+
+        const tooltipContent = (
+          <div>
+            {tooltipLines.map((line, index) => (
+              <div
+                key={index}
+                style={{ marginTop: index === 0 ? 0 : 4, fontSize: 12, color: '#8c8c8c' }}
+              >
+                {line}
+              </div>
+            ))}
+          </div>
+        )
+
+        return (
+          <Space size={6}>
+            <Tooltip title={tooltipContent}>
+              <Tag color={meta.tagColor} style={{ margin: 0 }}>
+                {meta.text}
+              </Tag>
+            </Tooltip>
+            {typeof available === 'boolean' && (
+              <Tooltip title={available ? '当前可用' : '当前不可用'}>
+                <Badge status={available ? 'success' : 'error'} />
+              </Tooltip>
+            )}
+          </Space>
+        )
+      },
     },
     {
       title: '操作',
@@ -658,22 +1225,14 @@ const DataSourceConfig = () => {
           >
             编辑
           </Button>
-          <Popconfirm
-            title="确定删除此数据源？"
-            onConfirm={() => handleDelete(record.id)}
-          >
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-            >
+          <Popconfirm title="确定删除此数据源？" onConfirm={() => handleDelete(record.id)}>
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
               删除
             </Button>
           </Popconfirm>
         </Space>
-      )
-    }
+      ),
+    },
   ]
 
   // 实时更新时间显示 - 修复：移除每秒更新，避免频繁重渲染
@@ -681,31 +1240,92 @@ const DataSourceConfig = () => {
   useEffect(() => {
     // 只在数据刷新时更新时间
     setCurrentTime(new Date())
-  }, [dataSources, healthData])
+  }, [dataSources, health])
 
   // 渲染日志 - 限制日志输出频率
   useEffect(() => {
     console.log('🎨 [DataSourceConfig] 渲染组件:', {
       loading,
       dataSourcesCount: dataSources?.length || 0,
-      healthDataCount: healthData?.length || 0,
+      healthCount: health?.sources ? Object.keys(health.sources).length : 0,
       error: error?.message
     })
-  }, [loading, dataSources, healthData, error])
+  }, [loading, dataSources, health, error])
   
   return (
     <>
-      {healthData && healthData.degraded && (
-        <Alert
-          message="数据源健康提醒"
-          description={`有 ${healthData.degraded} 个数据源处于降级状态，可能影响数据获取`}
-          type="warning"
-          showIcon
-          icon={<ExclamationCircleOutlined />}
-          closable
-          style={{ marginBottom: 16 }}
-        />
-      )}
+      {health && health.degraded && (
+      <Alert
+        message="数据源健康提醒"
+        description={`有 ${health.degraded} 个数据源处于降级状态，可能影响数据获取`}
+        type="warning"
+        showIcon
+        icon={<ExclamationCircleOutlined />}
+        closable
+        style={{ marginBottom: 16 }}
+      />
+    )}
+
+      <Card
+        title="状态概览"
+        style={{ marginBottom: 16 }}
+        extra={
+          <Space size={24}>
+            <span style={{ color: '#595959' }}>
+              总数: <strong style={{ fontSize: 16 }}>{totalSources}</strong>
+            </span>
+            <Tooltip title="标注当前 available=true 的数据源数量">
+              <span style={{ color: '#595959' }}>
+                当前可用: <strong style={{ fontSize: 16 }}>{availableSources}</strong>
+              </span>
+            </Tooltip>
+          </Space>
+        }
+      >
+        <Space size={[16, 16]} wrap>
+          {DATA_SOURCE_STATUS_ORDER.map(statusKey => {
+            const meta = getDataSourceStatusMeta(statusKey)
+            const count = statusSummary.counts?.[statusKey] ?? 0
+            const isZero = count === 0
+            return (
+              <Tooltip title={meta.description} key={statusKey}>
+                <div
+                  style={{
+                    minWidth: 180,
+                    maxWidth: 220,
+                    borderRadius: 8,
+                    border: `1px solid ${meta.tagColor}`,
+                    padding: '12px 16px',
+                    background: '#fff',
+                    boxShadow: isZero ? 'none' : '0 2px 8px rgba(0,0,0,0.06)',
+                    opacity: isZero ? 0.55 : 1,
+                    transition: 'all 0.2s ease-in-out',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 8,
+                    }}
+                  >
+                    <Tag color={meta.tagColor} style={{ margin: 0 }}>
+                      {meta.text}
+                    </Tag>
+                    <span style={{ fontSize: 24, fontWeight: 600, color: meta.tagColor }}>
+                      {count}
+                    </span>
+                  </div>
+                  <div style={{ color: '#8c8c8c', fontSize: 12, lineHeight: 1.4 }}>
+                    {meta.description}
+                  </div>
+                </div>
+              </Tooltip>
+            )
+          })}
+        </Space>
+      </Card>
 
       <Card
         title="数据源管理"
@@ -743,7 +1363,7 @@ const DataSourceConfig = () => {
                 </code>
               </div>
             )}
-            <Button onClick={refresh} style={{ marginTop: 16 }}>重试</Button>
+            <Button onClick={refreshAll} style={{ marginTop: 16 }}>重试</Button>
           </div>
         ) : (
           <Table
@@ -768,7 +1388,7 @@ const DataSourceConfig = () => {
         <DataSourceForm
           initialValues={editModal.data || undefined}
           onSubmit={editModal.data ? handleUpdate : handleCreate}
-          onTestSuccess={() => refresh()}
+          onTestSuccess={refreshAll}
         />
       </Modal>
     </>

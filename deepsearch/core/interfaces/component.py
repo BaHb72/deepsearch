@@ -3,12 +3,14 @@
 
 定义系统中的核心接口和协议，确保组件之间的一致性和可监控性。
 """
+
 from enum import Enum
-from typing import Protocol, Dict, Any, runtime_checkable
+from typing import Any, Awaitable, Dict, Protocol, runtime_checkable
 
 
 class ComponentStatus(Enum):
     """组件状态枚举"""
+
     UNINITIALIZED = "uninitialized"
     INITIALIZING = "initializing"  # 添加初始化中状态
     INITIALIZED = "initialized"
@@ -22,6 +24,7 @@ class ComponentStatus(Enum):
 
 class ComponentType(Enum):
     """组件类型枚举"""
+
     INFRASTRUCTURE = "infrastructure"  # 基础设施组件（事件引擎、消息总线等）
     BUSINESS = "business"  # 业务组件（网关、策略等）
     EXTERNAL = "external"  # 外部组件（数据库、缓存等）
@@ -33,14 +36,14 @@ class ComponentType(Enum):
 class Monitorable(Protocol):
     """
     可监控组件接口
-    
+
     所有需要提供监控信息的组件都应该实现此接口。
     """
 
     def get_statistics(self) -> Dict[str, Any]:
         """
         获取组件的统计信息
-        
+
         :return: 包含组件统计信息的字典，具体内容由组件决定
         """
         ...
@@ -50,15 +53,15 @@ class Monitorable(Protocol):
 class Lifecycle(Protocol):
     """
     生命周期管理接口
-    
+
     所有具有生命周期的组件都应该实现此接口。
     """
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """启动组件"""
         ...
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """停止组件"""
         ...
 
@@ -71,9 +74,13 @@ class Lifecycle(Protocol):
 class Component(Monitorable, Lifecycle, Protocol):
     """
     完整的组件接口
-    
+
     组合了监控和生命周期管理功能。
     """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """组件构造函数签名约束，允许实现自定义参数。"""
+        ...
 
     @property
     def name(self) -> str:
@@ -90,7 +97,7 @@ class Component(Monitorable, Lifecycle, Protocol):
         """获取组件状态"""
         ...
 
-    def initialize(self) -> None:
+    async def initialize(self) -> None:
         """初始化组件"""
         ...
 
@@ -106,7 +113,7 @@ class Component(Monitorable, Lifecycle, Protocol):
 class MonitoringHook:
     """
     监控钩子基类
-    
+
     用于在不修改原有代码的情况下添加监控功能。
     """
 
@@ -114,7 +121,9 @@ class MonitoringHook:
         """事件处理前的钩子"""
         pass
 
-    def after_event(self, event_type: str, event_data: Any, result: Any = None, error: Exception = None) -> None:
+    def after_event(
+        self, event_type: str, event_data: Any, result: Any = None, error: Exception | None = None
+    ) -> None:
         """事件处理后的钩子"""
         pass
 
@@ -122,6 +131,9 @@ class MonitoringHook:
         """处理器开始执行时的钩子"""
         pass
 
-    def on_handler_complete(self, handler_name: str, event_type: str, duration: float, error: Exception = None) -> None:
+    def on_handler_complete(
+        self, handler_name: str, event_type: str, duration: float, error: Exception | None = None
+    ) -> None:
         """处理器执行完成时的钩子"""
         pass
+

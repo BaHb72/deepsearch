@@ -8,7 +8,7 @@ Version: 4.0.0
 
 import asyncio
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Set, cast
 
 import pandas as pd
 from loguru import logger
@@ -22,6 +22,7 @@ from deepsearch.infrastructure.providers.interfaces.base import (
 from deepsearch.infrastructure.providers.interfaces.capabilities import (
     DataCapability
 )
+from deepsearch.infrastructure.providers.interfaces.payloads import QuotePayloadMap
 from ..implementations.qmt.unified_qmt_provider import UnifiedQMTProvider, QMTMode, SmartCacheManager
 from deepsearch.utils.patterns.request_batcher import RequestBatcher, MultiKeyBatcher
 
@@ -342,7 +343,7 @@ class EnhancedDataProviderManager:
 
     def _get_available_features(self) -> Dict[str, List[str]]:
         """获取可用功能列表"""
-        features = {
+        features: Dict[str, List[str]] = {
             "历史K线": [],
             "实时行情": [],
             "订阅推送": [],
@@ -410,7 +411,9 @@ class EnhancedDataProviderManager:
             if cached_data is not None:
                 self.stats['cache_hits'] += 1
                 logger.debug(f"📦 缓存命中: {symbol} 日线数据")
-                return cached_data
+                if isinstance(cached_data, pd.DataFrame):
+                    return cached_data
+                return pd.DataFrame(cached_data)
 
         # 选择数据源
         if source == "auto":
@@ -424,13 +427,17 @@ class EnhancedDataProviderManager:
         try:
             # 获取数据
             if hasattr(provider, 'get_kline'):
-                df = await provider.get_kline(
+                df_raw = await provider.get_kline(
                     symbol=symbol,
                     period='1d',
                     start_date=start_date,
                     end_date=end_date,
                     adjust=adjust
                 )
+                if isinstance(df_raw, pd.DataFrame):
+                    df = df_raw
+                else:
+                    df = pd.DataFrame(df_raw)
             else:
                 # AkShare接口
                 df = await self._get_akshare_daily(
@@ -483,7 +490,7 @@ class EnhancedDataProviderManager:
             symbols: List[str],
             source: str = "auto",
             use_cache: bool = True
-    ) -> Dict[str, Dict]:
+    ) -> QuotePayloadMap:
         """
         获取实时行情
         
@@ -498,12 +505,12 @@ class EnhancedDataProviderManager:
         self.stats['requests'] += 1
 
         # 检查短缓存（10秒）
+        cache_key = f"quotes_{','.join(sorted(symbols))}"
         if use_cache:
-            cache_key = f"quotes_{','.join(sorted(symbols))}"
             cached_data = self.global_cache.get(cache_key, max_age=10)
             if cached_data is not None:
                 self.stats['cache_hits'] += 1
-                return cached_data
+                return self._normalize_quote_map(cached_data)
 
         # 选择数据源
         if source == "auto":
@@ -515,33 +522,40 @@ class EnhancedDataProviderManager:
             raise DataProviderError("无可用的数据提供者")
 
         try:
-            # 获取数据
+            raw_quotes: object
             if hasattr(provider, 'get_realtime_quote'):
-                quotes = await provider.get_realtime_quote(symbols)
+                raw_quotes = await provider.get_realtime_quote(symbols)
+            elif hasattr(provider, 'get_realtime_quotes'):
+                raw_quotes = await provider.get_realtime_quotes(symbols)
             else:
                 # AkShare接口
-                quotes = await provider.get_realtime_data(symbols)
+                raw_quotes = await provider.get_realtime_data(symbols)
+
+            quotes = self._normalize_quote_map(raw_quotes)
 
             if quotes:
-                # 短缓存
                 if use_cache:
                     self.global_cache.set(cache_key, quotes, ttl=10)
 
                 self.stats['successes'] += 1
-                # 更新统计，记录实际使用的提供者
                 actual_provider = source if source != "auto" else (
                     "amazingdata" if self._amazingdata_provider and provider == self._amazingdata_provider else
                     "qmt" if provider == self._qmt_provider else "akshare"
                 )
                 self._update_provider_stats(actual_provider)
+                return quotes
 
-            return quotes
+            self.stats['failures'] += 1
+            logger.warning("实时行情查询返回空结果")
+
+            if source == "auto":
+                return await self._fallback_get_quotes(symbols)
+            return {}
 
         except Exception as e:
             self.stats['failures'] += 1
             logger.error(f"获取实时行情失败: {e}")
 
-            # 尝试降级
             if source == "auto":
                 return await self._fallback_get_quotes(symbols)
 
@@ -550,7 +564,7 @@ class EnhancedDataProviderManager:
     async def subscribe_quotes(
             self,
             symbols: List[str],
-            callback: callable,
+            callback: Callable[..., Awaitable[None] | None],
             source: str = "auto"
     ) -> bool:
         """
@@ -576,7 +590,8 @@ class EnhancedDataProviderManager:
 
         try:
             if hasattr(provider, 'subscribe_quote'):
-                return await provider.subscribe_quote(symbols, callback)
+                result = await provider.subscribe_quote(symbols, callback)
+                return bool(result)
             else:
                 logger.warning(f"{source} 不支持订阅功能")
                 return False
@@ -684,8 +699,8 @@ class EnhancedDataProviderManager:
     async def _get_akshare_daily(
             self,
             symbol: str,
-            start_date: str,
-            end_date: str,
+            start_date: Optional[str],
+            end_date: Optional[str],
             adjust: str
     ) -> pd.DataFrame:
         """通过AkShare获取日线数据"""
@@ -693,16 +708,26 @@ class EnhancedDataProviderManager:
             return pd.DataFrame()
 
         try:
+            start = start_date or ""
+            end = end_date or ""
+
             # AkShare 的 get_history_data 不支持 adjust 参数
-            df = await self._akshare_provider.get_history_data(
+            df_raw = await self._akshare_provider.get_history_data(
                 symbol=symbol,
                 period='daily',
-                start_date=start_date,
-                end_date=end_date
+                start_date=start,
+                end_date=end
             )
 
-            if df is not None and not df.empty:
-                return df
+            if isinstance(df_raw, pd.DataFrame):
+                if not df_raw.empty:
+                    return df_raw
+                return pd.DataFrame()
+
+            if df_raw is not None:
+                df = pd.DataFrame(df_raw)
+                if not df.empty:
+                    return df
 
             return pd.DataFrame()
 
@@ -713,18 +738,20 @@ class EnhancedDataProviderManager:
     async def _fallback_get_daily(
             self,
             symbol: str,
-            start_date: str,
-            end_date: str,
+            start_date: Optional[str],
+            end_date: Optional[str],
             adjust: str,
-            failed_sources: set = None
+            failed_sources: Optional[Set[str]] = None
     ) -> pd.DataFrame:
         """降级获取日线数据"""
         if failed_sources is None:
             failed_sources = set()
+        start = start_date or ""
+        end = end_date or ""
         
         # 记录当前失败的数据源（如果调用了fallback，说明primary已经失败）
         # 检查哪个是primary并标记为失败
-        primary_source = self._select_best_provider(DataCapability.KLINE_DATA)
+        primary_source = await self._select_best_provider(DataCapability.KLINE_DATA)
         if primary_source:
             provider_name = self._get_provider_name(primary_source)
             failed_sources.add(provider_name)
@@ -734,13 +761,14 @@ class EnhancedDataProviderManager:
         if 'qmt' not in failed_sources and self._qmt_provider and self.provider_health.get("qmt", {}).get("status") == "healthy":
             logger.info("尝试降级到QMT...")
             try:
-                df = await self._qmt_provider.get_kline(
+                df_raw = await self._qmt_provider.get_kline(
                     symbol=symbol,
                     period='1d',
-                    start_date=start_date,
-                    end_date=end_date,
+                    start_date=start,
+                    end_date=end,
                     adjust=adjust
                 )
+                df = df_raw if isinstance(df_raw, pd.DataFrame) else pd.DataFrame(df_raw)
                 if not df.empty:
                     logger.info("QMT降级成功")
                     return df
@@ -755,7 +783,7 @@ class EnhancedDataProviderManager:
         if 'akshare' not in failed_sources and self._akshare_provider:
             logger.info("尝试降级到AkShare...")
             try:
-                df = await self._get_akshare_daily(symbol, start_date, end_date, adjust)
+                df = await self._get_akshare_daily(symbol, start, end, adjust)
                 if not df.empty:
                     logger.info("AkShare降级成功")
                     return df
@@ -777,7 +805,36 @@ class EnhancedDataProviderManager:
             return 'akshare'
         return 'unknown'
 
-    async def _fallback_get_quotes(self, symbols: List[str]) -> Dict[str, Dict]:
+    @staticmethod
+    def _normalize_quote_map(raw: object) -> QuotePayloadMap:
+        """将多源行情结果转换为标准结构。"""
+
+        normalized: QuotePayloadMap = {}
+
+        if isinstance(raw, Mapping):
+            for symbol, payload in raw.items():
+                symbol_key = str(symbol)
+                if isinstance(payload, Mapping):
+                    normalized[symbol_key] = dict(payload)
+                elif payload is not None:
+                    normalized[symbol_key] = {"value": payload}
+                else:
+                    normalized[symbol_key] = {}
+            return normalized
+
+        if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes)):
+            for item in raw:
+                if isinstance(item, Mapping):
+                    symbol_value = item.get("symbol")
+                    symbol_key = (
+                        str(symbol_value) if symbol_value is not None else str(len(normalized))
+                    )
+                    normalized[symbol_key] = dict(item)
+            return normalized
+
+        return normalized
+
+    async def _fallback_get_quotes(self, symbols: List[str]) -> QuotePayloadMap:
         """降级获取实时行情"""
         # 按优先级尝试其他数据源
 
@@ -787,7 +844,7 @@ class EnhancedDataProviderManager:
             try:
                 quotes = await self._qmt_provider.get_realtime_quote(symbols)
                 if quotes:
-                    return quotes
+                    return self._normalize_quote_map(quotes)
             except Exception as e:
                 logger.error(f"QMT降级失败: {e}")
 
@@ -795,7 +852,8 @@ class EnhancedDataProviderManager:
         if self._akshare_provider:
             logger.info("尝试降级到AkShare...")
             try:
-                return await self._akshare_provider.get_realtime_data(symbols)
+                raw = await self._akshare_provider.get_realtime_data(symbols)
+                return self._normalize_quote_map(raw)
             except:
                 pass
 
@@ -877,7 +935,14 @@ class EnhancedDataProviderManager:
             results = []
             for item in data_list:
                 try:
-                    result = await self.get_kline_data(**item)
+                    result = await self.get_stock_daily(
+                        symbol=item.get('symbol', ''),
+                        start_date=item.get('start_date'),
+                        end_date=item.get('end_date'),
+                        source=item.get('source', 'auto'),
+                        adjust=item.get('adjust', 'qfq'),
+                        use_cache=item.get('use_cache', True),
+                    )
                     results.append(result)
                 except Exception as e:
                     logger.error(f"获取K线数据失败: {e}")
@@ -887,7 +952,7 @@ class EnhancedDataProviderManager:
         # 默认处理
         return [None] * len(data_list)
     
-    async def get_batch_quotes(self, symbols: List[str]) -> Dict[str, Any]:
+    async def get_batch_quotes(self, symbols: List[str]) -> QuotePayloadMap:
         """
         批量获取实时行情（使用批处理器）
         
@@ -908,13 +973,16 @@ class EnhancedDataProviderManager:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # 组装结果
-        quotes = {}
+        quotes: QuotePayloadMap = {}
         for symbol, result in zip(symbols, results):
             if isinstance(result, Exception):
                 logger.error(f"获取 {symbol} 行情失败: {result}")
                 quotes[symbol] = {'error': str(result)}
             else:
-                quotes[symbol] = result
+                if isinstance(result, Mapping):
+                    quotes[symbol] = dict(result)
+                else:
+                    quotes[symbol] = {'value': result}
         
         # 更新批处理统计
         self.stats['batch_stats'] = self.batch_manager.get_stats()

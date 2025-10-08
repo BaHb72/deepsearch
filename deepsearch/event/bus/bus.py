@@ -4,23 +4,25 @@ TimeSeriesZeroMQBus 实现
 这个文件只保留 TimeSeriesZeroMQBus 的实现，
 其他消息总线实现已经迁移到 deepsearch.messaging 模块。
 """
+
 from __future__ import annotations
 
 import json
-import logging
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from deepsearch.messaging import ZeroMQMessageBus
+from deepsearch.observability import get_logger
 
 if TYPE_CHECKING:
     from deepsearch.infrastructure.persistence.timeseries import RedisTimeSeriesStorage
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ==============================================================================
 # 持久化规则
 # ==============================================================================
+
 
 class PersistenceRule:
     """持久化规则基类"""
@@ -51,26 +53,27 @@ class TopicBasedPersist(PersistenceRule):
 # TimeSeriesZeroMQBus 实现
 # ==============================================================================
 
+
 class TimeSeriesZeroMQBus(ZeroMQMessageBus):
     """
     支持 RedisTimeSeries 持久化的 ZeroMQ 消息总线
-    
+
     扩展标准 ZeroMQ 消息总线，添加消息持久化功能。
     消息会被发布到 ZeroMQ 通道，同时存储到 RedisTimeSeries。
     """
 
     def __init__(
-            self,
-            host: str = "127.0.0.1",
-            pub_port: int = 5556,
-            sub_port: int = 5557,
-            storage_config: Optional[Dict[str, Any]] = None,
-            enable_persistence: bool = True,
-            persistence_rule: Optional[PersistenceRule] = None,
+        self,
+        host: str = "127.0.0.1",
+        pub_port: int = 5556,
+        sub_port: int = 5557,
+        storage_config: Optional[Dict[str, Any]] = None,
+        enable_persistence: bool = True,
+        persistence_rule: Optional[PersistenceRule] = None,
     ) -> None:
         """
         初始化支持 RedisTimeSeries 持久化的 ZeroMQ 消息总线
-        
+
         Args:
             host: ZeroMQ 主机地址
             pub_port: 发布端口
@@ -81,12 +84,9 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
         """
         # 创建ZeroMQ配置对象传递给父类
         from deepsearch.config.models import ZeroMQConfig
-        zeromq_config = ZeroMQConfig(
-            host=host,
-            pub_port=pub_port,
-            sub_port=sub_port
-        )
-        super().__init__(config=zeromq_config)
+
+        zeromq_config = ZeroMQConfig(host=host, pub_port=pub_port, sub_port=sub_port)
+        super().__init__(**zeromq_config.model_dump())
 
         self.enable_persistence = enable_persistence
         self.storage: Optional[RedisTimeSeriesStorage] = None
@@ -99,6 +99,7 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
         """初始化 RedisTimeSeries 存储"""
         try:
             from deepsearch.infrastructure.persistence.timeseries import RedisTimeSeriesStorage
+
             self.storage = RedisTimeSeriesStorage(**storage_config)
             logger.info("RedisTimeSeries 存储初始化成功")
         except Exception as e:
@@ -108,7 +109,7 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
     def publish(self, topic: str, message: Any) -> None:
         """
         发布消息并存储到 RedisTimeSeries
-        
+
         Args:
             topic: 消息主题
             message: 消息内容
@@ -117,7 +118,11 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
         super().publish(topic, message)
 
         # 然后存储到 RedisTimeSeries（如果启用）
-        if self.enable_persistence and self.storage and self.persistence_rule.should_persist(topic, message):
+        if (
+            self.enable_persistence
+            and self.storage
+            and self.persistence_rule.should_persist(topic, message)
+        ):
             try:
                 # 将消息转换为 JSON 格式存储
                 json_message = json.dumps(message, default=str)

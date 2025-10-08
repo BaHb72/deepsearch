@@ -3,8 +3,9 @@
 
 提供端口可用性检查和端口冲突检测功能。
 """
+
 import socket
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
 
 class PortChecker:
@@ -14,11 +15,11 @@ class PortChecker:
     def is_port_available(port: int, host: str = "localhost") -> bool:
         """
         检查端口是否可用
-        
+
         Args:
             port: 要检查的端口
             host: 主机地址
-            
+
         Returns:
             True 如果端口可用，False 如果端口被占用
         """
@@ -33,12 +34,13 @@ class PortChecker:
     def get_all_configured_ports() -> Dict[str, int]:
         """
         获取所有配置的端口
-        
+
         Returns:
             服务名到端口的映射
         """
         # 延迟导入避免循环依赖
         from deepsearch.config import get_config
+
         config = get_config()
         ports = {}
 
@@ -90,11 +92,12 @@ class PortChecker:
     def get_service_ports() -> Dict[str, int]:
         """
         获取依赖服务端口（应该被占用的端口）
-        
+
         Returns:
             服务名到端口的映射
         """
         from deepsearch.config import get_config
+
         config = get_config()
         service_ports = {}
 
@@ -109,11 +112,12 @@ class PortChecker:
     def get_listen_ports() -> Dict[str, int]:
         """
         获取 DeepSearch 要监听的端口（不应该被占用的端口）
-        
+
         Returns:
             服务名到端口的映射
         """
         from deepsearch.config import get_config
+
         config = get_config()
         listen_ports = {}
 
@@ -145,7 +149,7 @@ class PortChecker:
     def check_port_conflicts() -> List[Dict[str, any]]:
         """
         检查端口冲突
-        
+
         Returns:
             冲突列表，每个冲突包含服务名、端口和占用状态
         """
@@ -166,20 +170,19 @@ class PortChecker:
 
             if len(services) > 1:
                 # 多个服务使用同一端口
-                conflicts.append({
-                    "type": "duplicate",
-                    "port": port,
-                    "services": services,
-                    "is_available": is_available
-                })
+                conflicts.append(
+                    {
+                        "type": "duplicate",
+                        "port": port,
+                        "services": services,
+                        "is_available": is_available,
+                    }
+                )
             elif not is_available:
                 # 端口被外部进程占用
-                conflicts.append({
-                    "type": "occupied",
-                    "port": port,
-                    "services": services,
-                    "is_available": False
-                })
+                conflicts.append(
+                    {"type": "occupied", "port": port, "services": services, "is_available": False}
+                )
 
         return conflicts
 
@@ -187,11 +190,11 @@ class PortChecker:
     def get_available_port(start_port: int = 8000, max_attempts: int = 100) -> Optional[int]:
         """
         查找可用端口
-        
+
         Args:
             start_port: 起始端口
             max_attempts: 最大尝试次数
-            
+
         Returns:
             可用端口号，如果没找到返回 None
         """
@@ -205,7 +208,7 @@ class PortChecker:
     def validate_ports() -> bool:
         """
         验证所有配置的端口
-        
+
         Returns:
             True 如果所有端口都有效，False 如果有冲突
         """
@@ -217,11 +220,7 @@ class PortChecker:
         for service, port in service_ports.items():
             if PortChecker.is_port_available(port):
                 # 端口未被占用，服务未运行
-                service_issues.append({
-                    "service": service,
-                    "port": port,
-                    "issue": "服务未运行"
-                })
+                service_issues.append({"service": service, "port": port, "issue": "服务未运行"})
 
         # 检查监听端口（不应该被占用）
         listen_ports = PortChecker.get_listen_ports()
@@ -229,10 +228,7 @@ class PortChecker:
         for service, port in listen_ports.items():
             if not PortChecker.is_port_available(port):
                 # 端口被占用，有冲突
-                listen_conflicts.append({
-                    "service": service,
-                    "port": port
-                })
+                listen_conflicts.append({"service": service, "port": port})
                 has_error = True
 
         # 显示服务状态问题（警告）
@@ -241,7 +237,7 @@ class PortChecker:
             print("=" * 60)
             for issue in service_issues:
                 print(f"\n{issue['service']} (端口 {issue['port']}) - {issue['issue']}")
-                if "redis" in issue['service'].lower():
+                if "redis" in issue["service"].lower():
                     print("  提示: 请启动 Redis 服务，或禁用缓存配置")
             print("=" * 60)
 
@@ -255,16 +251,21 @@ class PortChecker:
                 # 尝试获取占用进程信息
                 try:
                     import psutil
+
                     for conn in psutil.net_connections():
-                        if hasattr(conn, 'laddr') and conn.laddr.port == conflict['port'] and conn.status == 'LISTEN':
+                        if (
+                            hasattr(conn, "laddr")
+                            and conn.laddr.port == conflict["port"]
+                            and conn.status == "LISTEN"
+                        ):
                             try:
                                 proc = psutil.Process(conn.pid)
                                 print(f"  占用进程: {proc.name()} (PID: {conn.pid})")
                                 print(f"  进程路径: {proc.exe()}")
-                            except:
+                            except Exception:
                                 print(f"  占用进程 PID: {conn.pid}")
                             break
-                except:
+                except Exception:
                     pass
 
             print("\n" + "=" * 60)
@@ -285,7 +286,7 @@ def check_and_report_ports():
     service_ports = PortChecker.get_service_ports()
     listen_ports = PortChecker.get_listen_ports()
 
-    print(f"\n依赖服务端口（应该被占用）:")
+    print("\n依赖服务端口（应该被占用）:")
     for service, port in sorted(service_ports.items()):
         is_available = PortChecker.is_port_available(port)
         if is_available:
@@ -294,7 +295,7 @@ def check_and_report_ports():
             status = "运行中"
         print(f"  {service:<20} : {port:>5} [{status}]")
 
-    print(f"\nDeepSearch 监听端口（不应该被占用）:")
+    print("\nDeepSearch 监听端口（不应该被占用）:")
     for service, port in sorted(listen_ports.items()):
         is_available = PortChecker.is_port_available(port)
         if is_available:

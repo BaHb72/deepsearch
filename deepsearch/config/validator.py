@@ -1,15 +1,21 @@
 """
 配置验证器 - 确保配置与运行时行为一致
 """
+
+import importlib.util
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional, Mapping, cast
 
 from loguru import logger
+from pydantic import ValidationError
+
+from deepsearch.config.models.amazingdata import AmazingDataConfig as AmazingDataConfigModel
 
 
 class ValidationLevel(Enum):
     """验证级别"""
+
     ERROR = "error"  # 错误 - 必须修复
     WARNING = "warning"  # 警告 - 建议修复
     INFO = "info"  # 信息 - 仅供参考
@@ -18,6 +24,7 @@ class ValidationLevel(Enum):
 @dataclass
 class ValidationResult:
     """验证结果"""
+
     level: ValidationLevel
     component: str
     message: str
@@ -51,62 +58,283 @@ class ConfigValidator:
 
     def _validate_data_sources(self):
         """验证数据源配置"""
-        if not hasattr(self.config, 'data_providers'):
-            self.results.append(ValidationResult(
-                level=ValidationLevel.WARNING,
-                component="data_providers",
-                message="未找到数据源配置",
-                suggestion="添加 data_providers 配置节"
-            ))
+        data_sources = getattr(self.config, "data_sources", None)
+        validated_amazing_configs: set[int] = set()
+
+        if data_sources and data_sources.get("providers"):
+            providers_raw = data_sources.get("providers")
+            providers: Dict[str, Any]
+            if hasattr(providers_raw, "model_dump"):
+                providers = cast(Dict[str, Any], providers_raw.model_dump())
+            elif isinstance(providers_raw, dict):
+                providers = dict(providers_raw)
+            else:
+                providers = dict(getattr(providers_raw, "__dict__", {}))
+
+            enabled_count = 0
+
+            akshare_cfg = cast(Dict[str, Any], providers.get("akshare", {}) or {})
+            if isinstance(akshare_cfg, dict) and akshare_cfg.get("enabled", False):
+                enabled_count += 1
+                logger.info("AKShare数据源已启用")
+
+                try:
+                    import akshare  # noqa: F401
+                except ImportError:
+                    self.results.append(
+                        ValidationResult(
+                            level=ValidationLevel.ERROR,
+                            component="akshare",
+                            message="AKShare配置为启用但模块未安装",
+                            suggestion="运行: pip install akshare",
+                        )
+                    )
+
+                proxy_cfg: Dict[str, Any] = {}
+                if isinstance(akshare_cfg.get("config"), dict):
+                    proxy_cfg = akshare_cfg["config"].get("proxy", {}) or {}
+                if isinstance(akshare_cfg.get("proxy"), dict):
+                    proxy_cfg.update(
+                        {k: v for k, v in akshare_cfg["proxy"].items() if v is not None}
+                    )
+
+                if proxy_cfg.get("enabled"):
+                    worker_url = proxy_cfg.get("worker_url") or self._get_cloudflare_worker_url()
+                    if not worker_url:
+                        self.results.append(
+                            ValidationResult(
+                                level=ValidationLevel.ERROR,
+                                component="akshare.proxy",
+                                message="AkShare代理启用但未找到可用的 Cloudflare Worker URL",
+                                suggestion="在 akshare.proxy.worker_url 或 cloudflare_workers 中配置 Worker 地址",
+                            )
+                        )
+
+            cloudflare_cfg = cast(Dict[str, Any], providers.get("cloudflare", {}) or {})
+            if isinstance(cloudflare_cfg, dict) and cloudflare_cfg.get("enabled", False):
+                enabled_count += 1
+                worker_url = cloudflare_cfg.get("worker_url")
+                if not worker_url and isinstance(cloudflare_cfg.get("config"), dict):
+                    worker_url = cloudflare_cfg["config"].get("worker_url")
+                if not worker_url:
+                    worker_url = self._get_cloudflare_worker_url()
+                if not worker_url:
+                    self.results.append(
+                        ValidationResult(
+                            level=ValidationLevel.ERROR,
+                            component="cloudflare",
+                            message="Cloudflare数据源启用但未配置 Worker URL",
+                            suggestion="在 cloudflare.config.worker_url 或 cloudflare_workers 中设置 Worker 地址",
+                        )
+                    )
+
+            amazing_cfg_raw = providers.get("amazingdata")
+            amazing_cfg_model = self._coerce_amazingdata_config(
+                amazing_cfg_raw, "data_sources.amazingdata"
+            )
+            if amazing_cfg_model:
+                validated_amazing_configs.add(id(amazing_cfg_model))
+                if amazing_cfg_model.enabled:
+                    enabled_count += 1
+                self._validate_amazingdata_settings(
+                    amazing_cfg_model, "data_sources.amazingdata"
+                )
+
+            top_level_enabled = self._validate_top_level_amazingdata(validated_amazing_configs)
+
+            if enabled_count == 0 and not top_level_enabled and (
+                not hasattr(self.config, "qmt") or not getattr(self.config.qmt, "enabled", False)
+            ):
+                self.results.append(
+                    ValidationResult(
+                        level=ValidationLevel.WARNING,
+                        component="data_sources",
+                        message="没有启用任何数据源",
+                        suggestion="至少启用一个数据源（QMT、AkShare或Cloudflare）",
+                    )
+                )
+
+            # legacy 提示
+            if hasattr(self.config, "data_providers") and hasattr(
+                self.config.data_providers, "cloudflare_proxy"
+            ):
+                self.results.append(
+                    ValidationResult(
+                        level=ValidationLevel.WARNING,
+                        component="cloudflare_proxy",
+                        message="检测到 legacy cloudflare_proxy 配置，系统会自动迁移为 akshare.proxy",
+                        suggestion="请将相关设置迁移到 data_sources.providers.akshare.proxy",
+                    )
+                )
+            return
+
+        # Legacy data_providers 兼容
+        if not hasattr(self.config, "data_providers"):
+            self.results.append(
+                ValidationResult(
+                    level=ValidationLevel.WARNING,
+                    component="data_providers",
+                    message="未找到数据源配置",
+                    suggestion="添加 data_sources.providers 或升级到新配置结构",
+                )
+            )
+            self._validate_top_level_amazingdata(validated_amazing_configs)
             return
 
         providers = self.config.data_providers
         enabled_count = 0
 
-        # 检查AKShare
-        if hasattr(providers, 'akshare_proxy'):
-            if providers.akshare_proxy.get('enabled', False):
-                enabled_count += 1
-                logger.info("AKShare数据源已启用")
-
-                # 检查AKShare是否安装
-                try:
-                    import akshare
-                except ImportError:
-                    self.results.append(ValidationResult(
+        if hasattr(providers, "akshare_proxy") and providers.akshare_proxy.get("enabled", False):
+            enabled_count += 1
+            logger.info("AKShare数据源已启用 (legacy 配置)")
+            try:
+                import akshare  # noqa: F401
+            except ImportError:
+                self.results.append(
+                    ValidationResult(
                         level=ValidationLevel.ERROR,
                         component="akshare",
                         message="AKShare配置为启用但模块未安装",
-                        suggestion="运行: pip install akshare"
-                    ))
+                        suggestion="运行: pip install akshare",
+                    )
+                )
 
-        # 检查CloudFlare
-        if hasattr(providers, 'cloudflare_proxy'):
-            if providers.cloudflare_proxy.get('enabled', False):
-                enabled_count += 1
-                logger.info("CloudFlare代理已启用")
+        if hasattr(providers, "cloudflare_proxy") and providers.cloudflare_proxy.get(
+            "enabled", False
+        ):
+            enabled_count += 1
+            self.results.append(
+                ValidationResult(
+                    level=ValidationLevel.WARNING,
+                    component="cloudflare_proxy",
+                    message="cloudflare_proxy 配置已废弃，系统将自动迁移为 akshare.proxy",
+                    suggestion="请迁移到 data_sources.providers.akshare.proxy",
+                )
+            )
 
-                # 检查Worker URL
-                if not providers.cloudflare_proxy.get('worker_url'):
-                    self.results.append(ValidationResult(
-                        level=ValidationLevel.ERROR,
-                        component="cloudflare",
-                        message="CloudFlare启用但未配置worker_url",
-                        suggestion="设置 cloudflare_proxy.worker_url"
-                    ))
+        top_level_enabled = self._validate_top_level_amazingdata(validated_amazing_configs)
+        if enabled_count == 0 and not top_level_enabled and (
+            not hasattr(self.config, "qmt") or not getattr(self.config.qmt, "enabled", False)
+        ):
+            self.results.append(
+                ValidationResult(
+                    level=ValidationLevel.WARNING,
+                    component="data_providers",
+                    message="没有启用任何数据源",
+                    suggestion="至少启用一个数据源（QMT、AkShare或Cloudflare）",
+                )
+            )
 
-        # 检查是否至少有一个数据源启用
-        if enabled_count == 0 and (not hasattr(self.config, 'qmt') or not self.config.qmt.enabled):
-            self.results.append(ValidationResult(
-                level=ValidationLevel.WARNING,
-                component="data_sources",
-                message="没有启用任何数据源",
-                suggestion="至少启用一个数据源（QMT、AKShare或CloudFlare）"
-            ))
+    def _coerce_amazingdata_config(
+        self, raw: object, component: str
+    ) -> Optional[AmazingDataConfigModel]:
+        """将输入对象解析为 AmazingData 配置模型。"""
+
+        if raw is None:
+            return None
+
+        if isinstance(raw, AmazingDataConfigModel):
+            return raw
+
+        data: Dict[str, Any]
+        if hasattr(raw, "model_dump"):
+            data = raw.model_dump()
+        elif isinstance(raw, Mapping):
+            data = dict(raw)
+        else:
+            data = dict(getattr(raw, "__dict__", {}))
+
+        try:
+            validated = AmazingDataConfigModel.model_validate(data)
+            return cast(AmazingDataConfigModel, validated)
+        except ValidationError as exc:
+            issues = []
+            for error in exc.errors():
+                loc = ".".join(str(part) for part in error.get("loc", ()))
+                msg = error.get("msg", "配置校验失败")
+                issues.append(f"{loc}: {msg}" if loc else msg)
+
+            detail = "；".join(issues) if issues else str(exc)
+            self.results.append(
+                ValidationResult(
+                    level=ValidationLevel.ERROR,
+                    component=component,
+                    message=f"AmazingData 配置解析失败: {detail}",
+                    suggestion="请检查 settings.<env>.yaml 中 amazingdata.* 字段的值是否完整且类型正确",
+                )
+            )
+            return None
+
+
+    def _validate_amazingdata_settings(
+        self, config_model: AmazingDataConfigModel, component: str
+    ) -> None:
+        """针对启用状态的 AmazingData 配置执行连通性检查。"""
+
+        if not config_model.enabled:
+            return
+
+        ensure_ready = getattr(config_model, "ensure_connection_ready", None)
+        if ensure_ready is None or not callable(ensure_ready):
+            return
+
+        try:
+            ensure_ready()
+        except ValueError as exc:
+            self.results.append(
+                ValidationResult(
+                    level=ValidationLevel.ERROR,
+                    component=f"{component}.connection",
+                    message=f"AmazingData 连接配置无效：{exc}",
+                    suggestion="请在 settings.<env>.yaml 的 amazingdata.connection 中填写合法的凭证与主机信息",
+                )
+            )
+
+
+    def _validate_top_level_amazingdata(self, validated_ids: set[int]) -> bool:
+        """校验顶层 AmazingData 配置，避免重复记录错误。"""
+
+        amazingdata_attr = getattr(self.config, "amazingdata", None)
+        config_model = self._coerce_amazingdata_config(amazingdata_attr, "amazingdata")
+        if not config_model or id(config_model) in validated_ids:
+            return False
+
+        validated_ids.add(id(config_model))
+        self._validate_amazingdata_settings(config_model, "amazingdata")
+        return bool(getattr(config_model, "enabled", False))
+
+    def _get_cloudflare_worker_url(self) -> Optional[str]:
+        """尝试从配置中解析 Cloudflare Worker URL"""
+        workers_cfg = getattr(self.config, "cloudflare_workers", None)
+        if not workers_cfg:
+            return None
+
+        # 优先调用 get_full_url() 以适配工厂方法
+        if hasattr(workers_cfg, "get_full_url"):
+            try:
+                full_url = workers_cfg.get_full_url()
+                if isinstance(full_url, str) and full_url:
+                    return full_url
+            except Exception as err:
+                logger.debug(f"获取 cloudflare_workers 完整 URL 失败: {err}")
+
+        for attr in ("worker_url", "base_url", "url"):
+            if hasattr(workers_cfg, attr):
+                value = getattr(workers_cfg, attr)
+                if isinstance(value, str) and value:
+                    return value
+
+        if isinstance(workers_cfg, dict):
+            for key in ("worker_url", "base_url", "url"):
+                value = workers_cfg.get(key)
+                if isinstance(value, str) and value:
+                    return value
+
+        return None
 
     def _validate_qmt_config(self):
         """验证QMT配置"""
-        if not hasattr(self.config, 'qmt'):
+        if not hasattr(self.config, "qmt"):
             return
 
         qmt = self.config.qmt
@@ -115,80 +343,91 @@ class ConfigValidator:
             logger.info("QMT已启用")
 
             # 检查端口配置
-            if hasattr(qmt, 'receiver'):
+            if hasattr(qmt, "receiver"):
                 tcp_port = qmt.receiver.tcp_port
                 if tcp_port < 1024 or tcp_port > 65535:
-                    self.results.append(ValidationResult(
-                        level=ValidationLevel.ERROR,
-                        component="qmt",
-                        message=f"QMT TCP端口 {tcp_port} 无效",
-                        suggestion="使用1024-65535之间的端口"
-                    ))
+                    self.results.append(
+                        ValidationResult(
+                            level=ValidationLevel.ERROR,
+                            component="qmt",
+                            message=f"QMT TCP端口 {tcp_port} 无效",
+                            suggestion="使用1024-65535之间的端口",
+                        )
+                    )
 
             # 检查回退配置
-            if hasattr(qmt, 'fallback_enabled'):
+            if hasattr(qmt, "fallback_enabled"):
                 if qmt.fallback_enabled and not self._has_fallback_sources():
-                    self.results.append(ValidationResult(
-                        level=ValidationLevel.WARNING,
-                        component="qmt",
-                        message="QMT启用了回退但没有配置备用数据源",
-                        suggestion="启用至少一个备用数据源或禁用fallback_enabled"
-                    ))
+                    self.results.append(
+                        ValidationResult(
+                            level=ValidationLevel.WARNING,
+                            component="qmt",
+                            message="QMT启用了回退但没有配置备用数据源",
+                            suggestion="启用至少一个备用数据源或禁用fallback_enabled",
+                        )
+                    )
 
     def _validate_conflicts(self):
         """验证配置冲突"""
         # 检查QMT Only Mode与其他数据源的冲突
         qmt_only = False
-        if hasattr(self.config, 'qmt') and self.config.qmt.enabled:
-            if hasattr(self.config.qmt, 'only_mode'):
+        if hasattr(self.config, "qmt") and self.config.qmt.enabled:
+            if hasattr(self.config.qmt, "only_mode"):
                 qmt_only = self.config.qmt.only_mode
 
         if qmt_only:
             # 检查是否同时启用了其他数据源
             other_sources = []
-            if hasattr(self.config, 'data_providers'):
+            if hasattr(self.config, "data_providers"):
                 providers = self.config.data_providers
-                if hasattr(providers, 'akshare_proxy') and providers.akshare_proxy.get('enabled'):
-                    other_sources.append('akshare')
-                if hasattr(providers, 'cloudflare_proxy') and providers.cloudflare_proxy.get('enabled'):
-                    other_sources.append('cloudflare')
+                if hasattr(providers, "akshare_proxy") and providers.akshare_proxy.get("enabled"):
+                    other_sources.append("akshare")
+                if hasattr(providers, "cloudflare_proxy") and providers.cloudflare_proxy.get(
+                    "enabled"
+                ):
+                    other_sources.append("cloudflare")
 
             if other_sources:
-                self.results.append(ValidationResult(
-                    level=ValidationLevel.WARNING,
-                    component="config",
-                    message=f"QMT Only Mode启用但同时启用了其他数据源: {', '.join(other_sources)}",
-                    suggestion="在QMT Only Mode下禁用其他数据源"
-                ))
+                self.results.append(
+                    ValidationResult(
+                        level=ValidationLevel.WARNING,
+                        component="config",
+                        message=f"QMT Only Mode启用但同时启用了其他数据源: {', '.join(other_sources)}",
+                        suggestion="在QMT Only Mode下禁用其他数据源",
+                    )
+                )
 
     def _validate_dependencies(self):
         """验证依赖关系"""
         # 检查Redis依赖
-        if hasattr(self.config, 'cache') and self.config.cache.enabled:
-            if self.config.cache.type == 'redis':
+        if hasattr(self.config, "cache") and self.config.cache.enabled:
+            if self.config.cache.type == "redis":
                 try:
-                    import redis
+                    if importlib.util.find_spec("redis") is None:
+                        raise ImportError
                 except ImportError:
-                    self.results.append(ValidationResult(
-                        level=ValidationLevel.ERROR,
-                        component="cache",
-                        message="Redis缓存启用但redis模块未安装",
-                        suggestion="运行: pip install redis"
-                    ))
+                    self.results.append(
+                        ValidationResult(
+                            level=ValidationLevel.ERROR,
+                            component="cache",
+                            message="Redis缓存启用但redis模块未安装",
+                            suggestion="运行: pip install redis",
+                        )
+                    )
 
     def _has_fallback_sources(self) -> bool:
         """检查是否有可用的备用数据源"""
-        if not hasattr(self.config, 'data_providers'):
+        if not hasattr(self.config, "data_providers"):
             return False
 
         providers = self.config.data_providers
 
         # 检查AKShare
-        if hasattr(providers, 'akshare_proxy') and providers.akshare_proxy.get('enabled'):
+        if hasattr(providers, "akshare_proxy") and providers.akshare_proxy.get("enabled"):
             return True
 
         # 检查CloudFlare
-        if hasattr(providers, 'cloudflare_proxy') and providers.cloudflare_proxy.get('enabled'):
+        if hasattr(providers, "cloudflare_proxy") and providers.cloudflare_proxy.get("enabled"):
             return True
 
         return False
@@ -240,10 +479,10 @@ class ConfigValidator:
                     "level": r.level.value,
                     "component": r.component,
                     "message": r.message,
-                    "suggestion": r.suggestion
+                    "suggestion": r.suggestion,
                 }
                 for r in self.results
-            ]
+            ],
         }
 
 

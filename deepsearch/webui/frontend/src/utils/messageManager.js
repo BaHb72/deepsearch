@@ -3,6 +3,10 @@
  * 用于管理全局的 message 实例，避免直接使用 antd 的静态 message
  */
 
+import logger from '@/utils/logger'
+
+const messageManagerLogger = logger.child('utils:message-manager')
+
 class MessageManager {
   constructor() {
     this.messageApi = null
@@ -25,7 +29,7 @@ class MessageManager {
     if (this.messageApi) {
       this.messageApi.success(content, duration)
     } else {
-      console.log('[Success]:', content)
+      messageManagerLogger.info('[Success]:', content)
     }
   }
 
@@ -38,7 +42,7 @@ class MessageManager {
     if (this.messageApi) {
       this.messageApi.error(content, duration)
     } else {
-      console.error('[Error]:', content)
+      messageManagerLogger.error('[Error]:', content)
     }
   }
 
@@ -51,7 +55,7 @@ class MessageManager {
     if (this.messageApi) {
       this.messageApi.warning(content, duration)
     } else {
-      console.warn('[Warning]:', content)
+      messageManagerLogger.warn('[Warning]:', content)
     }
   }
 
@@ -64,7 +68,7 @@ class MessageManager {
     if (this.messageApi) {
       this.messageApi.info(content, duration)
     } else {
-      console.info('[Info]:', content)
+      messageManagerLogger.info('[Info]:', content)
     }
   }
 
@@ -77,7 +81,7 @@ class MessageManager {
     if (this.messageApi) {
       return this.messageApi.loading(content, duration)
     } else {
-      console.log('[Loading]:', content)
+      messageManagerLogger.info('[Loading]:', content)
       return () => {} // 返回空函数作为 destroy 方法
     }
   }

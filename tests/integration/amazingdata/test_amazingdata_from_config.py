@@ -1,17 +1,18 @@
 """
 从配置文件读取凭证测试AmazingData API
 """
+
 import asyncio
-import sys
 import os
+import sys
 from datetime import datetime, timedelta
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from deepsearch.config import get_config
-from loguru import logger
 import pandas as pd
+
+from deepsearch.config import get_config
 
 
 def test_amazingdata_config():
@@ -26,23 +27,23 @@ def test_amazingdata_config():
     print(f"[INFO] 当前环境: {config.app.env}")
 
     # 优先检查新格式配置 (data_sources.providers.amazingdata)
-    if hasattr(config, 'data_sources') and config.data_sources:
-        providers = config.data_sources.get('providers', {})
-        if 'amazingdata' in providers:
+    if hasattr(config, "data_sources") and config.data_sources:
+        providers = config.data_sources.get("providers", {})
+        if "amazingdata" in providers:
             print("[INFO] 使用新格式配置 (data_sources.providers.amazingdata)")
-            ad_provider = providers['amazingdata']
+            ad_provider = providers["amazingdata"]
 
-            enabled = ad_provider.get('enabled', False)
-            ad_config_dict = ad_provider.get('config', {})
-            conn_config = ad_config_dict.get('connection', {})
+            enabled = ad_provider.get("enabled", False)
+            ad_config_dict = ad_provider.get("config", {})
+            conn_config = ad_config_dict.get("connection", {})
 
-            host = conn_config.get('host', 'localhost')
-            port = conn_config.get('port', 8888)
-            username = conn_config.get('username', '')
-            password = conn_config.get('password', '')
-            timeout = conn_config.get('timeout', 10)
+            host = conn_config.get("host", "localhost")
+            port = conn_config.get("port", 8888)
+            username = conn_config.get("username", "")
+            password = conn_config.get("password", "")
+            timeout = conn_config.get("timeout", 10)
 
-            print(f"\n[INFO] AmazingData配置状态:")
+            print("\n[INFO] AmazingData配置状态:")
             print(f"  启用: {enabled}")
             print(f"  服务器: {host}:{port}")
             print(f"  用户名: {'***' + username[-4:] if len(username) > 4 else '***'}")
@@ -59,22 +60,22 @@ def test_amazingdata_config():
                 return False
 
             return {
-                'host': host,
-                'port': port,
-                'username': username,
-                'password': password,
-                'timeout': timeout
+                "host": host,
+                "port": port,
+                "username": username,
+                "password": password,
+                "timeout": timeout,
             }
 
     # 回退到旧格式配置 (amazingdata)
-    if hasattr(config, 'amazingdata'):
+    if hasattr(config, "amazingdata"):
         print("[INFO] 使用旧格式配置 (amazingdata)")
         ad_config = config.amazingdata
-        print(f"\n[INFO] AmazingData配置状态:")
+        print("\n[INFO] AmazingData配置状态:")
         print(f"  启用: {ad_config.enabled}")
 
         # 获取连接配置
-        if hasattr(ad_config, 'connection'):
+        if hasattr(ad_config, "connection"):
             conn_config = ad_config.connection
             host = conn_config.host
             port = conn_config.port
@@ -83,11 +84,11 @@ def test_amazingdata_config():
             timeout = conn_config.timeout
         else:
             # 兼容旧配置格式
-            host = getattr(ad_config, 'host', 'localhost')
-            port = getattr(ad_config, 'port', 8888)
-            username = getattr(ad_config, 'username', '')
-            password = str(getattr(ad_config, 'password', ''))  # 确保密码是字符串
-            timeout = getattr(ad_config, 'timeout', 10)
+            host = getattr(ad_config, "host", "localhost")
+            port = getattr(ad_config, "port", 8888)
+            username = getattr(ad_config, "username", "")
+            password = str(getattr(ad_config, "password", ""))  # 确保密码是字符串
+            timeout = getattr(ad_config, "timeout", 10)
 
         print(f"  服务器: {host}:{port}")
         print(f"  用户名: {'***' + username[-4:] if len(username) > 4 else '***'}")
@@ -104,11 +105,11 @@ def test_amazingdata_config():
             return False
 
         return {
-            'host': host,
-            'port': port,
-            'username': username,
-            'password': password,
-            'timeout': timeout
+            "host": host,
+            "port": port,
+            "username": username,
+            "password": password,
+            "timeout": timeout,
         }
 
     print("[FAIL] 配置文件中没有amazingdata配置项")
@@ -123,10 +124,11 @@ async def test_amazingdata_connection(credentials):
 
     try:
         import AmazingData as ad
+
         print("[OK] AmazingData SDK已导入")
     except ImportError as e:
         print(f"[FAIL] AmazingData SDK未安装: {e}")
-        print("请运行: uv pip install installer/AmazingData-1.0.9-cp313-none-any.whl")
+        print("请运行: uv pip install third_party/AmazingData-1.0.9-cp313-none-any.whl")
         return False
 
     # 创建客户端实例
@@ -135,12 +137,12 @@ async def test_amazingdata_connection(credentials):
 
     # 设置服务器
     print(f"[2] 设置服务器 {credentials['host']}:{credentials['port']}...")
-    client.set_server(credentials['host'], credentials['port'])
+    client.set_server(credentials["host"], credentials["port"])
 
     # 登录
     print(f"[3] 登录用户 {credentials['username'][:3]}***...")
     try:
-        login_result = client.login(credentials['username'], credentials['password'])
+        login_result = client.login(credentials["username"], credentials["password"])
         if login_result:
             print("[OK] 登录成功")
         else:
@@ -153,7 +155,7 @@ async def test_amazingdata_connection(credentials):
     # 测试获取股票列表
     print("\n[4] 测试获取股票列表...")
     try:
-        stock_list = client.get_stock_list('A股')
+        stock_list = client.get_stock_list("A股")
         if stock_list and len(stock_list) > 0:
             print(f"[OK] 获取股票列表成功，共 {len(stock_list)} 只股票")
             print(f"    示例: {stock_list[:5] if len(stock_list) >= 5 else stock_list}")
@@ -185,9 +187,9 @@ async def test_amazingdata_connection(credentials):
 
         kline = client.get_kline(
             symbol=test_symbol,
-            period='daily',
-            start_date=start_date.strftime('%Y%m%d'),
-            end_date=end_date.strftime('%Y%m%d')
+            period="daily",
+            start_date=start_date.strftime("%Y%m%d"),
+            end_date=end_date.strftime("%Y%m%d"),
         )
 
         if kline is not None and len(kline) > 0:
@@ -229,10 +231,13 @@ def main():
     # 检查SDK
     try:
         import AmazingData as ad
-        print(f"\n[INFO] AmazingData SDK版本: {ad.__version__ if hasattr(ad, '__version__') else '未知'}")
+
+        print(
+            f"\n[INFO] AmazingData SDK版本: {ad.__version__ if hasattr(ad, '__version__') else '未知'}"
+        )
     except ImportError:
         print("\n[ERROR] AmazingData SDK未安装")
-        print("请运行: uv pip install installer/AmazingData-1.0.9-cp313-none-any.whl")
+        print("请运行: uv pip install third_party/AmazingData-1.0.9-cp313-none-any.whl")
         return
 
     # 运行异步测试
@@ -259,6 +264,7 @@ def main():
     except Exception as e:
         print(f"\n[ERROR] 测试过程出现异常: {e}")
         import traceback
+
         traceback.print_exc()
 
 

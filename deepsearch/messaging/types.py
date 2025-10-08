@@ -1,10 +1,11 @@
 """
 Message bus type definitions for the DeepSearch event system.
 """
+
 from __future__ import annotations
 
 from enum import Enum
-
+from typing import Mapping, Sequence, TypedDict
 
 # ==============================================================================
 # Message Bus Type Enumeration
@@ -14,12 +15,13 @@ from enum import Enum
 class BusName(str, Enum):
     """
     Enumeration of available message bus implementations.
-    
+
     Each bus type provides different capabilities:
     - INMEM: In-memory message bus for single-process applications
     - ZMQ: ZeroMQ-based distributed message bus
     - TIMESERIES: ZeroMQ with Redis TimeSeries persistence
     """
+
     INMEM = "inmem"  # In-memory message bus
     ZMQ = "zmq"  # ZeroMQ message bus
     TIMESERIES = "timeseries"  # ZeroMQ with TimeSeries persistence
@@ -57,4 +59,37 @@ Usage:
     }
 """
 
-__all__ = ["BusName"]
+
+class MessageHeaders(TypedDict, total=False):
+    """消息头部定义。"""
+
+    request_id: str
+    correlation_id: str
+    source: str
+    trace_id: str
+    strategy_id: str
+    metadata: Mapping[str, object]
+
+
+class MessageEnvelope(TypedDict, total=False):
+    """消息总线通用信封结构。"""
+
+    topic: str
+    type: str
+    message_id: str
+    timestamp: float
+    priority: int
+    headers: MessageHeaders
+    metadata: Mapping[str, object]
+    payload: object
+    data: object
+    client: str
+    token: str
+    capabilities: Sequence[str]
+    message: str
+    items: Sequence[Mapping[str, object]]
+    _compressed: bool
+    _data: bytes
+
+
+__all__ = ["BusName", "MessageEnvelope", "MessageHeaders"]

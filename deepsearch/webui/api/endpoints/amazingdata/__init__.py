@@ -14,13 +14,13 @@ AmazingData Web API 模块
 - amazingdata_api.py: 原始完整实现（保留兼容性）
 """
 
-# 导入新的模块化路由器
-from .router import router as modular_router
-
 # 保留原始路由器以确保兼容性
 from .amazingdata_api import router as legacy_router
+
+# 导入新的模块化路由器
+from .router import router as modular_router
 
 # 默认导出模块化路由器
 main_router = modular_router
 
-__all__ = ['main_router', 'modular_router', 'legacy_router']
+__all__ = ["main_router", "modular_router", "legacy_router"]

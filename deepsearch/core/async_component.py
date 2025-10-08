@@ -3,20 +3,21 @@
 
 使用状态管理器和资源分离的设计，避免自引用模式。
 """
+
 import asyncio
-import functools
+import concurrent.futures
 import inspect
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, TypeVar, Generic, Callable
-from datetime import datetime
+from typing import Any, Awaitable, Callable, Coroutine, Dict, Generic, Optional, TypeVar, cast
 
-from .component_state import ComponentState, ComponentLifecycle, ComponentStateManager
-from .utils.exceptions import ComponentLifecycleError
+from .component_state import ComponentLifecycle, ComponentState, ComponentStateManager
 from .interfaces import Component, ComponentStatus, ComponentType
+from .utils.exceptions import ComponentLifecycleError
 from .utils.statistics import StatisticsProvider, get_statistics_collector
 
-T = TypeVar('T')  # 资源类型
+T = TypeVar("T")  # 资源类型
+TReturn = TypeVar("TReturn")
 
 
 class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
@@ -36,7 +37,7 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
         component_type: ComponentType,
         display_name: Optional[str] = None,
         config: Optional[Any] = None,  # 支持依赖注入配置
-        dependencies: Optional[Dict[str, Any]] = None  # 支持依赖注入
+        dependencies: Optional[Dict[str, Any]] = None,  # 支持依赖注入
     ):
         """
         初始化组件
@@ -101,6 +102,10 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
 
         return status_mapping.get(lifecycle, ComponentStatus.UNKNOWN)
 
+    def get_status(self) -> str:
+        """向旧版统一组件接口提供状态字符串"""
+        return str(self.status.value)
+
     @property
     def state(self) -> ComponentState:
         """获取组件状态对象"""
@@ -109,12 +114,17 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
     @property
     def resource(self) -> Optional[T]:
         """获取组件管理的资源"""
-        return self._state_manager.state.resource
+        return cast(Optional[T], self._state_manager.state.resource)
 
     @property
     def config(self) -> Optional[Any]:
         """获取组件配置"""
         return self._config
+
+    @config.setter
+    def config(self, value: Any) -> None:
+        """更新组件配置"""
+        self._config = value
 
     # ==================== 生命周期管理 ====================
 
@@ -124,8 +134,9 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
         """
         if not self._state_manager.can_transition(ComponentLifecycle.INITIALIZING):
             raise ComponentLifecycleError(
-                self._name, "initialize",
-                f"Cannot initialize from state {self.state.lifecycle.value}"
+                self._name,
+                "initialize",
+                f"Cannot initialize from state {self.state.lifecycle.value}",
             )
 
         try:
@@ -143,10 +154,7 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
             self._logger.info(f"组件 {self._name} 初始化成功")
 
         except Exception as e:
-            self._state_manager.transition_to(
-                ComponentLifecycle.FAILED,
-                str(e)
-            )
+            self._state_manager.transition_to(ComponentLifecycle.FAILED, str(e))
             self._logger.error(f"组件 {self._name} 初始化失败: {e}")
             raise ComponentLifecycleError(self._name, "initialize", str(e))
 
@@ -156,8 +164,7 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
         """
         if not self._state_manager.can_transition(ComponentLifecycle.STARTING):
             raise ComponentLifecycleError(
-                self._name, "start",
-                f"Cannot start from state {self.state.lifecycle.value}"
+                self._name, "start", f"Cannot start from state {self.state.lifecycle.value}"
             )
 
         try:
@@ -171,10 +178,7 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
             self._logger.info(f"组件 {self._name} 启动成功")
 
         except Exception as e:
-            self._state_manager.transition_to(
-                ComponentLifecycle.FAILED,
-                str(e)
-            )
+            self._state_manager.transition_to(ComponentLifecycle.FAILED, str(e))
             self._logger.error(f"组件 {self._name} 启动失败: {e}")
             raise ComponentLifecycleError(self._name, "start", str(e))
 
@@ -200,8 +204,7 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
             if self.state.lifecycle in [ComponentLifecycle.STOPPED, ComponentLifecycle.DISPOSED]:
                 return
             raise ComponentLifecycleError(
-                self._name, "stop",
-                f"Cannot stop from state {self.state.lifecycle.value}"
+                self._name, "stop", f"Cannot stop from state {self.state.lifecycle.value}"
             )
 
         try:
@@ -246,16 +249,9 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
 
     @abstractmethod
     async def _do_initialize(self) -> Optional[T]:
-        """
-        执行初始化（子类实现）
-
-        Returns:
-            初始化的资源对象（如数据库连接、Redis客户端等），
-            如果没有资源则返回 None
-        """
+        """执行初始化逻辑。"""
         pass
 
-    @abstractmethod
     async def _do_start(self) -> None:
         """执行启动（子类实现）"""
         pass
@@ -277,19 +273,20 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
 
     async def health_check_async(self) -> bool:
         """
-        异步健康检查
+        执行异步健康检查
 
         Returns:
             组件是否健康
         """
-        if not self.state.is_running():
+        if not bool(self.state.is_running()):
             return False
 
         try:
-            # 调用子类的具体健康检查
-            return await self._do_health_check()
+            # 子类可覆盖具体实现
+            result = await self._do_health_check()
+            return bool(result)
         except Exception as e:
-            self._logger.error(f"健康检查失败: {e}")
+            self._logger.error(f"组件健康检查失败: {e}")
             return False
 
     async def _do_health_check(self) -> bool:
@@ -300,7 +297,9 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
             是否健康
         """
         # 默认实现：检查是否有资源且状态正常
-        return self.state.has_resource() and self.state.is_healthy()
+        has_resource = bool(self.state.has_resource())
+        is_healthy = bool(self.state.is_healthy())
+        return has_resource and is_healthy
 
     def health_check_sync(self) -> bool:
         """
@@ -310,7 +309,7 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
             组件是否健康
         """
         # 简单检查状态
-        return self.state.is_healthy()
+        return bool(self.state.is_healthy())
 
     # 兼容旧接口
     def _health_check(self) -> bool:
@@ -337,6 +336,61 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
 
         return stats
 
+    def _execute_async_callable(self, coroutine_factory: Callable[[], Coroutine[Any, Any, TReturn]]) -> TReturn:
+        """在同步上下文中安全执行协程调用。"""
+
+        def _runner() -> TReturn:
+            return asyncio.run(coroutine_factory())
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return _runner()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_runner)
+            return future.result()
+
+    def _collect_statistics_for_status(self) -> Dict[str, Any]:
+        """收集状态接口需要的统计信息，兼容异步实现。"""
+        stats_callable = getattr(self, "get_statistics", None)
+        if not callable(stats_callable):
+            return {}
+
+        base_callable = getattr(stats_callable, "__func__", stats_callable)
+
+        try:
+            if inspect.iscoroutinefunction(base_callable):
+
+                async def _invoke_async() -> Any:
+                    return await stats_callable()
+
+                result = self._execute_async_callable(_invoke_async)
+            else:
+                result = stats_callable()
+                if inspect.isawaitable(result):
+
+                    async def _await_result() -> Any:
+                        return await result
+
+                    result = self._execute_async_callable(_await_result)
+        except Exception as exc:
+            self._logger.debug(f"Collect statistics failed for {self._name}: {exc}")
+            return {}
+
+        if isinstance(result, dict):
+            return cast(Dict[str, Any], result)
+
+        if hasattr(result, "to_dict"):
+            try:
+                dict_result = result.to_dict()
+            except Exception as exc:
+                self._logger.debug(f"Convert statistics to dict failed for {self._name}: {exc}")
+            else:
+                if isinstance(dict_result, dict):
+                    return cast(Dict[str, Any], dict_result)
+        return {}
+
     def _get_extra_statistics(self) -> Optional[Dict[str, Any]]:
         """
         获取额外的统计信息（子类可覆盖）
@@ -350,32 +404,33 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
 
     def get_status_info(self) -> Dict[str, Any]:
         """获取状态信息"""
+        statistics = self._collect_statistics_for_status()
         return {
             "name": self._name,
             "display_name": self._display_name,
             "type": self._component_type.value,
             "status": self.status.value,
             "state": self.state.to_dict(),
-            "statistics": self.get_statistics(),
+            "statistics": statistics,
         }
 
     # ==================== 辅助方法 ====================
 
     def is_initialized(self) -> bool:
         """检查是否已初始化"""
-        return self.state.is_initialized()
+        return bool(self.state.is_initialized())
 
     def is_running(self) -> bool:
         """检查是否正在运行"""
-        return self.state.is_running()
+        return bool(self.state.is_running())
 
     def is_healthy(self) -> bool:
         """检查是否健康"""
-        return self.state.is_healthy()
+        return bool(self.state.is_healthy())
 
     def get_error(self) -> Optional[str]:
         """获取错误信息"""
-        return self.state.error_message
+        return cast(Optional[str], self.state.error_message)
 
     def add_dependency(self, name: str, dependency: Any):
         """添加依赖"""
@@ -402,9 +457,9 @@ class SimpleAsyncComponent(AsyncComponent[T]):
         self,
         name: str,
         component_type: ComponentType,
-        instance_factory: Callable[..., T],
+        instance_factory: Callable[..., Awaitable[T] | T],
         display_name: Optional[str] = None,
-        **factory_kwargs
+        **factory_kwargs,
     ):
         super().__init__(name, component_type, display_name)
         self._instance_factory = instance_factory
@@ -418,18 +473,19 @@ class SimpleAsyncComponent(AsyncComponent[T]):
     def _detect_lifecycle_methods(self):
         """自动检测实例的启动和停止方法"""
         # 常见的启动方法名
-        self._potential_start_methods = ['start', 'run', 'connect', 'open']
-        self._potential_stop_methods = ['stop', 'close', 'disconnect', 'shutdown']
+        self._potential_start_methods = ["start", "run", "connect", "open"]
+        self._potential_stop_methods = ["stop", "close", "disconnect", "shutdown"]
 
     async def _do_initialize(self) -> Optional[T]:
         """创建实例"""
-        # 如果工厂是异步的
+        instance: T
         if asyncio.iscoroutinefunction(self._instance_factory):
-            instance = await self._instance_factory(**self._factory_kwargs)
+            async_factory = cast(Callable[..., Awaitable[T]], self._instance_factory)
+            instance = await async_factory(**self._factory_kwargs)
         else:
-            instance = self._instance_factory(**self._factory_kwargs)
+            sync_factory = cast(Callable[..., T], self._instance_factory)
+            instance = sync_factory(**self._factory_kwargs)
 
-        # 检测实际的启动和停止方法
         for method_name in self._potential_start_methods:
             if hasattr(instance, method_name):
                 self._start_method = method_name
@@ -440,7 +496,7 @@ class SimpleAsyncComponent(AsyncComponent[T]):
                 self._stop_method = method_name
                 break
 
-        return instance  # 返回实例，由状态管理器管理
+        return instance  # 返回实例交由状态管理器处理
 
     async def _do_start(self) -> None:
         """启动实例"""
@@ -473,16 +529,20 @@ class SimpleAsyncComponent(AsyncComponent[T]):
         return self.resource
 
     def _health_check(self) -> bool:
-        """健康检查（同步版本，兼容旧代码）"""
+        """执行同步健康检查"""
         instance = self.resource
         if not instance:
             return False
-        # 如果实例有健康检查方法，调用它
-        if hasattr(instance, 'health_check'):
-            return instance.health_check()
-        if hasattr(instance, 'is_healthy'):
-            return instance.is_healthy()
-        # 默认认为如果实例存在就是健康的
+
+        if hasattr(instance, "health_check"):
+            result = instance.health_check()
+            if inspect.isawaitable(result):
+                return False
+            return bool(result)
+        if hasattr(instance, "is_healthy"):
+            result = instance.is_healthy()
+            if inspect.isawaitable(result):
+                return False
+            return bool(result)
+        # 默认认为实例存在即健康
         return True
-
-

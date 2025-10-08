@@ -1,6 +1,8 @@
-import {defineConfig} from 'vite'
+import {defineConfig, createLogger} from 'vite'
 import react from '@vitejs/plugin-react'
 import {fileURLToPath, URL} from 'node:url'
+
+const proxyLogger = createLogger('info', { prefix: '[proxy]' })
 
 export default defineConfig({
     plugins: [
@@ -49,6 +51,12 @@ export default defineConfig({
                 ws: true,
                 changeOrigin: true
             },
+            '/api/system/logs/ws': {
+                target: 'ws://localhost:8000',
+                ws: true,
+                changeOrigin: true
+            },
+
             // 数据源日志 WebSocket
             '/api/data-source/logs': {
                 target: 'ws://localhost:8000',
@@ -59,12 +67,12 @@ export default defineConfig({
             '/api': {
                 target: 'http://localhost:8000',
                 changeOrigin: true,
-                configure: (proxy, options) => {
-                    proxy.on('error', (err, req, res) => {
-                        console.log('proxy error', err);
+                configure: (proxy) => {
+                    proxy.on('error', (err, req) => {
+                        proxyLogger.error(`[PROXY_ERROR] ${req?.url ?? 'unknown'}`, err)
                     });
-                    proxy.on('proxyReq', (proxyReq, req, res) => {
-                        console.log('Sending Request to the Target:', req.url);
+                    proxy.on('proxyReq', (_proxyReq, req) => {
+                        proxyLogger.info(`[PROXY_REQUEST] ${req?.url ?? 'unknown'}`)
                     });
                 }
             },

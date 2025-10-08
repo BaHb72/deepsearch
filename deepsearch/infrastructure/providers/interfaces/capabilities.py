@@ -1,13 +1,15 @@
 """
 数据能力定义
 """
-from enum import Enum
-from typing import List, Set, Optional, Dict, Any
+
 from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Any, Dict, List, Set
 
 
 class DataCapability(Enum):
     """数据源能力枚举"""
+
     # 基础数据能力
     STOCK_LIST = "stock_list"
     REALTIME_QUOTE = "realtime_quote"
@@ -58,21 +60,25 @@ class DataProvider(ABC):
 
 class DataProviderConfig:
     """数据提供者配置"""
+
     pass
 
 
 class DataRequest:
     """数据请求"""
+
     pass
 
 
 class DataResponse:
     """数据响应"""
+
     pass
 
 
 class DataProviderError(Exception):
     """数据提供者错误"""
+
     pass
 
 
@@ -80,7 +86,7 @@ def get_capable_providers(providers: Dict[str, Any], capability: DataCapability)
     """获取支持指定能力的提供者"""
     result = []
     for name, provider in providers.items():
-        if hasattr(provider, 'get_capabilities'):
+        if hasattr(provider, "get_capabilities"):
             if capability in provider.get_capabilities():
                 result.append(name)
     return result
@@ -88,6 +94,6 @@ def get_capable_providers(providers: Dict[str, Any], capability: DataCapability)
 
 def check_provider_capability(provider: Any, capability: DataCapability) -> bool:
     """检查提供者是否支持指定能力"""
-    if hasattr(provider, 'get_capabilities'):
+    if hasattr(provider, "get_capabilities"):
         return capability in provider.get_capabilities()
     return False

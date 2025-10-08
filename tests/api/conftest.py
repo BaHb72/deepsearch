@@ -1,19 +1,21 @@
 """
 API测试配置和fixtures
 """
-import pytest
+
 import asyncio
-from typing import Generator, AsyncGenerator
-from fastapi.testclient import TestClient
-from httpx import AsyncClient, ASGITransport
-import json
-from pathlib import Path
 from datetime import datetime
-import logging
+from pathlib import Path
+from typing import AsyncGenerator, Generator
+
+import pytest
+from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
+
+from deepsearch.observability import get_logger, logger_manager
 
 # 配置日志
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger_manager.start()
+logger = get_logger(__name__)
 
 
 @pytest.fixture(scope="session")
@@ -29,7 +31,8 @@ def test_client() -> Generator[TestClient, None, None]:
     """创建测试客户端"""
     from deepsearch.webui.server import app
 
-    with TestClient(app) as client:
+    headers = {"X-Test-Mode": "true"}
+    with TestClient(app, headers=headers) as client:
         yield client
 
 
@@ -39,27 +42,21 @@ async def async_client() -> AsyncGenerator[AsyncClient, None]:
     from deepsearch.webui.server import app
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    headers = {"X-Test-Mode": "true"}
+    async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as client:
         yield client
 
 
 @pytest.fixture(scope="function")
 def api_headers():
     """API请求头"""
-    return {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "X-Test-Mode": "true"
-    }
+    return {"Content-Type": "application/json", "Accept": "application/json", "X-Test-Mode": "true"}
 
 
 @pytest.fixture(scope="function")
 def auth_headers():
     """认证请求头"""
-    return {
-        "Authorization": "Bearer test-token-123456",
-        "Content-Type": "application/json"
-    }
+    return {"Authorization": "Bearer test-token-123456", "Content-Type": "application/json"}
 
 
 @pytest.fixture(scope="session")
@@ -79,7 +76,7 @@ def mock_stock_data():
         "change_pct": 4.75,
         "volume": 123456789,
         "amount": 1523456789.12,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
     }
 
 
@@ -94,7 +91,7 @@ def mock_kline_data():
             "low": 12.00,
             "close": 12.34,
             "volume": 10000000,
-            "amount": 123000000
+            "amount": 123000000,
         },
         {
             "date": "2025-09-15",
@@ -103,8 +100,8 @@ def mock_kline_data():
             "low": 11.90,
             "close": 12.10,
             "volume": 9500000,
-            "amount": 115000000
-        }
+            "amount": 115000000,
+        },
     ]
 
 
@@ -117,22 +114,22 @@ def mock_market_overview():
             "name": "上证指数",
             "current": 3124.56,
             "change": 12.34,
-            "change_pct": 0.40
+            "change_pct": 0.40,
         },
         "sz_index": {
             "code": "399001",
             "name": "深证成指",
             "current": 9876.54,
             "change": -23.45,
-            "change_pct": -0.24
+            "change_pct": -0.24,
         },
         "cyb_index": {
             "code": "399006",
             "name": "创业板指",
             "current": 2345.67,
             "change": 34.56,
-            "change_pct": 1.50
-        }
+            "change_pct": 1.50,
+        },
     }
 
 
@@ -140,21 +137,9 @@ def mock_market_overview():
 def mock_data_source_config():
     """模拟数据源配置"""
     return {
-        "amazingdata": {
-            "enabled": True,
-            "priority": 1,
-            "timeout": 5000
-        },
-        "cloudflare": {
-            "enabled": True,
-            "priority": 2,
-            "timeout": 3000
-        },
-        "qmt": {
-            "enabled": False,
-            "priority": 3,
-            "timeout": 10000
-        }
+        "amazingdata": {"enabled": True, "priority": 1, "timeout": 5000},
+        "cloudflare": {"enabled": True, "priority": 2, "timeout": 3000},
+        "qmt": {"enabled": False, "priority": 3, "timeout": 10000},
     }
 
 
@@ -217,7 +202,7 @@ class APITestHelper:
                 assert key in actual, f"Missing key: {key}"
                 APITestHelper.compare_json(actual[key], value, ignore_fields)
         elif isinstance(expected, list) and isinstance(actual, list):
-            assert len(actual) == len(expected), f"List length mismatch"
+            assert len(actual) == len(expected), "List length mismatch"
             for a, e in zip(actual, expected):
                 APITestHelper.compare_json(a, e, ignore_fields)
         else:

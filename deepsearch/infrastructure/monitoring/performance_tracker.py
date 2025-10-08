@@ -7,22 +7,23 @@
 - API端点性能分析
 - 实时指标聚合
 """
-import asyncio
-import time
-import psutil
-import threading
-from typing import Dict, List, Any, Optional, Callable
-from datetime import datetime, timedelta
-from dataclasses import dataclass, field, asdict
-from collections import defaultdict, deque
-from enum import Enum
-import json
 
+import json
+import threading
+import time
+from collections import defaultdict, deque
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Any, Callable, DefaultDict, Deque, Dict, List, Optional, TypedDict, cast
+
+import psutil
 from loguru import logger
 
 
 class MetricLevel(Enum):
     """指标级别"""
+
     SYSTEM = "system"
     APPLICATION = "application"
     DATABASE = "database"
@@ -32,6 +33,7 @@ class MetricLevel(Enum):
 
 class AlertSeverity(Enum):
     """告警严重程度"""
+
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
@@ -41,6 +43,7 @@ class AlertSeverity(Enum):
 @dataclass
 class SystemMetrics:
     """系统资源指标"""
+
     timestamp: float
     cpu_percent: float
     memory_percent: float
@@ -58,33 +61,32 @@ class SystemMetrics:
         """转换为字典"""
         return {
             "timestamp": self.timestamp,
-            "cpu": {
-                "percent": round(self.cpu_percent, 2)
-            },
+            "cpu": {"percent": round(self.cpu_percent, 2)},
             "memory": {
                 "percent": round(self.memory_percent, 2),
                 "available_mb": round(self.memory_available / 1024 / 1024, 2),
-                "used_mb": round(self.memory_used / 1024 / 1024, 2)
+                "used_mb": round(self.memory_used / 1024 / 1024, 2),
             },
             "disk_io": {
                 "read_mb": round(self.disk_io_read_bytes / 1024 / 1024, 2),
-                "write_mb": round(self.disk_io_write_bytes / 1024 / 1024, 2)
+                "write_mb": round(self.disk_io_write_bytes / 1024 / 1024, 2),
             },
             "network": {
                 "sent_mb": round(self.network_sent_bytes / 1024 / 1024, 2),
-                "recv_mb": round(self.network_recv_bytes / 1024 / 1024, 2)
+                "recv_mb": round(self.network_recv_bytes / 1024 / 1024, 2),
             },
             "process": {
                 "count": self.process_count,
                 "threads": self.thread_count,
-                "open_files": self.open_files
-            }
+                "open_files": self.open_files,
+            },
         }
 
 
 @dataclass
 class DatabaseMetrics:
     """数据库性能指标"""
+
     timestamp: float
     active_connections: int = 0
     idle_connections: int = 0
@@ -104,29 +106,27 @@ class DatabaseMetrics:
             "connections": {
                 "active": self.active_connections,
                 "idle": self.idle_connections,
-                "total": self.active_connections + self.idle_connections
+                "total": self.active_connections + self.idle_connections,
             },
             "queries": {
                 "total": self.total_queries,
                 "slow": self.slow_queries,
                 "failed": self.failed_queries,
-                "error_rate": round(self.failed_queries / max(self.total_queries, 1) * 100, 2)
+                "error_rate": round(self.failed_queries / max(self.total_queries, 1) * 100, 2),
             },
             "performance": {
                 "avg_query_time_ms": round(self.avg_query_time * 1000, 2),
                 "max_query_time_ms": round(self.max_query_time * 1000, 2),
-                "cache_hit_ratio": round(self.cache_hit_ratio * 100, 2)
+                "cache_hit_ratio": round(self.cache_hit_ratio * 100, 2),
             },
-            "locks": {
-                "deadlocks": self.deadlocks,
-                "lock_waits": self.lock_waits
-            }
+            "locks": {"deadlocks": self.deadlocks, "lock_waits": self.lock_waits},
         }
 
 
 @dataclass
 class ApplicationMetrics:
     """应用层指标"""
+
     timestamp: float
     request_count: int = 0
     request_rate: float = 0.0
@@ -148,25 +148,34 @@ class ApplicationMetrics:
                 "count": self.request_count,
                 "rate_per_sec": round(self.request_rate, 2),
                 "error_count": self.error_count,
-                "error_rate": round(self.error_rate * 100, 2)
+                "error_rate": round(self.error_rate * 100, 2),
             },
             "response_time": {
                 "avg_ms": round(self.avg_response_time * 1000, 2),
                 "p50_ms": round(self.p50_response_time * 1000, 2),
                 "p90_ms": round(self.p90_response_time * 1000, 2),
-                "p99_ms": round(self.p99_response_time * 1000, 2)
+                "p99_ms": round(self.p99_response_time * 1000, 2),
             },
             "application": {
                 "active_sessions": self.active_sessions,
                 "cache_hit_rate": round(self.cache_hit_rate * 100, 2),
-                "event_queue_size": self.event_queue_size
-            }
+                "event_queue_size": self.event_queue_size,
+            },
         }
+
+
+class CustomMetric(TypedDict):
+    """自定义指标结构"""
+
+    timestamp: float
+    value: float
+    tags: Dict[str, str]
 
 
 @dataclass
 class Alert:
     """性能告警"""
+
     id: str
     severity: AlertSeverity
     metric_level: MetricLevel
@@ -186,7 +195,7 @@ class Alert:
             "details": self.details,
             "timestamp": self.timestamp.isoformat(),
             "resolved": self.resolved,
-            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
         }
 
 
@@ -194,10 +203,7 @@ class PerformanceTracker:
     """综合性能跟踪器"""
 
     def __init__(
-        self,
-        collect_interval: float = 1.0,
-        history_size: int = 3600,
-        enable_alerts: bool = True
+        self, collect_interval: float = 1.0, history_size: int = 3600, enable_alerts: bool = True
     ):
         """
         初始化性能跟踪器
@@ -208,16 +214,16 @@ class PerformanceTracker:
             enable_alerts: 是否启用告警
         """
         self.collect_interval = collect_interval
-        self.history_size = history_size
+        self._history_size = history_size
         self.enable_alerts = enable_alerts
 
         # 指标历史
-        self.system_metrics: deque = deque(maxlen=history_size)
-        self.database_metrics: deque = deque(maxlen=history_size)
-        self.application_metrics: deque = deque(maxlen=history_size)
+        self.system_metrics: Deque[SystemMetrics] = deque(maxlen=history_size)
+        self.database_metrics: Deque[DatabaseMetrics] = deque(maxlen=history_size)
+        self.application_metrics: Deque[ApplicationMetrics] = deque(maxlen=history_size)
 
         # 自定义指标
-        self.custom_metrics: Dict[str, deque] = defaultdict(lambda: deque(maxlen=history_size))
+        self.custom_metrics: DefaultDict[str, Deque[CustomMetric]] = self._create_custom_metric_store(history_size)
 
         # 告警
         self.alerts: Dict[str, Alert] = {}
@@ -237,6 +243,38 @@ class PerformanceTracker:
         # 初始化默认告警规则
         self._init_default_alert_rules()
 
+    @property
+    def history_size(self) -> int:
+        """Return current history limit"""
+        return self._history_size
+
+    @history_size.setter
+    def history_size(self, value: int):
+        """Update history limit and trim existing buffers"""
+        if value <= 0:
+            raise ValueError("history_size must be positive")
+        if value == self._history_size:
+            return
+
+        self._history_size = value
+
+        self.system_metrics = deque(list(self.system_metrics)[-value:], maxlen=value)
+        self.database_metrics = deque(list(self.database_metrics)[-value:], maxlen=value)
+        self.application_metrics = deque(list(self.application_metrics)[-value:], maxlen=value)
+
+        updated_custom = self._create_custom_metric_store(value)
+        for name, metrics in self.custom_metrics.items():
+            updated_custom[name].extend(list(metrics)[-value:])
+        self.custom_metrics = updated_custom
+
+    def _create_custom_metric_store(self, maxlen: int) -> DefaultDict[str, Deque[CustomMetric]]:
+        """构造自定义指标缓冲区"""
+
+        def _factory() -> Deque[CustomMetric]:
+            return cast(Deque[CustomMetric], deque(maxlen=maxlen))
+
+        return defaultdict(_factory)
+
     def _init_default_alert_rules(self):
         """初始化默认告警规则"""
         self.alert_rules = [
@@ -245,50 +283,50 @@ class PerformanceTracker:
                 "level": MetricLevel.SYSTEM,
                 "severity": AlertSeverity.WARNING,
                 "condition": lambda m: m.cpu_percent > 80,
-                "message": "CPU使用率过高: {cpu_percent:.1f}%"
+                "message": "CPU使用率过高: {cpu_percent:.1f}%",
             },
             {
                 "name": "high_memory",
                 "level": MetricLevel.SYSTEM,
                 "severity": AlertSeverity.WARNING,
                 "condition": lambda m: m.memory_percent > 85,
-                "message": "内存使用率过高: {memory_percent:.1f}%"
+                "message": "内存使用率过高: {memory_percent:.1f}%",
             },
             {
                 "name": "critical_memory",
                 "level": MetricLevel.SYSTEM,
                 "severity": AlertSeverity.CRITICAL,
                 "condition": lambda m: m.memory_percent > 95,
-                "message": "内存使用率危急: {memory_percent:.1f}%"
+                "message": "内存使用率危急: {memory_percent:.1f}%",
             },
             {
                 "name": "high_error_rate",
                 "level": MetricLevel.APPLICATION,
                 "severity": AlertSeverity.ERROR,
                 "condition": lambda m: m.error_rate > 0.1,
-                "message": "错误率过高: {error_rate:.1%}"
+                "message": "错误率过高: {error_rate:.1%}",
             },
             {
                 "name": "slow_response",
                 "level": MetricLevel.APPLICATION,
                 "severity": AlertSeverity.WARNING,
                 "condition": lambda m: m.p99_response_time > 5.0,
-                "message": "响应时间过慢: P99={p99_response_time:.2f}s"
+                "message": "响应时间过慢: P99={p99_response_time:.2f}s",
             },
             {
                 "name": "db_connection_leak",
                 "level": MetricLevel.DATABASE,
                 "severity": AlertSeverity.ERROR,
                 "condition": lambda m: m.active_connections > 100,
-                "message": "数据库连接数过多: {active_connections}"
+                "message": "数据库连接数过多: {active_connections}",
             },
             {
                 "name": "db_deadlock",
                 "level": MetricLevel.DATABASE,
                 "severity": AlertSeverity.CRITICAL,
                 "condition": lambda m: m.deadlocks > 0,
-                "message": "检测到数据库死锁: {deadlocks}个"
-            }
+                "message": "检测到数据库死锁: {deadlocks}个",
+            },
         ]
 
     def start(self):
@@ -362,10 +400,10 @@ class PerformanceTracker:
 
         # 进程信息
         try:
-            process_info = self._process.as_dict(attrs=['num_threads', 'num_fds'])
-            thread_count = process_info.get('num_threads', 0)
-            open_files = process_info.get('num_fds', 0)
-        except:
+            process_info = self._process.as_dict(attrs=["num_threads", "num_fds"])
+            thread_count = process_info.get("num_threads", 0)
+            open_files = process_info.get("num_fds", 0)
+        except Exception:
             thread_count = open_files = 0
 
         return SystemMetrics(
@@ -380,7 +418,7 @@ class PerformanceTracker:
             network_recv_bytes=net_recv,
             process_count=len(psutil.pids()),
             thread_count=thread_count,
-            open_files=open_files
+            open_files=open_files,
         )
 
     def record_database_metrics(self, metrics: DatabaseMetrics):
@@ -411,11 +449,8 @@ class PerformanceTracker:
 
     def record_custom_metric(self, name: str, value: float, tags: Optional[Dict[str, str]] = None):
         """记录自定义指标"""
-        metric = {
-            "timestamp": time.time(),
-            "value": value,
-            "tags": tags or {}
-        }
+        metric_tags: Dict[str, str] = tags if tags is not None else {}
+        metric: CustomMetric = {"timestamp": time.time(), "value": value, "tags": metric_tags}
         self.custom_metrics[name].append(metric)
 
     def _check_alerts(self, level: MetricLevel, metrics: Any):
@@ -433,7 +468,7 @@ class PerformanceTracker:
                     # 检查是否已存在未解决的同类告警
                     existing_alert = None
                     for aid, alert in self.alerts.items():
-                        if alert.message.startswith(rule["name"]) and not alert.resolved:
+                        if alert.id.startswith(rule["name"]) and not alert.resolved:
                             existing_alert = alert
                             break
 
@@ -445,7 +480,7 @@ class PerformanceTracker:
                             severity=rule["severity"],
                             metric_level=level,
                             message=message,
-                            details=metrics.to_dict() if hasattr(metrics, 'to_dict') else {}
+                            details=metrics.to_dict() if hasattr(metrics, "to_dict") else {},
                         )
 
                         self.alerts[alert_id] = alert
@@ -461,7 +496,7 @@ class PerformanceTracker:
                 else:
                     # 检查是否有需要解决的告警
                     for alert in self.alerts.values():
-                        if alert.message.startswith(rule["name"]) and not alert.resolved:
+                        if alert.id.startswith(rule["name"]) and not alert.resolved:
                             alert.resolved = True
                             alert.resolved_at = datetime.now()
                             logger.info(f"[告警解除] {alert.message}")
@@ -493,9 +528,7 @@ class PerformanceTracker:
         return result
 
     def get_metrics_history(
-        self,
-        level: MetricLevel,
-        duration: Optional[int] = None
+        self, level: MetricLevel, duration: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """
         获取指标历史
@@ -507,12 +540,13 @@ class PerformanceTracker:
         Returns:
             指标历史列表
         """
+        metrics: Deque[Any]
         if level == MetricLevel.SYSTEM:
-            metrics = self.system_metrics
+            metrics = cast(Deque[Any], self.system_metrics)
         elif level == MetricLevel.DATABASE:
-            metrics = self.database_metrics
+            metrics = cast(Deque[Any], self.database_metrics)
         elif level == MetricLevel.APPLICATION:
-            metrics = self.application_metrics
+            metrics = cast(Deque[Any], self.application_metrics)
         else:
             return []
 
@@ -537,15 +571,15 @@ class PerformanceTracker:
         Returns:
             统计信息
         """
-        stats = {
+        stats: Dict[str, Any] = {
             "timestamp": datetime.now().isoformat(),
             "duration": duration,
             "metrics_count": {
                 "system": len(self.system_metrics),
                 "database": len(self.database_metrics),
                 "application": len(self.application_metrics),
-                "custom": sum(len(v) for v in self.custom_metrics.values())
-            }
+                "custom": sum(len(v) for v in self.custom_metrics.values()),
+            },
         }
 
         # 系统统计
@@ -559,13 +593,13 @@ class PerformanceTracker:
                     "cpu": {
                         "avg": round(sum(cpu_values) / len(cpu_values), 2),
                         "max": round(max(cpu_values), 2),
-                        "min": round(min(cpu_values), 2)
+                        "min": round(min(cpu_values), 2),
                     },
                     "memory": {
                         "avg": round(sum(memory_values) / len(memory_values), 2),
                         "max": round(max(memory_values), 2),
-                        "min": round(min(memory_values), 2)
-                    }
+                        "min": round(min(memory_values), 2),
+                    },
                 }
 
         # 应用统计
@@ -582,12 +616,12 @@ class PerformanceTracker:
                     "response_time_ms": {
                         "avg": round(sum(response_times) / len(response_times), 2),
                         "max": round(max(response_times), 2),
-                        "min": round(min(response_times), 2)
+                        "min": round(min(response_times), 2),
                     },
                     "error_rate": {
                         "avg": round(sum(error_rates) / len(error_rates), 2),
-                        "max": round(max(error_rates), 2)
-                    }
+                        "max": round(max(error_rates), 2),
+                    },
                 }
 
         # 告警统计
@@ -602,8 +636,8 @@ class PerformanceTracker:
                 "critical": len([a for a in active_alerts if a.severity == AlertSeverity.CRITICAL]),
                 "error": len([a for a in active_alerts if a.severity == AlertSeverity.ERROR]),
                 "warning": len([a for a in active_alerts if a.severity == AlertSeverity.WARNING]),
-                "info": len([a for a in active_alerts if a.severity == AlertSeverity.INFO])
-            }
+                "info": len([a for a in active_alerts if a.severity == AlertSeverity.INFO]),
+            },
         }
 
         return stats
@@ -648,12 +682,12 @@ class PerformanceTracker:
             filepath: 文件路径
             format: 导出格式（json/csv）
         """
-        data = {
+        data: Dict[str, Any] = {
             "exported_at": datetime.now().isoformat(),
             "system": [m.to_dict() for m in self.system_metrics],
             "database": [m.to_dict() for m in self.database_metrics],
             "application": [m.to_dict() for m in self.application_metrics],
-            "custom": {}
+            "custom": {},
         }
 
         for name, values in self.custom_metrics.items():
@@ -712,7 +746,7 @@ class PerformanceTracker:
 
         lines.append("\n## 统计摘要（最近1小时）")
         if "system" in stats:
-            lines.append(f"\n### 系统资源")
+            lines.append("\n### 系统资源")
             lines.append(f"- CPU平均: {stats['system']['cpu']['avg']}%")
             lines.append(f"- CPU最大: {stats['system']['cpu']['max']}%")
             lines.append(f"- 内存平均: {stats['system']['memory']['avg']}%")
@@ -741,29 +775,19 @@ def get_tracker() -> PerformanceTracker:
     return _tracker
 
 
-def record_db_metrics(
-    active_connections: int,
-    total_queries: int,
-    avg_query_time: float,
-    **kwargs
-):
+def record_db_metrics(active_connections: int, total_queries: int, avg_query_time: float, **kwargs):
     """快捷记录数据库指标"""
     metrics = DatabaseMetrics(
         timestamp=time.time(),
         active_connections=active_connections,
         total_queries=total_queries,
         avg_query_time=avg_query_time,
-        **kwargs
+        **kwargs,
     )
     get_tracker().record_database_metrics(metrics)
 
 
-def record_app_metrics(
-    request_count: int,
-    error_count: int,
-    avg_response_time: float,
-    **kwargs
-):
+def record_app_metrics(request_count: int, error_count: int, avg_response_time: float, **kwargs):
     """快捷记录应用指标"""
     metrics = ApplicationMetrics(
         timestamp=time.time(),
@@ -771,6 +795,6 @@ def record_app_metrics(
         error_count=error_count,
         error_rate=error_count / max(request_count, 1),
         avg_response_time=avg_response_time,
-        **kwargs
+        **kwargs,
     )
     get_tracker().record_application_metrics(metrics)

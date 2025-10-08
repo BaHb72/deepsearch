@@ -4,16 +4,18 @@ Event System Decorators Module
 This module provides decorators to enhance developer experience when working with
 the event system, including automatic registration, validation, monitoring, and more.
 """
+
 from __future__ import annotations
 
 import functools
-import logging
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union
+from collections.abc import Mapping
+from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union, cast
 
 from deepsearch.event.engine.engine import Event, EventEngine, Handler
 from deepsearch.event.schema import BaseEventSchema
+from deepsearch.observability import get_logger
 from deepsearch.observability.metrics.metrics import MetricsCollector
 
 # ==============================================================================
@@ -29,8 +31,8 @@ DEFAULT_RATE_LIMIT = 100  # Events per second
 # Type Variables and Logger
 # ==============================================================================
 
-logger = logging.getLogger(__name__)
-F = TypeVar('F', bound=Callable[..., Any])
+logger = get_logger(__name__)
+F = TypeVar("F", bound=Callable[..., Any])
 
 # Global registry for decorated handlers
 _handler_registry: Dict[str, List[Handler]] = {}
@@ -43,20 +45,16 @@ _engine_registry: Optional[EventEngine] = None
 
 
 def event_handler(
-        event_type: str,
-        *,
-        priority: int = 0,
-        async_flag: bool = False,
-        auto_register: bool = True
+    event_type: str, *, priority: int = 0, async_flag: bool = False, auto_register: bool = True
 ) -> Callable[[F], F]:
     """
     Decorator to mark a function as an event handler.
-    
+
     :param event_type: Type of event to handle
     :param priority: Handler priority
     :param async_flag: Whether to execute asynchronously
     :param auto_register: Whether to auto-register with engine
-    
+
     Example:
         @event_handler("TICK", priority=10, async_flag=True)
         def handle_tick(event: Event):
@@ -65,9 +63,9 @@ def event_handler(
 
     def decorator(func: F) -> F:
         # Add metadata to function
-        func._event_type = event_type
-        func._priority = priority
-        func._async_flag = async_flag
+        setattr(func, "_event_type", event_type)
+        setattr(func, "_priority", priority)
+        setattr(func, "_async_flag", async_flag)
 
         # Add to registry if auto-register is enabled
         if auto_register:
@@ -78,10 +76,7 @@ def event_handler(
             # Register immediately if engine is available
             if _engine_registry:
                 _engine_registry.register(
-                    event_type=event_type,
-                    handler=func,
-                    priority=priority,
-                    async_flag=async_flag
+                    event_type=event_type, handler=func, priority=priority, async_flag=async_flag
                 )
 
         return func
@@ -90,15 +85,15 @@ def event_handler(
 
 
 def multi_event_handler(
-        event_types: List[str],
-        *,
-        priority: int = 0,
-        async_flag: bool = False,
-        auto_register: bool = True
+    event_types: List[str],
+    *,
+    priority: int = 0,
+    async_flag: bool = False,
+    auto_register: bool = True,
 ) -> Callable[[F], F]:
     """
     Decorator to handle multiple event types with one function.
-    
+
     Example:
         @multi_event_handler(["TICK", "TRADE"], priority=5)
         def handle_market_data(event: Event):
@@ -109,14 +104,11 @@ def multi_event_handler(
         # Apply event_handler for each type
         for event_type in event_types:
             event_handler(
-                event_type,
-                priority=priority,
-                async_flag=async_flag,
-                auto_register=auto_register
+                event_type, priority=priority, async_flag=async_flag, auto_register=auto_register
             )(func)
 
         # Store all event types
-        func._event_types = event_types
+        setattr(func, "_event_types", event_types)
 
         return func
 
@@ -129,20 +121,20 @@ def multi_event_handler(
 
 
 def validated_handler(
-        event_type: str,
-        schema: Type[BaseEventSchema],
-        *,
-        priority: int = 0,
-        async_flag: bool = False,
-        strict: bool = True
+    event_type: str,
+    schema: Type[BaseEventSchema],
+    *,
+    priority: int = 0,
+    async_flag: bool = False,
+    strict: bool = True,
 ) -> Callable[[F], F]:
     """
     Decorator that validates event data against a schema before processing.
-    
+
     :param event_type: Event type to handle
     :param schema: Pydantic schema for validation
     :param strict: Whether to raise exception on validation failure
-    
+
     Example:
         @validated_handler("ORDER", OrderSchema)
         def handle_order(event: Event):
@@ -155,13 +147,21 @@ def validated_handler(
         def wrapper(event: Event) -> Any:
             try:
                 # Validate event data
-                validated_data = schema(**event.data)
+                raw_data = event.data
+                if raw_data is None:
+                    payload: Mapping[str, Any] = {}
+                elif isinstance(raw_data, Mapping):
+                    payload = raw_data
+                else:
+                    raise TypeError(
+                        f"Event data for '{event_type}' must be mapping-like, got {type(raw_data)!r}"
+                    )
+                payload_dict = payload if isinstance(payload, dict) else dict(payload)
+                validated_data = schema(**payload_dict)
 
                 # Create new event with validated data
                 validated_event = Event(
-                    type=event.type,
-                    data=validated_data.model_dump(),
-                    ts=event.ts
+                    type=event.type, data=validated_data.model_dump(), ts=event.ts
                 )
 
                 return func(validated_event)
@@ -174,11 +174,9 @@ def validated_handler(
                 return None
 
         # Apply event_handler decorator
-        return event_handler(
-            event_type,
-            priority=priority,
-            async_flag=async_flag
-        )(wrapper)
+        return cast(
+            F, event_handler(event_type, priority=priority, async_flag=async_flag)(wrapper)
+        )
 
     return decorator
 
@@ -189,12 +187,11 @@ def validated_handler(
 
 
 def monitored(
-        metric_name: Optional[str] = None,
-        collector: Optional[MetricsCollector] = None
+    metric_name: Optional[str] = None, collector: Optional[MetricsCollector] = None
 ) -> Callable[[F], F]:
     """
     Decorator to monitor handler performance.
-    
+
     Example:
         @monitored(metric_name="tick_processing")
         @event_handler("TICK")
@@ -214,7 +211,7 @@ def monitored(
             try:
                 result = func(event)
                 return result
-            except Exception as e:
+            except Exception:
                 success = False
                 raise
             finally:
@@ -226,28 +223,26 @@ def monitored(
                         event_type=event.type,
                         processing_time=duration,
                         success=success,
-                        handler_name=name
+                        handler_name=name,
                     )
                 else:
                     # Just log if no collector
                     logger.debug(f"{name} took {duration:.3f}s (success={success})")
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
 
 def rate_limited(
-        max_rate: float = DEFAULT_RATE_LIMIT,
-        *,
-        per_event_type: bool = False
+    max_rate: float = DEFAULT_RATE_LIMIT, *, per_event_type: bool = False
 ) -> Callable[[F], F]:
     """
     Decorator to rate limit event processing.
-    
+
     :param max_rate: Maximum events per second
     :param per_event_type: Whether to apply limit per event type
-    
+
     Example:
         @rate_limited(10)  # Max 10 events per second
         @event_handler("TICK")
@@ -299,7 +294,7 @@ def rate_limited(
 
             return func(event)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
@@ -310,14 +305,14 @@ def rate_limited(
 
 
 def retry_on_error(
-        max_retries: int = DEFAULT_RETRY_COUNT,
-        delay: float = DEFAULT_RETRY_DELAY,
-        backoff: float = 2.0,
-        exceptions: tuple = (Exception,)
+    max_retries: int = DEFAULT_RETRY_COUNT,
+    delay: float = DEFAULT_RETRY_DELAY,
+    backoff: float = 2.0,
+    exceptions: tuple = (Exception,),
 ) -> Callable[[F], F]:
     """
     Decorator to retry handler on failure.
-    
+
     Example:
         @retry_on_error(max_retries=3, delay=1.0)
         @event_handler("ORDER")
@@ -343,13 +338,15 @@ def retry_on_error(
                         time.sleep(current_delay)
                         current_delay *= backoff
                     else:
-                        logger.error(f"Handler {func.__name__} failed after {max_retries + 1} attempts")
+                        logger.error(
+                            f"Handler {func.__name__} failed after {max_retries + 1} attempts"
+                        )
 
             # Re-raise last exception
             if last_exception:
                 raise last_exception
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
@@ -357,7 +354,7 @@ def retry_on_error(
 def timeout(seconds: float = DEFAULT_TIMEOUT) -> Callable[[F], F]:
     """
     Decorator to add timeout to handler execution.
-    
+
     Example:
         @timeout(5.0)  # 5 second timeout
         @event_handler("TRADE")
@@ -391,7 +388,7 @@ def timeout(seconds: float = DEFAULT_TIMEOUT) -> Callable[[F], F]:
 
             return result[0]
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
@@ -402,13 +399,11 @@ def timeout(seconds: float = DEFAULT_TIMEOUT) -> Callable[[F], F]:
 
 
 def conditional_handler(
-        condition: Callable[[Event], bool],
-        event_type: str,
-        **kwargs
+    condition: Callable[[Event], bool], event_type: str, **kwargs
 ) -> Callable[[F], F]:
     """
     Decorator to conditionally execute handler based on event data.
-    
+
     Example:
         @conditional_handler(
             lambda e: e.data.get('price', 0) > 50000,
@@ -427,20 +422,17 @@ def conditional_handler(
             return None
 
         # Apply event_handler decorator
-        return event_handler(event_type, **kwargs)(wrapper)
+        return cast(F, event_handler(event_type, **kwargs)(wrapper))
 
     return decorator
 
 
 def filter_by_field(
-        field: str,
-        values: Union[Any, List[Any]],
-        event_type: str,
-        **kwargs
+    field: str, values: Union[Any, List[Any]], event_type: str, **kwargs
 ) -> Callable[[F], F]:
     """
     Decorator to filter events by field value.
-    
+
     Example:
         @filter_by_field("symbol", ["BTCUSDT", "ETHUSDT"], "TICK")
         def handle_major_pairs(event: Event):
@@ -464,17 +456,15 @@ def filter_by_field(
 # ==============================================================================
 
 
-def transform_event(
-        transformer: Callable[[Event], Event]
-) -> Callable[[F], F]:
+def transform_event(transformer: Callable[[Event], Event]) -> Callable[[F], F]:
     """
     Decorator to transform event before processing.
-    
+
     Example:
         def add_timestamp(event: Event) -> Event:
             event.data['processed_at'] = time.time()
             return event
-        
+
         @transform_event(add_timestamp)
         @event_handler("TICK")
         def handle_tick(event: Event):
@@ -488,22 +478,20 @@ def transform_event(
             transformed = transformer(event)
             return func(transformed)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
 
-def enrich_event(
-        enricher: Callable[[Dict[str, Any]], Dict[str, Any]]
-) -> Callable[[F], F]:
+def enrich_event(enricher: Callable[[Dict[str, Any]], Dict[str, Any]]) -> Callable[[F], F]:
     """
     Decorator to enrich event data.
-    
+
     Example:
         def add_spread(data: dict) -> dict:
             data['spread'] = data.get('ask', 0) - data.get('bid', 0)
             return data
-        
+
         @enrich_event(add_spread)
         @event_handler("TICK")
         def handle_tick(event: Event):
@@ -527,11 +515,11 @@ def enrich_event(
 def set_engine(engine: EventEngine) -> None:
     """
     Set the global event engine for auto-registration.
-    
+
     Example:
         engine = EventEngine()
         set_engine(engine)
-        
+
         # Now all @event_handler decorators will auto-register
     """
     global _engine_registry
@@ -543,8 +531,8 @@ def set_engine(engine: EventEngine) -> None:
             engine.register(
                 event_type=event_type,
                 handler=handler,
-                priority=getattr(handler, '_priority', 0),
-                async_flag=getattr(handler, '_async_flag', False)
+                priority=getattr(handler, "_priority", 0),
+                async_flag=getattr(handler, "_async_flag", False),
             )
 
     logger.info(f"Registered {sum(len(h) for h in _handler_registry.values())} handlers")
@@ -567,18 +555,18 @@ def clear_handlers() -> None:
 
 
 def robust_handler(
-        event_type: str,
-        *,
-        schema: Optional[Type[BaseEventSchema]] = None,
-        max_retries: int = DEFAULT_RETRY_COUNT,
-        timeout_seconds: float = DEFAULT_TIMEOUT,
-        rate_limit: Optional[float] = None,
-        monitor: bool = True,
-        **kwargs
+    event_type: str,
+    *,
+    schema: Optional[Type[BaseEventSchema]] = None,
+    max_retries: int = DEFAULT_RETRY_COUNT,
+    timeout_seconds: float = DEFAULT_TIMEOUT,
+    rate_limit: Optional[float] = None,
+    monitor: bool = True,
+    **kwargs,
 ) -> Callable[[F], F]:
     """
     Combined decorator for robust event handling.
-    
+
     Applies multiple decorators in the correct order:
     1. Monitoring
     2. Timeout
@@ -586,7 +574,7 @@ def robust_handler(
     4. Rate limiting
     5. Validation
     6. Event handler registration
-    
+
     Example:
         @robust_handler(
             "ORDER",
@@ -606,14 +594,10 @@ def robust_handler(
 
         # Apply validation if schema provided
         if schema:
-            handler = validated_handler(
-                event_type,
-                schema,
-                strict=True
-            )(handler)
+            handler = validated_handler(event_type, schema, strict=True)(handler)
         else:
             # Just register as event handler
-            handler = event_handler(event_type, **kwargs)(handler)
+            handler = cast(F, event_handler(event_type, **kwargs)(handler))
 
         # Apply rate limiting if specified
         if rate_limit:

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 import { renderHook, act } from '@testing-library/react'
 import { useResponsive } from '../useResponsive'
 

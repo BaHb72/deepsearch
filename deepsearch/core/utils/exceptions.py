@@ -10,6 +10,7 @@ DeepSearch 应用程序的自定义异常。
 3. 提供结构化的错误信息
 4. 支持错误处理上下文管理器
 """
+
 import traceback
 from contextlib import contextmanager
 from datetime import datetime
@@ -19,10 +20,10 @@ from typing import Any, Dict, Optional
 class DeepSearchError(Exception):
     """
     所有 DeepSearch 错误的基类。
-    
+
     所有自定义异常都应该继承自这个类，这样可以通过
     单个 except 语句捕获所有 DeepSearch 特定的错误。
-    
+
     增强功能：
     - 支持异常链（cause）
     - 自动记录时间戳
@@ -31,15 +32,15 @@ class DeepSearchError(Exception):
     """
 
     def __init__(
-            self,
-            message: str,
-            error_code: Optional[int] = None,
-            details: Optional[Dict[str, Any]] = None,
-            cause: Optional[Exception] = None
+        self,
+        message: str,
+        error_code: Optional[int] = None,
+        details: Optional[Dict[str, Any]] = None,
+        cause: Optional[Exception] = None,
     ):
         """
         初始化 DeepSearch 错误。
-        
+
         参数：
             message: 错误消息
             error_code: 可选的错误码，用于程序化处理
@@ -52,14 +53,13 @@ class DeepSearchError(Exception):
         self.details = details or {}
         self.cause = cause
         self.timestamp = datetime.now()
-        self.traceback_str = traceback.format_exc() if traceback.format_exc() != "NoneType: None\n" else None
+        self.traceback_str = (
+            traceback.format_exc() if traceback.format_exc() != "NoneType: None\n" else None
+        )
 
         # 如果有原因异常，添加到详情中
         if cause:
-            self.details['cause'] = {
-                'type': type(cause).__name__,
-                'message': str(cause)
-            }
+            self.details["cause"] = {"type": type(cause).__name__, "message": str(cause)}
 
     def __str__(self) -> str:
         """错误的字符串表示。"""
@@ -75,10 +75,10 @@ class DeepSearchError(Exception):
             "error_code": self.error_code,
             "details": self.details,
             "timestamp": self.timestamp.isoformat(),
-            "traceback": self.traceback_str
+            "traceback": self.traceback_str,
         }
 
-    def with_context(self, **kwargs) -> 'DeepSearchError':
+    def with_context(self, **kwargs) -> "DeepSearchError":
         """添加额外的上下文信息"""
         self.details.update(kwargs)
         return self
@@ -91,16 +91,19 @@ class DeepSearchError(Exception):
 
 class ConfigurationError(DeepSearchError):
     """配置存在问题时引发。"""
+
     pass
 
 
 class InvalidConfigError(ConfigurationError):
     """配置值无效时引发。"""
+
     pass
 
 
 class MissingConfigError(ConfigurationError):
     """缺少必需的配置时引发。"""
+
     pass
 
 
@@ -111,11 +114,13 @@ class MissingConfigError(ConfigurationError):
 
 class ValidationError(DeepSearchError):
     """数据验证失败时引发。"""
+
     pass
 
 
 class SchemaValidationError(ValidationError):
     """事件数据不符合模式时引发。"""
+
     pass
 
 
@@ -126,7 +131,7 @@ class FieldValidationError(ValidationError):
         super().__init__(
             f"字段 '{field}' 验证失败：{reason}",
             details={"field": field, "value": value, "reason": reason},
-            **kwargs
+            **kwargs,
         )
 
 
@@ -137,21 +142,25 @@ class FieldValidationError(ValidationError):
 
 class ConnectionError(DeepSearchError):
     """连接到外部服务失败时引发。"""
+
     pass
 
 
 class NetworkError(ConnectionError):
     """网络通信失败时引发。"""
+
     pass
 
 
 class TimeoutError(ConnectionError):
     """操作超时时引发。"""
+
     pass
 
 
 class AuthenticationError(ConnectionError):
     """认证失败时引发。"""
+
     pass
 
 
@@ -162,11 +171,13 @@ class AuthenticationError(ConnectionError):
 
 class EventError(DeepSearchError):
     """事件系统错误的基类。"""
+
     pass
 
 
 class EventQueueFullError(EventError):
     """事件队列已满时引发。"""
+
     pass
 
 
@@ -179,14 +190,15 @@ class EventHandlerError(EventError):
             details={
                 "handler": handler_name,
                 "event_type": event_type,
-                "original_error": str(original_error)
+                "original_error": str(original_error),
             },
-            **kwargs
+            **kwargs,
         )
 
 
 class EventValidationError(EventError):
     """事件验证失败时引发。"""
+
     pass
 
 
@@ -197,26 +209,31 @@ class EventValidationError(EventError):
 
 class StorageError(DeepSearchError):
     """存储相关错误的基类。"""
+
     pass
 
 
 class StorageConnectionError(StorageError):
     """连接到存储失败时引发。"""
+
     pass
 
 
 class StorageReadError(StorageError):
     """从存储读取失败时引发。"""
+
     pass
 
 
 class StorageWriteError(StorageError):
     """写入存储失败时引发。"""
+
     pass
 
 
 class StorageNotFoundError(StorageError):
     """在存储中找不到请求的数据时引发。"""
+
     pass
 
 
@@ -227,16 +244,19 @@ class StorageNotFoundError(StorageError):
 
 class GatewayError(DeepSearchError):
     """网关相关错误的基类。"""
+
     pass
 
 
 class GatewayConnectionError(GatewayError):
     """网关连接失败时引发。"""
+
     pass
 
 
 class GatewayAuthError(GatewayError):
     """网关认证失败时引发。"""
+
     pass
 
 
@@ -247,12 +267,13 @@ class GatewayOrderError(GatewayError):
         super().__init__(
             f"订单 '{order_id}' 失败：{reason}",
             details={"order_id": order_id, "reason": reason},
-            **kwargs
+            **kwargs,
         )
 
 
 class GatewayDataError(GatewayError):
     """市场数据接收失败时引发。"""
+
     pass
 
 
@@ -263,6 +284,7 @@ class GatewayDataError(GatewayError):
 
 class TradingError(DeepSearchError):
     """交易相关错误的基类。"""
+
     pass
 
 
@@ -272,27 +294,26 @@ class InsufficientBalanceError(TradingError):
     def __init__(self, required: float, available: float, currency: str, **kwargs):
         super().__init__(
             f"{currency} 余额不足：需要 {required}，可用 {available}",
-            details={
-                "required": required,
-                "available": available,
-                "currency": currency
-            },
-            **kwargs
+            details={"required": required, "available": available, "currency": currency},
+            **kwargs,
         )
 
 
 class PositionLimitError(TradingError):
     """超出持仓限制时引发。"""
+
     pass
 
 
 class RiskLimitError(TradingError):
     """超出风险限制时引发。"""
+
     pass
 
 
 class InvalidOrderError(TradingError):
     """订单参数无效时引发。"""
+
     pass
 
 
@@ -303,21 +324,25 @@ class InvalidOrderError(TradingError):
 
 class SystemError(DeepSearchError):
     """系统级错误的基类。"""
+
     pass
 
 
 class StartupError(SystemError):
     """系统启动失败时引发。"""
+
     pass
 
 
 class ShutdownError(SystemError):
     """系统关闭失败时引发。"""
+
     pass
 
 
 class ResourceError(SystemError):
     """系统资源不可用时引发。"""
+
     pass
 
 
@@ -329,12 +354,16 @@ class ResourceError(SystemError):
 class ComponentError(DeepSearchError):
     """组件相关的基础异常"""
 
-    def __init__(self, component_name: str, message: str,
-                 error_code: Optional[int] = None,
-                 details: Optional[Dict[str, Any]] = None,
-                 cause: Optional[Exception] = None):
+    def __init__(
+        self,
+        component_name: str,
+        message: str,
+        error_code: Optional[int] = None,
+        details: Optional[Dict[str, Any]] = None,
+        cause: Optional[Exception] = None,
+    ):
         details = details or {}
-        details['component'] = component_name
+        details["component"] = component_name
         super().__init__(message, error_code, details, cause)
         self.component_name = component_name
 
@@ -342,39 +371,51 @@ class ComponentError(DeepSearchError):
 class ComponentLifecycleError(ComponentError):
     """组件生命周期管理异常"""
 
-    def __init__(self, component_name: str, lifecycle_phase: str,
-                 message: str, cause: Optional[Exception] = None):
-        details = {'lifecycle_phase': lifecycle_phase}
+    def __init__(
+        self,
+        component_name: str,
+        lifecycle_phase: str,
+        message: str,
+        cause: Optional[Exception] = None,
+    ):
+        details = {"lifecycle_phase": lifecycle_phase}
         super().__init__(
             component_name,
             f"Component {component_name} lifecycle error in {lifecycle_phase}: {message}",
             details=details,
-            cause=cause
+            cause=cause,
         )
         self.lifecycle_phase = lifecycle_phase
 
 
 class ComponentNotFoundError(ComponentError):
     """组件未找到异常"""
+
     pass
 
 
 class ComponentAlreadyExistsError(ComponentError):
     """组件已存在异常"""
+
     pass
 
 
 class ComponentDependencyError(ComponentError):
     """组件依赖异常"""
 
-    def __init__(self, component_name: str, dependency_name: str,
-                 message: str, cause: Optional[Exception] = None):
-        details = {'dependency': dependency_name}
+    def __init__(
+        self,
+        component_name: str,
+        dependency_name: str,
+        message: str,
+        cause: Optional[Exception] = None,
+    ):
+        details = {"dependency": dependency_name}
         super().__init__(
             component_name,
             f"Component {component_name} dependency error with {dependency_name}: {message}",
             details=details,
-            cause=cause
+            cause=cause,
         )
         self.dependency_name = dependency_name
 
@@ -386,30 +427,29 @@ class ComponentDependencyError(ComponentError):
 
 class DatabaseError(DeepSearchError):
     """数据库相关异常基类"""
+
     pass
 
 
 class DatabaseConnectionError(DatabaseError):
     """数据库连接异常"""
 
-    def __init__(self, database_url: str, message: str,
-                 cause: Optional[Exception] = None):
+    def __init__(self, database_url: str, message: str, cause: Optional[Exception] = None):
         super().__init__(
             f"Database connection error: {message}",
-            details={'database_url': database_url},
-            cause=cause
+            details={"database_url": database_url},
+            cause=cause,
         )
 
 
 class DatabaseQueryError(DatabaseError):
     """数据库查询异常"""
 
-    def __init__(self, query: str, message: str,
-                 cause: Optional[Exception] = None):
+    def __init__(self, query: str, message: str, cause: Optional[Exception] = None):
         super().__init__(
             f"Database query error: {message}",
-            details={'query': query[:200]},  # 限制查询长度
-            cause=cause
+            details={"query": query[:200]},  # 限制查询长度
+            cause=cause,
         )
 
 
@@ -422,44 +462,45 @@ class ErrorHandler:
     """统一的错误处理器"""
 
     @staticmethod
-    def handle_error(error: Exception, component_name: Optional[str] = None,
-                     operation: Optional[str] = None) -> DeepSearchError:
+    def handle_error(
+        error: Exception, component_name: Optional[str] = None, operation: Optional[str] = None
+    ) -> DeepSearchError:
         """
         将任意异常转换为DeepSearch异常
-        
+
         Args:
             error: 原始异常
             component_name: 组件名称
             operation: 正在执行的操作
-            
+
         Returns:
             DeepSearchError: 转换后的异常
         """
         # 如果已经是DeepSearchError，添加上下文后返回
         if isinstance(error, DeepSearchError):
-            if component_name and 'component' not in error.details:
-                error.details['component'] = component_name
-            if operation and 'operation' not in error.details:
-                error.details['operation'] = operation
+            if component_name and "component" not in error.details:
+                error.details["component"] = component_name
+            if operation and "operation" not in error.details:
+                error.details["operation"] = operation
             return error
 
         # 转换为合适的DeepSearchError子类
         details = {}
         if component_name:
-            details['component'] = component_name
+            details["component"] = component_name
         if operation:
-            details['operation'] = operation
+            details["operation"] = operation
 
         # 根据异常类型选择合适的包装类
         error_message = str(error)
 
-        if 'connection' in error_message.lower():
-            if 'database' in error_message.lower():
-                return DatabaseConnectionError('unknown', error_message, cause=error)
+        if "connection" in error_message.lower():
+            if "database" in error_message.lower():
+                return DatabaseConnectionError("unknown", error_message, cause=error)
             else:
                 return ConnectionError(error_message, details=details, cause=error)
 
-        if 'timeout' in error_message.lower():
+        if "timeout" in error_message.lower():
             return TimeoutError(error_message, details=details, cause=error)
 
         if component_name:
@@ -473,7 +514,7 @@ class ErrorHandler:
 def error_context(component_name: str, operation: str):
     """
     错误上下文管理器
-    
+
     使用示例：
         with error_context('database', 'query_execution'):
             # 执行可能出错的代码
@@ -490,7 +531,7 @@ def error_context(component_name: str, operation: str):
 def reraise_with_context(original_error: Exception, context: str, **details) -> None:
     """
     重新引发异常并附加额外的上下文信息。
-    
+
     参数：
         original_error: 原始异常
         context: 额外的上下文消息
@@ -510,7 +551,7 @@ def reraise_with_context(original_error: Exception, context: str, **details) -> 
         details={
             "original_error": str(original_error),
             "original_type": error_class.__name__,
-            **details
+            **details,
         },
-        cause=original_error
+        cause=original_error,
     ) from original_error

@@ -8,6 +8,9 @@ app:
   debug: ${DEBUG:false}  # 生产环境必须为false
   author: BaHb
 
+runtime:
+  mode: full
+
 log:
   level: ${LOG_LEVEL:INFO}  # DEBUG | INFO | WARNING | ERROR
   format: ${LOG_FORMAT:verbose}  # verbose (dev) | json (prod)
@@ -40,6 +43,7 @@ database:
     enabled: ${REDIS_ENABLED:true}
     host: ${REDIS_HOST:localhost}
     port: ${REDIS_PORT:6379}
+    username: "your_redis_username"
     password: ${REDIS_PASSWORD}  # 生产环境必须设置密码
     db: ${REDIS_DB:0}
     # 连接池配置
@@ -52,6 +56,19 @@ database:
     health_check_interval: 30
     max_idle_time: 300
     idle_check_interval: 60
+    auto_start_windows: ${REDIS_AUTO_START_WINDOWS:true}
+    windows_service_names:
+      - ${REDIS_WINDOWS_SERVICE_PRIMARY:Redis}
+      - ${REDIS_WINDOWS_SERVICE_FALLBACK:redis}
+    startup_binary_path: ${REDIS_BINARY_PATH:C:/Program Files/Redis/redis-server.exe}
+    startup_arguments: []
+    startup_command: []  # 可选：例如 ['wsl.exe', '-d', 'Ubuntu', '-u', 'root', 'service', 'redis-server', 'start']
+    wsl:
+      enabled: 
+      distro: 
+      auto_resolve_ip: 
+      service_name: redis-server  # 可选：WSL 中 service 命令对应的 Redis 服务名
+      user: root  # 可选：执行命令时使用的 WSL 用户 (传递给 -u)
 
 # 数据源统一配置
 data_sources:
@@ -62,7 +79,6 @@ data_sources:
     - amazingdata
     - cloudflare
     - akshare
-    - qmt
 
   # 熔断器配置
   circuit_breaker:
@@ -80,78 +96,54 @@ data_sources:
 
   # 数据提供者配置
   providers:
-    # AmazingData（主数据源）
     amazingdata:
-      enabled: ${AMAZINGDATA_ENABLED:true}
+      enabled: true
       priority: 1
+      fallback_sources:
+        - cloudflare
+        - akshare
+      has_saved_credential: false
       type: amazingdata
       config:
+        implementation_mode: legacy
         connection:
-          username: ${AMAZINGDATA_USERNAME}
-          password: ${AMAZINGDATA_PASSWORD}
-          host: ${AMAZINGDATA_HOST:101.230.159.234}
-          port: ${AMAZINGDATA_PORT:8600}
-          network_provider: ${AMAZINGDATA_NETWORK:telecom}  # telecom | unicom
+          username: your_amazingdata_username
+          password: your_amazingdata_password
+          host: 101.230.159.234
+          port: 8600
+          network_provider: telecom
           timeout: 10
           max_retries: 3
           heartbeat_interval: 60
           auto_reconnect: true
           reconnect_interval: 10
         local:
-          path: ${AMAZINGDATA_LOCAL_PATH:D://AmazingData_local_data//}
-          use_local: ${AMAZINGDATA_USE_LOCAL:true}
+          path: D://AmazingData_local_data//
+          use_local: true
         subscription:
           enabled: true
           batch_size: 100
           max_symbols: 500
           auto_resubscribe: true
-        cache:
-          enabled: true
-          ttl: 300
-          max_size: 10000
-        monitoring:
-          enabled: true
-          report_interval: 60
-          metrics_enabled: true
-          log_slow_requests: true
-          slow_request_threshold: 1000
-
-    # CloudFlare代理（备用数据源1）
     cloudflare:
-      enabled: ${CLOUDFLARE_ENABLED:true}
+      enabled: true
       priority: 2
-      type: cloudflare_proxy
+      has_saved_credential: false
+      type: cloudflare
       config:
-        worker_url: ${CLOUDFLARE_URL:https://akshare-proxy.934073514.workers.dev}
-        api_key: ${CLOUDFLARE_API_KEY}
-        fallback_to_direct: true
+        worker_url: https://your-cloudflare-worker.example.com
         timeout: 30
         retry_count: 3
-        cache:
-          enabled: true
-          ttl: 300
-
-    # AKShare直连（备用数据源2）
     akshare:
-      enabled: ${AKSHARE_ENABLED:true}
+      enabled: true
       priority: 3
       type: akshare
       config:
+        mode: direct
         timeout: 30
-        max_retries: 3
-        cache_ttl: 300
-        rate_limit:
-          max_requests: 100
-          time_window: 60
+        proxy:
+          enabled: false
 
-    # QMT（备用数据源3）
-    qmt:
-      enabled: ${QMT_ENABLED:false}
-      priority: 4
-      type: qmt
-      config:
-        host: ${QMT_HOST:localhost}
-        port: ${QMT_PORT:8888}  # 统一端口
 
 # 消息总线配置
 message_bus:
@@ -255,3 +247,5 @@ security:
     enabled: true
     log_sensitive_operations: true
     retention_days: 365
+
+

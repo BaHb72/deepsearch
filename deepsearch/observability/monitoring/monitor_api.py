@@ -3,6 +3,7 @@
 
 为未来的 Web UI 整合提供统一的数据访问接口。
 """
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,7 @@ import time
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Deque
+from typing import Any, Deque, Dict, List, Optional, cast
 
 from loguru import logger
 
@@ -21,17 +22,17 @@ from deepsearch.observability.monitoring.event_monitor import EventSystemMonitor
 class MonitorDataStore:
     """
     监控数据存储。
-    
+
     特点：
     - 内存中保留最近的实时数据
     - 定期持久化到 JSON 文件
     - 提供统一的查询接口
     """
 
-    def __init__(self, data_dir: Optional[Path] = None, max_records: int = 1000):
+    def __init__(self, data_dir: Optional[Path] = None, max_records: int = 1000) -> None:
         """
         初始化数据存储。
-        
+
         Args:
             data_dir: 数据存储目录
             max_records: 内存中保留的最大记录数
@@ -54,10 +55,10 @@ class MonitorDataStore:
     def get_realtime_data(self, limit: int = 100) -> List[Dict[str, Any]]:
         """
         获取最新的实时数据。
-        
+
         Args:
             limit: 返回的最大记录数
-            
+
         Returns:
             最新的监控记录列表
         """
@@ -68,11 +69,11 @@ class MonitorDataStore:
     def get_time_range_data(self, start_time: datetime, end_time: datetime) -> List[Dict[str, Any]]:
         """
         获取指定时间范围的数据。
-        
+
         Args:
             start_time: 开始时间
             end_time: 结束时间
-            
+
         Returns:
             时间范围内的监控记录
         """
@@ -111,8 +112,12 @@ class MonitorDataStore:
             with open(latest_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 # 只加载最近的数据
-                for record in data[-self._realtime_data.maxlen:]:
-                    self._realtime_data.append(record)
+                maxlen = self._realtime_data.maxlen
+                if isinstance(data, list):
+                    records_to_load = data if maxlen is None else data[-maxlen:]
+                    for record in records_to_load:
+                        if isinstance(record, dict):
+                            self._realtime_data.append(record)
             logger.info(f"已加载历史监控数据：{len(self._realtime_data)} 条记录")
         except Exception as e:
             logger.error(f"加载历史数据失败：{e}")
@@ -121,14 +126,14 @@ class MonitorDataStore:
 class MonitorAPI:
     """
     监控系统 API。
-    
+
     提供适合 Web UI 整合的数据接口。
     """
 
-    def __init__(self, monitor: EventSystemMonitor):
+    def __init__(self, monitor: EventSystemMonitor) -> None:
         """
         初始化监控 API。
-        
+
         Args:
             monitor: 事件系统监控器
         """
@@ -144,11 +149,12 @@ class MonitorAPI:
 
         # 注册到统计收集器
         from deepsearch.core.utils.statistics import get_statistics_collector
+
         self._statistics_collector = get_statistics_collector()
         self._statistics_collector.register_provider("monitor_api", self)
 
         # 如果 monitor 也是 StatisticsProvider，注册它
-        if hasattr(monitor, 'get_statistics'):
+        if hasattr(monitor, "get_statistics"):
             self._statistics_collector.register_provider("event_monitor", monitor)
 
     def start(self) -> None:
@@ -175,9 +181,9 @@ class MonitorAPI:
 
         # 从统计收集器注销
         self._statistics_collector.unregister_provider("monitor_api")
-        if hasattr(self._monitor, 'get_statistics'):
+        if hasattr(self._monitor, "get_statistics"):
             self._statistics_collector.unregister_provider("event_monitor")
-            
+
         logger.info("监控 API 已停止")
 
     def _update_loop(self) -> None:
@@ -207,15 +213,15 @@ class MonitorAPI:
             "timestamp": summary.get("timestamp", datetime.now().isoformat()),
             "health": {
                 "status": summary.get("health", {}).get("status", "unknown"),
-                "checks": summary.get("health", {}).get("checks", {})
+                "checks": summary.get("health", {}).get("checks", {}),
             },
             "metrics": {
                 "events": self._format_event_metrics(summary.get("events", {})),
                 "handlers": summary.get("handlers", {}),
                 "queue_size": self._get_queue_size(),
-                "slow_events": len(summary.get("slow_events", []))
+                "slow_events": len(summary.get("slow_events", [])),
             },
-            "alerts": self._generate_alerts(summary)
+            "alerts": self._generate_alerts(summary),
         }
 
         return record
@@ -229,13 +235,13 @@ class MonitorAPI:
                 "success_rate": round(metrics.get("success_rate", 1.0) * 100, 2),
                 "avg_time_ms": round(metrics.get("avg_processing_time", 0) * 1000, 2),
                 "min_time_ms": round(metrics.get("min_processing_time", 0) * 1000, 2),
-                "max_time_ms": round(metrics.get("max_processing_time", 0) * 1000, 2)
+                "max_time_ms": round(metrics.get("max_processing_time", 0) * 1000, 2),
             }
         return formatted
 
     def _get_queue_size(self) -> int:
         """获取队列大小。"""
-        if hasattr(self._monitor._engine, '_queue'):
+        if hasattr(self._monitor._engine, "_queue"):
             return self._monitor._engine._queue.qsize()
         return 0
 
@@ -246,34 +252,40 @@ class MonitorAPI:
         # 健康状态告警
         health_status = summary.get("health", {}).get("status", "healthy")
         if health_status != "healthy":
-            alerts.append({
-                "level": "error" if health_status == "unhealthy" else "warning",
-                "type": "health",
-                "message": f"系统健康状态：{health_status}",
-                "timestamp": datetime.now().isoformat()
-            })
+            alerts.append(
+                {
+                    "level": "error" if health_status == "unhealthy" else "warning",
+                    "type": "health",
+                    "message": f"系统健康状态：{health_status}",
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
 
         # 慢事件告警
         slow_events = summary.get("slow_events", [])
         if len(slow_events) > 10:
-            alerts.append({
-                "level": "warning",
-                "type": "performance",
-                "message": f"检测到 {len(slow_events)} 个慢事件",
-                "timestamp": datetime.now().isoformat()
-            })
+            alerts.append(
+                {
+                    "level": "warning",
+                    "type": "performance",
+                    "message": f"检测到 {len(slow_events)} 个慢事件",
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
 
         # 失败率告警
         events = summary.get("events", {})
         for event_type, metrics in events.items():
             success_rate = metrics.get("success_rate", 1.0)
             if success_rate < 0.95:
-                alerts.append({
-                    "level": "warning",
-                    "type": "error_rate",
-                    "message": f"事件 {event_type} 失败率过高：{(1 - success_rate) * 100:.1f}%",
-                    "timestamp": datetime.now().isoformat()
-                })
+                alerts.append(
+                    {
+                        "level": "warning",
+                        "type": "error_rate",
+                        "message": f"事件 {event_type} 失败率过高：{(1 - success_rate) * 100:.1f}%",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                )
 
         return alerts
 
@@ -282,7 +294,7 @@ class MonitorAPI:
     def get_dashboard_data(self) -> Dict[str, Any]:
         """
         获取仪表板数据。
-        
+
         Returns:
             适合 Web UI 仪表板展示的汇总数据
         """
@@ -303,19 +315,19 @@ class MonitorAPI:
                 "total_events": sum(m["count"] for m in latest["metrics"]["events"].values()),
                 "queue_size": latest["metrics"]["queue_size"],
                 "slow_events": latest["metrics"]["slow_events"],
-                "active_alerts": len([a for a in latest["alerts"] if a["level"] == "error"])
+                "active_alerts": len([a for a in latest["alerts"] if a["level"] == "error"]),
             },
             "trends": trends,
-            "alerts": latest["alerts"]
+            "alerts": latest["alerts"],
         }
 
     def get_realtime_metrics(self, event_types: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         获取实时指标数据。
-        
+
         Args:
             event_types: 要获取的事件类型列表（None 表示所有）
-            
+
         Returns:
             适合实时图表展示的指标数据
         """
@@ -325,8 +337,8 @@ class MonitorAPI:
             return {"series": {}, "timestamps": []}
 
         # 构建时间序列数据
-        series = {}
-        timestamps = []
+        series: Dict[str, Dict[str, List[float]]] = {}
+        timestamps: List[str] = []
 
         for record in records:
             timestamps.append(record["timestamp"])
@@ -336,25 +348,18 @@ class MonitorAPI:
                     continue
 
                 if event_type not in series:
-                    series[event_type] = {
-                        "count": [],
-                        "success_rate": [],
-                        "avg_time_ms": []
-                    }
+                    series[event_type] = {"count": [], "success_rate": [], "avg_time_ms": []}
 
-                series[event_type]["count"].append(metrics["count"])
-                series[event_type]["success_rate"].append(metrics["success_rate"])
-                series[event_type]["avg_time_ms"].append(metrics["avg_time_ms"])
+                series[event_type]["count"].append(float(metrics["count"]))
+                series[event_type]["success_rate"].append(float(metrics["success_rate"]))
+                series[event_type]["avg_time_ms"].append(float(metrics["avg_time_ms"]))
 
-        return {
-            "series": series,
-            "timestamps": timestamps
-        }
+        return {"series": series, "timestamps": timestamps}
 
     def get_health_status(self) -> Dict[str, Any]:
         """
         获取健康状态详情。
-        
+
         Returns:
             健康检查的详细信息
         """
@@ -363,30 +368,39 @@ class MonitorAPI:
         if not latest_records:
             return {"status": "unknown", "checks": {}}
 
-        return latest_records[0]["health"]
+        record = latest_records[0]
+        health_value = record.get("health")
+        if isinstance(health_value, dict):
+            return cast(Dict[str, Any], health_value)
+        return {"status": "unknown", "checks": {}}
 
     def get_slow_events(self, limit: int = 50) -> List[Dict[str, Any]]:
         """
         获取慢事件列表。
-        
+
         Args:
             limit: 返回的最大数量
-            
+
         Returns:
             慢事件详细信息列表
         """
         summary = self._monitor.get_summary()
-        slow_events = summary.get("slow_events", [])
+        slow_events_data = summary.get("slow_events", [])
 
-        return slow_events[:limit]
+        valid_events: List[Dict[str, Any]] = []
+        if isinstance(slow_events_data, list):
+            for item in slow_events_data:
+                if isinstance(item, dict):
+                    valid_events.append(item)
+        return valid_events[:limit]
 
     def get_historical_data(self, hours: int = 24) -> Dict[str, Any]:
         """
         获取历史数据。
-        
+
         Args:
             hours: 要获取的历史小时数
-            
+
         Returns:
             指定时间范围的历史数据
         """
@@ -399,7 +413,7 @@ class MonitorAPI:
             "start_time": start_time.isoformat(),
             "end_time": end_time.isoformat(),
             "record_count": len(records),
-            "records": records
+            "records": records,
         }
 
     def _calculate_trends(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -417,7 +431,7 @@ class MonitorAPI:
         return {
             "events_change": new_total - old_total,
             "queue_size_change": new["queue_size"] - old.get("queue_size", 0),
-            "slow_events_change": new["slow_events"] - old.get("slow_events", 0)
+            "slow_events_change": new["slow_events"] - old.get("slow_events", 0),
         }
 
     def _get_empty_dashboard(self) -> Dict[str, Any]:
@@ -429,16 +443,16 @@ class MonitorAPI:
                 "total_events": 0,
                 "queue_size": 0,
                 "slow_events": 0,
-                "active_alerts": 0
+                "active_alerts": 0,
             },
             "trends": {},
-            "alerts": []
+            "alerts": [],
         }
 
     def get_statistics(self) -> Dict[str, Any]:
         """
         实现 StatisticsProvider 接口
-        
+
         Returns:
             监控API的统计信息
         """
@@ -448,14 +462,15 @@ class MonitorAPI:
         # 获取最新的监控记录
         latest_records = self._data_store.get_realtime_data(limit=1)
         latest = latest_records[-1] if latest_records else None
-        
+
         monitor_stats = {
             "timestamp": datetime.now().isoformat(),
             "monitor_running": self._running,
             "update_interval": self._update_interval,
             "data_store_size": len(self._data_store._realtime_data),
             "dashboard_data": self.get_dashboard_data(),
-            "latest_record": latest
+            "latest_record": latest,
         }
 
         return monitor_stats
+

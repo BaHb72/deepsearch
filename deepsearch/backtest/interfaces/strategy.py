@@ -1,437 +1,1010 @@
 """
+
 BaseStrategy - 统一的策略基类
 
 设计同时支持回测和实盘的策略框架
+
 """
-import logging
+
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+
+from dataclasses import dataclass
+
 from datetime import datetime
-from typing import Dict, Any, Optional
+
+from logging import Logger
+
+from typing import Dict, List, Mapping, Optional, TYPE_CHECKING, Type, cast
+
+from deepsearch.observability import get_logger
+
+from deepsearch.strategies.interfaces.protocols import BacktestStrategy
+
+from deepsearch.strategies.interfaces.types import (
+
+    MarketBarData,
+
+    StrategyBusEnvelope,
+
+    StrategyCancelPayload,
+
+    StrategyDataCache,
+
+    StrategyMetrics,
+
+    StrategyOrder,
+
+    StrategyParams,
+
+    StrategyPosition,
+
+    StrategyTrade,
+
+    TickData,
+
+)
+
+if TYPE_CHECKING:
+
+    from backtrader import Cerebro, Strategy as BacktraderStrategyBase
+
+    from deepsearch.event.engine.engine import EventEngine
 
 try:
+
     import backtrader as bt
 
     HAS_BACKTRADER = True
+
 except ImportError:
+
     HAS_BACKTRADER = False
+
     bt = None
 
+def _default_metrics() -> "StrategyMetrics":
+
+    """����Ĭ�ϵĲ������ݱ�׼ָ��."""
+
+    return {
+
+        "total_trades": 0,
+
+        "winning_trades": 0,
+
+        "losing_trades": 0,
+
+        "total_pnl": 0.0,
+
+        "max_drawdown": 0.0,
+
+        "sharpe_ratio": 0.0,
+
+    }
+
+@dataclass(init=False)
 
 class BaseStrategy(ABC):
-    """
-    DeepSearch 统一策略基类
-    
-    这个基类定义了策略的标准接口，可以同时用于：
-    1. Backtrader 回测
-    2. 实盘交易（通过事件系统）
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None):
+    DeepSearch 统一策略基类
+
+    这个基类定义了策略的标准接口，可以同时用于：
+
+    1. Backtrader 回测
+
+    2. 实盘交易（通过事件系统）
+
+    """
+
+    strategy_id: str
+
+    params: StrategyParams
+
+    logger: Logger
+
+    positions: Dict[str, StrategyPosition]
+
+    orders: Dict[str, StrategyOrder]
+
+    metrics: "StrategyMetrics"
+
+    data_cache: "StrategyDataCache"
+
+    is_backtest: bool
+
+    event_engine: "EventEngine | None"
+
+    def __init__(
+
+        self,
+
+        params: Optional[StrategyParams] = None,
+
+        *,
+
+        strategy_id: Optional[str] = None,
+
+    ) -> None:
+
         """
-        初始化策略
-        
+
+        ��ʼ������
+
         Args:
-            params: 策略参数字典
+
+            params: ���Գ��������ֵ�
+
+            strategy_id: ������ʶ����Ϊ�ձ�����ʹ���ඨ����
+
         """
-        self.params = params or {}
-        self.logger = logging.getLogger(f"strategy.{self.__class__.__name__}")
-        self.positions = {}
-        self.orders = {}
+
+        self.strategy_id = strategy_id or self.__class__.__name__
+
+        self.params = dict(params or {})
+
+        self.logger = get_logger(f"strategy.{self.strategy_id}")
+
+        self.positions = cast(Dict[str, StrategyPosition], {})
+
+        self.orders = cast(Dict[str, StrategyOrder], {})
+
+        self.metrics = _default_metrics()
+
+        self.data_cache = cast(StrategyDataCache, {})
+
         self.is_backtest = False
+
         self.event_engine = None
 
     @abstractmethod
-    def on_init(self):
+
+    def on_init(self) -> None:
+
         """策略初始化，设置指标等"""
+
         pass
 
     @abstractmethod
-    def on_start(self):
+
+    def on_start(self) -> None:
+
         """策略启动时调用"""
+
         pass
 
     @abstractmethod
-    def on_bar(self, bar: Dict[str, Any]):
-        """
-        处理新的K线数据
-        
-        Args:
-            bar: K线数据字典，包含 open, high, low, close, volume 等
-        """
-        pass
 
-    @abstractmethod
-    def on_tick(self, tick: Dict[str, Any]):
+    def on_bar(self, bar: MarketBarData) -> None:
+
+        """处理K线数据"""
+
+        raise NotImplementedError
+
+    def on_tick(self, tick: TickData) -> None:
+
         """
+
         处理Tick数据
-        
+
         Args:
+
             tick: Tick数据字典
+
         """
+
         pass
 
     @abstractmethod
-    def on_order(self, order: Dict[str, Any]):
+
+    def on_order(self, order: StrategyOrder) -> None:
+
         """
+
         订单状态更新
-        
+
         Args:
+
             order: 订单信息字典
+
         """
+
         pass
 
     @abstractmethod
-    def on_trade(self, trade: Dict[str, Any]):
+
+    def on_trade(self, trade: StrategyTrade) -> None:
+
         """
+
         成交回报
-        
+
         Args:
+
             trade: 成交信息字典
+
         """
+
         pass
 
     @abstractmethod
-    def on_stop(self):
+
+    def on_stop(self) -> None:
+
         """策略停止时调用"""
+
         pass
 
-    def buy(self, symbol: str, size: float, price: Optional[float] = None,
-            order_type: str = 'MARKET', **kwargs) -> str:
+    def buy(
+
+        self,
+
+        symbol: str,
+
+        size: float,
+
+        price: Optional[float] = None,
+
+        order_type: str = "MARKET",
+
+        **kwargs: object,
+
+    ) -> str:
+
         """
-        买入订单
-        
+
+        ���붩��
+
         Args:
-            symbol: 标的代码
-            size: 数量
-            price: 价格（限价单需要）
-            order_type: 订单类型
-            **kwargs: 其他参数
-            
+
+            symbol: ��Ĵ���
+
+            size: ����
+
+            price: �۸��޼۵���Ҫ��
+
+            order_type: ��������
+
+            **kwargs: ��������
+
         Returns:
-            str: 订单ID
+
+            str: ����ID
+
         """
+
+        size_value = float(size)
+
         order_id = self._generate_order_id()
-        order = {
-            'id': order_id,
-            'symbol': symbol,
-            'side': 'BUY',
-            'size': size,
-            'price': price,
-            'type': order_type,
-            'status': 'PENDING',
-            'create_time': datetime.now(),
-            **kwargs
+
+        order: StrategyOrder = {
+
+            "id": order_id,
+
+            "order_id": order_id,
+
+            "strategy_id": self.strategy_id,
+
+            "symbol": symbol,
+
+            "side": "BUY",
+
+            "size": size_value,
+
+            "price": price,
+
+            "type": order_type,
+
+            "status": "PENDING",
+
+            "create_time": datetime.now(),
+
+            "filled": 0.0,
+
+            "remaining": size_value,
+
         }
 
-        if self.is_backtest:
-            # 回测模式：直接返回订单ID，由回测引擎处理
-            return order_id
-        else:
-            # 实盘模式：通过事件系统发送订单
-            self._send_order_event(order)
-            return order_id
+        extra_kwargs: Dict[str, object] = dict(kwargs)
 
-    def sell(self, symbol: str, size: float, price: Optional[float] = None,
-             order_type: str = 'MARKET', **kwargs) -> str:
+        metadata_obj = extra_kwargs.pop("metadata", None)
+
+        if metadata_obj is not None:
+
+            if isinstance(metadata_obj, Mapping):
+
+                order["metadata"] = dict(metadata_obj)
+
+            else:
+
+                order["metadata"] = {"extra": metadata_obj}
+
+        if extra_kwargs:
+
+            extra_meta = dict(order.get("metadata", {}))
+
+            extra_meta.update(extra_kwargs)
+
+            order["metadata"] = extra_meta
+
+        self.orders[order_id] = order
+
+        if not self.is_backtest:
+
+            self._send_order_event(order)
+
+        return order_id
+
+    def sell(
+
+        self,
+
+        symbol: str,
+
+        size: float,
+
+        price: Optional[float] = None,
+
+        order_type: str = "MARKET",
+
+        **kwargs: object,
+
+    ) -> str:
+
         """
-        卖出订单
-        
+
+        ��������
+
         Args:
-            symbol: 标的代码
-            size: 数量
-            price: 价格（限价单需要）
-            order_type: 订单类型
-            **kwargs: 其他参数
-            
+
+            symbol: ��Ĵ���
+
+            size: ����
+
+            price: �۸��޼۵���Ҫ��
+
+            order_type: ��������
+
+            **kwargs: ��������
+
         Returns:
-            str: 订单ID
+
+            str: ����ID
+
         """
+
+        size_value = float(size)
+
         order_id = self._generate_order_id()
-        order = {
-            'id': order_id,
-            'symbol': symbol,
-            'side': 'SELL',
-            'size': size,
-            'price': price,
-            'type': order_type,
-            'status': 'PENDING',
-            'create_time': datetime.now(),
-            **kwargs
+
+        order: StrategyOrder = {
+
+            "id": order_id,
+
+            "order_id": order_id,
+
+            "strategy_id": self.strategy_id,
+
+            "symbol": symbol,
+
+            "side": "SELL",
+
+            "size": size_value,
+
+            "price": price,
+
+            "type": order_type,
+
+            "status": "PENDING",
+
+            "create_time": datetime.now(),
+
+            "filled": 0.0,
+
+            "remaining": size_value,
+
         }
 
-        if self.is_backtest:
-            return order_id
-        else:
+        extra_kwargs: Dict[str, object] = dict(kwargs)
+
+        metadata_obj = extra_kwargs.pop("metadata", None)
+
+        if metadata_obj is not None:
+
+            if isinstance(metadata_obj, Mapping):
+
+                order["metadata"] = dict(metadata_obj)
+
+            else:
+
+                order["metadata"] = {"extra": metadata_obj}
+
+        if extra_kwargs:
+
+            extra_meta = dict(order.get("metadata", {}))
+
+            extra_meta.update(extra_kwargs)
+
+            order["metadata"] = extra_meta
+
+        self.orders[order_id] = order
+
+        if not self.is_backtest:
+
             self._send_order_event(order)
-            return order_id
 
-    def cancel_order(self, order_id: str):
-        """取消订单"""
+        return order_id
+
+    def cancel_order(self, order_id: str) -> None:
+
+        """ȡ������"""
+
         if self.is_backtest:
-            pass  # 回测引擎处理
-        else:
-            self._send_cancel_event(order_id)
 
-    def get_position(self, symbol: str) -> Dict[str, Any]:
-        """获取持仓"""
-        return self.positions.get(symbol, {
-            'symbol': symbol,
-            'size': 0,
-            'avg_cost': 0,
-            'market_value': 0,
-            'pnl': 0
-        })
+            return
 
-    def get_all_positions(self) -> Dict[str, Dict[str, Any]]:
-        """获取所有持仓"""
-        return self.positions.copy()
+        self._send_cancel_event(order_id)
+
+    def get_position(self, symbol: str) -> StrategyPosition:
+
+        """��ȡ�ֲ�"""
+
+        default_position: StrategyPosition = {
+
+            "symbol": symbol,
+
+            "size": 0.0,
+
+            "avg_cost": 0.0,
+
+            "market_value": 0.0,
+
+            "unrealized_pnl": 0.0,
+
+            "realized_pnl": 0.0,
+
+        }
+
+        return cast(StrategyPosition, self.positions.get(symbol, default_position))
+
+    def get_all_positions(self) -> Dict[str, StrategyPosition]:
+
+        """��ȡ���гֲ�"""
+
+        return {symbol: cast(StrategyPosition, position) for symbol, position in self.positions.items()}
 
     def _generate_order_id(self) -> str:
-        """生成订单ID"""
+
+        """���ɶ���ID"""
+
         import uuid
-        return str(uuid.uuid4())[:8]
 
-    def _send_order_event(self, order: Dict[str, Any]):
-        """发送订单事件（实盘用）"""
-        if self.event_engine:
-            from deepsearch.event.engine.engine import Event
-            event = Event(
-                type="ORDER_SUBMIT",
-                data=order
-            )
-            self.event_engine.put(event)
+        return f"{self.strategy_id}_{uuid.uuid4().hex[:8]}"
 
-    def _send_cancel_event(self, order_id: str):
-        """发送取消订单事件（实盘用）"""
-        if self.event_engine:
-            from deepsearch.event.engine.engine import Event
-            event = Event(
-                type="ORDER_CANCEL",
-                data={'order_id': order_id}
-            )
-            self.event_engine.put(event)
+    def _send_order_event(self, order: StrategyOrder) -> None:
 
-    def log(self, message: str, level: str = 'INFO'):
+        """���Ͷ����¼���ʵ���ã�"""
+
+        if not self.event_engine:
+
+            return
+
+        from deepsearch.event.engine.engine import Event
+
+        envelope: StrategyBusEnvelope = {
+
+            "topic": f"strategy.{self.strategy_id}.orders",
+
+            "type": "STRATEGY_ORDER_SUBMIT",
+
+            "timestamp": datetime.now().timestamp(),
+
+            "payload": order,
+
+            "metadata": {"source": "backtest" if self.is_backtest else "live"},
+
+            "headers": {"strategy_id": self.strategy_id},
+
+        }
+
+        self.event_engine.put(Event(type="STRATEGY_ORDER_SUBMIT", data=envelope))
+
+    def _send_cancel_event(self, order_id: str) -> None:
+
+        """����ȡ�������¼���ʵ���ã�"""
+
+        if not self.event_engine:
+
+            return
+
+        from deepsearch.event.engine.engine import Event
+
+        payload: StrategyCancelPayload = {"order_id": order_id, "strategy_id": self.strategy_id}
+
+        envelope: StrategyBusEnvelope = {
+
+            "topic": f"strategy.{self.strategy_id}.orders",
+
+            "type": "STRATEGY_ORDER_CANCEL",
+
+            "timestamp": datetime.now().timestamp(),
+
+            "payload": payload,
+
+            "headers": {"strategy_id": self.strategy_id},
+
+            "metadata": {"source": "backtest" if self.is_backtest else "live"},
+
+        }
+
+        self.event_engine.put(Event(type="STRATEGY_ORDER_CANCEL", data=envelope))
+
+    def log(self, message: str, level: str = "INFO") -> None:
+
         """记录日志"""
-        if level == 'DEBUG':
+
+        if level == "DEBUG":
+
             self.logger.debug(message)
-        elif level == 'INFO':
-            self.logger.info(message)
-        elif level == 'WARNING':
-            self.logger.warning(message)
-        elif level == 'ERROR':
-            self.logger.error(message)
-        else:
+
+        elif level == "INFO":
+
             self.logger.info(message)
 
+        elif level == "WARNING":
+
+            self.logger.warning(message)
+
+        elif level == "ERROR":
+
+            self.logger.error(message)
+
+        else:
+
+            self.logger.info(message)
 
 class BacktraderStrategyAdapter:
+
     """
+
     Backtrader 策略适配器
-    
+
     将 DeepSearch 策略适配为 Backtrader 策略
+
     """
 
     @staticmethod
-    def create_backtrader_strategy(base_strategy: BaseStrategy):
+
+    def create_backtrader_strategy(
+
+        base_strategy: BacktestStrategy,
+
+    ) -> "Type[BacktraderStrategyBase]":
+
         """
+
         创建 Backtrader 策略类
-        
+
         Args:
+
             base_strategy: DeepSearch 策略实例
-            
+
         Returns:
+
             Backtrader 策略类
+
         """
+
         if not HAS_BACKTRADER:
+
             raise ImportError("请先安装 backtrader: pip install backtrader")
 
         class BTStrategy(bt.Strategy):
+
             """动态生成的 Backtrader 策略"""
 
             def __init__(self):
+
                 super().__init__()
+
                 self.deepsearch_strategy = base_strategy
+
                 self.deepsearch_strategy.is_backtest = True
 
                 # 调用策略初始化
+
                 self.deepsearch_strategy.on_init()
 
             def start(self):
+
                 """策略启动"""
+
                 self.deepsearch_strategy.on_start()
 
             def next(self):
+
                 """处理新的K线"""
+
                 # 构造K线数据字典
-                bar = {
-                    'datetime': self.datas[0].datetime.datetime(0),
-                    'open': self.datas[0].open[0],
-                    'high': self.datas[0].high[0],
-                    'low': self.datas[0].low[0],
-                    'close': self.datas[0].close[0],
-                    'volume': self.datas[0].volume[0],
+
+                bar: MarketBarData = {
+
+                    "symbol": self.datas[0]._name,
+
+                    "datetime": self.datas[0].datetime.datetime(0),
+
+                    "open": float(self.datas[0].open[0]),
+
+                    "high": float(self.datas[0].high[0]),
+
+                    "low": float(self.datas[0].low[0]),
+
+                    "close": float(self.datas[0].close[0]),
+
+                    "volume": float(self.datas[0].volume[0]),
+
                 }
 
                 # 更新持仓信息
+
                 self._update_positions()
 
                 # 调用策略的 on_bar 方法
+
                 self.deepsearch_strategy.on_bar(bar)
 
                 # 处理策略产生的订单
+
                 self._process_strategy_orders()
 
             def notify_order(self, order):
+
                 """订单通知"""
-                order_info = {
-                    'id': order.ref,
-                    'status': self._get_order_status(order),
-                    'size': order.size,
-                    'price': order.price,
-                    'executed_size': order.executed.size,
-                    'executed_price': order.executed.price,
-                    'commission': order.executed.comm
+
+                size_value = float(order.size)
+
+                executed_size = float(getattr(order.executed, "size", 0.0))
+
+                remaining = max(size_value - executed_size, 0.0)
+
+                order_type = getattr(getattr(order, "info", {}), "get", lambda *args, **kwargs: "UNKNOWN")("order_type", "UNKNOWN")
+
+                order_symbol = getattr(getattr(order, "data", None), "_name", "")
+
+                order_info: StrategyOrder = {
+
+                    "id": str(order.ref),
+
+                    "order_id": str(order.ref),
+
+                    "strategy_id": self.deepsearch_strategy.strategy_id,
+
+                    "symbol": order_symbol,
+
+                    "side": "BUY" if order.isbuy() else "SELL",
+
+                    "size": size_value,
+
+                    "price": float(order.price) if order.price is not None else None,
+
+                    "type": str(order_type),
+
+                    "status": self._get_order_status(order),
+
+                    "filled": executed_size,
+
+                    "remaining": remaining,
+
+                    "update_time": datetime.now(),
+
+                    "metadata": {
+
+                        "executed_price": float(getattr(order.executed, "price", 0.0) or 0.0),
+
+                        "commission": float(getattr(order.executed, "comm", 0.0) or 0.0),
+
+                    },
+
                 }
 
                 self.deepsearch_strategy.on_order(order_info)
 
             def notify_trade(self, trade):
+
                 """成交通知"""
-                trade_info = {
-                    'symbol': trade.data._name,
-                    'size': trade.size,
-                    'price': trade.price,
-                    'value': trade.value,
-                    'commission': trade.commission,
-                    'pnl': trade.pnl,
-                    'pnlcomm': trade.pnlcomm
+
+                trade_order = getattr(trade, "order", None)
+
+                order_id = str(getattr(trade_order, "ref", ""))
+
+                trade_id = str(getattr(trade, "ref", order_id or f"trade_{datetime.now().timestamp():.0f}"))
+
+                side = "BUY" if float(trade.size) >= 0 else "SELL"
+
+                trade_info: StrategyTrade = {
+
+                    "trade_id": trade_id,
+
+                    "order_id": order_id,
+
+                    "strategy_id": self.deepsearch_strategy.strategy_id,
+
+                    "symbol": getattr(trade.data, "_name", ""),
+
+                    "side": side,
+
+                    "size": abs(float(trade.size)),
+
+                    "price": float(trade.price),
+
+                    "pnl": float(trade.pnl),
+
+                    "fee": float(trade.commission or 0.0),
+
+                    "timestamp": datetime.now(),
+
+                    "metadata": {
+
+                        "value": float(trade.value),
+
+                        "pnl_comm": float(trade.pnlcomm),
+
+                    },
+
                 }
 
                 self.deepsearch_strategy.on_trade(trade_info)
 
             def stop(self):
+
                 """策略停止"""
+
                 self.deepsearch_strategy.on_stop()
 
             def _update_positions(self):
+
                 """更新持仓信息"""
+
                 position = self.getposition(self.datas[0])
+
                 if position:
-                    self.deepsearch_strategy.positions[self.datas[0]._name] = {
-                        'symbol': self.datas[0]._name,
-                        'size': position.size,
-                        'price': position.price,
-                        'value': position.value,
-                        'pnl': position.pnl,
-                        'pnlcomm': position.pnlcomm
+
+                    position_data: StrategyPosition = {
+
+                        "symbol": self.datas[0]._name,
+
+                        "size": float(position.size),
+
+                        "avg_cost": float(position.price),
+
+                        "market_value": float(position.value),
+
+                        "unrealized_pnl": float(position.pnl),
+
+                        "metadata": {
+
+                            "pnl_comm": float(position.pnlcomm),
+
+                        },
+
+                        "last_update": datetime.now(),
+
                     }
 
+                    self.deepsearch_strategy.positions[self.datas[0]._name] = position_data
+
             def _process_strategy_orders(self):
+
                 """处理策略产生的订单"""
+
                 # 这里可以检查策略的 buy/sell 调用
+
                 # 并转换为 Backtrader 订单
+
                 pass
 
             def _get_order_status(self, order):
+
                 """获取订单状态"""
+
                 if order.status == order.Submitted:
-                    return 'SUBMITTED'
+
+                    return "SUBMITTED"
+
                 elif order.status == order.Accepted:
-                    return 'ACCEPTED'
+
+                    return "ACCEPTED"
+
                 elif order.status == order.Partial:
-                    return 'PARTIAL'
+
+                    return "PARTIAL"
+
                 elif order.status == order.Completed:
-                    return 'COMPLETED'
+
+                    return "COMPLETED"
+
                 elif order.status == order.Canceled:
-                    return 'CANCELED'
+
+                    return "CANCELED"
+
                 elif order.status == order.Expired:
-                    return 'EXPIRED'
+
+                    return "EXPIRED"
+
                 elif order.status == order.Rejected:
-                    return 'REJECTED'
+
+                    return "REJECTED"
+
                 else:
-                    return 'UNKNOWN'
+
+                    return "UNKNOWN"
 
         return BTStrategy
 
-
 class SimpleMovingAverageStrategy(BaseStrategy):
-    """
-    简单移动平均线策略示例
-    
-    当短期均线上穿长期均线时买入
-    当短期均线下穿长期均线时卖出
+
     """
 
-    def __init__(self, params: Optional[Dict[str, Any]] = None):
+    ���ƶ�ƽ���߲���ʾ��
+
+    �����ھ����ϴ����ھ���ʱ����
+
+    �����ھ����´����ھ���ʱ����
+
+    """
+
+    def __init__(self, params: Optional[StrategyParams] = None):
+
         super().__init__(params)
 
-        # 策略参数
-        self.short_period = self.params.get('short_period', 10)
-        self.long_period = self.params.get('long_period', 30)
+        # ���Բ���
 
-        # 数据存储
-        self.prices = []
-        self.short_ma = []
-        self.long_ma = []
+        self.short_period: int = self._coerce_period(self.params.get("short_period"), 10)
 
-        # 信号状态
-        self.in_position = False
+        self.long_period: int = self._coerce_period(self.params.get("long_period"), 30)
 
-    def on_init(self):
+        self.params["short_period"] = self.short_period
+
+        self.params["long_period"] = self.long_period
+
+        # ���ݴ洢
+
+        self.prices: List[float] = []
+
+        self.short_ma: List[float] = []
+
+        self.long_ma: List[float] = []
+
+        # �ź�״̬
+
+        self.in_position: bool = False
+
+    @staticmethod
+
+    def _coerce_period(value: Optional[object], default: int) -> int:
+
+        """ʹ�����ֶ�������������ȷ�����."""
+
+        if isinstance(value, bool):
+
+            return default
+
+        if isinstance(value, (int, float)):
+
+            candidate = int(value)
+
+        elif isinstance(value, str):
+
+            try:
+
+                candidate = int(float(value))
+
+            except ValueError:
+
+                return default
+
+        else:
+
+            return default
+
+        return candidate if candidate > 0 else default
+
+    def on_init(self) -> None:
+
         """初始化策略"""
+
         self.log(f"初始化 SMA 策略: 短期={self.short_period}, 长期={self.long_period}")
 
-    def on_start(self):
+    def on_start(self) -> None:
+
         """策略启动"""
+
         self.log("SMA 策略启动")
 
-    def on_bar(self, bar: Dict[str, Any]):
-        """处理K线数据"""
-        # 记录收盘价
-        self.prices.append(bar['close'])
+    def on_bar(self, bar: MarketBarData) -> None:
 
-        # 计算移动平均线
+        """����K������"""
+
+        close_value = bar.get("close")
+
+        if close_value is None:
+
+            return
+
+        close_price = float(close_value)
+
+        self.prices.append(close_price)
+
         if len(self.prices) >= self.short_period:
-            short_ma = sum(self.prices[-self.short_period:]) / self.short_period
+
+            short_ma = sum(self.prices[-self.short_period :]) / self.short_period
+
             self.short_ma.append(short_ma)
 
         if len(self.prices) >= self.long_period:
-            long_ma = sum(self.prices[-self.long_period:]) / self.long_period
+
+            long_ma = sum(self.prices[-self.long_period :]) / self.long_period
+
             self.long_ma.append(long_ma)
 
-        # 生成交易信号
         if len(self.short_ma) >= 2 and len(self.long_ma) >= 2:
-            # 金叉：短期均线上穿长期均线
-            if (self.short_ma[-2] <= self.long_ma[-2] and
-                    self.short_ma[-1] > self.long_ma[-1] and
-                    not self.in_position):
 
-                self.log(f"金叉信号: 买入 @ {bar['close']}")
-                self.buy('default', size=100)
+            if (
+
+                self.short_ma[-2] <= self.long_ma[-2]
+
+                and self.short_ma[-1] > self.long_ma[-1]
+
+                and not self.in_position
+
+            ):
+
+                self.log(f"����ź�: ���� @ {close_price}")
+
+                self.buy(bar.get("symbol", "default") or "default", size=100)
+
                 self.in_position = True
 
-            # 死叉：短期均线下穿长期均线
-            elif (self.short_ma[-2] >= self.long_ma[-2] and
-                  self.short_ma[-1] < self.long_ma[-1] and
-                  self.in_position):
+            elif (
 
-                self.log(f"死叉信号: 卖出 @ {bar['close']}")
-                self.sell('default', size=100)
+                self.short_ma[-2] >= self.long_ma[-2]
+
+                and self.short_ma[-1] < self.long_ma[-1]
+
+                and self.in_position
+
+            ):
+
+                self.log(f"�����ź�: ���� @ {close_price}")
+
+                self.sell(bar.get("symbol", "default") or "default", size=100)
+
                 self.in_position = False
 
-    def on_tick(self, tick: Dict[str, Any]):
+    def on_tick(self, tick: TickData) -> None:
+
         """处理Tick数据"""
+
         pass  # 该策略不使用tick数据
 
-    def on_order(self, order: Dict[str, Any]):
+    def on_order(self, order: StrategyOrder) -> None:
+
         """处理订单更新"""
+
         self.log(f"订单更新: {order['id']} - {order['status']}")
 
-    def on_trade(self, trade: Dict[str, Any]):
+    def on_trade(self, trade: StrategyTrade) -> None:
+
         """处理成交回报"""
+
         self.log(f"成交: {trade['size']} @ {trade['price']}, PnL: {trade.get('pnl', 0)}")
 
-    def on_stop(self):
+    def on_stop(self) -> None:
+
         """策略停止"""
+
         self.log("SMA 策略停止")
+

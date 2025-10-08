@@ -3,20 +3,26 @@
 
 提供数据源连接和性能测试功能
 """
+
 import time
-import asyncio
-from typing import Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Query
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.observability.monitoring.data_source_monitor import DataSourceMonitor, DataAccessType, DataSourceType
+from deepsearch.observability.monitoring.data_source_monitor import (
+    DataAccessType,
+    DataSourceMonitor,
+    DataSourceType,
+)
 
 router = APIRouter(prefix="/api/data-source", tags=["data-source-test"])
 
 
 class TestRequest(BaseModel):
     """测试请求"""
+
     source: str
     symbol: str = "000001"  # 默认测试股票
     test_type: str = "realtime"  # realtime, historical
@@ -24,6 +30,7 @@ class TestRequest(BaseModel):
 
 class TestResponse(BaseModel):
     """测试响应"""
+
     success: bool
     source: str
     latency_ms: float
@@ -36,29 +43,30 @@ class TestResponse(BaseModel):
 async def test_data_source(request: TestRequest):
     """
     测试数据源连接和性能
-    
+
     Args:
         request: 测试请求参数
-        
+
     Returns:
         测试结果，包含延迟等性能指标
     """
     monitor = DataSourceMonitor()
     start_time = time.perf_counter()
-    
+
     try:
         # 解析数据源类型
         try:
             source_type = DataSourceType(request.source.lower())
         except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"无效的数据源类型: {request.source}"
-            )
-        
+            raise HTTPException(status_code=400, detail=f"无效的数据源类型: {request.source}")
+
         # 解析访问类型
-        access_type = DataAccessType.REALTIME_QUOTE if request.test_type == "realtime" else DataAccessType.HISTORICAL_KLINE
-        
+        access_type = (
+            DataAccessType.REALTIME_QUOTE
+            if request.test_type == "realtime"
+            else DataAccessType.HISTORICAL_KLINE
+        )
+
         # 根据数据源类型获取对应的provider
         from deepsearch.webui.api.providers import DataProviderFactory
 
@@ -79,7 +87,7 @@ async def test_data_source(request: TestRequest):
                             symbols=[request.symbol],
                             start_date=None,
                             end_date=None,
-                            frequency="daily"
+                            frequency="daily",
                         )
                         # 提取单个股票的数据
                         if result and isinstance(result, dict):
@@ -87,10 +95,7 @@ async def test_data_source(request: TestRequest):
                 except Exception as provider_error:
                     # 如果provider方法有问题，返回错误信息
                     logger.error(f"Provider error for {source_type}: {provider_error}")
-                    result = {
-                        "error": f"Provider error: {provider_error}",
-                        "success": False
-                    }
+                    result = {"error": f"Provider error: {provider_error}", "success": False}
             elif source_type == DataSourceType.AMAZINGDATA:
                 provider = await DataProviderFactory.get_provider_async("amazingdata")
                 # AmazingData测试逻辑
@@ -102,14 +107,20 @@ async def test_data_source(request: TestRequest):
                     except AttributeError:
                         # 如果方法不存在，返回错误
                         # 注意：AmazingData实时数据需要通过订阅模式(onSnapshot)获取，不存在get_realtime_data方法
-                        result = {"error": "AmazingData实时数据需通过订阅接口(onSnapshot)获取，请使用datasource_manager中的新测试端点", "success": False}
+                        result = {
+                            "error": "AmazingData实时数据需通过订阅接口(onSnapshot)获取，请使用datasource_manager中的新测试端点",
+                            "success": False,
+                        }
                 else:
                     try:
                         result = await provider.get_historical_data(request.symbol)
                         if not result:
                             result = {"error": "No historical data available", "success": False}
                     except AttributeError:
-                        result = {"error": "AmazingData历史数据需使用特定API接口，请使用datasource_manager中的新测试端点", "success": False}
+                        result = {
+                            "error": "AmazingData历史数据需使用特定API接口，请使用datasource_manager中的新测试端点",
+                            "success": False,
+                        }
             elif source_type == DataSourceType.QMT:
                 provider = await DataProviderFactory.get_provider_async("qmt")
                 # QMT测试逻辑
@@ -119,14 +130,23 @@ async def test_data_source(request: TestRequest):
                         if not result:
                             result = {"error": "QMT realtime data not available", "success": False}
                     except AttributeError:
-                        result = {"error": "QMT provider does not support realtime quotes", "success": False}
+                        result = {
+                            "error": "QMT provider does not support realtime quotes",
+                            "success": False,
+                        }
                 else:
                     try:
                         result = await provider.get_kline_data(request.symbol, period="daily")
                         if not result:
-                            result = {"error": "QMT historical data not available", "success": False}
+                            result = {
+                                "error": "QMT historical data not available",
+                                "success": False,
+                            }
                     except AttributeError:
-                        result = {"error": "QMT provider does not support kline data", "success": False}
+                        result = {
+                            "error": "QMT provider does not support kline data",
+                            "success": False,
+                        }
             else:
                 # 统一数据源 - 使用默认测试逻辑
                 try:
@@ -140,16 +160,16 @@ async def test_data_source(request: TestRequest):
                     # 如果统一数据源不可用，返回错误信息
                     logger.error(f"Unified provider error: {unified_error}")
                     result = {"error": f"Unified provider error: {unified_error}", "success": False}
-            
+
             # 计算延迟（毫秒）
             latency_ms = (time.perf_counter() - start_time) * 1000
-            
+
             # 判断是否成功
             success = bool(result and not result.get("error"))
-            
+
             # 计算数据大小
             data_size = len(str(result)) if result else 0
-            
+
             # 记录到监控系统
             monitor.record_access(
                 source=source_type,
@@ -159,9 +179,9 @@ async def test_data_source(request: TestRequest):
                 success=success,
                 latency_ms=latency_ms,
                 data_size=data_size,
-                error_message=result.get("error") if not success else None
+                error_message=result.get("error") if not success else None,
             )
-            
+
             # 返回测试结果
             return TestResponse(
                 success=success,
@@ -169,9 +189,9 @@ async def test_data_source(request: TestRequest):
                 latency_ms=latency_ms,
                 data_size=data_size,
                 message=f"测试{'成功' if success else '失败'}",
-                error=result.get("error") if not success else None
+                error=result.get("error") if not success else None,
             )
-            
+
         except Exception as e:
             # 计算失败时的延迟
             latency_ms = (time.perf_counter() - start_time) * 1000
@@ -186,7 +206,7 @@ async def test_data_source(request: TestRequest):
                     success=False,
                     latency_ms=latency_ms,
                     data_size=0,
-                    error_message=str(e)
+                    error_message=str(e),
                 )
             except Exception as monitor_error:
                 logger.warning(f"监控记录失败: {monitor_error}")
@@ -199,9 +219,9 @@ async def test_data_source(request: TestRequest):
                 latency_ms=latency_ms,
                 data_size=0,
                 message="测试失败",
-                error=str(e)
+                error=str(e),
             )
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -213,13 +233,13 @@ async def test_data_source(request: TestRequest):
 async def test_all_data_sources():
     """
     测试所有数据源
-    
+
     Returns:
         所有数据源的测试结果
     """
     results = {}
     test_symbol = "000001"
-    
+
     # 测试所有已知数据源
     sources = [
         DataSourceType.AKSHARE_PROXY,
@@ -227,14 +247,10 @@ async def test_all_data_sources():
         DataSourceType.AMAZINGDATA,
         DataSourceType.QMT,
     ]
-    
+
     for source in sources:
         try:
-            request = TestRequest(
-                source=source.value,
-                symbol=test_symbol,
-                test_type="realtime"
-            )
+            request = TestRequest(source=source.value, symbol=test_symbol, test_type="realtime")
             result = await test_data_source(request)
             results[source.value] = result.dict()
         except Exception as e:
@@ -243,7 +259,7 @@ async def test_all_data_sources():
                 "error": str(e),
                 "latency_ms": -1,
                 "data_size": 0,
-                "message": f"测试失败: {e}"
+                "message": f"测试失败: {e}",
             }
-    
+
     return results

@@ -10,6 +10,10 @@
  * - 离线支持
  */
 
+import logger from '@/utils/logger'
+
+const dataCacheLogger = logger.child('utils:data-cache')
+
 import { ref, computed } from 'vue'
 
 // IndexedDB 配置
@@ -280,12 +284,12 @@ class DataCache {
   setupEventListeners() {
     window.addEventListener('online', () => {
       this.isOffline.value = false
-      console.log('Cache: Online mode')
+      dataCacheLogger.info('Cache: Online mode')
     })
     
     window.addEventListener('offline', () => {
       this.isOffline.value = true
-      console.log('Cache: Offline mode')
+      dataCacheLogger.info('Cache: Offline mode')
     })
   }
   
@@ -295,10 +299,10 @@ class DataCache {
       try {
         const deletedCount = await this.indexedDBCache.cleanExpired()
         if (deletedCount > 0) {
-          console.log(`Cleaned ${deletedCount} expired cache entries`)
+          dataCacheLogger.info(`Cleaned ${deletedCount} expired cache entries`)
         }
       } catch (error) {
-        console.error('Cache cleanup error:', error)
+        dataCacheLogger.error('Cache cleanup error:', error)
       }
     }, 60000) // 每分钟清理一次
   }
@@ -347,7 +351,7 @@ class DataCache {
           return this.processData(data, strategy)
         }
       } catch (error) {
-        console.error('IndexedDB read error:', error)
+        dataCacheLogger.error('IndexedDB read error:', error)
       }
     }
     
@@ -367,7 +371,7 @@ class DataCache {
         
         // 验证数据
         if (strategy.validator && !strategy.validator(data)) {
-          console.warn(`Data validation failed for key: ${key}`)
+          dataCacheLogger.warn(`Data validation failed for key: ${key}`)
           return null
         }
         
@@ -376,7 +380,7 @@ class DataCache {
         
         return this.processData(data, strategy)
       } catch (error) {
-        console.error(`Loader error for key ${key}:`, error)
+        dataCacheLogger.error(`Loader error for key ${key}:`, error)
         
         // 降级到过期缓存
         return this.getStale(key)
@@ -417,7 +421,7 @@ class DataCache {
         const expiry = Date.now() + strategy.ttl
         await this.indexedDBCache.set(key, processedValue, expiry, strategy.category)
       } catch (error) {
-        console.error('IndexedDB write error:', error)
+        dataCacheLogger.error('IndexedDB write error:', error)
       }
     }
   }
@@ -463,7 +467,7 @@ class DataCache {
           }
         }
       } catch (error) {
-        console.error('Batch loader error:', error)
+        dataCacheLogger.error('Batch loader error:', error)
       }
     }
     
@@ -515,7 +519,7 @@ class DataCache {
         return this.processData(result.value, this.strategies.get(key) || {})
       }
     } catch (error) {
-      console.error('Get stale data error:', error)
+      dataCacheLogger.error('Get stale data error:', error)
     }
     
     return null
@@ -583,7 +587,7 @@ class DataCache {
     })
     
     await Promise.allSettled(promises)
-    console.log('Cache warmup completed')
+    dataCacheLogger.info('Cache warmup completed')
   }
 }
 

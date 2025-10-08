@@ -1,5 +1,5 @@
-"""System-related API endpoints."""
+"""系统管理 API 路由聚合模块。"""
 
-from .system_api import router
+from .system import router
 
-__all__ = ['router']
+__all__ = ["router"]

@@ -3,14 +3,17 @@
  * 用于追踪为什么请求会发送到错误的地址
  */
 
+import logger from '@/utils/logger'
+
+const debugApiLogger = logger.child('utils:debug-api')
+
 // 拦截所有的 XMLHttpRequest
 const originalXHROpen = XMLHttpRequest.prototype.open;
-const originalXHRSend = XMLHttpRequest.prototype.send;
 
 XMLHttpRequest.prototype.open = function(method, url, ...args) {
     // 记录所有请求
     if (url && url.includes('database')) {
-        console.error('🚨 [XHR拦截] 发现database请求:', {
+        debugApiLogger.error('🚨 [XHR拦截] 发现database请求:', {
             method,
             url,
             fullUrl: new URL(url, window.location.href).href,
@@ -26,7 +29,7 @@ XMLHttpRequest.prototype.open = function(method, url, ...args) {
 const originalFetch = window.fetch;
 window.fetch = function(url, options = {}) {
     if (url && url.toString().includes('database')) {
-        console.error('🚨 [Fetch拦截] 发现database请求:', {
+        debugApiLogger.error('🚨 [Fetch拦截] 发现database请求:', {
             url: url.toString(),
             fullUrl: new URL(url, window.location.href).href,
             method: options.method || 'GET',
@@ -39,7 +42,7 @@ window.fetch = function(url, options = {}) {
 
 // 监控 axios 实例
 export function debugAxiosInstance(axiosInstance) {
-    console.log('📊 [Axios调试] 当前配置:', {
+    debugApiLogger.info('📊 [Axios调试] 当前配置:', {
         baseURL: axiosInstance.defaults.baseURL,
         timeout: axiosInstance.defaults.timeout,
         headers: axiosInstance.defaults.headers
@@ -53,7 +56,7 @@ export function debugAxiosInstance(axiosInstance) {
                     config.baseURL + config.url : 
                     config.url;
                     
-                console.error('🚨 [Axios拦截] database请求配置:', {
+                debugApiLogger.error('🚨 [Axios拦截] database请求配置:', {
                     url: config.url,
                     baseURL: config.baseURL,
                     fullUrl,
@@ -63,13 +66,13 @@ export function debugAxiosInstance(axiosInstance) {
             return config;
         },
         error => {
-            console.error('❌ [Axios请求错误]:', error);
+            debugApiLogger.error('❌ [Axios请求错误]:', error);
             return Promise.reject(error);
         }
     );
 }
 
-console.log('✅ API调试工具已加载');
+debugApiLogger.info('✅ API调试工具已加载');
 
 export default {
     debugAxiosInstance

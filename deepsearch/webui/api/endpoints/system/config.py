@@ -1,17 +1,18 @@
 """
 配置管理 API 路由。
 """
+
 import asyncio
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict, Final, cast
 
 import yaml
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.config import get_config
+from deepsearch.config import get_config, reload_config
 from deepsearch.constants import YAML_ENCODING
 
 # Windows 兼容性：设置事件循环策略
@@ -20,15 +21,17 @@ if sys.platform == "win32":
 
 router = APIRouter()
 
+MASKED_SECRET: Final[str] = "***"  # nosec B105 - UI 脱敏显示占位符
+
 
 def parse_database_error(error_str: str, db_type: str = "postgresql") -> str:
     """
     解析数据库连接错误，返回友好的错误信息。
-    
+
     Args:
         error_str: 原始错误信息
         db_type: 数据库类型
-        
+
     Returns:
         友好的错误提示
     """
@@ -92,7 +95,7 @@ def parse_database_error(error_str: str, db_type: str = "postgresql") -> str:
     # 去除多余的连接尝试信息
     if "Multiple connection attempts failed" in error_str:
         # 提取第一个有意义的错误信息
-        lines = error_str.split('\n')
+        lines = error_str.split("\n")
         for line in lines:
             if "failed:" in line:
                 # 提取错误核心信息
@@ -112,6 +115,7 @@ def parse_database_error(error_str: str, db_type: str = "postgresql") -> str:
 
 class ConfigUpdate(BaseModel):
     """配置更新请求模型。"""
+
     section: str
     key: str
     value: Any
@@ -121,7 +125,7 @@ class ConfigUpdate(BaseModel):
 async def get_configuration() -> Dict[str, Any]:
     """
     获取当前系统配置。
-    
+
     Returns:
         系统配置字典
     """
@@ -133,7 +137,7 @@ async def get_configuration() -> Dict[str, Any]:
                 "error": "配置未加载",
                 "message": "配置系统未能正确初始化",
                 "config_missing": True,
-                "env": "unknown"
+                "env": "unknown",
             }
 
         # 检查配置文件是否存在
@@ -148,17 +152,17 @@ async def get_configuration() -> Dict[str, Any]:
                 "message": f"请创建配置文件: {config_path}",
                 "config_missing": True,
                 "config_path": str(config_path),
-                "env": env
+                "env": env,
             }
-        
+
         # 将配置转换为字典格式
-        config_dict = config.model_dump()
+        config_dict: Dict[str, Any] = config.model_dump()
 
         # 移除敏感信息
         if "security" in config_dict and config_dict["security"] is not None:
             config_dict["security"] = {
-                "api_key": "***" if config_dict["security"].get("api_key") else None,
-                "secret_key": "***" if config_dict["security"].get("secret_key") else None
+                "api_key": MASKED_SECRET if config_dict["security"].get("api_key") else None,
+                "secret_key": MASKED_SECRET if config_dict["security"].get("secret_key") else None,
             }
 
         # 对数据库密码进行脱敏处理
@@ -167,14 +171,17 @@ async def get_configuration() -> Dict[str, Any]:
                 if config_dict["database"]["main"]["password"]:
                     # 添加标志表示是否有保存的密码
                     config_dict["database"]["main"]["has_saved_password"] = True
-                    config_dict["database"]["main"]["password"] = "***"
+                    config_dict["database"]["main"]["password"] = MASKED_SECRET
                 else:
                     config_dict["database"]["main"]["has_saved_password"] = False
-            if "cache" in config_dict["database"] and "password" in config_dict["database"]["cache"]:
+            if (
+                "cache" in config_dict["database"]
+                and "password" in config_dict["database"]["cache"]
+            ):
                 if config_dict["database"]["cache"]["password"]:
                     # 添加标志表示是否有保存的密码
                     config_dict["database"]["cache"]["has_saved_password"] = True
-                    config_dict["database"]["cache"]["password"] = "***"
+                    config_dict["database"]["cache"]["password"] = MASKED_SECRET
                 else:
                     config_dict["database"]["cache"]["has_saved_password"] = False
 
@@ -189,7 +196,7 @@ async def get_configuration() -> Dict[str, Any]:
 async def get_config_schema() -> Dict[str, Any]:
     """
     获取配置模式定义。
-    
+
     Returns:
         配置的 JSON Schema
     """
@@ -197,7 +204,7 @@ async def get_config_schema() -> Dict[str, Any]:
         config = get_config()
         if config is None:
             raise HTTPException(status_code=500, detail="配置系统未初始化")
-        return config.model_json_schema()
+        return cast(Dict[str, Any], config.model_json_schema())
     except Exception as e:
         logger.error(f"获取配置模式失败：{e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -207,10 +214,10 @@ async def get_config_schema() -> Dict[str, Any]:
 async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     保存配置到文件。
-    
+
     Args:
         config_data: 完整的配置数据
-        
+
     Returns:
         保存结果
     """
@@ -218,10 +225,7 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
         # 检查settings是否存在
         config = get_config()
         if config is None:
-            return {
-                "success": False,
-                "message": "配置系统未初始化，无法保存配置"
-            }
+            return {"success": False, "message": "配置系统未初始化，无法保存配置"}
 
         # 获取当前环境
         env = config.app.env
@@ -233,7 +237,7 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
 
         # 读取现有配置文件（保留注释等）
         existing_content = ""
-        existing_config = {}  # 新增：保存解析后的配置
+        existing_config: Dict[str, Any] = {}  # 新增：保存解析后的配置
         if config_path.exists():
             with config_path.open("r", encoding=YAML_ENCODING) as f:
                 existing_content = f.read()
@@ -261,18 +265,20 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
             if "main" in db_config or "cache" in db_config:
                 save_data["database"] = {
                     "main": db_config.get("main", {}),
-                    "cache": db_config.get("cache", {})
+                    "cache": db_config.get("cache", {}),
                 }
                 # 处理主数据库密码保存逻辑
                 if "main" in save_data["database"]:
                     # 获取现有密码
-                    existing_password = existing_config.get("database", {}).get("main", {}).get("password", "")
+                    existing_password = (
+                        existing_config.get("database", {}).get("main", {}).get("password", "")
+                    )
 
                     if "password" in save_data["database"]["main"]:
                         remember_password = db_config.get("main", {}).get("rememberPassword", False)
                         password = save_data["database"]["main"]["password"]
 
-                        if password == "***":
+                        if password == MASKED_SECRET:
                             # 脱敏密码，使用现有密码
                             save_data["database"]["main"]["password"] = existing_password
                         elif remember_password and password:
@@ -280,23 +286,27 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
                             save_data["database"]["main"]["password"] = password
                         else:
                             # 不记住密码或密码为空
-                            save_data["database"]["main"]["password"] = ""
+                            save_data["database"]["main"]["password"] = ""  # nosec B105 B106 - 清空已保存密码
                     else:
                         # 如果没有密码字段，保持现有密码
                         save_data["database"]["main"]["password"] = existing_password
-                    
 
                 # 删除临时的rememberPassword字段
-                if "main" in save_data["database"] and "rememberPassword" in save_data["database"]["main"]:
+                if (
+                    "main" in save_data["database"]
+                    and "rememberPassword" in save_data["database"]["main"]
+                ):
                     del save_data["database"]["main"]["rememberPassword"]
                 # 处理缓存数据库密码保存逻辑
                 if "cache" in save_data["database"]:
                     # 获取现有密码
-                    existing_cache_password = existing_config.get("database", {}).get("cache", {}).get("password", "")
+                    existing_cache_password = (
+                        existing_config.get("database", {}).get("cache", {}).get("password", "")
+                    )
 
                     if "password" in save_data["database"]["cache"]:
                         cache_password = save_data["database"]["cache"]["password"]
-                        if cache_password == "***":
+                        if cache_password == MASKED_SECRET:
                             # 脱敏密码，使用现有密码
                             save_data["database"]["cache"]["password"] = existing_cache_password
                         elif cache_password:
@@ -304,11 +314,11 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
                             save_data["database"]["cache"]["password"] = cache_password
                         else:
                             # 密码为空
-                            save_data["database"]["cache"]["password"] = ""
+                            save_data["database"]["cache"]["password"] = ""  # nosec B105 B106 - 清空已保存密码
                     else:
                         # 如果没有密码字段，保持现有密码
                         save_data["database"]["cache"]["password"] = existing_cache_password
-                    
+
             # 兼容旧格式
             elif "url" in db_config:
                 save_data["database"] = {"url": db_config["url"]}
@@ -326,9 +336,9 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
             # 不保存脱敏的安全信息
             security = config_data["security"]
             save_security = {}
-            if security.get("api_key") and security["api_key"] != "***":
+            if security.get("api_key") and security["api_key"] != MASKED_SECRET:
                 save_security["api_key"] = security["api_key"]
-            if security.get("secret_key") and security["secret_key"] != "***":
+            if security.get("secret_key") and security["secret_key"] != MASKED_SECRET:
                 save_security["secret_key"] = security["secret_key"]
             if save_security:
                 save_data["security"] = save_security
@@ -341,52 +351,57 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
 
         # 保存配置
         with config_path.open("w", encoding=YAML_ENCODING) as f:
-            yaml.dump(save_data, f,
-                      default_flow_style=False,
-                      allow_unicode=True,
-                      sort_keys=False)
+            yaml.dump(save_data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
         logger.info(f"配置已保存到: {config_path}")
+
+        try:
+            reload_config()
+        except Exception as reload_error:
+            logger.error(f"保存后重新加载配置失败: {reload_error}")
+            return {
+                "success": False,
+                "message": f"配置已写入文件，但重新加载失败: {reload_error}",
+                "path": str(config_path),
+            }
+
+        # 返回最新配置，便于前端立即刷新展示
+        updated_config = await get_configuration()
 
         return {
             "success": True,
             "message": "配置保存成功",
-            "path": str(config_path)
+            "path": str(config_path),
+            "config": updated_config,
         }
 
     except Exception as e:
         logger.error(f"保存配置失败: {e}")
-        return {
-            "success": False,
-            "message": f"保存配置失败: {str(e)}"
-        }
+        return {"success": False, "message": f"保存配置失败: {str(e)}"}
 
 
 @router.put("")
 async def update_config(update: ConfigUpdate) -> Dict[str, Any]:
     """
     更新配置项。
-    
+
     注意：此功能在生产环境中应该谨慎使用。
-    
+
     Args:
         update: 配置更新信息
-        
+
     Returns:
         更新后的配置
     """
     # 保留此接口以保持向后兼容
-    return {
-        "status": "deprecated",
-        "message": "请使用 POST /api/config/save 接口保存完整配置"
-    }
+    return {"status": "deprecated", "message": "请使用 POST /api/config/save 接口保存完整配置"}
 
 
 @router.get("/validate")
 async def validate_config() -> Dict[str, Any]:
     """
     验证当前配置的有效性。
-    
+
     Returns:
         验证结果
     """
@@ -396,52 +411,32 @@ async def validate_config() -> Dict[str, Any]:
         # 检查settings是否存在
         config = get_config()
         if config is None:
-            return {
-                "valid": False,
-                "error": "配置系统未初始化",
-                "issues": []
-            }
-        
+            return {"valid": False, "error": "配置系统未初始化", "issues": []}
+
         # 检查必要的目录是否存在
         if not config.log.active:
-            issues.append({
-                "level": "warning",
-                "section": "log",
-                "message": "日志功能已禁用"
-            })
+            issues.append({"level": "warning", "section": "log", "message": "日志功能已禁用"})
 
         # 检查消息总线配置
         if not config.message_bus.enabled_buses:
-            issues.append({
-                "level": "error",
-                "section": "message_bus",
-                "message": "没有启用的消息总线"
-            })
+            issues.append(
+                {"level": "error", "section": "message_bus", "message": "没有启用的消息总线"}
+            )
 
         # 检查监控配置
         if config.monitoring and not config.monitoring.enable_metrics:
-            issues.append({
-                "level": "info",
-                "section": "monitoring",
-                "message": "监控指标未启用"
-            })
+            issues.append({"level": "info", "section": "monitoring", "message": "监控指标未启用"})
 
-        return {
-            "valid": len([i for i in issues if i["level"] == "error"]) == 0,
-            "issues": issues
-        }
+        return {"valid": len([i for i in issues if i["level"] == "error"]) == 0, "issues": issues}
 
     except Exception as e:
         logger.error(f"验证配置失败：{e}")
-        return {
-            "valid": False,
-            "error": str(e),
-            "issues": []
-        }
+        return {"valid": False, "error": str(e), "issues": []}
 
 
 class DatabaseConnectionTest(BaseModel):
     """数据库连接测试请求模型。"""
+
     db_type: str  # postgresql, mysql, sqlite
     host: str = "localhost"
     port: int = 5432
@@ -453,8 +448,10 @@ class DatabaseConnectionTest(BaseModel):
 
 class CacheConnectionTest(BaseModel):
     """缓存连接测试请求模型。"""
+
     host: str = "localhost"
     port: int = 6379
+    username: str = ""
     password: str = ""
     db: int = 0
 
@@ -463,10 +460,10 @@ class CacheConnectionTest(BaseModel):
 async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, Any]:
     """
     测试数据库连接。
-    
+
     Args:
         config: 数据库连接配置
-        
+
     Returns:
         连接测试结果
     """
@@ -474,13 +471,13 @@ async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, 
         # 如果密码是 ***，从配置中读取实际密码
         actual_password = config.password
         config_obj = get_config()
-        if config.password == "***" and config_obj:
+        if config.password == MASKED_SECRET and config_obj:
             # 从配置中获取保存的密码
             if config.db_type == "postgresql":
                 saved_password = config_obj.database.main.password
                 if saved_password:
                     actual_password = saved_password
-        
+
         if config.db_type == "postgresql":
             # 测试 PostgreSQL 连接
             try:
@@ -488,46 +485,40 @@ async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, 
 
                 # 使用 psycopg3 异步连接
                 async with await psycopg.AsyncConnection.connect(
-                        host=config.host,
-                        port=config.port,
-                        dbname=config.database,
-                        user=config.username,
-                        password=actual_password,
-                        connect_timeout=5
+                    host=config.host,
+                    port=config.port,
+                    dbname=config.database,
+                    user=config.username,
+                    password=actual_password,
+                    connect_timeout=5,
                 ) as conn:
                     async with conn.cursor() as cur:
                         await cur.execute("SELECT version()")
                         result = await cur.fetchone()
                         version = result[0] if result else "Unknown"
 
-                return {
-                    "success": True,
-                    "message": "PostgreSQL 连接成功",
-                    "version": version
-                }
+                return {"success": True, "message": "PostgreSQL 连接成功", "version": version}
             except ImportError:
                 return {
                     "success": False,
-                    "message": "PostgreSQL 驱动未安装，请运行: pip install psycopg[binary]"
+                    "message": "PostgreSQL 驱动未安装，请运行: pip install psycopg[binary]",
                 }
             except Exception as e:
                 error_msg = parse_database_error(str(e), "postgresql")
-                return {
-                    "success": False,
-                    "message": f"PostgreSQL 连接失败: {error_msg}"
-                }
+                return {"success": False, "message": f"PostgreSQL 连接失败: {error_msg}"}
 
         elif config.db_type == "mysql":
             # 测试 MySQL 连接
             try:
                 import aiomysql
+
                 conn = await aiomysql.connect(
                     host=config.host,
                     port=config.port,
                     db=config.database,
                     user=config.username,
                     password=actual_password,
-                    connect_timeout=5
+                    connect_timeout=5,
                 )
                 cursor = await conn.cursor()
                 await cursor.execute("SELECT VERSION()")
@@ -538,24 +529,22 @@ async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, 
                 return {
                     "success": True,
                     "message": "MySQL 连接成功",
-                    "version": version[0] if version else None
+                    "version": version[0] if version else None,
                 }
             except ImportError:
                 return {
                     "success": False,
-                    "message": "MySQL 驱动未安装，请运行: pip install aiomysql"
+                    "message": "MySQL 驱动未安装，请运行: pip install aiomysql",
                 }
             except Exception as e:
                 error_msg = parse_database_error(str(e), "mysql")
-                return {
-                    "success": False,
-                    "message": f"MySQL 连接失败: {error_msg}"
-                }
+                return {"success": False, "message": f"MySQL 连接失败: {error_msg}"}
 
         elif config.db_type == "sqlite":
             # 测试 SQLite 连接
             try:
                 import aiosqlite
+
                 conn = await aiosqlite.connect(config.path)
                 cursor = await conn.execute("SELECT sqlite_version()")
                 version = await cursor.fetchone()
@@ -564,62 +553,60 @@ async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, 
                 return {
                     "success": True,
                     "message": "SQLite 连接成功",
-                    "version": version[0] if version else None
+                    "version": version[0] if version else None,
                 }
             except ImportError:
                 return {
                     "success": False,
-                    "message": "SQLite 驱动未安装，请运行: pip install aiosqlite"
+                    "message": "SQLite 驱动未安装，请运行: pip install aiosqlite",
                 }
             except Exception as e:
                 error_msg = parse_database_error(str(e), "sqlite")
-                return {
-                    "success": False,
-                    "message": f"SQLite 连接失败: {error_msg}"
-                }
+                return {"success": False, "message": f"SQLite 连接失败: {error_msg}"}
         else:
-            return {
-                "success": False,
-                "message": f"不支持的数据库类型: {config.db_type}"
-            }
+            return {"success": False, "message": f"不支持的数据库类型: {config.db_type}"}
 
     except Exception as e:
         logger.error(f"数据库连接测试失败：{e}")
-        return {
-            "success": False,
-            "message": f"连接测试失败: {str(e)}"
-        }
+        return {"success": False, "message": f"连接测试失败: {str(e)}"}
 
 
 @router.post("/test-cache")
 async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
     """
     测试 Redis 缓存连接。
-    
+
     Args:
         config: Redis 连接配置
-        
+
     Returns:
         连接测试结果
     """
     try:
         # 如果密码是 ***，从配置中读取实际密码
         actual_password = config.password
+        actual_username = config.username
         config_obj = get_config()
-        if config.password == "***" and config_obj:
+        if config.username == MASKED_SECRET and config_obj:
+            saved_username = getattr(config_obj.database.cache, "username", "")
+            if saved_username:
+                actual_username = saved_username
+        if config.password == MASKED_SECRET and config_obj:
             saved_password = config_obj.database.cache.password
             if saved_password:
                 actual_password = saved_password
         # 尝试使用 redis-py 的异步客户端
         try:
             import redis.asyncio as redis_async
+
             # 创建 Redis 连接
             client = redis_async.Redis(
                 host=config.host,
                 port=config.port,
+                username=actual_username or None,
                 password=actual_password if actual_password else None,
                 db=config.db,
-                socket_connect_timeout=5
+                socket_connect_timeout=5,
             )
 
             # 测试连接
@@ -627,26 +614,24 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
 
             # 获取 Redis 信息
             info = await client.info()
-            redis_version = info.get('redis_version', 'Unknown')
+            redis_version = info.get("redis_version", "Unknown")
 
             # 关闭连接
             await client.aclose()
 
-            return {
-                "success": True,
-                "message": "Redis 连接成功",
-                "version": redis_version
-            }
+            return {"success": True, "message": "Redis 连接成功", "version": redis_version}
         except ImportError:
             # 如果 redis.asyncio 不可用，尝试同步方式测试
             import redis
+
             try:
                 client = redis.Redis(
                     host=config.host,
                     port=config.port,
+                    username=actual_username or None,
                     password=actual_password if actual_password else None,
                     db=config.db,
-                    socket_connect_timeout=5
+                    socket_connect_timeout=5,
                 )
 
                 # 同步测试连接
@@ -654,7 +639,7 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
 
                 # 获取 Redis 信息
                 info = client.info()
-                redis_version = info.get('redis_version', 'Unknown')
+                redis_version = info.get("redis_version", "Unknown")
 
                 # 关闭连接
                 client.close()
@@ -662,7 +647,7 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
                 return {
                     "success": True,
                     "message": "Redis 连接成功（同步模式）",
-                    "version": redis_version
+                    "version": redis_version,
                 }
             except Exception as e:
                 error_msg = str(e)
@@ -676,19 +661,11 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
                 elif "timeout" in error_msg.lower():
                     error_msg = "连接超时"
 
-                return {
-                    "success": False,
-                    "message": f"Redis 连接失败: {error_msg}"
-                }
+                return {"success": False, "message": f"Redis 连接失败: {error_msg}"}
 
     except asyncio.TimeoutError:
-        return {
-            "success": False,
-            "message": "Redis 连接超时"
-        }
+        return {"success": False, "message": "Redis 连接超时"}
     except Exception as e:
         logger.error(f"Redis 连接测试失败：{e}")
-        return {
-            "success": False,
-            "message": f"Redis 连接失败: {str(e)}"
-        }
+        return {"success": False, "message": f"Redis 连接失败: {str(e)}"}
+

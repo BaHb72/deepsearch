@@ -3,14 +3,19 @@
 
 提供缓存状态查询、管理和监控功能
 """
-from typing import Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Depends
+
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 from loguru import logger
 
-from deepsearch.webui.api.cache.unified import UnifiedCache
+MASKED_SECRET = "***"  # 用于识别配置中的脱敏密码占位符  # nosec B105
+from pydantic import BaseModel
+
 from deepsearch.config import get_config
+from deepsearch.webui.api.cache.unified import UnifiedCache
+from deepsearch.webui.api.cache.unified import get_cache as get_unified_cache
 
 # 创建路由器
 router = APIRouter(prefix="/cache", tags=["缓存管理"])
@@ -20,23 +25,17 @@ _cache_instance: Optional[UnifiedCache] = None
 
 
 def get_cache() -> UnifiedCache:
-    """获取缓存实例（单例模式）"""
+    """获取缓存实例（单例模式）。"""
     global _cache_instance
     if _cache_instance is None:
-        config = get_config()
-        _cache_instance = UnifiedCache(
-            memory_size=getattr(config.cache, 'memory_size', 1000),
-            redis_host=getattr(config.cache, 'redis_host', 'localhost'),
-            redis_port=getattr(config.cache, 'redis_port', 6379),
-            redis_db=getattr(config.cache, 'redis_db', 0),
-            default_ttl=getattr(config.cache, 'default_ttl', 300)
-        )
+        _cache_instance = get_unified_cache()
     return _cache_instance
 
 
 # 请求和响应模型
 class CacheStatusResponse(BaseModel):
     """缓存状态响应"""
+
     connected: bool
     redis_available: bool
     memory_usage: Dict[str, Any]
@@ -46,6 +45,7 @@ class CacheStatusResponse(BaseModel):
 
 class CacheInfoResponse(BaseModel):
     """缓存信息响应"""
+
     version: str
     memory_usage: str
     keys: int
@@ -56,6 +56,7 @@ class CacheInfoResponse(BaseModel):
 
 class ClearCacheRequest(BaseModel):
     """清理缓存请求"""
+
     namespace: Optional[str] = None
     pattern: Optional[str] = None
     confirm: bool = False
@@ -70,10 +71,11 @@ async def get_cache_status(cache: UnifiedCache = Depends(get_cache)) -> CacheSta
     """
     try:
         # 检查Redis连接状态
-        redis_available = cache.redis_client is not None
-        if redis_available:
+        redis_client = cache.redis_client
+        redis_available = redis_client is not None
+        if redis_client is not None:
             try:
-                cache.redis_client.ping()
+                redis_client.ping()
             except Exception:
                 redis_available = False
 
@@ -81,24 +83,24 @@ async def get_cache_status(cache: UnifiedCache = Depends(get_cache)) -> CacheSta
         memory_usage = {
             "current_size": len(cache.memory_cache),
             "max_size": cache.memory_size,
-            "usage_percent": round(len(cache.memory_cache) / cache.memory_size * 100, 2)
+            "usage_percent": round(len(cache.memory_cache) / cache.memory_size * 100, 2),
         }
 
         # 计算命中率
         total_memory = cache.stats["memory_hits"] + cache.stats["memory_misses"]
-        memory_hit_rate = 0 if total_memory == 0 else round(
-            cache.stats["memory_hits"] / total_memory * 100, 2
+        memory_hit_rate = (
+            0 if total_memory == 0 else round(cache.stats["memory_hits"] / total_memory * 100, 2)
         )
 
         total_redis = cache.stats["redis_hits"] + cache.stats["redis_misses"]
-        redis_hit_rate = 0 if total_redis == 0 else round(
-            cache.stats["redis_hits"] / total_redis * 100, 2
+        redis_hit_rate = (
+            0 if total_redis == 0 else round(cache.stats["redis_hits"] / total_redis * 100, 2)
         )
 
         statistics = {
             **cache.stats,
             "memory_hit_rate": memory_hit_rate,
-            "redis_hit_rate": redis_hit_rate
+            "redis_hit_rate": redis_hit_rate,
         }
 
         return CacheStatusResponse(
@@ -106,7 +108,7 @@ async def get_cache_status(cache: UnifiedCache = Depends(get_cache)) -> CacheSta
             redis_available=redis_available,
             memory_usage=memory_usage,
             statistics=statistics,
-            version="2.0.0"
+            version="2.0.0",
         )
 
     except Exception as e:
@@ -132,7 +134,7 @@ async def get_cache_info(cache: UnifiedCache = Depends(get_cache)) -> CacheInfoR
                     "used_memory_human": info.get("used_memory_human", "0B"),
                     "connected_clients": info.get("connected_clients", 0),
                     "total_connections_received": info.get("total_connections_received", 0),
-                    "keyspace": {}
+                    "keyspace": {},
                 }
                 # 获取各个数据库的键数量
                 for key, value in info.items():
@@ -143,9 +145,9 @@ async def get_cache_info(cache: UnifiedCache = Depends(get_cache)) -> CacheInfoR
 
         # 计算内存使用（估算）
         import sys
+
         memory_bytes = sum(
-            sys.getsizeof(k) + sys.getsizeof(v)
-            for k, v in cache.memory_cache.items()
+            sys.getsizeof(k) + sys.getsizeof(v) for k, v in cache.memory_cache.items()
         )
         memory_usage = f"{memory_bytes / 1024 / 1024:.2f}MB"
 
@@ -154,8 +156,8 @@ async def get_cache_info(cache: UnifiedCache = Depends(get_cache)) -> CacheInfoR
         if cache.redis_client:
             try:
                 keys_count += cache.redis_client.dbsize()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.opt(exception=exc).debug("获取 Redis 键数量失败")
 
         return CacheInfoResponse(
             version="2.0.0",
@@ -163,7 +165,7 @@ async def get_cache_info(cache: UnifiedCache = Depends(get_cache)) -> CacheInfoR
             keys=keys_count,
             connected_clients=redis_info["connected_clients"] if redis_info else 0,
             status="running" if cache.redis_client else "memory_only",
-            redis_info=redis_info
+            redis_info=redis_info,
         )
 
     except Exception as e:
@@ -173,8 +175,7 @@ async def get_cache_info(cache: UnifiedCache = Depends(get_cache)) -> CacheInfoR
 
 @router.post("/clear")
 async def clear_cache(
-    request: ClearCacheRequest,
-    cache: UnifiedCache = Depends(get_cache)
+    request: ClearCacheRequest, cache: UnifiedCache = Depends(get_cache)
 ) -> JSONResponse:
     """
     清理缓存
@@ -182,10 +183,9 @@ async def clear_cache(
     根据指定的条件清理缓存数据
     """
     if not request.confirm:
-        return JSONResponse({
-            "success": False,
-            "message": "需要确认才能清理缓存（设置confirm=true）"
-        })
+        return JSONResponse(
+            {"success": False, "message": "需要确认才能清理缓存（设置confirm=true）"}
+        )
 
     try:
         cleared_count = 0
@@ -193,10 +193,7 @@ async def clear_cache(
         # 清理内存缓存
         if request.pattern:
             # 按模式清理
-            keys_to_delete = [
-                k for k in cache.memory_cache.keys()
-                if request.pattern in k
-            ]
+            keys_to_delete = [k for k in cache.memory_cache.keys() if request.pattern in k]
             for key in keys_to_delete:
                 del cache.memory_cache[key]
                 cleared_count += 1
@@ -213,9 +210,7 @@ async def clear_cache(
                     pattern = f"*{request.pattern}*"
                     cursor = 0
                     while True:
-                        cursor, keys = cache.redis_client.scan(
-                            cursor, match=pattern, count=100
-                        )
+                        cursor, keys = cache.redis_client.scan(cursor, match=pattern, count=100)
                         if keys:
                             cache.redis_client.delete(*keys)
                             cleared_count += len(keys)
@@ -231,11 +226,13 @@ async def clear_cache(
         # 重置统计信息
         cache.stats = {k: 0 for k in cache.stats}
 
-        return JSONResponse({
-            "success": True,
-            "message": f"成功清理 {cleared_count} 个缓存项",
-            "cleared_count": cleared_count
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "message": f"成功清理 {cleared_count} 个缓存项",
+                "cleared_count": cleared_count,
+            }
+        )
 
     except Exception as e:
         logger.error(f"清理缓存失败: {e}")
@@ -250,15 +247,10 @@ async def disconnect_cache(cache: UnifiedCache = Depends(get_cache)) -> JSONResp
     断开Redis连接，仅使用内存缓存
     """
     try:
-        if cache.redis_client:
-            cache.redis_client.close()
-            cache.redis_client = None
-            logger.info("Redis缓存已断开")
+        cache.disconnect()
+        logger.info("Redis缓存已断开")
 
-        return JSONResponse({
-            "success": True,
-            "message": "缓存连接已断开，当前仅使用内存缓存"
-        })
+        return JSONResponse({"success": True, "message": "Redis缓存已断开，当前将使用内存缓存"})
 
     except Exception as e:
         logger.error(f"断开缓存连接失败: {e}")
@@ -274,38 +266,47 @@ async def reconnect_cache(cache: UnifiedCache = Depends(get_cache)) -> JSONRespo
     """
     try:
         if cache.redis_client is not None:
-            return JSONResponse({
-                "success": True,
-                "message": "Redis缓存已连接"
-            })
+            return JSONResponse({"success": True, "message": "Redis缓存已连接"})
 
         # 尝试重新连接
-        try:
-            import redis
-            config = get_config()
-            cache.redis_client = redis.Redis(
-                host=getattr(config.cache, 'redis_host', 'localhost'),
-                port=getattr(config.cache, 'redis_port', 6379),
-                db=getattr(config.cache, 'redis_db', 0),
-                decode_responses=False,
-                socket_connect_timeout=2,
-                socket_timeout=2
+        config = get_config()
+        cache_settings = getattr(getattr(config, "database", None), "cache", None)
+        if not cache_settings:
+            return JSONResponse(
+                {"success": False, "message": "未找到缓存配置", "error": "CONFIG_MISSING"}
             )
-            cache.redis_client.ping()
+
+        redis_password = getattr(cache_settings, "password", None) or None
+        if redis_password == MASKED_SECRET:
+            redis_password = None
+        redis_username = getattr(cache_settings, "username", None) or None
+
+        reconnect_ok = cache.reconnect(
+            redis_host=getattr(cache_settings, "host", "localhost"),
+            redis_port=getattr(cache_settings, "port", 6379),
+            redis_db=getattr(cache_settings, "db", 0),
+            redis_username=redis_username,
+            redis_password=redis_password,
+        )
+
+        if reconnect_ok:
             logger.info("Redis缓存重新连接成功")
+            return JSONResponse({"success": True, "message": "Redis缓存重新连接成功"})
 
-            return JSONResponse({
-                "success": True,
-                "message": "Redis缓存重新连接成功"
-            })
-
-        except Exception as e:
-            logger.error(f"重新连接Redis失败: {e}")
-            return JSONResponse({
+        logger.error("Redis缓存重新连接失败")
+        return JSONResponse(
+            {
                 "success": False,
-                "message": f"重新连接失败: {str(e)}",
-                "error": "CONNECTION_FAILED"
-            })
+                "message": "重新连接失败：请检查 Redis 配置或服务状态",
+                "error": "CONNECTION_FAILED",
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"重新连接Redis失败: {e}")
+        return JSONResponse(
+            {"success": False, "message": f"重新连接失败: {str(e)}", "error": "CONNECTION_FAILED"}
+        )
 
     except Exception as e:
         logger.error(f"重新连接缓存失败: {e}")
@@ -332,28 +333,34 @@ async def get_cache_stats(cache: UnifiedCache = Depends(get_cache)) -> JSONRespo
         stats = {
             "operations": {
                 "total_gets": cache.stats["total_gets"],
-                "total_sets": cache.stats["total_sets"]
+                "total_sets": cache.stats["total_sets"],
             },
             "memory_cache": {
                 "hits": cache.stats["memory_hits"],
                 "misses": cache.stats["memory_misses"],
                 "size": len(cache.memory_cache),
-                "max_size": cache.memory_size
+                "max_size": cache.memory_size,
             },
             "redis_cache": {
                 "available": cache.redis_client is not None,
                 "hits": cache.stats["redis_hits"],
-                "misses": cache.stats["redis_misses"]
+                "misses": cache.stats["redis_misses"],
             },
             "performance": {
                 "overall_hit_rate": overall_hit_rate,
                 "memory_hit_rate": round(
-                    cache.stats["memory_hits"] / max(1, cache.stats["memory_hits"] + cache.stats["memory_misses"]) * 100, 2
+                    cache.stats["memory_hits"]
+                    / max(1, cache.stats["memory_hits"] + cache.stats["memory_misses"])
+                    * 100,
+                    2,
                 ),
                 "redis_hit_rate": round(
-                    cache.stats["redis_hits"] / max(1, cache.stats["redis_hits"] + cache.stats["redis_misses"]) * 100, 2
-                )
-            }
+                    cache.stats["redis_hits"]
+                    / max(1, cache.stats["redis_hits"] + cache.stats["redis_misses"])
+                    * 100,
+                    2,
+                ),
+            },
         }
 
         return JSONResponse(stats)

@@ -3,6 +3,7 @@
 
 提供外部系统接入的抽象网关接口。
 """
+
 from .gateway import (
     BaseGateway,
     Gateway,

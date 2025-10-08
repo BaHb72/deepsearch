@@ -1,317 +1,208 @@
 """
 数据源监控装饰器
 
-提供便捷的监控集成方式，自动记录数据访问情况。
+在统一的监控链路基础上补充结构化日志输出。
 """
-import time
-import functools
+
+from __future__ import annotations
+
 import asyncio
-from typing import Any, Callable, Optional
-import inspect
+import functools
+import time
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, cast
 
 from loguru import logger
 
 from deepsearch.observability.monitoring.data_source_monitor import (
-    get_monitor,
+    DataAccessType,
     DataSourceType,
-    DataAccessType
 )
+from deepsearch.observability.monitoring.decorators import (
+    MonitorMetadata,
+    SymbolExtractor,
+    analyze_result,
+    monitor_access as core_monitor_access,
+)
+
+__all__ = ["monitor_access", "batch_monitor_access", "MonitorMetadata"]
+
+
+def _wrap_symbol_extractor(
+    resolver: Optional[Callable[..., Any]]
+) -> Optional[SymbolExtractor]:
+    if resolver is None:
+        return None
+
+    def wrapped(args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Optional[str]:
+        try:
+            value = resolver(*args, **kwargs)
+        except Exception:
+            return None
+        if value is None:
+            return None
+        return str(value)
+
+    return wrapped
+
+
+def _resolve_symbol_for_log(
+    resolver: Optional[Callable[..., Any]],
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
+) -> Optional[str]:
+    if resolver is not None:
+        try:
+            value = resolver(*args, **kwargs)
+        except Exception:
+            value = None
+        if value is not None:
+            return str(value)
+    if "symbol" in kwargs and kwargs["symbol"] is not None:
+        return str(kwargs["symbol"])
+    if len(args) > 1 and isinstance(args[1], str):
+        return args[1]
+    if args and isinstance(args[0], str):
+        return args[0]
+    return None
 
 
 def monitor_access(
     source: DataSourceType,
     access_type: DataAccessType,
-    extract_symbol: Optional[Callable] = None
-):
+    extract_symbol: Optional[Callable[..., Any]] = None,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
-    数据访问监控装饰器
-    
-    Args:
-        source: 数据源类型
-        access_type: 访问类型
-        extract_symbol: 从参数中提取股票代码的函数
-    
-    Example:
-        @monitor_access(
-            source=DataSourceType.AKSHARE,
-            access_type=DataAccessType.REALTIME_QUOTE,
-            extract_symbol=lambda args, kwargs: kwargs.get('symbol') or args[1] if len(args) > 1 else None
-        )
-        async def get_realtime_quote(self, symbol: str):
-            # 实际的数据获取逻辑
-            pass
+    为同步/异步函数提供监控采集与结构化日志。
     """
-    def decorator(func):
-        monitor = get_monitor()
-        
-        @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            # 提取股票代码
-            symbol = None
-            if extract_symbol:
-                try:
-                    symbol = extract_symbol(args, kwargs)
-                except:
-                    pass
-            elif 'symbol' in kwargs:
-                symbol = kwargs['symbol']
-            elif len(args) > 1 and isinstance(args[1], str):
-                symbol = args[1]
-            
-            # 获取调用模块
-            frame = inspect.currentframe()
-            if frame and frame.f_back:
-                module = frame.f_back.f_globals.get('__name__', 'unknown')
-            else:
-                module = 'unknown'
-            
-            # 开始计时
-            start_time = time.time()
-            success = False
-            error_message = None
-            result = None
-            data_size = 0
-            
-            try:
-                # 执行实际函数
-                result = await func(*args, **kwargs)
-                success = True
-                
-                # 估算数据大小
-                if result:
-                    try:
-                        import json
-                        data_size = len(json.dumps(result, default=str))
-                    except:
-                        data_size = 0
-                
-                return result
-                
-            except Exception as e:
-                success = False
-                error_message = str(e)
-                raise
-                
-            finally:
-                # 计算延迟
-                latency_ms = (time.time() - start_time) * 1000
-                
-                # 记录访问
-                monitor.record_access(
-                    source=source,
-                    access_type=access_type,
-                    success=success,
-                    latency_ms=latency_ms,
-                    symbol=symbol,
-                    module=module,
-                    error_message=error_message,
-                    data_size=data_size,
-                    metadata={
-                        "function": func.__name__,
-                        "has_result": result is not None
-                    }
-                )
-                
-                # 输出调试日志（成功时使用DEBUG级别，失败时使用WARNING级别）
-                if success:
-                    logger.debug(
-                        f"[MONITOR] {source.value} -> {access_type.value} "
-                        f"[{symbol}] {latency_ms:.1f}ms OK"
-                    )
-                else:
-                    logger.warning(
-                        f"[MONITOR] {source.value} -> {access_type.value} "
-                        f"[{symbol}] FAILED: {error_message}"
-                    )
-        
-        @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            # 提取股票代码
-            symbol = None
-            if extract_symbol:
-                try:
-                    symbol = extract_symbol(args, kwargs)
-                except:
-                    pass
-            elif 'symbol' in kwargs:
-                symbol = kwargs['symbol']
-            elif len(args) > 1 and isinstance(args[1], str):
-                symbol = args[1]
-            
-            # 获取调用模块
-            frame = inspect.currentframe()
-            if frame and frame.f_back:
-                module = frame.f_back.f_globals.get('__name__', 'unknown')
-            else:
-                module = 'unknown'
-            
-            # 开始计时
-            start_time = time.time()
-            success = False
-            error_message = None
-            result = None
-            data_size = 0
-            
-            try:
-                # 执行实际函数
-                result = func(*args, **kwargs)
-                success = True
-                
-                # 估算数据大小
-                if result:
-                    try:
-                        import json
-                        data_size = len(json.dumps(result, default=str))
-                    except:
-                        data_size = 0
-                
-                return result
-                
-            except Exception as e:
-                success = False
-                error_message = str(e)
-                raise
-                
-            finally:
-                # 计算延迟
-                latency_ms = (time.time() - start_time) * 1000
-                
-                # 记录访问
-                monitor.record_access(
-                    source=source,
-                    access_type=access_type,
-                    success=success,
-                    latency_ms=latency_ms,
-                    symbol=symbol,
-                    module=module,
-                    error_message=error_message,
-                    data_size=data_size,
-                    metadata={
-                        "function": func.__name__,
-                        "has_result": result is not None
-                    }
-                )
-                
-                # 输出调试日志
-                if success:
-                    logger.debug(
-                        f"[MONITOR] {source.value} -> {access_type.value} "
-                        f"[{symbol}] {latency_ms:.1f}ms OK"
-                    )
-                else:
-                    logger.warning(
-                        f"[MONITOR] {source.value} -> {access_type.value} "
-                        f"[{symbol}] FAILED: {error_message}"
-                    )
-        
-        # 根据函数类型返回相应的包装器
+
+    symbol_extractor = _wrap_symbol_extractor(extract_symbol)
+    core_decorator = core_monitor_access(
+        source_type=source,
+        access_type=access_type,
+        extract_symbol=symbol_extractor,
+    )
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        monitored = core_decorator(func)
+
         if asyncio.iscoroutinefunction(func):
+
+            @functools.wraps(func)
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                start_time = time.time()
+                symbol = _resolve_symbol_for_log(extract_symbol, args, kwargs)
+                try:
+                    async_func = cast(Callable[..., Awaitable[Any]], monitored)
+                    result = await async_func(*args, **kwargs)
+                    latency_ms = (time.time() - start_time) * 1000.0
+                    logger.debug(
+                        f"[MONITOR] {source.value} -> {access_type.value} "
+                        f"[{symbol or '-'}] {latency_ms:.1f}ms OK"
+                    )
+                    return result
+                except Exception as exc:
+                    latency_ms = (time.time() - start_time) * 1000.0
+                    logger.warning(
+                        f"[MONITOR] {source.value} -> {access_type.value} "
+                        f"[{symbol or '-'}] FAILED: {exc}"
+                    )
+                    raise
+
             return async_wrapper
-        else:
-            return sync_wrapper
-    
+
+        @functools.wraps(func)
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            start_time = time.time()
+            symbol = _resolve_symbol_for_log(extract_symbol, args, kwargs)
+            try:
+                sync_func = cast(Callable[..., Any], monitored)
+                result = sync_func(*args, **kwargs)
+                latency_ms = (time.time() - start_time) * 1000.0
+                logger.debug(
+                    f"[MONITOR] {source.value} -> {access_type.value} "
+                    f"[{symbol or '-'}] {latency_ms:.1f}ms OK"
+                )
+                return result
+            except Exception as exc:
+                latency_ms = (time.time() - start_time) * 1000.0
+                logger.warning(
+                    f"[MONITOR] {source.value} -> {access_type.value} "
+                    f"[{symbol or '-'}] FAILED: {exc}"
+                )
+                raise
+
+        return sync_wrapper
+
     return decorator
 
 
 def batch_monitor_access(
     source: DataSourceType,
-    access_type: DataAccessType
-):
+    access_type: DataAccessType,
+    extract_symbol: Optional[Callable[..., Any]] = None,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
-    批量数据访问监控装饰器（用于返回多条记录的API）
-    
-    Args:
-        source: 数据源类型
-        access_type: 访问类型
+    针对批量返回结构增加记录数统计的装饰器。
     """
-    def decorator(func):
-        monitor = get_monitor()
-        
-        @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            # 获取调用模块
-            frame = inspect.currentframe()
-            if frame and frame.f_back:
-                module = frame.f_back.f_globals.get('__name__', 'unknown')
-            else:
-                module = 'unknown'
-            
-            # 开始计时
-            start_time = time.time()
-            success = False
-            error_message = None
-            result = None
-            record_count = 0
-            data_size = 0
-            
-            try:
-                # 执行实际函数
-                result = await func(*args, **kwargs)
-                success = True
-                
-                # 统计记录数
-                if isinstance(result, (list, tuple)):
-                    record_count = len(result)
-                elif isinstance(result, dict) and 'data' in result:
-                    if isinstance(result['data'], (list, tuple)):
-                        record_count = len(result['data'])
-                
-                # 估算数据大小
-                if result:
-                    try:
-                        import json
-                        data_size = len(json.dumps(result, default=str))
-                    except:
-                        data_size = 0
-                
-                return result
-                
-            except Exception as e:
-                success = False
-                error_message = str(e)
-                raise
-                
-            finally:
-                # 计算延迟
-                latency_ms = (time.time() - start_time) * 1000
-                
-                # 记录访问
-                monitor.record_access(
-                    source=source,
-                    access_type=access_type,
-                    success=success,
-                    latency_ms=latency_ms,
-                    symbol=None,  # 批量操作没有特定股票
-                    module=module,
-                    error_message=error_message,
-                    data_size=data_size,
-                    metadata={
-                        "function": func.__name__,
-                        "record_count": record_count
-                    }
-                )
-                
-                # 输出调试日志
-                if success:
+
+    symbol_extractor = _wrap_symbol_extractor(extract_symbol)
+    core_decorator = core_monitor_access(
+        source_type=source,
+        access_type=access_type,
+        extract_symbol=symbol_extractor,
+    )
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        monitored = core_decorator(func)
+
+        if asyncio.iscoroutinefunction(func):
+
+            @functools.wraps(func)
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                start_time = time.time()
+                symbol = _resolve_symbol_for_log(extract_symbol, args, kwargs)
+                try:
+                    async_func = cast(Callable[..., Awaitable[Any]], monitored)
+                    result = await async_func(*args, **kwargs)
+                    metadata = analyze_result(result)
+                    record_count = metadata.get("record_count", 0)
+                    latency_ms = (time.time() - start_time) * 1000.0
                     logger.debug(
                         f"[MONITOR] {source.value} -> {access_type.value} "
                         f"[{record_count} records] {latency_ms:.1f}ms OK"
                     )
-                else:
+                    return result
+                except Exception as exc:
+                    latency_ms = (time.time() - start_time) * 1000.0
                     logger.warning(
-                        f"[MONITOR] {source.value} -> {access_type.value} "
-                        f"FAILED: {error_message}"
+                        f"[MONITOR] {source.value} -> {access_type.value} FAILED: {exc}"
                     )
-        
-        @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            # 同步版本的实现...
-            pass
-        
-        # 根据函数类型返回相应的包装器
-        if asyncio.iscoroutinefunction(func):
+                    raise
+
             return async_wrapper
-        else:
-            return sync_wrapper
-    
+
+        @functools.wraps(func)
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            start_time = time.time()
+            try:
+                sync_func = cast(Callable[..., Any], monitored)
+                result = sync_func(*args, **kwargs)
+                metadata = analyze_result(result)
+                record_count = metadata.get("record_count", 0)
+                latency_ms = (time.time() - start_time) * 1000.0
+                logger.debug(
+                    f"[MONITOR] {source.value} -> {access_type.value} "
+                    f"[{record_count} records] {latency_ms:.1f}ms OK"
+                )
+                return result
+            except Exception as exc:
+                latency_ms = (time.time() - start_time) * 1000.0
+                logger.warning(
+                    f"[MONITOR] {source.value} -> {access_type.value} FAILED: {exc}"
+                )
+                raise
+
+        return sync_wrapper
+
     return decorator
+

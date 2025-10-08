@@ -2,10 +2,11 @@
 
 用于日级别数据的分析和存储
 """
+
 import os
 import re
 from datetime import date
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional, cast
 
 import duckdb
 import pandas as pd
@@ -18,9 +19,9 @@ class AnalyticsDB:
     @staticmethod
     def _validate_table_name(table_name: str) -> bool:
         """验证表名是否安全，防止SQL注入"""
-        pattern = r'^[a-zA-Z_][a-zA-Z0-9_]*$'
+        pattern = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
         return bool(re.match(pattern, table_name))
-    
+
     """DuckDB 分析数据库
     
     用于存储和分析日级别的市场数据
@@ -28,7 +29,7 @@ class AnalyticsDB:
 
     def __init__(self, db_path: Optional[str] = None):
         """初始化分析数据库
-        
+
         Args:
             db_path: 数据库文件路径，如果不提供则从配置中读取
         """
@@ -36,13 +37,14 @@ class AnalyticsDB:
             # 从配置中读取
             try:
                 from deepsearch.config import get_config
+
                 config = get_config()
                 db_path = config.database.analytics.path
             except Exception:
                 # 如果配置读取失败，使用默认路径
-                data_dir = os.path.join(os.path.dirname(__file__), '../../data')
+                data_dir = os.path.join(os.path.dirname(__file__), "../../data")
                 os.makedirs(data_dir, exist_ok=True)
-                db_path = os.path.join(data_dir, 'analytics.duckdb')
+                db_path = os.path.join(data_dir, "analytics.duckdb")
 
         # 确保目录存在
         db_dir = os.path.dirname(db_path)
@@ -51,7 +53,7 @@ class AnalyticsDB:
 
         self.db_path = db_path
         self.conn: Optional[duckdb.DuckDBPyConnection] = None
-        self.logger = logger.bind(module="analytics_db")
+        self.logger = logger.bind(module="分析数据库")
 
     def connect(self) -> None:
         """连接到数据库"""
@@ -59,6 +61,7 @@ class AnalyticsDB:
             # 获取配置
             try:
                 from deepsearch.config import get_config
+
                 config = get_config()
                 memory_limit = config.database.analytics.memory_limit
                 threads = config.database.analytics.threads
@@ -77,7 +80,9 @@ class AnalyticsDB:
             # 初始化架构
             self._init_schema()
 
-            self.logger.info(f"连接到 DuckDB: {self.db_path} (内存限制: {memory_limit}, 线程数: {threads})")
+            self.logger.info(
+                f"连接到 DuckDB: {self.db_path} (内存限制: {memory_limit}, 线程数: {threads})"
+            )
         except Exception as e:
             self.logger.error(f"连接 DuckDB 失败: {e}")
             raise
@@ -88,7 +93,8 @@ class AnalyticsDB:
             raise RuntimeError("未连接到数据库")
 
         # 创建日线数据表
-        self.conn.execute("""
+        self.conn.execute(
+            """
                           CREATE TABLE IF NOT EXISTS market_daily
                           (
                               date
@@ -156,10 +162,12 @@ class AnalyticsDB:
                               date
                           )
                               )
-                          """)
+                          """
+        )
 
         # 创建因子数据表
-        self.conn.execute("""
+        self.conn.execute(
+            """
                           CREATE TABLE IF NOT EXISTS factor_data
                           (
                               date
@@ -184,10 +192,12 @@ class AnalyticsDB:
                               factor_name
                           )
                               )
-                          """)
+                          """
+        )
 
         # 创建指标数据表
-        self.conn.execute("""
+        self.conn.execute(
+            """
                           CREATE TABLE IF NOT EXISTS indicator_data
                           (
                               date
@@ -214,7 +224,8 @@ class AnalyticsDB:
                               indicator_name
                           )
                               )
-                          """)
+                          """
+        )
 
         self.logger.info("DuckDB 架构初始化完成")
 
@@ -236,10 +247,10 @@ class AnalyticsDB:
 
     def insert_daily_data(self, df: pd.DataFrame) -> int:
         """插入日线数据
-        
+
         Args:
             df: 包含日线数据的 DataFrame
-            
+
         Returns:
             插入的记录数
         """
@@ -247,7 +258,7 @@ class AnalyticsDB:
             raise RuntimeError("未连接到数据库")
 
         # 确保必要的列存在
-        required_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'turnover']
+        required_cols = ["date", "symbol", "open", "high", "low", "close", "volume", "turnover"]
         if not all(col in df.columns for col in required_cols):
             raise ValueError(f"DataFrame 必须包含以下列: {required_cols}")
 
@@ -259,18 +270,18 @@ class AnalyticsDB:
         return count
 
     def query_daily_data(
-            self,
-            symbols: Optional[List[str]] = None,
-            start_date: Optional[date] = None,
-            end_date: Optional[date] = None
+        self,
+        symbols: Optional[List[str]] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
     ) -> pd.DataFrame:
         """查询日线数据
-        
+
         Args:
             symbols: 股票代码列表
             start_date: 开始日期
             end_date: 结束日期
-            
+
         Returns:
             查询结果 DataFrame
         """
@@ -279,7 +290,7 @@ class AnalyticsDB:
 
         # 构建查询条件
         conditions = []
-        params = {}
+        params: dict[str, object] = {}
 
         if symbols:
             placeholders = [f"${i + 1}" for i in range(len(symbols))]
@@ -289,11 +300,11 @@ class AnalyticsDB:
 
         if start_date:
             conditions.append(f"date >= ${len(params) + 1}")
-            params[f"${len(params) + 1}"] = start_date
+            params[f"${len(params) + 1}"] = start_date.isoformat()
 
         if end_date:
             conditions.append(f"date <= ${len(params) + 1}")
-            params[f"${len(params) + 1}"] = end_date
+            params[f"${len(params) + 1}"] = end_date.isoformat()
 
         # 构建查询语句
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
@@ -304,18 +315,18 @@ class AnalyticsDB:
         """
 
         # 执行查询
-        result = self.conn.execute(query, list(params.values())).df()
+        result = cast(pd.DataFrame, self.conn.execute(query, list(params.values())).df())
 
         self.logger.info(f"查询到 {len(result)} 条日线数据")
         return result
 
     def calculate_returns(self, symbols: List[str], period: int = 1) -> pd.DataFrame:
         """计算收益率
-        
+
         Args:
             symbols: 股票代码列表
             period: 计算周期（天数）
-            
+
         Returns:
             包含收益率的 DataFrame
         """
@@ -343,13 +354,13 @@ class AnalyticsDB:
             ORDER BY symbol, date
         """
 
-        result = self.conn.execute(query, symbols).df()
+        result = cast(pd.DataFrame, self.conn.execute(query, symbols).df())
         self.logger.info(f"计算了 {len(result)} 条 {period} 日收益率")
         return result
 
     def export_to_parquet(self, table_name: str, output_path: str) -> None:
         """导出表到 Parquet 文件
-        
+
         Args:
             table_name: 表名
             output_path: 输出文件路径
@@ -357,19 +368,21 @@ class AnalyticsDB:
         if not self.conn:
             raise RuntimeError("未连接到数据库")
 
-        self.conn.execute(f"""
+        self.conn.execute(
+            f"""
             COPY {table_name} TO '{output_path}' (FORMAT PARQUET, COMPRESSION 'SNAPPY')
-        """)
+        """
+        )
 
         self.logger.info(f"导出 {table_name} 到 {output_path}")
 
     def import_from_parquet(self, table_name: str, file_path: str) -> int:
         """从 Parquet 文件导入数据
-        
+
         Args:
             table_name: 表名
             file_path: 文件路径
-            
+
         Returns:
             导入的记录数
         """
@@ -381,21 +394,24 @@ class AnalyticsDB:
             raise ValueError(f"Invalid table name: {table_name}")
 
         # 先获取记录数
-        count_before = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        count_before = int(self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
 
         # 导入数据 - 注意: DuckDB 的 read_parquet 需要使用字符串参数
         # 为了安全，先验证文件路径存在
         import os
+
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
-            
-        self.conn.execute(f"""
+
+        self.conn.execute(
+            f"""
             INSERT OR REPLACE INTO {table_name} 
             SELECT * FROM read_parquet('{file_path}')
-        """)
+        """
+        )
 
         # 计算新增记录数
-        count_after = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        count_after = int(self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
         imported = count_after - count_before
 
         self.logger.info(f"从 {file_path} 导入 {imported} 条记录到 {table_name}")
@@ -406,36 +422,37 @@ class AnalyticsDB:
         if not self.conn:
             raise RuntimeError("未连接到数据库")
 
-        stats = {}
+        stats: Dict[str, Any] = {}
 
         # 获取各表记录数 - 使用白名单的表名
-        tables = ['market_daily', 'factor_data', 'indicator_data']
+        tables = ["market_daily", "factor_data", "indicator_data"]
         for table in tables:
             # 这里表名是硬编码的白名单，安全
-            count = self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            count = int(self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
             stats[f"{table}_count"] = count
 
         # 获取日线数据的时间范围
-        date_range = self.conn.execute("""
+        date_range = self.conn.execute(
+            """
                                        SELECT MIN(date) as min_date, MAX(date) as max_date
                                        FROM market_daily
-                                       """).fetchone()
+                                       """
+        ).fetchone()
 
         if date_range[0]:
-            stats['date_range'] = {
-                'start': str(date_range[0]),
-                'end': str(date_range[1])
-            }
+            stats["date_range"] = {"start": str(date_range[0]), "end": str(date_range[1])}
 
         # 获取股票数量
-        symbol_count = self.conn.execute("""
+        symbol_count = self.conn.execute(
+            """
                                          SELECT COUNT(DISTINCT symbol)
                                          FROM market_daily
-                                         """).fetchone()[0]
-        stats['symbol_count'] = symbol_count
+                                         """
+        ).fetchone()[0]
+        stats["symbol_count"] = symbol_count
 
         # 获取数据库文件大小
         if os.path.exists(self.db_path):
-            stats['db_size_mb'] = os.path.getsize(self.db_path) / 1024 / 1024
+            stats["db_size_mb"] = os.path.getsize(self.db_path) / 1024 / 1024
 
         return stats

@@ -8,42 +8,36 @@
 """
 
 # 导入所有已拆分的组件
-from .components import (
-    # 基础设施组件
-    EventEngineComponent,
-    MessageBusComponent,
-    # 数据组件
-    DatabaseComponent,
-    CacheComponent,
-    # 监控组件
-    MonitorComponent,
-    # 网关组件
-    GatewayComponent,
-    QMTGatewayComponent,
-    # 分析组件
+from .components import (  # 基础设施组件; 数据组件; 监控组件; 网关组件; 分析组件; UI组件; 业务组件
     AnalyticsComponent,
-    # UI组件
+    BacktestComponent,
+    CacheComponent,
+    DatabaseComponent,
+    EventEngineComponent,
+    GatewayComponent,
+    MessageBusComponent,
+    MonitorComponent,
+    QMTGatewayComponent,
     WebUIComponent,
-    # 业务组件
-    BacktestComponent
 )
 
 # 导出所有组件，保持向后兼容
 __all__ = [
-    'EventEngineComponent',
-    'MessageBusComponent',
-    'DatabaseComponent',
-    'CacheComponent',
-    'MonitorComponent',
-    'GatewayComponent',
-    'QMTGatewayComponent',
-    'AnalyticsComponent',
-    'WebUIComponent',
-    'BacktestComponent'
+    "EventEngineComponent",
+    "MessageBusComponent",
+    "DatabaseComponent",
+    "CacheComponent",
+    "MonitorComponent",
+    "GatewayComponent",
+    "QMTGatewayComponent",
+    "AnalyticsComponent",
+    "WebUIComponent",
+    "BacktestComponent",
 ]
 
 # 添加弃用警告
 import warnings
+
 
 def _show_deprecation_warning():
     warnings.warn(
@@ -51,8 +45,9 @@ def _show_deprecation_warning():
         "请使用 'from deepsearch.core.components import XXXComponent' 代替。"
         "此兼容层将在未来版本中移除。",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
+
 
 # 在模块导入时显示警告
 _show_deprecation_warning()

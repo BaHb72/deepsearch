@@ -3,9 +3,15 @@ AmazingData测试辅助模块
 
 提供AmazingData数据源的测试功能，包括错误处理和兼容性修复
 """
+
 import time
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional, TypedDict
+
 from loguru import logger
+
+class LogoutResult(TypedDict):
+    success: bool
+    exception: Exception | None
 
 
 def create_test_result(
@@ -15,7 +21,7 @@ def create_test_result(
     error: Optional[str] = None,
     details: Optional[Dict[str, Any]] = None,
     latency_ms: float = 0,
-    data_size: int = 0
+    data_size: int = 0,
 ) -> Dict[str, Any]:
     """
     创建标准的测试结果格式
@@ -39,7 +45,7 @@ def create_test_result(
         "latency_ms": latency_ms,
         "data_size": data_size,
         "error": error,
-        "details": details or {}
+        "details": details or {},
     }
 
     # 清理None值
@@ -60,27 +66,28 @@ def safe_logout(username: str) -> bool:
         bool: logout是否成功
     """
     import threading
-    import time
+
     from loguru import logger
 
     # 用于存储logout结果
-    result_holder = {'success': False, 'exception': None}
+    result_holder: LogoutResult = {"success": False, "exception": None}
 
     def logout_in_thread():
         """在独立线程中执行logout"""
         try:
             # 导入AmazingData模块
             import AmazingData as ad
+
             # 执行logout
             ad.logout(username)
-            result_holder['success'] = True
+            result_holder["success"] = True
         except SystemExit as e:
             # SDK调用了exit，但我们认为logout成功
             logger.warning(f"[HELPER] SDK在logout时调用了exit: {e}")
-            result_holder['success'] = True
+            result_holder["success"] = True
         except Exception as e:
             logger.error(f"[HELPER] logout异常: {e}")
-            result_holder['exception'] = e
+            result_holder["exception"] = e
 
     # 创建并启动线程
     thread = threading.Thread(target=logout_in_thread)
@@ -94,11 +101,11 @@ def safe_logout(username: str) -> bool:
         # 即使超时也认为logout成功（避免阻塞）
         return True
 
-    if result_holder['exception']:
+    if result_holder["exception"]:
         logger.error(f"[HELPER] logout失败: {result_holder['exception']}")
         return False
 
-    return result_holder['success']
+    return result_holder["success"]
 
 
 def test_amazingdata_connection(
@@ -106,7 +113,7 @@ def test_amazingdata_connection(
     password: str,
     host: str = "101.230.159.234",
     port: int = 8600,
-    test_type: str = "realtime"
+    test_type: str = "realtime",
 ) -> Dict[str, Any]:
     """
     测试AmazingData连接（使用进程隔离）
@@ -121,6 +128,32 @@ def test_amazingdata_connection(
     Returns:
         测试结果
     """
+    sanitized_username = (username or "").strip()
+    sanitized_password = password or ""
+    missing_fields = []
+    if not sanitized_username:
+        missing_fields.append("username")
+    if not sanitized_password:
+        missing_fields.append("password")
+
+    if missing_fields:
+        logger.warning(f"[HELPER] Missing AmazingData credentials: {missing_fields}")
+        details = {
+            "server": f"{host}:{port}",
+            "missing_fields": missing_fields,
+            "note": "请在后台配置中填写AmazingData的用户名和密码",
+        }
+        return create_test_result(
+            success=False,
+            message="测试失败",
+            error="缺少必填认证信息: " + ", ".join(missing_fields),
+            details=details,
+            latency_ms=0,
+        )
+
+    username = sanitized_username
+    password = sanitized_password
+
     start_time = time.time()
 
     logger.info(f"[HELPER] 开始测试AmazingData连接: {username}@{host}:{port}")
@@ -130,8 +163,9 @@ def test_amazingdata_connection(
         # 导入独立进程测试函数
         try:
             from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import (
-                test_connection_with_datasource
+                test_connection_with_datasource,
             )
+
             logger.info("[HELPER] 独立进程测试函数导入成功")
         except ImportError as e:
             logger.error(f"[HELPER] 安全包装器导入失败: {e}")
@@ -140,16 +174,12 @@ def test_amazingdata_connection(
 
             try:
                 import AmazingData as ad
+
                 logger.info("[HELPER] AmazingData SDK导入成功")
 
                 # 直接调用SDK（危险！）
                 logger.warning("[HELPER] 警告：直接调用SDK可能导致进程崩溃")
-                login_result = ad.login(
-                    username=username,
-                    password=password,
-                    host=host,
-                    port=port
-                )
+                login_result = ad.login(username=username, password=password, host=host, port=port)
 
                 if login_result == 0 or login_result is True:
                     logger.info("[HELPER] 登录成功")
@@ -161,17 +191,17 @@ def test_amazingdata_connection(
                             "username": username,
                             "test_type": "connection",
                             "mode": "direct_sdk",
-                            "warning": "使用直接SDK调用，存在崩溃风险"
+                            "warning": "使用直接SDK调用，存在崩溃风险",
                         },
                         latency_ms=(time.time() - start_time) * 1000,
-                        data_size=0
+                        data_size=0,
                     )
                 else:
                     return create_test_result(
                         success=False,
                         message="测试失败",
                         error=f"登录失败，错误码: {login_result}",
-                        latency_ms=(time.time() - start_time) * 1000
+                        latency_ms=(time.time() - start_time) * 1000,
                     )
 
             except ImportError:
@@ -180,9 +210,9 @@ def test_amazingdata_connection(
                     message="测试失败",
                     error="AmazingData SDK未安装，请先安装SDK",
                     details={
-                        "install_command": "pip install installer/AmazingData-1.0.9-cp313-none-any.whl"
+                        "install_command": "pip install third_party/AmazingData-1.0.9-cp313-none-any.whl"
                     },
-                    latency_ms=(time.time() - start_time) * 1000
+                    latency_ms=(time.time() - start_time) * 1000,
                 )
             except SystemExit as e:
                 logger.critical(f"[HELPER] SDK尝试退出进程: {e}")
@@ -192,9 +222,9 @@ def test_amazingdata_connection(
                     error="SDK尝试终止进程（SystemExit），连接失败",
                     details={
                         "crash_type": "SystemExit",
-                        "exit_code": str(e.code) if hasattr(e, 'code') else "unknown"
+                        "exit_code": str(e.code) if hasattr(e, "code") else "unknown",
                     },
-                    latency_ms=(time.time() - start_time) * 1000
+                    latency_ms=(time.time() - start_time) * 1000,
                 )
 
         # 使用独立进程测试函数（每次创建新进程）
@@ -202,11 +232,7 @@ def test_amazingdata_connection(
 
         # 每次测试创建新的独立进程
         result = test_connection_with_datasource(
-            datasource_id="amazingdata",
-            username=username,
-            password=password,
-            host=host,
-            port=port
+            datasource_id="amazingdata", username=username, password=password, host=host, port=port
         )
 
         if result["success"]:
@@ -222,20 +248,20 @@ def test_amazingdata_connection(
                     "mode": "dedicated_process",
                     "test_id": result.get("test_id"),
                     "note": "每次测试使用独立进程，测试后自动清理",
-                    "stats": result.get("stats", {})
+                    "stats": result.get("stats", {}),
                 },
                 latency_ms=result.get("latency_ms", (time.time() - start_time) * 1000),
-                data_size=0
+                data_size=0,
             )
         else:
-            error = result.get('error', '登录失败')
+            error = result.get("error", "登录失败")
             logger.error(f"[HELPER] 登录失败: {error}")
 
             # 分析错误类型
             error_details = {
                 "server": f"{host}:{port}",
                 "username": username,
-                "test_id": result.get("test_id")
+                "test_id": result.get("test_id"),
             }
 
             if "SystemExit" in str(error):
@@ -250,7 +276,7 @@ def test_amazingdata_connection(
                 message="测试失败",
                 error=error,
                 details=error_details,
-                latency_ms=result.get("latency_ms", (time.time() - start_time) * 1000)
+                latency_ms=result.get("latency_ms", (time.time() - start_time) * 1000),
             )
 
     except Exception as e:
@@ -259,7 +285,7 @@ def test_amazingdata_connection(
             success=False,
             message="测试失败",
             error=f"未知错误: {str(e)}",
-            latency_ms=(time.time() - start_time) * 1000
+            latency_ms=(time.time() - start_time) * 1000,
         )
 
 
@@ -273,11 +299,17 @@ def validate_amazingdata_config(config: Dict[str, Any]) -> tuple[bool, str]:
     Returns:
         (是否有效, 错误信息)
     """
-    if not config.get("username"):
+    username = (config.get("username") or "").strip()
+    if not username:
         return False, "缺少用户名"
+    config["username"] = username
 
-    if not config.get("password"):
+    password_raw = config.get("password")
+    password = password_raw.strip() if isinstance(password_raw, str) else password_raw
+    if not password:
         return False, "缺少密码"
+    if isinstance(password_raw, str):
+        config["password"] = password
 
     # 验证网络提供商设置
     network_provider = config.get("networkProvider", "telecom")

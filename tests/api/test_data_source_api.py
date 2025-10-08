@@ -1,48 +1,77 @@
 """
 数据源API接口测试
 """
+
 import pytest
-from datetime import datetime, timedelta
-import json
 
 
 class TestDataSourceAPI:
     """数据源API测试类"""
 
     def test_get_data_source_status(self, test_client, api_helper):
-        """测试获取数据源状态"""
-        response = test_client.get("/api/data/source/status")
+        """测试获取数据源状态（新接口）"""
+        response = test_client.get("/api/data-sources/status")
         data = api_helper.assert_success_response(response)
 
         # 验证数据结构
         assert "sources" in data
-        assert isinstance(data["sources"], list)
+        assert isinstance(data["sources"], dict)
 
-        for source in data["sources"]:
-            assert "name" in source
-            assert "enabled" in source
-            assert "status" in source
-            assert "priority" in source
-            assert source["status"] in ["online", "offline", "error", "unknown"]
-
-    def test_update_data_source_config(self, test_client, api_helper, mock_data_source_config):
-        """测试更新数据源配置"""
-        # 修改为正确的请求格式
-        config_request = {
-            "source": "amazingdata",
-            "enabled": True,
-            "priority": 1,
-            "config": {
-                "timeout": 5000
-            }
+        allowed_status = {
+            "draft",
+            "pending_test",
+            "testing",
+            "ready",
+            "active",
+            "degraded",
+            "error",
+            "offline",
+            "unknown",
         }
-        response = test_client.post(
-            "/api/data/source/config",
-            json=config_request
-        )
+
+        for name, source in data["sources"].items():
+            assert name
+            assert "status" in source
+            assert source.get("status") in allowed_status
+            assert "available" in source or "is_available" in source
+
+        assert "availableCount" in data or "available_count" in data
+
+    def test_list_data_sources(self, test_client, api_helper):
+        """测试获取数据源列表接口"""
+        response = test_client.get("/api/data-sources/list")
         data = api_helper.assert_success_response(response)
 
-        assert data["updated"] == True
+        assert isinstance(data, list)
+        assert data, "数据源列表不应为空"
+
+        ids = set()
+        for item in data:
+            assert isinstance(item, dict)
+            assert item.get("id")
+            assert item.get("type")
+            assert "enabled" in item
+            assert "priority" in item
+            assert isinstance(item.get("config", {}), dict)
+            ids.add(item["id"])
+
+        assert len(ids) == len(data), "数据源ID应该唯一"
+
+    def test_removed_data_source_status_endpoint(self, test_client):
+        """旧数据源状态路径应返回404"""
+        response = test_client.get("/api/data/source/status")
+        assert response.status_code == 404
+
+    def test_update_data_source_config(self, test_client, api_helper):
+        """更新数据源配置"""
+        config_request = {"enabled": True, "priority": 1, "config": {"timeout": 5000}}
+        response = test_client.put("/api/data-sources/config/amazingdata", json=config_request)
+        data = api_helper.assert_success_response(response)
+
+        assert data["enabled"] is True
+        assert data["priority"] == 1
+        assert data["config"]["timeout"] == 5000
+
         assert "config" in data
 
     def test_get_stock_info(self, test_client, api_helper):
@@ -61,7 +90,7 @@ class TestDataSourceAPI:
             "symbol": "000001",
             "period": "1d",
             "start_date": "2025-09-01",
-            "end_date": "2025-09-16"
+            "end_date": "2025-09-16",
         }
         response = test_client.get("/api/data/kline", params=params)
         data = api_helper.assert_success_response(response)
@@ -79,23 +108,33 @@ class TestDataSourceAPI:
         data = api_helper.assert_success_response(response)
 
         required_fields = [
-            "symbol", "name", "current", "change", "change_pct",
-            "volume", "amount", "timestamp"
+            "symbol",
+            "name",
+            "current",
+            "change",
+            "change_pct",
+            "volume",
+            "amount",
+            "timestamp",
         ]
         for field in required_fields:
             assert field in data, f"Missing field: {field}"
 
     def test_batch_get_realtime_quotes(self, test_client, api_helper):
-        """测试批量获取实时行情"""
+        """批量获取实时行情"""
         symbols = ["000001", "000002", "600000"]
-        response = test_client.post(
-            "/api/data/realtime/batch",
-            json={"symbols": symbols}
-        )
+        response = test_client.post("/api/data/realtime/batch", json={"symbols": symbols})
         data = api_helper.assert_success_response(response)
 
         assert isinstance(data, list)
-        assert len(data) <= len(symbols)
+        assert len(data) == len(symbols)
+
+        returned_symbols = {item.get("symbol") for item in data}
+        assert set(symbols) == returned_symbols
+
+        for item in data:
+            for field in ("symbol", "name", "current", "volume", "amount", "timestamp"):
+                assert field in item, f"Missing field in batch quote: {field}"
 
     def test_get_market_overview(self, test_client, api_helper):
         """测试获取市场概览"""
@@ -147,31 +186,42 @@ class TestDataSourceAPI:
             for i in range(len(data) - 1):
                 assert data[i]["change_pct"] <= data[i + 1]["change_pct"]
 
-    def test_data_source_failover(self, test_client, api_helper):
-        """测试数据源故障转移"""
-        # 先禁用主数据源
-        config = {
-            "amazingdata": {"enabled": False},
-            "cloudflare": {"enabled": True},
-            "qmt": {"enabled": False}
-        }
-        test_client.post("/api/data/source/config", json=config)
+    def test_data_source_config_toggle(self, test_client, api_helper):
+        """禁用并重新启用 AmazingData 时状态应同步"""
+        test_client.put("/api/data-sources/config/amazingdata", json={"enabled": False})
+        status_response = test_client.get("/api/data-sources/status")
+        data = api_helper.assert_success_response(status_response)
+        sources = data.get("sources", {})
+        amazing = sources.get("amazingdata", {})
+        assert amazing.get("status") == "degraded"
+        assert amazing.get("degradedReason") == "disabled_by_config"
+        assert amazing.get("config", {}).get("enabled") is False
+
+        test_client.put("/api/data-sources/config/amazingdata", json={"enabled": True})
+        status_response = test_client.get("/api/data-sources/status")
+        data = api_helper.assert_success_response(status_response)
+        sources = data.get("sources", {})
+        amazing = sources.get("amazingdata", {})
+        assert amazing.get("status") == "pending_test"
+        assert amazing.get("reason") == "test_mode_pending_activation"
+        assert amazing.get("pendingReactivation") is True
+        assert amazing.get("degradedReason") == "disabled_by_config"
+        assert amazing.get("config", {}).get("enabled") is False
+        akshare = sources.get("akshare", {})
+        proxies = {proxy.get("id"): proxy for proxy in akshare.get("proxies", [])}
+        assert proxies.get("cloudflare", {}).get("config", {}).get("enabled") is True
 
         # 请求数据，应该自动使用备用源
         response = test_client.get("/api/data/stock/000001")
         data = api_helper.assert_success_response(response)
 
         # 检查响应头中的数据源信息
-        assert response.headers.get("X-Data-Source") == "cloudflare"
+        assert response.headers.get("X-Data-Source") in {"cloudflare", "akshare"}
 
     @pytest.mark.parametrize("period", ["1m", "5m", "15m", "30m", "60m", "1d", "1w", "1M"])
     def test_kline_periods(self, test_client, api_helper, period):
         """测试不同周期的K线数据"""
-        params = {
-            "symbol": "000001",
-            "period": period,
-            "limit": 100
-        }
+        params = {"symbol": "000001", "period": period, "limit": 100}
         response = test_client.get("/api/data/kline", params=params)
         data = api_helper.assert_success_response(response)
 
@@ -193,7 +243,7 @@ class TestDataSourceAPI:
             "symbol": "000001",
             "period": "1d",
             "start_date": "2025-09-16",
-            "end_date": "2025-09-01"  # 结束日期早于开始日期
+            "end_date": "2025-09-01",  # 结束日期早于开始日期
         }
         response = test_client.get("/api/data/kline", params=params)
 
@@ -208,10 +258,7 @@ class TestDataSourceAPI:
 
         symbols = ["000001", "000002", "600000", "600519", "002594"]
 
-        tasks = [
-            async_client.get(f"/api/data/stock/{symbol}")
-            for symbol in symbols
-        ]
+        tasks = [async_client.get(f"/api/data/stock/{symbol}") for symbol in symbols]
 
         responses = await asyncio.gather(*tasks)
 
@@ -220,21 +267,20 @@ class TestDataSourceAPI:
 
     def test_cache_headers(self, test_client):
         """测试缓存头"""
-        response = test_client.get("/api/data/stock/000001")
+        first = test_client.get("/api/data/stock/000001")
 
-        # 检查缓存相关头
-        assert "Cache-Control" in response.headers
-        assert "ETag" in response.headers or "Last-Modified" in response.headers
+        assert "Cache-Control" in first.headers
+        assert first.headers.get("ETag") or first.headers.get("Last-Modified")
+        assert first.headers.get("X-Data-Source")
 
-        # 第二次请求应该返回304
-        etag = response.headers.get("ETag")
-        if etag:
-            response2 = test_client.get(
-                "/api/data/stock/000001",
-                headers={"If-None-Match": etag}
-            )
-            # 如果缓存有效，应返回304
-            # assert response2.status_code == 304
+        second = test_client.get("/api/data/stock/000001")
+        assert second.headers.get("Cache-Control")
+        assert second.headers.get("ETag") or second.headers.get("Last-Modified")
+        assert second.headers.get("X-Data-Source")
+
+        payload = second.json()
+        data = payload.get("data", payload)
+        assert data.get("symbol") == "000001"
 
     def test_rate_limiting(self, test_client):
         """测试速率限制"""
@@ -254,11 +300,9 @@ class TestDataSourceAPI:
 
     def test_data_validation(self, test_client, api_helper):
         """测试数据验证"""
-        response = test_client.get("/api/data/kline", params={
-            "symbol": "000001",
-            "period": "1d",
-            "limit": 1000
-        })
+        response = test_client.get(
+            "/api/data/kline", params={"symbol": "000001", "period": "1d", "limit": 1000}
+        )
         data = api_helper.assert_success_response(response)
 
         for kline in data:

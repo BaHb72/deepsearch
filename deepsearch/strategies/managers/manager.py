@@ -4,20 +4,31 @@ Strategy Manager
 Manages the lifecycle of multiple strategies, including adding, removing,
 starting, stopping, and monitoring strategies.
 """
+
 import asyncio
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Type
+from typing import Dict, List, Mapping, Optional, Type, TYPE_CHECKING, cast, Literal
 
 from loguru import logger
 
 from deepsearch.strategies.interfaces.base import BaseStrategy
+from deepsearch.strategies.interfaces.types import (
+    MarketBarData,
+    StrategyMetrics,
+    StrategyParams,
+    StrategyStatus,
+    TickData,
+)
 from deepsearch.utils.system.singleton import Singleton
+
+if TYPE_CHECKING:
+    from deepsearch.event.engine.engine import EventEngine
 
 
 class StrategyManager(metaclass=Singleton):
     """
     Centralized strategy management system
-    
+
     Responsibilities:
     - Strategy lifecycle management
     - Strategy registration and instantiation
@@ -29,19 +40,17 @@ class StrategyManager(metaclass=Singleton):
         """Initialize strategy manager"""
         self.strategies: Dict[str, BaseStrategy] = {}
         self.strategy_classes: Dict[str, Type[BaseStrategy]] = {}
-        self.strategy_status: Dict[str, Dict[str, Any]] = {}
-        self.event_engine = None
+        self.strategy_status: Dict[str, StrategyStatus] = {}
+        self.event_engine: "EventEngine | None" = None
         self.is_running = False
         self._lock = asyncio.Lock()
 
         logger.info("StrategyManager initialized")
 
-    def register_strategy_class(self,
-                                name: str,
-                                strategy_class: Type[BaseStrategy]):
+    def register_strategy_class(self, name: str, strategy_class: Type[BaseStrategy]):
         """
         Register a strategy class for later instantiation
-        
+
         Args:
             name: Strategy class name
             strategy_class: Strategy class (not instance)
@@ -52,20 +61,22 @@ class StrategyManager(metaclass=Singleton):
         self.strategy_classes[name] = strategy_class
         logger.info(f"Registered strategy class: {name}")
 
-    def add_strategy(self,
-                     strategy_class: Type[BaseStrategy],
-                     strategy_id: Optional[str] = None,
-                     params: Optional[Dict[str, Any]] = None,
-                     auto_start: bool = False) -> str:
+    def add_strategy(
+        self,
+        strategy_class: Type[BaseStrategy] | str,
+        strategy_id: Optional[str] = None,
+        params: Optional[StrategyParams] = None,
+        auto_start: bool = False,
+    ) -> str:
         """
         Add a new strategy instance
-        
+
         Args:
             strategy_class: Strategy class or registered name
             strategy_id: Unique strategy ID (auto-generated if None)
             params: Strategy parameters
             auto_start: Whether to start strategy immediately
-            
+
         Returns:
             str: Strategy ID
         """
@@ -87,14 +98,14 @@ class StrategyManager(metaclass=Singleton):
 
         # Initialize status
         self.strategy_status[strategy.strategy_id] = {
-            'id': strategy.strategy_id,
-            'class': strategy.__class__.__name__,
-            'status': 'STOPPED',
-            'created_at': datetime.now(),
-            'started_at': None,
-            'stopped_at': None,
-            'error': None,
-            'metrics': {}
+            "id": strategy.strategy_id,
+            "class": strategy.__class__.__name__,
+            "status": "STOPPED",
+            "created_at": datetime.now(),
+            "started_at": None,
+            "stopped_at": None,
+            "error": None,
+            "metrics": cast(StrategyMetrics, {}),
         }
 
         # Set event engine if available
@@ -111,7 +122,7 @@ class StrategyManager(metaclass=Singleton):
 
         except Exception as e:
             logger.error(f"Failed to initialize strategy {strategy.strategy_id}: {e}")
-            self.strategy_status[strategy.strategy_id]['error'] = str(e)
+            self.strategy_status[strategy.strategy_id]["error"] = str(e)
             raise
 
         return strategy.strategy_id
@@ -119,7 +130,7 @@ class StrategyManager(metaclass=Singleton):
     def remove_strategy(self, strategy_id: str, force: bool = False):
         """
         Remove a strategy
-        
+
         Args:
             strategy_id: Strategy ID to remove
             force: Force removal even if running
@@ -127,15 +138,15 @@ class StrategyManager(metaclass=Singleton):
         if strategy_id not in self.strategies:
             raise ValueError(f"Strategy {strategy_id} not found")
 
-        strategy = self.strategies[strategy_id]
+        self.strategies[strategy_id]
         status = self.strategy_status[strategy_id]
 
         # Check if running
-        if status['status'] == 'RUNNING' and not force:
+        if status["status"] == "RUNNING" and not force:
             raise RuntimeError(f"Cannot remove running strategy {strategy_id}")
 
         # Stop if running
-        if status['status'] == 'RUNNING':
+        if status["status"] == "RUNNING":
             self.stop_strategy(strategy_id)
 
         # Clean up
@@ -147,7 +158,7 @@ class StrategyManager(metaclass=Singleton):
     def start_strategy(self, strategy_id: str):
         """
         Start a strategy
-        
+
         Args:
             strategy_id: Strategy ID to start
         """
@@ -157,7 +168,7 @@ class StrategyManager(metaclass=Singleton):
         strategy = self.strategies[strategy_id]
         status = self.strategy_status[strategy_id]
 
-        if status['status'] == 'RUNNING':
+        if status["status"] == "RUNNING":
             logger.warning(f"Strategy {strategy_id} already running")
             return
 
@@ -165,28 +176,27 @@ class StrategyManager(metaclass=Singleton):
             strategy.on_start()
             strategy.is_running = True
 
-            status['status'] = 'RUNNING'
-            status['started_at'] = datetime.now()
-            status['error'] = None
+            status["status"] = "RUNNING"
+            status["started_at"] = datetime.now()
+            status["error"] = None
 
             logger.info(f"Strategy {strategy_id} started")
 
             # Emit event
-            self._emit_strategy_event('STRATEGY_STARTED', {
-                'strategy_id': strategy_id,
-                'timestamp': datetime.now()
-            })
+            self._emit_strategy_event(
+                "STRATEGY_STARTED", {"strategy_id": strategy_id, "timestamp": datetime.now()}
+            )
 
         except Exception as e:
             logger.error(f"Failed to start strategy {strategy_id}: {e}")
-            status['status'] = 'ERROR'
-            status['error'] = str(e)
+            status["status"] = "ERROR"
+            status["error"] = str(e)
             raise
 
     def stop_strategy(self, strategy_id: str):
         """
         Stop a strategy
-        
+
         Args:
             strategy_id: Strategy ID to stop
         """
@@ -196,7 +206,7 @@ class StrategyManager(metaclass=Singleton):
         strategy = self.strategies[strategy_id]
         status = self.strategy_status[strategy_id]
 
-        if status['status'] != 'RUNNING':
+        if status["status"] != "RUNNING":
             logger.warning(f"Strategy {strategy_id} not running")
             return
 
@@ -204,26 +214,25 @@ class StrategyManager(metaclass=Singleton):
             strategy.on_stop()
             strategy.is_running = False
 
-            status['status'] = 'STOPPED'
-            status['stopped_at'] = datetime.now()
+            status["status"] = "STOPPED"
+            status["stopped_at"] = datetime.now()
 
             logger.info(f"Strategy {strategy_id} stopped")
 
             # Emit event
-            self._emit_strategy_event('STRATEGY_STOPPED', {
-                'strategy_id': strategy_id,
-                'timestamp': datetime.now()
-            })
+            self._emit_strategy_event(
+                "STRATEGY_STOPPED", {"strategy_id": strategy_id, "timestamp": datetime.now()}
+            )
 
         except Exception as e:
             logger.error(f"Failed to stop strategy {strategy_id}: {e}")
-            status['error'] = str(e)
+            status["error"] = str(e)
             raise
 
     def pause_strategy(self, strategy_id: str):
         """
         Pause a running strategy
-        
+
         Args:
             strategy_id: Strategy ID to pause
         """
@@ -232,10 +241,10 @@ class StrategyManager(metaclass=Singleton):
 
         status = self.strategy_status[strategy_id]
 
-        if status['status'] != 'RUNNING':
-            raise RuntimeError(f"Can only pause running strategy")
+        if status["status"] != "RUNNING":
+            raise RuntimeError("Can only pause running strategy")
 
-        status['status'] = 'PAUSED'
+        status["status"] = "PAUSED"
         self.strategies[strategy_id].is_running = False
 
         logger.info(f"Strategy {strategy_id} paused")
@@ -243,7 +252,7 @@ class StrategyManager(metaclass=Singleton):
     def resume_strategy(self, strategy_id: str):
         """
         Resume a paused strategy
-        
+
         Args:
             strategy_id: Strategy ID to resume
         """
@@ -252,10 +261,10 @@ class StrategyManager(metaclass=Singleton):
 
         status = self.strategy_status[strategy_id]
 
-        if status['status'] != 'PAUSED':
-            raise RuntimeError(f"Can only resume paused strategy")
+        if status["status"] != "PAUSED":
+            raise RuntimeError("Can only resume paused strategy")
 
-        status['status'] = 'RUNNING'
+        status["status"] = "RUNNING"
         self.strategies[strategy_id].is_running = True
 
         logger.info(f"Strategy {strategy_id} resumed")
@@ -268,27 +277,29 @@ class StrategyManager(metaclass=Singleton):
         """Get all strategy instances"""
         return self.strategies.copy()
 
-    def get_strategy_status(self, strategy_id: str) -> Dict[str, Any]:
+    def get_strategy_status(self, strategy_id: str) -> Optional[StrategyStatus]:
         """Get strategy status"""
-        if strategy_id not in self.strategy_status:
+        status = self.strategy_status.get(strategy_id)
+        if status is None:
             return None
-        return self.strategy_status[strategy_id].copy()
+        return cast(StrategyStatus, dict(status))
 
-    def get_all_status(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_status(self) -> Dict[str, StrategyStatus]:
         """Get status of all strategies"""
-        return self.strategy_status.copy()
+        return {sid: cast(StrategyStatus, dict(status)) for sid, status in self.strategy_status.items()}
 
     def get_running_strategies(self) -> List[str]:
         """Get list of running strategy IDs"""
         return [
-            sid for sid, status in self.strategy_status.items()
-            if status['status'] == 'RUNNING'
+            sid for sid, status in self.strategy_status.items() if status["status"] == "RUNNING"
         ]
 
-    async def process_market_data(self, data_type: str, data: Dict[str, Any]):
+    async def process_market_data(
+        self, data_type: Literal["bar", "tick", "depth"], data: Mapping[str, object]
+    ) -> None:
         """
         Process market data for all running strategies
-        
+
         Args:
             data_type: Type of data ('bar', 'tick', 'depth')
             data: Market data
@@ -298,42 +309,50 @@ class StrategyManager(metaclass=Singleton):
         if not running_strategies:
             return
 
+        payload_dict: dict[str, object]
+        if isinstance(data, dict):
+            payload_dict = data
+        else:
+            payload_dict = dict(data)
+
         # Process data for each strategy
         tasks = []
         for strategy_id in running_strategies:
             strategy = self.strategies[strategy_id]
 
-            if data_type == 'bar':
-                tasks.append(self._process_bar_async(strategy, data))
-            elif data_type == 'tick':
-                tasks.append(self._process_tick_async(strategy, data))
+            if data_type == "bar":
+                bar_payload = cast(MarketBarData, payload_dict)
+                tasks.append(self._process_bar_async(strategy, bar_payload))
+            elif data_type == "tick":
+                tick_payload = cast(TickData, payload_dict)
+                tasks.append(self._process_tick_async(strategy, tick_payload))
 
         # Execute in parallel
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _process_bar_async(self, strategy: BaseStrategy, bar: Dict[str, Any]):
+    async def _process_bar_async(self, strategy: BaseStrategy, bar: MarketBarData) -> None:
         """Process bar data asynchronously"""
         try:
             strategy.on_bar(bar)
         except Exception as e:
             logger.error(f"Strategy {strategy.strategy_id} error processing bar: {e}")
-            self.strategy_status[strategy.strategy_id]['error'] = str(e)
+            self.strategy_status[strategy.strategy_id]["error"] = str(e)
 
-    async def _process_tick_async(self, strategy: BaseStrategy, tick: Dict[str, Any]):
+    async def _process_tick_async(self, strategy: BaseStrategy, tick: TickData) -> None:
         """Process tick data asynchronously"""
         try:
             strategy.on_tick(tick)
         except Exception as e:
             logger.error(f"Strategy {strategy.strategy_id} error processing tick: {e}")
-            self.strategy_status[strategy.strategy_id]['error'] = str(e)
+            self.strategy_status[strategy.strategy_id]["error"] = str(e)
 
-    def update_metrics(self, strategy_id: str, metrics: Dict[str, Any]):
+    def update_metrics(self, strategy_id: str, metrics: StrategyMetrics) -> None:
         """Update strategy metrics"""
         if strategy_id in self.strategy_status:
-            self.strategy_status[strategy_id]['metrics'] = metrics
+            self.strategy_status[strategy_id]["metrics"] = metrics
 
-    def set_event_engine(self, event_engine):
+    def set_event_engine(self, event_engine: "EventEngine | None") -> None:
         """Set event engine for all strategies"""
         self.event_engine = event_engine
 
@@ -341,17 +360,18 @@ class StrategyManager(metaclass=Singleton):
         for strategy in self.strategies.values():
             strategy.event_engine = event_engine
 
-    def _emit_strategy_event(self, event_type: str, data: Dict[str, Any]):
+    def _emit_strategy_event(self, event_type: str, data: Dict[str, object]) -> None:
         """Emit strategy-related event"""
         if self.event_engine:
             from deepsearch.event.engine.engine import Event
+
             event = Event(type=event_type, data=data)
             self.event_engine.put(event)
 
     def start_all(self):
         """Start all strategies"""
         for strategy_id in self.strategies:
-            if self.strategy_status[strategy_id]['status'] == 'STOPPED':
+            if self.strategy_status[strategy_id]["status"] == "STOPPED":
                 self.start_strategy(strategy_id)
 
     def stop_all(self):
@@ -364,16 +384,14 @@ class StrategyManager(metaclass=Singleton):
         for strategy in self.strategies.values():
             strategy.reset()
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> Dict[str, object]:
         """Get manager summary"""
         return {
-            'total_strategies': len(self.strategies),
-            'running': len(self.get_running_strategies()),
-            'stopped': len([s for s in self.strategy_status.values()
-                            if s['status'] == 'STOPPED']),
-            'error': len([s for s in self.strategy_status.values()
-                          if s['status'] == 'ERROR']),
-            'strategies': list(self.strategies.keys())
+            "total_strategies": len(self.strategies),
+            "running": len(self.get_running_strategies()),
+            "stopped": len([s for s in self.strategy_status.values() if s["status"] == "STOPPED"]),
+            "error": len([s for s in self.strategy_status.values() if s["status"] == "ERROR"]),
+            "strategies": list(self.strategies.keys()),
         }
 
 

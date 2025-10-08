@@ -3,6 +3,7 @@ API响应格式化工具
 
 提供统一的API响应格式、错误代码定义和异常处理
 """
+
 from enum import IntEnum
 from typing import Any, Dict, Optional
 
@@ -12,6 +13,7 @@ from deepsearch.webui.api.exception_handlers import APIException
 
 class ErrorCodes(IntEnum):
     """错误代码枚举"""
+
     # 通用错误
     SUCCESS = 0
     INTERNAL_ERROR = 500
@@ -58,19 +60,16 @@ class APIResponse:
         Returns:
             格式化的成功响应字典
         """
-        return {
-            "code": ErrorCodes.SUCCESS,
-            "message": message,
-            "data": data,
-            "success": True
-        }
+        return {"code": ErrorCodes.SUCCESS, "message": message, "data": data, "success": True}
 
     @staticmethod
-    def error(code: ErrorCodes = ErrorCodes.INTERNAL_ERROR,
-             message: str = "Error occurred",
-             data: Optional[Any] = None,
-             details: Optional[Any] = None,
-             status_code: int = 500) -> Dict[str, Any]:
+    def error(
+        code: ErrorCodes = ErrorCodes.INTERNAL_ERROR,
+        message: str = "Error occurred",
+        data: Optional[Any] = None,
+        details: Optional[Any] = None,
+        status_code: int = 500,
+    ) -> Dict[str, Any]:
         """
         创建错误响应
 
@@ -88,7 +87,7 @@ class APIResponse:
             "code": int(code),  # 转换为整数
             "message": message,
             "success": False,
-            "status_code": status_code  # 添加状态码
+            "status_code": status_code,  # 添加状态码
         }
         # 优先使用data，如果没有则使用details
         if data is not None:
@@ -135,10 +134,4 @@ def error_response(message: str, code: int = 1, data: Optional[Any] = None) -> D
 
 
 # 导出所有需要的类和函数
-__all__ = [
-    'APIResponse',
-    'APIException',
-    'ErrorCodes',
-    'success_response',
-    'error_response'
-]
+__all__ = ["APIResponse", "APIException", "ErrorCodes", "success_response", "error_response"]

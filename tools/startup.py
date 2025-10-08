@@ -19,12 +19,13 @@ def cleanup_old_processes():
 
     # 检查端口占用
     from deepsearch.config import get_config
+
     config = get_config()
     ports_to_check = [config.webui.backend_port, config.webui.frontend_port]  # 后端和前端端口
 
     for port in ports_to_check:
         for conn in psutil.net_connections():
-            if conn.laddr.port == port and conn.status == 'LISTEN':
+            if conn.laddr.port == port and conn.status == "LISTEN":
                 pid = conn.pid
                 if pid:
                     try:
@@ -33,7 +34,7 @@ def cleanup_old_processes():
                         print(f"  发现端口 {port} 被进程 {proc_name} (PID={pid}) 占用")
 
                         # 如果是Python或Node进程，尝试终止
-                        if 'python' in proc_name.lower() or 'node' in proc_name.lower():
+                        if "python" in proc_name.lower() or "node" in proc_name.lower():
                             print(f"  终止进程 PID={pid}...")
                             proc.terminate()
                             proc.wait(timeout=3)

@@ -2,25 +2,29 @@
 依赖注入容器
 管理应用程序依赖项的创建和生命周期
 """
-from typing import Optional, Dict, Any, Type, Callable, TypeVar, Generic
+
+import asyncio
+import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Callable, Dict, Optional, Type, TypeVar
+
 from loguru import logger
-import inspect
-import asyncio
 
 
 class ServiceLifetime(Enum):
     """服务生命周期"""
-    SINGLETON = "singleton"      # 单例，整个应用生命周期内只创建一次
-    SCOPED = "scoped"            # 作用域，每个请求/作用域创建一次
-    TRANSIENT = "transient"      # 瞬态，每次请求都创建新实例
+
+    SINGLETON = "singleton"  # 单例，整个应用生命周期内只创建一次
+    SCOPED = "scoped"  # 作用域，每个请求/作用域创建一次
+    TRANSIENT = "transient"  # 瞬态，每次请求都创建新实例
 
 
 @dataclass
 class ServiceDescriptor:
     """服务描述符"""
+
     service_type: Type
     implementation_type: Optional[Type] = None
     factory: Optional[Callable] = None
@@ -28,7 +32,7 @@ class ServiceDescriptor:
     lifetime: ServiceLifetime = ServiceLifetime.SINGLETON
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class IServiceProvider(ABC):
@@ -48,7 +52,7 @@ class IServiceProvider(ABC):
 class ServiceScope(IServiceProvider):
     """服务作用域"""
 
-    def __init__(self, container: 'DIContainer'):
+    def __init__(self, container: "DIContainer"):
         self.container = container
         self._scoped_instances: Dict[Type, Any] = {}
 
@@ -87,14 +91,14 @@ class DIContainer:
     def __init__(self):
         self._services: Dict[Type, ServiceDescriptor] = {}
         self._singletons: Dict[Type, Any] = {}
-    
+
     def register(
         self,
         service_type: Type,
         implementation: Optional[Type] = None,
         factory: Optional[Callable] = None,
         instance: Optional[Any] = None,
-        lifetime: ServiceLifetime = ServiceLifetime.SINGLETON
+        lifetime: ServiceLifetime = ServiceLifetime.SINGLETON,
     ):
         """
         注册服务
@@ -114,7 +118,7 @@ class DIContainer:
             implementation_type=implementation,
             factory=factory,
             instance=instance,
-            lifetime=lifetime
+            lifetime=lifetime,
         )
 
         self._services[service_type] = descriptor
@@ -122,7 +126,9 @@ class DIContainer:
 
     def register_singleton(self, service_type: Type, implementation: Optional[Type] = None):
         """注册单例服务"""
-        self.register(service_type, implementation or service_type, lifetime=ServiceLifetime.SINGLETON)
+        self.register(
+            service_type, implementation or service_type, lifetime=ServiceLifetime.SINGLETON
+        )
 
     def register_scoped(self, service_type: Type, implementation: Optional[Type] = None):
         """注册作用域服务"""
@@ -130,8 +136,10 @@ class DIContainer:
 
     def register_transient(self, service_type: Type, implementation: Optional[Type] = None):
         """注册瞬态服务"""
-        self.register(service_type, implementation or service_type, lifetime=ServiceLifetime.TRANSIENT)
-    
+        self.register(
+            service_type, implementation or service_type, lifetime=ServiceLifetime.TRANSIENT
+        )
+
     def resolve(self, service_type: Type[T]) -> Optional[T]:
         """
         解析服务
@@ -145,7 +153,7 @@ class DIContainer:
         # 创建新的作用域
         scope = ServiceScope(self)
         return scope.get_service(service_type)
-    
+
     def resolve_in_scope(self, service_type: Type[T], scope: ServiceScope) -> Optional[T]:
         """
         在作用域内解析服务
@@ -180,6 +188,7 @@ class DIContainer:
 
         # 处理瞬态
         return self._create_instance(descriptor, scope)
+
     def _create_instance(self, descriptor: ServiceDescriptor, scope: ServiceScope) -> Optional[Any]:
         """
         创建服务实例
@@ -226,7 +235,7 @@ class DIContainer:
         kwargs = {}
 
         for param_name, param in sig.parameters.items():
-            if param_name == 'self':
+            if param_name == "self":
                 continue
 
             # 获取参数类型
@@ -288,11 +297,11 @@ class DIContainer:
         某些服务可能需要异步初始化
         """
         for service_type, instance in self._singletons.items():
-            if hasattr(instance, 'initialize') and asyncio.iscoroutinefunction(instance.initialize):
+            if hasattr(instance, "initialize") and asyncio.iscoroutinefunction(instance.initialize):
                 logger.info(f"Initializing async service: {service_type.__name__}")
                 await instance.initialize()
 
-    def register_module(self, module_configurator: Callable[['DIContainer'], None]):
+    def register_module(self, module_configurator: Callable[["DIContainer"], None]):
         """
         注册模块配置器
 
@@ -402,30 +411,22 @@ def configure_infrastructure(container: DIContainer):
     Args:
         container: DI容器
     """
-    from deepsearch.infrastructure.providers.factory import get_factory
-    from deepsearch.infrastructure.providers.registry import get_registry
     from deepsearch.infrastructure.cache.cache_manager import CacheManager
     from deepsearch.infrastructure.persistence.database import DatabaseService
+    from deepsearch.infrastructure.providers.factory import get_factory
+    from deepsearch.infrastructure.providers.registry import get_registry
 
     # 注册单例服务
     container.register_singleton(
-        service_type=type(get_factory()),
-        implementation=type(get_factory())
+        service_type=type(get_factory()), implementation=type(get_factory())
     )
 
     container.register_singleton(
-        service_type=type(get_registry()),
-        implementation=type(get_registry())
+        service_type=type(get_registry()), implementation=type(get_registry())
     )
 
     # 注册作用域服务
-    container.register_scoped(
-        service_type=CacheManager,
-        implementation=CacheManager
-    )
+    container.register_scoped(service_type=CacheManager, implementation=CacheManager)
 
     # 注册瞬态服务
-    container.register_transient(
-        service_type=DatabaseService,
-        implementation=DatabaseService
-    )
+    container.register_transient(service_type=DatabaseService, implementation=DatabaseService)

@@ -1,211 +1,154 @@
 """
-AmazingData 融资融券和龙虎榜数据接口
-包含融资融券汇总、明细和龙虎榜数据
+AmazingData 融资融券与龙虎榜数据接口
+修正调用签名以匹配 provider，并补充本地过滤逻辑
 """
 
-from datetime import datetime, date
-from typing import Optional, List, Dict, Any
+from typing import List, Optional
+
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
-from loguru import logger
 
-from .base import get_amazingdata_provider as get_provider, handle_api_error, format_response as create_response
+from .base import (
+    JSONDict,
+    dataframe_to_dict,
+    filter_dataframe_by_dates,
+    filter_dataframe_by_value,
+    format_response,
+    get_amazingdata_provider,
+    normalize_date_int,
+)
 
-# 定义handle_amazingdata_error为兼容函数
-async def handle_amazingdata_error(func_call):
-    """包装AmazingData API调用的错误处理"""
-    try:
-        return await func_call if hasattr(func_call, '__await__') else func_call
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-router = APIRouter()
+router = APIRouter(tags=["AmazingData-融资融券"])
 
 
-@router.get("/margin-summary", summary="获取融资融券汇总数据")
+_DATE_COLUMNS_MARGIN = ("trade_date", "TRADE_DATE", "date", "DATE")
+_DATE_COLUMNS_LONGHU = ("trade_date", "TRADE_DATE", "date", "DATE", "tradeDate")
+_CODE_COLUMNS = ("code", "CODE", "symbol", "SYMBOL")
+_MARKET_COLUMNS = ("market", "MARKET", "exchange", "EXCHANGE")
+_REASON_COLUMNS = ("reason", "REASON", "desc", "DESC")
+
+
+def _apply_date_filter(data: Optional[pd.DataFrame], start: Optional[str], end: Optional[str], columns) -> Optional[pd.DataFrame]:
+    if data is None or data.empty:
+        return data
+    start_int = normalize_date_int(start) if start else None
+    end_int = normalize_date_int(end) if end else None
+    if start_int is None and end_int is None:
+        return data
+    if start_int is not None and end_int is not None and start_int > end_int:
+        raise HTTPException(status_code=400, detail="Invalid date range")
+    effective_start = start_int or end_int
+    effective_end = end_int or start_int
+    if effective_start is None or effective_end is None:
+        return data
+    narrowed = filter_dataframe_by_dates(data, effective_start, effective_end, columns=columns)
+    if isinstance(narrowed, pd.DataFrame):
+        return narrowed
+    return data
+
+
+def _apply_column_selection(data: Optional[pd.DataFrame], columns: Optional[List[str]]) -> Optional[pd.DataFrame]:
+    if data is None or data.empty or not columns:
+        return data
+    valid = [column for column in columns if column in data.columns]
+    if not valid:
+        return data
+    return data.loc[:, valid]
+
+
+@router.get("/margin-summary", summary="获取融资融券汇总")
 async def get_margin_summary(
-    code: Optional[str] = Query(None, description="证券代码，如SH.600000，不填则返回市场汇总"),
-    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
-    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    market: Optional[str] = Query(None, description="市场类型：SH/SZ/ALL")
-):
-    """
-    获取融资融券汇总数据
-
-    Parameters:
-        code: 证券代码（可选）
-        start_date: 开始日期
-        end_date: 结束日期
-        market: 市场类型
-
-    Returns:
-        融资融券汇总数据，包含：
-        - 日期
-        - 融资余额
-        - 融券余额
-        - 融资买入额
-        - 融券卖出量
-        - 融资融券余额
-    """
+    code: Optional[str] = Query(None, description="证券代码，示例 SH.600000"),
+    start_date: Optional[str] = Query(None, description="起始日期，格式 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期，格式 YYYY-MM-DD"),
+    market: Optional[str] = Query(None, description="市场类型，SH/SZ/ALL"),
+) -> JSONDict:
+    """查询融资融券总体情况，并支持本地过滤"""
     try:
-        provider = await get_provider()
-
-        # 构建参数
-        params = {}
-        if code:
-            params['code'] = code
-        if start_date:
-            params['start_date'] = start_date
-        if end_date:
-            params['end_date'] = end_date
-        if market:
-            params['market'] = market
-
-        # 调用SDK接口
-        result = await handle_amazingdata_error(
-            provider.get_margin_summary(**params)
+        provider = await get_amazingdata_provider()
+        raw = await provider.get_margin_summary()
+        filtered = raw
+        if isinstance(filtered, pd.DataFrame):
+            filtered = _apply_date_filter(filtered, start_date, end_date, _DATE_COLUMNS_MARGIN)
+            if code:
+                filtered = filter_dataframe_by_value(filtered, code, columns=_CODE_COLUMNS)
+            if market:
+                filtered = filter_dataframe_by_value(filtered, market, columns=_MARKET_COLUMNS)
+        return format_response(
+            success=True,
+            data=dataframe_to_dict(filtered),
+            filters={
+                "code": code,
+                "start_date": start_date,
+                "end_date": end_date,
+                "market": market,
+            },
         )
-
-        return create_response(
-            data=result,
-            message="获取融资融券汇总数据成功"
-        )
-
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"获取融资融券汇总数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.post("/margin-detail", summary="获取融资融券明细数据")
+@router.post("/margin-detail", summary="获取融资融券明细")
 async def get_margin_detail(
-    code: str = Query(..., description="证券代码，如SH.600000"),
-    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
-    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
-    fields: Optional[List[str]] = Query(None, description="需要返回的字段列表")
-):
-    """
-    获取单个证券的融资融券明细数据
-
-    Parameters:
-        code: 证券代码（必填）
-        start_date: 开始日期
-        end_date: 结束日期
-        fields: 需要返回的字段列表
-
-    Returns:
-        融资融券明细数据，包含：
-        - 日期
-        - 证券代码
-        - 证券名称
-        - 融资余额
-        - 融资买入额
-        - 融资偿还额
-        - 融券余量
-        - 融券卖出量
-        - 融券偿还量
-        - 融资融券余额
-        - 融资融券余额差值
-        - 融资融券余额占流通市值比
-    """
+    code: str = Query(..., description="证券代码，例如 SH.600000"),
+    start_date: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    fields: Optional[List[str]] = Query(None, description="需要保留的列名列表"),
+) -> JSONDict:
+    """查询指定证券的融资融券明细，支持日期过滤和列过滤"""
     try:
-        provider = await get_provider()
-
-        # 构建参数
-        params = {'code': code}
-        if start_date:
-            params['start_date'] = start_date
-        if end_date:
-            params['end_date'] = end_date
-        if fields:
-            params['fields'] = fields
-
-        # 调用SDK接口
-        result = await handle_amazingdata_error(
-            provider.get_margin_detail(**params)
+        provider = await get_amazingdata_provider()
+        raw = await provider.get_margin_detail([code])
+        filtered = raw
+        if isinstance(filtered, pd.DataFrame):
+            filtered = _apply_date_filter(filtered, start_date, end_date, _DATE_COLUMNS_MARGIN)
+            filtered = _apply_column_selection(filtered, fields)
+        return format_response(
+            success=True,
+            data=dataframe_to_dict(filtered),
+            code=code,
+            start_date=start_date,
+            end_date=end_date,
+            fields=fields,
         )
-
-        return create_response(
-            data=result,
-            message=f"获取{code}融资融券明细数据成功"
-        )
-
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"获取融资融券明细数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.post("/long-hu-bang", summary="获取龙虎榜数据")
 async def get_long_hu_bang(
-    date: Optional[str] = Query(None, description="日期，格式：YYYY-MM-DD，不填则返回最新"),
-    code: Optional[str] = Query(None, description="证券代码，如SH.600000"),
-    reason: Optional[str] = Query(None, description="上榜原因类型"),
-    limit: int = Query(100, description="返回数据条数限制")
-):
-    """
-    获取龙虎榜数据
+    code: Optional[str] = Query(None, description="证券代码，示例 SH.600000"),
+    date: Optional[str] = Query(None, description="交易日期 YYYY-MM-DD，可选"),
+    reason: Optional[str] = Query(None, description="上榜原因，可选"),
+    limit: int = Query(100, description="返回记录上限"),
+) -> JSONDict:
+    """查询龙虎榜信息，并允许按日期、原因等条件过滤"""
+    if code is None:
+        raise HTTPException(status_code=400, detail="code is required for long_hu_bang query")
 
-    Parameters:
-        date: 查询日期（可选）
-        code: 证券代码（可选）
-        reason: 上榜原因（可选）
-        limit: 返回数据条数
-
-    Returns:
-        龙虎榜数据，包含：
-        - 日期
-        - 证券代码
-        - 证券名称
-        - 收盘价
-        - 涨跌幅
-        - 成交额
-        - 上榜原因
-        - 买入营业部
-        - 买入金额
-        - 卖出营业部
-        - 卖出金额
-        - 净买入金额
-        - 买入前五占比
-        - 卖出前五占比
-    """
     try:
-        provider = await get_provider()
-
-        # 构建参数
-        params = {'limit': limit}
-        if date:
-            params['date'] = date
-        if code:
-            params['code'] = code
-        if reason:
-            params['reason'] = reason
-
-        # 调用SDK接口
-        result = await handle_amazingdata_error(
-            provider.get_long_hu_bang(**params)
+        provider = await get_amazingdata_provider()
+        raw = await provider.get_long_hu_bang([code])
+        filtered = raw
+        if isinstance(filtered, pd.DataFrame):
+            filtered = _apply_date_filter(filtered, date, date, _DATE_COLUMNS_LONGHU)
+            if reason:
+                filtered = filter_dataframe_by_value(filtered, reason, columns=_REASON_COLUMNS)
+            if limit > 0 and isinstance(filtered, pd.DataFrame):
+                filtered = filtered.head(limit)
+        return format_response(
+            success=True,
+            data=dataframe_to_dict(filtered),
+            code=code,
+            date=date,
+            reason=reason,
+            limit=limit,
         )
-
-        # 处理返回数据
-        if isinstance(result, dict):
-            # 如果返回的是字典，可能包含多个部分
-            response_data = {
-                'summary': result.get('summary', []),
-                'details': result.get('details', []),
-                'statistics': result.get('statistics', {})
-            }
-        else:
-            # 如果返回的是DataFrame或列表
-            response_data = result
-
-        return create_response(
-            data=response_data,
-            message="获取龙虎榜数据成功"
-        )
-
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"获取龙虎榜数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

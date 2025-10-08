@@ -3,18 +3,25 @@ Moving Average Strategy
 
 Classic trend-following strategy using moving average crossovers.
 """
+
 from collections import deque
-from typing import Dict, Any
+from typing import Any, Dict
 
 import numpy as np
 
 from deepsearch.strategies.interfaces.base import BaseStrategy
+from deepsearch.strategies.interfaces.types import (
+    MarketBarData,
+    StrategyOrder,
+    StrategyTrade,
+    TickData,
+)
 
 
 class MovingAverageStrategy(BaseStrategy):
     """
     Moving Average Crossover Strategy
-    
+
     Generates buy signals when short MA crosses above long MA (golden cross)
     Generates sell signals when short MA crosses below long MA (death cross)
     """
@@ -22,10 +29,10 @@ class MovingAverageStrategy(BaseStrategy):
     def on_init(self):
         """Initialize strategy parameters and indicators"""
         # Strategy parameters
-        self.short_period = self.params.get('short_period', 10)
-        self.long_period = self.params.get('long_period', 30)
-        self.position_size = self.params.get('position_size', 100)
-        self.max_positions = self.params.get('max_positions', 5)
+        self.short_period = self.params.get("short_period", 10)
+        self.long_period = self.params.get("long_period", 30)
+        self.position_size = self.params.get("position_size", 100)
+        self.max_positions = self.params.get("max_positions", 5)
 
         # Price history for each symbol
         self.price_history = {}
@@ -43,14 +50,14 @@ class MovingAverageStrategy(BaseStrategy):
         """Strategy start callback"""
         self.log("Moving Average Strategy started")
 
-    def on_bar(self, bar: Dict[str, Any]):
+    def on_bar(self, bar: MarketBarData) -> None:
         """
         Process new bar data
-        
+
         Args:
             bar: Bar data with symbol, OHLCV, etc.
         """
-        symbol = bar.get('symbol')
+        symbol = bar.get("symbol")
         if not symbol:
             return
 
@@ -62,7 +69,7 @@ class MovingAverageStrategy(BaseStrategy):
             self.in_position[symbol] = False
 
         # Add price to history
-        close_price = bar.get('close', 0)
+        close_price = bar.get("close", 0)
         self.price_history[symbol].append(close_price)
 
         # Need enough data for long MA
@@ -71,8 +78,8 @@ class MovingAverageStrategy(BaseStrategy):
 
         # Calculate moving averages
         prices = list(self.price_history[symbol])
-        short_ma_value = np.mean(prices[-self.short_period:])
-        long_ma_value = np.mean(prices[-self.long_period:])
+        short_ma_value = np.mean(prices[-self.short_period :])
+        long_ma_value = np.mean(prices[-self.long_period :])
 
         # Store MA values
         self.short_ma[symbol].append(short_ma_value)
@@ -100,13 +107,13 @@ class MovingAverageStrategy(BaseStrategy):
 
         # Log current state
         self.data_cache[symbol] = {
-            'price': close_price,
-            'short_ma': curr_short,
-            'long_ma': curr_long,
-            'position': self.in_position[symbol]
+            "price": close_price,
+            "short_ma": curr_short,
+            "long_ma": curr_long,
+            "position": self.in_position[symbol],
         }
 
-    def _handle_buy_signal(self, symbol: str, price: float, bar: Dict[str, Any]):
+    def _handle_buy_signal(self, symbol: str, price: float, bar: MarketBarData) -> None:
         """Handle buy signal"""
         # Check if we can open more positions
         open_positions = sum(1 for p in self.in_position.values() if p)
@@ -118,84 +125,74 @@ class MovingAverageStrategy(BaseStrategy):
         size = self.position_size
 
         # Submit buy order
-        order_id = self.buy(
-            symbol=symbol,
-            size=size,
-            price=None,  # Market order
-            order_type='MARKET'
-        )
+        self.buy(symbol=symbol, size=size, price=None, order_type="MARKET")  # Market order
 
         self.in_position[symbol] = True
 
         self.log(f"BUY signal: {symbol} @ {price:.2f}, MA crossover detected")
 
         # Update metrics
-        self.metrics['total_trades'] += 1
+        self.metrics["total_trades"] += 1
 
-    def _handle_sell_signal(self, symbol: str, price: float, bar: Dict[str, Any]):
+    def _handle_sell_signal(self, symbol: str, price: float, bar: MarketBarData) -> None:
         """Handle sell signal"""
         # Get position size
         position = self.get_position(symbol)
-        size = position.get('size', self.position_size)
+        size = position.get("size", self.position_size)
 
         if size <= 0:
             self.log(f"No position to sell for {symbol}")
             return
 
         # Submit sell order
-        order_id = self.sell(
-            symbol=symbol,
-            size=size,
-            price=None,  # Market order
-            order_type='MARKET'
-        )
+        self.sell(symbol=symbol, size=size, price=None, order_type="MARKET")  # Market order
 
         self.in_position[symbol] = False
 
         self.log(f"SELL signal: {symbol} @ {price:.2f}, MA crossover detected")
 
-    def on_tick(self, tick: Dict[str, Any]):
+    def on_tick(self, tick: TickData) -> None:
         """Process tick data - not used in this strategy"""
         pass
 
-    def on_order(self, order: Dict[str, Any]):
+    def on_order(self, order: StrategyOrder) -> None:
         """Handle order status update"""
-        status = order.get('status')
-        symbol = order.get('symbol')
+        status = order.get("status")
+        symbol = order.get("symbol")
 
-        if status == 'FILLED':
+        if status == "FILLED":
             self.log(f"Order filled: {order.get('side')} {order.get('size')} {symbol}")
-        elif status == 'REJECTED':
-            self.log(f"Order rejected: {symbol}", level='ERROR')
+        elif status == "REJECTED":
+            self.log(f"Order rejected: {symbol}", level="ERROR")
             # Reset position flag if order was rejected
             if symbol in self.in_position:
                 self.in_position[symbol] = False
 
-    def on_trade(self, trade: Dict[str, Any]):
+    def on_trade(self, trade: StrategyTrade) -> None:
         """Handle trade execution"""
-        symbol = trade.get('symbol')
-        side = trade.get('side')
-        size = trade.get('size')
-        price = trade.get('price')
-        pnl = trade.get('pnl', 0)
+        symbol = trade.get("symbol")
+        side = trade.get("side")
+        size = trade.get("size")
+        price = trade.get("price")
+        pnl = trade.get("pnl", 0)
 
         # Update metrics
         if pnl > 0:
-            self.metrics['winning_trades'] += 1
+            self.metrics["winning_trades"] += 1
         elif pnl < 0:
-            self.metrics['losing_trades'] += 1
+            self.metrics["losing_trades"] += 1
 
-        self.metrics['total_pnl'] += pnl
+        self.metrics["total_pnl"] += pnl
 
         self.log(f"Trade executed: {side} {size} {symbol} @ {price:.2f}, PnL: {pnl:.2f}")
 
     def on_stop(self):
         """Strategy stop callback"""
         # Calculate final metrics
-        total_trades = self.metrics['total_trades']
+        total_trades = self.metrics["total_trades"]
         if total_trades > 0:
-            win_rate = self.metrics['winning_trades'] / total_trades
-            self.metrics['win_rate'] = win_rate
+            win_rate = self.metrics["winning_trades"] / total_trades
+            self.metrics["win_rate"] = win_rate
 
         self.log(f"Strategy stopped. Total PnL: {self.metrics['total_pnl']:.2f}")
 
@@ -205,8 +202,8 @@ class MovingAverageStrategy(BaseStrategy):
             return {}
 
         return {
-            'short_ma': self.short_ma[symbol][-1] if self.short_ma[symbol] else None,
-            'long_ma': self.long_ma[symbol][-1] if self.long_ma[symbol] else None,
-            'price': self.price_history[symbol][-1] if self.price_history[symbol] else None,
-            'position': self.in_position.get(symbol, False)
+            "short_ma": self.short_ma[symbol][-1] if self.short_ma[symbol] else None,
+            "long_ma": self.long_ma[symbol][-1] if self.long_ma[symbol] else None,
+            "price": self.price_history[symbol][-1] if self.price_history[symbol] else None,
+            "position": self.in_position.get(symbol, False),
         }

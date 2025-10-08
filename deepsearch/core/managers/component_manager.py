@@ -4,18 +4,23 @@
 该模块提供了组件注册、状态管理、依赖管理等功能，
 支持基础设施组件和业务组件的分离管理。
 """
-import logging
+
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Callable, Set
+import asyncio
+import inspect
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from deepsearch.core.utils.exceptions import ComponentError
-from ..interfaces.component import ComponentStatus, ComponentType, Component
+from deepsearch.observability import get_logger
+
+from ..interfaces.component import Component, ComponentStatus, ComponentType
 
 
 @dataclass
 class ComponentInfo:
     """组件信息"""
+
     name: str  # 组件名称
     display_name: str  # 显示名称
     description: str  # 组件描述
@@ -36,7 +41,7 @@ class ComponentInfo:
 class ComponentManager:
     """
     组件管理器
-    
+
     负责管理系统中所有组件的生命周期，包括：
     - 组件注册和注销
     - 组件状态管理
@@ -46,22 +51,22 @@ class ComponentManager:
     """
 
     def __init__(self):
-        self._logger = logging.getLogger(__name__)
+        self._logger = get_logger(__name__)
         self._components: Dict[str, Component] = {}
         self._component_info: Dict[str, ComponentInfo] = {}
         self._initialization_order: List[str] = []
 
     def register_component(
-            self,
-            component: Component,
-            display_name: str,
-            description: str,
-            dependencies: Optional[Set[str]] = None,
-            config: Optional[Dict[str, Any]] = None
+        self,
+        component: Component,
+        display_name: str,
+        description: str,
+        dependencies: Optional[Set[str]] = None,
+        config: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         注册组件
-        
+
         :param component: 组件实例
         :param display_name: 显示名称
         :param description: 组件描述
@@ -74,9 +79,9 @@ class ComponentManager:
             raise ComponentError(name, f"Component {name} already registered")
 
         # 验证组件必需的属性
-        if not hasattr(component, 'component_type') or component.component_type is None:
+        if not hasattr(component, "component_type") or component.component_type is None:
             raise ComponentError(name, f"Component {name} must have a valid component_type")
-        if not hasattr(component, 'status') or component.status is None:
+        if not hasattr(component, "status") or component.status is None:
             raise ComponentError(name, f"Component {name} must have a valid status")
 
         # 验证依赖
@@ -94,7 +99,7 @@ class ComponentManager:
             status=ComponentStatus.UNINITIALIZED,  # 初始状态设置为未初始化
             dependencies=dependencies or set(),
             health_check=component.health_check,
-            config=config or {}
+            config=config or {},
         )
 
         # 更新初始化顺序
@@ -103,38 +108,34 @@ class ComponentManager:
         self._logger.debug(f"已注册组件：{name}")
 
     def unregister_component(self, name: str) -> None:
-        """
-        注销组件
-        
-        :param name: 组件名称
-        """
+        """取消注册组件"""
         if name not in self._components:
             raise ComponentError(name, f"Component {name} not found")
 
-        # 检查是否有其他组件依赖此组件
         for comp_name, info in self._component_info.items():
             if name in info.dependencies:
                 raise ComponentError(
-                    name,
-                    f"Cannot unregister {name}, component {comp_name} depends on it"
+                    name, f"Cannot unregister {name}, component {comp_name} depends on it"
                 )
 
-        # 如果组件正在运行，先停止
-        if self._component_info[name].status == ComponentStatus.RUNNING:
-            self.stop_component(name)
+        component_status = self._component_info[name].status
+        if component_status == ComponentStatus.RUNNING:
+            stop_result = self.stop_component(name)
+            if inspect.isawaitable(stop_result):
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    asyncio.run(stop_result)
+                else:
+                    loop.create_task(stop_result)
 
         del self._components[name]
         del self._component_info[name]
         self._update_initialization_order()
 
-        self._logger.debug(f"已取消注册：{name}")
-
+        self._logger.debug(f"取消注册组件: {name}")
     async def initialize_component(self, name: str) -> None:
-        """
-        初始化单个组件
-        
-        :param name: 组件名称
-        """
+        """初始化指定组件。"""
         if name not in self._components:
             raise ComponentError(name, f"Component {name} not found")
 
@@ -142,29 +143,26 @@ class ComponentManager:
         info = self._component_info[name]
 
         if info.status not in [ComponentStatus.UNINITIALIZED, ComponentStatus.STOPPED]:
-            self._logger.debug(f"组件 {name} 已经初始化过了（状态：{info.status}）")
+            self._logger.debug(f"组件 {name} 已初始化，当前状态 {info.status}")
             return
 
         try:
             info.status = ComponentStatus.INITIALIZING
-            if hasattr(component, 'initialize'):
-                import inspect
-                if inspect.iscoroutinefunction(component.initialize):
-                    await component.initialize()
-                else:
-                    component.initialize()
+            if hasattr(component, "initialize"):
+                result = component.initialize()
+                if inspect.isawaitable(result):
+                    await result
             info.status = ComponentStatus.INITIALIZED
-            self._logger.debug(f"初始化完成：{name}")
-        except Exception as e:
+            self._logger.debug(f"初始化完成: {name}")
+        except Exception as exc:
             info.status = ComponentStatus.ERROR
-            info.error_message = str(e)
-            self._logger.error(f"初始化 {name} 失败：{e}")
-            raise ComponentError(name, f"Failed to initialize {name}: {e}") from e
-
+            info.error_message = str(exc)
+            self._logger.error(f"初始化 {name} 失败: {exc}")
+            raise ComponentError(name, f"Failed to initialize {name}: {exc}") from exc
     async def initialize_all(self, component_type: Optional[ComponentType] = None) -> None:
         """
         初始化所有组件（或指定类型的组件）
-        
+
         :param component_type: 组件类型，None表示所有组件
         """
         for name in self._initialization_order:
@@ -174,58 +172,42 @@ class ComponentManager:
                     await self.initialize_component(name)
 
     async def start_component(self, name: str) -> None:
-        """
-        启动单个组件
-        
-        :param name: 组件名称
-        """
+        """启动指定组件。"""
         if name not in self._components:
             raise ComponentError(name, f"Component {name} not found")
 
         component = self._components[name]
         info = self._component_info[name]
 
-        # 检查组件状态
         if info.status == ComponentStatus.RUNNING:
-            self._logger.debug(f"组件 {name} 已经在运行了")
+            self._logger.debug(f"组件 {name} 已在运行")
             return
 
         if info.status == ComponentStatus.UNINITIALIZED:
             await self.initialize_component(name)
 
-        # 检查依赖
         for dep in info.dependencies:
             dep_info = self._component_info[dep]
             if dep_info.status != ComponentStatus.RUNNING:
-                raise ComponentError(
-                    name,
-                    f"Cannot start {name}, dependency {dep} is not running"
-                )
+                raise ComponentError(name, f"Cannot start {name}, dependency {dep} is not running")
 
         try:
             info.status = ComponentStatus.STARTING
-            if hasattr(component, 'start'):
-                import inspect
-                if inspect.iscoroutinefunction(component.start):
-                    await component.start()
-                else:
-                    component.start()
+            if hasattr(component, "start"):
+                result = component.start()
+                if inspect.isawaitable(result):
+                    await result
             info.status = ComponentStatus.RUNNING
             info.start_time = datetime.now()
             info.error_message = None
-            self._logger.debug(f"启动完成：{name}")
-        except Exception as e:
+            self._logger.debug(f"启动完成: {name}")
+        except Exception as exc:
             info.status = ComponentStatus.ERROR
-            info.error_message = str(e)
-            self._logger.error(f"启动 {name} 失败：{e}")
-            raise ComponentError(name, f"Failed to start {name}: {e}") from e
-
+            info.error_message = str(exc)
+            self._logger.error(f"启动 {name} 失败: {exc}")
+            raise ComponentError(name, f"Failed to start {name}: {exc}") from exc
     async def stop_component(self, name: str) -> None:
-        """
-        停止单个组件
-        
-        :param name: 组件名称
-        """
+        """停止指定组件。"""
         if name not in self._components:
             raise ComponentError(name, f"Component {name} not found")
 
@@ -233,34 +215,27 @@ class ComponentManager:
         info = self._component_info[name]
 
         if info.status != ComponentStatus.RUNNING:
-            self._logger.debug(f"组件 {name} 未在运行")
+            self._logger.debug(f"组件 {name} 未处于运行状态")
             return
 
-        # 检查是否有其他运行中的组件依赖此组件
         for comp_name, comp_info in self._component_info.items():
             if name in comp_info.dependencies and comp_info.status == ComponentStatus.RUNNING:
-                raise ComponentError(
-                    name,
-                    f"Cannot stop {name}, component {comp_name} depends on it"
-                )
+                raise ComponentError(name, f"Cannot stop {name}, component {comp_name} depends on it")
 
         try:
             info.status = ComponentStatus.STOPPING
-            if hasattr(component, 'stop'):
-                import inspect
-                if inspect.iscoroutinefunction(component.stop):
-                    await component.stop()
-                else:
-                    component.stop()
+            if hasattr(component, "stop"):
+                result = component.stop()
+                if inspect.isawaitable(result):
+                    await result
             info.status = ComponentStatus.STOPPED
             info.stop_time = datetime.now()
-            self._logger.debug(f"停止完成：{name}")
-        except Exception as e:
+            self._logger.debug(f"停止完成: {name}")
+        except Exception as exc:
             info.status = ComponentStatus.ERROR
-            info.error_message = str(e)
-            self._logger.error(f"停止 {name} 失败：{e}")
-            raise ComponentError(name, f"Failed to stop {name}: {e}") from e
-
+            info.error_message = str(exc)
+            self._logger.error(f"停止 {name} 失败: {exc}")
+            raise ComponentError(name, f"Failed to stop {name}: {exc}") from exc
     async def start_infrastructure(self) -> None:
         """启动所有基础设施组件"""
         for name in self._initialization_order:
@@ -300,7 +275,7 @@ class ComponentManager:
     def get_component(self, name: str) -> Optional[Component]:
         """
         获取指定名称的组件实例
-        
+
         :param name: 组件名称
         :return: 组件实例，如果不存在返回 None
         """
@@ -309,16 +284,16 @@ class ComponentManager:
     def has_component(self, name: str) -> bool:
         """
         检查组件是否存在
-        
+
         :param name: 组件名称
         :return: 组件是否存在
         """
         return name in self._components
-    
+
     def get_component_status(self, name: str) -> ComponentInfo:
         """
         获取组件状态信息
-        
+
         :param name: 组件名称
         :return: 组件信息
         """
@@ -327,19 +302,19 @@ class ComponentManager:
 
         info = self._component_info[name]
         component = self._components[name]
-        
+
         # 更新状态
         info.status = component.status
 
         # 先获取组件自己的错误信息
-        if hasattr(component, '_error_message') and component._error_message:
+        if hasattr(component, "_error_message") and component._error_message:
             info.error_message = component._error_message
 
         # 执行健康检查
         if info.status == ComponentStatus.RUNNING and info.health_check:
             try:
-                import inspect
                 import asyncio
+                import inspect
 
                 # 检查是否是协程函数
                 if inspect.iscoroutinefunction(info.health_check):
@@ -379,7 +354,7 @@ class ComponentManager:
     def get_all_components_status(self) -> Dict[str, ComponentInfo]:
         """
         获取所有组件的状态信息
-        
+
         :return: 组件名称到组件信息的映射
         """
         result = {}
@@ -390,12 +365,12 @@ class ComponentManager:
     def perform_health_check(self) -> Dict[str, bool]:
         """
         对所有运行中的组件执行健康检查
-        
+
         :return: 组件名称到健康状态的映射
         """
-        import inspect
         import asyncio
-        
+        import inspect
+
         results = {}
         for name, info in self._component_info.items():
             if info.status == ComponentStatus.RUNNING and info.health_check:
@@ -414,9 +389,11 @@ class ComponentManager:
                             asyncio.set_event_loop(loop)
                             try:
                                 health_result = loop.run_until_complete(info.health_check())
-                                results[name] = bool(health_result) if not isinstance(health_result,
-                                                                                      dict) else health_result.get(
-                                    'healthy', False)
+                                results[name] = (
+                                    bool(health_result)
+                                    if not isinstance(health_result, dict)
+                                    else health_result.get("healthy", False)
+                                )
                             finally:
                                 loop.close()
                     else:
@@ -472,39 +449,32 @@ class ComponentManager:
         """根据类型获取组件"""
         result = {}
         for name, component in self._components.items():
-            if hasattr(component, 'component_type') and component.component_type == component_type:
+            if hasattr(component, "component_type") and component.component_type == component_type:
                 result[name] = component
         return result
 
     def health_check_component(self, name: str) -> bool:
-        """执行单个组件的健康检查"""
+        """执行指定组件的健康检查"""
         if name not in self._component_info:
             raise ComponentError(name, f"Component {name} not found")
 
         info = self._component_info[name]
         if info.health_check:
             try:
-                import inspect
-                import asyncio
-
-                if inspect.iscoroutinefunction(info.health_check):
+                result = info.health_check()
+                if inspect.isawaitable(result):
                     try:
                         loop = asyncio.get_running_loop()
-                        return True  # 假定健康，避免阻塞
                     except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            return loop.run_until_complete(info.health_check())
-                        finally:
-                            loop.close()
-                else:
-                    return info.health_check()
+                        return bool(asyncio.run(result))
+                    else:
+                        loop.create_task(result)
+                        return True
+                return bool(result)
             except Exception as e:
                 self._logger.error(f"Health check failed for {name}: {e}")
                 return False
-        return info.status == ComponentStatus.RUNNING
-
+        return bool(info.status == ComponentStatus.RUNNING)
     def health_check_all(self) -> Dict[str, bool]:
         """对所有组件执行健康检查（别名）"""
         return self.perform_health_check()
@@ -517,32 +487,32 @@ class ComponentManager:
         self._component_info[name].metrics.update(metrics)
 
     def get_status_summary(self) -> Dict[str, Any]:
-        """获取所有组件的状态摘要"""
-        summary = {
-            'total': len(self._components),
-            'running': 0,
-            'stopped': 0,
-            'error': 0,
-            'components': {}
+        """获取组件总体状态摘要"""
+        summary: Dict[str, Any] = {
+            "total": len(self._components),
+            "running": 0,
+            "stopped": 0,
+            "error": 0,
         }
+        components_summary: Dict[str, Dict[str, Any]] = {}
 
         for name, info in self._component_info.items():
-            status_str = info.status.value if info.status else 'unknown'
-            summary['components'][name] = {
-                'status': status_str,
-                'type': info.component_type.value if info.component_type else 'unknown',
-                'error': info.error_message
+            status_str = info.status.value if info.status else "unknown"
+            components_summary[name] = {
+                "status": status_str,
+                "type": info.component_type.value if info.component_type else "unknown",
+                "error": info.error_message,
             }
 
             if info.status == ComponentStatus.RUNNING:
-                summary['running'] += 1
+                summary["running"] = int(summary["running"]) + 1
             elif info.status == ComponentStatus.STOPPED:
-                summary['stopped'] += 1
+                summary["stopped"] = int(summary["stopped"]) + 1
             elif info.status == ComponentStatus.ERROR:
-                summary['error'] += 1
+                summary["error"] = int(summary["error"]) + 1
 
+        summary["components"] = components_summary
         return summary
-
     async def initialize_all_components(self) -> None:
         """初始化所有组件（别名）"""
         await self.initialize_all()
@@ -554,4 +524,3 @@ class ComponentManager:
     async def stop_all_components(self) -> None:
         """停止所有组件（别名）"""
         await self.stop_all()
-

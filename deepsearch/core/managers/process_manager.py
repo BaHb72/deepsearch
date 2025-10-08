@@ -3,9 +3,9 @@
 
 提供统一的进程、线程和异步任务管理功能，确保系统能够优雅地关闭所有资源。
 """
+
 import asyncio
 import atexit
-import logging
 import os
 import signal
 import subprocess
@@ -17,13 +17,16 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Optional, Any, Callable, Union
+from typing import Any, Callable, Dict, Optional, Union
 
 import psutil
+
+from deepsearch.observability import get_logger
 
 
 class ResourceType(Enum):
     """资源类型"""
+
     PROCESS = "process"
     THREAD = "thread"
     EXECUTOR = "executor"
@@ -33,6 +36,7 @@ class ResourceType(Enum):
 
 class ResourceStatus(Enum):
     """资源状态"""
+
     CREATED = "created"
     RUNNING = "running"
     STOPPING = "stopping"
@@ -43,6 +47,7 @@ class ResourceStatus(Enum):
 @dataclass
 class ResourceInfo:
     """资源信息"""
+
     resource_id: str
     resource_type: ResourceType
     name: str
@@ -57,7 +62,7 @@ class ResourceInfo:
 class ProcessManager:
     """
     进程和线程管理器（单例模式）
-    
+
     负责：
     1. 注册和跟踪所有创建的进程、线程和异步任务
     2. 提供统一的清理接口
@@ -80,14 +85,14 @@ class ProcessManager:
             return
 
         self._initialized = True
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(__name__)
 
         # 资源注册表
         self._resources: Dict[str, ResourceInfo] = {}
         self._resource_lock = threading.RLock()
 
         # 弱引用存储，避免循环引用
-        self._threads: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+        self._threads: weakref.WeakValueDictionary[str, threading.Thread] = weakref.WeakValueDictionary()
         self._processes: Dict[str, subprocess.Popen] = {}
         self._executors: weakref.WeakSet = weakref.WeakSet()
         self._event_loops: weakref.WeakSet = weakref.WeakSet()
@@ -131,6 +136,7 @@ class ProcessManager:
 
             try:
                 import win32api
+
                 win32api.SetConsoleCtrlHandler(lambda _: (self.shutdown(force=True) or True), True)
             except ImportError:
                 pass
@@ -144,7 +150,7 @@ class ProcessManager:
     def register_engine(self, engine) -> None:
         """
         注册引擎实例
-        
+
         Args:
             engine: MainEngine 实例
         """
@@ -157,7 +163,7 @@ class ProcessManager:
     def unregister_engine(self, engine) -> None:
         """
         注销引擎实例
-        
+
         Args:
             engine: MainEngine 实例
         """
@@ -168,17 +174,20 @@ class ProcessManager:
                 self._primary_engine = next(iter(self._engines), None)
             self.logger.debug(f"注销引擎: {id(engine)}")
 
-    def register_thread(self, thread: threading.Thread,
-                        name: Optional[str] = None,
-                        cleanup_callback: Optional[Callable] = None) -> str:
+    def register_thread(
+        self,
+        thread: threading.Thread,
+        name: Optional[str] = None,
+        cleanup_callback: Optional[Callable] = None,
+    ) -> str:
         """
         注册线程
-        
+
         Args:
             thread: 线程对象
             name: 线程名称
             cleanup_callback: 清理回调函数
-            
+
         Returns:
             资源ID
         """
@@ -195,11 +204,8 @@ class ProcessManager:
                 name=name or thread.name,
                 status=ResourceStatus.CREATED if not thread.is_alive() else ResourceStatus.RUNNING,
                 created_at=datetime.now(),
-                metadata={
-                    "daemon": thread.daemon,
-                    "ident": thread.ident
-                },
-                cleanup_callback=cleanup_callback
+                metadata={"daemon": thread.daemon, "ident": thread.ident},
+                cleanup_callback=cleanup_callback,
             )
 
             self._resources[resource_id] = info
@@ -207,17 +213,20 @@ class ProcessManager:
 
             return resource_id
 
-    def register_process(self, process: subprocess.Popen,
-                         name: Optional[str] = None,
-                         cleanup_callback: Optional[Callable] = None) -> str:
+    def register_process(
+        self,
+        process: subprocess.Popen,
+        name: Optional[str] = None,
+        cleanup_callback: Optional[Callable] = None,
+    ) -> str:
         """
         注册进程
-        
+
         Args:
             process: 进程对象
             name: 进程名称
             cleanup_callback: 清理回调函数
-            
+
         Returns:
             资源ID
         """
@@ -232,14 +241,18 @@ class ProcessManager:
                 resource_id=resource_id,
                 resource_type=ResourceType.PROCESS,
                 name=name or f"Process-{process.pid}",
-                status=ResourceStatus.RUNNING if (hasattr(process, 'poll') and process.poll() is None) or (
-                            hasattr(process, 'returncode') and process.returncode is None) else ResourceStatus.STOPPED,
+                status=(
+                    ResourceStatus.RUNNING
+                    if (hasattr(process, "poll") and process.poll() is None)
+                    or (hasattr(process, "returncode") and process.returncode is None)
+                    else ResourceStatus.STOPPED
+                ),
                 created_at=datetime.now(),
                 metadata={
                     "pid": process.pid,
-                    "args": process.args if hasattr(process, 'args') else None
+                    "args": process.args if hasattr(process, "args") else None,
                 },
-                cleanup_callback=cleanup_callback
+                cleanup_callback=cleanup_callback,
             )
 
             self._resources[resource_id] = info
@@ -247,8 +260,7 @@ class ProcessManager:
 
             return resource_id
 
-    def register_executor(self, executor: ThreadPoolExecutor,
-                          name: Optional[str] = None) -> str:
+    def register_executor(self, executor: ThreadPoolExecutor, name: Optional[str] = None) -> str:
         """注册线程池执行器"""
         with self._resource_lock:
             resource_id = f"executor_{id(executor)}"
@@ -264,8 +276,10 @@ class ProcessManager:
                 status=ResourceStatus.RUNNING,
                 created_at=datetime.now(),
                 metadata={
-                    "max_workers": executor._max_workers if hasattr(executor, '_max_workers') else None
-                }
+                    "max_workers": (
+                        executor._max_workers if hasattr(executor, "_max_workers") else None
+                    )
+                },
             )
 
             self._resources[resource_id] = info
@@ -273,8 +287,9 @@ class ProcessManager:
 
             return resource_id
 
-    def register_event_loop(self, loop: asyncio.AbstractEventLoop,
-                            name: Optional[str] = None) -> str:
+    def register_event_loop(
+        self, loop: asyncio.AbstractEventLoop, name: Optional[str] = None
+    ) -> str:
         """注册事件循环"""
         with self._resource_lock:
             resource_id = f"eventloop_{id(loop)}"
@@ -288,7 +303,7 @@ class ProcessManager:
                 resource_type=ResourceType.EVENT_LOOP,
                 name=name or "EventLoop",
                 status=ResourceStatus.RUNNING if loop.is_running() else ResourceStatus.CREATED,
-                created_at=datetime.now()
+                created_at=datetime.now(),
             )
 
             self._resources[resource_id] = info
@@ -296,58 +311,47 @@ class ProcessManager:
 
             return resource_id
 
-    def stop_thread(self, thread: Union[threading.Thread, str],
-                    timeout: float = 5.0) -> bool:
-        """
-        停止线程
-        
-        Args:
-            thread: 线程对象或资源ID
-            timeout: 超时时间
-            
-        Returns:
-            是否成功停止
-        """
-        if isinstance(thread, str):
-            resource_id = thread
-            thread = self._threads.get(resource_id)
-            if not thread:
-                return True
-        else:
+    def stop_thread(self, thread: Union[threading.Thread, str], timeout: float = 5.0) -> bool:
+        """停止线程"""
+        if isinstance(thread, threading.Thread):
             resource_id = f"thread_{id(thread)}"
+            target_thread: Optional[threading.Thread] = thread
+        else:
+            resource_id = thread
+            target_thread = self._threads.get(resource_id)
 
-        if not thread or not thread.is_alive():
+        if target_thread is None:
             return True
 
-        self.logger.debug(f"停止线程: {thread.name}")
+        if not target_thread.is_alive():
+            return True
 
-        # 更新状态
+        self.logger.debug(f"停止线程: {target_thread.name}")
+
         if resource_id in self._resources:
             self._resources[resource_id].status = ResourceStatus.STOPPING
 
-        # 如果是daemon线程，不需要等待
-        if thread.daemon:
-            self.logger.debug(f"线程 {thread.name} 是daemon线程，将自动退出")
+        if target_thread.daemon:
+            self.logger.debug(f"线程 {target_thread.name} 为 daemon 线程，将自行退出")
             return True
 
-        # 等待线程结束
-        thread.join(timeout=timeout)
+        target_thread.join(timeout=timeout)
+        success = not target_thread.is_alive()
 
-        success = not thread.is_alive()
-
-        # 更新状态
         if resource_id in self._resources:
-            self._resources[resource_id].status = ResourceStatus.STOPPED if success else ResourceStatus.FAILED
+            self._resources[resource_id].status = (
+                ResourceStatus.STOPPED if success else ResourceStatus.FAILED
+            )
             if success:
                 self._resources[resource_id].stopped_at = datetime.now()
 
         if not success:
-            self.logger.warning(f"线程 {thread.name} 在 {timeout}秒内未能停止")
+            self.logger.warning(f"线程 {target_thread.name} 在 {timeout} 秒内未停止")
 
         return success
-
-    def stop_process(self, process: Union[subprocess.Popen, str],
-                     timeout: float = 5.0, force: bool = False) -> bool:
+    def stop_process(
+        self, process: Union[subprocess.Popen, str], timeout: float = 5.0, force: bool = False
+    ) -> bool:
         """
         停止进程
 
@@ -355,7 +359,7 @@ class ProcessManager:
             process: 进程对象或资源ID
             timeout: 超时时间
             force: 是否强制停止
-            
+
         Returns:
             是否成功停止
         """
@@ -370,8 +374,11 @@ class ProcessManager:
             process_obj = process
 
         process = process_obj
-        if not process or (hasattr(process, 'poll') and process.poll() is not None) or (
-                hasattr(process, 'returncode') and process.returncode is not None):
+        if (
+            not process
+            or (hasattr(process, "poll") and process.poll() is not None)
+            or (hasattr(process, "returncode") and process.returncode is not None)
+        ):
             self._processes.pop(resource_id, None)
             return True
 
@@ -397,7 +404,7 @@ class ProcessManager:
                     result = subprocess.run(
                         ["taskkill", "/F", "/T", "/PID", str(process.pid)],
                         capture_output=True,
-                        text=True
+                        text=True,
                     )
                     success = result.returncode == 0
             else:
@@ -421,7 +428,9 @@ class ProcessManager:
 
         # 更新状态
         if resource_id in self._resources:
-            self._resources[resource_id].status = ResourceStatus.STOPPED if success else ResourceStatus.FAILED
+            self._resources[resource_id].status = (
+                ResourceStatus.STOPPED if success else ResourceStatus.FAILED
+            )
             if success:
                 self._resources[resource_id].stopped_at = datetime.now()
 
@@ -430,8 +439,9 @@ class ProcessManager:
 
         return success
 
-    def stop_executor(self, executor: ThreadPoolExecutor,
-                      wait: bool = True, timeout: float = 5.0) -> bool:
+    def stop_executor(
+        self, executor: ThreadPoolExecutor, wait: bool = True, timeout: float = 5.0
+    ) -> bool:
         """停止线程池执行器"""
         try:
             if sys.version_info >= (3, 9):
@@ -479,8 +489,8 @@ class ProcessManager:
             for child in children:
                 try:
                     # 检查是否是DeepSearch相关进程
-                    cmdline = ' '.join(child.cmdline()).lower()
-                    if 'deepsearch' in cmdline or self._is_managed_process(child):
+                    cmdline = " ".join(child.cmdline()).lower()
+                    if "deepsearch" in cmdline or self._is_managed_process(child):
                         self.logger.info(f"清理孤儿进程: PID={child.pid} ({child.name()})")
                         child.terminate()
                         child.wait(timeout=2)
@@ -501,17 +511,16 @@ class ProcessManager:
             # 检查进程ID是否在注册表中
             for resource_id, info in self._resources.items():
                 if info.resource_type == ResourceType.PROCESS:
-                    if info.metadata.get('pid') == process.pid:
+                    if info.metadata.get("pid") == process.pid:
                         return True
 
             # 检查是否是相关进程
             name = process.name().lower()
-            return any(keyword in name for keyword in ['python', 'node', 'npm', 'uvicorn'])
+            return any(keyword in name for keyword in ["python", "node", "npm", "uvicorn"])
 
         except Exception as e:
             self.logger.debug(f"Failed to check if process is related: {e}")
             return False
-
 
     def _prepare_shutdown(self) -> Optional[float]:
         """初始化关停流程，返回起始时间"""
@@ -536,12 +545,12 @@ class ProcessManager:
         tracked_engines = []
         for engine in list(self._engines):
             try:
-                if hasattr(engine, 'is_running') and engine.is_running():
+                if hasattr(engine, "is_running") and engine.is_running():
                     self.logger.debug(f"异步停止引擎: {id(engine)}")
-                    if hasattr(engine, 'stop_async'):
+                    if hasattr(engine, "stop_async"):
                         stop_tasks.append(engine.stop_async())
                         tracked_engines.append(engine)
-                    elif hasattr(engine, 'stop'):
+                    elif hasattr(engine, "stop"):
                         stop_tasks.append(asyncio.to_thread(engine.stop))
                         tracked_engines.append(engine)
             except Exception as e:
@@ -578,7 +587,7 @@ class ProcessManager:
 
         for engine in list(self._engines):
             try:
-                if hasattr(engine, 'is_running') and engine.is_running():
+                if hasattr(engine, "is_running") and engine.is_running():
                     self.logger.debug(f"停止引擎: {id(engine)}")
                     engine.stop()
             except Exception as e:
@@ -664,30 +673,29 @@ class ProcessManager:
             self._cleanup_ports()
 
         self.logger.info(f"资源关闭完成，用时: {time.time() - start_time:.2f}秒")
+
     def _cleanup_ports(self):
         """清理占用的端口"""
         try:
             from deepsearch.config import get_config
+
             config = get_config()
 
-            ports = [
-                config.webui.backend_port,
-                config.webui.frontend_port
-            ]
+            ports = [config.webui.backend_port, config.webui.frontend_port]
 
             # 添加 ZMQ 端口（如果配置存在）
-            if 'zmq' in config.message_bus.buses:
-                zmq_config = config.message_bus.buses['zmq'].config
+            if "zmq" in config.message_bus.buses:
+                zmq_config = config.message_bus.buses["zmq"].config
                 # 处理不同类型的配置对象
-                if hasattr(zmq_config, 'pub_port'):
+                if hasattr(zmq_config, "pub_port"):
                     ports.append(zmq_config.pub_port)
                     ports.append(zmq_config.sub_port)
                 elif isinstance(zmq_config, dict):
-                    ports.append(zmq_config.get('pub_port', 5556))
-                    ports.append(zmq_config.get('sub_port', 5557))
+                    ports.append(zmq_config.get("pub_port", 5556))
+                    ports.append(zmq_config.get("sub_port", 5557))
 
             for conn in psutil.net_connections():
-                if hasattr(conn, 'laddr') and conn.laddr.port in ports:
+                if hasattr(conn, "laddr") and conn.laddr.port in ports:
                     if conn.pid and conn.pid != os.getpid():
                         try:
                             proc = psutil.Process(conn.pid)
@@ -709,31 +717,31 @@ class ProcessManager:
                 "total_resources": len(self._resources),
                 "resources_by_type": {},
                 "resources_by_status": {},
-                "active_resources": []
+                "active_resources": [],
             }
 
             # 按类型统计
             for resource_type in ResourceType:
-                count = sum(1 for r in self._resources.values()
-                            if r.resource_type == resource_type)
+                count = sum(1 for r in self._resources.values() if r.resource_type == resource_type)
                 status["resources_by_type"][resource_type.value] = count
 
             # 按状态统计
             for resource_status in ResourceStatus:
-                count = sum(1 for r in self._resources.values()
-                            if r.status == resource_status)
+                count = sum(1 for r in self._resources.values() if r.status == resource_status)
                 status["resources_by_status"][resource_status.value] = count
 
             # 活跃资源列表
             for info in self._resources.values():
                 if info.status in (ResourceStatus.CREATED, ResourceStatus.RUNNING):
-                    status["active_resources"].append({
-                        "id": info.resource_id,
-                        "type": info.resource_type.value,
-                        "name": info.name,
-                        "status": info.status.value,
-                        "created_at": info.created_at.isoformat()
-                    })
+                    status["active_resources"].append(
+                        {
+                            "id": info.resource_id,
+                            "type": info.resource_type.value,
+                            "name": info.name,
+                            "status": info.status.value,
+                            "created_at": info.created_at.isoformat(),
+                        }
+                    )
 
             return status
 

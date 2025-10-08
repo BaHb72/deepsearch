@@ -4,11 +4,11 @@
 """
 
 import ast
-import os
-from pathlib import Path
-from typing import Dict, Set, List, Tuple
-from collections import defaultdict
 import json
+from collections import defaultdict
+from pathlib import Path
+from typing import Dict, List, Set, Tuple
+
 
 class DependencyAnalyzer:
     def __init__(self, root_path: str = "deepsearch"):
@@ -46,7 +46,7 @@ class DependencyAnalyzer:
             module_name = self._get_module_name(py_file)
 
             try:
-                with open(py_file, 'r', encoding='utf-8') as f:
+                with open(py_file, "r", encoding="utf-8") as f:
                     tree = ast.parse(f.read())
 
                 for node in ast.walk(tree):
@@ -61,7 +61,7 @@ class DependencyAnalyzer:
                         if node.module and node.module.startswith("deepsearch"):
                             self.imports[module_name].add(node.module)
                             self._add_module_dep(module_name, node.module)
-            except:
+            except Exception:
                 pass  # 忽略解析错误的文件
 
     def _get_module_name(self, file_path: Path) -> str:
@@ -72,8 +72,8 @@ class DependencyAnalyzer:
 
     def _add_module_dep(self, from_module: str, to_module: str):
         """添加模块级别的依赖"""
-        from_top = from_module.split('.')[1] if len(from_module.split('.')) > 1 else from_module
-        to_top = to_module.split('.')[1] if len(to_module.split('.')) > 1 else to_module
+        from_top = from_module.split(".")[1] if len(from_module.split(".")) > 1 else from_module
+        to_top = to_module.split(".")[1] if len(to_module.split(".")) > 1 else to_module
 
         if from_top != to_top:
             self.module_deps[from_top].add(to_top)
@@ -122,11 +122,11 @@ class DependencyAnalyzer:
 
         # 定义架构层次规则
         layer_rules = {
-            'domain': [],  # 领域层不应该依赖其他层
-            'application': ['domain'],  # 应用层只能依赖领域层
-            'infrastructure': ['domain', 'application'],  # 基础设施层可以依赖领域和应用层
-            'interfaces': ['domain', 'application', 'infrastructure'],  # 接口层可以依赖所有层
-            'presentation': ['domain', 'application', 'infrastructure', 'interfaces'],
+            "domain": [],  # 领域层不应该依赖其他层
+            "application": ["domain"],  # 应用层只能依赖领域层
+            "infrastructure": ["domain", "application"],  # 基础设施层可以依赖领域和应用层
+            "interfaces": ["domain", "application", "infrastructure"],  # 接口层可以依赖所有层
+            "presentation": ["domain", "application", "infrastructure", "interfaces"],
         }
 
         for module, deps in self.module_deps.items():
@@ -134,27 +134,31 @@ class DependencyAnalyzer:
                 allowed_deps = layer_rules[module]
                 for dep in deps:
                     if dep in layer_rules and dep not in allowed_deps:
-                        self.violations.append({
-                            'from': module,
-                            'to': dep,
-                            'type': 'layer_violation',
-                            'message': f'{module}层不应该依赖{dep}层'
-                        })
+                        self.violations.append(
+                            {
+                                "from": module,
+                                "to": dep,
+                                "type": "layer_violation",
+                                "message": f"{module}层不应该依赖{dep}层",
+                            }
+                        )
 
     def _generate_report(self):
         """生成分析报告"""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("依赖关系分析报告")
-        print("="*60)
+        print("=" * 60)
 
         # 1. 基本统计
-        print(f"\n[+] 基本统计:")
+        print("\n[+] 基本统计:")
         print(f"  - 分析的模块数: {len(self.module_deps)}")
         print(f"  - 总依赖关系数: {sum(len(deps) for deps in self.module_deps.values())}")
-        print(f"  - 平均依赖数: {sum(len(deps) for deps in self.module_deps.values()) / max(len(self.module_deps), 1):.1f}")
+        print(
+            f"  - 平均依赖数: {sum(len(deps) for deps in self.module_deps.values()) / max(len(self.module_deps), 1):.1f}"
+        )
 
         # 2. 循环依赖
-        print(f"\n[+] 循环依赖检测:")
+        print("\n[+] 循环依赖检测:")
         if self.circular_deps:
             print(f"  [X] 发现 {len(self.circular_deps)} 个循环依赖:")
             for cycle in self.circular_deps[:5]:  # 只显示前5个
@@ -163,10 +167,10 @@ class DependencyAnalyzer:
             print("  [OK] 未发现循环依赖")
 
         # 3. 高耦合模块
-        print(f"\n[+] 模块耦合度分析:")
+        print("\n[+] 模块耦合度分析:")
         high_coupling = [(m, s) for m, s in self.coupling_scores.items() if s > 30]
         if high_coupling:
-            print(f"  [!] 高耦合模块 (>30%):")
+            print("  [!] 高耦合模块 (>30%):")
             for module, score in sorted(high_coupling, key=lambda x: x[1], reverse=True)[:5]:
                 deps_count = len(self.module_deps[module])
                 print(f"    - {module}: {score:.1f}% (依赖{deps_count}个模块)")
@@ -174,7 +178,7 @@ class DependencyAnalyzer:
             print("  [OK] 所有模块耦合度正常")
 
         # 4. 架构违规
-        print(f"\n[+] 架构层次检查:")
+        print("\n[+] 架构层次检查:")
         if self.violations:
             print(f"  [X] 发现 {len(self.violations)} 个架构违规:")
             for v in self.violations[:5]:
@@ -183,9 +187,19 @@ class DependencyAnalyzer:
             print("  [OK] 未发现架构层次违规")
 
         # 5. 模块依赖详情
-        print(f"\n[+] 主要模块依赖关系:")
-        main_modules = ['domain', 'application', 'infrastructure', 'interfaces', 'presentation',
-                       'core', 'webui', 'event', 'messaging', 'observability']
+        print("\n[+] 主要模块依赖关系:")
+        main_modules = [
+            "domain",
+            "application",
+            "infrastructure",
+            "interfaces",
+            "presentation",
+            "core",
+            "webui",
+            "event",
+            "messaging",
+            "observability",
+        ]
 
         for module in main_modules:
             if module in self.module_deps:
@@ -194,7 +208,7 @@ class DependencyAnalyzer:
                     print(f"  {module} -> {', '.join(sorted(deps))}")
 
         # 6. 建议
-        print(f"\n[+] 优化建议:")
+        print("\n[+] 优化建议:")
         if self.circular_deps:
             print("  1. 优先解决循环依赖问题，这会严重影响代码的可维护性")
 
@@ -213,21 +227,21 @@ class DependencyAnalyzer:
     def _save_detailed_report(self):
         """保存详细的JSON报告"""
         report = {
-            'summary': {
-                'total_modules': len(self.module_deps),
-                'total_dependencies': sum(len(deps) for deps in self.module_deps.values()),
-                'circular_dependencies_count': len(self.circular_deps),
-                'high_coupling_modules': len([s for s in self.coupling_scores.values() if s > 30]),
-                'architecture_violations': len(self.violations)
+            "summary": {
+                "total_modules": len(self.module_deps),
+                "total_dependencies": sum(len(deps) for deps in self.module_deps.values()),
+                "circular_dependencies_count": len(self.circular_deps),
+                "high_coupling_modules": len([s for s in self.coupling_scores.values() if s > 30]),
+                "architecture_violations": len(self.violations),
             },
-            'module_dependencies': {k: list(v) for k, v in self.module_deps.items()},
-            'circular_dependencies': [list(cycle) for cycle in self.circular_deps],
-            'coupling_scores': self.coupling_scores,
-            'violations': self.violations
+            "module_dependencies": {k: list(v) for k, v in self.module_deps.items()},
+            "circular_dependencies": [list(cycle) for cycle in self.circular_deps],
+            "coupling_scores": self.coupling_scores,
+            "violations": self.violations,
         }
 
-        output_file = Path('dependency_analysis_report.json')
-        with open(output_file, 'w', encoding='utf-8') as f:
+        output_file = Path("dependency_analysis_report.json")
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2, ensure_ascii=False)
 
         print(f"\n[*] 详细报告已保存到: {output_file}")

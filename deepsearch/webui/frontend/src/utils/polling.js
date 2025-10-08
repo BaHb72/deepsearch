@@ -8,6 +8,10 @@
  * - 批量管理轮询任务
  */
 
+import logger from '@/utils/logger'
+
+const pollingLogger = logger.child('utils:polling')
+
 class PollingManager {
   constructor() {
     this.pollers = new Map()
@@ -18,31 +22,31 @@ class PollingManager {
     // 监听页面可见性变化
     document.addEventListener('visibilitychange', () => {
       this.visibility = !document.hidden
-      console.log('[PollingManager] Visibility changed:', this.visibility)
+      pollingLogger.info('[PollingManager] Visibility changed:', this.visibility)
       this.updateAllPollingRates()
     })
     
     // 监听窗口焦点变化
     window.addEventListener('focus', () => {
       this.focused = true
-      console.log('[PollingManager] Window focused')
+      pollingLogger.info('[PollingManager] Window focused')
       this.updateAllPollingRates()
     })
     
     window.addEventListener('blur', () => {
       this.focused = false
-      console.log('[PollingManager] Window blurred')
+      pollingLogger.info('[PollingManager] Window blurred')
       this.updateAllPollingRates()
     })
     
     // 监听网络状态
     window.addEventListener('online', () => {
-      console.log('[PollingManager] Network online')
+      pollingLogger.info('[PollingManager] Network online')
       this.resumeAll()
     })
     
     window.addEventListener('offline', () => {
-      console.log('[PollingManager] Network offline')
+      pollingLogger.info('[PollingManager] Network offline')
       this.pauseAll()
     })
   }
@@ -145,7 +149,7 @@ class PollingManager {
       return data
       
     } catch (error) {
-      console.error(`[PollingManager] Error in ${key}:`, error)
+      pollingLogger.error(`[PollingManager] Error in ${key}:`, error)
       poller.errorCount++
       poller.status = 'error'
       
@@ -156,11 +160,11 @@ class PollingManager {
           poller.currentInterval * Math.pow(poller.backoffMultiplier, poller.errorCount),
           poller.maxInterval
         )
-        console.log(`[PollingManager] Retrying ${key} in ${retryInterval}ms`)
+        pollingLogger.info(`[PollingManager] Retrying ${key} in ${retryInterval}ms`)
         this.setInterval(key, retryInterval)
       } else if (poller.errorCount > poller.maxRetries) {
         // 超过最大重试次数，暂停轮询
-        console.error(`[PollingManager] Max retries exceeded for ${key}, pausing`)
+        pollingLogger.error(`[PollingManager] Max retries exceeded for ${key}, pausing`)
         this.pause(key)
       }
       
@@ -190,14 +194,14 @@ class PollingManager {
           poller.maxInterval
         )
         if (newInterval !== poller.currentInterval) {
-          console.log(`[PollingManager] ${key}: Data unchanged ${poller.unchangedCount} times, increasing interval to ${newInterval}ms`)
+          pollingLogger.info(`[PollingManager] ${key}: Data unchanged ${poller.unchangedCount} times, increasing interval to ${newInterval}ms`)
           this.setInterval(key, newInterval)
         }
       }
     } else {
       // 数据有变化
       if (poller.unchangedCount > 0) {
-        console.log(`[PollingManager] ${key}: Data changed after ${poller.unchangedCount} unchanged polls`)
+        pollingLogger.info(`[PollingManager] ${key}: Data changed after ${poller.unchangedCount} unchanged polls`)
       }
       
       poller.unchangedCount = 0
@@ -206,7 +210,7 @@ class PollingManager {
       
       // 恢复到正常间隔
       if (poller.currentInterval > poller.interval) {
-        console.log(`[PollingManager] ${key}: Data changed, restoring interval to ${poller.interval}ms`)
+        pollingLogger.info(`[PollingManager] ${key}: Data changed, restoring interval to ${poller.interval}ms`)
         this.setInterval(key, poller.interval)
       }
     }
@@ -254,7 +258,7 @@ class PollingManager {
     const poller = this.pollers.get(key)
     if (!poller) return
     
-    console.log(`[PollingManager] Starting ${key}`)
+    pollingLogger.info(`[PollingManager] Starting ${key}`)
     poller.status = 'idle'
     this.scheduleNext(key)
   }
@@ -266,7 +270,7 @@ class PollingManager {
     const poller = this.pollers.get(key)
     if (!poller) return
     
-    console.log(`[PollingManager] Stopping ${key}`)
+    pollingLogger.info(`[PollingManager] Stopping ${key}`)
     
     if (poller.timer) {
       clearTimeout(poller.timer)
@@ -283,7 +287,7 @@ class PollingManager {
     const poller = this.pollers.get(key)
     if (!poller) return
     
-    console.log(`[PollingManager] Pausing ${key}`)
+    pollingLogger.info(`[PollingManager] Pausing ${key}`)
     
     if (poller.timer) {
       clearTimeout(poller.timer)
@@ -300,7 +304,7 @@ class PollingManager {
     const poller = this.pollers.get(key)
     if (!poller || poller.status !== 'paused') return
     
-    console.log(`[PollingManager] Resuming ${key}`)
+    pollingLogger.info(`[PollingManager] Resuming ${key}`)
     poller.status = 'idle'
     
     // 立即执行一次
@@ -313,7 +317,7 @@ class PollingManager {
    * 移除轮询
    */
   unregister(key) {
-    console.log(`[PollingManager] Unregistering ${key}`)
+    pollingLogger.info(`[PollingManager] Unregistering ${key}`)
     this.stop(key)
     this.pollers.delete(key)
   }
@@ -328,21 +332,21 @@ class PollingManager {
       if (!this.visibility) {
         // 页面不可见，暂停或降低频率
         if (poller.adaptive) {
-          console.log(`[PollingManager] Page hidden, pausing ${key}`)
+          pollingLogger.info(`[PollingManager] Page hidden, pausing ${key}`)
           this.pause(key)
         }
       } else if (!this.focused) {
         // 失去焦点，降低频率
         const slowInterval = Math.min(poller.currentInterval * 2, poller.maxInterval)
-        console.log(`[PollingManager] Window blurred, slowing ${key} to ${slowInterval}ms`)
+        pollingLogger.info(`[PollingManager] Window blurred, slowing ${key} to ${slowInterval}ms`)
         this.setInterval(key, slowInterval)
       } else {
         // 恢复正常
         if (poller.status === 'paused' && poller.adaptive) {
-          console.log(`[PollingManager] Page visible, resuming ${key}`)
+          pollingLogger.info(`[PollingManager] Page visible, resuming ${key}`)
           this.resume(key)
         } else {
-          console.log(`[PollingManager] Window focused, restoring ${key} to ${poller.interval}ms`)
+          pollingLogger.info(`[PollingManager] Window focused, restoring ${key} to ${poller.interval}ms`)
           this.setInterval(key, poller.interval)
         }
       }
@@ -353,7 +357,7 @@ class PollingManager {
    * 暂停所有轮询
    */
   pauseAll() {
-    console.log('[PollingManager] Pausing all pollers')
+    pollingLogger.info('[PollingManager] Pausing all pollers')
     this.globalPaused = true
     for (const key of this.pollers.keys()) {
       this.pause(key)
@@ -364,7 +368,7 @@ class PollingManager {
    * 恢复所有轮询
    */
   resumeAll() {
-    console.log('[PollingManager] Resuming all pollers')
+    pollingLogger.info('[PollingManager] Resuming all pollers')
     this.globalPaused = false
     for (const key of this.pollers.keys()) {
       this.resume(key)
@@ -405,7 +409,7 @@ class PollingManager {
    * 清理所有轮询
    */
   destroy() {
-    console.log('[PollingManager] Destroying all pollers')
+    pollingLogger.info('[PollingManager] Destroying all pollers')
     for (const key of this.pollers.keys()) {
       this.unregister(key)
     }

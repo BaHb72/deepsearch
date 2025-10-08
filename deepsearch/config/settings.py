@@ -4,6 +4,7 @@ DeepSearch 应用程序的主配置类。
 本模块提供了中央配置类 Settings，它聚合了所有
 配置模型并处理配置加载。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,30 +14,35 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from deepsearch.constants import LOG_DIR
+
 from .loader import load_yaml_config
 from .models import (
     AmazingDataConfig,
     AppConfig,
+    CloudflareWorkersConfig,
     DatabaseConfig,
     DebugConfig,
+    HealthCheckConfig,
     LogConfig,
     MessageBusConfig,
     MonitoringConfig,
+    NotificationsConfig,
     PerformanceConfig,
+    RuntimeConfig,
     QmtConfig,
     SecurityConfig,
     WebUIConfig,
     ZeroMQConfig,
-    HealthCheckConfig,
-    CloudflareWorkersConfig,
 )
 from .models.datafeed import CloudflareConfig, DataFeedConfig
 
 
 class Settings(BaseSettings):
     """应用程序配置。"""
+
     app: AppConfig = Field(default_factory=AppConfig)
-    log: LogConfig = Field(default_factory=LogConfig)
+    runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
+    log: LogConfig = Field(default_factory=lambda: LogConfig())
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     message_bus: MessageBusConfig = Field(default_factory=MessageBusConfig)
     webui: WebUIConfig = Field(default_factory=WebUIConfig)
@@ -50,6 +56,7 @@ class Settings(BaseSettings):
     amazingdata: Optional[AmazingDataConfig] = None  # AmazingData配置
     cloudflare: Optional[CloudflareConfig] = None
     cloudflare_workers: Optional[CloudflareWorkersConfig] = None  # Workers 代理配置
+    notifications: Optional[NotificationsConfig] = None  # 通知推送配置
     data_providers: Optional[DataFeedConfig] = None
     data_sources: Optional[Dict[str, Any]] = None  # 统一的数据源配置
 
@@ -80,12 +87,12 @@ class Settings(BaseSettings):
 
     @classmethod
     def settings_customise_sources(
-            cls,
-            settings_cls,
-            init_settings,
-            env_settings,
-            dotenv_settings,
-            file_secret_settings,
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
     ):
         """自定义配置来源以包含 YAML 配置。"""
 

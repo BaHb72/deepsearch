@@ -2,16 +2,20 @@
 数据提供者注册表
 统一管理所有数据提供者的注册、配置和实例化
 """
-from typing import Dict, Type, Optional, Any, List
-from enum import Enum
-from dataclasses import dataclass
-from loguru import logger
+
 import importlib
 import inspect
+import os
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from loguru import logger
 
 
 class ProviderType(Enum):
     """数据提供者类型"""
+
     AKSHARE = "akshare"
     AMAZINGDATA = "amazingdata"
     CLOUDFLARE = "cloudflare"
@@ -21,9 +25,18 @@ class ProviderType(Enum):
     CUSTOM = "custom"
 
 
+ALLOWED_PROVIDER_TYPES = {
+    ProviderType.AMAZINGDATA,
+    ProviderType.CLOUDFLARE,
+    ProviderType.AKSHARE,
+    ProviderType.CUSTOM,
+}
+
+
 @dataclass
 class ProviderInfo:
     """数据提供者信息"""
+
     name: str
     type: ProviderType
     module_path: str
@@ -59,68 +72,50 @@ class DataProviderRegistry:
         """初始化默认的数据提供者"""
         default_providers = [
             ProviderInfo(
-                name="akshare_direct",
-                type=ProviderType.AKSHARE,
-                module_path="deepsearch.infrastructure.providers.implementations.akshare.akshare_direct",
-                class_name="AKShareDirectProvider",
-                description="AKShare直连数据提供者",
-                priority=50,
-                enabled=True
-            ),
-            ProviderInfo(
-                name="akshare_proxy",
-                type=ProviderType.AKSHARE,
-                module_path="deepsearch.infrastructure.providers.implementations.akshare.akshare",
-                class_name="AkShareProxyProvider",
-                description="AKShare代理数据提供者",
-                priority=60,
-                enabled=True
-            ),
-            ProviderInfo(
                 name="amazingdata",
                 type=ProviderType.AMAZINGDATA,
                 module_path="deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata",
                 class_name="AmazingDataProvider",
                 description="银河证券数据提供者",
                 priority=90,
-                enabled=True
+                enabled=True,
             ),
             ProviderInfo(
                 name="cloudflare",
                 type=ProviderType.CLOUDFLARE,
                 module_path="deepsearch.infrastructure.providers.implementations.cloudflare.cloudflare",
                 class_name="ProxyDataProvider",
-                description="CloudFlare Workers代理提供者",
+                description="Cloudflare AkShare 代理提供者",
                 priority=80,
-                enabled=True
+                enabled=True,
             ),
             ProviderInfo(
-                name="qmt",
-                type=ProviderType.QMT,
-                module_path="deepsearch.infrastructure.providers.implementations.qmt.unified_qmt_provider",
-                class_name="UnifiedQMTProvider",
-                description="QMT统一数据提供者",
+                name="akshare",
+                type=ProviderType.AKSHARE,
+                module_path="deepsearch.infrastructure.providers.implementations.akshare.akshare_direct",
+                class_name="AKShareDirectProvider",
+                description="AkShare 直连数据提供者",
                 priority=70,
-                enabled=True
+                enabled=True,
             ),
             ProviderInfo(
-                name="miniqmt",
-                type=ProviderType.MINIQMT,
-                module_path="deepsearch.infrastructure.providers.implementations.qmt.miniqmt",
-                class_name="MiniQMTDataProvider",
-                description="MiniQMT数据提供者",
-                priority=65,
-                enabled=True
+                name="akshare_proxy",
+                type=ProviderType.CLOUDFLARE,
+                module_path="deepsearch.infrastructure.providers.implementations.akshare.akshare",
+                class_name="AkShareProxyProvider",
+                description="AkShare Cloudflare 代理（兼容）",
+                priority=75,
+                enabled=False,
             ),
             ProviderInfo(
-                name="ths_direct",
-                type=ProviderType.THS,
-                module_path="deepsearch.infrastructure.providers.implementations.akshare.ths_direct",
-                class_name="THSDirectProvider",
-                description="同花顺直连数据提供者",
-                priority=55,
-                enabled=True
-            )
+                name="cloudflare_proxy",
+                type=ProviderType.CLOUDFLARE,
+                module_path="deepsearch.infrastructure.providers.implementations.cloudflare.cloudflare",
+                class_name="ProxyDataProvider",
+                description="Cloudflare 代理（兼容）",
+                priority=78,
+                enabled=False,
+            ),
         ]
 
         for provider_info in default_providers:
@@ -133,6 +128,13 @@ class DataProviderRegistry:
         Args:
             provider_info: 数据提供者信息
         """
+        if provider_info.type not in ALLOWED_PROVIDER_TYPES:
+            allowed_types = " / ".join(sorted(t.value for t in ALLOWED_PROVIDER_TYPES))
+            logger.warning(
+                f"已忽略数据提供者 {provider_info.name}：类型 {provider_info.type.value} 不在允许列表，仅支持 {allowed_types}"
+            )
+            return
+
         self._providers[provider_info.name] = provider_info
         logger.info(f"注册数据提供者: {provider_info.name} ({provider_info.description})")
 
@@ -191,50 +193,127 @@ class DataProviderRegistry:
 
             # 创建实例
             # 特殊处理AmazingDataProvider
-            if name == 'amazingdata':
-                # 导入AmazingDataConfig
-                from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import AmazingDataConfig
+            if name == "amazingdata":
                 from deepsearch.config import get_config
+                from deepsearch.config.models.amazingdata import (
+                    AmazingDataConnectionConfig as SettingsAmazingDataConnectionConfig,
+                )
+                from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+                    AmazingDataConfig,
+                    AmazingDataProvider as LegacyAmazingDataProvider,
+                )
 
-                # 如果没有配置，从系统配置中获取
-                if not provider_info.config or not provider_info.config.get('username'):
+                env_name = os.getenv("APP__ENV", "prod")
+                config_hint = f"settings.{env_name}.yaml"
+
+                raw_config = provider_info.config or {}
+
+                def _extract_connection_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+                    if isinstance(data, dict) and "connection" in data:
+                        connection_cfg = data["connection"] or {}
+                        if not isinstance(connection_cfg, dict):
+                            raise ValueError(
+                                "AmazingDataProvider registration config connection field must be a dict"
+                            )
+                        flattened = dict(connection_cfg)
+                        extras = {k: v for k, v in data.items() if k != "connection"}
+                        flattened.update(extras)
+                        return flattened
+                    return data
+
+                def _validate_connection(source: str, data: Dict[str, Any]) -> None:
+                    candidate = SettingsAmazingDataConnectionConfig.model_validate(data)
+                    errors = candidate._collect_activation_errors()
+                    if errors:
+                        joined = ";".join(errors)
+                        raise ValueError(f"{source} missing required settings: {joined}")
+
+                def _normalize_mode(value: Any) -> Optional[str]:
+                    if isinstance(value, bool):
+                        return "optimized" if value else "legacy"
+                    if isinstance(value, str):
+                        lowered = value.strip().lower()
+                        if lowered in {"legacy", "optimized"}:
+                            return lowered
+                        logger.warning(
+                            f"Unknown AmazingData implementation_mode value {value!r}, falling back to legacy"
+                        )
+                    return None
+
+                if raw_config:
+                    flattened_config = _extract_connection_payload(raw_config)
+                    _validate_connection("AmazingDataProvider registry config", flattened_config)
+                    payload = dict(flattened_config)
+                    mode = _normalize_mode(payload.pop("implementation_mode", None))
+                else:
                     app_config = get_config()
-                    if hasattr(app_config, 'amazingdata') and app_config.amazingdata:
-                        provider_info.config = {
-                            'username': app_config.amazingdata.connection.username,
-                            'password': app_config.amazingdata.connection.password,
-                            'host': app_config.amazingdata.connection.host,
-                            'port': app_config.amazingdata.connection.port
-                        }
-                    else:
-                        # 提供默认配置
-                        logger.warning("AmazingData配置未找到，使用默认配置")
-                        provider_info.config = {
-                            'username': '',
-                            'password': '',
-                            'host': 'localhost',
-                            'port': 8888
-                        }
+                    amazingdata_settings = getattr(app_config, "amazingdata", None)
+                    if not amazingdata_settings:
+                        raise ValueError(
+                            f"Missing amazingdata configuration in {config_hint}, please copy template and fill credentials"
+                        )
+                    payload = dict(amazingdata_settings.connection.model_dump())
+                    _validate_connection(f"{config_hint} amazingdata.connection", payload)
+                    mode = _normalize_mode(getattr(amazingdata_settings, "implementation_mode", None))
 
-                config_obj = AmazingDataConfig(**provider_info.config)
-                instance = provider_class(config_obj)
+                desired_mode = mode or "legacy"
+
+                stored_config = dict(payload)
+                stored_config["implementation_mode"] = desired_mode
+                provider_info.config = stored_config
+
+                if not force_new and name in self._instances:
+                    cached_instance = self._instances[name]
+                    cached_mode = getattr(cached_instance, "_implementation_mode", "legacy")
+                    if cached_mode == desired_mode:
+                        return cached_instance
+                    del self._instances[name]
+
+                provider_cls = LegacyAmazingDataProvider
+
+                if desired_mode == "optimized":
+                    try:
+                        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized import (
+                            OptimizedAmazingDataProvider,
+                        )
+
+                        provider_cls = OptimizedAmazingDataProvider
+                    except Exception as exc:
+                        logger.warning(
+                            f"Failed to load AmazingData optimized provider ({exc}), falling back to legacy"
+                        )
+                        desired_mode = "legacy"
+
+                config_obj = AmazingDataConfig(**payload)
+                instance = provider_cls(config_obj)
+                setattr(instance, "_implementation_mode", desired_mode)
+
             elif provider_info.config:
                 # 检查构造函数签名
                 sig = inspect.signature(provider_class.__init__)
-                if 'config' in sig.parameters:
+                if "config" in sig.parameters:
                     instance = provider_class(config=provider_info.config)
                 else:
                     instance = provider_class(**provider_info.config)
+
             else:
                 # 检查是否需要config参数
                 sig = inspect.signature(provider_class.__init__)
                 params = sig.parameters
                 # 排除self参数
-                required_params = [p for p in params if p != 'self' and params[p].default == inspect.Parameter.empty]
+                required_params = [
+                    p
+                    for p in params
+                    if p != "self" and params[p].default == inspect.Parameter.empty
+                ]
 
                 if required_params:
-                    logger.error(f"Provider {name} requires parameters but none provided: {required_params}")
-                    raise ValueError(f"Provider {name} requires configuration parameters: {required_params}")
+                    logger.error(
+                        f"Provider {name} requires parameters but none provided: {required_params}"
+                    )
+                    raise ValueError(
+                        f"Provider {name} requires configuration parameters: {required_params}"
+                    )
 
                 instance = provider_class()
 
@@ -265,10 +344,7 @@ class DataProviderRegistry:
         Returns:
             提供者信息列表
         """
-        return [
-            info for info in self._providers.values()
-            if info.type == provider_type
-        ]
+        return [info for info in self._providers.values() if info.type == provider_type]
 
     def get_enabled_providers(self) -> List[ProviderInfo]:
         """
@@ -277,10 +353,7 @@ class DataProviderRegistry:
         Returns:
             启用的提供者信息列表
         """
-        return [
-            info for info in self._providers.values()
-            if info.enabled
-        ]
+        return [info for info in self._providers.values() if info.enabled]
 
     def get_providers_by_priority(self) -> List[ProviderInfo]:
         """
@@ -289,11 +362,7 @@ class DataProviderRegistry:
         Returns:
             按优先级排序的提供者信息列表
         """
-        return sorted(
-            self._providers.values(),
-            key=lambda x: x.priority,
-            reverse=True
-        )
+        return sorted(self._providers.values(), key=lambda x: x.priority, reverse=True)
 
     def update_provider_config(self, name: str, config: Dict[str, Any]) -> None:
         """

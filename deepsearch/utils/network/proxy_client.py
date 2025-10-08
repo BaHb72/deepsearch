@@ -2,13 +2,14 @@
 HTTP 代理客户端
 通过 Cloudflare Worker 代理请求，保护服务器 IP
 """
+
 import json
 import time
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional, TypedDict
 
-import requests
+import requests  # type: ignore[import-untyped]
 from loguru import logger
-from requests.adapters import HTTPAdapter
+from requests.adapters import HTTPAdapter  # type: ignore[import-untyped]
 from urllib3.util.retry import Retry
 
 from deepsearch.config import get_config
@@ -17,23 +18,43 @@ from deepsearch.config import get_config
 _OriginalSession = requests.Session
 
 
+class ProxyClientStats(TypedDict):
+    """基础统计结构。"""
+
+    total_requests: int
+    proxy_requests: int
+    direct_requests: int
+    failed_requests: int
+    total_time: float
+
+
+class ProxyClientStatsReport(ProxyClientStats, total=False):
+    """带派生指标的统计报表。"""
+
+    success_rate: float
+    avg_time: float
+    mode: str
+    worker_url: Optional[str]
+
+
 class ProxyClient:
     """通过 Cloudflare Worker 代理的 HTTP 客户端"""
 
     def __init__(self, worker_url: Optional[str] = None):
         """
         初始化代理客户端
-        
+
         Args:
             worker_url: Worker URL，如果不提供则从配置读取
         """
         # 获取 Worker URL
+        self.worker_url: Optional[str]
         if worker_url:
             self.worker_url = worker_url
         else:
             # 从配置读取
             config = get_config()
-            if config and hasattr(config, 'cloudflare_workers') and config.cloudflare_workers:
+            if config and hasattr(config, "cloudflare_workers") and config.cloudflare_workers:
                 # 现在 cloudflare_workers 是 CloudflareWorkersConfig 对象
                 if config.cloudflare_workers.is_configured():
                     self.worker_url = config.cloudflare_workers.get_full_url()
@@ -52,10 +73,10 @@ class ProxyClient:
 
         # 创建 session，使用原始的 Session 类避免递归
         self.session = _OriginalSession()
-        
+
         # 设置默认超时时间（秒）
         self.default_timeout = 10  # 默认10秒超时
-        
+
         # 配置重试策略
         retry_strategy = Retry(
             total=3,
@@ -67,58 +88,71 @@ class ProxyClient:
         self.session.mount("https://", adapter)
 
         # 统计信息
-        self.stats = {
+        self.stats: ProxyClientStats = {
             "total_requests": 0,
             "proxy_requests": 0,
             "direct_requests": 0,
             "failed_requests": 0,
-            "total_time": 0
+            "total_time": 0.0,
         }
+
+    def update_worker_url(self, worker_url: Optional[str]) -> None:
+        """动态更新 Worker URL，并切换代理模式"""
+        if worker_url == self.worker_url:
+            return
+
+        self.worker_url = worker_url
+        self.use_proxy = bool(worker_url)
+
+        if self.use_proxy:
+            logger.info(f"更新 Worker 代理: {self.worker_url}")
+        else:
+            logger.info("关闭 Worker 代理，切换为直连模式")
 
     def get(self, url: str, **kwargs) -> requests.Response:
         """
         发送 GET 请求
-        
+
         Args:
             url: 目标 URL
             **kwargs: 其他请求参数
-            
+
         Returns:
             Response 对象
         """
-        return self.request('GET', url, **kwargs)
+        return self.request("GET", url, **kwargs)
 
     def post(self, url: str, **kwargs) -> requests.Response:
         """
         发送 POST 请求
-        
+
         Args:
             url: 目标 URL
             **kwargs: 其他请求参数
-            
+
         Returns:
             Response 对象
         """
-        return self.request('POST', url, **kwargs)
+        return self.request("POST", url, **kwargs)
 
     def request(self, method: str, url: str, **kwargs) -> requests.Response:
         """
         发送 HTTP 请求
-        
+
         Args:
             method: 请求方法
             url: 目标 URL
             **kwargs: 其他请求参数
-            
+
         Returns:
             Response 对象
         """
         start_time = time.time()
         self.stats["total_requests"] += 1
-        
+
         # 设置默认超时（如果用户没有提供）
-        if 'timeout' not in kwargs:
-            kwargs['timeout'] = self.default_timeout
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = self.default_timeout
 
         try:
             if self.use_proxy and self.worker_url:
@@ -146,12 +180,12 @@ class ProxyClient:
     def _proxy_request(self, method: str, url: str, **kwargs) -> requests.Response:
         """
         通过 Worker 代理发送请求
-        
+
         Args:
             method: 请求方法
             url: 目标 URL
             **kwargs: 其他请求参数
-            
+
         Returns:
             Response 对象
         """
@@ -159,44 +193,45 @@ class ProxyClient:
         proxy_url = f"{self.worker_url}/proxy"
 
         # 准备参数
-        proxy_params = {
-            "url": url
-        }
+        proxy_params = {"url": url}
 
         # 处理原始请求参数
-        if method == 'GET':
+        if method == "GET":
             # GET 请求，参数已经在 URL 中
-            if 'params' in kwargs:
+            if "params" in kwargs:
                 # 如果有额外参数，添加到 URL
-                from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
+                from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
                 parsed = urlparse(url)
                 query_params = parse_qs(parsed.query)
-                query_params.update(kwargs.pop('params'))
+                query_params.update(kwargs.pop("params"))
                 new_query = urlencode(query_params, doseq=True)
-                url = urlunparse((
-                    parsed.scheme,
-                    parsed.netloc,
-                    parsed.path,
-                    parsed.params,
-                    new_query,
-                    parsed.fragment
-                ))
+                url = urlunparse(
+                    (
+                        parsed.scheme,
+                        parsed.netloc,
+                        parsed.path,
+                        parsed.params,
+                        new_query,
+                        parsed.fragment,
+                    )
+                )
                 proxy_params["url"] = url
 
             # 发送 GET 请求到 Worker
             response = self.session.get(proxy_url, params=proxy_params, **kwargs)
 
-        elif method == 'POST':
+        elif method == "POST":
             # POST 请求，需要转发请求体
             # Worker 会转发请求体到目标服务器
-            headers = kwargs.get('headers', {})
+            headers = kwargs.get("headers", {})
 
             # 如果有 JSON 数据
-            if 'json' in kwargs:
-                headers['Content-Type'] = 'application/json'
-                kwargs['data'] = json.dumps(kwargs.pop('json'))
+            if "json" in kwargs:
+                headers["Content-Type"] = "application/json"
+                kwargs["data"] = json.dumps(kwargs.pop("json"))
 
-            kwargs['headers'] = headers
+            kwargs["headers"] = headers
 
             # 发送 POST 请求到 Worker
             # 注意：这里仍然是 GET 到 Worker，因为 Worker 会根据参数转发
@@ -208,44 +243,66 @@ class ProxyClient:
 
         return response
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> ProxyClientStatsReport:
         """
         获取统计信息
-        
+
         Returns:
             统计信息字典
         """
-        stats = self.stats.copy()
+        total_requests = self.stats["total_requests"]
+        failed_requests = self.stats["failed_requests"]
+        total_time = self.stats["total_time"]
 
-        # 计算成功率
-        if stats["total_requests"] > 0:
-            stats["success_rate"] = 1 - (stats["failed_requests"] / stats["total_requests"])
-            stats["avg_time"] = stats["total_time"] / stats["total_requests"]
+        if total_requests > 0:
+            success_rate = 1 - (failed_requests / total_requests)
+            avg_time = total_time / total_requests
         else:
-            stats["success_rate"] = 0
-            stats["avg_time"] = 0
+            success_rate = 0.0
+            avg_time = 0.0
 
-        # 添加模式信息
-        stats["mode"] = "proxy" if self.use_proxy else "direct"
-        stats["worker_url"] = self.worker_url if self.use_proxy else None
+        report: ProxyClientStatsReport = {
+            "total_requests": total_requests,
+            "proxy_requests": self.stats["proxy_requests"],
+            "direct_requests": self.stats["direct_requests"],
+            "failed_requests": failed_requests,
+            "total_time": total_time,
+            "success_rate": success_rate,
+            "avg_time": avg_time,
+            "mode": "proxy" if self.use_proxy else "direct",
+            "worker_url": self.worker_url if self.use_proxy else None,
+        }
 
-        return stats
+        return report
 
 
 # 全局代理客户端实例
-_proxy_client = None
+_proxy_client: Optional[ProxyClient] = None
 
 
-def get_proxy_client() -> ProxyClient:
+def get_proxy_client(worker_url: Optional[str] = None, force_refresh: bool = False) -> ProxyClient:
     """
-    获取全局代理客户端实例
-    
+    获取全局代理客户端实例，并支持动态更新 Worker URL
+
+    Args:
+        worker_url: 指定新的 Worker URL
+        force_refresh: 是否强制刷新现有客户端配置
+
     Returns:
         ProxyClient 实例
     """
     global _proxy_client
+
     if _proxy_client is None:
-        _proxy_client = ProxyClient()
+        _proxy_client = ProxyClient(worker_url=worker_url)
+        return _proxy_client
+
+    if worker_url is not None:
+        if force_refresh or _proxy_client.worker_url != worker_url:
+            _proxy_client.update_worker_url(worker_url)
+    elif force_refresh:
+        _proxy_client.update_worker_url(None)
+
     return _proxy_client
 
 
@@ -253,7 +310,7 @@ def create_proxy_session() -> requests.Session:
     """
     创建一个配置了代理的 requests.Session
     这个 session 的所有请求都会通过 Worker 代理
-    
+
     Returns:
         配置好的 Session 对象
     """
@@ -264,7 +321,7 @@ def create_proxy_session() -> requests.Session:
         return _OriginalSession()
 
     # 创建一个自定义的 Session，继承自原始 Session 类
-    class ProxySession(_OriginalSession):
+    class ProxySession(_OriginalSession):  # type: ignore[misc, valid-type]
         def request(self, method, url, **kwargs):
             # 拦截所有请求，通过代理客户端发送
             return client.request(method, url, **kwargs)

@@ -1,6 +1,7 @@
 """
 日志配置模型。
 """
+
 from typing import Literal
 
 from pydantic import BaseModel, Field, PositiveInt
@@ -12,6 +13,7 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 class LogConfig(BaseModel):
     """日志配置。"""
+
     active: bool = True
     level: LogLevel = "INFO"
     rotation: str = DEFAULT_LOG_ROTATION_TIME

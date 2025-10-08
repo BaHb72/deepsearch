@@ -3,6 +3,10 @@
  * 统一处理不同格式的后端响应
  */
 
+import logger from '@/utils/logger'
+
+const apiResponseLogger = logger.child('utils:api-response')
+
 /**
  * 处理API响应，自动解包APIResponse格式
  * @param {Object} response - API响应
@@ -125,11 +129,11 @@ export function logApiResponse(apiName, response) {
   const timestamp = new Date().toISOString()
   
   if (isSuccessResponse(response)) {
-    console.log(`[${timestamp}] ✅ ${apiName} 成功:`, response.data)
+    apiResponseLogger.info(`[${timestamp}] ✅ ${apiName} 成功:`, response.data)
   } else if (isErrorResponse(response)) {
-    console.error(`[${timestamp}] ❌ ${apiName} 失败:`, response.error)
+    apiResponseLogger.error(`[${timestamp}] ❌ ${apiName} 失败:`, response.error)
   } else {
-    console.log(`[${timestamp}] 📡 ${apiName} 响应:`, response)
+    apiResponseLogger.info(`[${timestamp}] 📡 ${apiName} 响应:`, response)
   }
 }
 

@@ -3,16 +3,20 @@ WebUI API 端点测试
 
 测试主要的API端点功能
 """
-import json
-from datetime import datetime, timedelta
-from typing import Any, Dict
+
+import shutil
+from datetime import datetime
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from fastapi import FastAPI
+import yaml
 from fastapi.testclient import TestClient
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
+from deepsearch.config import get_config, reload_config
+from deepsearch.constants import YAML_ENCODING
+from deepsearch.webui.api.services.system_data_service import ComponentNotFoundError
 from deepsearch.webui.server import app
 
 
@@ -72,12 +76,136 @@ class TestSystemEndpoints:
         data = response.json()
         assert isinstance(data, dict)
 
-    @patch("deepsearch.webui.api.endpoints.system.system.get_config")
+    @patch("deepsearch.webui.api.endpoints.system.system.system_data_service.get_metrics")
+    def test_system_metrics(self, mock_metrics, client: TestClient):
+        """系统指标接口返回聚合数据。"""
+        mock_metrics.return_value = {"cpu": {"usage_percent": 10.5}}
+        response = client.get("/api/system/metrics")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cpu"]["usage_percent"] == 10.5
+
+    @patch("deepsearch.webui.api.endpoints.system.system.system_data_service.list_components")
+    def test_system_components(self, mock_list, client: TestClient):
+        """组件列表接口使用聚合服务。"""
+        mock_list.return_value = {"components": {}}
+        response = client.get("/api/system/components")
+        assert response.status_code == 200
+        assert "components" in response.json()
+
+    @patch("deepsearch.webui.api.endpoints.system.system.system_data_service.get_component")
+    def test_system_component_not_found(self, mock_get_component, client: TestClient):
+        """组件不存在时返回 404。"""
+        mock_get_component.side_effect = ComponentNotFoundError("missing")
+        response = client.get("/api/system/components/missing")
+        assert response.status_code == 404
+
+    @patch("deepsearch.webui.api.endpoints.system.config.get_config")
     def test_system_config_error(self, mock_config, client: TestClient):
         """测试配置获取错误处理"""
         mock_config.side_effect = Exception("Config error")
         response = client.get("/api/system/config")
         assert response.status_code == 500
+
+    def test_system_config_save_refreshes_runtime(self, client: TestClient):
+        """保存配置后应重新加载并在后续读取中返回最新值。"""
+
+        current_env = get_config().app.env
+        config_path = Path("deepsearch/config") / f"settings.{current_env}.yaml"
+        config_path = config_path.resolve()
+        backup_path = config_path.with_suffix(config_path.suffix + ".autotest")
+
+        shutil.copy2(config_path, backup_path)
+        try:
+            # 准备基础配置，确保测试字段处于确定状态
+            baseline = yaml.safe_load(config_path.read_text(encoding=YAML_ENCODING)) or {}
+            baseline.setdefault("app", {})
+            baseline["app"].setdefault("env", current_env)
+            baseline.setdefault("database", {}).setdefault("main", {})
+            baseline["database"]["main"].update(
+                {
+                    "host": "initial-host",
+                    "password": "initial-secret",
+                    "username": baseline["database"]["main"].get("username", "tester"),
+                    "database": baseline["database"]["main"].get("database", "deepsearch"),
+                    "type": baseline["database"]["main"].get("type", "postgresql"),
+                    "port": baseline["database"]["main"].get("port", 5432),
+                    "auto_connect": True,
+                    "enabled": True,
+                }
+            )
+
+            baseline["database"].setdefault("cache", {})
+            baseline["database"]["cache"].update(
+                {
+                    "enabled": True,
+                    "host": "cache-host",
+                    "port": 6379,
+                    "username": "cache-user",
+                    "password": "initial-cache-secret",
+                    "db": 0,
+                }
+            )
+
+            config_path.write_text(
+                yaml.safe_dump(baseline, allow_unicode=True, sort_keys=False),
+                encoding=YAML_ENCODING,
+            )
+
+            reload_config()
+
+            response = client.get("/api/system/config")
+            assert response.status_code == 200
+            payload = response.json()
+
+            save_payload = {
+                "app": payload["app"],
+                "log": payload.get("log"),
+                "database": {
+                    "main": {
+                        k: v
+                        for k, v in payload["database"]["main"].items()
+                        if k != "has_saved_password"
+                    },
+                    "cache": {
+                        k: v
+                        for k, v in payload["database"]["cache"].items()
+                        if k != "has_saved_password"
+                    },
+                },
+                "message_bus": payload.get("message_bus"),
+                "webui": payload.get("webui"),
+                "notifications": payload.get("notifications"),
+            }
+
+            save_payload["database"]["main"].update(
+                {
+                    "host": "updated-host",
+                    "password": "updated-secret",
+                    "rememberPassword": True,
+                }
+            )
+            save_payload["database"]["cache"].update({"password": "updated-cache"})
+
+            save_response = client.post("/api/system/config/save", json=save_payload)
+            assert save_response.status_code == 200
+            save_data = save_response.json()
+            assert save_data["success"] is True
+            assert save_data.get("config") is not None
+            assert save_data["config"]["database"]["main"]["host"] == "updated-host"
+
+            # 新一次读取应立即反映刚刚保存的主机名
+            refreshed = client.get("/api/system/config")
+            assert refreshed.status_code == 200
+            refreshed_payload = refreshed.json()
+            assert refreshed_payload["database"]["main"]["host"] == "updated-host"
+
+            stored = yaml.safe_load(config_path.read_text(encoding=YAML_ENCODING))
+            assert stored["database"]["main"]["host"] == "updated-host"
+        finally:
+            shutil.copy2(backup_path, config_path)
+            backup_path.unlink(missing_ok=True)
+            reload_config()
 
 
 class TestDataEndpoints:
@@ -92,20 +220,24 @@ class TestDataEndpoints:
         """模拟数据服务"""
         with patch("deepsearch.webui.api.endpoints.data.data.get_data_service") as mock:
             service = Mock()
-            service.get_stock_list = AsyncMock(return_value=[
-                {"symbol": "000001", "name": "平安银行"},
-                {"symbol": "000002", "name": "万科A"}
-            ])
-            service.get_kline_data = AsyncMock(return_value=[
-                {
-                    "timestamp": datetime.now().isoformat(),
-                    "open": 100.0,
-                    "high": 105.0,
-                    "low": 99.0,
-                    "close": 103.0,
-                    "volume": 1000000
-                }
-            ])
+            service.get_stock_list = AsyncMock(
+                return_value=[
+                    {"symbol": "000001", "name": "平安银行"},
+                    {"symbol": "000002", "name": "万科A"},
+                ]
+            )
+            service.get_kline_data = AsyncMock(
+                return_value=[
+                    {
+                        "timestamp": datetime.now().isoformat(),
+                        "open": 100.0,
+                        "high": 105.0,
+                        "low": 99.0,
+                        "close": 103.0,
+                        "volume": 1000000,
+                    }
+                ]
+            )
             mock.return_value = service
             yield service
 
@@ -131,8 +263,8 @@ class TestDataEndpoints:
                     "symbol": "000001",
                     "period": "1d",
                     "start_date": "2024-01-01",
-                    "end_date": "2024-01-31"
-                }
+                    "end_date": "2024-01-31",
+                },
             )
             assert response.status_code == 200
             data = response.json()
@@ -159,17 +291,19 @@ class TestTradingEndpoints:
         """模拟市场服务"""
         with patch("deepsearch.webui.api.endpoints.trading.market.get_market_service") as mock:
             service = Mock()
-            service.get_market_overview = AsyncMock(return_value={
-                "total_market_cap": 1000000000000,
-                "total_volume": 100000000000,
-                "market_sentiment": "neutral"
-            })
-            service.get_top_gainers = AsyncMock(return_value=[
-                {"symbol": "000001", "change_percent": 10.0}
-            ])
-            service.get_top_losers = AsyncMock(return_value=[
-                {"symbol": "000002", "change_percent": -8.0}
-            ])
+            service.get_market_overview = AsyncMock(
+                return_value={
+                    "total_market_cap": 1000000000000,
+                    "total_volume": 100000000000,
+                    "market_sentiment": "neutral",
+                }
+            )
+            service.get_top_gainers = AsyncMock(
+                return_value=[{"symbol": "000001", "change_percent": 10.0}]
+            )
+            service.get_top_losers = AsyncMock(
+                return_value=[{"symbol": "000002", "change_percent": -8.0}]
+            )
             mock.return_value = service
             yield service
 
@@ -242,38 +376,23 @@ class TestQMTEndpoints:
     def client(self) -> TestClient:
         return TestClient(app)
 
-    @pytest.fixture
-    def mock_qmt_service(self):
-        """模拟QMT服务"""
-        with patch("deepsearch.webui.api.endpoints.qmt.qmt.get_qmt_service") as mock:
-            service = Mock()
-            service.is_connected = Mock(return_value=True)
-            service.get_account_info = AsyncMock(return_value={
-                "account_id": "test_account",
-                "balance": 1000000.0,
-                "positions": []
-            })
-            mock.return_value = service
-            yield service
-
-    def test_qmt_status(self, client: TestClient, mock_qmt_service):
-        """测试QMT连接状态"""
+    def test_qmt_status_disabled(self, client: TestClient):
+        """在未配置QMT时应返回禁用状态"""
         response = client.get("/api/qmt/status")
-        assert response.status_code == 200
+        assert response.status_code == 503
         data = response.json()
-        assert "connected" in data
-        assert data["connected"] is True
+        assert data.get("status") == "error"
+        assert data.get("data", {}).get("enabled") is False
 
     @pytest.mark.asyncio
-    async def test_qmt_account(self, mock_qmt_service):
-        """测试QMT账户信息"""
+    async def test_qmt_account_disabled(self):
+        """在未配置QMT时查询账户应返回错误"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/qmt/account")
-            assert response.status_code == 200
+            assert response.status_code == 503
             data = response.json()
-            assert "account_id" in data
-            assert "balance" in data
+            assert data.get("detail") in ("QMT网关未启动", "QMT unavailable")
 
 
 class TestWebSocketEndpoints:
@@ -301,11 +420,9 @@ class TestWebSocketEndpoints:
         client = TestClient(app)
         with client.websocket_connect("/ws") as websocket:
             # 订阅市场数据
-            websocket.send_json({
-                "type": "subscribe",
-                "channel": "market",
-                "symbols": ["000001", "000002"]
-            })
+            websocket.send_json(
+                {"type": "subscribe", "channel": "market", "symbols": ["000001", "000002"]}
+            )
 
             # 接收确认
             data = websocket.receive_json()
@@ -334,10 +451,7 @@ class TestErrorHandling:
 
     def test_validation_error(self, client: TestClient):
         """测试参数验证错误"""
-        response = client.get(
-            "/api/data/kline",
-            params={"symbol": ""}  # 空symbol应该报错
-        )
+        response = client.get("/api/data/kline", params={"symbol": ""})  # 空symbol应该报错
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
@@ -403,10 +517,7 @@ class TestCORS:
         """测试CORS头"""
         response = client.options(
             "/api/health",
-            headers={
-                "Origin": "http://localhost:3000",
-                "Access-Control-Request-Method": "GET"
-            }
+            headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": "GET"},
         )
         assert response.status_code == 200
         assert "Access-Control-Allow-Origin" in response.headers

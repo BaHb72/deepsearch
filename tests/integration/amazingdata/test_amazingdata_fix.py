@@ -1,19 +1,22 @@
 """
 测试AmazingData数据源状态同步修复
 """
+
 import asyncio
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from deepsearch.observability.monitoring.data_source_monitor import (
-    get_monitor,
+    DataAccessType,
     DataSourceType,
-    DataAccessType
+    get_monitor,
 )
 from deepsearch.webui.api.endpoints.datasources.datasource_manager import (
-    update_datasource_status_after_test
+    update_datasource_status_after_test,
 )
+
 
 async def test_amazingdata_status():
     """测试AmazingData状态同步"""
@@ -42,7 +45,7 @@ async def test_amazingdata_status():
             latency_ms=5000,
             symbol="000001",
             module="test",
-            error_message="模拟连接失败"
+            error_message="模拟连接失败",
         )
 
     # 3. 获取失败后的状态
@@ -54,23 +57,6 @@ async def test_amazingdata_status():
 
     # 4. 调用测试成功后的状态更新函数
     print("\n3. 调用update_datasource_status_after_test模拟测试成功")
-    # 注意：需要先初始化data_sources字典
-    from deepsearch.webui.api.endpoints.datasources.datasource_manager import data_sources, DataSource, DataSourceConfig
-    from datetime import datetime
-
-    # 添加AmazingData到data_sources
-    data_sources["amazingdata"] = DataSource(
-        id="amazingdata",
-        name="银河证券星耀数智",
-        type="amazingdata",
-        enabled=True,
-        priority=1,
-        config=DataSourceConfig(),
-        status="error",
-        created_at=datetime.now(),
-        updated_at=datetime.now()
-    )
-
     # 调用更新函数
     update_datasource_status_after_test("amazingdata", True, 100)
 
@@ -81,11 +67,15 @@ async def test_amazingdata_status():
     print(f"   - 成功率: {updated_health['success_rate']:.2f}%")
     print(f"   - 错误率: {updated_health['recent_error_rate']:.2f}%")
     print(f"   - 总请求数: {updated_health['total_requests']}")
-    print(f"   - 平均延迟: {updated_health['avg_latency_ms']:.2f}ms" if updated_health['avg_latency_ms'] > 0 else "   - 平均延迟: 暂无数据")
+    print(
+        f"   - 平均延迟: {updated_health['avg_latency_ms']:.2f}ms"
+        if updated_health["avg_latency_ms"] > 0
+        else "   - 平均延迟: 暂无数据"
+    )
 
     # 6. 验证修复效果
     print("\n5. 验证修复效果")
-    if updated_health['healthy']:
+    if updated_health["healthy"]:
         print("   [OK] 修复成功！AmazingData现在显示为健康状态")
         print("   [OK] 测试成功后，监控系统状态已同步更新")
         return True
@@ -93,6 +83,7 @@ async def test_amazingdata_status():
         print("   [ERROR] 修复失败！AmazingData仍然显示为不健康状态")
         print("   [ERROR] 可能需要进一步检查")
         return False
+
 
 if __name__ == "__main__":
     success = asyncio.run(test_amazingdata_status())

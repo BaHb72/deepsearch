@@ -6,29 +6,29 @@ AmazingData 优化版本的单元测试
 
 import asyncio
 import gc
-import time
-import pytest
-import pandas as pd
-from unittest.mock import Mock, MagicMock, patch
 
 # 假设 AmazingData SDK 可能未安装，先 mock
 import sys
-sys.modules['AmazingData'] = MagicMock()
+import time
+from unittest.mock import MagicMock, Mock, patch
 
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized import (
-    OptimizedThreadPoolManager,
-    OptimizedHeartbeat,
-    OptimizedCacheManager,
-    SubscriptionManager,
-    OptimizedDataConverter,
-    RateLimiter,
+import pandas as pd
+import pytest
+
+sys.modules["AmazingData"] = MagicMock()
+
+from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized import (  # noqa: E402
     CircuitBreaker,
     MonitoringSystem,
     OptimizedAmazingDataProvider,
-    ErrorCode,
-    ErrorContext
+    OptimizedCacheManager,
+    OptimizedDataConverter,
+    OptimizedHeartbeat,
+    OptimizedThreadPoolManager,
+    RateLimiter,
+    SubscriptionManager,
 )
-from deepsearch.infrastructure.providers.interfaces.base import DataProviderConfig
+from deepsearch.infrastructure.providers.interfaces.base import DataProviderConfig  # noqa: E402
 
 
 class TestOptimizedThreadPoolManager:
@@ -45,10 +45,7 @@ class TestOptimizedThreadPoolManager:
             return delay
 
         # 并发执行50个任务
-        tasks = [
-            manager.execute_async(slow_func, 0.01)
-            for _ in range(50)
-        ]
+        tasks = [manager.execute_async(slow_func, 0.01) for _ in range(50)]
 
         start = time.time()
         results = await asyncio.gather(*tasks)
@@ -64,8 +61,8 @@ class TestOptimizedThreadPoolManager:
         assert elapsed < 0.2  # 给一些余量
 
         # 验证统计
-        assert manager.stats['completed_tasks'] == 50
-        assert manager.stats['failed_tasks'] == 0
+        assert manager.stats["completed_tasks"] == 50
+        assert manager.stats["failed_tasks"] == 0
 
     @pytest.mark.asyncio
     async def test_thread_pool_semaphore(self):
@@ -76,15 +73,12 @@ class TestOptimizedThreadPoolManager:
         concurrent_count = []
 
         def track_concurrent():
-            concurrent_count.append(manager.stats['active_threads'])
+            concurrent_count.append(manager.stats["active_threads"])
             time.sleep(0.01)
             return True
 
         # 发起100个并发任务
-        tasks = [
-            manager.execute_async(track_concurrent)
-            for _ in range(100)
-        ]
+        tasks = [manager.execute_async(track_concurrent) for _ in range(100)]
 
         await asyncio.gather(*tasks)
 
@@ -161,22 +155,16 @@ class TestOptimizedCacheManager:
 
         # 不同格式的日期应该生成相同的键
         key1 = cache.generate_cache_key(
-            symbol='000001.SZ',
-            period='daily',
-            start_date='2024-01-01',
-            end_date='2024-12-31'
+            symbol="000001.SZ", period="daily", start_date="2024-01-01", end_date="2024-12-31"
         )
 
         key2 = cache.generate_cache_key(
-            symbol='000001.SZ',
-            period='daily',
-            start_date='20240101',
-            end_date='20241231'
+            symbol="000001.SZ", period="daily", start_date="20240101", end_date="20241231"
         )
 
         # 去掉哈希部分比较前缀
-        prefix1 = key1.split(':')[:-1]
-        prefix2 = key2.split(':')[:-1]
+        prefix1 = key1.split(":")[:-1]
+        prefix2 = key2.split(":")[:-1]
 
         assert prefix1 == prefix2
 
@@ -185,10 +173,10 @@ class TestOptimizedCacheManager:
         cache = OptimizedCacheManager()
 
         # 模拟数据
-        test_data = pd.DataFrame({'value': [1, 2, 3]})
+        test_data = pd.DataFrame({"value": [1, 2, 3]})
 
         # 第一次查询 - miss
-        key = cache.generate_cache_key(symbol='000001.SZ', period='daily')
+        key = cache.generate_cache_key(symbol="000001.SZ", period="daily")
         result = cache.get(key)
         assert result is None
 
@@ -202,18 +190,18 @@ class TestOptimizedCacheManager:
 
         # 验证统计
         stats = cache.get_stats()
-        assert cache.stats['hits'] == 10
-        assert cache.stats['misses'] == 1
+        assert cache.stats["hits"] == 10
+        assert cache.stats["misses"] == 1
 
         # 验证命中率
-        hit_rate = float(stats['hit_rate'].strip('%'))
+        hit_rate = float(stats["hit_rate"].strip("%"))
         assert hit_rate > 90
 
     def test_cache_ttl(self):
         """测试缓存过期"""
         cache = OptimizedCacheManager(ttl=0.1)  # 100ms 过期
 
-        key = cache.generate_cache_key(symbol='test')
+        key = cache.generate_cache_key(symbol="test")
         cache.set(key, "test_data")
 
         # 立即获取 - 应该命中
@@ -224,7 +212,7 @@ class TestOptimizedCacheManager:
 
         # 应该过期
         assert cache.get(key) is None
-        assert cache.stats['evictions'] == 1
+        assert cache.stats["evictions"] == 1
 
 
 class TestSubscriptionManager:
@@ -240,10 +228,10 @@ class TestSubscriptionManager:
             pass
 
         # 订阅
-        sub_id = manager.subscribe('000001.SZ', callback)
+        sub_id = manager.subscribe("000001.SZ", callback)
 
         # 验证订阅存在
-        assert '000001.SZ' in manager._subscriptions
+        assert "000001.SZ" in manager._subscriptions
         assert sub_id in manager._weak_callbacks
 
         # 删除回调引用
@@ -268,7 +256,7 @@ class TestSubscriptionManager:
         for i in range(10):
             callback = Mock()
             callbacks.append(callback)
-            sub_id = manager.subscribe(f'stock_{i}', callback)
+            sub_id = manager.subscribe(f"stock_{i}", callback)
             sub_ids.append(sub_id)
 
         # 验证订阅数量
@@ -291,12 +279,12 @@ class TestOptimizedDataConverter:
         # 生成测试数据
         test_data = [
             {
-                'datetime': '20240101',
-                'open': '10.5',
-                'high': '11.0',
-                'low': '10.0',
-                'close': '10.8',
-                'volume': '1000000'
+                "datetime": "20240101",
+                "open": "10.5",
+                "high": "11.0",
+                "low": "10.0",
+                "close": "10.8",
+                "volume": "1000000",
             }
             for _ in range(1000)
         ]
@@ -307,11 +295,11 @@ class TestOptimizedDataConverter:
 
         # 验证结果
         assert len(df) == 1000
-        assert df.index.name == 'datetime'
-        assert all(col in df.columns for col in ['open', 'high', 'low', 'close', 'volume'])
+        assert df.index.name == "datetime"
+        assert all(col in df.columns for col in ["open", "high", "low", "close", "volume"])
 
         # 验证数据类型
-        assert df['open'].dtype in [float, 'float64']
+        assert df["open"].dtype in [float, "float64"]
 
         # 性能验证（应该很快）
         assert elapsed < 0.1  # 1000行应该在100ms内完成
@@ -319,20 +307,22 @@ class TestOptimizedDataConverter:
     def test_data_validation(self):
         """测试数据验证和清理"""
         # 创建异常数据
-        df = pd.DataFrame({
-            'high': [10.0, 9.0, 12.0],  # 第二行 high < low
-            'low': [9.0, 10.0, 11.0],
-            'volume': [1000, -100, 2000],  # 负成交量
-            'change_percent': [5.0, 100.0, -50.0]  # 异常涨跌幅
-        })
+        df = pd.DataFrame(
+            {
+                "high": [10.0, 9.0, 12.0],  # 第二行 high < low
+                "low": [9.0, 10.0, 11.0],
+                "volume": [1000, -100, 2000],  # 负成交量
+                "change_percent": [5.0, 100.0, -50.0],  # 异常涨跌幅
+            }
+        )
 
         # 验证和清理
         cleaned_df = OptimizedDataConverter.validate_and_clean(df)
 
         # 验证修正
-        assert cleaned_df.loc[1, 'high'] >= cleaned_df.loc[1, 'low']  # high/low 修正
-        assert cleaned_df.loc[1, 'volume'] >= 0  # 负值修正
-        assert abs(cleaned_df.loc[1, 'change_percent']) <= 20  # 涨跌幅限制
+        assert cleaned_df.loc[1, "high"] >= cleaned_df.loc[1, "low"]  # high/low 修正
+        assert cleaned_df.loc[1, "volume"] >= 0  # 负值修正
+        assert abs(cleaned_df.loc[1, "change_percent"]) <= 20  # 涨跌幅限制
 
 
 class TestRateLimiter:
@@ -371,7 +361,7 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=0.5)
 
         # 初始状态：关闭
-        assert breaker.state == 'closed'
+        assert breaker.state == "closed"
 
         # 模拟成功调用
         async def success_call():
@@ -390,7 +380,7 @@ class TestCircuitBreaker:
                 await breaker.call(fail_call())
 
         # 断路器应该开启
-        assert breaker.state == 'open'
+        assert breaker.state == "open"
 
         # 立即调用应该被拒绝
         with pytest.raises(RuntimeError, match="断路器开启"):
@@ -407,7 +397,7 @@ class TestCircuitBreaker:
         for _ in range(2):
             await breaker.call(success_call())
 
-        assert breaker.state == 'closed'
+        assert breaker.state == "closed"
 
 
 class TestMonitoringSystem:
@@ -420,23 +410,23 @@ class TestMonitoringSystem:
         # 记录多个请求
         latencies = [0.1, 0.2, 0.15, 0.3, 0.25]
         for latency in latencies:
-            monitoring.record_request('kline', latency, True)
+            monitoring.record_request("kline", latency, True)
 
         # 获取统计
         health = monitoring.get_health_status()
 
         # 验证计数
-        assert monitoring.counters['total_requests'] == 5
-        assert monitoring.counters['successful_requests'] == 5
+        assert monitoring.counters["total_requests"] == 5
+        assert monitoring.counters["successful_requests"] == 5
 
         # 验证成功率
-        assert health['status'] == 'healthy'
-        assert '100' in health['success_rate']
+        assert health["status"] == "healthy"
+        assert "100" in health["success_rate"]
 
         # 验证延迟统计
-        kline_stats = health['metrics']['kline']
-        assert kline_stats['count'] == 5
-        assert 0.1 <= kline_stats['mean'] <= 0.3
+        kline_stats = health["metrics"]["kline"]
+        assert kline_stats["count"] == 5
+        assert 0.1 <= kline_stats["mean"] <= 0.3
 
     def test_event_recording(self):
         """测试事件记录"""
@@ -444,12 +434,12 @@ class TestMonitoringSystem:
 
         # 记录事件
         for i in range(10):
-            monitoring.record_event('test_event', {'index': i})
+            monitoring.record_event("test_event", {"index": i})
 
         # 验证事件记录
         assert len(monitoring.events) == 10
-        assert monitoring.events[-1]['type'] == 'test_event'
-        assert monitoring.events[-1]['details']['index'] == 9
+        assert monitoring.events[-1]["type"] == "test_event"
+        assert monitoring.events[-1]["details"]["index"] == 9
 
 
 class TestOptimizedAmazingDataProvider:
@@ -459,25 +449,28 @@ class TestOptimizedAmazingDataProvider:
     def config(self):
         """创建测试配置"""
         return DataProviderConfig(
-            name='amazingdata_test',
+            name="amazingdata_test",
             enabled=True,
             priority=1,
             timeout=10,
             retry_count=3,  # 使用retry_count而不是max_retries
             config={
-                'cache_enabled': True,
-                'cache_ttl': 300,
-                'username': 'test_user',
-                'password': 'test_pass',
-                'host': 'localhost',
-                'port': 8080
-            }
+                "cache_enabled": True,
+                "cache_ttl": 300,
+                "username": "test_user",
+                "password": "test_pass",
+                "host": "localhost",
+                "port": 8080,
+            },
         )
 
     @pytest.mark.asyncio
     async def test_provider_initialization(self, config):
         """测试提供者初始化"""
-        with patch('deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA', True):
+        with patch(
+            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA",
+            True,
+        ):
             provider = OptimizedAmazingDataProvider(config)
 
             # 验证组件初始化
@@ -492,8 +485,13 @@ class TestOptimizedAmazingDataProvider:
     @pytest.mark.asyncio
     async def test_cache_integration(self, config):
         """测试缓存集成"""
-        with patch('deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA', True):
-            with patch('deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.ad') as mock_ad:
+        with patch(
+            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA",
+            True,
+        ):
+            with patch(
+                "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.ad"
+            ) as mock_ad:
                 provider = OptimizedAmazingDataProvider(config)
 
                 # Mock 登录成功
@@ -502,12 +500,12 @@ class TestOptimizedAmazingDataProvider:
                 # Mock K线数据
                 mock_kline_data = [
                     {
-                        'datetime': '20240101',
-                        'open': 10.0,
-                        'high': 11.0,
-                        'low': 9.5,
-                        'close': 10.5,
-                        'volume': 1000000
+                        "datetime": "20240101",
+                        "open": 10.0,
+                        "high": 11.0,
+                        "low": 9.5,
+                        "close": 10.5,
+                        "volume": 1000000,
                     }
                 ]
                 mock_ad.KLine.get_kline.return_value = mock_kline_data
@@ -516,39 +514,42 @@ class TestOptimizedAmazingDataProvider:
                 await provider.connect()
 
                 # 第一次查询 - 应该调用 API
-                result1 = await provider.get_kline('000001.SZ', 'daily')
+                result1 = await provider.get_kline("000001.SZ", "daily")
                 assert len(result1) == 1
                 assert mock_ad.KLine.get_kline.call_count == 1
 
                 # 第二次查询相同数据 - 应该命中缓存
-                result2 = await provider.get_kline('000001.SZ', 'daily')
+                result2 = await provider.get_kline("000001.SZ", "daily")
                 assert len(result2) == 1
                 assert mock_ad.KLine.get_kline.call_count == 1  # 不应该再调用
 
                 # 验证缓存统计
-                assert provider.monitoring.counters['cache_hits'] == 1
-                assert provider.monitoring.counters['cache_misses'] == 1
+                assert provider.monitoring.counters["cache_hits"] == 1
+                assert provider.monitoring.counters["cache_misses"] == 1
 
     @pytest.mark.asyncio
     async def test_health_status(self, config):
         """测试健康状态报告"""
-        with patch('deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA', True):
+        with patch(
+            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA",
+            True,
+        ):
             provider = OptimizedAmazingDataProvider(config)
 
             # 获取健康状态
             health = await provider.get_health_status()
 
             # 验证结构
-            assert health['provider'] == 'amazingdata_optimized'
-            assert 'status' in health
-            assert 'cache' in health
-            assert 'circuit_breaker' in health
-            assert 'thread_pool' in health
-            assert 'heartbeat' in health
+            assert health["provider"] == "amazingdata_optimized"
+            assert "status" in health
+            assert "cache" in health
+            assert "circuit_breaker" in health
+            assert "thread_pool" in health
+            assert "heartbeat" in health
 
             # 验证初始状态
-            assert health['circuit_breaker'] == 'closed'
-            assert health['thread_pool']['size'] > 0
+            assert health["circuit_breaker"] == "closed"
+            assert health["thread_pool"]["size"] > 0
 
 
 @pytest.mark.benchmark
@@ -563,14 +564,11 @@ class TestPerformanceBenchmark:
         # 模拟 API 调用
         def mock_api_call():
             time.sleep(0.01)  # 模拟10ms延迟
-            return {'data': 'test'}
+            return {"data": "test"}
 
         # 发起100个并发请求
         start = time.time()
-        tasks = [
-            manager.execute_async(mock_api_call)
-            for _ in range(100)
-        ]
+        tasks = [manager.execute_async(mock_api_call) for _ in range(100)]
         results = await asyncio.gather(*tasks)
         elapsed = time.time() - start
 
@@ -593,14 +591,14 @@ class TestPerformanceBenchmark:
 
         # 预热缓存
         for i in range(1000):
-            key = cache.generate_cache_key(symbol=f'stock_{i}', period='daily')
-            cache.set(key, f'data_{i}')
+            key = cache.generate_cache_key(symbol=f"stock_{i}", period="daily")
+            cache.set(key, f"data_{i}")
 
         # 测试查询性能
         start = time.time()
         hits = 0
         for _ in range(10000):
-            key = cache.generate_cache_key(symbol=f'stock_{_ % 1000}', period='daily')
+            key = cache.generate_cache_key(symbol=f"stock_{_ % 1000}", period="daily")
             if cache.get(key) is not None:
                 hits += 1
         elapsed = time.time() - start

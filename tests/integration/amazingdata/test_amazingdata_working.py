@@ -4,11 +4,12 @@
 AmazingData 工作测试脚本（使用正确的关键字参数）
 """
 
-import sys
 import os
+import sys
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 
 def test_amazingdata():
     print("\n" + "=" * 60)
@@ -17,6 +18,7 @@ def test_amazingdata():
 
     try:
         import AmazingData as ad
+
         print("\n[OK] AmazingData SDK已导入")
         print(f"版本: {getattr(ad, '__version__', '未知')}")
     except ImportError as e:
@@ -25,25 +27,25 @@ def test_amazingdata():
 
     # 使用正确的凭证和服务器
     credentials = {
-        'username': '212200038719',
-        'password': '212200038719@2025',
-        'host': '101.230.159.234',  # 使用电信线路2
-        'port': 8600
+        "username": "212200038719",
+        "password": "212200038719@2025",
+        "host": "101.230.159.234",  # 使用电信线路2
+        "port": 8600,
     }
 
-    print(f"\n连接信息：")
+    print("\n连接信息：")
     print(f"  服务器: {credentials['host']}:{credentials['port']}")
     print(f"  用户名: {credentials['username']}")
-    print(f"  密码: ***")
+    print("  密码: ***")
 
     # 1. 测试登录（使用关键字参数）
     print("\n[测试1] 登录...")
     try:
         login_result = ad.login(
-            username=credentials['username'],
-            password=credentials['password'],
-            host=credentials['host'],
-            port=credentials['port']
+            username=credentials["username"],
+            password=credentials["password"],
+            host=credentials["host"],
+            port=credentials["port"],
         )
 
         if login_result == 0 or login_result is True:
@@ -64,7 +66,7 @@ def test_amazingdata():
             # 显示前3只股票
             print("示例股票：")
             for i in range(min(3, len(stock_list))):
-                stock = stock_list.iloc[i] if hasattr(stock_list, 'iloc') else stock_list[i]
+                stock = stock_list.iloc[i] if hasattr(stock_list, "iloc") else stock_list[i]
                 print(f"  {i+1}. {stock}")
         else:
             print("[WARNING] 股票列表为空")
@@ -73,12 +75,14 @@ def test_amazingdata():
 
     # 3. 测试获取实时行情
     print("\n[测试3] 获取实时行情...")
-    test_symbols = ['000001', '600036', '000002']
+    test_symbols = ["000001", "600036", "000002"]
     for symbol in test_symbols:
         try:
             quote = ad.MarketData.get_realtime_quote(symbol)
             if quote:
-                print(f"[SUCCESS] {symbol}: 最新价={quote.get('last', 'N/A')}, 涨跌幅={quote.get('pct_chg', 'N/A')}%")
+                print(
+                    f"[SUCCESS] {symbol}: 最新价={quote.get('last', 'N/A')}, 涨跌幅={quote.get('pct_chg', 'N/A')}%"
+                )
             else:
                 print(f"[WARNING] {symbol}: 无数据")
         except Exception as e:
@@ -89,21 +93,22 @@ def test_amazingdata():
     print("\n[测试4] 获取K线数据...")
     try:
         from datetime import datetime, timedelta
+
         end_date = datetime.now()
         start_date = end_date - timedelta(days=30)
 
         kline = ad.MarketData.get_kline_data(
-            symbol='000001',
-            period='1d',
-            start_date=start_date.strftime('%Y%m%d'),
-            end_date=end_date.strftime('%Y%m%d'),
-            adjust='none'
+            symbol="000001",
+            period="1d",
+            start_date=start_date.strftime("%Y%m%d"),
+            end_date=end_date.strftime("%Y%m%d"),
+            adjust="none",
         )
 
         if kline is not None and len(kline) > 0:
             print(f"[SUCCESS] 获取{len(kline)}条K线数据")
             print("最近3天数据：")
-            if hasattr(kline, 'tail'):
+            if hasattr(kline, "tail"):
                 print(kline.tail(3))
             else:
                 print(kline[-3:])
@@ -125,6 +130,7 @@ def test_amazingdata():
     print("=" * 60)
 
     return True
+
 
 if __name__ == "__main__":
     success = test_amazingdata()

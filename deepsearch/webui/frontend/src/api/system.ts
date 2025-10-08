@@ -4,6 +4,33 @@
  */
 import request from './request';
 
+type ApiEnvelope<T> = {
+  code?: number;
+  message?: string;
+  data: T;
+};
+
+function unwrapResponse<T>(response: unknown): T | null {
+  if (response == null) {
+    return null;
+  }
+
+  const payload = (response as any)?.data ?? response;
+
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'data' in (payload as Record<string, unknown>) &&
+    (Object.prototype.hasOwnProperty.call(payload, 'code') ||
+      Object.prototype.hasOwnProperty.call(payload, 'message'))
+  ) {
+    const envelope = payload as ApiEnvelope<T>;
+    return (envelope.data ?? null) as T | null;
+  }
+
+  return (payload ?? null) as T | null;
+}
+
 export interface SystemInfo {
   cpu_usage: number;
   memory_usage: number;
@@ -13,6 +40,23 @@ export interface SystemInfo {
   process_count: number;
   uptime: number;
   timestamp: number;
+  status?: 'running' | 'stopped' | string;
+  updated_at?: string;
+  engine?: {
+    running: boolean;
+    uptime: number;
+    event_count: number;
+    queue_size: number;
+  };
+  monitor?: {
+    running: boolean;
+    api_running: boolean;
+  };
+  components?: Record<string, any>;
+  total_components?: number;
+  healthy_components?: number;
+  key_metrics?: Record<string, any>;
+  error?: string;
 }
 
 export interface SystemMetrics {
@@ -51,8 +95,10 @@ export const systemAPI = {
   /**
    * 获取系统状态信息
    */
-  getSystemStatus: () =>
-    request.get<SystemInfo>('/system/status'),
+  getSystemStatus: async (): Promise<SystemInfo | null> => {
+    const response = await request.get<SystemInfo | ApiEnvelope<SystemInfo>>('/system/status');
+    return unwrapResponse<SystemInfo>(response);
+  },
 
   /**
    * 获取系统性能指标

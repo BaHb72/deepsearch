@@ -10,15 +10,15 @@ QMT (迅投) 量化交易终端集成模块
 """
 
 from .datafeed import QMTDataFeed
-from .models.tick import TickData, OrderBook
-from .models.trade import TradeData, OrderData
+from .models.tick import OrderBook, TickData
+from .models.trade import OrderData, TradeData
 
 __all__ = [
-    'TickData',
-    'OrderBook',
-    'TradeData',
-    'OrderData',
-    'QMTDataFeed',
+    "TickData",
+    "OrderBook",
+    "TradeData",
+    "OrderData",
+    "QMTDataFeed",
 ]
 
-__version__ = '1.0.0'
+__version__ = "1.0.0"

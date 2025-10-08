@@ -5,14 +5,12 @@ API 文档自动生成工具
 """
 
 import json
-import os
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional
 
-import yaml
 from loguru import logger
 
 # 项目根目录
@@ -20,11 +18,8 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 # 导入编码处理工具
-from deepsearch.core.utils.file_encoding import (
-    SafeFileHandler,
-    PlatformEncodingHelper,
-    safe_open
-)
+from deepsearch.core.utils.file_encoding import SafeFileHandler  # noqa: E402
+
 BACKEND_DIR = PROJECT_ROOT / "deepsearch" / "webui"
 FRONTEND_DIR = PROJECT_ROOT / "deepsearch" / "webui" / "frontend" / "src"
 DOCS_DIR = PROJECT_ROOT / "docs" / "api"
@@ -32,7 +27,7 @@ DOCS_DIR = PROJECT_ROOT / "docs" / "api"
 
 class ApiEndpoint:
     """API 端点信息"""
-    
+
     def __init__(self):
         self.path: str = ""
         self.method: str = ""
@@ -47,7 +42,7 @@ class ApiEndpoint:
         self.deprecated: bool = False
         self.frontend_usage: List[str] = []
         self.backend_impl: str = ""
-    
+
     def to_dict(self) -> Dict:
         """转换为字典"""
         return {
@@ -63,21 +58,21 @@ class ApiEndpoint:
             "requires_auth": self.requires_auth,
             "deprecated": self.deprecated,
             "frontend_usage": self.frontend_usage,
-            "backend_impl": self.backend_impl
+            "backend_impl": self.backend_impl,
         }
-    
+
     def __repr__(self):
         return f"<ApiEndpoint {self.method} {self.path}>"
 
 
 class ApiDocumentGenerator:
     """API 文档生成器"""
-    
+
     def __init__(self):
         self.endpoints: List[ApiEndpoint] = []
         self.frontend_apis: Dict[str, List[str]] = {}
         self.backend_routes: Dict[str, ApiEndpoint] = {}
-        
+
     def scan_backend(self):
         """扫描后端 API 路由"""
         logger.info("扫描后端 API 路由...")
@@ -91,20 +86,20 @@ class ApiDocumentGenerator:
 
         # 递归扫描include_router引用的模块
         self._scan_included_routers()
-    
+
     def _parse_python_file(self, file_path: Path):
         """解析 Python 文件中的路由定义"""
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
                 lines = content.split("\n")
-            
+
             # 查找路由装饰器
             router_patterns = [
                 r'@router\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
                 r'@app\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
             ]
-            
+
             for i, line in enumerate(lines):
                 for pattern in router_patterns:
                     match = re.search(pattern, line)
@@ -116,10 +111,10 @@ class ApiDocumentGenerator:
                             self.endpoints.append(endpoint)
                             key = f"{endpoint.method}:{endpoint.path}"
                             self.backend_routes[key] = endpoint
-                            
+
         except Exception as e:
             logger.error(f"解析文件 {file_path} 失败: {e}")
-    
+
     def _extract_endpoint_info(
         self, lines: List[str], start_line: int, method: str, path: str, file_path: Path
     ) -> Optional[ApiEndpoint]:
@@ -129,14 +124,14 @@ class ApiDocumentGenerator:
         endpoint.path = path
         endpoint.file_path = str(file_path.relative_to(PROJECT_ROOT))
         endpoint.line_number = start_line + 1
-        
+
         # 查找函数定义
         for i in range(start_line + 1, min(start_line + 10, len(lines))):
             if lines[i].strip().startswith("def "):
                 func_match = re.match(r"def\s+(\w+)\s*\(", lines[i].strip())
                 if func_match:
                     endpoint.name = func_match.group(1)
-                    
+
                 # 提取文档字符串
                 for j in range(i + 1, min(i + 20, len(lines))):
                     if '"""' in lines[j] or "'''" in lines[j]:
@@ -146,20 +141,20 @@ class ApiDocumentGenerator:
                             if '"""' in lines[k] or "'''" in lines[k]:
                                 doc_end = k
                                 break
-                        
-                        doc_lines = lines[doc_start:doc_end + 1]
+
+                        doc_lines = lines[doc_start : doc_end + 1]
                         endpoint.description = self._parse_docstring(doc_lines)
                         break
                 break
-        
+
         # 检查是否需要认证
         endpoint.requires_auth = self._check_auth_required(lines, start_line)
-        
+
         # 提取分类
         endpoint.category = self._extract_category(file_path)
-        
+
         return endpoint
-    
+
     def _parse_docstring(self, lines: List[str]) -> str:
         """解析文档字符串"""
         doc = []
@@ -168,7 +163,7 @@ class ApiDocumentGenerator:
             if cleaned:
                 doc.append(cleaned)
         return " ".join(doc[:2]) if doc else ""  # 只取前两行作为描述
-    
+
     def _check_auth_required(self, lines: List[str], start_line: int) -> bool:
         """检查是否需要认证"""
         # 查找附近的认证装饰器
@@ -176,7 +171,7 @@ class ApiDocumentGenerator:
             if "require_auth" in lines[i] or "Depends(get_current_user)" in lines[i]:
                 return True
         return False
-    
+
     def _extract_category(self, file_path: Path) -> str:
         """根据文件路径提取分类"""
         path_str = str(file_path)
@@ -192,7 +187,7 @@ class ApiDocumentGenerator:
             "data-source": "数据源",
             "qmt": "QMT集成",
             "strategy": "策略",
-            "backtest": "回测"
+            "backtest": "回测",
         }
 
         for key, value in categories.items():
@@ -206,7 +201,6 @@ class ApiDocumentGenerator:
         logger.info("扫描嵌套路由器...")
 
         # 查找所有include_router调用
-        router_imports = {}
         for py_file in BACKEND_DIR.rglob("*.py"):
             if "__pycache__" in str(py_file):
                 continue
@@ -217,8 +211,8 @@ class ApiDocumentGenerator:
 
                 # 查找include_router调用
                 include_patterns = [
-                    r'app\.include_router\s*\(\s*([^,\)]+)',
-                    r'router\.include_router\s*\(\s*([^,\)]+)'
+                    r"app\.include_router\s*\(\s*([^,\)]+)",
+                    r"router\.include_router\s*\(\s*([^,\)]+)",
                 ]
 
                 for pattern in include_patterns:
@@ -226,12 +220,12 @@ class ApiDocumentGenerator:
                     for match in matches:
                         router_var = match.strip()
                         # 查找对应的import语句
-                        import_pattern = rf'from\s+([^\s]+)\s+import\s+.*\s+as\s+{router_var}|from\s+([^\s]+)\s+import\s+{router_var}'
+                        import_pattern = rf"from\s+([^\s]+)\s+import\s+.*\s+as\s+{router_var}|from\s+([^\s]+)\s+import\s+{router_var}"
                         import_match = re.search(import_pattern, content)
                         if import_match:
                             module_path = import_match.group(1) or import_match.group(2)
                             # 处理相对导入
-                            if module_path.startswith('.'):
+                            if module_path.startswith("."):
                                 base_path = py_file.parent
                                 module_file = self._resolve_module_path(base_path, module_path)
                                 if module_file and module_file.exists():
@@ -243,17 +237,17 @@ class ApiDocumentGenerator:
     def _resolve_module_path(self, base_path: Path, module_path: str) -> Optional[Path]:
         """解析模块路径"""
         # 处理相对导入路径
-        parts = module_path.split('.')
+        parts = module_path.split(".")
         resolved_path = base_path
 
         for i, part in enumerate(parts):
-            if part == '':  # 相对导入的点
+            if part == "":  # 相对导入的点
                 resolved_path = resolved_path.parent if i > 0 else resolved_path
             else:
                 resolved_path = resolved_path / part
 
         # 尝试不同的文件扩展名
-        for ext in ['.py', '/__init__.py']:
+        for ext in [".py", "/__init__.py"]:
             file_path = Path(str(resolved_path) + ext)
             if file_path.exists():
                 return file_path
@@ -270,7 +264,9 @@ class ApiDocumentGenerator:
                 lines = content.split("\n")
 
             # 查找路由器定义的前缀
-            prefix_pattern = rf'{router_name}\s*=\s*APIRouter\s*\(\s*prefix\s*=\s*["\']([^"\']+)["\']'
+            prefix_pattern = (
+                rf'{router_name}\s*=\s*APIRouter\s*\(\s*prefix\s*=\s*["\']([^"\']+)["\']'
+            )
             prefix_match = re.search(prefix_pattern, content)
             if prefix_match:
                 current_prefix = prefix + prefix_match.group(1)
@@ -303,7 +299,7 @@ class ApiDocumentGenerator:
             # 递归查找该模块的include_router
             include_patterns = [
                 rf'{router_name}\.include_router\s*\(\s*([^,\)]+)\s*,\s*prefix\s*=\s*["\']([^"\']+)["\']',
-                rf'{router_name}\.include_router\s*\(\s*([^,\)]+)'
+                rf"{router_name}\.include_router\s*\(\s*([^,\)]+)",
             ]
 
             for pattern in include_patterns:
@@ -317,11 +313,11 @@ class ApiDocumentGenerator:
                         sub_prefix = current_prefix
 
                     # 查找子路由器的导入
-                    import_pattern = rf'from\s+([^\s]+)\s+import\s+.*\s+as\s+{sub_router}|from\s+([^\s]+)\s+import\s+{sub_router}'
+                    import_pattern = rf"from\s+([^\s]+)\s+import\s+.*\s+as\s+{sub_router}|from\s+([^\s]+)\s+import\s+{sub_router}"
                     import_match = re.search(import_pattern, content)
                     if import_match:
                         module_path = import_match.group(1) or import_match.group(2)
-                        if module_path.startswith('.'):
+                        if module_path.startswith("."):
                             base_path = file_path.parent
                             sub_module_file = self._resolve_module_path(base_path, module_path)
                             if sub_module_file and sub_module_file.exists():
@@ -330,19 +326,19 @@ class ApiDocumentGenerator:
 
         except Exception as e:
             logger.error(f"解析路由器模块失败 {file_path}: {e}")
-    
+
     def scan_frontend(self):
         """扫描前端 API 调用"""
         logger.info("扫描前端 API 调用...")
-        
+
         # 扫描所有 JavaScript/TypeScript 文件
         for ext in ["*.js", "*.jsx", "*.ts", "*.tsx"]:
             for js_file in FRONTEND_DIR.rglob(ext):
                 if "node_modules" in str(js_file):
                     continue
-                
+
                 self._parse_frontend_file(js_file)
-    
+
     def _parse_frontend_file(self, file_path: Path):
         """解析前端文件中的 API 调用"""
         try:
@@ -380,17 +376,17 @@ class ApiDocumentGenerator:
     def _normalize_url(self, url: str) -> str:
         """标准化URL，处理模板变量"""
         # 移除查询参数
-        if '?' in url:
-            url = url.split('?')[0]
+        if "?" in url:
+            url = url.split("?")[0]
 
         # 将模板变量 ${var} 转换为 {var}
-        url = re.sub(r'\$\{([^}]+)\}', r'{\1}', url)
+        url = re.sub(r"\$\{([^}]+)\}", r"{\1}", url)
 
         # 处理路径参数（如 :id -> {id}）
-        url = re.sub(r':(\w+)', r'{\1}', url)
+        url = re.sub(r":(\w+)", r"{\1}", url)
 
         return url
-    
+
     def match_frontend_backend(self):
         """匹配前后端 API"""
         logger.info("匹配前后端 API...")
@@ -403,9 +399,9 @@ class ApiDocumentGenerator:
             full_paths.append(endpoint.path)
 
             # 从文件路径推断可能的前缀
-            file_parts = endpoint.file_path.split('/')
-            if 'endpoints' in file_parts:
-                endpoints_index = file_parts.index('endpoints')
+            file_parts = endpoint.file_path.split("/")
+            if "endpoints" in file_parts:
+                endpoints_index = file_parts.index("endpoints")
                 if endpoints_index + 1 < len(file_parts):
                     category = file_parts[endpoints_index + 1]
                     # 添加带前缀的路径
@@ -429,10 +425,12 @@ class ApiDocumentGenerator:
             return True
 
         # 参数化路径匹配 (处理 {id} 等参数)
-        frontend_pattern = re.sub(r'\{[^}]+\}', r'[^/]+', frontend_path)
-        backend_pattern = re.sub(r'\{[^}]+\}', r'[^/]+', backend_path)
+        frontend_pattern = re.sub(r"\{[^}]+\}", r"[^/]+", frontend_path)
+        backend_pattern = re.sub(r"\{[^}]+\}", r"[^/]+", backend_path)
 
-        if re.match(f"^{frontend_pattern}$", backend_path) or re.match(f"^{backend_pattern}$", frontend_path):
+        if re.match(f"^{frontend_pattern}$", backend_path) or re.match(
+            f"^{backend_pattern}$", frontend_path
+        ):
             return True
 
         # 后缀匹配（处理前缀差异）
@@ -440,29 +438,29 @@ class ApiDocumentGenerator:
             return True
 
         return False
-    
+
     def generate_documentation(self):
         """生成文档"""
         logger.info("生成 API 文档...")
-        
+
         # 确保文档目录存在
         DOCS_DIR.mkdir(parents=True, exist_ok=True)
-        
+
         # 生成主文档
         self._generate_main_doc()
-        
+
         # 生成分类文档
         self._generate_category_docs()
-        
+
         # 生成 OpenAPI 规范
         self._generate_openapi_spec()
-        
+
         # 生成前端 API 映射
         self._generate_frontend_mapping()
-        
+
         # 生成统计报告
         self._generate_statistics()
-    
+
     def _generate_main_doc(self):
         """生成主文档"""
         doc_path = DOCS_DIR / "README.md"
@@ -494,8 +492,8 @@ class ApiDocumentGenerator:
             content.append("\n")
 
         # 使用安全文件写入
-        SafeFileHandler.write_file(doc_path, ''.join(content))
-    
+        SafeFileHandler.write_file(doc_path, "".join(content))
+
     def _generate_category_docs(self):
         """生成分类文档"""
         categories = {}
@@ -505,7 +503,7 @@ class ApiDocumentGenerator:
             categories[endpoint.category].append(endpoint)
 
         for category, endpoints in categories.items():
-            safe_name = re.sub(r'[^\w\s-]', '', category).strip().replace(' ', '_')
+            safe_name = re.sub(r"[^\w\s-]", "", category).strip().replace(" ", "_")
             doc_path = DOCS_DIR / f"{safe_name}.md"
 
             # 构建文档内容
@@ -534,8 +532,8 @@ class ApiDocumentGenerator:
                 content.append("---\n\n")
 
             # 使用安全文件写入
-            SafeFileHandler.write_file(doc_path, ''.join(content))
-    
+            SafeFileHandler.write_file(doc_path, "".join(content))
+
     def _generate_openapi_spec(self):
         """生成 OpenAPI 规范"""
         spec = {
@@ -543,18 +541,16 @@ class ApiDocumentGenerator:
             "info": {
                 "title": "DeepSearch API",
                 "version": "1.0.0",
-                "description": "量化交易系统 API"
+                "description": "量化交易系统 API",
             },
-            "servers": [
-                {"url": "http://localhost:8000/api", "description": "开发服务器"}
-            ],
-            "paths": {}
+            "servers": [{"url": "http://localhost:8000/api", "description": "开发服务器"}],
+            "paths": {},
         }
-        
+
         for endpoint in self.endpoints:
             if endpoint.path not in spec["paths"]:
                 spec["paths"][endpoint.path] = {}
-            
+
             spec["paths"][endpoint.path][endpoint.method.lower()] = {
                 "summary": endpoint.name,
                 "description": endpoint.description,
@@ -562,26 +558,26 @@ class ApiDocumentGenerator:
                 "responses": {
                     "200": {"description": "成功"},
                     "400": {"description": "请求错误"},
-                    "500": {"description": "服务器错误"}
-                }
+                    "500": {"description": "服务器错误"},
+                },
             }
-            
+
             if endpoint.requires_auth:
                 spec["paths"][endpoint.path][endpoint.method.lower()]["security"] = [
                     {"bearerAuth": []}
                 ]
-        
+
         spec_path = DOCS_DIR / "openapi.json"
         with open(spec_path, "w", encoding="utf-8") as f:
             json.dump(spec, f, indent=2, ensure_ascii=False)
-    
+
     def _generate_frontend_mapping(self):
         """生成前端 API 映射"""
         mapping_path = DOCS_DIR / "frontend_mapping.md"
-        
+
         with open(mapping_path, "w", encoding="utf-8") as f:
             f.write("# 前端 API 使用映射\n\n")
-            
+
             # 未使用的后端 API
             unused_apis = [ep for ep in self.endpoints if not ep.frontend_usage]
             if unused_apis:
@@ -589,7 +585,7 @@ class ApiDocumentGenerator:
                 for ep in unused_apis:
                     f.write(f"- {ep.method} {ep.path} ({ep.file_path}:{ep.line_number})\n")
                 f.write("\n")
-            
+
             # 未匹配的前端调用
             unmatched_calls = []
             for api_path in self.frontend_apis:
@@ -600,7 +596,7 @@ class ApiDocumentGenerator:
                         break
                 if not matched:
                     unmatched_calls.append(api_path)
-            
+
             if unmatched_calls:
                 f.write("## ⚠️ 未匹配的前端 API 调用\n\n")
                 for path in sorted(unmatched_calls):
@@ -609,16 +605,16 @@ class ApiDocumentGenerator:
                     for file in files[:3]:
                         f.write(f"  - {file}\n")
                 f.write("\n")
-    
+
     def _generate_statistics(self):
         """生成统计报告"""
         stats_path = DOCS_DIR / "statistics.md"
-        
+
         # 统计数据
         total_endpoints = len(self.endpoints)
         used_endpoints = len([ep for ep in self.endpoints if ep.frontend_usage])
         unused_endpoints = total_endpoints - used_endpoints
-        
+
         categories = {}
         for ep in self.endpoints:
             if ep.category not in categories:
@@ -626,51 +622,53 @@ class ApiDocumentGenerator:
             categories[ep.category]["total"] += 1
             if ep.frontend_usage:
                 categories[ep.category]["used"] += 1
-        
+
         methods = {}
         for ep in self.endpoints:
             if ep.method not in methods:
                 methods[ep.method] = 0
             methods[ep.method] += 1
-        
+
         with open(stats_path, "w", encoding="utf-8") as f:
             f.write("# API 统计报告\n\n")
             f.write(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-            
+
             f.write("## 总体统计\n\n")
             f.write(f"- 总端点数: {total_endpoints}\n")
             f.write(f"- 已使用: {used_endpoints} ({used_endpoints/total_endpoints*100:.1f}%)\n")
-            f.write(f"- 未使用: {unused_endpoints} ({unused_endpoints/total_endpoints*100:.1f}%)\n\n")
-            
+            f.write(
+                f"- 未使用: {unused_endpoints} ({unused_endpoints/total_endpoints*100:.1f}%)\n\n"
+            )
+
             f.write("## 分类统计\n\n")
             f.write("| 分类 | 总数 | 已使用 | 使用率 |\n")
             f.write("|------|------|--------|--------|\n")
             for cat, stats in sorted(categories.items()):
                 usage_rate = stats["used"] / stats["total"] * 100
                 f.write(f"| {cat} | {stats['total']} | {stats['used']} | {usage_rate:.1f}% |\n")
-            
+
             f.write("\n## 方法统计\n\n")
             for method, count in sorted(methods.items()):
                 f.write(f"- {method}: {count}\n")
-    
+
     def run(self):
         """运行文档生成器"""
         logger.info("开始生成 API 文档...")
-        
+
         # 扫描后端
         self.scan_backend()
         logger.info(f"发现 {len(self.endpoints)} 个后端 API 端点")
-        
+
         # 扫描前端
         self.scan_frontend()
         logger.info(f"发现 {len(self.frontend_apis)} 个前端 API 调用")
-        
+
         # 匹配前后端
         self.match_frontend_backend()
-        
+
         # 生成文档
         self.generate_documentation()
-        
+
         logger.info(f"API 文档已生成到: {DOCS_DIR}")
 
 

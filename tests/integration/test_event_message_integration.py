@@ -3,16 +3,31 @@ EventEngine 和 MessageBus 集成测试
 
 测试事件系统和消息总线的交互
 """
-import pytest
+
 import asyncio
+import pickle
 import time
-from typing import List, Dict, Any
-from unittest.mock import Mock, AsyncMock, patch
+import zlib
+
+import pytest
 
 from deepsearch.event.engine.engine import EventEngine
 from deepsearch.event.schema import Event
 from deepsearch.messaging.bus import CompositeMessageBus
-from deepsearch.core.utils.exceptions import ComponentLifecycleError
+
+
+def decode_message_payload(message):
+    """解码 CompositeMessageBus 投递的压缩消息。"""
+    if isinstance(message, dict) and "_data" in message:
+        data = message.get("_data")
+        is_compressed = bool(message.get("_compressed"))
+        try:
+            if is_compressed:
+                data = zlib.decompress(data)
+            return pickle.loads(data)
+        except Exception:
+            return message
+    return message
 
 
 class TestEventMessageIntegration:
@@ -30,8 +45,8 @@ class TestEventMessageIntegration:
     async def message_bus(self):
         """创建消息总线实例"""
         # 使用内存总线进行测试
-        from deepsearch.messaging.factory import MessageBusFactory
         from deepsearch.config.models.bus import RouteConfig
+        from deepsearch.messaging.factory import MessageBusFactory
 
         # 创建内存总线实例
         memory_bus = MessageBusFactory.create("inmem", {})
@@ -52,7 +67,7 @@ class TestEventMessageIntegration:
 
         # 订阅消息
         def message_handler(topic, message):
-            received_messages.append(message)
+            received_messages.append(decode_message_payload(message))
 
         message_bus.subscribe("test.event", message_handler)
 
@@ -60,6 +75,7 @@ class TestEventMessageIntegration:
         def event_handler(event: Event):
             # Event is a dataclass, not a pydantic model
             from dataclasses import asdict
+
             message_bus.publish("test.event", asdict(event))
 
         event_engine.register("TEST_EVENT", event_handler)
@@ -89,7 +105,8 @@ class TestEventMessageIntegration:
 
         # 订阅消息并转发到事件引擎
         def message_handler(topic, message):
-            event = Event(type="MESSAGE_EVENT", data=message)
+            payload = decode_message_payload(message)
+            event = Event(type="MESSAGE_EVENT", data=payload)
             event_engine.put(event)
 
         message_bus.subscribe("test.message", message_handler)
@@ -145,7 +162,6 @@ class TestEventMessageIntegration:
     @pytest.mark.asyncio
     async def test_error_handling(self, event_engine, message_bus):
         """测试错误处理"""
-        errors = []
 
         # 错误的事件处理器
         def faulty_event_handler(event: Event):
@@ -202,8 +218,9 @@ class TestEventMessageIntegration:
         # 等待处理完成
         max_wait = 5  # 最多等待5秒
         wait_start = time.time()
-        while (event_counter < num_items or message_counter < num_items) and \
-              (time.time() - wait_start < max_wait):
+        while (event_counter < num_items or message_counter < num_items) and (
+            time.time() - wait_start < max_wait
+        ):
             await asyncio.sleep(0.01)
 
         elapsed_time = time.time() - start_time
@@ -227,10 +244,10 @@ class TestEventMessageIntegration:
 
         # 不同路由的处理器 - 使用同步处理器
         def handler_a(topic, message):
-            route_a_messages.append(message)
+            route_a_messages.append(decode_message_payload(message))
 
         def handler_b(topic, message):
-            route_b_messages.append(message)
+            route_b_messages.append(decode_message_payload(message))
 
         # 订阅不同的路由
         message_bus.subscribe("route.a", handler_a)
@@ -407,50 +424,243 @@ class TestMessageBusFeatures:
     @pytest.mark.asyncio
     async def test_wildcard_subscription(self):
         """测试通配符订阅"""
-        from deepsearch.messaging.factory import MessageBusFactory
         from deepsearch.config.models.bus import RouteConfig
+        from deepsearch.messaging.factory import MessageBusFactory
 
-        # 创建内存总线实例
         memory_bus = MessageBusFactory.create("inmem", {})
-
-        # 创建复合总线，包含内存总线
         buses = {"inmem": memory_bus}
         routes = [RouteConfig(match="*", buses=["inmem"])]
 
         bus = CompositeMessageBus(buses=buses, routes=routes)
-        bus.start()  # start是同步方法
+        bus.start()
 
         received = []
 
         def handler(topic, message):
-            received.append(message)
+            received.append(decode_message_payload(message))
 
-        # 订阅通配符路由
         bus.subscribe("test.*", handler)
 
-        # 发布到不同的子路由
         bus.publish("test.one", {"id": 1})
         bus.publish("test.two", {"id": 2})
-        bus.publish("other.test", {"id": 3})  # 不应该被接收
+        bus.publish("other.test", {"id": 3})
 
-        # 等待处理
         await asyncio.sleep(0.1)
 
-        # 验证
         assert len(received) == 2
         assert received[0]["id"] == 1
         assert received[1]["id"] == 2
 
-        bus.stop()  # stop是同步方法
+        bus.stop()
 
     @pytest.mark.asyncio
-    async def test_message_persistence(self):
-        """测试消息持久化（如果支持）"""
-        # 这个测试依赖于消息总线的具体实现
-        pass
+    async def test_message_compression_roundtrip(self):
+        """验证启用压缩后的消息可以被正确解码。"""
+        from deepsearch.config.models.bus import RouteConfig
+        from deepsearch.messaging.factory import MessageBusFactory
+
+        memory_bus = MessageBusFactory.create("inmem", {})
+        buses = {"inmem": memory_bus}
+        routes = [RouteConfig(match="compress.*", buses=["inmem"])]
+
+        bus = CompositeMessageBus(
+            buses=buses,
+            routes=routes,
+            enable_compression=True,
+            enable_deduplication=False,
+        )
+        bus.start()
+
+        decoded = []
+
+        def handler(topic, message):
+            decoded.append(decode_message_payload(message))
+
+        bus.subscribe("compress.topic", handler)
+
+        payload = {"blob": "x" * 2048, "index": 1}
+        bus.publish("compress.topic", payload)
+
+        await asyncio.sleep(0.05)
+
+        assert decoded == [payload]
+        performance = bus.get_statistics()["performance"]
+        assert performance["messages_compressed"] >= 1
+        assert performance["compression_ratio"] > 0
+
+        bus.stop()
 
     @pytest.mark.asyncio
-    async def test_message_acknowledgment(self):
-        """测试消息确认机制（如果支持）"""
-        # 这个测试依赖于消息总线的具体实现
-        pass
+    async def test_message_deduplication(self):
+        """验证消息去重策略避免重复投递。"""
+        from deepsearch.config.models.bus import RouteConfig
+        from deepsearch.messaging.factory import MessageBusFactory
+
+        memory_bus = MessageBusFactory.create("inmem", {})
+        buses = {"inmem": memory_bus}
+        routes = [RouteConfig(match="dedup.*", buses=["inmem"])]
+
+        bus = CompositeMessageBus(
+            buses=buses,
+            routes=routes,
+            enable_compression=False,
+            enable_deduplication=True,
+        )
+        bus.start()
+
+        counter = 0
+
+        def handler(topic, message):
+            nonlocal counter
+            counter += 1
+
+        bus.subscribe("dedup.topic", handler)
+
+        payload = {"id": 42}
+        bus.publish("dedup.topic", payload)
+        bus.publish("dedup.topic", payload)
+        bus.publish("dedup.topic", dict(payload))
+
+        await asyncio.sleep(0.05)
+
+        assert counter == 1
+        performance = bus.get_statistics()["performance"]
+        assert performance["messages_deduplicated"] >= 1
+        assert performance["deduplication_ratio"] > 0
+
+        bus.stop()
+
+    @pytest.mark.asyncio
+    async def test_statistics_reset(self):
+        """验证统计信息复位逻辑。"""
+        from deepsearch.config.models.bus import RouteConfig
+        from deepsearch.messaging.factory import MessageBusFactory
+
+        memory_bus = MessageBusFactory.create("inmem", {})
+        buses = {"inmem": memory_bus}
+        routes = [RouteConfig(match="stats.*", buses=["inmem"])]
+
+        bus = CompositeMessageBus(
+            buses=buses,
+            routes=routes,
+            enable_compression=True,
+            enable_deduplication=True,
+        )
+        bus.start()
+
+        payload = {"blob": "x" * 2048}
+        bus.publish("stats.topic", payload)
+        bus.publish("stats.topic", payload)
+
+        await asyncio.sleep(0.05)
+
+        stats = bus.get_statistics()
+        performance = stats["performance"]
+        assert performance["messages_published"] == 2
+        assert performance["messages_compressed"] >= 1
+        assert performance["messages_deduplicated"] >= 1
+        assert performance["compression_ratio"] > 0
+        assert performance["deduplication_ratio"] > 0
+
+        if "deduplicator" in stats:
+            dedup_stats = stats["deduplicator"]
+            assert dedup_stats["total_messages"] >= 2
+            assert dedup_stats["duplicates_filtered"] >= 1
+
+        bus.reset_statistics()
+        reset_stats = bus.get_statistics()
+        performance_after = reset_stats["performance"]
+        assert performance_after["messages_published"] == 0
+        assert performance_after["messages_compressed"] == 0
+        assert performance_after["messages_deduplicated"] == 0
+        assert performance_after["compression_ratio"] == 0.0
+        assert performance_after["deduplication_ratio"] == 0.0
+        assert performance_after["routing_decisions"] == {}
+        assert performance_after["errors"] == {}
+        assert performance_after["avg_publish_time"] == 0.0
+
+        if "deduplicator" in reset_stats:
+            dedup_stats_after = reset_stats["deduplicator"]
+            assert dedup_stats_after["total_messages"] == 0
+            assert dedup_stats_after["duplicates_filtered"] == 0
+            assert dedup_stats_after["unique_messages"] == 0
+
+        bus.stop()
+
+    @pytest.mark.asyncio
+    async def test_dynamic_bus_registration(self):
+        """验证动态新增总线与路由后消息可正确分发。"""
+        from deepsearch.config.models.bus import RouteConfig
+        from deepsearch.messaging.factory import MessageBusFactory
+
+        primary_bus = MessageBusFactory.create("inmem", {})
+        composite = CompositeMessageBus(buses={"inmem": primary_bus}, routes=[])
+
+        secondary_bus = MessageBusFactory.create("inmem", {})
+        composite.add_bus("zmq", secondary_bus)
+        composite.add_route(RouteConfig(match="dyn.*", buses=["inmem", "zmq"]))
+
+        received = []
+
+        def handler(topic, message):
+            received.append(decode_message_payload(message))
+
+        composite.subscribe("dyn.*", handler)
+        composite.start()
+
+        composite.publish("dyn.topic", {"value": 1})
+        await asyncio.sleep(0.05)
+
+        assert len(received) == 2
+        routing = composite.get_statistics()["performance"]["routing_decisions"]
+        assert routing == {"inmem": 1, "zmq": 1}
+
+        with pytest.raises(RuntimeError):
+            composite.add_bus("timeseries", MessageBusFactory.create("inmem", {}))
+
+        composite.stop()
+
+    @pytest.mark.asyncio
+    async def test_async_publish_requires_start(self):
+        """验证未启动时的异步发布会抛出异常。"""
+        from deepsearch.config.models.bus import RouteConfig
+        from deepsearch.messaging.factory import MessageBusFactory
+
+        bus = CompositeMessageBus(
+            buses={"inmem": MessageBusFactory.create("inmem", {})},
+            routes=[RouteConfig(match="async.*", buses=["inmem"])],
+        )
+
+        with pytest.raises(RuntimeError):
+            await bus.publish_async("async.topic", {"msg": "test"})
+
+    @pytest.mark.asyncio
+    async def test_async_subscription_flow(self):
+        """验证异步订阅与发布的桥接逻辑。"""
+        from deepsearch.config.models.bus import RouteConfig
+        from deepsearch.messaging.factory import MessageBusFactory
+
+        memory_bus = MessageBusFactory.create("inmem", {})
+        buses = {"inmem": memory_bus}
+        routes = [RouteConfig(match="async.*", buses=["inmem"])]
+
+        bus = CompositeMessageBus(buses=buses, routes=routes)
+        bus.start()
+
+        received = []
+
+        async def async_handler(topic, message):
+            received.append(decode_message_payload(message))
+
+        await bus.subscribe_async("async.*", async_handler)
+        await bus.publish_async("async.topic", {"value": 1})
+
+        for _ in range(10):
+            if received:
+                break
+            await asyncio.sleep(0.01)
+
+        assert received == [{"value": 1}]
+
+        await bus.unsubscribe_async("async.*", async_handler)
+        bus.stop()

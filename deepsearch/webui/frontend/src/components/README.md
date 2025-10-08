@@ -142,18 +142,6 @@ import { useTheme } from '@/contexts/ThemeContext'
 const { toggleDark } = useTheme()
 ```
 
-## Component Showcase
-
-To view all components and their variants, navigate to:
-```
-/showcase
-```
-
-Or import the showcase page:
-```jsx
-import ComponentShowcase from '@/pages/ComponentShowcase'
-```
-
 ## Best Practices
 
 1. **Always use design tokens** instead of hardcoded values
