@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol
@@ -116,18 +117,26 @@ class DataRequest:
 
 
 
-@dataclass
+@dataclass(init=False)
 class DataResponse:
     """数据响应"""
 
     success: bool
-    data: DataPayload | None = None
-    error: Optional[str] = None
-    metadata: Dict[str, object] = field(default_factory=dict)
+    data: DataPayload | None
+    error: Optional[str]
+    metadata: Dict[str, object]
 
-    def __post_init__(self) -> None:
-        if self.metadata is None:
-            self.metadata = {}
+    def __init__(
+        self,
+        success: bool,
+        data: DataPayload | None = None,
+        error: Optional[str] = None,
+        metadata: Mapping[str, object] | None = None,
+    ) -> None:
+        self.success = success
+        self.data = data
+        self.error = error
+        self.metadata = dict(metadata or {})
 
 class DataProviderError(Exception):
     """数据提供者错误"""
