@@ -4,7 +4,7 @@
 提供缓存状态查询、管理和监控功能
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
@@ -39,7 +39,7 @@ class CacheStatusResponse(BaseModel):
     connected: bool
     redis_available: bool
     memory_usage: Dict[str, Any]
-    statistics: Dict[str, int]
+    statistics: Dict[str, Union[int, float]]
     version: str
 
 

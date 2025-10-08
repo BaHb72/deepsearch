@@ -3,7 +3,7 @@
 包含事件引擎和消息总线等核心基础设施组件
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from deepsearch.config import get_config
 from deepsearch.core.async_component import AsyncComponent, SimpleAsyncComponent
@@ -11,6 +11,7 @@ from deepsearch.core.interfaces import ComponentType
 from deepsearch.core.utils.exceptions import error_context
 from deepsearch.event.engine.engine import EventEngine
 from deepsearch.messaging.bus import CompositeMessageBus, RouteConfig
+from deepsearch.messaging.types import BusName
 from deepsearch.messaging.factory import MessageBusFactory
 
 
@@ -115,13 +116,19 @@ class MessageBusComponent(AsyncComponent[CompositeMessageBus]):
                 # 创建路由配置
                 if hasattr(msg_bus_config, "routes"):
                     for route_cfg in msg_bus_config.routes:
-                        # 将buses转换为字符串列表（如果是枚举的话）
-                        bus_list = []
+                        # 将路由配置统一转换为 BusName 列表，确保类型安全
+                        bus_list: List[BusName] = []
                         for bus in route_cfg.buses:
-                            if hasattr(bus, "value"):
-                                bus_list.append(bus.value)
+                            if isinstance(bus, BusName):
+                                bus_list.append(bus)
+                            elif isinstance(bus, str):
+                                bus_list.append(BusName(bus))
+                            elif hasattr(bus, "value"):
+                                bus_list.append(BusName(str(bus.value)))
                             else:
-                                bus_list.append(str(bus))
+                                raise TypeError(
+                                    f"无法识别的消息总线类型: {type(bus).__name__}"
+                                )
 
                         route = RouteConfig(match=route_cfg.match, buses=bus_list)
                         routes.append(route)
@@ -131,7 +138,7 @@ class MessageBusComponent(AsyncComponent[CompositeMessageBus]):
             if not buses:
                 self._logger.warning("未找到消息总线配置，使用默认内存总线")
                 buses["inmem"] = MessageBusFactory.create("inmem", {})
-                routes.append(RouteConfig(match="*", buses=["inmem"]))
+                routes.append(RouteConfig(match="*", buses=[BusName.INMEM]))
 
             # 创建CompositeMessageBus实例并返回
             instance = CompositeMessageBus(buses=buses, routes=routes)

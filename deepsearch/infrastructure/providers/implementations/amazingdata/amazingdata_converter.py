@@ -11,13 +11,20 @@ import pandas as pd
 from loguru import logger
 
 def _coalesce(*values: object | None) -> object | None:
-    """按顺序返回首个真值，全部为假时返回最后一个值"""
+    """按顺序返回首个有效值，支持保留零值与布尔假值"""
+
     if not values:
         return None
+
     for value in values:
-        if value:
-            return value
-    return values[-1]
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            # 空字符串视为无效，继续尝试后续值
+            continue
+        return value
+
+    return None
 
 def _ensure_float(value: object | None, default: float = 0.0) -> float:
     """将任意类型转换为 float，无法转换时返回默认值"""

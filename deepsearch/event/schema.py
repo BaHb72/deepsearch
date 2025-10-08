@@ -10,7 +10,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
+from functools import wraps
+from typing import Any, Callable, Dict, List, Mapping, Optional, Type, TypeVar, cast
 
 from pydantic import BaseModel, Field, ValidationError, validator
 from pydantic.json_schema import JsonSchemaValue
@@ -34,6 +35,7 @@ VALIDATION_ERROR_LIMIT = 10
 
 logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
+HandlerFunc = TypeVar("HandlerFunc", bound=Callable[["Event"], Any])
 
 
 # ==============================================================================
@@ -260,14 +262,30 @@ class AccountSchema(TradingSchema):
 # ==============================================================================
 
 
-def schema_validated(event_type: str, schema: Type[BaseModel]):
+def schema_validated(event_type: str, schema: Type[BaseModel]) -> Callable[[HandlerFunc], HandlerFunc]:
     """Decorator to add schema validation to event handlers"""
 
-    def decorator(func):
+    def decorator(func: HandlerFunc) -> HandlerFunc:
+        @wraps(func)
         def wrapper(event: Event):
             # Validate event data against schema
+            payload = event.data
+            if isinstance(payload, BaseModel):
+                payload_data: Mapping[str, Any] = payload.model_dump()
+            elif isinstance(payload, Mapping):
+                payload_data = dict(payload)
+            elif payload is None:
+                payload_data = {}
+            else:
+                error_message = (
+                    f"事件数据必须为映射或 BaseModel，当前类型: {type(payload).__name__}"
+                )
+                logger.error(error_message)
+                raise TypeError(error_message)
+
             try:
-                validated_data = schema(**event.data)
+                validated_data = schema.model_validate(payload_data)
+                validated_payload: Dict[str, Any] = validated_data.model_dump()
                 # Create new event with validated data
                 ts_value = getattr(event, "ts", None)
                 if ts_value is None and hasattr(event, "timestamp"):
@@ -275,19 +293,17 @@ def schema_validated(event_type: str, schema: Type[BaseModel]):
                     if isinstance(maybe_ts, (int, float)):
                         ts_value = maybe_ts
                 if ts_value is None:
-                    validated_event = Event(type=event.type, data=validated_data.model_dump())
+                    validated_event = Event(type=event.type, data=validated_payload)
                 else:
-                    validated_event = Event(
-                        type=event.type, data=validated_data.model_dump(), ts=ts_value
-                    )
+                    validated_event = Event(type=event.type, data=validated_payload, ts=ts_value)
                 return func(validated_event)
             except ValidationError as e:
                 logger.error(f"Schema validation failed for {event_type}: {e}")
                 raise
 
-        wrapper._event_schema = schema
-        wrapper._event_type = event_type
-        return wrapper
+        setattr(wrapper, "_event_schema", schema)
+        setattr(wrapper, "_event_type", event_type)
+        return cast(HandlerFunc, wrapper)
 
     return decorator
 
