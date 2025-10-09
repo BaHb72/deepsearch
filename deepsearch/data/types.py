@@ -8,7 +8,8 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-NumericArray: TypeAlias = npt.NDArray[np.float_]
+# numpy 2.0 移除了 np.float_ 别名，统一使用 np.float64 保持兼容
+NumericArray: TypeAlias = npt.NDArray[np.float64]
 NumericSeries: TypeAlias = pd.Series
 BoolSeries: TypeAlias = pd.Series
 StringSeries: TypeAlias = pd.Series
