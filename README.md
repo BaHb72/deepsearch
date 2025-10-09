@@ -71,6 +71,11 @@ deepsearch/
    ```powershell
    uv sync --all-extras
    ```
+   > 📌 **提示**：默认 `uv sync` 仅安装基础依赖。若需运行单元测试或调试 CLI，请追加 `--dev` 以同步 `pytest`、`coverage` 等开发套件：
+   > ```powershell
+   > uv sync --all-extras --dev
+   > ```
+   > 若执行测试仍提示缺少 `pandas`、`pydantic`、`fastapi`、`psutil` 等模块，请确认是否遗漏以上同步步骤。仓库已在 `pyproject.toml` 中声明这些依赖，缺失通常意味着当前虚拟环境尚未安装。 
 5. 安装 WebUI 依赖：
    ```powershell
    cd deepsearch/webui/frontend
