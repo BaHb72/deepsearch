@@ -9,17 +9,27 @@ Version: 1.0.0
 import asyncio
 import threading
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from loguru import logger
 
+bt: Any
+
 try:
-    import backtrader as bt
+    import backtrader as _backtrader
 
     HAS_BACKTRADER = True
+    bt = _backtrader
 except ImportError:
     HAS_BACKTRADER = False
     bt = None
+
+if TYPE_CHECKING:
+    from backtrader import DataBase as BacktraderDataBase
+    from backtrader.feeds import GenericCSVData as BacktraderGenericCSVData
+else:
+    BacktraderDataBase = Any
+    BacktraderGenericCSVData = Any
 
 
 class DeepSearchLiveData(bt.DataBase):
@@ -152,6 +162,8 @@ class DeepSearchLiveData(bt.DataBase):
 
     def _load(self):
         """加载下一条数据"""
+        if bt is None:
+            raise RuntimeError("Backtrader 未安装，无法加载数据")
         if self.historical_data is not None and self.current_index < len(self.historical_data):
             # 加载历史数据
             row = self.historical_data.iloc[self.current_index]
@@ -296,7 +308,7 @@ class MultiSourceData:
         self.sources = {}
         self.active_source = None
 
-    def add_source(self, name: str, data_feed: bt.DataBase):
+    def add_source(self, name: str, data_feed: "BacktraderDataBase"):
         """
         添加数据源
 
@@ -324,13 +336,13 @@ class MultiSourceData:
         else:
             logger.error(f"数据源不存在: {name}")
 
-    def get_active_source(self) -> Optional[bt.DataBase]:
+    def get_active_source(self) -> Optional["BacktraderDataBase"]:
         """获取当前活动数据源"""
         if self.active_source:
             return self.sources.get(self.active_source)
         return None
 
-    def get_source(self, name: str) -> Optional[bt.DataBase]:
+    def get_source(self, name: str) -> Optional["BacktraderDataBase"]:
         """获取指定数据源"""
         return self.sources.get(name)
 

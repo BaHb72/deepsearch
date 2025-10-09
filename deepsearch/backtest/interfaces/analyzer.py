@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any, Dict, List
 import numpy as np
 import pandas as pd
 
+from deepsearch.data.types import NumericSeries
+
 if TYPE_CHECKING:
     from deepsearch.backtest.utils.results import BacktestResult
 
@@ -22,7 +24,7 @@ class PerformanceAnalyzer:
 
     @staticmethod
     def calculate_sharpe_ratio(
-        returns: pd.Series, risk_free_rate: float = 0.03, periods: int = 252
+        returns: NumericSeries, risk_free_rate: float = 0.03, periods: int = 252
     ) -> float:
         """
         计算夏普比率
@@ -35,19 +37,24 @@ class PerformanceAnalyzer:
         Returns:
             夏普比率
         """
-        if len(returns) == 0:
-            return 0
+        series = returns.dropna()
 
-        excess_returns = returns - risk_free_rate / periods
+        if len(series) == 0:
+            return 0.0
 
-        if excess_returns.std() == 0:
-            return 0
+        values = np.asarray(series, dtype=float)
+        excess_returns = values - (risk_free_rate / periods)
+        std_value = float(np.std(excess_returns, ddof=1))
 
-        return float(np.sqrt(periods) * excess_returns.mean() / excess_returns.std())
+        if std_value == 0:
+            return 0.0
+
+        mean_value = float(np.mean(excess_returns))
+        return float(np.sqrt(periods) * mean_value / std_value)
 
     @staticmethod
     def calculate_sortino_ratio(
-        returns: pd.Series, risk_free_rate: float = 0.03, periods: int = 252
+        returns: NumericSeries, risk_free_rate: float = 0.03, periods: int = 252
     ) -> float:
         """
         计算索提诺比率
@@ -60,24 +67,28 @@ class PerformanceAnalyzer:
         Returns:
             索提诺比率
         """
-        if len(returns) == 0:
-            return 0
+        series = returns.dropna()
 
-        excess_returns = returns - risk_free_rate / periods
+        if len(series) == 0:
+            return 0.0
+
+        values = np.asarray(series, dtype=float)
+        excess_returns = values - (risk_free_rate / periods)
         downside_returns = excess_returns[excess_returns < 0]
 
-        if len(downside_returns) == 0:
+        if downside_returns.size == 0:
             return float("inf")
 
-        downside_std = np.sqrt(np.mean(downside_returns**2))
+        downside_std = float(np.sqrt(np.mean(downside_returns**2)))
 
         if downside_std == 0:
-            return 0
+            return 0.0
 
-        return float(np.sqrt(periods) * excess_returns.mean() / downside_std)
+        mean_value = float(np.mean(excess_returns))
+        return float(np.sqrt(periods) * mean_value / downside_std)
 
     @staticmethod
-    def calculate_max_drawdown(equity_curve: pd.Series) -> Dict[str, Any]:
+    def calculate_max_drawdown(equity_curve: NumericSeries) -> Dict[str, Any]:
         """
         计算最大回撤
 
@@ -87,34 +98,38 @@ class PerformanceAnalyzer:
         Returns:
             包含最大回撤信息的字典
         """
-        if len(equity_curve) == 0:
-            return {"max_drawdown": 0, "max_drawdown_duration": 0}
+        series = equity_curve.dropna()
 
-        # 计算累计最大值
-        cummax = equity_curve.expanding().max()
+        if len(series) == 0:
+            return {"max_drawdown": 0.0, "max_drawdown_duration": 0}
 
-        # 计算回撤
-        drawdown = (equity_curve - cummax) / cummax
+        values = np.asarray(series, dtype=float)
+        cummax = np.maximum.accumulate(values)
+        drawdowns = np.divide(
+            values - cummax,
+            cummax,
+            out=np.zeros_like(values),
+            where=cummax != 0,
+        )
 
-        # 找到最大回撤
-        max_drawdown = drawdown.min()
+        min_index = int(np.argmin(drawdowns))
+        max_drawdown = float(drawdowns[min_index])
+        index = series.index
+        drawdown_start = index[min_index]
+        peak_value = cummax[min_index]
 
-        # 计算最大回撤持续时间
-        drawdown_start = drawdown[drawdown == max_drawdown].index[0]
-
-        # 找到恢复点
-        recovery_date = None
-        peak_value = cummax[drawdown_start]
-
-        for date in equity_curve[drawdown_start:].index:
-            if equity_curve[date] >= peak_value:
-                recovery_date = date
+        recovery_index: int | None = None
+        for offset in range(min_index, len(values)):
+            if values[offset] >= peak_value:
+                recovery_index = offset
                 break
 
-        if recovery_date:
-            duration = (recovery_date - drawdown_start).days
+        if recovery_index is not None:
+            recovery_date = index[recovery_index]
+            duration = int((recovery_date - drawdown_start).days)
         else:
-            duration = (equity_curve.index[-1] - drawdown_start).days
+            recovery_date = None
+            duration = int((index[-1] - drawdown_start).days)
 
         return {
             "max_drawdown": abs(max_drawdown),
@@ -137,7 +152,7 @@ class PerformanceAnalyzer:
             卡尔玛比率
         """
         if max_drawdown == 0 or years == 0:
-            return 0
+            return 0.0
 
         annualized_return = (1 + total_return) ** (1 / years) - 1
         return float(annualized_return / abs(max_drawdown))
@@ -154,7 +169,7 @@ class PerformanceAnalyzer:
             胜率
         """
         if not trades:
-            return 0
+            return 0.0
 
         winning_trades = sum(1 for t in trades if t.get("pnl", 0) > 0)
         return winning_trades / len(trades)
@@ -171,19 +186,19 @@ class PerformanceAnalyzer:
             盈亏比
         """
         if not trades:
-            return 0
+            return 0.0
 
         gross_profit = sum(t["pnl"] for t in trades if t.get("pnl", 0) > 0)
         gross_loss = abs(sum(t["pnl"] for t in trades if t.get("pnl", 0) < 0))
 
         if gross_loss == 0:
-            return float("inf") if gross_profit > 0 else 0
+            return float("inf") if gross_profit > 0 else 0.0
 
         return float(gross_profit / gross_loss)
 
     @staticmethod
     def calculate_risk_metrics(
-        returns: pd.Series, confidence_level: float = 0.95
+        returns: NumericSeries, confidence_level: float = 0.95
     ) -> Dict[str, float]:
         """
         计算风险指标
@@ -195,23 +210,41 @@ class PerformanceAnalyzer:
         Returns:
             风险指标字典
         """
-        if len(returns) == 0:
+        series = returns.dropna()
+
+        if len(series) == 0:
             return {}
 
+        values = np.asarray(series, dtype=float)
+        mean_value = float(np.mean(values))
+        centered = values - mean_value
+        std_sample = float(np.std(values, ddof=1))
+        volatility = std_sample * np.sqrt(252)
+
+        if std_sample == 0:
+            skewness = 0.0
+            kurtosis = 0.0
+        else:
+            normalized = centered / std_sample
+            skewness = float(np.mean(normalized**3))
+            kurtosis = float(np.mean(normalized**4))
+
+        var_threshold = float(np.quantile(values, 1 - confidence_level))
+        tail_values = values[values <= var_threshold]
+        cvar = float(tail_values.mean()) if tail_values.size > 0 else 0.0
+
         metrics = {
-            "volatility": returns.std() * np.sqrt(252),  # 年化波动率
-            "skewness": returns.skew(),  # 偏度
-            "kurtosis": returns.kurtosis(),  # 峰度
-            "var": returns.quantile(1 - confidence_level),  # 风险价值
-            "cvar": returns[
-                returns <= returns.quantile(1 - confidence_level)
-            ].mean(),  # 条件风险价值
+            "volatility": float(volatility),
+            "skewness": skewness,
+            "kurtosis": kurtosis,
+            "var": var_threshold,
+            "cvar": cvar,
         }
 
         return metrics
 
     @staticmethod
-    def calculate_rolling_metrics(equity_curve: pd.Series, window: int = 30) -> pd.DataFrame:
+    def calculate_rolling_metrics(equity_curve: NumericSeries, window: int = 30) -> pd.DataFrame:
         """
         计算滚动指标
 
@@ -222,25 +255,42 @@ class PerformanceAnalyzer:
         Returns:
             滚动指标 DataFrame
         """
-        if len(equity_curve) < window:
+        series = equity_curve.dropna()
+
+        if len(series) < window:
             return pd.DataFrame()
 
-        returns = equity_curve.pct_change().dropna()
+        values = np.asarray(series, dtype=float)
+        returns_values = np.diff(values) / values[:-1]
+        returns_index = series.index[1:]
 
-        rolling_metrics = pd.DataFrame(index=equity_curve.index[window:])
+        if len(returns_values) < window:
+            return pd.DataFrame()
 
-        # 滚动收益率
-        rolling_metrics["rolling_return"] = returns.rolling(window).mean() * 252
-
-        # 滚动波动率
-        rolling_metrics["rolling_volatility"] = returns.rolling(window).std() * np.sqrt(252)
-
-        # 滚动夏普比率
-        rolling_metrics["rolling_sharpe"] = (
-            rolling_metrics["rolling_return"] / rolling_metrics["rolling_volatility"]
+        returns_series = pd.Series(returns_values, index=returns_index)
+        rolling_return = np.asarray(returns_series.rolling(window).mean(), dtype=float) * 252.0
+        rolling_volatility = (
+            np.asarray(returns_series.rolling(window).std(), dtype=float) * np.sqrt(252.0)
         )
 
-        return rolling_metrics
+        with np.errstate(divide="ignore", invalid="ignore"):
+            rolling_sharpe = np.divide(
+                rolling_return,
+                rolling_volatility,
+                out=np.zeros_like(rolling_return),
+                where=rolling_volatility != 0,
+            )
+
+        rolling_metrics = pd.DataFrame(
+            {
+                "rolling_return": rolling_return,
+                "rolling_volatility": rolling_volatility,
+                "rolling_sharpe": rolling_sharpe,
+            },
+            index=returns_index,
+        )
+
+        return rolling_metrics.dropna()
 
     @staticmethod
     def generate_report(result: "BacktestResult") -> str:
@@ -338,9 +388,13 @@ class PerformanceAnalyzer:
         avg_trade_value = result.initial_cash * 0.1
 
         # 双边交易成本（买入+卖出）
-        commission_cost = avg_trade_value * result.commission * 2 * result.total_trades
+        commission_cost = float(
+            avg_trade_value * result.commission * 2 * result.total_trades
+        )
 
         # 滑点成本
-        slippage_cost = avg_trade_value * result.slippage * 2 * result.total_trades
+        slippage_cost = float(
+            avg_trade_value * result.slippage * 2 * result.total_trades
+        )
 
-        return commission_cost + slippage_cost
+        return float(commission_cost + slippage_cost)

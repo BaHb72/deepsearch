@@ -7,6 +7,9 @@ Version: 1.0.0
 """
 
 from loguru import logger
+from types import ModuleType, SimpleNamespace
+from typing import cast
+
 
 try:
     import backtrader as bt
@@ -15,8 +18,19 @@ try:
     HAS_BACKTRADER = True
 except ImportError:
     HAS_BACKTRADER = False
-    bt = None
-    btind = None
+    fallback_strategy = type("FallbackStrategy", (), {"params": ()})
+    bt = cast(ModuleType, SimpleNamespace(Strategy=fallback_strategy))
+    btind = cast(
+        ModuleType,
+        SimpleNamespace(
+            SimpleMovingAverage=object,
+            ExponentialMovingAverage=object,
+            RelativeStrengthIndex=object,
+            MACD=object,
+            BollingerBands=object,
+            AverageTrueRange=object,
+        ),
+    )
 
 
 class DataValidationStrategy(bt.Strategy):

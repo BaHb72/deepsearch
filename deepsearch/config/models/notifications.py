@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, cast
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -87,8 +87,12 @@ class NotificationsConfig(BaseModel):
         default_channel = self.default_channel
         for name, category in self.categories.items():
             if not category.channels:
-                # 直接修改实例副本
-                self.categories[name] = category.model_copy(update={"channels": [default_channel]})
+                # 通过显式类型转换让 mypy 理解 model_copy 返回值的具体类型
+                updated = cast(
+                    NotificationCategoryConfig,
+                    category.model_copy(update={"channels": [default_channel]}),
+                )
+                self.categories[name] = updated
         return self
 
     def get_token(self, channel: str) -> Optional[str]:

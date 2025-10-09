@@ -14,12 +14,15 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from loguru import logger
 from deepsearch.infrastructure.providers.interfaces.base import (
+    DataProvider,
+    DataProviderConfig,
+    DataProviderError,
+    DataRequest,
     DataResponse,
     DataSourceType,
 )
 from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
 
-from .base import DataProvider, DataProviderConfig, DataProviderError, DataRequest
 
 
 class MiniQMTProvider(DataProvider):

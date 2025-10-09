@@ -4,7 +4,7 @@ QMT数据验证和容错机制
 实现数据质量检查、异常检测和自动修复
 """
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 from loguru import logger
@@ -16,7 +16,7 @@ class DataValidator:
     def __init__(self):
         """初始化验证器"""
         # 价格限制
-        self.price_limits = {
+        self.price_limits: Dict[str, float] = {
             'daily_limit': 0.1,  # 涨跌停限制10%
             'st_limit': 0.05,  # ST股票5%
             'kcb_limit': 0.2,  # 科创板20%
@@ -24,10 +24,10 @@ class DataValidator:
         }
 
         # 异常检测阈值
-        self.thresholds = {
-            'volume_spike': 10,  # 成交量异常倍数
+        self.thresholds: Dict[str, float] = {
+            'volume_spike': 10.0,  # 成交量异常倍数
             'price_gap': 0.15,  # 价格跳空阈值
-            'zero_volume_days': 30,  # 零成交天数阈值
+            'zero_volume_days': 30.0,  # 零成交天数阈值
         }
 
     def validate_tick_data(self, tick_data: Dict) -> Tuple[bool, str]:
@@ -93,7 +93,9 @@ class DataValidator:
         except Exception as e:
             return False, f"验证异常: {str(e)}"
 
-    def validate_kline_data(self, kline_data: pd.DataFrame, symbol: str = None) -> Tuple[bool, List[str]]:
+    def validate_kline_data(
+        self, kline_data: pd.DataFrame, symbol: Optional[str] = None
+    ) -> Tuple[bool, List[str]]:
         """
         验证K线数据
         
@@ -159,8 +161,9 @@ class DataValidator:
 
                 # 检查长期零成交
                 zero_volume = kline_data[kline_data['volume'] == 0]
-                if len(zero_volume) > self.thresholds['zero_volume_days']:
-                    errors.append(f"发现超过{self.thresholds['zero_volume_days']}天零成交")
+                zero_volume_limit = int(self.thresholds['zero_volume_days'])
+                if len(zero_volume) > zero_volume_limit:
+                    errors.append(f"发现超过{zero_volume_limit}天零成交")
 
             # 时间连续性检查
             if kline_data.index.name == 'date' or 'date' in kline_data.columns:
@@ -277,7 +280,7 @@ class DataValidator:
         return (morning_open <= time <= morning_close) or \
             (afternoon_open <= time <= afternoon_close)
 
-    def _get_price_limit(self, symbol: str) -> float:
+    def _get_price_limit(self, symbol: Optional[str]) -> float:
         """
         获取股票的涨跌停限制
         

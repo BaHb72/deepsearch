@@ -2,7 +2,7 @@
 日志配置模型。
 """
 
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field, PositiveInt
 
@@ -17,5 +17,6 @@ class LogConfig(BaseModel):
     active: bool = True
     level: LogLevel = "INFO"
     rotation: str = DEFAULT_LOG_ROTATION_TIME
-    retention_days: PositiveInt = DEFAULT_LOG_RETENTION_DAYS
+    # 使用 cast 确保默认值在静态类型层面符合 PositiveInt 的约束
+    retention_days: PositiveInt = cast(PositiveInt, DEFAULT_LOG_RETENTION_DAYS)
     enable_json: bool = Field(False, alias="json")

@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict, deque
+from collections.abc import MutableMapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import DefaultDict, Optional
+from typing import Any, DefaultDict, Optional, cast
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -116,7 +117,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             burst_size: 突发请求容量
             exclude_paths: 不限流的路径集合
         """
-        super().__init__(app)
+        # FastAPI 应用满足 ASGI 协议，此处忽略 mypy 的类型误报
+        super().__init__(app)  # type: ignore[arg-type]
 
         global _middleware_instance
         _middleware_instance = self
@@ -286,14 +288,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # 测试模式下跳过限流，避免集成测试被 429 干扰
         if request.headers.get("X-Test-Mode", "").lower() == "true":
-            response = await call_next(request)
-            response.headers.setdefault("X-RateLimit-Mode", "test-bypass")
-            response.headers.setdefault("X-Test-Mode", "true")
-            return response
+            bypass_response: Response = await call_next(request)
+            bypass_headers = cast(MutableMapping[str, str], bypass_response.headers)
+            bypass_headers.setdefault("X-RateLimit-Mode", "test-bypass")
+            bypass_headers.setdefault("X-Test-Mode", "true")
+            return bypass_response
 
         # 排除不需要限流的路径
         if path in self.exclude_paths:
-            return await call_next(request)
+            passthrough_response: Response = await call_next(request)
+            return passthrough_response
 
         # 重置计数器
         self._reset_counters()
@@ -318,9 +322,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
             usage_percent = (self.daily_requests / self.daily_limit) * 100
 
-            return JSONResponse(
+            return self._build_json_response(
                 status_code=429,
-                content={
+                payload={
                     "error": "Rate limit exceeded",
                     "message": f"Daily limit approaching ({usage_percent:.1f}%), {priority.name} requests temporarily disabled",
                     "daily_usage": f"{self.daily_requests}/{self.daily_limit}",
@@ -333,9 +337,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if self.minute_requests > self.minute_limit:
             self._counters.record_rejection(priority)
 
-            return JSONResponse(
+            return self._build_json_response(
                 status_code=429,
-                content={
+                payload={
                     "error": "Rate limit exceeded",
                     "message": f"Minute limit exceeded ({self.minute_requests}/{self.minute_limit})",
                     "retry_after": 60,
@@ -347,9 +351,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not self._check_rate_limit():
             self._counters.record_rejection(priority)
 
-            return JSONResponse(
+            return self._build_json_response(
                 status_code=429,
-                content={
+                payload={
                     "error": "Rate limit exceeded",
                     "message": f"Request rate too high (max {self.requests_per_second}/s)",
                     "retry_after": 1,
@@ -374,18 +378,29 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             logger.error(f"CloudFlare 日限额已使用 95%: {self.daily_requests}/{self.daily_limit}")
 
         # 继续处理请求
-        response = await call_next(request)
+        downstream_response: Response = await call_next(request)
 
         # 添加限流信息到响应头
-        response.headers["X-RateLimit-Limit"] = str(self.daily_limit)
-        response.headers["X-RateLimit-Remaining"] = str(self.daily_limit - self.daily_requests)
-        response.headers["X-RateLimit-Reset"] = str(
+        downstream_headers = cast(MutableMapping[str, str], downstream_response.headers)
+        downstream_headers["X-RateLimit-Limit"] = str(self.daily_limit)
+        downstream_headers["X-RateLimit-Remaining"] = str(
+            self.daily_limit - self.daily_requests
+        )
+        downstream_headers["X-RateLimit-Reset"] = str(
             int(
                 (datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)).timestamp()
             )
         )
 
-        return response
+        return downstream_response
+
+    @staticmethod
+    def _build_json_response(
+        *, status_code: int, payload: dict[str, Any], headers: dict[str, str] | None = None
+    ) -> Response:
+        """生成符合 Response 类型的 JSON 响应，避免 mypy 误判"""
+
+        return cast(Response, JSONResponse(status_code=status_code, content=payload, headers=headers))
 
     def get_stats(self) -> RateLimitStats:
         """获取限流统计信息快照"""

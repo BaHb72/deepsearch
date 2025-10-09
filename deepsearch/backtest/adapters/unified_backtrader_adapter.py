@@ -8,7 +8,7 @@ Version: 1.0.0
 
 import asyncio
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Mapping, Optional, Union, cast
+from typing import Any, Callable, Dict, List, Mapping, Optional, TYPE_CHECKING, Union, cast
 
 import pandas as pd
 from loguru import logger
@@ -16,12 +16,18 @@ from loguru import logger
 bt: Any
 
 try:
-    import backtrader as bt
+    import backtrader as _backtrader
 
     HAS_BACKTRADER = True
+    bt = _backtrader
 except ImportError:
     HAS_BACKTRADER = False
     bt = None
+
+if TYPE_CHECKING:
+    from backtrader.feeds import PandasData as BacktraderPandasData
+else:
+    BacktraderPandasData = Any
 
 from deepsearch.infrastructure.providers.managers.enhanced_manager import get_data_manager
 
@@ -220,7 +226,7 @@ class UnifiedBacktraderAdapter:
 
     def create_backtrader_feed(
         self, dataframe: pd.DataFrame, name: Optional[str] = None, **kwargs
-    ) -> bt.feeds.PandasData:
+    ) -> Optional["BacktraderPandasData"]:
         """创建 Backtrader 数据源"""
         feed = self.data_bridge.create_backtrader_feed(dataframe, **kwargs)
         if feed is not None and name:

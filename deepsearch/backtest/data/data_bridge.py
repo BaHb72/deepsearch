@@ -5,7 +5,7 @@
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union, cast
 
 import pandas as pd
 from loguru import logger
@@ -13,12 +13,18 @@ from loguru import logger
 bt: Any
 
 try:
-    import backtrader as bt
+    import backtrader as _backtrader
 
     HAS_BACKTRADER = True
+    bt = _backtrader
 except ImportError:
     HAS_BACKTRADER = False
     bt = None
+
+if TYPE_CHECKING:
+    from backtrader.feeds import PandasData as BacktraderPandasData
+else:
+    BacktraderPandasData = Any
 
 
 class DataBridge:
@@ -343,7 +349,7 @@ class DataBridge:
 
         return df
 
-    def create_backtrader_feed(self, df: pd.DataFrame, **kwargs) -> Optional["bt.feeds.PandasData"]:
+    def create_backtrader_feed(self, df: pd.DataFrame, **kwargs) -> Optional["BacktraderPandasData"]:
         """
         创建 Backtrader 数据源对象
 
@@ -363,17 +369,21 @@ class DataBridge:
             return None
 
         try:
+            assert bt is not None
             # 创建 Backtrader 数据源
-            data = bt.feeds.PandasData(
-                dataname=df,
-                datetime=None,  # 使用索引作为日期
-                open="open" if "open" in df.columns else -1,
-                high="high" if "high" in df.columns else -1,
-                low="low" if "low" in df.columns else -1,
-                close="close" if "close" in df.columns else -1,
-                volume="volume" if "volume" in df.columns else -1,
-                openinterest=-1,  # 不使用持仓量
-                **kwargs,
+            data = cast(
+                BacktraderPandasData,
+                bt.feeds.PandasData(
+                    dataname=df,
+                    datetime=None,  # 使用索引作为日期
+                    open="open" if "open" in df.columns else -1,
+                    high="high" if "high" in df.columns else -1,
+                    low="low" if "low" in df.columns else -1,
+                    close="close" if "close" in df.columns else -1,
+                    volume="volume" if "volume" in df.columns else -1,
+                    openinterest=-1,  # 不使用持仓量
+                    **kwargs,
+                ),
             )
 
             logger.info(f"Created Backtrader feed with {len(df)} bars")

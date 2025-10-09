@@ -793,7 +793,8 @@ class BacktestEngine:
             return json.dumps(data, indent=2, default=str)
         if format == "csv":
             df = pd.DataFrame([data["metrics"]])
-            return df.to_csv(index=False)
+            csv_content = df.to_csv(index=False)
+            return cast(str, csv_content)
         if format == "excel":
             trades = cast(List[Dict[str, Any]], data["trades"])
             equity_records = cast(List[Dict[str, Any]], data["equity_curve"])

@@ -3,11 +3,13 @@ AKShare直连数据提供者
 直接使用AKShare获取实时股票数据，作为备用数据源
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from loguru import logger
 
@@ -17,25 +19,15 @@ from deepsearch.core.utils.async_timeout import timeout_decorator
 from deepsearch.infrastructure.providers.unified_proxy import async_monitor_access
 from deepsearch.observability.monitoring.data_source_monitor import DataAccessType, DataSourceType
 
-try:
-    import akshare as ak
+from ._deps import AkshareModule, PandasModule, load_akshare, load_pandas
 
-    HAS_AKSHARE = True
-except ImportError:
-    HAS_AKSHARE = False
-    ak = None
+ak: Optional[AkshareModule] = load_akshare()
+HAS_AKSHARE = ak is not None
+if not HAS_AKSHARE:
     logger.warning("AKShare未安装，直连数据提供者不可用")
 
-try:
-    import pandas as pd
-
-    HAS_PANDAS = True
-except ImportError:
-    HAS_PANDAS = False
-    pd = None  # type: ignore[assignment]
-
-if TYPE_CHECKING:
-    import pandas as pd  # pragma: no cover
+pd: Optional[PandasModule] = load_pandas()
+HAS_PANDAS = pd is not None
 
 
 CacheEntry = Tuple[float, Dict[str, Any]]
@@ -44,7 +36,13 @@ CacheEntry = Tuple[float, Dict[str, Any]]
 class AKShareDirectProvider:
     """AKShare直连数据提供者"""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None, timeout: Optional[float] = None):
+    def __init__(
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        akshare_module: Optional[AkshareModule] = None,
+        pandas_module: Optional[PandasModule] = None,
+    ):
         self.config = config if isinstance(config, dict) else {}
         self.timeout = timeout
         self._cache: Dict[str, CacheEntry] = {}
@@ -57,11 +55,25 @@ class AKShareDirectProvider:
         self.initialized = False
         self.access_mode = "auto"
         self.proxy_info = {"enabled": False, "worker_url": None, "mode": "direct"}
+        self._akshare: Optional[AkshareModule] = akshare_module if akshare_module is not None else ak
+        self._pandas: Optional[PandasModule] = pandas_module if pandas_module is not None else pd
+
+    def _ensure_akshare(self) -> AkshareModule:
+        """获取注入的 AkShare 模块"""
+
+        if self._akshare is None:
+            raise RuntimeError("AkShare 未安装或未注入，无法执行该操作")
+        return self._akshare
+
+    def _get_pandas(self) -> Optional[PandasModule]:
+        """返回注入的 pandas 模块（允许为空）"""
+
+        return self._pandas
 
     async def initialize(self):
         """初始化"""
-        if not HAS_AKSHARE:
-            logger.error("AKShare未安装，无法初始化直连数据提供者")
+        if self._akshare is None:
+            logger.error("AKShare未安装或未注入，无法初始化直连数据提供者")
             return False
 
         proxy_config = {}
@@ -189,8 +201,21 @@ class AKShareDirectProvider:
 
     def _fetch_stock_info_sync(self, symbol: str) -> Dict[str, Any]:
         """??????????"""
+        module = self._akshare
+        if module is None:
+            logger.error("AkShare 未安装或未注入，无法获取股票基础信息")
+            return {
+                "symbol": symbol,
+                "name": f"未知{symbol}",
+                "exchange": self._infer_exchange(symbol),
+                "industry": "",
+                "market": "",
+                "listed_date": "",
+                "source": "akshare_direct",
+                "error": "AkShare 未安装",
+            }
         try:
-            df = ak.stock_individual_info_em(symbol=symbol)
+            df = module.stock_individual_info_em(symbol=symbol)
             if df is None or df.empty:
                 return {
                     "symbol": symbol,
@@ -271,10 +296,14 @@ class AKShareDirectProvider:
 
     def _fetch_daily_summary(self, symbol: str) -> Optional[Dict[str, Any]]:
         """????????????"""
+        module = self._akshare
+        if module is None:
+            logger.error("AkShare 未安装或未注入，无法获取日线摘要")
+            return None
         try:
             end_date = datetime.now().strftime("%Y%m%d")
             start_date = (datetime.now() - timedelta(days=15)).strftime("%Y%m%d")
-            df = ak.stock_zh_a_hist(
+            df = module.stock_zh_a_hist(
                 symbol=symbol,
                 period="daily",
                 start_date=start_date,
@@ -312,7 +341,7 @@ class AKShareDirectProvider:
     )
     async def get_top_gainers(self, limit: int = 10, **kwargs) -> List[Dict[str, Any]]:
         """???????"""
-        if not HAS_AKSHARE or not self.initialized:
+        if self._akshare is None or not self.initialized:
             return []
         symbols = kwargs.get("symbols")
         if not symbols:
@@ -335,7 +364,7 @@ class AKShareDirectProvider:
     )
     async def get_top_losers(self, limit: int = 10, **kwargs) -> List[Dict[str, Any]]:
         """???????"""
-        if not HAS_AKSHARE or not self.initialized:
+        if self._akshare is None or not self.initialized:
             return []
         symbols = kwargs.get("symbols")
         if not symbols:
@@ -359,7 +388,7 @@ class AKShareDirectProvider:
     @timeout_decorator(seconds=10.0, default={"error": "timeout"})
     async def get_stock_info(self, symbol: str) -> Dict[str, Any]:
         """获取股票基础信息"""
-        if not HAS_AKSHARE or not self.initialized:
+        if self._akshare is None or not self.initialized:
             return {
                 "symbol": symbol,
                 "code": symbol,
@@ -404,7 +433,7 @@ class AKShareDirectProvider:
         Returns:
             实时行情数据
         """
-        if not HAS_AKSHARE or not self.initialized:
+        if self._akshare is None or not self.initialized:
             return {"error": "AKShare未安装或未初始化"}
 
         try:
@@ -433,13 +462,16 @@ class AKShareDirectProvider:
 
     def _fetch_realtime_quote_sync(self, symbol: str) -> Dict[str, Any]:
         """同步获取实时行情（在线程池中执行）"""
+        module = self._akshare
+        if module is None:
+            return {"error": "AkShare 未安装或未注入"}
         try:
             logger.info(f"[AKShare] 开始获取 {symbol} 实时行情")
 
             # 方法1: 尝试使用个股信息接口（更快）
             try:
                 # 获取个股信息
-                df_info = ak.stock_individual_info_em(symbol=symbol)
+                df_info = module.stock_individual_info_em(symbol=symbol)
                 if not df_info.empty:
                     info_dict = {}
                     for _, row in df_info.iterrows():
@@ -466,7 +498,7 @@ class AKShareDirectProvider:
 
             # 方法2: 降级到全市场查询（慢，约20秒）
             logger.warning("[AKShare] 降级到全市场查询（慢）")
-            df = ak.stock_zh_a_spot_em()
+            df = module.stock_zh_a_spot_em()
 
             # 查找指定股票
             stock_data = df[df["代码"] == symbol]
@@ -531,7 +563,7 @@ class AKShareDirectProvider:
         Returns:
             历史K线数据
         """
-        if not HAS_AKSHARE or not self.initialized:
+        if self._akshare is None or not self.initialized:
             return {"data": [], "error": "AKShare未安装或未初始化"}
 
         try:
@@ -659,6 +691,13 @@ class AKShareDirectProvider:
         adjust: str,
     ) -> Dict[str, Any]:
         """同步获取历史数据"""
+        module = self._akshare
+        if module is None:
+            return {
+                "data": [],
+                "error": "AkShare 未安装或未注入",
+                "source": "akshare_direct",
+            }
         try:
             # 转换复权类型
             adjust_map = {
@@ -670,7 +709,7 @@ class AKShareDirectProvider:
             adjust_type = adjust_map.get(adjust, "")
 
             # 获取历史数据
-            df = ak.stock_zh_a_hist(
+            df = module.stock_zh_a_hist(
                 symbol=symbol,
                 period=period,
                 start_date=start_date.replace("-", "") if start_date else "19900101",
@@ -717,7 +756,7 @@ class AKShareDirectProvider:
         Returns:
             股票基础信息
         """
-        if not HAS_AKSHARE or not self.initialized:
+        if self._akshare is None or not self.initialized:
             return {"symbol": symbol, "name": f"股票{symbol}", "error": "AKShare未安装或未初始化"}
 
         try:
@@ -749,7 +788,7 @@ class AKShareDirectProvider:
     )
     async def fetch_stock_list(self) -> List[Dict[str, str]]:
         """获取股票列表"""
-        if not HAS_AKSHARE or not self.initialized:
+        if self._akshare is None or not self.initialized:
             return []
 
         try:
@@ -804,6 +843,10 @@ class AKShareDirectProvider:
 
     def _fetch_stock_list_sync(self) -> List[Dict[str, str]]:
         """同步获取股票列表"""
+        module = self._akshare
+        if module is None:
+            logger.error("AkShare 未安装或未注入，无法获取股票列表")
+            return []
         try:
             # 尝试多种方式获取股票列表，提高容错性
             df = None
@@ -811,7 +854,7 @@ class AKShareDirectProvider:
             # 方法1: 使用stock_zh_a_spot_em (东方财富实时行情)
             try:
                 logger.debug("尝试使用东方财富接口获取股票列表...")
-                df = ak.stock_zh_a_spot_em()
+                df = module.stock_zh_a_spot_em()
                 if df is not None and not df.empty:
                     stocks = []
                     for _, row in df.iterrows():
@@ -826,7 +869,7 @@ class AKShareDirectProvider:
             # 方法2: 使用原来的stock_info_a_code_name
             try:
                 logger.debug("尝试使用stock_info_a_code_name获取股票列表...")
-                df = ak.stock_info_a_code_name()
+                df = module.stock_info_a_code_name()
                 if df is not None and not df.empty:
                     stocks = []
                     for _, row in df.iterrows():
@@ -879,7 +922,7 @@ class AKShareDirectProvider:
         Returns:
             API响应数据
         """
-        if not HAS_AKSHARE or not self.initialized:
+        if self._akshare is None or not self.initialized:
             return {"error": "AKShare未安装或未初始化"}
 
         # 检查缓存
@@ -933,11 +976,15 @@ class AKShareDirectProvider:
         Returns:
             格式化的响应数据
         """
+        module = self._akshare
+        if module is None:
+            return {"error": "AkShare 未安装或未注入"}
+        pandas_module = self._get_pandas()
         try:
             logger.info(f"[AKShare Direct] 调用 {api_name} with params: {params}")
 
             # 获取AkShare函数
-            if not hasattr(ak, api_name):
+            if not hasattr(module, api_name):
                 # 尝试处理一些已知的API变更
                 alternate_names = {
                     "stock_zh_a_hist_adj_factor": "stock_zh_a_adjust",  # 复权因子新API
@@ -949,16 +996,16 @@ class AKShareDirectProvider:
                     logger.info(f"API {api_name} 不存在，尝试使用替代API: {new_api_name}")
                     api_name = new_api_name
 
-                if not hasattr(ak, api_name):
+                if not hasattr(module, api_name):
                     return {"error": f"AkShare不存在函数: {api_name}"}
 
-            func = getattr(ak, api_name)
+            func = getattr(module, api_name)
 
             # 调用API
             result = func(**params) if params else func()
 
             # 处理返回结果
-            if pd and isinstance(result, pd.DataFrame):
+            if pandas_module and isinstance(result, pandas_module.DataFrame):
                 # 转换DataFrame为字典
                 return {
                     "success": True,
@@ -966,7 +1013,7 @@ class AKShareDirectProvider:
                     "columns": result.columns.tolist(),
                     "count": len(result),
                 }
-            elif pd and isinstance(result, pd.Series):
+            elif pandas_module and isinstance(result, pandas_module.Series):
                 # 转换Series为字典
                 return {"success": True, "data": result.to_dict(), "count": len(result)}
             else:
@@ -979,7 +1026,7 @@ class AKShareDirectProvider:
 
     def is_connected(self) -> bool:
         """检查是否连接"""
-        return HAS_AKSHARE and self.initialized
+        return self._akshare is not None and self.initialized
 
     async def close(self):
         """关闭连接"""

@@ -1,9 +1,11 @@
 from typing import Any, Awaitable, Callable, Mapping, Optional
 
+
 class Response:
     status_code: int
     text: str
     json: Callable[[], Any]
+
 
 class AsyncClient:
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
@@ -15,4 +17,8 @@ class AsyncClient:
     async def __aexit__(self, exc_type, exc, tb) -> Optional[bool]: ...
     async def aclose(self) -> None: ...
 
-__all__ = ["AsyncClient", "Response"]
+
+class RequestError(Exception): ...
+
+
+__all__ = ["AsyncClient", "Response", "RequestError"]

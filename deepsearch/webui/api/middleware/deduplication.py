@@ -9,9 +9,9 @@ import json
 from datetime import timedelta
 from typing import Any, Awaitable, Callable, Dict, Optional, Set, Union, cast
 
-from fastapi import Request
+from fastapi import Request, Response
 from loguru import logger
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
 try:
@@ -241,7 +241,8 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
     """
 
     def __init__(self, app: ASGIApp, ttl: int = 5, include_paths: Optional[Set[str]] = None):
-        super().__init__(app)
+        # FastAPI 应用满足 ASGI 协议，此处忽略 mypy 的类型误报
+        super().__init__(app)  # type: ignore[arg-type]
         self.deduplicator = RequestDeduplicator(ttl)
         self.include_paths = include_paths or {
             "/api/qmt/orderbook",
@@ -249,13 +250,16 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
             "/api/data/realtime",
         }
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         # 只对特定路径进行去重
         path = request.url.path
         should_dedupe = any(path.startswith(p) for p in self.include_paths)
 
         if not should_dedupe:
-            return await call_next(request)
+            passthrough_response: Response = await call_next(request)
+            return passthrough_response
 
         # 提取请求参数
         params = dict(request.query_params)
@@ -275,15 +279,18 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
                         "body": body,
                     }
 
-                request = StarletteRequest(scope=request.scope, receive=receive, send=request._send)
+                request = cast(
+                    Request,
+                    StarletteRequest(scope=request.scope, receive=receive, send=request._send),
+                )
             except Exception as e:
                 logger.debug(f"解析POST参数失败: {e}")
 
         # 去重处理
         try:
             # 创建处理函数
-            async def handler():
-                response = await call_next(request)
+            async def handler() -> Response:
+                response: Response = await call_next(request)
                 # 对于流式响应，需要特殊处理
                 if hasattr(response, "body_iterator"):
                     # 收集所有响应体
@@ -292,8 +299,6 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
                         body_parts.append(chunk)
 
                     # 重建响应
-                    from fastapi.responses import Response
-
                     full_body = b"".join(body_parts)
                     return Response(
                         content=full_body,
@@ -313,7 +318,8 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             logger.error(f"请求去重处理失败: {e}")
             # 出错时直接执行原始请求
-            return await call_next(request)
+            fallback_response: Response = await call_next(request)
+            return fallback_response
 
 
 # FastAPI 依赖注入辅助函数

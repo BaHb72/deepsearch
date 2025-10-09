@@ -44,7 +44,7 @@ class ProviderInfo:
     description: str
     priority: int = 100
     enabled: bool = True
-    config: Dict[str, Any] = None
+    config: Dict[str, Any] | None = None
 
     def __post_init__(self):
         if self.config is None:
@@ -269,7 +269,7 @@ class DataProviderRegistry:
                         return cached_instance
                     del self._instances[name]
 
-                provider_cls = LegacyAmazingDataProvider
+                provider_cls: type[Any] = LegacyAmazingDataProvider
 
                 if desired_mode == "optimized":
                     try:
@@ -423,7 +423,7 @@ class DataProviderRegistry:
 
 
 # 全局注册表实例
-_registry = None
+_registry: DataProviderRegistry | None = None
 
 
 def get_registry() -> DataProviderRegistry:

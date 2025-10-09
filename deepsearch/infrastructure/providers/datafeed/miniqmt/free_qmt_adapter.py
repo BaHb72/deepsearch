@@ -12,7 +12,7 @@ Version: 1.0.0
 """
 
 import time
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 import pandas as pd
 
@@ -216,7 +216,7 @@ class FreeQMTAdapter:
             return {}
 
     def subscribe_quotes(
-        self, symbols: List[str], callback: callable, period: str = "tick"
+        self, symbols: List[str], callback: Callable[..., None], period: str = "tick"
     ) -> bool:
         """
         订阅实时行情（免费版）

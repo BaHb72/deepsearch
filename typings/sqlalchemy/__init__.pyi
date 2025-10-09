@@ -1,8 +1,74 @@
-from typing import Any
+from typing import Any, Callable, Mapping, Protocol, TypeVar
+
+
+T = TypeVar("T", bound=Callable[..., Any])
+
+
+class _Executable(Protocol):
+    def execute(self, *args: Any, **kwargs: Any) -> Any: ...
+
 
 class text:
     def __init__(self, statement: str) -> None: ...
 
-def event(*args: Any, **kwargs: Any) -> Any: ...
 
-__all__ = ["text", "event"]
+class _EventModule:
+    def listens_for(
+        self, target: Any, identifier: str, *args: Any, **kwargs: Any
+    ) -> Callable[[T], T]: ...
+
+
+event: _EventModule
+
+
+class Engine:
+    dialect: Any
+    pool: Any
+
+    def connect(self, *args: Any, **kwargs: Any) -> _Executable: ...
+    def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any: ...
+
+
+class Inspector:
+    def get_table_names(self, *args: Any, **kwargs: Any) -> list[str]: ...
+    def get_columns(self, table_name: str, *args: Any, **kwargs: Any) -> list[Mapping[str, Any]]: ...
+
+
+def create_engine(url: str, *args: Any, **kwargs: Any) -> Engine: ...
+
+
+def inspect(target: Any, *args: Any, **kwargs: Any) -> Inspector: ...
+
+
+def select(*entities: Any) -> Any: ...
+
+
+def Column(*args: Any, **kwargs: Any) -> Any: ...
+
+
+def LargeBinary(length: int | None = ...) -> Any: ...
+
+
+class _ScalarType(Protocol):
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
+
+
+DateTime: _ScalarType
+Integer: _ScalarType
+Numeric: _ScalarType
+String: _ScalarType
+
+
+__all__ = [
+    "text",
+    "event",
+    "create_engine",
+    "inspect",
+    "select",
+    "Column",
+    "LargeBinary",
+    "DateTime",
+    "Integer",
+    "Numeric",
+    "String",
+]

@@ -16,7 +16,7 @@ from datetime import datetime
 
 from logging import Logger
 
-from typing import Dict, List, Mapping, Optional, TYPE_CHECKING, Type, cast
+from typing import Any, Dict, List, Mapping, Optional, TYPE_CHECKING, Type, cast
 
 from deepsearch.observability import get_logger
 
@@ -52,11 +52,15 @@ if TYPE_CHECKING:
 
     from deepsearch.event.engine.engine import EventEngine
 
+bt: Any
+
 try:
 
-    import backtrader as bt
+    import backtrader as _backtrader
 
     HAS_BACKTRADER = True
+
+    bt = _backtrader
 
 except ImportError:
 
@@ -601,6 +605,8 @@ class BacktraderStrategyAdapter:
         if not HAS_BACKTRADER:
 
             raise ImportError("请先安装 backtrader: pip install backtrader")
+
+        assert bt is not None
 
         class BTStrategy(bt.Strategy):
 

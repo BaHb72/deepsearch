@@ -10,10 +10,13 @@ from typing import Any, Dict, List, Optional, Type
 
 from deepsearch.observability import get_logger
 
+bt: Any
+
 try:
-    import backtrader as bt
+    import backtrader as _backtrader
 
     HAS_BACKTRADER = True
+    bt = _backtrader
 except ImportError:
     HAS_BACKTRADER = False
     bt = None
@@ -107,6 +110,7 @@ class BacktestEngine:
         self.slippage = slippage
 
         # 创建 Cerebro 实例
+        assert bt is not None
         self.cerebro = bt.Cerebro()
 
         # 设置初始资金
@@ -167,6 +171,7 @@ class BacktestEngine:
 
     def _add_analyzers(self):
         """添加分析器"""
+        assert bt is not None
         # 收益率分析
         self.cerebro.addanalyzer(bt.analyzers.Returns, _name="returns")
 

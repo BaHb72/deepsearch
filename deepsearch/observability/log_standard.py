@@ -1,8 +1,7 @@
-"""
-Standard logging templates and utilities
-"""
+"""Standard logging templates and utilities"""
 
 import time
+from traceback import format_exception
 from typing import Any, Optional
 
 
@@ -64,3 +63,12 @@ class LogStandard:
             return f"{duration_ms:.1f}ms"
         else:
             return f"{duration_ms/1000:.2f}s"
+
+    @staticmethod
+    def format_error(error: Exception | str, include_traceback: bool = True) -> str:
+        """格式化异常信息，可选附带堆栈"""
+        if isinstance(error, str):
+            return error
+        if include_traceback and getattr(error, "__traceback__", None) is not None:
+            return "".join(format_exception(type(error), error, error.__traceback__))
+        return str(error)

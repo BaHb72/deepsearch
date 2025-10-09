@@ -485,14 +485,15 @@ async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, 
 
                 # 使用 psycopg3 异步连接
                 async with await psycopg.AsyncConnection.connect(
+                    conninfo="",
                     host=config.host,
                     port=config.port,
                     dbname=config.database,
                     user=config.username,
                     password=actual_password,
                     connect_timeout=5,
-                ) as conn:
-                    async with conn.cursor() as cur:
+                ) as pg_conn:
+                    async with pg_conn.cursor() as cur:
                         await cur.execute("SELECT version()")
                         result = await cur.fetchone()
                         version = result[0] if result else "Unknown"
@@ -512,7 +513,7 @@ async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, 
             try:
                 import aiomysql
 
-                conn = await aiomysql.connect(
+                mysql_conn = await aiomysql.connect(
                     host=config.host,
                     port=config.port,
                     db=config.database,
@@ -520,11 +521,11 @@ async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, 
                     password=actual_password,
                     connect_timeout=5,
                 )
-                cursor = await conn.cursor()
-                await cursor.execute("SELECT VERSION()")
-                version = await cursor.fetchone()
-                await cursor.close()
-                conn.close()
+                mysql_cursor = await mysql_conn.cursor()
+                await mysql_cursor.execute("SELECT VERSION()")
+                version = await mysql_cursor.fetchone()
+                await mysql_cursor.close()
+                mysql_conn.close()
 
                 return {
                     "success": True,
@@ -545,10 +546,10 @@ async def test_database_connection(config: DatabaseConnectionTest) -> Dict[str, 
             try:
                 import aiosqlite
 
-                conn = await aiosqlite.connect(config.path)
-                cursor = await conn.execute("SELECT sqlite_version()")
-                version = await cursor.fetchone()
-                await conn.close()
+                sqlite_conn = await aiosqlite.connect(config.path)
+                sqlite_cursor = await sqlite_conn.execute("SELECT sqlite_version()")
+                version = await sqlite_cursor.fetchone()
+                await sqlite_conn.close()
 
                 return {
                     "success": True,
@@ -600,7 +601,7 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
             import redis.asyncio as redis_async
 
             # 创建 Redis 连接
-            client = redis_async.Redis(
+            client: redis_async.Redis = redis_async.Redis(
                 host=config.host,
                 port=config.port,
                 username=actual_username or None,
@@ -625,7 +626,7 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
             import redis
 
             try:
-                client = redis.Redis(
+                sync_client = redis.Redis(
                     host=config.host,
                     port=config.port,
                     username=actual_username or None,
@@ -635,14 +636,14 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
                 )
 
                 # 同步测试连接
-                client.ping()
+                sync_client.ping()
 
                 # 获取 Redis 信息
-                info = client.info()
+                info = sync_client.info()
                 redis_version = info.get("redis_version", "Unknown")
 
                 # 关闭连接
-                client.close()
+                sync_client.close()
 
                 return {
                     "success": True,

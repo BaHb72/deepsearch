@@ -10,5 +10,20 @@ import pandas as pd
 
 NumericArray: TypeAlias = npt.NDArray[np.float_]
 NumericSeries: TypeAlias = pd.Series
+BoolSeries: TypeAlias = pd.Series
+StringSeries: TypeAlias = pd.Series
+TimestampSeries: TypeAlias = pd.Series
+TimedeltaSeries: TypeAlias = pd.Series
+DatetimeScalar: TypeAlias = pd.Timestamp
+TimedeltaScalar: TypeAlias = pd.Timedelta
 
-__all__ = ["NumericArray", "NumericSeries"]
+__all__ = [
+    "NumericArray",
+    "NumericSeries",
+    "BoolSeries",
+    "StringSeries",
+    "TimestampSeries",
+    "TimedeltaSeries",
+    "DatetimeScalar",
+    "TimedeltaScalar",
+]

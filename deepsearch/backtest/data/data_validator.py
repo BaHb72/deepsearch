@@ -8,19 +8,29 @@ Version: 1.0.0
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, cast
 
 import numpy as np
 import pandas as pd
 from loguru import logger
 
+bt: Any
+
 try:
-    import backtrader as bt
+    import backtrader as _backtrader
 
     HAS_BACKTRADER = True
+    bt = _backtrader
 except ImportError:
     HAS_BACKTRADER = False
     bt = None
+
+if TYPE_CHECKING:
+    from backtrader import Cerebro as BacktraderCerebro
+    from backtrader import Strategy as BacktraderStrategy
+else:
+    BacktraderCerebro = Any
+    BacktraderStrategy = Any
 
 
 class ValidationLevel(Enum):
@@ -419,8 +429,9 @@ class DataValidator:
         result: Dict[str, Any] = {"passed": True, "errors": [], "warnings": [], "stats": {}}
 
         try:
+            assert bt is not None
             # 创建Cerebro引擎
-            cerebro = bt.Cerebro()
+            cerebro = cast(BacktraderCerebro, bt.Cerebro())
 
             # 添加数据
             data = bt.feeds.PandasData(

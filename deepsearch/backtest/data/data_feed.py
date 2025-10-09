@@ -5,7 +5,7 @@ DeepSearchDataFeed - Backtrader 数据适配器
 """
 
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional, TYPE_CHECKING, cast
 
 import numpy as np
 import pandas as pd
@@ -13,12 +13,18 @@ import pandas as pd
 bt: Any
 
 try:
-    import backtrader as bt
+    import backtrader as _backtrader
 
     HAS_BACKTRADER = True
+    bt = _backtrader
 except ImportError:
     HAS_BACKTRADER = False
     bt = None
+
+if TYPE_CHECKING:
+    from backtrader.feeds import PandasData as BacktraderPandasData
+else:
+    BacktraderPandasData = Any
 
 
 class DeepSearchDataFeed:
@@ -224,7 +230,7 @@ class DeepSearchDataFeed:
 
         return df
 
-    def create_backtrader_feed(self, dataframe: pd.DataFrame, **kwargs) -> "bt.feeds.PandasData":
+    def create_backtrader_feed(self, dataframe: pd.DataFrame, **kwargs) -> "BacktraderPandasData":
         """
         创建 Backtrader 数据源对象
 
@@ -238,20 +244,24 @@ class DeepSearchDataFeed:
         if not HAS_BACKTRADER:
             raise ImportError("请先安装 backtrader: pip install backtrader")
 
+        assert bt is not None
         # 创建 Backtrader 数据源
-        data = bt.feeds.PandasData(
-            dataname=dataframe,
-            datetime=None,  # 使用索引作为日期
-            open="open",
-            high="high",
-            low="low",
-            close="close",
-            volume="volume",
-            openinterest=-1,  # 不使用持仓量
-            **kwargs,
+        feed = cast(
+            BacktraderPandasData,
+            bt.feeds.PandasData(
+                dataname=dataframe,
+                datetime=None,  # 使用索引作为日期
+                open="open",
+                high="high",
+                low="low",
+                close="close",
+                volume="volume",
+                openinterest=-1,  # 不使用持仓量
+                **kwargs,
+            ),
         )
 
-        return data
+        return feed
 
     async def get_backtrader_feed(
         self,
@@ -261,7 +271,7 @@ class DeepSearchDataFeed:
         timeframe: str = "1d",
         adjust: str = "qfq",
         **kwargs,
-    ) -> "bt.feeds.PandasData":
+    ) -> "BacktraderPandasData":
         """
         直接获取 Backtrader 数据源对象
 

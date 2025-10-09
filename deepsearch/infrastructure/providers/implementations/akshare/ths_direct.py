@@ -3,47 +3,62 @@
 绕过CloudFlare代理，直接使用AkShare访问
 """
 
+from __future__ import annotations
+
 import asyncio
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from loguru import logger
 
-try:
-    import akshare as ak
+from ._deps import AkshareModule, PandasModule, load_akshare, load_pandas
 
-    HAS_AKSHARE = True
-except ImportError:
-    HAS_AKSHARE = False
-    ak = None
+ak: Optional[AkshareModule] = load_akshare()
+HAS_AKSHARE = ak is not None
 
-try:
-    import pandas as pd
-
-    HAS_PANDAS = True
-except ImportError:
-    HAS_PANDAS = False
-    pd = None
+pd: Optional[PandasModule] = load_pandas()
+HAS_PANDAS = pd is not None
 
 
 class ThsDirectProvider:
     """同花顺数据直接提供者"""
 
-    def __init__(self):
+    def __init__(
+        self,
+        akshare_module: Optional[AkshareModule] = None,
+        pandas_module: Optional[PandasModule] = None,
+    ):
         self.name = "ths_direct"
         self.display_name = "同花顺直连"
+        self._akshare: Optional[AkshareModule] = akshare_module if akshare_module is not None else ak
+        self._pandas: Optional[PandasModule] = pandas_module if pandas_module is not None else pd
 
-        if not HAS_AKSHARE:
-            raise ImportError("AkShare not installed")
+        if self._akshare is None:
+            raise ImportError("AkShare 未安装或未注入")
 
-        if not HAS_PANDAS:
-            raise ImportError("Pandas not installed")
+        if self._pandas is None:
+            raise ImportError("Pandas 未安装或未注入")
+
+    def _akshare_module(self) -> AkshareModule:
+        """返回已注入的 AkShare 模块"""
+
+        if self._akshare is None:
+            raise RuntimeError("AkShare 未正确注入")
+        return self._akshare
+
+    def _pandas_module(self) -> PandasModule:
+        """返回已注入的 pandas 模块"""
+
+        if self._pandas is None:
+            raise RuntimeError("pandas 未正确注入")
+        return self._pandas
 
     async def get_concept_list(self) -> Dict[str, Any]:
         """获取同花顺概念板块列表"""
+        akshare = self._akshare_module()
         try:
             logger.info("获取同花顺概念板块列表...")
             df = await asyncio.get_event_loop().run_in_executor(
-                None, ak.stock_board_concept_name_ths
+                None, akshare.stock_board_concept_name_ths
             )
 
             if df is not None and not df.empty:
@@ -66,10 +81,11 @@ class ThsDirectProvider:
         self, symbol: str, start_date: str = "20230101", end_date: str = "20250131"
     ) -> Dict[str, Any]:
         """获取概念板块指数数据"""
+        akshare = self._akshare_module()
         try:
             logger.info(f"获取概念板块指数: {symbol}")
             df = await asyncio.get_event_loop().run_in_executor(
-                None, ak.stock_board_concept_index_ths, symbol, start_date, end_date
+                None, akshare.stock_board_concept_index_ths, symbol, start_date, end_date
             )
 
             if df is not None and not df.empty:
@@ -89,10 +105,11 @@ class ThsDirectProvider:
 
     async def get_concept_info(self, symbol: str) -> Dict[str, Any]:
         """获取概念板块简介"""
+        akshare = self._akshare_module()
         try:
             logger.info(f"获取概念板块简介: {symbol}")
             df = await asyncio.get_event_loop().run_in_executor(
-                None, ak.stock_board_concept_info_ths, symbol
+                None, akshare.stock_board_concept_info_ths, symbol
             )
 
             if df is not None:
@@ -124,10 +141,11 @@ class ThsDirectProvider:
         注意：AkShare暂不支持获取同花顺概念板块成份股
         此方法返回概念板块汇总信息
         """
+        akshare = self._akshare_module()
         try:
             logger.info("获取概念板块汇总信息（成份股功能暂不可用）")
             df = await asyncio.get_event_loop().run_in_executor(
-                None, ak.stock_board_concept_summary_ths
+                None, akshare.stock_board_concept_summary_ths
             )
 
             if df is not None and not df.empty:
