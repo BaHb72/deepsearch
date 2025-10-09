@@ -1,70 +1,105 @@
-"""
-Backtest Service
+from __future__ import annotations
 
-Service for running backtests with Backtrader and generating visualizations.
-"""
+"""回测服务，提供 Backtrader 集成的类型安全封装."""
 
 import base64
 import io
+from dataclasses import dataclass, field
 from datetime import datetime
-from types import ModuleType
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, cast
+from importlib import import_module
+from importlib.util import find_spec
+from typing import Callable, Mapping, Sequence, TypedDict, cast
 
 from loguru import logger
 
-try:
-    import backtrader as _bt
-    import matplotlib
-
-    matplotlib.use("Agg")  # Use non-interactive backend
-    import matplotlib.pyplot as _plt
-
-    HAS_BACKTRADER = True
-except ImportError:
-    HAS_BACKTRADER = False
-    _bt = None
-    _plt = None
-
-bt: Optional[ModuleType] = cast(Optional[ModuleType], _bt)
-plt: Optional[ModuleType] = cast(Optional[ModuleType], _plt)
-
-if TYPE_CHECKING:  # pragma: no cover
-    import backtrader as bt  # type: ignore
-    from matplotlib.figure import Figure
-
 from deepsearch.backtest.adapters.unified_backtrader_adapter import UnifiedBacktraderAdapter
 from deepsearch.backtest.interfaces.strategy import BacktraderStrategyAdapter
+from deepsearch.backtest.ports import (
+    AnalyzerResultProto,
+    BacktesterAPI,
+    CerebroProto,
+    FigureProto,
+    StrategyProto,
+)
 from deepsearch.strategies.interfaces.protocols import BacktestStrategy
 
+HAS_MATPLOTLIB = find_spec("matplotlib") is not None
 
+StrategyParameters = Mapping[str, object]
+
+StrategyComparisonConfig = TypedDict(
+    "StrategyComparisonConfig",
+    {
+        "class": type[BacktestStrategy],
+        "params": StrategyParameters,
+        "name": str,
+    },
+    total=False,
+)
+
+PlotClose = Callable[[FigureProto], None]
+
+
+@dataclass(frozen=True)
+class TradeBreakdown:
+    """交易分析器返回的概要信息."""
+
+    category: str
+    total: int
+    pnl_total: float
+
+    def to_dict(self) -> dict[str, object]:
+        """转换为前端友好的字典结构."""
+
+        return {
+            "category": self.category,
+            "total": self.total,
+            "pnl_total": self.pnl_total,
+        }
+
+
+@dataclass(frozen=True)
+class EquityPoint:
+    """权益曲线中的单个节点."""
+
+    date: str
+    value: float
+
+    def to_dict(self) -> dict[str, object]:
+        """转换为可序列化字典."""
+
+        return {"date": self.date, "value": self.value}
+
+
+@dataclass
 class BacktestResult:
-    """Backtest result container"""
+    """结构化的回测结果."""
 
-    def __init__(self):
-        self.strategy_name: str = ""
-        self.start_date: Optional[datetime] = None
-        self.end_date: Optional[datetime] = None
-        self.initial_capital: float = 0.0
-        self.final_value: float = 0.0
-        self.total_return: float = 0.0
-        self.annual_return: float = 0.0
-        self.sharpe_ratio: float = 0.0
-        self.max_drawdown: float = 0.0
-        self.total_trades: int = 0
-        self.winning_trades: int = 0
-        self.losing_trades: int = 0
-        self.win_rate: float = 0.0
-        self.profit_factor: float = 0.0
-        self.trades: List[Dict[str, Any]] = []
-        self.equity_curve: List[Dict[str, Any]] = []
-        self.plot_base64: Optional[str] = None
+    strategy_name: str
+    start_date: datetime
+    end_date: datetime
+    initial_capital: float
+    final_value: float = 0.0
+    total_return: float = 0.0
+    annual_return: float = 0.0
+    sharpe_ratio: float = 0.0
+    max_drawdown: float = 0.0
+    total_trades: int = 0
+    winning_trades: int = 0
+    losing_trades: int = 0
+    win_rate: float = 0.0
+    profit_factor: float = 0.0
+    equity_curve: list[EquityPoint] = field(default_factory=list)
+    trade_breakdown: list[TradeBreakdown] = field(default_factory=list)
+    plot_base64: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary"""
+    def to_dict(self) -> dict[str, object]:
+        """转换为字典结果，供 WebUI 序列化使用."""
+
         return {
             "strategy_name": self.strategy_name,
-            "start_date": self.start_date.isoformat() if self.start_date else None,
-            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "start_date": self.start_date.isoformat(),
+            "end_date": self.end_date.isoformat(),
             "initial_capital": self.initial_capital,
             "final_value": self.final_value,
             "total_return": self.total_return,
@@ -76,213 +111,176 @@ class BacktestResult:
             "losing_trades": self.losing_trades,
             "win_rate": self.win_rate,
             "profit_factor": self.profit_factor,
-            "trades": self.trades,
-            "equity_curve": self.equity_curve,
+            "equity_curve": [point.to_dict() for point in self.equity_curve],
+            "trades": [item.to_dict() for item in self.trade_breakdown],
             "plot_base64": self.plot_base64,
         }
 
 
 class BacktestService:
-    """
-    Service for running strategy backtests
+    """统一的回测编排服务."""
 
-    Features:
-    - Run backtests with Backtrader
-    - Generate performance metrics
-    - Create visualization charts
-    - Export results for WebUI
-    """
+    def __init__(
+        self,
+        backtester: BacktesterAPI[StrategyProto, AnalyzerResultProto, object],
+        *,
+        plot_close: PlotClose | None = None,
+    ) -> None:
+        """注入 Backtrader 端口及可选的绘图关闭函数."""
 
-    def __init__(self):
-        """Initialize backtest service"""
-        if not HAS_BACKTRADER:
-            raise ImportError("Backtrader not installed. Run: pip install backtrader matplotlib")
+        self._backtester = backtester
+        self._plot_close = plot_close
+        self.adapter: UnifiedBacktraderAdapter | None = None
+        self.results_cache: dict[str, BacktestResult] = {}
 
-        self.adapter: Optional[UnifiedBacktraderAdapter] = None
-        self.results_cache: Dict[str, BacktestResult] = {}
+    async def initialize(self) -> None:
+        """初始化底层数据适配器."""
 
-    async def initialize(self):
-        """Initialize service"""
-        if not self.adapter:
+        if self.adapter is None:
             self.adapter = UnifiedBacktraderAdapter(source="auto")
             await self.adapter.initialize()
-            logger.info("BacktestService initialized")
+            logger.info("BacktestService 初始化完成")
 
     async def run_backtest(
         self,
-        strategy_class: Type[BacktestStrategy],
-        symbols: List[str],
+        strategy_class: type[BacktestStrategy],
+        symbols: Sequence[str],
         start_date: str,
         end_date: str,
         initial_capital: float = 100000,
-        strategy_params: Optional[Dict[str, Any]] = None,
+        strategy_params: StrategyParameters | None = None,
         commission: float = 0.001,
         plot: bool = True,
     ) -> BacktestResult:
-        """
-        Run a backtest for a strategy
+        """执行单个策略的回测."""
 
-        Args:
-            strategy_class: Strategy class to test
-            symbols: List of symbols to trade
-            start_date: Start date (YYYY-MM-DD)
-            end_date: End date (YYYY-MM-DD)
-            initial_capital: Initial capital
-            strategy_params: Strategy parameters
-            commission: Commission rate
-            plot: Whether to generate plot
-
-        Returns:
-            BacktestResult object
-        """
-        if not self.adapter:
+        if self.adapter is None:
             await self.initialize()
 
         if self.adapter is None:
-            raise RuntimeError("Backtest adapter is not initialized")
+            raise RuntimeError("回测数据适配器初始化失败")
 
-        adapter = self.adapter
+        cerebro = self._backtester.Cerebro()
+        cerebro.broker.setcash(initial_capital)
+        cerebro.broker.setcommission(commission=commission)
 
-        logger.info(f"Running backtest for {strategy_class.__name__} on {symbols}")
+        for symbol in symbols:
+            df = await self.adapter.get_data(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                timeframe="1d",
+                adjust="qfq",
+            )
 
-        # Create result object
-        result = BacktestResult()
-        result.strategy_name = strategy_class.__name__
-        result.start_date = datetime.strptime(start_date, "%Y-%m-%d")
-        result.end_date = datetime.strptime(end_date, "%Y-%m-%d")
-        result.initial_capital = initial_capital
+            if df.empty:
+                logger.warning(f"{symbol} 无可用数据，已跳过")
+                continue
 
-        try:
-            if bt is None:
-                raise RuntimeError("Backtrader module is not available")
+            data_feed = self.adapter.create_backtrader_feed(df, name=symbol)
+            cerebro.adddata(data_feed, name=symbol)
+            logger.info(f"已加载 {symbol} 的 {len(df)} 条数据")
 
-            # Create Cerebro engine
-            cerebro = bt.Cerebro()
+        strategy_instance = strategy_class(
+            params=dict(strategy_params) if strategy_params else None
+        )
+        bt_strategy_class = BacktraderStrategyAdapter.create_backtrader_strategy(
+            strategy_instance
+        )
+        cerebro.addstrategy(bt_strategy_class)
 
-            # Set initial capital
-            cerebro.broker.setcash(initial_capital)
-            cerebro.broker.setcommission(commission=commission)
+        analyzers = self._backtester.analyzers
+        cerebro.addanalyzer(analyzers.SharpeRatio, _name="sharpe")
+        cerebro.addanalyzer(analyzers.DrawDown, _name="drawdown")
+        cerebro.addanalyzer(analyzers.Returns, _name="returns")
+        cerebro.addanalyzer(analyzers.TradeAnalyzer, _name="trades")
+        cerebro.addanalyzer(analyzers.TimeReturn, _name="timereturn")
 
-            # Add data feeds
-            for symbol in symbols:
-                df = await adapter.get_data(
-                    symbol=symbol,
-                    start_date=start_date,
-                    end_date=end_date,
-                    timeframe="1d",
-                    adjust="qfq",
+        result = BacktestResult(
+            strategy_name=strategy_class.__name__,
+            start_date=datetime.strptime(start_date, "%Y-%m-%d"),
+            end_date=datetime.strptime(end_date, "%Y-%m-%d"),
+            initial_capital=initial_capital,
+        )
+
+        logger.info(
+            f"开始回测 {strategy_class.__name__}，标的：{', '.join(symbols)}"
+        )
+
+        strategies = cerebro.run()
+        if not strategies:
+            raise RuntimeError("回测返回结果为空")
+
+        strategy = cast(StrategyProto, strategies[0])
+
+        result.final_value = cerebro.broker.getvalue()
+        result.total_return = _to_float(
+            (result.final_value - initial_capital) / initial_capital
+        )
+
+        result.sharpe_ratio = _extract_ratio(strategy, "sharpe", "sharperatio")
+        result.max_drawdown = _extract_nested_ratio(
+            strategy, "drawdown", "max", "drawdown", scale=0.01
+        )
+        result.annual_return = _extract_ratio(
+            strategy, "returns", "rnorm100", scale=0.01
+        )
+
+        trades_summary = _extract_analysis(strategy, "trades")
+        total_section = _as_mapping(trades_summary.get("total"))
+        won_section = _as_mapping(trades_summary.get("won"))
+        lost_section = _as_mapping(trades_summary.get("lost"))
+
+        result.total_trades = _to_int(total_section.get("total"))
+        result.winning_trades = _to_int(won_section.get("total"))
+        result.losing_trades = _to_int(lost_section.get("total"))
+
+        if result.total_trades > 0:
+            result.win_rate = result.winning_trades / result.total_trades
+
+        lost_total = _to_float(_as_mapping(lost_section.get("pnl")).get("total"))
+        won_total = _to_float(_as_mapping(won_section.get("pnl")).get("total"))
+
+        if lost_total != 0:
+            result.profit_factor = abs(won_total / lost_total)
+
+        result.trade_breakdown = [
+            _build_trade_breakdown("total", total_section),
+            _build_trade_breakdown("won", won_section),
+            _build_trade_breakdown("lost", lost_section),
+        ]
+
+        time_returns = _extract_analysis(strategy, "timereturn")
+        if time_returns:
+            equity = initial_capital
+            equity_curve: list[EquityPoint] = [
+                EquityPoint(start_date, round(equity, 2))
+            ]
+            for date_value, daily_return in time_returns.items():
+                equity *= 1.0 + _to_float(daily_return)
+                equity_curve.append(
+                    EquityPoint(_format_date_label(date_value), round(equity, 2))
                 )
+            result.equity_curve = equity_curve
 
-                if not df.empty:
-                    data = adapter.create_backtrader_feed(df, name=symbol)
-                    cerebro.adddata(data)
-                    logger.info(f"Added data for {symbol}: {len(df)} bars")
-                else:
-                    logger.warning(f"No data available for {symbol}")
+        if plot:
+            result.plot_base64 = self._generate_plot(cerebro)
 
-            # Create and add strategy
-            strategy_instance: BacktestStrategy = strategy_class(params=strategy_params)
-            bt_strategy_class = BacktraderStrategyAdapter.create_backtrader_strategy(
-                strategy_instance
-            )
-            cerebro.addstrategy(bt_strategy_class)
-
-            # Add analyzers
-            cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe")
-            cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
-            cerebro.addanalyzer(bt.analyzers.Returns, _name="returns")
-            cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
-            cerebro.addanalyzer(bt.analyzers.TimeReturn, _name="timereturn")
-
-            # Run backtest
-            logger.info("Starting backtest...")
-            strategies = cerebro.run()
-            strategy = strategies[0]
-
-            # Get results
-            result.final_value = cerebro.broker.getvalue()
-            result.total_return = (result.final_value - initial_capital) / initial_capital
-
-            # Get analyzer results
-            if hasattr(strategy.analyzers, "sharpe"):
-                sharpe = strategy.analyzers.sharpe.get_analysis()
-                result.sharpe_ratio = sharpe.get("sharperatio", 0) or 0
-
-            if hasattr(strategy.analyzers, "drawdown"):
-                dd = strategy.analyzers.drawdown.get_analysis()
-                result.max_drawdown = dd.get("max", {}).get("drawdown", 0) / 100
-
-            if hasattr(strategy.analyzers, "returns"):
-                returns = strategy.analyzers.returns.get_analysis()
-                result.annual_return = returns.get("rnorm100", 0) / 100
-
-            if hasattr(strategy.analyzers, "trades"):
-                trades = strategy.analyzers.trades.get_analysis()
-                total = trades.get("total", {})
-                result.total_trades = total.get("total", 0)
-
-                won = trades.get("won", {})
-                lost = trades.get("lost", {})
-                result.winning_trades = won.get("total", 0)
-                result.losing_trades = lost.get("total", 0)
-
-                if result.total_trades > 0:
-                    result.win_rate = result.winning_trades / result.total_trades
-
-                # Calculate profit factor
-                if lost.get("pnl", {}).get("total", 0) != 0:
-                    result.profit_factor = abs(
-                        won.get("pnl", {}).get("total", 0) / lost.get("pnl", {}).get("total", 0)
-                    )
-
-            # Get equity curve
-            if hasattr(strategy.analyzers, "timereturn"):
-                time_returns = strategy.analyzers.timereturn.get_analysis()
-                equity = initial_capital
-                equity_curve = [{"date": start_date, "value": equity}]
-
-                for date, ret in time_returns.items():
-                    equity *= 1 + ret
-                    equity_curve.append(
-                        {
-                            "date": date.isoformat() if hasattr(date, "isoformat") else str(date),
-                            "value": round(equity, 2),
-                        }
-                    )
-
-                result.equity_curve = equity_curve
-
-            # Generate plot if requested
-            if plot:
-                result.plot_base64 = self._generate_plot(cerebro)
-
-            logger.info(
-                f"Backtest completed. Final value: {result.final_value:.2f}, "
-                f"Return: {result.total_return:.2%}"
-            )
-
-        except Exception as e:
-            logger.error(f"Backtest failed: {e}")
-            raise
+        logger.info(
+            "回测完成，最终权益 {:.2f}，收益率 {:.2f}%",
+            result.final_value,
+            result.total_return * 100,
+        )
 
         return result
 
-    def _generate_plot(self, cerebro: Any) -> Optional[str]:
-        """
-        Generate backtest plot and return as base64
-
-        Args:
-            cerebro: Backtrader Cerebro instance
-
-        Returns:
-            Base64 encoded plot image
-        """
-        if plt is None:
-            return None
+    def _generate_plot(
+        self, cerebro: CerebroProto[StrategyProto, AnalyzerResultProto, object]
+    ) -> str | None:
+        """生成回测图表并转换为 base64 编码."""
 
         try:
-            # Create figure
-            fig = cerebro.plot(
+            plot_result = cerebro.plot(
                 style="candlestick",
                 barup="green",
                 bardown="red",
@@ -290,94 +288,227 @@ class BacktestService:
                 numfigs=1,
                 plotdist=0.1,
                 grid=True,
-            )[0][0]
-
-            # Save to bytes buffer
-            buffer = io.BytesIO()
-            fig.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
-            buffer.seek(0)
-
-            # Convert to base64
-            image_base64 = base64.b64encode(buffer.read()).decode("utf-8")
-
-            # Clean up
-            plt.close(fig)
-            buffer.close()
-
-            return f"data:image/png;base64,{image_base64}"
-
-        except Exception as e:
-            logger.error(f"Failed to generate plot: {e}")
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.error(f"生成回测图表失败: {exc}")
             return None
+
+        figure = _pick_first_figure(plot_result)
+        if figure is None:
+            return None
+
+        buffer = io.BytesIO()
+        figure.savefig(
+            buffer,
+            format="png",
+            dpi=100,
+            bbox_inches="tight",
+        )
+        image_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        if self._plot_close is not None:
+            self._plot_close(figure)
+
+        return f"data:image/png;base64,{image_base64}"
 
     async def compare_strategies(
         self,
-        strategies: List[Dict[str, Any]],
-        symbols: List[str],
+        strategies: Sequence[StrategyComparisonConfig],
+        symbols: Sequence[str],
         start_date: str,
         end_date: str,
         initial_capital: float = 100000,
-    ) -> List[BacktestResult]:
-        """
-        Compare multiple strategies
+    ) -> list[BacktestResult]:
+        """批量比较多个策略的表现."""
 
-        Args:
-            strategies: List of strategy configurations
-                       [{'class': StrategyClass, 'params': {...}, 'name': 'Strategy1'}, ...]
-            symbols: Symbols to test
-            start_date: Start date
-            end_date: End date
-            initial_capital: Initial capital
-
-        Returns:
-            List of BacktestResult objects
-        """
-        results = []
-
+        results: list[BacktestResult] = []
         for strategy_config in strategies:
-            strategy_class = cast(Type[BacktestStrategy], strategy_config["class"])
-            strategy_params = strategy_config.get("params", {})
+            if "class" not in strategy_config:
+                raise ValueError("策略配置缺少 class 字段")
 
+            strategy_class = strategy_config["class"]
+            params = strategy_config.get("params")
             result = await self.run_backtest(
                 strategy_class=strategy_class,
                 symbols=symbols,
                 start_date=start_date,
                 end_date=end_date,
                 initial_capital=initial_capital,
-                strategy_params=strategy_params,
+                strategy_params=params,
+                commission=0.001,
                 plot=True,
             )
 
-            # Override name if provided
-            if "name" in strategy_config:
-                result.strategy_name = strategy_config["name"]
+            custom_name = strategy_config.get("name")
+            if custom_name:
+                result.strategy_name = custom_name
 
             results.append(result)
 
         return results
 
-    def get_cached_result(self, cache_key: str) -> Optional[BacktestResult]:
-        """Get cached backtest result"""
+    def get_cached_result(self, cache_key: str) -> BacktestResult | None:
+        """根据缓存键获取历史回测结果."""
+
         return self.results_cache.get(cache_key)
 
-    def cache_result(self, cache_key: str, result: BacktestResult):
-        """Cache backtest result"""
-        self.results_cache[cache_key] = result
+    def cache_result(self, cache_key: str, result: BacktestResult) -> None:
+        """缓存最新的回测结果，最多保留 10 份."""
 
-        # Limit cache size
+        self.results_cache[cache_key] = result
         if len(self.results_cache) > 10:
-            # Remove oldest entry
             oldest_key = next(iter(self.results_cache))
             del self.results_cache[oldest_key]
 
 
-# Global service instance
-_backtest_service: Optional[BacktestService] = None
+_backtest_service: BacktestService | None = None
 
 
 def get_backtest_service() -> BacktestService:
-    """Get global backtest service instance"""
+    """获取全局回测服务实例."""
+
     global _backtest_service
     if _backtest_service is None:
-        _backtest_service = BacktestService()
+        from deepsearch.backtest.adapters.backtrader_api_impl import load_api
+
+        plot_close = _load_default_plot_close()
+        _backtest_service = BacktestService(
+            backtester=load_api(),
+            plot_close=plot_close,
+        )
     return _backtest_service
+
+
+def _load_default_plot_close() -> PlotClose | None:
+    """加载 matplotlib 的关闭函数，若依赖缺失则返回 None."""
+
+    if not HAS_MATPLOTLIB:
+        return None
+
+    matplotlib_module = import_module("matplotlib")
+    use_backend = getattr(matplotlib_module, "use", None)
+    if callable(use_backend):
+        try:
+            use_backend("Agg")
+        except Exception as exc:  # pragma: no cover - 回退到默认后端
+            logger.warning(f"设置 matplotlib 后端失败，将使用默认配置: {exc}")
+
+    module = import_module("matplotlib.pyplot")
+    close_func = getattr(module, "close", None)
+    if callable(close_func):
+        return cast(PlotClose, close_func)
+    return None
+
+
+def _extract_analysis(strategy: StrategyProto, name: str) -> Mapping[object, object]:
+    """安全获取指定分析器的结果."""
+
+    analyzer = getattr(strategy.analyzers, name, None)
+    if analyzer is None:
+        return {}
+    get_analysis = getattr(analyzer, "get_analysis", None)
+    if callable(get_analysis):
+        try:
+            analysis = get_analysis()
+        except Exception as exc:  # pragma: no cover
+            logger.warning(f"读取分析器 {name} 失败: {exc}")
+            return {}
+        if isinstance(analysis, Mapping):
+            return analysis
+    return {}
+
+
+def _extract_ratio(
+    strategy: StrategyProto,
+    analyzer_name: str,
+    field: str,
+    *,
+    scale: float = 1.0,
+) -> float:
+    """从分析器中提取单层字段并转换为浮点数."""
+
+    analysis = _extract_analysis(strategy, analyzer_name)
+    return _to_float(analysis.get(field)) * scale
+
+
+def _extract_nested_ratio(
+    strategy: StrategyProto,
+    analyzer_name: str,
+    first_key: str,
+    second_key: str,
+    *,
+    scale: float = 1.0,
+) -> float:
+    """从嵌套字典中提取指标."""
+
+    analysis = _extract_analysis(strategy, analyzer_name)
+    first_level = _as_mapping(analysis.get(first_key))
+    return _to_float(first_level.get(second_key)) * scale
+
+
+def _as_mapping(value: object) -> Mapping[str, object]:
+    """若对象为映射则原样返回，否则给出空字典."""
+
+    if isinstance(value, Mapping):
+        return value
+    return {}
+
+
+def _to_float(value: object, default: float = 0.0) -> float:
+    """尽量将值转换为浮点数."""
+
+    if isinstance(value, (int, float)):
+        return float(value)
+    return default
+
+
+def _to_int(value: object, default: int = 0) -> int:
+    """尽量将值转换为整数."""
+
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    return default
+
+
+def _format_date_label(value: object) -> str:
+    """将时间索引统一转为字符串标签."""
+
+    if isinstance(value, datetime):
+        return value.isoformat()
+    iso_method = getattr(value, "isoformat", None)
+    if callable(iso_method):
+        try:
+            iso_value = iso_method()
+        except Exception:  # pragma: no cover
+            return str(value)
+        if isinstance(iso_value, str):
+            return iso_value
+    return str(value)
+
+
+def _pick_first_figure(
+    plot_result: Sequence[Sequence[FigureProto]],
+) -> FigureProto | None:
+    """从 Backtrader 的 plot 结果中挑选首个 Figure."""
+
+    if not plot_result:
+        return None
+    first_column = plot_result[0]
+    if not first_column:
+        return None
+    return first_column[0]
+
+
+def _build_trade_breakdown(
+    category: str,
+    section: Mapping[str, object],
+) -> TradeBreakdown:
+    """将分析器的片段转换为 TradeBreakdown 模型."""
+
+    pnl_mapping = _as_mapping(section.get("pnl"))
+    return TradeBreakdown(
+        category=category,
+        total=_to_int(section.get("total")),
+        pnl_total=_to_float(pnl_mapping.get("total")),
+    )

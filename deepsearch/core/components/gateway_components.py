@@ -277,6 +277,7 @@ class QMTGatewayComponent(AsyncComponent):
     def set_dependencies(self, event_engine, message_bus):
         """设置依赖（由容器在初始化后调用）"""
         self._event_engine = event_engine
+        self._message_bus = message_bus
         self._logger.info("QMT网关依赖已设置")
 
         # 现在创建网关实例
