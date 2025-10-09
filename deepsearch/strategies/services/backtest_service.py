@@ -41,6 +41,24 @@ PlotClose = Callable[[FigureProto], None]
 
 
 @dataclass(frozen=True)
+class TradeBreakdown:
+    """交易分析器返回的概要信息."""
+
+    category: str
+    total: int
+    pnl_total: float
+
+    def to_dict(self) -> dict[str, object]:
+        """转换为前端友好的字典结构."""
+
+        return {
+            "category": self.category,
+            "total": self.total,
+            "pnl_total": self.pnl_total,
+        }
+
+
+@dataclass(frozen=True)
 class EquityPoint:
     """权益曲线中的单个节点."""
 
@@ -72,6 +90,7 @@ class BacktestResult:
     win_rate: float = 0.0
     profit_factor: float = 0.0
     equity_curve: list[EquityPoint] = field(default_factory=list)
+    trade_breakdown: list[TradeBreakdown] = field(default_factory=list)
     plot_base64: str | None = None
 
     def to_dict(self) -> dict[str, object]:
@@ -93,6 +112,7 @@ class BacktestResult:
             "win_rate": self.win_rate,
             "profit_factor": self.profit_factor,
             "equity_curve": [point.to_dict() for point in self.equity_curve],
+            "trades": [item.to_dict() for item in self.trade_breakdown],
             "plot_base64": self.plot_base64,
         }
 
@@ -223,6 +243,12 @@ class BacktestService:
 
         if lost_total != 0:
             result.profit_factor = abs(won_total / lost_total)
+
+        result.trade_breakdown = [
+            _build_trade_breakdown("total", total_section),
+            _build_trade_breakdown("won", won_section),
+            _build_trade_breakdown("lost", lost_section),
+        ]
 
         time_returns = _extract_analysis(strategy, "timereturn")
         if time_returns:
@@ -358,6 +384,14 @@ def _load_default_plot_close() -> PlotClose | None:
     if not HAS_MATPLOTLIB:
         return None
 
+    matplotlib_module = import_module("matplotlib")
+    use_backend = getattr(matplotlib_module, "use", None)
+    if callable(use_backend):
+        try:
+            use_backend("Agg")
+        except Exception as exc:  # pragma: no cover - 回退到默认后端
+            logger.warning(f"设置 matplotlib 后端失败，将使用默认配置: {exc}")
+
     module = import_module("matplotlib.pyplot")
     close_func = getattr(module, "close", None)
     if callable(close_func):
@@ -464,3 +498,17 @@ def _pick_first_figure(
     if not first_column:
         return None
     return first_column[0]
+
+
+def _build_trade_breakdown(
+    category: str,
+    section: Mapping[str, object],
+) -> TradeBreakdown:
+    """将分析器的片段转换为 TradeBreakdown 模型."""
+
+    pnl_mapping = _as_mapping(section.get("pnl"))
+    return TradeBreakdown(
+        category=category,
+        total=_to_int(section.get("total")),
+        pnl_total=_to_float(pnl_mapping.get("total")),
+    )
