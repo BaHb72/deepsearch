@@ -1,0 +1,186 @@
+app:
+  name: DeepSearch
+  author: BaHb
+  env: prod
+  debug: false
+  data_dir: ./data
+
+runtime:
+  mode: full
+log:
+  active: true
+  level: INFO
+  rotation: 00:00
+  retention_days: 7
+  enable_json: false
+database:
+  main:
+    enabled: true
+    type: postgresql
+    host: updated-host
+    port: 5432
+    database: deepsearch
+    username: postgres
+    password: updated-secret
+    path: ./data/deepsearch.db
+    auto_connect: false
+    echo: false
+  cache:
+    enabled: true
+    host: localhost
+    port: 6379
+    username: ''
+    password: updated-cache
+    db: 0
+    pool_size: 10
+    socket_timeout: 5
+    socket_connect_timeout: 5
+    socket_keepalive: true
+    retry_on_timeout: true
+    health_check_interval: 30
+    max_idle_time: 300
+    idle_check_interval: 60
+    auto_start_windows: true
+    windows_service_names: []
+    startup_binary_path: null
+    startup_arguments: []
+    startup_command:
+    - wsl.exe
+    - -d
+    - Ubuntu
+    - -u
+    - root
+    - service
+    - redis-server
+    - start
+    wsl:
+      enabled: true
+      distro: Ubuntu
+      auto_resolve_ip: true
+      service_name: redis-server
+      user: root
+message_bus:
+  buses:
+    zmq:
+      type: zmq
+      enabled: true
+      config:
+        host: localhost
+        pub_port: 5556
+        sub_port: 5557
+  routes:
+  - match: '*'
+    buses:
+    - zmq
+webui:
+  enabled: true
+  backend_host: 0.0.0.0
+  backend_port: 8000
+  frontend_enabled: true
+  frontend_host: localhost
+  frontend_port: 3000
+  enable_cors: true
+  reload: false
+  workers: null
+data_sources:
+  default: amazingdata
+  fallback_order:
+  - amazingdata
+  - cloudflare
+  - akshare
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    recovery_timeout: 60
+    half_open_attempts: 3
+  failover:
+    enabled: true
+    timeout: 5
+    retry_count: 3
+    backoff_factor: 2
+  providers:
+    amazingdata:
+      enabled: false
+      priority: 1
+      fallback_sources:
+      - cloudflare
+      - akshare
+      has_saved_credential: false
+      worker_env: {}
+      config:
+        connection:
+          username: your_amazingdata_username
+          password: your_amazingdata_password
+          host: 101.230.159.234
+          port: 8600
+          timeout: 10
+          heartbeat_interval: 60
+          auto_reconnect: true
+          reconnect_interval: 10
+          max_retries: 3
+          network_provider: telecom
+          tgw_log_path: C:/Galaxy/gateway/logs
+          python_interpreter_path: runtime/interpreters/py39/Scripts/python.exe
+        local:
+          path: D:/AmazingData/cache
+          use_local: false
+        subscription:
+          enabled: true
+          batch_size: 100
+          max_symbols: 500
+          auto_resubscribe: true
+        cache:
+          enabled: true
+          ttl: 300
+          max_size: 10000
+        monitoring:
+          enabled: true
+          report_interval: 60
+          metrics_enabled: true
+          log_slow_requests: true
+          slow_request_threshold: 1000
+        timeout: 5000
+    cloudflare:
+      enabled: true
+      priority: 2
+      has_saved_credential: false
+      config:
+        worker_url: https://your-cloudflare-worker.example.com
+        timeout: 30
+        retry_count: 3
+    akshare:
+      enabled: true
+      priority: 3
+      config:
+        mode: direct
+        timeout: 30
+        proxy:
+          enabled: false
+notifications:
+  enabled: true
+  wechat_token: unit-test-token
+  bark_token: unit-test-token
+  base_urls:
+    wechat: https://wx.xtuis.cn
+    bark: https://bark.xtuis.cn
+  default_channel: wechat
+  categories:
+    alert:
+      enabled: true
+      max_per_window: 3
+      window_seconds: 180
+      channels:
+      - wechat
+    info:
+      enabled: true
+      max_per_window: 10
+      window_seconds: 600
+      channels:
+      - wechat
+      - bark
+  request_timeout: 6.5
+  retry_attempts: 2
+  retry_delay: 1.0
+  title_template: 测试默认标题 {symbol}
+  body_template: 最新价格：{price}
+

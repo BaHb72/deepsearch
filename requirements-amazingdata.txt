@@ -1,0 +1,5 @@
+--find-links third_party/amazingdata
+AmazingData==1.0.10
+tgw==1.0.8.1
+loguru>=0.7,<0.8
+

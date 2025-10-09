@@ -1,0 +1,210 @@
+app:
+  appName: DeepSearch
+  env: dev
+  debug: true
+  name: DeepSearch
+  author: BaHb
+  data_dir: ./data/dev
+
+runtime:
+  mode: full
+
+data_sources:
+  providers:
+    amazingdata:
+      enabled: false
+      priority: 1
+      timeout: 10
+      retry_count: 3
+      fallback_sources:
+        - cloudflare
+        - akshare
+      config:
+        connection:
+          username: your_amazingdata_username
+          password: your_amazingdata_password
+          host: 101.230.159.234
+          port: 8600
+          timeout: 10
+          heartbeat_interval: 60
+          auto_reconnect: true
+          reconnect_interval: 10
+          network_provider: telecom
+          max_retries: 3
+          servers:
+            telecom:
+              host: 101.230.159.234
+              port: 8600
+            unicom:
+              host: 140.206.44.234
+              port: 8600
+        local:
+          path: D://AmazingData_local_data//
+          use_local: true
+        subscription:
+          enabled: true
+          batch_size: 100
+          max_symbols: 500
+      has_saved_credential: false
+    cloudflare:
+      enabled: true
+      priority: 2
+      timeout: 30
+      retry_count: 3
+      config:
+        worker_url: https://your-cloudflare-worker.example.com
+        timeout: 30
+        retry_count: 3
+        connection:
+          api_key: your_cloudflare_api_key
+          timeout: 30
+          retry_count: 3
+          fallback_to_direct: true
+        cache:
+          enabled: true
+          ttl: 300
+      has_saved_credential: false
+    akshare:
+      enabled: true
+      priority: 3
+      timeout: 30
+      config:
+        mode: worker
+        timeout: 30
+        proxy:
+          enabled: true
+          worker_url: https://akshare-proxy.example.com
+          timeout: 15
+        connection:
+          mode: worker
+    qmt:
+      enabled: false
+      priority: 4
+      config:
+        connection:
+          host: localhost
+          port: 8888
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    recovery_timeout: 60
+    half_open_attempts: 3
+  failover:
+    enabled: true
+    timeout: 5
+    retry_count: 3
+    backoff_factor: 2
+  fallback_order:
+    - amazingdata
+    - cloudflare
+    - akshare
+  default: amazingdata
+
+log:
+  level: INFO
+  format: verbose
+  toFile: true
+  toConsole: true
+  active: true
+  rotation: 00:00
+  retention_days: 30
+  enable_json: false
+
+database:
+  main:
+    type: postgresql
+    host: localhost
+    port: 5432
+    database: deepsearch
+    username: your_database_username
+    password: your_database_password
+    path: ./data/deepsearch.db
+    auto_connect: true
+    enabled: true
+    has_saved_password: false
+  cache:
+    enabled: true
+    host: localhost
+    port: 6379
+    username: default
+    password: your_redis_password
+    db: 0
+    poolSize: 10
+    auto_connect: true
+    pool_size: 10
+    socket_timeout: 5
+    socket_connect_timeout: 5
+    socket_keepalive: true
+    retry_on_timeout: true
+    health_check_interval: 30
+    max_idle_time: 300
+    idle_check_interval: 60
+    startup_command: []
+    wsl:
+      enabled: false
+      distro: Ubuntu
+      auto_resolve_ip: true
+    has_saved_password: false
+
+notifications:
+  enabled: true
+  default_channel: wechat
+  wechat_token: your_wechat_token
+  bark_token: your_bark_token
+  request_timeout: 5.0
+  retry_attempts: 2
+  retry_delay: 1.0
+  categories:
+    alert:
+      enabled: true
+      max_per_window: 5
+      window_seconds: 300
+      channels:
+        - wechat
+        - bark
+    info:
+      enabled: true
+      max_per_window: 20
+      window_seconds: 600
+      channels:
+        - wechat
+        - bark
+
+data_providers:
+  akshare:
+    enabled: true
+    priority: 2
+    config:
+      mode: worker
+      proxy:
+        enabled: true
+        worker_url: https://akshare-proxy.example.com
+        timeout: 15
+  amazingdata:
+    enabled: false
+
+amazingdata:
+  enabled: false
+  username: your_amazingdata_username
+  password: your_amazingdata_password
+  network_provider: telecom
+  servers:
+    telecom:
+      host: 101.230.159.234
+      port: 8600
+    unicom:
+      host: 140.206.44.234
+      port: 8600
+  host: 101.230.159.234
+  port: 8600
+  timeout: 10
+  heartbeat_interval: 60
+  auto_reconnect: true
+  reconnect_interval: 10
+  local_path: D://AmazingData_local_data//
+  use_local: true
+  max_retries: 3
+  subscription_enabled: true
+  subscription_batch_size: 100
+  max_subscriptions: 500
+

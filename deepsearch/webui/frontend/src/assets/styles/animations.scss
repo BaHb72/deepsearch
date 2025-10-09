@@ -1,0 +1,417 @@
+// animations.scss - 动画效果集合
+// ==========================================
+
+// 导入设计令牌
+@use './design-tokens.scss' as tokens;
+
+// ==========================================
+// 基础动画 Basic Animations
+// ==========================================
+
+// 淡入淡出
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+// 滑入动画
+@keyframes slideInUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    transform: translateY(-30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+// ==========================================
+// 特效动画 Effect Animations
+// ==========================================
+
+// 脉冲效果
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+// 脉冲环
+@keyframes pulseRing {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+// 呼吸效果
+@keyframes breathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 0.9;
+  }
+}
+
+// 光晕扩散
+@keyframes glowSpread {
+  0% {
+    box-shadow: 0 0 0 0 tokens.$glow-primary;
+  }
+  70% {
+    box-shadow: 0 0 0 20px rgba(tokens.$brand-primary, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(tokens.$brand-primary, 0);
+  }
+}
+
+// 涟漪效果
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+// ==========================================
+// 加载动画 Loading Animations
+// ==========================================
+
+// 旋转
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// 弹跳
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+// 闪烁
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+// ==========================================
+// 数据动画 Data Animations
+// ==========================================
+
+// 数字滚动
+@keyframes countUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+// 进度条填充
+@keyframes fillProgress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: var(--progress-width, 100%);
+  }
+}
+
+// 图表线条绘制
+@keyframes drawLine {
+  from {
+    stroke-dashoffset: 1000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+// ==========================================
+// 金融数据专用动画 Financial Animations
+// ==========================================
+
+// 上涨动画
+@keyframes bullish {
+  0% {
+    transform: translateY(0);
+    color: tokens.$color-neutral;
+  }
+  50% {
+    transform: translateY(-5px);
+    color: tokens.$color-bullish;
+  }
+  100% {
+    transform: translateY(0);
+    color: tokens.$color-bullish;
+  }
+}
+
+// 下跌动画
+@keyframes bearish {
+  0% {
+    transform: translateY(0);
+    color: tokens.$color-neutral;
+  }
+  50% {
+    transform: translateY(5px);
+    color: tokens.$color-bearish;
+  }
+  100% {
+    transform: translateY(0);
+    color: tokens.$color-bearish;
+  }
+}
+
+// K线闪烁
+@keyframes candleGlow {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.2) drop-shadow(0 0 10px currentColor);
+  }
+}
+
+// ==========================================
+// 交互动画 Interaction Animations
+// ==========================================
+
+// 点击波纹
+@keyframes clickRipple {
+  from {
+    transform: scale(0);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+// 悬浮上升
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+// 抖动
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-2px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(2px);
+  }
+}
+
+// 3D翻转
+@keyframes flip3D {
+  from {
+    transform: perspective(400px) rotateY(0);
+  }
+  to {
+    transform: perspective(400px) rotateY(180deg);
+  }
+}
+
+// ==========================================
+// 背景动画 Background Animations
+// ==========================================
+
+// 渐变移动
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+// 星空闪烁
+@keyframes starTwinkle {
+  0%, 100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+// 流光效果
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+// ==========================================
+// 动画辅助类 Animation Helper Classes
+// ==========================================
+
+.animate-fadeIn {
+  animation: fadeIn tokens.$duration-base tokens.$ease-out;
+}
+
+.animate-slideUp {
+  animation: slideInUp tokens.$duration-base tokens.$ease-out;
+}
+
+.animate-pulse {
+  animation: pulse 2s tokens.$ease-in-out infinite;
+}
+
+.animate-breathe {
+  animation: breathe 3s tokens.$ease-in-out infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.animate-bounce {
+  animation: bounce 1s tokens.$ease-bounce infinite;
+}
+
+.animate-float {
+  animation: float 3s tokens.$ease-in-out infinite;
+}
+
+.animate-shimmer {
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+                    90deg,
+                    transparent,
+                    rgba(255, 255, 255, 0.2),
+                    transparent
+    );
+    animation: shimmer 2s infinite;
+  }
+}
+
+// 延迟动画类
+@for $i from 1 through 10 {
+  .animate-delay-#{$i} {
+    animation-delay: #{$i * 0.1}s;
+  }
+}
+
+// 动画时长类
+.animate-fast {
+  animation-duration: tokens.$duration-fast !important;
+}
+
+.animate-slow {
+  animation-duration: tokens.$duration-slow !important;
+}
+
+.animate-slower {
+  animation-duration: tokens.$duration-slower !important;
+}

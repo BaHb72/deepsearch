@@ -1,0 +1,37 @@
+# <type>(<scope>): <subject> (max 50 chars)
+
+# <body> (optional, max 72 chars per line)
+
+# <footer> (optional)
+
+# Type can be:
+#   feat:     新功能
+#   fix:      修复bug
+#   docs:     仅文档更改
+#   style:    不影响代码含义的更改（空格、格式、缺少分号等）
+#   refactor: 既不修复bug也不添加功能的代码更改
+#   perf:     改进性能的代码更改
+#   test:     添加缺失或纠正现有测试
+#   chore:    对构建过程或辅助工具和库的更改
+#   revert:   回滚之前的提交
+#
+# Scope is optional and can be anything specifying the place of the commit change.
+# Examples: api, frontend, backend, config, docs, tests
+#
+# Subject should use imperative mood: "change" not "changed" nor "changes"
+# Don't capitalize first letter
+# No dot (.) at the end
+#
+# Body should explain the motivation for the change and contrast with previous behavior
+#
+# Footer should contain any information about Breaking Changes and is also the place to reference GitHub issues
+# Breaking Changes should start with "BREAKING CHANGE:"
+#
+# Example:
+# ----------------
+# feat(api): add data source health monitoring
+#
+# Implement real-time health check for all data providers
+# with automatic failover and alert notifications
+#
+# Closes #123

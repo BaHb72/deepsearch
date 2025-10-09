@@ -1,0 +1,158 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deepsearch"
+version = "0.1.0"
+description = "高性能量化交易事件系统"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "BaHb", email = "bahb@example.com" },
+]
+requires-python = ">=3.13"
+dependencies = [
+    # ==== 核心依赖 ====
+    "anyio>=4.9.0",
+    "loguru>=0.7.3",
+    "matplotlib>=3.10.3",
+    "platformdirs>=4.3.8",
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.10.1",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.2",
+    "twisted>=25.5.0",
+    "pyzmq>=27.0.0",
+    "redis>=6.2.0",
+    "redistimeseries>=1.4.3",
+    "cryptography>=41.0.0",
+    # ==== 数据库依赖 ====
+    "sqlalchemy>=2.0.41",
+    "asyncpg>=0.30.0",
+    "psycopg[binary]>=3.2.9",
+    "duckdb>=1.0.0",
+    # ==== Web UI 依赖 ====
+    "fastapi==0.117.1",
+    "uvicorn[standard]>=0.33.0",
+    "python-multipart>=0.0.6",
+    "websockets>=13.1",
+    "httpx>=0.24.0",
+    "python-jose[cryptography]>=3.3.0",
+    # ==== 数据获取依赖 ====
+    "amazingdata==1.0.10",
+    "tgw==1.0.8.1",
+    "akshare==1.17.54",
+    "aiohttp>=3.9.0",
+    "numpy>=1.24.0",
+    "pandas>=2.3.0,<2.4.0",
+    # ==== 其他依赖 ====
+    "psutil>=7.0.0",
+    "aioredis>=2.0.1",
+    "tabulate>=0.9.0",
+    "notebook>=7.3.3",
+    "backtrader>=1.9.78.123",
+    "setuptools>=80.9.0",
+    "click==8.3.0",
+    "scipy>=1.16.1",
+    "ta-lib>=0.6.5",
+    "xxhash>=3.5.0",
+    "pandas-stubs>=2.3.0,<2.4.0",
+    "schedule>=1.2.2",
+    "black==25.9.0",
+    "chardet>=5.2.0",
+    "ruff>=0.13.1",
+    "python-dateutil>=2.9.0.post0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.10",
+    "pytest-tornasync>=0.6.0.post2",
+    "pytest-trio>=0.8.0",
+    "pytest-twisted>=1.14.3",
+    "pytest-xdist>=3.6.1",
+    "black>=23.0",
+    "isort>=5.12",
+    "mypy>=1.0",
+    "types-PyYAML>=6.0.12",
+    "ipython>=8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/BaHb/deepsearch"
+Repository = "https://github.com/BaHb/deepsearch.git"
+
+[project.scripts]
+deepsearch = "deepsearch.main:main"
+
+[tool.setuptools]
+packages = ["deepsearch"]
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
+exclude = [
+    "deepsearch/infrastructure/providers/datafeed/qmt/scripts",
+    "examples/akshare_resources/getakshare.ipynb",
+]
+
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.uv]
+python-preference = "only-system"
+compile-bytecode = true
+
+[tool.uv.sources]
+amazingdata = { path = "third_party/amazingdata" }
+tgw = { path = "third_party/tgw" }
+
+[tool.uv.pip]
+index-url = "https://pypi.org/simple"
+
+[dependency-groups]
+dev = [
+    "bandit>=1.8.6",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-benchmark>=5.1.0",
+    "pytest-cov>=6.3.0",
+    "pytest-mock>=3.15.0",
+    "types-PyYAML>=6.0.12",
+]
+[tool.mypy]
+python_version = "3.13"
+# 为第三方依赖补充的本地类型桩
+mypy_path = ["typings"]
+#ignore_missing_imports = true
+warn_unused_ignores = true
+warn_return_any = true
+show_error_codes = true
+pretty = true
+files = [
+    "deepsearch/config/manager.py",
+    "deepsearch/config/crypto.py",
+    "deepsearch/webui/api/middleware/deduplication.py",
+    "deepsearch/webui/api/monitor/data_source_api.py",
+    "deepsearch/webui/api/endpoints/system/logs.py",
+    "deepsearch/infrastructure/messaging/event_publisher.py",
+    "deepsearch/infrastructure/database/optimized_pool.py",
+    "deepsearch/debug/performance_profiler.py",
+    "deepsearch/core/utils/ipc.py",
+    "deepsearch/core/utils/error_handler.py",
+    "deepsearch/core/components/infrastructure_components.py",
+]
+

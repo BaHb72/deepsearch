@@ -1,0 +1,146 @@
+# ==================== Python Artifacts ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ==================== Packaging Outputs ====================
+build/
+dist/
+downloads/
+develop-eggs/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+wheels/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ==================== Virtual Environments ====================
+.venv/
+venv/
+env/
+ENV/
+
+# ==================== Tooling & Caches ====================
+.benchmarks/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+pytest-coverage.log
+
+# ==================== Logs & Diagnostics ====================
+*.log
+logs/
+diagnostic_*.json
+diagnostic_log.json
+
+# ==================== OS & Editors ====================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# ==================== Local Configuration (never commit secrets) ====================
+config/settings.local.yaml
+settings.local.yaml
+settings.*.local.yaml
+deepsearch/config/settings.dev.yaml
+deepsearch/config/settings.local.yaml
+config/.crypto_key
+.crypto_key
+deepsearch/config/database_connections.*.yaml
+
+# Shared templates must remain tracked
+!deepsearch/config/settings.template.yaml
+!deepsearch/config/settings.dev.yaml.example
+
+# ==================== Frontend Build Artifacts ====================
+/deepsearch/webui/static/assets/
+/deepsearch/webui/static/index.html
+/deepsearch/webui/frontend/dist/
+/deepsearch/webui/frontend/.vite/
+/deepsearch/webui/frontend/node_modules/
+/deepsearch/webui/frontend/package-lock.json
+/deepsearch/webui/frontend/src/.trash/
+/deepsearch/webui/frontend/__mocks__/
+/deepsearch/webui/frontend/.husky/
+/deepsearch/webui/frontend/.env.*
+deepsearch/webui/frontend/.backup-cleanup/
+deepsearch/webui/frontend/jsx-backup-*/
+
+# ==================== Third-Party Packages ====================
+/third_party/*
+!/third_party/amazingdata/
+!/third_party/amazingdata/**
+!/third_party/tgw/
+!/third_party/tgw/**
+cloudflare-deploy/*.toml
+cloudflare-deploy/*.min.js
+wrangler*.toml
+
+# ==================== Data Artifacts ====================
+data/**/*.db
+data/**/*.duckdb
+data/**/*.duckdb.wal
+data/**/*.parquet
+data/**/*.log
+data/**/*.json
+data/cache/
+data/temp/
+data/logs/
+data/monitoring/
+data/analytics/
+data/datasourceapi/
+!/data/**/.gitkeep
+deepsearch/data/
+deepsearch/infrastructure/data/**/*.duckdb.wal
+monitoring_data/
+reports/test_reports/
+reports/probes/
+
+# ==================== Temporary Helpers ====================
+test_report_*.json
+temp_*.txt
+temp_*.py
+tmp/
+*.bak
+*.backup
+*_old.py
+cleanup_*.py
+cleanup_*.bat
+final_*.py
+2025-*.txt
+*-think.txt
+temp_block.txt
+*qmt_config.json
+
+# ==================== Project Automation ====================
+runtime/interpreters/
+worker/
+.python-version
+
+# ==================== Misc ====================
+/.claude/
+/.archive/
+/.trash/
+*/.trash/
+**/.trash/
+.trash/
+nul
+runs/
+D?Stockcodedeepsearch.pre-commit-config.yaml
+

@@ -1,0 +1,240 @@
+name: PR Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_VERSION: "0.1.24"
+
+jobs:
+  check-title:
+    name: Check PR Title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title format
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+
+  check-files:
+    name: Check Modified Files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v35
+
+      - name: Check for migrations
+        if: contains(steps.changed-files.outputs.all_changed_files, 'migrations/')
+        run: |
+          echo "Database migrations detected. Please ensure:"
+          echo "1. Migration is reversible"
+          echo "2. Migration has been tested"
+          echo "3. Downgrade path is documented"
+
+      - name: Check for API changes
+        if: contains(steps.changed-files.outputs.all_changed_files, 'api/') || contains(steps.changed-files.outputs.all_changed_files, 'endpoints/')
+        run: |
+          echo "API changes detected. Please ensure:"
+          echo "1. API documentation is updated"
+          echo "2. Breaking changes are documented"
+          echo "3. Frontend is compatible"
+
+      - name: Check for config changes
+        if: contains(steps.changed-files.outputs.all_changed_files, 'config/') || contains(steps.changed-files.outputs.all_changed_files, 'settings')
+        run: |
+          echo "Configuration changes detected. Please ensure:"
+          echo "1. Default values are reasonable"
+          echo "2. Environment variables are documented"
+          echo "3. Breaking changes are noted"
+
+  check-size:
+    name: Check PR Size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Check PR size
+        run: |
+          # 获取更改的行数
+          ADDITIONS=$(git diff origin/${{ github.base_ref }}..HEAD --numstat | awk '{sum+=$1} END {print sum}')
+          DELETIONS=$(git diff origin/${{ github.base_ref }}..HEAD --numstat | awk '{sum+=$2} END {print sum}')
+          TOTAL=$((ADDITIONS + DELETIONS))
+
+          echo "Lines added: $ADDITIONS"
+          echo "Lines deleted: $DELETIONS"
+          echo "Total changes: $TOTAL"
+
+          # 警告大型PR
+          if [ $TOTAL -gt 1000 ]; then
+            echo "::warning::Large PR detected ($TOTAL lines). Consider breaking it into smaller PRs."
+          fi
+
+          if [ $TOTAL -gt 2000 ]; then
+            echo "::error::PR too large ($TOTAL lines). Please break it into smaller PRs."
+            exit 1
+          fi
+
+  test-coverage:
+    name: Test Coverage Check
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: deepsearch_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install UV
+        run: |
+          pip install uv==${{ env.UV_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv sync --all-extras
+
+      - name: Run tests with coverage
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/deepsearch_test
+          REDIS_URL: redis://localhost:6379
+        run: |
+          source .venv/bin/activate
+          pytest --cov=deepsearch --cov-report=xml --cov-report=term
+
+      - name: Check coverage threshold
+        run: |
+          source .venv/bin/activate
+          coverage report --fail-under=30
+
+      - name: Comment coverage on PR
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINIMUM_GREEN: 80
+          MINIMUM_ORANGE: 50
+
+  documentation:
+    name: Check Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check README
+        run: |
+          if [ ! -f "README.md" ]; then
+            echo "::error::README.md not found"
+            exit 1
+          fi
+
+      - name: Check API documentation
+        run: |
+          # 检查API文档是否最新
+          python tools/generate_api_documentation.py --check-only || true
+
+      - name: Check docstrings
+        run: |
+          pip install pydocstyle
+          pydocstyle deepsearch --ignore=D100,D101,D102,D103,D104,D105,D106,D107 || true
+
+  dependencies:
+    name: Check Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check for security vulnerabilities
+        run: |
+          pip install safety
+          safety check --json || true
+
+      - name: Check for outdated dependencies
+        run: |
+          pip install pip-outdated
+          pip-outdated || true
+
+  pr-labels:
+    name: Auto Label PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v4
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          configuration-path: .github/labeler.yml
+
+  conflict-check:
+    name: Check Merge Conflicts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Check for conflicts with base branch
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          if ! git merge-tree $(git merge-base HEAD origin/${{ github.base_ref }}) HEAD origin/${{ github.base_ref }} | grep -q "<<<<<<< "; then
+            echo "No merge conflicts detected"
+          else
+            echo "::error::Merge conflicts detected. Please resolve before merging."
+            exit 1
+          fi

@@ -1,0 +1,230 @@
+name: CD
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_VERSION: "0.1.24"
+  NODE_VERSION: "18"
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    uses: ./.github/workflows/ci.yml
+
+  build-artifacts:
+    name: Build Artifacts
+    runs-on: ubuntu-latest
+    needs: [build-and-test]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install UV
+        run: |
+          pip install uv==${{ env.UV_VERSION }}
+
+      - name: Build Python package
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv build
+
+      - name: Build frontend
+        working-directory: deepsearch/webui/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create release archive
+        run: |
+          mkdir -p release
+          cp -r dist/* release/
+          cp -r deepsearch/webui/frontend/build release/frontend
+          tar -czf deepsearch-${{ github.ref_name }}.tar.gz release/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-artifacts
+          path: |
+            deepsearch-*.tar.gz
+            dist/*.whl
+            dist/*.tar.gz
+
+  docker-build-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [build-and-test]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ secrets.DOCKER_USERNAME }}/deepsearch
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [docker-build-push]
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging.deepsearch.example.com
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy to staging server
+        run: |
+          # SSH部署脚本
+          echo "Deploying to staging..."
+          # ssh ${{ secrets.STAGING_SERVER }} 'docker pull ${{ secrets.DOCKER_USERNAME }}/deepsearch:latest && docker-compose up -d'
+
+      - name: Health check
+        run: |
+          sleep 30
+          curl -f https://staging.deepsearch.example.com/api/health || exit 1
+
+      - name: Run smoke tests
+        run: |
+          # 运行冒烟测试
+          echo "Running smoke tests..."
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [docker-build-push]
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment:
+      name: production
+      url: https://deepsearch.example.com
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Backup database
+        run: |
+          echo "Creating database backup..."
+          # 数据库备份脚本
+
+      - name: Deploy to production server
+        run: |
+          # SSH部署脚本
+          echo "Deploying to production..."
+          # ssh ${{ secrets.PROD_SERVER }} 'docker pull ${{ secrets.DOCKER_USERNAME }}/deepsearch:${{ github.ref_name }} && docker-compose up -d'
+
+      - name: Health check
+        run: |
+          sleep 30
+          curl -f https://deepsearch.example.com/api/health || exit 1
+
+      - name: Run smoke tests
+        run: |
+          # 运行冒烟测试
+          echo "Running smoke tests..."
+
+      - name: Notify deployment
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Production deployment ${{ job.status }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-artifacts]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: release-artifacts
+          path: ./artifacts
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          echo "# Release ${{ github.ref_name }}" > release_notes.md
+          echo "" >> release_notes.md
+          echo "## What's Changed" >> release_notes.md
+          git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.whl
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+
+  cleanup:
+    name: Cleanup Old Deployments
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+    steps:
+      - name: Clean up old Docker images
+        run: |
+          echo "Cleaning up old Docker images..."
+          # docker system prune -af --filter "until=168h"
+
+      - name: Clean up old artifacts
+        uses: c-hive/gha-remove-artifacts@v1
+        with:
+          age: '7 days'

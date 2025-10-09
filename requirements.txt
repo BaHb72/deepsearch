@@ -1,0 +1,2 @@
+# Dependencies are now managed in pyproject.toml
+# This file is kept for backward compatibility with setup.py
