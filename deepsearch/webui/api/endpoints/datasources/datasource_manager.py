@@ -739,11 +739,13 @@ async def update_data_source_config(request: Request, source: str, payload: Conf
     update_data = payload.model_dump(exclude_unset=True)
     if "enabled" in update_data:
         desired_enabled = bool(update_data["enabled"])
+        previous_enabled = config.enabled
+        config.enabled = desired_enabled
         if desired_enabled:
             was_soft_disabled = (
                 status_entry.get("degraded_reason") == "disabled_by_config"
                 or status_entry.get("reason") == "disabled_by_config"
-                or not config.enabled
+                or not previous_enabled
             )
             if test_mode and was_soft_disabled:
                 manager.mark_test_reactivation_pending(source_type)

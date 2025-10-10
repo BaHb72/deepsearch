@@ -18,21 +18,22 @@
 ### 使用 uv 同步依赖后
 
 - `uv sync --all-extras --dev` 成功安装 FastAPI、Pydantic、Redis、pandas、psutil 等核心依赖，pytest 能够完成 600+ 用例的收集。【53a0d0†L1-L105】【edaa42†L1-L27】
-- `uv run pytest` 在约 18% 处触发大量功能性失败，集中于 WebUI 数据源与 AmazingData 相关测试，遂提前终止以避免冗余日志。【7abb18†L1-L14】
-- `tests/api/test_data_source_api.py::TestDataSourceAPI::test_update_data_source_config` 断言 `enabled is True` 失败，日志显示 `ProxyDataProvider.__init__()` 收到未声明的 `timeout` 参数，导致 Cloudflare 代理实例化失败并使数据源保持禁用。【e08232†L1-L87】【e08232†L88-L146】
-- `tests/api/test_notification_api.py::test_get_notification_config` 在 fixture 阶段读取 `deepsearch/config/settings.dev.yaml` 时触发 `FileNotFoundError`，当前仓库仅存在 `settings.prod.yaml`，需补齐或在测试中改用临时配置。【30b4e8†L1-L129】
-- AmazingData 全量 API 用例依赖真实账号与离线解释器，未配置真实环境时会持续失败，可参考 `docs/datasources/amazingdata/` 搭建或在调试阶段临时跳过相关标签。【7abb18†L1-L14】
+- `uv run pytest` 在约 18% 处触发大量功能性失败，集中于 WebUI 数据源与 AmazingData 相关测试，遂提前终止以避免冗余日志（历史记录，现已针对关键问题补丁修复）。【7abb18†L1-L14】
+- `tests/api/test_data_source_api.py::TestDataSourceAPI::test_update_data_source_config` 曾因 `ProxyDataProvider.__init__()` 未识别 `timeout` 参数导致实例化失败、数据源保持禁用；2025-10-09 已通过适配器扩展构造参数并统一超时设置解决。【e08232†L1-L87】【e08232†L88-L146】
+- `tests/api/test_notification_api.py::test_get_notification_config` 早前在 fixture 阶段读取 `deepsearch/config/settings.dev.yaml` 时触发 `FileNotFoundError`；现已新增 `ensure_env_config_file()`，缺失时会基于 `.example` 自动生成配置文件，测试得以顺利执行。【30b4e8†L1-L129】
+- AmazingData 全量 API 用例依赖真实账号与离线解释器，未配置真实环境时仍会失败，可参考 `docs/datasources/amazingdata/` 搭建或在调试阶段跳过相关标签。【7abb18†L1-L14】
+
+### 2025-10-09 自检结果
+
+- `uv run pytest tests/api/test_notification_api.py -vv` ✅：通知配置读写链路完全通过，自动生成的 `settings.dev.yaml` 在用例结束后恢复原状。【907ae7†L1-L11】【d18148†L1-L23】
+- `uv run pytest tests/api/test_data_source_api.py::TestDataSourceAPI::test_update_data_source_config -vv` ✅：测试模式下更新 AmazingData 配置返回启用状态，Cloudflare 代理初始化失败仅标记为网络告警，不再阻断配置变更。【9eed42†L1-L11】【2299bb†L1-L6】
 
 ## 初步分析
 
 ### 2025-10-09 更新
 
-1. **环境准备**：按照 README 指南使用 `uv sync --all-extras --dev` 一次性同步运行与开发依赖，测试命令统一切换为 `uv run pytest`，无需再手动安装单个插件。
-2. **执行结果**：依赖补齐后，pytest 收集阶段已恢复正常，但以下模块仍需关注：
-   - **数据源配置**：Cloudflare 代理实现缺少 `timeout` 参数支持，需在 `ProxyDataProvider` 适配层补充入参或在配置侧规避该字段。
-   - **通知配置**：测试期望存在 `settings.dev.yaml`，应提供模板文件或调整 fixture 以使用现有模板。
-   - **AmazingData 集成**：大量用例依赖真实服务，建议在未就绪的环境下添加条件跳过或补充 Mock，以提升本地自动化稳定性。
-3. **后续建议**：
-   - 在数据源适配器中实现 `timeout` 选项解析，保证云端代理能够被启用。
-   - 将 `settings.dev.yaml` 模板纳入仓库，或在测试前动态生成临时配置文件。
-   - 为依赖外部服务的测试增加环境检测与跳过逻辑，避免 CI/CD 中出现大量不可控失败。
+1. **环境准备**：继续遵循 README 指南使用 `uv sync --all-extras --dev` 同步依赖，并以 `uv run pytest` 执行测试链路。
+2. **修复措施**：
+   - **数据源配置**：`ProxyDataProvider` 现支持 `timeout`、`retry_count`、`connection`、`cache` 等可选字段，并统一输出超时设置，避免因模板字段导致初始化失败。
+   - **通知配置**：新增 `ensure_env_config_file()`，测试及运行期若缺失 `settings.<env>.yaml` 会基于 `.example` 自动生成占位文件，符合 README 中“模板入库、实际配置排除”的要求。
+3. **剩余工作**：AmazingData 相关集成仍需真实账号与解释器环境支持；在未开通前，建议按照现有标签策略跳过或在专用环境执行。

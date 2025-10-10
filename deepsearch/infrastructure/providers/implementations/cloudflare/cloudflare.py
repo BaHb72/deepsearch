@@ -44,11 +44,44 @@ except ImportError:
 class ProxyDataProvider:
     """通过代理获取真实股票数据"""
 
-    def __init__(self, worker_url: str = "https://akshare-proxy.934073514.workers.dev"):
-        self.worker_url = worker_url.rstrip("/")
+    def __init__(
+        self,
+        worker_url: str = "https://akshare-proxy.934073514.workers.dev",
+        timeout: float | int | None = None,
+        retry_count: int | None = None,
+        connection: Optional[Dict[str, Any]] | None = None,
+        cache: Optional[Dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ):
+        """初始化代理数据提供者。
+
+        兼容配置文件中的扩展字段，确保 registry 传入的参数不会导致初始化失败。
+        """
+
+        base_url = worker_url or "https://akshare-proxy.934073514.workers.dev"
+        self.worker_url = base_url.rstrip("/")
+
+        connection = connection or {}
+        if connection.get("worker_url"):
+            self.worker_url = str(connection["worker_url"]).rstrip("/")
+
+        configured_timeout = timeout if timeout is not None else connection.get("timeout")
+        self._timeout_seconds = float(configured_timeout) if configured_timeout is not None else 30.0
+
+        configured_retry = retry_count if retry_count is not None else connection.get("retry_count")
+        self._retry_count = int(configured_retry) if configured_retry is not None else 3
+
         self.session = None
         self._cache = {}
         self._cache_ttl = {"realtime": 5, "minute": 60, "daily": 300, "info": 3600}
+        self._cache_config = cache or {}
+        self._extra_options = kwargs
+
+    def _make_timeout(self, override: Optional[float] = None) -> aiohttp.ClientTimeout:
+        """构造统一的超时配置。"""
+
+        total = self._timeout_seconds if override is None else float(override)
+        return aiohttp.ClientTimeout(total=total)
 
     async def initialize(self):
         """初始化"""
@@ -57,7 +90,9 @@ class ProxyDataProvider:
         # 测试连接
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.worker_url}/health", timeout=5) as response:
+                async with session.get(
+                    f"{self.worker_url}/health", timeout=self._timeout_seconds
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
                         logger.info(f"Worker健康检查成功: v{data.get('version', 'unknown')}")
@@ -201,7 +236,9 @@ class ProxyDataProvider:
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    url, params={"url": target_with_params}, timeout=aiohttp.ClientTimeout(total=30)
+                    url,
+                    params={"url": target_with_params},
+                    timeout=self._make_timeout(),
                 ) as response:
                     if response.status == 200:
                         text = await response.text()
@@ -295,7 +332,9 @@ class ProxyDataProvider:
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    url, params={"url": target}, timeout=aiohttp.ClientTimeout(total=10)
+                    url,
+                    params={"url": target},
+                    timeout=self._make_timeout(10),
                 ) as response:
                     if response.status == 200:
                         text = await response.text()
@@ -391,7 +430,7 @@ class ProxyDataProvider:
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    url, params=params, timeout=aiohttp.ClientTimeout(total=10)
+                    url, params=params, timeout=self._make_timeout(10),
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -544,7 +583,9 @@ class ProxyDataProvider:
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    url, params={"url": target_with_params}, timeout=aiohttp.ClientTimeout(total=30)
+                    url,
+                    params={"url": target_with_params},
+                    timeout=self._make_timeout(),
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
