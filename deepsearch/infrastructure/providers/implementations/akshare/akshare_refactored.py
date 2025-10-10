@@ -4,7 +4,7 @@
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import pandas as pd
 from loguru import logger
@@ -269,7 +269,7 @@ class AkShareProxyProvider:
                 }
                 period = period_mapping.get(period_alias, "daily")
 
-                dataframe = await self.get_history_data(
+                history_df = await self.get_history_data(
                     symbol=symbol,
                     start_date=request.start_date,
                     end_date=request.end_date,
@@ -277,10 +277,10 @@ class AkShareProxyProvider:
                     adjust=request.adjust or "",
                 )
 
-                if dataframe is None:
+                if history_df is None:
                     raise DataProviderError("未获取到历史数据")
 
-                return DataResponse(success=True, data=dataframe, metadata=metadata)
+                return DataResponse(success=True, data=history_df, metadata=metadata)
 
             if request_type == "minute_kline":
                 symbol = self._normalize_symbol(request.symbol)
@@ -327,7 +327,8 @@ class AkShareProxyProvider:
         """获取实时行情数据"""
         if not self._initialized:
             await self.initialize()
-        return await self.api_methods.get_realtime_data(symbols)
+        result = await self.api_methods.get_realtime_data(symbols)
+        return cast(Dict[str, Any], result)
 
     async def get_history_data(
         self,
@@ -340,25 +341,29 @@ class AkShareProxyProvider:
         """获取历史K线数据"""
         if not self._initialized:
             await self.initialize()
-        return await self.api_methods.get_history_data(symbol, start_date, end_date, period, adjust)
+        result = await self.api_methods.get_history_data(symbol, start_date, end_date, period, adjust)
+        return cast(Optional[pd.DataFrame], result)
 
     async def fetch_sector_data(self, api_name: str, params: Dict[str, Any]) -> Any:
         """获取板块数据"""
         if not self._initialized:
             await self.initialize()
-        return await self.api_methods.fetch_sector_data(api_name, params)
+        result = await self.api_methods.fetch_sector_data(api_name, params)
+        return result
 
     async def fetch_anomaly_data(self, api_name: str, params: Dict[str, Any]) -> Any:
         """获取异动数据"""
         if not self._initialized:
             await self.initialize()
-        return await self.api_methods.fetch_anomaly_data(api_name, params)
+        result = await self.api_methods.fetch_anomaly_data(api_name, params)
+        return result
 
     async def fetch_hsgt_data(self, api_name: str, params: Dict[str, Any]) -> Any:
         """获取沪深港通数据"""
         if not self._initialized:
             await self.initialize()
-        return await self.api_methods.fetch_hsgt_data(api_name, params)
+        result = await self.api_methods.fetch_hsgt_data(api_name, params)
+        return result
 
     async def fetch_all_realtime_quotes(self) -> Any:
         """获取所有股票实时行情"""
@@ -454,9 +459,10 @@ class AkShareProxyProvider:
     ) -> Dict[str, Any]:
         if not self._initialized:
             await self.initialize()
-        return await self.request_handler._fetch_with_fallback(
+        result = await self.request_handler._fetch_with_fallback(
             api_name, params, max_retries=max_retries, use_cache=use_cache
         )
+        return cast(Dict[str, Any], result)
 
     # ==================== 管理方法 ====================
 
@@ -485,10 +491,10 @@ class AkShareProxyProvider:
 
     @property
     def worker_health(self) -> Dict[str, bool]:
-        return self.worker_manager.get_health_flags()
+        return cast(Dict[str, bool], self.worker_manager.get_health_flags())
 
     async def _check_worker_health(self, url: str) -> bool:
-        return await self.worker_manager.check_worker_health(url)
+        return bool(await self.worker_manager.check_worker_health(url))
 
     def reset_worker(self, url: str) -> None:
         self.worker_manager.reset_worker(url)

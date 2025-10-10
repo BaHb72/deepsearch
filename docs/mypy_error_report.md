@@ -1162,3 +1162,10 @@ deepsearch/webui/server.py:408: note: By default the bodies of untyped functions
 - 修正系统数据库检测中 DuckDB 连接变量的类型推断，以及 Workers Proxy 报表的时间戳归一化策略，确保 mypy 可识别 `None` 与 `datetime` 的联合类型。
 - 最新基线：`UV_HTTP_TIMEOUT=600 uv run mypy --hide-error-context --no-error-summary --pretty deepsearch` 仍剩余 **50** 条错误，集中在 Analytics 组件、AkShare/QMT 管理器及依赖缺失的监控模块，后续需继续拆分治理。
 
+## 2025-10-13 - Analytics/AkShare 批次收尾
+
+- `AkShareRefactoredDataProvider` 将历史行情的局部变量重命名为 `history_df` 并为多处 API 输出增加显式 `cast`，同时统一工人健康检查的布尔返回值，解决 `Name already defined` 及 “Returning Any” 报错。
+- Provider 包入口改为通过 `importlib` 安全加载 `AkShareProxyProvider`，并在类型检查阶段仅暴露 `Optional`，消除 “Cannot assign to a type”。
+- 事件监控装饰器改用 `event_monitor.MetricsCollector`，补齐 `record_event` 能力断言，避免桩类缺失方法导致的属性报错。
+- 最新基线：`UV_HTTP_TIMEOUT=600 uv run mypy --hide-error-context --no-error-summary --pretty deepsearch` **零错误，仅剩注释性 annotation-unchecked 提示**（详见 `mypy_full_latest.log`）。
+
