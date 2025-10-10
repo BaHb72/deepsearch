@@ -24,7 +24,20 @@
 - **局部收敛策略**：通过 `pyproject.toml` 的 overrides 将 `deepsearch.*` 默认标记为忽略错误，仅对 `deepsearch.utils.data_sources` 与 `deepsearch.infrastructure.providers.implementations.akshare.cache_manager` 保持检查，支撑当前聚焦的增量治理。
 - **类型桩补全**：扩充 `typings/pandas`、`typings/fastapi`、`typings/pydantic` 并新增 `typings/deepsearch` 目录，为自研管理器提供最小 stub，避免 mypy 递归解析整仓旧债。
 - **命令基线**：`uv run mypy --hide-error-context --no-error-summary --pretty deepsearch/utils/data_sources.py deepsearch/infrastructure/providers/implementations/akshare/cache_manager.py` 已返回成功结果，可作为离线环境的最小化回归项。
-5. **配置与 TypedDict 访问**：配置对象在可选/字典混用时直接访问属性，TypedDict 定义缺失键，导致大量 `Union` 分支取属性失败。
+- **配置与 TypedDict 访问**：配置对象在可选/字典混用时直接访问属性，TypedDict 定义缺失键，导致大量 `Union` 分支取属性失败。
+
+## 2025-10-13 解除 overrides 后复测
+
+- **配置回滚**：移除 `pyproject.toml` 中的 overrides，让 mypy 按默认规则扫描整个 `deepsearch` 代码树，以便评估真实债务规模。
+- **聚焦模块验证**：在 `--follow-imports=skip` 模式下复跑 `deepsearch/utils/data_sources.py` 与 `deepsearch/infrastructure/providers/implementations/akshare/cache_manager.py`，命令成功返回并确认本次治理模块保持零错误。对应命令：`uv run mypy --hide-error-context --no-error-summary --pretty --follow-imports=skip deepsearch/utils/data_sources.py deepsearch/infrastructure/providers/implementations/akshare/cache_manager.py`。【aa056e†L1-L3】
+- **全量扫描结果**：执行 `uv run mypy --hide-error-context --no-error-summary --pretty deepsearch` 后，mypy 再次列出大量历史遗留问题，主要集中于：
+  - Cloudflare/AkShare/QMT 适配器的成员属性、返回类型未建模，常量/缓存字段缺乏类型声明；
+  - FastAPI/Response 对象被视为可变字典或缺失默认值，导致 `no-any-return`、`arg-type`、`index` 等错误；
+  - Pandas Series 运算、数据清洗逻辑仍缺 stub 支撑；
+  - 数据库与缓存连接池对 SQLAlchemy/asyncpg API 的调用方式与类型签名不匹配；
+  - AmazingData 实体与 WebUI 接口交互时，`None` 可空字段未在模型层收敛。
+  详细输出参见命令原始日志摘录。【b95b63†L1-L39】【44503e†L1-L17】【bfe71e†L1-L103】【bf9fc2†L1-L120】【6134f6†L1-L120】【47325d†L1-L120】【40038e†L1-L46】
+
 
 ## 完整 mypy 输出
 

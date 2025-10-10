@@ -143,15 +143,3 @@ warn_return_any = true
 show_error_codes = true
 pretty = true
 
-[[tool.mypy.overrides]]
-module = "deepsearch.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "deepsearch.utils.data_sources"
-ignore_errors = false
-
-[[tool.mypy.overrides]]
-module = "deepsearch.infrastructure.providers.implementations.akshare.cache_manager"
-ignore_errors = false
-
