@@ -4,6 +4,14 @@
 - **总体结果**：根据首次执行输出，当前共有 246 个错误分布在 50 个文件中。
 - **环境备注**：首次执行需安装虚拟环境依赖，后续复跑约 2 分钟内完成。
 
+## 2025-10-11 更新
+
+- **数据源工具模块修复**：`deepsearch/utils/data_sources.py` 的 `_load_real_module` 现显式校验 `sys.modules` 返回值，避免 `Module | None` 的返回类型污染 `DataSourceManager` 相关导出。
+- **Redis 缓存检测改进**：`deepsearch/infrastructure/providers/implementations/akshare/cache_manager.py` 改用 `importlib` 动态探测 Redis 并保留类
+  型标注，既符合仓库“禁止 try/except 导入”约束，也让 mypy 识别 `HAS_REDIS` 与运行时对象的对应关系。
+- **最新执行结论**：`uv run mypy --hide-error-context --no-error-summary --pretty` 仍因第三方 stub 缺失与历史类型债务失败，详见下方原始输
+  出（截取于 2025-10-11 复测）。
+
 ## 主要问题归类
 
 1. **Pandas 指标计算类型不匹配**：`deepsearch/indicators` 模块大量使用 `pandas.Series` 运算，缺少类型别名或 `pandas` 的补充 stubs，导致算术运算、比较和属性访问均被判定为不受支持。
@@ -13,6 +21,8 @@
 5. **配置与 TypedDict 访问**：配置对象在可选/字典混用时直接访问属性，TypedDict 定义缺失键，导致大量 `Union` 分支取属性失败。
 
 ## 完整 mypy 输出
+
+> 注：下方为 2025-10-10 首次执行时的原始输出全文，仍保留 `deepsearch/utils/data_sources.py` 等已修复项，供比对历史基线使用。
 
 ````text
 deepsearch/utils/data_sources.py:39: error: Incompatible return value type (got Module | None, expected Module)  [return-value]

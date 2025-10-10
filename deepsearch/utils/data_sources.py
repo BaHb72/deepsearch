@@ -24,8 +24,8 @@ def _is_stub_module(module: ModuleType | None) -> bool:
 
 
 def _load_real_module() -> ModuleType:
-    module = sys.modules.get(_MODULE_NAME)
-    if _is_stub_module(module):
+    module: ModuleType | None = sys.modules.get(_MODULE_NAME)
+    if module is None or _is_stub_module(module):
         module_path = Path(__file__).resolve().parent.parent / "infrastructure" / "providers" / "managers" / "data_source_manager.py"
         spec = importlib.util.spec_from_file_location(_MODULE_NAME, module_path)
         if spec is None or spec.loader is None:
@@ -35,6 +35,9 @@ def _load_real_module() -> ModuleType:
         spec.loader.exec_module(real_module)
         sys.modules[_MODULE_NAME] = real_module
         module = real_module
+
+    if module is None:
+        raise ImportError(f"模块 {_MODULE_NAME} 加载失败")
 
     return module
 
