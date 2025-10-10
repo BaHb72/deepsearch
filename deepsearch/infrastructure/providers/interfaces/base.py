@@ -20,6 +20,7 @@ class DataSourceType(Enum):
     CLOUDFLARE = "cloudflare"
     AKSHARE = "akshare"
     QMT = "qmt"
+    DATABASE = "database"
     DEFAULT = "default"
     CUSTOM = "custom"
 
@@ -68,6 +69,8 @@ class ProxyConfig:
     blacklist_threshold: int = 3
     blacklist_duration: int = 300
     health_check_interval: int = 60
+    pool_size: int = 0
+    enabled: bool = True
 
     def as_http_url(self) -> Optional[str]:
         """返回首选 HTTP 代理地址，便于快速注入 requests/urllib3."""

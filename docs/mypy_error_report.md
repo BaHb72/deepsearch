@@ -38,6 +38,15 @@
   - AmazingData 实体与 WebUI 接口交互时，`None` 可空字段未在模型层收敛。
   详细输出参见命令原始日志摘录。【b95b63†L1-L39】【44503e†L1-L17】【bfe71e†L1-L103】【bf9fc2†L1-L120】【6134f6†L1-L120】【47325d†L1-L120】【40038e†L1-L46】
 
+## 2025-10-14 代理配置与 asyncpg 桩修复
+
+- **新增内容**：
+  - `typings/asyncpg/__init__.pyi` 扩展 `Transaction`、`Connection.transaction()` 与 `Pool.acquire()` 等声明，保障基础设施层获取事务上下文时不再触发 `name-defined` 报错。
+  - `typings/sqlalchemy/ext/asyncio/__init__.pyi` 补充 `AsyncSession.add`/`add_all`/`delete` 以及 `AsyncConnection.__aenter__`，覆盖 L3 缓存与数据库迁移流程使用的 API。
+  - `deepsearch/infrastructure/providers/interfaces/base.py` 增加 `DataSourceType.DATABASE`，并同步拓展 `ProxyConfig` dataclass 以纳入 `pool_size`、`enabled` 字段，确保连接诊断与代理管理配置一致。
+  - `deepsearch/utils/network/proxy_client.py` 去除冗余 `type: ignore`，`ProxyValidator` 接受浮点超时，避免因精度换算触发 `arg-type` 错误。
+- **执行记录**：`uv run mypy --hide-error-context --no-error-summary --pretty deepsearch` 仍失败；最新输出表明 QMT、AkShare、AmazingData 适配器、Timeseries 存储及数据库配置等模块依旧存在大量类型不匹配与缺失 stub 的历史债务，后续需继续分批治理。【7f38a4†L1-L1】【2372fb†L1-L120】
+
 # 2025-10-12 离线治理进展
 
 - **新增第三方类型桩**：补齐 `asyncpg`、`psycopg`, `requests`、`urllib3`、`jose` 等最小 `.pyi`，并在 `typings/deepsearch` 下扩展缺失包，缓解 `name-defined` 与 `import-not-found` 报错。

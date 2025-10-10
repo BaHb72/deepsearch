@@ -321,7 +321,7 @@ def create_proxy_session() -> requests.Session:
         return _OriginalSession()
 
     # 创建一个自定义的 Session，继承自原始 Session 类
-    class ProxySession(_OriginalSession):  # type: ignore[misc, valid-type]
+    class ProxySession(_OriginalSession):
         def request(self, method, url, **kwargs):
             # 拦截所有请求，通过代理客户端发送
             return client.request(method, url, **kwargs)

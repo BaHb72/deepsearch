@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncpg
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass

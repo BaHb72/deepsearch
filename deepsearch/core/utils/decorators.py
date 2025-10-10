@@ -13,6 +13,7 @@ from typing import Any, Callable, Optional, TypeVar, cast
 
 from deepsearch.observability import get_logger
 
+from ..interfaces.component import ComponentStatus
 from .exceptions import ComponentLifecycleError
 
 # 类型变量
@@ -243,8 +244,6 @@ def ensure_initialized(func: F) -> F:
     @functools.wraps(func)
     def sync_wrapper(self, *args, **kwargs):
         if hasattr(self, "_status"):
-            from .interfaces import ComponentStatus
-
             if self._status == ComponentStatus.UNINITIALIZED:
                 raise ComponentLifecycleError(
                     f"组件 {getattr(self, '_name', 'unknown')} 尚未初始化"
@@ -254,8 +253,6 @@ def ensure_initialized(func: F) -> F:
     @functools.wraps(func)
     async def async_wrapper(self, *args, **kwargs):
         if hasattr(self, "_status"):
-            from .interfaces import ComponentStatus
-
             if self._status == ComponentStatus.UNINITIALIZED:
                 raise ComponentLifecycleError(
                     f"组件 {getattr(self, '_name', 'unknown')} 尚未初始化"
