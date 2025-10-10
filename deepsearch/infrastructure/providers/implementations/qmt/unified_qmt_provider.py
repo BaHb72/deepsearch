@@ -106,6 +106,14 @@ class UnifiedQMTProvider(DataProvider):
         self.cache_manager = SmartCacheManager()
 
 
+    def _require_backend(self) -> "QMTBackend":
+        """确保后端已初始化。"""
+
+        if self.backend is None:
+            raise RuntimeError("QMT后端未初始化")
+        return self.backend
+
+
     def get_capabilities(self) -> set[DataCapability]:
         """返回 Unified QMT 支持的数据能力集合。"""
 
@@ -141,11 +149,12 @@ class UnifiedQMTProvider(DataProvider):
         try:
             import xtquant.xtdata as xtdata
 
-            # 测试连接
-            test_data = xtdata.get_full_tick(["000001.SZ"])
-            if test_data is not None and len(test_data) > 0:
-                logger.info("检测到MiniQMT环境")
-                return QMTMode.MINI
+            get_full_tick = getattr(xtdata, "get_full_tick", None)
+            if callable(get_full_tick):
+                test_data = get_full_tick(["000001.SZ"])
+                if test_data:
+                    logger.info("检测到MiniQMT环境")
+                    return QMTMode.MINI
         except Exception:
             pass
 
@@ -277,7 +286,9 @@ class UnifiedQMTProvider(DataProvider):
             return cast(pd.DataFrame, cached_data)
 
         # 调用后端获取数据
-        if not self.backend:
+        try:
+            self._require_backend()
+        except RuntimeError:
             logger.error("QMT后端未初始化")
             return pd.DataFrame()
 
@@ -320,11 +331,12 @@ class UnifiedQMTProvider(DataProvider):
             return cast(QuotePayloadMapping, cached_data)
 
         # 调用后端
-        if not self.backend:
+        backend = self.backend
+        if backend is None:
             logger.error("QMT后端未初始化")
             return {}
 
-        quotes = await self.backend.get_realtime_quote(symbols)
+        quotes = await backend.get_realtime_quote(symbols)
 
         # 短暂缓存
         if quotes:
@@ -345,11 +357,12 @@ class UnifiedQMTProvider(DataProvider):
         --------
         是否订阅成功
         """
-        if not self.backend:
+        backend = self.backend
+        if backend is None:
             logger.error("QMT后端未初始化，无法订阅")
             return False
 
-        return await self.backend.subscribe_quote(symbols, callback)
+        return await backend.subscribe_quote(symbols, callback)
 
     async def get_special_data(self, data_type: str, **kwargs) -> Any:
         """
@@ -371,7 +384,12 @@ class UnifiedQMTProvider(DataProvider):
             return cached_data
 
         # 调用后端
-        data = await self.backend.get_special_data(data_type, **kwargs)
+        backend = self.backend
+        if backend is None:
+            logger.error("QMT后端未初始化")
+            return None
+
+        data = await backend.get_special_data(data_type, **kwargs)
 
         # 缓存
         if data:

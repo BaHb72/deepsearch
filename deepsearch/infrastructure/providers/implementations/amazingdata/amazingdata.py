@@ -930,41 +930,63 @@ class AmazingDataProvider(DataProvider):
             data_type = request.extra_params["data_type"]
 
             if data_type == "kline":
+                symbol = request.symbol
+                period = request.period
+                if symbol is None or period is None:
+                    raise DataProviderError("K线请求缺少必要参数")
                 return cast(
                     pd.DataFrame,
                     await self.get_kline(
-                        symbol=request.symbol,
-                        period=request.period,
+                        symbol=symbol,
+                        period=period,
                         start_date=request.start_date,
                         end_date=request.end_date,
                         adjust=request.adjust,
                     ),
                 )
-            elif data_type == "realtime":
-                quotes = await self.get_realtime_quote(request.symbols or [request.symbol])
-                return pd.DataFrame(quotes).T
-            elif data_type == "financial":
+
+            if data_type == "realtime":
+                symbols: list[str] = []
+                if request.symbols:
+                    symbols = [sym for sym in request.symbols if sym is not None]
+                if not symbols:
+                    symbol = request.symbol
+                    if symbol is None:
+                        raise DataProviderError("实时行情请求缺少股票代码")
+                    symbols = [symbol]
+                quotes = await self.get_realtime_quote(symbols)
+                return cast(pd.DataFrame, pd.DataFrame(quotes).T)
+
+            if data_type == "financial":
+                symbol = request.symbol
+                if symbol is None:
+                    raise DataProviderError("财务数据请求缺少股票代码")
+                report_type = request.extra_params.get("report_type", "balance_sheet")
                 return cast(
                     pd.DataFrame,
                     await self.get_financial_data(
-                        symbol=request.symbol,
-                        report_type=request.extra_params.get("report_type", "balance_sheet"),
+                        symbol=symbol,
+                        report_type=report_type,
                     ),
                 )
-            else:
-                raise DataProviderError(f"不支持的数据类型: {data_type}")
-        else:
-            # Ĭ�Ϸ���K������
-            return cast(
-                pd.DataFrame,
-                await self.get_kline(
-                    symbol=request.symbol,
-                    period=request.period,
-                    start_date=request.start_date,
-                    end_date=request.end_date,
-                    adjust=request.adjust,
-                ),
-            )
+
+            raise DataProviderError(f"不支持的数据类型: {data_type}")
+
+        symbol = request.symbol
+        period = request.period
+        if symbol is None or period is None:
+            raise DataProviderError("K线请求缺少必要参数")
+
+        return cast(
+            pd.DataFrame,
+            await self.get_kline(
+                symbol=symbol,
+                period=period,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                adjust=request.adjust,
+            ),
+        )
 
     @monitor_data_source(
         source=DataSourceType.AMAZINGDATA,

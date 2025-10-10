@@ -1110,3 +1110,12 @@ deepsearch/webui/server.py:406: note: By default the bodies of untyped functions
 deepsearch/webui/server.py:407: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
 deepsearch/webui/server.py:408: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
 ````
+
+## 2025-10-11 - 继续治理进展
+
+- 调整 `UnifiedQMTProvider` 的后端判空逻辑并补充 MiniQMT/标准 QMT 切换时的可空返回值处理，防止类型检查阶段访问 `None`。
+- 为 AmazingData 安全包装器补全最小 `TypedDict` 声明，并在 `_fetch_data` 中显式校验请求参数，避免 `Optional[str]` 直接传入 SDK。
+- 再次执行 `uv run mypy --hide-error-context --no-error-summary --pretty deepsearch`，仍有 MiniQMT 返回值、AkShare 缓存接口、Redis/Timeseries 类型桩与 SQLAlchemy Engine 操作等大量遗留错误，详见最新输出。
+
+> 备注：当前主要卡在第三方依赖缺少桩文件与多个组件判空逻辑，后续需优先梳理 Redis/RediTimeSeries/psycopg/SQLAlchemy 的类型支持，并统一整理 `Optional` 配置模型的访问方式。
+
