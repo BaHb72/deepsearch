@@ -28,6 +28,28 @@ router = APIRouter(prefix="/api/data", tags=["market_data"])
 STUB_SOURCE_LABEL = "stub"
 
 
+def _resolve_source_label(manager: Any, source: Optional[Any], prefer_stub: bool = False) -> str:
+    """根据当前数据源状态推断响应头所需的来源标识。"""
+
+    if source and getattr(source, "value", ""):
+        return source.value
+
+    available_sources = []
+    get_available = getattr(manager, "get_available_sources", None)
+    if callable(get_available):
+        try:
+            available_sources = list(get_available())
+        except Exception as lookup_error:  # pragma: no cover - 调试辅助
+            logger.debug(f"获取可用数据源失败: {lookup_error}")
+
+    for candidate in available_sources:
+        candidate_value = getattr(candidate, "value", None)
+        if isinstance(candidate_value, str) and candidate_value:
+            return candidate_value
+
+    return STUB_SOURCE_LABEL if prefer_stub else "unknown"
+
+
 def _build_stub_stock_info(symbol: str) -> Dict[str, Any]:
     base_symbol = symbol or "000001"
     return {
@@ -197,9 +219,7 @@ async def get_stock_info(
                 use_stub = True
 
             if response:
-                source_label = (
-                    STUB_SOURCE_LABEL if use_stub else (source.value if source else "unknown")
-                )
+                source_label = _resolve_source_label(manager, source, prefer_stub=use_stub)
                 response.headers["X-Data-Source"] = source_label
                 try:
                     payload = json.dumps(result, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -269,14 +289,14 @@ async def get_kline_data(
                 end_date=end_date,
             )
             source = manager.get_last_success_source()
+            use_stub = False
             if not result:
                 logger.warning(f"未能获取 {symbol} 的K线数据，返回示例数据")
                 result = _build_stub_kline(symbol)
-                source_label = STUB_SOURCE_LABEL
-            else:
-                source_label = source.value if source else "unknown"
+                use_stub = True
 
             if response:
+                source_label = _resolve_source_label(manager, source, prefer_stub=use_stub)
                 response.headers["X-Data-Source"] = source_label
 
             return success_response(result)
