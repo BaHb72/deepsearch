@@ -122,7 +122,7 @@ class BacktestService:
 
     def __init__(
         self,
-        backtester: BacktesterAPI[StrategyProto, AnalyzerResultProto, object],
+        backtester: BacktesterAPI,
         *,
         plot_close: PlotClose | None = None,
     ) -> None:
@@ -275,7 +275,7 @@ class BacktestService:
         return result
 
     def _generate_plot(
-        self, cerebro: CerebroProto[StrategyProto, AnalyzerResultProto, object]
+        self, cerebro: CerebroProto
     ) -> str | None:
         """生成回测图表并转换为 base64 编码."""
 

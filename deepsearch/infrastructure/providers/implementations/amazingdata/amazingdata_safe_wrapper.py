@@ -9,27 +9,48 @@ Date: 2025-09-20
 """
 
 import time
-from typing import Any, Dict, Optional, Tuple, Union, cast
+from typing import Any, Dict, Optional, Tuple, TypedDict, Union, cast
 
 import pandas as pd
 
 from loguru import logger
 
 from .amazingdata_process_pool import get_global_pool
-from .amazingdata_process_proxy import (
-    HealthCheckPayload,
-    MappingPayload,
-    ProxyResponse,
-    ProxyResultPayload,
-    RequestType,
-    SubscribeResultPayload,
-)
+from .amazingdata_process_proxy import ProxyResponse, RequestType
 from deepsearch.infrastructure.providers.interfaces.runtime import (
     ProviderCallStats,
     ProviderSDKProtocol,
     ProviderStatsReport,
     ProxyRuntimeStats,
 )
+
+
+class ProxyResultPayload(TypedDict, total=False):
+    request_id: str
+    success: bool
+    result: Any
+    error: Optional[str]
+    error_type: Optional[str]
+    timestamp: float
+    data: Any
+    rows: list[dict[str, Any]] | list[Any]
+    value: Any
+
+
+class SubscribeResultPayload(TypedDict, total=False):
+    channel: str
+    success: bool
+    error: Optional[str]
+
+
+class HealthCheckPayload(TypedDict, total=False):
+    status: str
+    details: Dict[str, Any]
+
+
+class MappingPayload(TypedDict, total=False):
+    request_id: str
+    payload: Dict[str, Any]
 
 
 class AmazingDataSafeWrapper:

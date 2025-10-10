@@ -23,6 +23,11 @@ from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata
     AmazingDataRealtime,
 )
 from deepsearch.webui.api.providers import DataProviderFactory, DataSourceType
+from .base import DEFAULT_LOCAL_PATH
+
+
+def _resolve_local_path(local_path: Optional[str]) -> str:
+    return local_path or DEFAULT_LOCAL_PATH
 
 # 创建路由器
 router = APIRouter(prefix="/api/amazingdata", tags=["AmazingData"])
@@ -131,25 +136,32 @@ async def get_amazingdata_provider() -> AmazingDataExtended:
 
             config = get_config()
 
-            payload = None
-            if getattr(config, "amazingdata", None):
-                amazingdata_settings = config.amazingdata
-                if hasattr(amazingdata_settings, "to_provider_payload"):
-                    payload = amazingdata_settings.to_provider_payload()
-                elif hasattr(amazingdata_settings, "model_dump"):
-                    payload = amazingdata_settings.model_dump()
-            elif getattr(config, "data_sources", None):
-                data_sources = config.data_sources
-                amazingdata_section = None
-                if hasattr(data_sources, "amazingdata"):
-                    amazingdata_section = data_sources.amazingdata
-                elif isinstance(data_sources, Mapping):
-                    amazingdata_section = data_sources.get("amazingdata")
+            payload: Mapping[str, Any] | None = None
+            direct_config = getattr(config, "amazingdata", None)
+            if direct_config is not None:
+                if hasattr(direct_config, "to_provider_payload"):
+                    payload = cast(Mapping[str, Any], direct_config.to_provider_payload())
+                elif hasattr(direct_config, "model_dump"):
+                    payload = cast(Mapping[str, Any], direct_config.model_dump())
+                elif isinstance(direct_config, Mapping):
+                    payload = dict(direct_config)
+
+            if payload is None:
+                data_sources = getattr(config, "data_sources", None)
+                amazingdata_section: Any | None = None
+                if data_sources is not None:
+                    if hasattr(data_sources, "amazingdata"):
+                        amazingdata_section = getattr(data_sources, "amazingdata")
+                    elif isinstance(data_sources, Mapping):
+                        amazingdata_section = data_sources.get("amazingdata")
+
                 if amazingdata_section is not None:
                     if hasattr(amazingdata_section, "to_provider_payload"):
-                        payload = amazingdata_section.to_provider_payload()
+                        payload = cast(
+                            Mapping[str, Any], amazingdata_section.to_provider_payload()
+                        )
                     elif hasattr(amazingdata_section, "model_dump"):
-                        payload = amazingdata_section.model_dump()
+                        payload = cast(Mapping[str, Any], amazingdata_section.model_dump())
                     elif isinstance(amazingdata_section, Mapping):
                         payload = dict(amazingdata_section)
 
@@ -222,7 +234,8 @@ async def logout() -> AmazingDataResponse:
     """
     try:
         provider = await get_amazingdata_provider()
-        await provider.stop()
+        await provider.unsubscribe_all()
+        await provider.stop_async()
         return _build_success_response(message="登出成功")
     except Exception as e:
         logger.error(f"登出失败: {e}")
@@ -318,7 +331,7 @@ async def get_backward_factor(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_backward_factor(
-            request.code_list, request.local_path, request.is_local
+            request.code_list, _resolve_local_path(request.local_path), request.is_local
         )
         return {
             "status": "success",
@@ -339,7 +352,7 @@ async def get_adj_factor(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_adj_factor(
-            request.code_list, request.local_path, request.is_local
+            request.code_list, _resolve_local_path(request.local_path), request.is_local
         )
         return {
             "status": "success",
@@ -360,7 +373,7 @@ async def get_history_stock_status(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_history_stock_status(
-            request.code_list, request.local_path, request.is_local
+            request.code_list, _resolve_local_path(request.local_path), request.is_local
         )
         return {
             "status": "success",
@@ -381,7 +394,7 @@ async def get_hist_code_list(request: HistCodeListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_hist_code_list(
-            request.security_type, request.start_date, request.end_date, request.local_path
+            request.security_type, request.start_date, request.end_date, _resolve_local_path(request.local_path)
         )
         return {"status": "success", "data": result, "count": len(result) if result else 0}
     except Exception as e:
@@ -503,7 +516,7 @@ async def get_balance_sheet(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_balance_sheet(
-            request.code_list, request.local_path, request.is_local
+            request.code_list, _resolve_local_path(request.local_path), request.is_local
         )
         return {
             "status": "success",
@@ -524,7 +537,7 @@ async def get_cash_flow(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_cash_flow(
-            request.code_list, request.local_path, request.is_local
+            request.code_list, _resolve_local_path(request.local_path), request.is_local
         )
         return {
             "status": "success",
@@ -544,7 +557,11 @@ async def get_income(request: StockListRequest):
     """
     try:
         provider = await get_amazingdata_provider()
-        result = await provider.get_income(request.code_list, request.local_path, request.is_local)
+        result = await provider.get_income(
+            request.code_list,
+            _resolve_local_path(request.local_path),
+            request.is_local,
+        )
         return {"status": "success", "data": dataframe_to_dict(result), "message": "利润表获取成功"}
     except Exception as e:
         logger.error(f"获取利润表失败: {e}")
@@ -560,7 +577,9 @@ async def get_profit_express(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_profit_express(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            _resolve_local_path(request.local_path),
+            request.is_local,
         )
         return {
             "status": "success",
@@ -581,7 +600,9 @@ async def get_profit_notice(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_profit_notice(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            _resolve_local_path(request.local_path),
+            request.is_local,
         )
         return {
             "status": "success",
@@ -605,7 +626,9 @@ async def get_share_holder(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_share_holder(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            _resolve_local_path(request.local_path),
+            request.is_local,
         )
         return {
             "status": "success",
@@ -626,7 +649,9 @@ async def get_holder_num(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_holder_num(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            _resolve_local_path(request.local_path),
+            request.is_local,
         )
         return {
             "status": "success",
@@ -647,7 +672,9 @@ async def get_equity_structure(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_equity_structure(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            _resolve_local_path(request.local_path),
+            request.is_local,
         )
         return {
             "status": "success",
@@ -668,7 +695,9 @@ async def get_equity_pledge_freeze(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_equity_pledge_freeze(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            _resolve_local_path(request.local_path),
+            request.is_local,
         )
         return {
             "status": "success",
@@ -689,7 +718,9 @@ async def get_equity_restricted(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_equity_restricted(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            _resolve_local_path(request.local_path),
+            request.is_local,
         )
         return {
             "status": "success",
@@ -713,7 +744,9 @@ async def get_dividend(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_dividend(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            _resolve_local_path(request.local_path),
+            request.is_local,
         )
         return {
             "status": "success",
@@ -734,7 +767,9 @@ async def get_right_issue(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_right_issue(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            _resolve_local_path(request.local_path),
+            request.is_local,
         )
         return {
             "status": "success",

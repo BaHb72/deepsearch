@@ -1,5 +1,4 @@
 import asyncio
-from pathlib import Path
 from typing import Dict
 
 import pytest
@@ -8,8 +7,9 @@ from deepsearch.config import get_config, reload_config
 from deepsearch.config.models.notifications import NotificationsConfig
 from deepsearch.core.runtime.context import get_context
 from deepsearch.infrastructure.notifications import NotificationQuotaGuard, NotificationService
+from deepsearch.config.loader import ensure_env_config_file
 
-CONFIG_PATH = Path(__file__).resolve().parents[2] / "deepsearch" / "config" / "settings.dev.yaml"
+CONFIG_PATH = ensure_env_config_file("dev")
 
 
 def _refresh_notification_service() -> None:

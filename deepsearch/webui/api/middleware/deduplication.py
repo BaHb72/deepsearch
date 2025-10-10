@@ -290,7 +290,7 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
         try:
             # 创建处理函数
             async def handler() -> Response:
-                response: Response = await call_next(request)
+                response = cast(Response, await call_next(request))
                 # 对于流式响应，需要特殊处理
                 if hasattr(response, "body_iterator"):
                     # 收集所有响应体
@@ -312,7 +312,7 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
             key = self.deduplicator.get_request_key(path, params)
 
             # 执行去重 - 传递函数而非协程对象，避免 RuntimeWarning
-            response = await self.deduplicator.deduplicate(key, handler)
+            response = cast(Response, await self.deduplicator.deduplicate(key, handler))
             return response
 
         except Exception as e:

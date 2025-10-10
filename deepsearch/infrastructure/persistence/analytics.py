@@ -6,12 +6,18 @@
 import os
 import re
 from datetime import date
-from typing import Any, Dict, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
 
 import duckdb
 import pandas as pd
 
 from deepsearch.observability.logger import logger
+
+
+if TYPE_CHECKING:
+    from duckdb import DuckDBPyConnection
+else:  # pragma: no cover - runtime fallback for typing only
+    DuckDBPyConnection = Any
 
 
 class AnalyticsDB:
@@ -52,7 +58,7 @@ class AnalyticsDB:
             os.makedirs(db_dir, exist_ok=True)
 
         self.db_path = db_path
-        self.conn: Optional[duckdb.DuckDBPyConnection] = None
+        self.conn: Optional[DuckDBPyConnection] = None
         self.logger = logger.bind(module="分析数据库")
 
     def connect(self) -> None:
@@ -394,7 +400,8 @@ class AnalyticsDB:
             raise ValueError(f"Invalid table name: {table_name}")
 
         # 先获取记录数
-        count_before = int(self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
+        before_row = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+        count_before = int(before_row[0]) if before_row and before_row[0] is not None else 0
 
         # 导入数据 - 注意: DuckDB 的 read_parquet 需要使用字符串参数
         # 为了安全，先验证文件路径存在
@@ -411,7 +418,8 @@ class AnalyticsDB:
         )
 
         # 计算新增记录数
-        count_after = int(self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
+        after_row = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+        count_after = int(after_row[0]) if after_row and after_row[0] is not None else 0
         imported = count_after - count_before
 
         self.logger.info(f"从 {file_path} 导入 {imported} 条记录到 {table_name}")
@@ -427,29 +435,31 @@ class AnalyticsDB:
         # 获取各表记录数 - 使用白名单的表名
         tables = ["market_daily", "factor_data", "indicator_data"]
         for table in tables:
-            # 这里表名是硬编码的白名单，安全
-            count = int(self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
-            stats[f"{table}_count"] = count
+            row = self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+            stats[f"{table}_count"] = int(row[0]) if row and row[0] is not None else 0
 
         # 获取日线数据的时间范围
-        date_range = self.conn.execute(
+        date_range_row = self.conn.execute(
             """
                                        SELECT MIN(date) as min_date, MAX(date) as max_date
                                        FROM market_daily
                                        """
         ).fetchone()
 
-        if date_range[0]:
-            stats["date_range"] = {"start": str(date_range[0]), "end": str(date_range[1])}
+        if date_range_row and date_range_row[0] and date_range_row[1]:
+            stats["date_range"] = {
+                "start": str(date_range_row[0]),
+                "end": str(date_range_row[1]),
+            }
 
         # 获取股票数量
-        symbol_count = self.conn.execute(
+        symbol_row = self.conn.execute(
             """
                                          SELECT COUNT(DISTINCT symbol)
                                          FROM market_daily
                                          """
-        ).fetchone()[0]
-        stats["symbol_count"] = symbol_count
+        ).fetchone()
+        stats["symbol_count"] = int(symbol_row[0]) if symbol_row and symbol_row[0] is not None else 0
 
         # 获取数据库文件大小
         if os.path.exists(self.db_path):

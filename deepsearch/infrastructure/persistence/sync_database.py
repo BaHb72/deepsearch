@@ -16,7 +16,10 @@ from deepsearch.observability import logger
 # 创建同步引擎
 config = get_config()
 database_config = config.database if config else None
-database_url = database_config.get_main_url() if database_config else ""
+raw_database_url: str | None = (
+    database_config.get_main_url() if database_config else None
+)
+database_url = raw_database_url or ""
 echo_flag = (
     database_config.main.echo
     if database_config and getattr(database_config, "main", None)

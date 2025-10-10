@@ -14,7 +14,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from deepsearch.config import get_config
-from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceManager
+from deepsearch.utils.data_sources import DataSourceManager
 
 # 创建路由器
 router = APIRouter(prefix="/chart", tags=["图表数据管理"])
@@ -121,41 +121,59 @@ async def get_chart_series(
 
         # 获取K线数据
         try:
-            kline_data = data_manager.get_kline(
+            raw_kline = await data_manager.get_kline_data(
                 symbol=symbol,
                 period=mapped_period,
                 start_date=start_date,
                 end_date=end_date,
+                limit=limit,
                 adjust=adjust,
             )
 
-            if kline_data is None or kline_data.empty:
+            if not raw_kline:
                 return ChartSeriesResponse(
                     success=False, data={}, message=f"未获取到{symbol}的K线数据"
                 )
 
             # 转换数据格式
             series_data = []
-            for index, row in kline_data.iterrows():
+            for entry in raw_kline[-limit:]:
+                date_value = (
+                    entry.get("date")
+                    or entry.get("trade_date")
+                    or entry.get("datetime")
+                    or entry.get("time")
+                )
+                if date_value is not None:
+                    try:
+                        parsed_obj = pd.to_datetime(date_value, errors="coerce")
+                        if isinstance(parsed_obj, pd.Series):
+                            parsed_value = parsed_obj.iloc[0] if not parsed_obj.empty else None
+                        else:
+                            parsed_value = parsed_obj
+                        if isinstance(parsed_value, pd.Timestamp) and not pd.isna(parsed_value):
+                            formatted_date = parsed_value.to_pydatetime().strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            )
+                        else:
+                            formatted_date = str(date_value)
+                    except Exception:
+                        formatted_date = str(date_value)
+                else:
+                    formatted_date = ""
+                row = entry if isinstance(entry, dict) else {}
                 series_data.append(
                     {
-                        "date": (
-                            index.strftime("%Y-%m-%d %H:%M:%S")
-                            if hasattr(index, "strftime")
-                            else str(index)
-                        ),
-                        "open": float(row.get("开盘", row.get("open", 0))),
-                        "high": float(row.get("最高", row.get("high", 0))),
-                        "low": float(row.get("最低", row.get("low", 0))),
-                        "close": float(row.get("收盘", row.get("close", 0))),
-                        "volume": float(row.get("成交量", row.get("volume", 0))),
+                        "date": formatted_date,
+                        "open": float(row.get("开盘", row.get("open", 0.0)) or 0.0),
+                        "high": float(row.get("最高", row.get("high", 0.0)) or 0.0),
+                        "low": float(row.get("最低", row.get("low", 0.0)) or 0.0),
+                        "close": float(row.get("收盘", row.get("close", 0.0)) or 0.0),
+                        "volume": float(row.get("成交量", row.get("volume", 0.0)) or 0.0),
                     }
                 )
 
             # 限制返回数量
-            if len(series_data) > limit:
-                series_data = series_data[-limit:]
-
             return ChartSeriesResponse(
                 success=True,
                 data={
@@ -203,18 +221,51 @@ async def calculate_indicators(
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
 
-        kline_data = data_manager.get_kline(
+        raw_kline = await data_manager.get_kline_data(
             symbol=request.symbol,
             period="daily",
             start_date=start_date,
             end_date=end_date,
+            limit=500,
             adjust="qfq",
         )
 
-        if kline_data is None or kline_data.empty:
+        if not raw_kline:
             return TechnicalIndicatorResponse(
                 success=False, indicator=request.indicator, values=[], params=request.params or {}
             )
+
+        kline_df = pd.DataFrame(raw_kline)
+        if kline_df.empty:
+            return TechnicalIndicatorResponse(
+                success=False, indicator=request.indicator, values=[], params=request.params or {}
+            )
+
+        # 统一列名
+        column_mapping = {
+            "开盘": "open",
+            "最高": "high",
+            "最低": "low",
+            "收盘": "close",
+            "成交量": "volume",
+        }
+        for source, target in column_mapping.items():
+            if source in kline_df.columns and target not in kline_df.columns:
+                kline_df[target] = kline_df[source]
+
+        date_column = None
+        for candidate in ("date", "trade_date", "datetime", "time"):
+            if candidate in kline_df.columns:
+                date_column = candidate
+                break
+        if date_column:
+            kline_df[date_column] = pd.to_datetime(kline_df[date_column], errors="coerce")
+            kline_df = kline_df.dropna(subset=[date_column])
+            kline_df = kline_df.sort_values(date_column)
+            kline_df = kline_df.set_index(date_column)
+
+        if "close" not in kline_df.columns:
+            raise HTTPException(status_code=500, detail="缺少收盘价列，无法计算指标")
 
         # 计算指标
         indicator_values: List[IndicatorEntry] = []
@@ -224,7 +275,7 @@ async def calculate_indicators(
             # 移动平均线
             periods = params.get("periods", [5, 10, 20, 60])
             for period in periods:
-                ma_values = kline_data["close"].rolling(window=period).mean()
+                ma_values = kline_df["close"].rolling(window=period).mean()
                 for i, (index, value) in enumerate(ma_values.items()):
                     if i >= len(indicator_values):
                         indicator_values.append({"date": str(index)})
@@ -236,14 +287,14 @@ async def calculate_indicators(
             long_period = params.get("long", 26)
             signal_period = params.get("signal", 9)
 
-            exp1 = kline_data["close"].ewm(span=short_period, adjust=False).mean()
-            exp2 = kline_data["close"].ewm(span=long_period, adjust=False).mean()
+            exp1 = kline_df["close"].ewm(span=short_period, adjust=False).mean()
+            exp2 = kline_df["close"].ewm(span=long_period, adjust=False).mean()
             macd = exp1 - exp2
             signal = macd.ewm(span=signal_period, adjust=False).mean()
             histogram = macd - signal
 
-            for index, row in kline_data.iterrows():
-                idx = kline_data.index.get_loc(index)
+            for index, row in kline_df.iterrows():
+                idx = kline_df.index.get_loc(index)
                 indicator_values.append(
                     {
                         "date": str(index),
@@ -258,7 +309,7 @@ async def calculate_indicators(
         elif request.indicator.upper() == "RSI":
             # RSI指标
             period = params.get("period", 14)
-            delta = kline_data["close"].diff()
+            delta = kline_df["close"].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
             rs = gain / loss

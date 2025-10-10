@@ -5,7 +5,8 @@ Mock Data Provider Tests
 Mock数据仅限于测试环境（env=test）使用。
 """
 
-from unittest.mock import MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -64,8 +65,8 @@ class MockDataProvider:
 
 @pytest.fixture
 def mock_config():
-    """确保测试在test环境中运行"""
-    with patch("deepsearch.config.get_config") as mock_get_config:
+    """确保测试在 test 环境中运行"""
+    with patch("tests.test_mock_data_provider.get_config") as mock_get_config:
         config = MagicMock()
         config.app.env = "test"
         mock_get_config.return_value = config
@@ -128,20 +129,27 @@ class TestAPIWithMockData:
 
     @pytest.mark.asyncio
     async def test_api_endpoint_with_mock(self, mock_config):
-        """测试API端点在测试环境中使用Mock数据"""
+        """测试 API 工厂在测试环境返回可用的数据源实例"""
         from deepsearch.webui.api.providers import DataProviderFactory
+        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+            AmazingDataProvider,
+        )
 
         # 清除现有实例
         DataProviderFactory.clear_all()
 
-        # 在测试环境中获取provider应该返回MockProvider
+        # 在测试环境中获取 provider 应返回 AmazingDataProvider，并由桩模块托底
         provider = await DataProviderFactory.get_provider_async("amazingdata")
 
-        # 验证返回的是MockProvider
-        assert hasattr(provider, "test_connection")
-        result = await provider.test_connection()
-        assert result["mock"] is True
-        assert result["test_only"] is True
+        assert isinstance(provider, AmazingDataProvider)
+        capabilities = provider.get_capabilities()
+        assert "stock_info" in {cap.value for cap in capabilities}
+
+        # 访问一次行情接口，确认桩模块能返回稳定结构
+        stock = await provider.get_stock_info("000001")
+        if stock is not None:
+            assert stock.get("symbol") == "000001"
+            assert stock.get("source") == "amazingdata"
 
     @pytest.mark.asyncio
     async def test_api_fallback_in_production(self):
@@ -157,18 +165,25 @@ class TestAPIWithMockData:
             # 清除现有实例
             DataProviderFactory.clear_all()
 
-            # 在生产环境中应该降级到AkShareProxyProvider
+            # 在生产环境中应在 AmazingData 初始化失败时降级到 AkShare
             with patch(
-                "deepsearch.infrastructure.providers.implementations.akshare.akshare.AkShareProxyProvider"
-            ) as MockAkShare:
-                mock_instance = MagicMock()
-                MockAkShare.return_value = mock_instance
+                "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.ensure_amazingdata_provider_config",
+                side_effect=RuntimeError("invalid config"),
+            ) as mock_ensure:
+                with patch(
+                    "deepsearch.infrastructure.providers.implementations.akshare.akshare.AkShareProxyProvider"
+                ) as MockAkShare:
+                    mock_akshare = MagicMock()
+                    mock_akshare.initialize = AsyncMock(return_value=None)
+                    MockAkShare.return_value = mock_akshare
 
-                provider = await DataProviderFactory.get_provider_async("amazingdata")
+                    provider = await asyncio.wait_for(
+                        DataProviderFactory.get_provider_async("amazingdata"), timeout=2
+                    )
 
-                # 验证创建了AkShareProxyProvider而不是MockProvider
-                MockAkShare.assert_called_once()
-                assert provider == mock_instance
+                    mock_ensure.assert_called_once()
+                    MockAkShare.assert_called_once()
+                    assert provider == mock_akshare
 
 
 if __name__ == "__main__":

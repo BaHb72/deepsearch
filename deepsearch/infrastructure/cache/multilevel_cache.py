@@ -108,6 +108,13 @@ class CacheEntry(Base):
     access_count = Column(Integer, default=0)
     last_accessed = Column(DateTime, default=datetime.now)
 
+    def __init__(self, **kwargs: Any) -> None:  # pragma: no cover - ORM 初始化辅助
+        """
+        SQLAlchemy 默认会在 Declarative 模型上注入 `__init__`，但 mypy 无法感知。
+        显式声明后既不影响运行时行为，也能让类型检查器理解关键字参数。
+        """
+        super().__init__(**kwargs)
+
 
 @dataclass
 class CacheConfig:
@@ -184,7 +191,7 @@ class MultiLevelCache:
         # 初始化 L2 Redis
         if self.config.l2_enabled:
             try:
-                self.l2_cache = await aioredis.from_url(
+                self.l2_cache = aioredis.from_url(
                     f"redis://{self.config.l2_host}:{self.config.l2_port}/{self.config.l2_db}",
                     password=self.config.l2_password,
                     encoding="utf-8",
@@ -487,7 +494,7 @@ class MultiLevelCache:
             else:
                 # 创建新记录
                 entry = CacheEntry(key=key, value=serialized, expires_at=expires_at)
-                session.add(entry)
+                cast(AsyncSession, session).add(entry)
 
             await session.commit()
 
@@ -502,7 +509,7 @@ class MultiLevelCache:
             entry = result.scalar_one_or_none()
 
             if entry:
-                await session.delete(entry)
+                await cast(AsyncSession, session).delete(entry)
                 await session.commit()
 
     async def _invalidate_l3(self, pattern: str) -> int:
@@ -519,7 +526,7 @@ class MultiLevelCache:
 
             count = len(entries)
             for entry in entries:
-                await session.delete(entry)
+                await cast(AsyncSession, session).delete(entry)
 
             await session.commit()
             return count
@@ -636,6 +643,12 @@ class MultiLevelCache:
 
         # 关闭 Redis 连接
         if self.l2_cache:
-            await self.l2_cache.close()
+            close_coro = getattr(self.l2_cache, "aclose", None)
+            if callable(close_coro):
+                await close_coro()
+            else:
+                close_sync = getattr(self.l2_cache, "close", None)
+                if callable(close_sync):
+                    close_sync()
 
         self._logger.info("多级缓存系统已关闭")

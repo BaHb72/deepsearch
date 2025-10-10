@@ -1,21 +1,39 @@
-"""
-数据提供者模块
+"""数据提供者模块。
 
 提供统一的数据源访问能力，支持多数据源与降级管理。
 """
 
-try:
-    from .implementations.akshare.akshare import AkShareProxyProvider
-except Exception:  # pragma: no cover - 降级场景下容忍缺少依赖
-    AkShareProxyProvider = None
+from __future__ import annotations
+
+import importlib
+from typing import Any, Optional, TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from .implementations.akshare.akshare import AkShareProxyProvider as _AkShareProxyProvider
+else:  # pragma: no cover - 仅用于类型检查
+    _AkShareProxyProvider = Any  # type: ignore[assignment]
 
 
-def _safe_import(path: str, name: str):
+def _safe_import(path: str, name: str) -> Any:
     try:
         module = __import__(path, fromlist=[name])
         return getattr(module, name)
     except Exception:  # pragma: no cover - 降级场景
         return None
+
+
+def _load_akshare_proxy_provider() -> Optional[_AkShareProxyProvider]:
+    try:
+        module = importlib.import_module(
+            "deepsearch.infrastructure.providers.implementations.akshare.akshare"
+        )
+        provider = getattr(module, "AkShareProxyProvider")
+        return cast("_AkShareProxyProvider", provider)
+    except Exception:  # pragma: no cover - 降级场景
+        return None
+
+
+AkShareProxyProvider: Optional[_AkShareProxyProvider] = _load_akshare_proxy_provider()
 
 
 DataProvider = _safe_import("deepsearch.infrastructure.providers.interfaces.base", "DataProvider")

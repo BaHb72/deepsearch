@@ -6,8 +6,8 @@ from collections.abc import Mapping, Sequence
 from typing import IO, Protocol, TypeVar
 
 
-StrategyT_co = TypeVar("StrategyT_co", covariant=True)
-AnalyzerResultT_co = TypeVar("AnalyzerResultT_co", covariant=True)
+StrategyT = TypeVar("StrategyT")
+AnalyzerResultT = TypeVar("AnalyzerResultT")
 DataFeedT = TypeVar("DataFeedT")
 
 
@@ -61,7 +61,7 @@ class FigureProto(Protocol):
         """保存图像到二进制缓冲区."""
 
 
-class CerebroProto(Protocol[StrategyT_co, AnalyzerResultT_co, DataFeedT]):
+class CerebroProto(Protocol[StrategyT, AnalyzerResultT, DataFeedT]):
     """Backtrader 核心调度器抽象."""
 
     broker: BrokerProto
@@ -71,7 +71,7 @@ class CerebroProto(Protocol[StrategyT_co, AnalyzerResultT_co, DataFeedT]):
 
     def addstrategy(
         self,
-        strategy: type[StrategyT_co],
+        strategy: type[StrategyT],
         *args: object,
         **kwargs: object,
     ) -> None:
@@ -79,32 +79,32 @@ class CerebroProto(Protocol[StrategyT_co, AnalyzerResultT_co, DataFeedT]):
 
     def addanalyzer(
         self,
-        analyzer: type[AnalyzerResultT_co],
+        analyzer: type[AnalyzerResultT],
         *args: object,
         **kwargs: object,
     ) -> None:
         """注册分析器."""
 
-    def run(self) -> Sequence[StrategyT_co]:
+    def run(self) -> Sequence[StrategyT]:
         """执行回测并返回策略实例列表."""
 
     def plot(self, *args: object, **kwargs: object) -> Sequence[Sequence[FigureProto]]:
         """生成图表."""
 
 
-class AnalyzerNamespaceProto(Protocol[AnalyzerResultT_co]):
+class AnalyzerNamespaceProto(Protocol[AnalyzerResultT]):
     """Backtrader 自带的分析器命名空间."""
 
-    SharpeRatio: type[AnalyzerResultT_co]
-    DrawDown: type[AnalyzerResultT_co]
-    Returns: type[AnalyzerResultT_co]
-    TradeAnalyzer: type[AnalyzerResultT_co]
-    TimeReturn: type[AnalyzerResultT_co]
-    AnnualReturn: type[AnalyzerResultT_co]
+    SharpeRatio: type[AnalyzerResultT]
+    DrawDown: type[AnalyzerResultT]
+    Returns: type[AnalyzerResultT]
+    TradeAnalyzer: type[AnalyzerResultT]
+    TimeReturn: type[AnalyzerResultT]
+    AnnualReturn: type[AnalyzerResultT]
 
 
-class BacktesterAPI(Protocol[StrategyT_co, AnalyzerResultT_co, DataFeedT]):
+class BacktesterAPI(Protocol[StrategyT, AnalyzerResultT, DataFeedT]):
     """Backtrader 模块在领域层暴露的能力边界."""
 
-    Cerebro: type[CerebroProto[StrategyT_co, AnalyzerResultT_co, DataFeedT]]
-    analyzers: AnalyzerNamespaceProto[AnalyzerResultT_co]
+    Cerebro: type[CerebroProto[StrategyT, AnalyzerResultT, DataFeedT]]
+    analyzers: AnalyzerNamespaceProto[AnalyzerResultT]

@@ -1,0 +1,23 @@
+from typing import Any, Sequence
+
+from redis import Redis
+
+
+class Client:
+    def __init__(self, redis_client: Redis, *args: Any, **kwargs: Any) -> None: ...
+    def create(self, key: str, **kwargs: Any) -> bool: ...
+    def add(self, key: str, timestamp: int, value: float, *args: Any, **kwargs: Any) -> int: ...
+    def range(
+        self,
+        key: str,
+        from_time: int | str = ...,
+        to_time: int | str = ...,
+        count: int | None = ...,
+        **kwargs: Any,
+    ) -> Sequence[tuple[int, float]]: ...
+    def get(self, key: str) -> tuple[int, float] | None: ...
+    def delete(self, *keys: str) -> int: ...
+    def info(self, key: str) -> dict[str, Any]: ...
+
+
+__all__ = ["Client"]

@@ -377,7 +377,7 @@ async def subscribe_kline(request: KlineSubscribeRequest) -> JSONDict:
         )
 
         await provider.subscribe_kline(
-            code_list=request.code_list, period=request.period, callback=on_kline
+            code_list=request.code_list, callback=on_kline
         )
 
         return format_response(

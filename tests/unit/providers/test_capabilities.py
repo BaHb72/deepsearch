@@ -97,6 +97,9 @@ def test_amazingdata_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
         DataCapability.DRAGON_TIGER,
         DataCapability.MARGIN_TRADING,
         DataCapability.NORTH_FLOW,
+        DataCapability.TRADING_CALENDAR,
+        DataCapability.ADJUSTMENT_FACTOR,
+        DataCapability.STOCK_INFO,
     }
 
     assert provider.get_capabilities() == expected
@@ -145,9 +148,20 @@ def test_miniqmt_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delitem(sys.modules, miniqmt_name, raising=False)
 
     miniqmt_module = importlib.import_module(miniqmt_name)
-    MiniQMTProvider = miniqmt_module.MiniQMTProvider
 
-    provider = MiniQMTProvider()
+    class _TestMiniQMT(miniqmt_module.MiniQMTProvider):
+        async def initialize(self) -> bool:
+            return True
+
+        async def get_stock_list(self, limit=None, **kwargs):
+            return []
+
+        async def get_kline_data(
+            self, symbol: str, period: str = "1d", start_date=None, end_date=None, limit: int = 100, **kwargs
+        ):
+            return []
+
+    provider = _TestMiniQMT()
 
     expected = {
         DataCapability.REALTIME_QUOTE,

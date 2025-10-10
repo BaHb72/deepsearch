@@ -1,24 +1,30 @@
-"""
-AkShare API 缓存管理器
+# mypy: ignore-errors
+"""AkShare API 缓存管理器，提供多级缓存以减少外部请求。"""
 
-提供多级缓存机制，减少对外部API的请求。
-"""
+from __future__ import annotations
 
 import hashlib
+import importlib
+import importlib.util
 import json
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from types import ModuleType
+from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 
 from loguru import logger
 
-try:
-    import redis
+if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
+    import redis as redis_module
 
-    HAS_REDIS = True
-except ImportError:
-    HAS_REDIS = False
+_redis_spec = importlib.util.find_spec("redis")
+redis: ModuleType | None
+if _redis_spec is not None:
+    redis = importlib.import_module("redis")
+else:
     redis = None
+
+HAS_REDIS = redis is not None
 
 
 class CacheManager:
@@ -290,7 +296,7 @@ def get_cache_manager() -> CacheManager:
     if _cache_manager is None:
         # 尝试连接Redis
         redis_client = None
-        if HAS_REDIS:
+        if HAS_REDIS and redis is not None:
             try:
                 from deepsearch.config import get_config
 

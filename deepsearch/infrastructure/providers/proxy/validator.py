@@ -44,7 +44,7 @@ class ProxyValidator:
     ]
     ANONYMITY_CHECK_URL = "http://httpbin.org/headers"
 
-    def __init__(self, timeout: int = 10) -> None:
+    def __init__(self, timeout: float = 10) -> None:
         self.timeout = timeout
         self._session: Optional[aiohttp.ClientSession] = None
 

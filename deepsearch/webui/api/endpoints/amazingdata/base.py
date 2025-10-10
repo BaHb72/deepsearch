@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Optional, TypeAlias
+from typing import Optional, TypeAlias, cast
 
 import pandas as pd
 from fastapi import HTTPException
@@ -50,8 +50,11 @@ async def get_amazingdata_provider() -> AmazingDataExtended:
             from deepsearch.config import get_config
 
             config = get_config()
-            amazingdata_config = config.data_sources.amazingdata.model_dump()
-            provider = AmazingDataExtended(amazingdata_config)
+            data_sources = getattr(config, "data_sources", None)
+            amazingdata_config = getattr(data_sources, "amazingdata", None)
+            if amazingdata_config is None:
+                raise HTTPException(status_code=500, detail="AmazingData 配置缺失")
+            provider = AmazingDataExtended(amazingdata_config.model_dump())
             await provider.initialize()
         return provider
     except Exception as e:
@@ -211,7 +214,8 @@ def normalize_date_int(value: object) -> Optional[int]:
         except (TypeError, ValueError):
             return None
     if isinstance(value, (pd.Timestamp, datetime)):
-        return int(value.strftime("%Y%m%d"))
+        actual = value.to_pydatetime() if isinstance(value, pd.Timestamp) else value
+        return int(actual.strftime("%Y%m%d"))
     text_value = str(value).strip()
     if not text_value:
         return None
@@ -241,14 +245,14 @@ def filter_dataframe_by_dates(
             mask = data[column].apply(normalize_date_int).apply(
                 lambda value: value is not None and start_date <= value <= end_date
             )
-            return data.loc[mask]
+            return cast(pd.DataFrame, data.loc[mask])
     if data.index.nlevels == 1:
         index_mask = [
             (normalized is not None and start_date <= normalized <= end_date)
             for normalized in (normalize_date_int(value) for value in data.index)
         ]
         if any(index_mask):
-            return data.loc[index_mask]
+            return cast(pd.DataFrame, data.loc[index_mask])
     return data
 
 
@@ -271,5 +275,5 @@ def filter_dataframe_by_value(
                 mask = series.str.lower() == compare_value
             else:
                 mask = series == target
-            return data.loc[mask]
+            return cast(pd.DataFrame, data.loc[mask])
     return data

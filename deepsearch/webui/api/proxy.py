@@ -15,6 +15,14 @@ from pydantic import BaseModel, Field
 from deepsearch.config import get_config
 from deepsearch.webui.api.providers import get_akshare_provider
 
+
+def _format_last_check(value: Any) -> str | None:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, str):
+        return value
+    return None
+
 # 创建路由
 router = APIRouter(prefix="/api/workers", tags=["Workers Proxy"])
 
@@ -148,7 +156,7 @@ async def get_status() -> WorkersStatusResponse:
         workers_detail: list[WorkerDetail] = []
         for url in getattr(provider, "worker_urls", []):
             stats_raw = getattr(provider, "worker_stats", {}).get(url, {})
-            last_check = stats_raw.get("last_check")
+            last_check_str = _format_last_check(stats_raw.get("last_check"))
             stats: WorkerStats = {
                 "total_requests": int(stats_raw.get("total_requests", 0)),
                 "success_count": int(stats_raw.get("success_count", 0)),
@@ -156,7 +164,7 @@ async def get_status() -> WorkersStatusResponse:
                 "fail_streak": int(stats_raw.get("fail_streak", 0)),
                 "success_streak": int(stats_raw.get("success_streak", 0)),
                 "avg_latency": float(stats_raw.get("avg_latency", 0.0)),
-                "last_check": last_check.isoformat() if hasattr(last_check, "isoformat") else None,
+                "last_check": last_check_str,
                 "last_transition": int(stats_raw.get("last_transition", 0)),
             }
             workers_detail.append(
@@ -170,7 +178,7 @@ async def get_status() -> WorkersStatusResponse:
                     "fail_streak": stats["fail_streak"],
                     "success_streak": stats["success_streak"],
                     "avg_latency": stats["avg_latency"],
-                    "last_check": stats["last_check"],
+                    "last_check": last_check_str,
                     "last_transition": stats.get("last_transition", 0),
                     "stats": stats,
                 }
@@ -296,12 +304,14 @@ async def list_workers() -> dict[str, Any]:
         provider = AkShareProxyProvider()
 
         workers: list[WorkerDetail] = []
-        for url in getattr(provider, "worker_urls", []):
-            stats_raw = getattr(provider, "worker_stats", {}).get(url, {})
+        stats_snapshot = provider.worker_stats
+        health_flags = provider.worker_health
+        for url in provider.worker_urls:
+            stats_raw = stats_snapshot.get(url, {})
             total_requests = int(stats_raw.get("total_requests", 0))
             success_count = int(stats_raw.get("success_count", 0))
             success_rate = success_count / total_requests if total_requests else 0.0
-            last_check = stats_raw.get("last_check")
+            last_check_str = _format_last_check(stats_raw.get("last_check"))
             stats: WorkerStats = {
                 "total_requests": total_requests,
                 "success_count": success_count,
@@ -309,21 +319,21 @@ async def list_workers() -> dict[str, Any]:
                 "fail_streak": int(stats_raw.get("fail_streak", 0)),
                 "success_streak": int(stats_raw.get("success_streak", 0)),
                 "avg_latency": float(stats_raw.get("avg_latency", 0.0)),
-                "last_check": last_check.isoformat() if hasattr(last_check, "isoformat") else None,
+                "last_check": last_check_str,
             }
 
             workers.append(
                 {
                     "url": url,
                     "state": str(stats_raw.get("state", "unknown")),
-                    "healthy": bool(getattr(provider, "worker_health", {}).get(url, False)),
+                    "healthy": bool(health_flags.get(url, False)),
                     "total_requests": stats["total_requests"],
                     "success_count": stats["success_count"],
                     "fail_count": stats["fail_count"],
                     "fail_streak": stats["fail_streak"],
                     "success_streak": stats["success_streak"],
                     "avg_latency": stats["avg_latency"],
-                    "last_check": stats["last_check"],
+                    "last_check": last_check_str,
                     "last_transition": int(stats_raw.get("last_transition", 0)),
                     "stats": stats | {"success_rate": success_rate},
                 }
@@ -387,12 +397,7 @@ async def reset_worker(worker_id: str) -> MessageResponse:
             raise HTTPException(status_code=404, detail="Worker not found")
 
         # 重置状态
-        if worker_url in provider.worker_stats:
-            provider.worker_stats[worker_url]["state"] = "suspect"
-            provider.worker_stats[worker_url]["fail_streak"] = 0
-            provider.worker_stats[worker_url]["success_streak"] = 0
-            provider.worker_stats[worker_url]["next_retry_time"] = 0
-            provider.worker_health[worker_url] = True
+        provider.reset_worker(worker_url)
 
         return {"success": True, "message": f"Worker {worker_url} has been reset to suspect state"}
     except HTTPException:

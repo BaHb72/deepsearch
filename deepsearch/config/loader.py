@@ -8,12 +8,38 @@
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import yaml
 
 from deepsearch.config.migrations import migrate_data_source_config
 from deepsearch.constants import YAML_ENCODING
+
+
+def ensure_env_config_file(env: str, config_dir: Optional[Path] = None) -> Path:
+    """确保指定环境的配置文件存在。
+
+    若实际配置缺失且存在 `.example` 模板，则自动复制一份供运行时使用。
+    """
+
+    base_dir = config_dir or Path(__file__).parent
+    target_path = base_dir / f"settings.{env}.yaml"
+
+    if target_path.exists():
+        return target_path
+
+    example_path = base_dir / f"settings.{env}.yaml.example"
+    if example_path.exists():
+        shutil.copy2(example_path, target_path)
+        print(
+            f"[INFO] settings.{env}.yaml 不存在，已由模板自动生成",
+            file=sys.stderr,
+        )
+        return target_path
+
+    raise FileNotFoundError(
+        f"Config file not found: {target_path}. Please create it based on {example_path.name}"
+    )
 
 
 def load_yaml_config() -> Dict[str, Any]:
@@ -33,11 +59,11 @@ def load_yaml_config() -> Dict[str, Any]:
 
     # 构建特定环境的配置文件路径
     config_dir = Path(__file__).parent
-    env_config_path = config_dir / f"settings.{env}.yaml"
-
-    # 检查配置文件是否存在
-    if not env_config_path.exists():
+    try:
+        env_config_path = ensure_env_config_file(env, config_dir=config_dir)
+    except FileNotFoundError:
         # 尝试查找包安装后的配置文件位置
+        env_config_path = config_dir / f"settings.{env}.yaml"
         try:
             import deepsearch
 

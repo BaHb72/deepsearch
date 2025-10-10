@@ -20,6 +20,7 @@ class DataSourceType(Enum):
     CLOUDFLARE = "cloudflare"
     AKSHARE = "akshare"
     QMT = "qmt"
+    DATABASE = "database"
     DEFAULT = "default"
     CUSTOM = "custom"
 
@@ -34,6 +35,7 @@ class DataProviderConfig:
     priority: int = 100
     timeout: float = 30.0
     retry_count: int = 3
+    retry_delay: float = 1.0
     config: Dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -56,10 +58,32 @@ class DataProviderConfig:
 class ProxyConfig:
     """代理配置"""
 
-    host: str
-    port: int
+    host: str | None = None
+    port: int | None = None
     username: Optional[str] = None
     password: Optional[str] = None
+    proxy_list: list[str] = field(default_factory=list)
+    proxy_api_url: Optional[str] = None
+    proxy_api_key: Optional[str] = None
+    rotation_strategy: str = "round_robin"
+    timeout: float = 5.0
+    blacklist_threshold: int = 3
+    blacklist_duration: int = 300
+    health_check_interval: int = 60
+    pool_size: int = 0
+    enabled: bool = True
+
+    def as_http_url(self) -> Optional[str]:
+        """返回首选 HTTP 代理地址，便于快速注入 requests/urllib3."""
+        if self.host is None or self.port is None:
+            return None
+        auth = ""
+        if self.username:
+            auth = self.username
+            if self.password:
+                auth = f"{auth}:{self.password}"
+            auth += "@"
+        return f"http://{auth}{self.host}:{self.port}"
 
 
 

@@ -10,24 +10,46 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from threading import Lock
-from typing import Any, Final, Literal, MutableMapping, NotRequired, Optional, TypedDict, Union, cast
+import importlib
+from typing import TYPE_CHECKING, Any, Final, Literal, MutableMapping, NotRequired, Optional, TypedDict, Union, cast
 
 from loguru import logger
 
-try:
-    from deepsearch.application.services.market.market_service import MarketService
-except ImportError:  # pragma: no cover
-    MarketService = cast(Any, None)
+if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
+    from deepsearch.application.services.market.akshare_direct_service import (
+        AkShareDirectService as AkShareDirectServiceType,
+    )
+    from deepsearch.application.services.market.eastmoney_service import (
+        EastMoneyService as EastMoneyServiceType,
+    )
+    from deepsearch.application.services.market.market_service import (
+        MarketService as MarketServiceType,
+    )
+else:
+    AkShareDirectServiceType = Any
+    EastMoneyServiceType = Any
+    MarketServiceType = Any
 
-try:
-    from deepsearch.application.services.market.eastmoney_service import EastMoneyService
-except ImportError:  # pragma: no cover
-    EastMoneyService = cast(Any, None)
+def _load_symbol(module_name: str, attr: str) -> Any:
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError:  # pragma: no cover - 可选依赖
+        return None
+    return getattr(module, attr, None)
 
-try:
-    from deepsearch.application.services.market.akshare_direct_service import AkShareDirectService
-except ImportError:  # pragma: no cover
-    AkShareDirectService = cast(Any, None)
+
+_MarketServiceImpl = cast(Any, _load_symbol("deepsearch.application.services.market.market_service", "MarketService"))
+_EastMoneyServiceImpl = cast(
+    Any,
+    _load_symbol("deepsearch.application.services.market.eastmoney_service", "EastMoneyService"),
+)
+_AkShareDirectServiceImpl = cast(
+    Any,
+    _load_symbol(
+        "deepsearch.application.services.market.akshare_direct_service",
+        "AkShareDirectService",
+    ),
+)
 
 
 class DataSourceType(str, Enum):
@@ -124,7 +146,7 @@ class DataProviderFactory:
             provider_type: Type of provider to get
                 - "akshare": AkShareProxyProvider
                 - "unified": DataSourceManager
-                - "market": MarketService
+                - "market": MarketServiceType
                 - "qmt": QMTDataProvider
 
         Returns:
@@ -156,16 +178,16 @@ class DataProviderFactory:
                     )
 
                     default_provider = AkShareProxyProvider()
-                    if MarketService is None:
+                    if _MarketServiceImpl is None:
                         raise RuntimeError("MarketService implementation is unavailable")
-                    cls._instances[normalized_type] = MarketService(default_provider)
+                    cls._instances[normalized_type] = _MarketServiceImpl(default_provider)
 
                 elif normalized_type == "qmt":
-                    from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import (
-                        MiniQMTDataProvider,
+                    logger.warning(
+                        "QMT provider requires explicit asynchronous initialization. "
+                        "Use get_provider_async('qmt') in application bootstrapping."
                     )
-
-                    cls._instances[normalized_type] = MiniQMTDataProvider()
+                    return None
 
                 else:
                     raise ValueError(f"Unknown provider type: {provider_type}")
@@ -195,9 +217,7 @@ class DataProviderFactory:
                         instance = AkShareProxyProvider()
 
                     elif normalized_type == "unified":
-                        from deepsearch.infrastructure.providers.managers.data_source_manager import (
-                            get_data_source_manager,
-                        )
+                        from deepsearch.utils.data_sources import get_data_source_manager
 
                         instance = get_data_source_manager()
 
@@ -207,48 +227,64 @@ class DataProviderFactory:
                         )
 
                         akshare_provider = cls._instances.get("akshare") or AkShareProxyProvider()
-                        if MarketService is None:
+                        if _MarketServiceImpl is None:
                             raise RuntimeError("MarketService implementation is unavailable")
-                        instance = MarketService(akshare_provider)
+                        instance = _MarketServiceImpl(akshare_provider)
 
                     elif normalized_type == "qmt":
-                        from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import (
-                            MiniQMTDataProvider,
+                        logger.warning(
+                            "QMT provider requires dedicated environment; returning None"
                         )
-
-                        instance = MiniQMTDataProvider()
+                        instance = None
 
                     elif normalized_type == "amazingdata":
                         init_success = False
                         fallback_reason = None
-                        chosen_instance = None
+                        chosen_instance: Any | None = None
 
                         try:
                             from deepsearch.config import get_config
                             from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
-                                AmazingDataConfig,
                                 AmazingDataProvider,
+                                ensure_amazingdata_provider_config,
                             )
 
                             app_config = get_config()
-                            amazingdata_config = app_config.get("amazingdata", {})
-                            network_provider = amazingdata_config.get("network_provider", "telecom")
-                            server_config = amazingdata_config.get("servers", {}).get(
-                                network_provider, {}
-                            )
+                            data_sources_cfg = getattr(app_config, "data_sources", {})
+                            if isinstance(data_sources_cfg, dict):
+                                providers_cfg = data_sources_cfg.get("providers", {})
+                            else:
+                                providers_cfg = {}
 
-                            config = AmazingDataConfig(
-                                username=amazingdata_config.get("username", ""),
-                                password=amazingdata_config.get("password", ""),
-                                host=server_config.get("host", "101.230.159.234"),
-                                port=server_config.get("port", 8600),
-                                timeout=10,
-                                retry_count=2,
-                                heartbeat_interval=60,
-                                auto_reconnect=True,
-                            )
+                            provider_entry = providers_cfg.get("amazingdata", {})
+                            raw_config = provider_entry.get("config", {})
 
-                            provider = AmazingDataProvider(config)
+                            connection_cfg = raw_config.get("connection", {})
+                            subscription_cfg = raw_config.get("subscription", {})
+                            cache_cfg = raw_config.get("cache", {})
+
+                            config_payload = {
+                                "username": connection_cfg.get("username", ""),
+                                "password": connection_cfg.get("password", ""),
+                                "host": connection_cfg.get("host", "101.230.159.234"),
+                                "port": connection_cfg.get("port", 8600),
+                                "timeout": float(connection_cfg.get("timeout", 10)),
+                                "retry_count": int(connection_cfg.get("max_retries", 3)),
+                                "heartbeat_interval": connection_cfg.get("heartbeat_interval", 60),
+                                "auto_reconnect": connection_cfg.get("auto_reconnect", True),
+                                "reconnect_interval": connection_cfg.get("reconnect_interval", 10),
+                                "subscription_batch_size": subscription_cfg.get("batch_size", 100),
+                                "max_subscriptions": subscription_cfg.get("max_symbols", 500),
+                                "subscription_enabled": subscription_cfg.get("enabled", True),
+                                "cache_enabled": cache_cfg.get("enabled", True),
+                                "cache_ttl": cache_cfg.get("ttl", 300),
+                                "worker_env": provider_entry.get("worker_env", {}),
+                                "tgw_log_path": connection_cfg.get("tgw_log_path", ""),
+                            }
+
+                            provider_config = ensure_amazingdata_provider_config(config_payload)
+
+                            provider = AmazingDataProvider(provider_config)
                             await provider.initialize()
                             chosen_instance = provider
                             init_success = True
@@ -387,9 +423,13 @@ class DataProviderFactory:
     @classmethod
     def clear_all(cls):
         """Clear all provider instances."""
+        # NOTE: ``clear_instance`` 会获取 ``_lock``，因此不能在已持有锁的情况下直接调用，
+        # 否则会因为 ``threading.Lock`` 不可重入而造成死锁（在 pytest 批量执行时会卡住）。
         with cls._lock:
-            for provider_type in list(cls._instances.keys()):
-                cls.clear_instance(provider_type)
+            provider_types = list(cls._instances.keys())
+
+        for provider_type in provider_types:
+            cls.clear_instance(provider_type)
 
     @classmethod
     def get_stats(cls) -> ProviderFactoryStats:
@@ -487,27 +527,27 @@ async def get_unified_manager():
 
 async def get_market_service():
     """FastAPI dependency for Market Service."""
-    if EastMoneyService is not None:
+    if _EastMoneyServiceImpl is not None:
         try:
             logger.info("Using EastMoneyService for fast real market data")
-            return EastMoneyService()
+            return _EastMoneyServiceImpl()
         except Exception as e1:
             logger.warning(f"EastMoneyService failed: {e1}, trying AkShareDirectService")
     else:
         logger.warning("EastMoneyService implementation not available; skipping")
 
-    if AkShareDirectService is not None:
+    if _AkShareDirectServiceImpl is not None:
         try:
             logger.info("Using AkShareDirectService for real market data")
-            return AkShareDirectService()
+            return _AkShareDirectServiceImpl()
         except Exception as e2:
             logger.error(f"AkShareDirectService failed: {e2}")
     else:
         logger.warning("AkShareDirectService implementation not available; skipping")
 
-    if MarketService is not None:
+    if _MarketServiceImpl is not None:
         logger.info("Falling back to MarketService default implementation")
-        return MarketService(None)
+        return _MarketServiceImpl(None)
 
     raise RuntimeError(
         "No market service implementation available; please configure a market data service."

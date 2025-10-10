@@ -21,6 +21,7 @@ class RequestPriority(Enum):
     URGENT = 0  # 紧急请求（实时数据）
     HIGH = 1  # 高优先级（用户交互）
     NORMAL = 2  # 正常优先级
+    MEDIUM = 2  # 兼容历史命名
     LOW = 3  # 低优先级（后台任务）
     BATCH = 4  # 批量请求（可延迟）
 

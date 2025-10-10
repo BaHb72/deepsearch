@@ -5,8 +5,18 @@ _R = TypeVar("_R")
 class Response:
     media_type: Optional[str]
     status_code: int
-    headers: Mapping[str, Any]
+    headers: MutableMapping[str, str]
+    background: Any | None
     body_iterator: Any
+    def __init__(
+        self,
+        content: Any = ...,
+        *,
+        status_code: int = ...,
+        headers: Mapping[str, Any] | None = ...,
+        media_type: str | None = ...,
+        background: Any | None = ...,
+    ) -> None: ...
     async def __call__(self, scope: Mapping[str, Any], receive: Callable[[], Awaitable[Any]], send: Callable[[Mapping[str, Any]], Awaitable[None]]) -> None: ...
 
 class Request:
@@ -37,6 +47,10 @@ class WebSocket:
 
 class WebSocketDisconnect(Exception):
     code: int
+
+class JSONResponse(Response):
+    media_type: Optional[str]
+    def render(self, content: Any) -> bytes: ...
 
 class HTTPException(Exception):
     status_code: int
@@ -71,9 +85,31 @@ class FastAPI:
 
 status: Any
 
+
+class UploadFile:
+    filename: str | None
+    content_type: str | None
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+
+    async def read(self) -> bytes: ...
+    async def write(self, data: bytes) -> None: ...
+    async def close(self) -> None: ...
+
+
+def File(default: Any = ..., *args: Any, **kwargs: Any) -> Any: ...
+
+
 def Depends(dependency: Optional[Callable[..., Any]] = ..., *, use_cache: bool = ...) -> Any: ...
 
-def Query(default: Any = ..., *, description: Optional[str] = ..., ge: Optional[float] = ..., le: Optional[float] = ...) -> Any: ...
+def Query(
+    default: Any = ...,
+    *,
+    description: Optional[str] = ...,
+    ge: Optional[float] = ...,
+    le: Optional[float] = ...,
+    regex: Optional[str] = ...,
+) -> Any: ...
 
 def Body(default: Any = ..., *args: Any, **kwargs: Any) -> Any: ...
 
@@ -82,6 +118,13 @@ def Path(default: Any = ..., *args: Any, **kwargs: Any) -> Any: ...
 def Header(default: Any = ..., *args: Any, **kwargs: Any) -> Any: ...
 
 def Cookie(default: Any = ..., *args: Any, **kwargs: Any) -> Any: ...
+
+def Security(
+    dependency: Callable[..., Any],
+    scopes: Sequence[str] | None = ...,
+    *,
+    use_cache: bool = ...,
+) -> Any: ...
 
 __all__ = [
     "APIRouter",
@@ -93,10 +136,14 @@ __all__ = [
     "Path",
     "Header",
     "Cookie",
+    "Security",
     "Request",
     "Response",
     "WebSocket",
     "WebSocketDisconnect",
+    "JSONResponse",
+    "UploadFile",
+    "File",
     "BackgroundTasks",
     "status",
 ]

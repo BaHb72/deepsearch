@@ -123,7 +123,12 @@ class SystemDataService:
         }
 
         try:
-            metrics["cpu_usage"] = round(psutil.cpu_percent(interval=0.1), 2)
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            if isinstance(cpu_percent, (list, tuple)):
+                cpu_value = float(cpu_percent[0]) if cpu_percent else 0.0
+            else:
+                cpu_value = float(cpu_percent)
+            metrics["cpu_usage"] = round(cpu_value, 2)
 
             memory = psutil.virtual_memory()
             metrics["memory_usage"] = round(memory.percent, 2)

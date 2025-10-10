@@ -16,7 +16,7 @@ from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union, ca
 from deepsearch.event.engine.engine import Event, EventEngine, Handler
 from deepsearch.event.schema import BaseEventSchema
 from deepsearch.observability import get_logger
-from deepsearch.observability.metrics.metrics import MetricsCollector
+from deepsearch.observability.monitoring.event_monitor import MetricsCollector
 
 # ==============================================================================
 # Constants

@@ -19,8 +19,7 @@ from loguru import logger
 from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
 
 # AmazingData SDK
-from ._sdk_loader import ad
-from .amazingdata import AmazingDataProvider, ProviderConfigLike
+from .amazingdata import AmazingDataProvider, ProviderConfigLike, SubscriptionCallback
 
 
 class AmazingDataExtended(AmazingDataProvider):
@@ -38,19 +37,20 @@ class AmazingDataExtended(AmazingDataProvider):
         """确保数据对象已初始化"""
         if not self._initialized_objects and self._connected:
             try:
+                sdk = self._require_sdk()
                 loop = asyncio.get_event_loop()
 
                 # 初始化基础数据对象
-                self._base_data = await loop.run_in_executor(None, ad.BaseData)
+                self._base_data = await loop.run_in_executor(None, sdk.BaseData)
 
                 # 初始化信息数据对象
-                self._info_data = await loop.run_in_executor(None, ad.InfoData)
+                self._info_data = await loop.run_in_executor(None, sdk.InfoData)
 
                 # 获取交易日历
                 calendar = await self.get_calendar()
                 if calendar:
                     # 初始化市场数据对象
-                    self._market_data = await loop.run_in_executor(None, ad.MarketData, calendar)
+                    self._market_data = await loop.run_in_executor(None, sdk.MarketData, calendar)
 
                 self._initialized_objects = True
                 logger.info("AmazingData 数据对象初始化成功")
@@ -411,7 +411,7 @@ class AmazingDataExtended(AmazingDataProvider):
             code_list: 代码列表
             begin_date: 开始日期
             end_date: 结束日期
-            period: 周期，如ad.constant.Period.day.value
+            period: 周期，默认退回日线 ("day")
 
         Returns:
             字典，key为代码，value为DataFrame
@@ -419,12 +419,27 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            if period is None:
-                period = ad.constant.Period.day.value
+            effective_period = period
+            if effective_period is None:
+                try:
+                    sdk = self._require_sdk()
+                except DataProviderError:
+                    sdk = None
+
+                if sdk is not None:
+                    constant = getattr(sdk, "constant", None)
+                    if constant is not None:
+                        try:
+                            effective_period = constant.Period.day.value
+                        except AttributeError:
+                            logger.warning("AmazingData SDK 未提供周期常量，退回默认日线")
+
+                if effective_period is None:
+                    effective_period = "day"
 
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None, self._market_data.query_kline, code_list, begin_date, end_date, period
+                None, self._market_data.query_kline, code_list, begin_date, end_date, effective_period
             )
 
             logger.info("成功获取历史K线数据")
@@ -891,6 +906,64 @@ class AmazingDataExtended(AmazingDataProvider):
             logger.error(f"获取龙虎榜数据失败: {e}")
             return None
 
+    # ================== 实时订阅接口 ==================
+
+    async def subscribe_index_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅指数快照，复用通用订阅能力。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_stock_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅股票快照。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_future_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅期货快照。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_etf_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅 ETF 快照。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_kzz_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅可转债快照。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_hkt_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅港股通快照。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_kline(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅 K 线推送。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="kline")
+
+    async def unsubscribe_all(self) -> bool:
+        """取消所有订阅，兼容 WebAPI 的统一退出逻辑。"""
+
+        if not self._subscriptions:
+            return True
+        return await self.unsubscribe_quote(list(self._subscriptions.keys()))
+
     # ================== 账户管理接口 ==================
 
     async def update_password(self, old_password: str, new_password: str) -> bool:
@@ -910,9 +983,14 @@ class AmazingDataExtended(AmazingDataProvider):
             return False
 
         try:
+            sdk = self._require_sdk()
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None, ad.update_password, self.config.username, old_password, new_password
+                None,
+                sdk.update_password,
+                self.config.username,
+                old_password,
+                new_password,
             )
 
             if result:

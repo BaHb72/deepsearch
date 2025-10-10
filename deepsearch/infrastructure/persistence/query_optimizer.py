@@ -498,9 +498,10 @@ class QueryOptimizer:
             )
 
             try:
-                from deepsearch.config import settings
+                from deepsearch.config import get_config
 
-                if settings.app.env == "dev":
+                config = get_config()
+                if config and getattr(config.app, "env", "") == "dev":
                     logger.warning(f"慢查询检测 ({duration:.2f}s): {query[:100]}...")
             except ImportError:
                 pass

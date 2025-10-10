@@ -57,6 +57,7 @@ DateTime: _ScalarType
 Integer: _ScalarType
 Numeric: _ScalarType
 String: _ScalarType
+JSON: _ScalarType
 
 
 __all__ = [
@@ -71,4 +72,5 @@ __all__ = [
     "Integer",
     "Numeric",
     "String",
+    "JSON",
 ]

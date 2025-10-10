@@ -39,20 +39,20 @@ class MiniQMTCollector:
         Args:
             mini_qmt_path: MiniQMT安装路径（可选）
         """
-        self.xtdata = None
+        self.xtdata: Any = None
         self.connected = False
         self.mini_qmt_path = mini_qmt_path
 
         # 订阅管理
-        self.subscriptions = {}  # {symbol: callback}
+        self.subscriptions: Dict[str, Callable[[Dict[str, Any]], None]] = {}
         self.subscription_locks = threading.Lock()
 
         # 数据缓存
-        self.data_cache = {}  # 缓存下载的历史数据
+        self.data_cache: Dict[str, tuple[float, Dict[str, Any]]] = {}
         self.cache_ttl = 300  # 缓存有效期5分钟
 
         # 消息队列
-        self.message_queue = Queue()
+        self.message_queue: Queue[Dict[str, Any]] = Queue()
 
         # 初始化连接
         self._init_connection()
@@ -235,7 +235,7 @@ class MiniQMTCollector:
 
             # 保存订阅信息
             with self.subscription_locks:
-                self.subscriptions[f"{stock_code}_{period}"] = callback
+                self.subscriptions[f"{stock_code}_{period}"] = on_data
 
             logger.info(f"✅ 订阅成功: {stock_code}")
             return True
@@ -332,7 +332,7 @@ class MiniQMTCollector:
             logger.error(f"❌ 获取市场数据失败: {e}")
             return {}
 
-    def get_full_tick(self, stock_codes: List[str]) -> Dict[str, Dict]:
+    def get_full_tick(self, stock_codes: List[str]) -> Dict[str, Dict[str, Any]]:
         """
         获取最新tick数据（含五档盘口）
 
@@ -386,7 +386,7 @@ class MiniQMTCollector:
     # ==================== 4. 财务数据 ====================
     def get_financial_data(
         self, stock_list: List[str], table_list: Optional[List[str]] = None
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> Dict[str, Dict[str, pd.DataFrame]]:
         """
         获取财务数据
 
@@ -494,7 +494,11 @@ class MiniQMTCollector:
             logger.info(f"🏢 获取板块成分股: {sector_name}")
 
             # 获取板块成分股
-            stock_list = self.xtdata.get_stock_list_in_sector(sector_name)
+            stock_list_raw = self.xtdata.get_stock_list_in_sector(sector_name)
+            if isinstance(stock_list_raw, list):
+                stock_list = [str(item) for item in stock_list_raw]
+            else:
+                stock_list = []
 
             logger.info(f"✅ 获取成功: {len(stock_list)} 只股票")
             return stock_list
@@ -514,7 +518,7 @@ class MiniQMTCollector:
             "data": data,
         }
 
-    def _get_cached_data(self, key: str) -> Optional[Dict]:
+    def _get_cached_data(self, key: str) -> Optional[Dict[str, Any]]:
         """获取缓存数据"""
         if key in self.data_cache:
             cached_time, cached_data = self.data_cache[key]
@@ -524,7 +528,7 @@ class MiniQMTCollector:
                 del self.data_cache[key]
         return None
 
-    def _cache_data(self, key: str, data: Dict):
+    def _cache_data(self, key: str, data: Dict[str, Any]) -> None:
         """缓存数据"""
         self.data_cache[key] = (time.time(), data)
 

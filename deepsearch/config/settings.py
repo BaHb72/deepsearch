@@ -73,7 +73,10 @@ class Settings(BaseSettings):
         except ValueError:
             # 如果未配置，返回默认配置
             buses = MessageBusConfig._create_default_buses()
-            return buses.get("timeseries", {}).config if "timeseries" in buses else {}
+            timeseries_bus = buses.get("timeseries")
+            if timeseries_bus is not None:
+                return timeseries_bus.config
+            return {}
 
     @property
     def log_dir(self) -> Path:

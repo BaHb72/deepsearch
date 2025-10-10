@@ -3,13 +3,19 @@
 包含数据库和缓存等数据存储组件
 """
 
+import inspect
 import re
+from contextlib import suppress
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from deepsearch.config import get_config
 from deepsearch.core.async_component import AsyncComponent
@@ -26,8 +32,8 @@ class DatabaseComponent(AsyncComponent[Any]):
 
     def __init__(self):
         super().__init__("database", ComponentType.EXTERNAL, "数据库")
-        self._engine = None
-        self._session_factory = None
+        self._engine: AsyncEngine | None = None
+        self._session_factory: Callable[[], AsyncSession] | None = None
         self._is_timescale_enabled = False
         self._timeout_manager = get_timeout_manager()
 
@@ -87,7 +93,7 @@ class DatabaseComponent(AsyncComponent[Any]):
             db_config = config.database if config else None
 
             # 检查是否应该自动连接
-            if not db_config.main.auto_connect:
+            if not db_config or not db_config.main.auto_connect:
                 store, key = self._get_store_and_key()
                 store.save_connectivity_status(key, {"state": "disconnected", "retrying": False})
                 self._logger.info("数据库组件已初始化（未连接）- auto_connect=false")
@@ -121,6 +127,16 @@ class DatabaseComponent(AsyncComponent[Any]):
         if not self._session_factory:
             raise ComponentLifecycleError(self.name, "get_session", "Database not initialized")
         return self._session_factory()
+
+    @property
+    def engine(self) -> AsyncEngine | None:
+        """Expose the underlying async engine for consumers requiring direct access."""
+        return self._engine
+
+    @property
+    def is_timescale_enabled(self) -> bool:
+        """Whether the component has enabled TimescaleDB features."""
+        return self._is_timescale_enabled
 
     def _get_extra_status_info(self) -> Dict[str, Any]:
         """提供额外的状态信息"""
@@ -252,7 +268,7 @@ class DatabaseComponent(AsyncComponent[Any]):
         )
 
         # 创建会话工厂
-        self._session_factory = sessionmaker(
+        self._session_factory = async_sessionmaker(
             self._engine, class_=AsyncSession, expire_on_commit=False
         )
 
@@ -265,7 +281,20 @@ class DatabaseComponent(AsyncComponent[Any]):
                     await conn.execute(text("SELECT 1"))
                     self._logger.info("数据库连接成功")
 
-            await asyncio.wait_for(_test_connection(), timeout=connect_timeout)
+            test_task = asyncio.create_task(_test_connection())
+            try:
+                await asyncio.wait_for(test_task, timeout=connect_timeout)
+            except asyncio.TimeoutError:
+                test_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await test_task
+                raise
+            except Exception:
+                if not test_task.done():
+                    test_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await test_task
+                raise
         except asyncio.TimeoutError:
             # 连接超时，清理资源
             if self._engine:
@@ -391,7 +420,7 @@ class CacheComponent(AsyncComponent[Any]):
             cache_config = config.database.cache if config and config.database else None
 
             # 检查是否启用
-            if not cache_config.enabled:
+            if not cache_config or not cache_config.enabled:
                 self._logger.info("Redis 缓存功能已禁用")
                 return None  # 返回None表示没有资源
 
@@ -454,7 +483,20 @@ class CacheComponent(AsyncComponent[Any]):
             async def _test_connection():
                 await self._redis_client.ping()
 
-            await asyncio.wait_for(_test_connection(), timeout=connect_timeout)
+            test_task = asyncio.create_task(_test_connection())
+            try:
+                await asyncio.wait_for(test_task, timeout=connect_timeout)
+            except asyncio.TimeoutError:
+                test_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await test_task
+                raise
+            except Exception:
+                if not test_task.done():
+                    test_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await test_task
+                raise
 
             self._connected = True
             self._connection_error = None
@@ -486,14 +528,21 @@ class CacheComponent(AsyncComponent[Any]):
         """停止缓存服务"""
         if self._redis_client:
             try:
-                if hasattr(self._redis_client, "close"):
-                    await self._redis_client.close()
-                    if hasattr(self._redis_client, "wait_closed"):
-                        await self._redis_client.wait_closed()
-                    else:
-                        await self._redis_client.aclose()
-                elif hasattr(self._redis_client, "aclose"):
-                    await self._redis_client.aclose()
+                close_method = getattr(self._redis_client, "close", None)
+                if close_method:
+                    close_result = close_method()
+                    if inspect.isawaitable(close_result):
+                        await close_result
+                alternate_close = getattr(self._redis_client, "aclose", None)
+                if alternate_close and alternate_close is not close_method:
+                    alt_result = alternate_close()
+                    if inspect.isawaitable(alt_result):
+                        await alt_result
+                wait_closed = getattr(self._redis_client, "wait_closed", None)
+                if wait_closed:
+                    wait_result = wait_closed()
+                    if inspect.isawaitable(wait_result):
+                        await wait_result
             except Exception as e:
                 self._logger.error(f"关闭 Redis 连接时出错: {e}")
             finally:

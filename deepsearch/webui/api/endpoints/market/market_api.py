@@ -14,7 +14,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from deepsearch.config import get_config
-from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceManager
+from deepsearch.utils.data_sources import DataSourceManager
 
 
 
@@ -112,8 +112,8 @@ async def get_market_overview(
         for code, name in indices.items():
             try:
                 # 尝试获取实时数据
-                quote = data_manager.get_realtime_quote(code)
-                if quote:
+                quote = await data_manager.get_realtime_quote(code)
+                if isinstance(quote, dict):
                     index_data[code] = {
                         "name": name,
                         "current": quote.get("price", 0),

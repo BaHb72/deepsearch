@@ -1,6 +1,7 @@
-"""
-数据源API接口测试
-"""
+"""数据源API接口测试"""
+
+import sys
+from types import ModuleType
 
 import pytest
 
@@ -316,3 +317,22 @@ class TestDataSourceAPI:
             # 验证数据类型
             assert isinstance(kline["volume"], (int, float))
             assert kline["volume"] >= 0
+
+    def test_manager_stub_recovery(self, test_client, api_helper, monkeypatch):
+        """验证当管理器模块被替换为桩实现时仍可恢复真实依赖"""
+
+        stub_module = ModuleType(
+            "deepsearch.infrastructure.providers.managers.data_source_manager"
+        )
+        stub_module.DataSourceManager = object
+        stub_module.get_data_source_manager = lambda: None
+        monkeypatch.setitem(
+            sys.modules,
+            "deepsearch.infrastructure.providers.managers.data_source_manager",
+            stub_module,
+        )
+
+        response = test_client.get("/api/data/realtime/000001")
+        data = api_helper.assert_success_response(response)
+
+        assert data.get("symbol") == "000001"

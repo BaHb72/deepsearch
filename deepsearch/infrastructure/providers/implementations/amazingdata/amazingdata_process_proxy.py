@@ -7,6 +7,7 @@ AmazingData SDK 进程代理
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import multiprocessing as mp
 import os
@@ -203,6 +204,11 @@ class AmazingDataProcessProxy:
         if self.python_executable:
             return self._start_external_worker()
         return self._start_local_worker()
+
+    async def start_async(self) -> bool:
+        """异步启动 Worker 进程，包装同步实现以兼容 asyncio。"""
+
+        return await asyncio.to_thread(self.start)
 
     def _start_local_worker(self) -> bool:
         try:

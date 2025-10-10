@@ -1066,12 +1066,12 @@ async def _execute_connection_test(request: TestConnectionRequest) -> Dict[str, 
                     else:
                         import psycopg2
 
-                        conn = psycopg2.connect(conn_string)
-                        cur = conn.cursor()
+                        sync_conn = psycopg2.connect(conn_string)
+                        cur = sync_conn.cursor()
                         cur.execute("SELECT version()")
                         version = cur.fetchone()
                         cur.close()
-                        conn.close()
+                        sync_conn.close()
                         result["success"] = True
                         result["message"] = "连接成功"
                         result["details"]["version"] = version[0] if version else "Unknown"
@@ -1082,9 +1082,9 @@ async def _execute_connection_test(request: TestConnectionRequest) -> Dict[str, 
                 target_path = request.database or ":memory:"
                 if target_path != ":memory:":
                     target_path = resolve_duckdb_path(target_path)
-                conn = duckdb.connect(target_path)
-                version = conn.execute("SELECT version()").fetchone()
-                conn.close()
+                duck_conn = duckdb.connect(target_path)
+                version = duck_conn.execute("SELECT version()").fetchone()
+                duck_conn.close()
                 result["success"] = True
                 result["message"] = "连接成功"
                 result["details"]["version"] = version[0] if version else "Unknown"

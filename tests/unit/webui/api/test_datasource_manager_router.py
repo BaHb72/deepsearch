@@ -100,8 +100,31 @@ class FakeManager:
                 }
             },
         }
+        self._source_status: Dict[DummyDataSourceType, Dict[str, Any]] = {
+            DummyDataSourceType.AMAZINGDATA: {
+                "available": True,
+                "status": "active",
+                "reason": "healthy",
+            }
+        }
         self.switch_calls: List[DummyDataSourceType] = []
-        self.config = SimpleNamespace(app=SimpleNamespace(env="dev"))
+        self.config = SimpleNamespace(
+            app=SimpleNamespace(env="dev"),
+            data_sources={
+                "default": DummyDataSourceType.AMAZINGDATA.value,
+                "providers": {
+                    DummyDataSourceType.AMAZINGDATA.value: {
+                        "enabled": True,
+                        "priority": 1,
+                        "timeout": 5.0,
+                        "retry_count": 3,
+                        "fallback_enabled": False,
+                        "fallback_sources": [],
+                        "config": {"timeout": 5000},
+                    }
+                },
+            },
+        )
 
     async def initialize(self) -> None:
         self.initialized = True
@@ -124,7 +147,9 @@ class FakeManager:
         entry = self._status["sources"].setdefault(source_type.value, {})
         entry["status"] = status.value if hasattr(status, "value") else status
         entry.update(updates)
-        return entry
+        runtime_entry = self._source_status.setdefault(source_type, {})
+        runtime_entry.update(entry)
+        return runtime_entry
 
     def disable_provider(self, source_type, reinitialize: bool = True):
         config = self.registry.get_config(source_type)
@@ -135,6 +160,11 @@ class FakeManager:
             {"status": "degraded", "available": False, "degraded_reason": "disabled_by_config"}
         )
         entry.pop("pending_reactivation", None)
+        self._source_status[source_type] = {
+            "status": "degraded",
+            "available": False,
+            "degraded_reason": "disabled_by_config",
+        }
         return True
 
     def enable_provider(self, source_type, reinitialize: bool = True):
@@ -145,7 +175,15 @@ class FakeManager:
         entry.update({"status": "active", "available": True})
         entry.pop("degraded_reason", None)
         entry.pop("pending_reactivation", None)
+        self._source_status[source_type] = {
+            "status": "active",
+            "available": True,
+        }
         return True
+
+    def mark_test_reactivation_pending(self, source_type):
+        entry = self._source_status.setdefault(source_type, {})
+        entry["pending_reactivation"] = True
 
     async def get_data(self, data_type, symbol, preferred_source, **kwargs):
         return {"symbol": symbol, "data_type": data_type, "source": preferred_source.value}
@@ -212,37 +250,6 @@ def fake_environment(monkeypatch):
     fake_manager = FakeManager()
     fake_monitor = FakeMonitor()
     cache_calls: List[Any] = []
-    settings_data = {
-        "data_sources": {
-            "default": DummyDataSourceType.AMAZINGDATA.value,
-            "fallback_order": [DummyDataSourceType.AMAZINGDATA.value],
-            "providers": {DummyDataSourceType.AMAZINGDATA.value: {"enabled": True, "priority": 1}},
-        }
-    }
-
-    def fake_update_settings(manager, updater):
-        updater(settings_data)
-        provider_block = settings_data["data_sources"]["providers"].get(
-            DummyDataSourceType.AMAZINGDATA.value, {}
-        )
-        fake_manager.registry.set_config(
-            DummyDataSourceType.AMAZINGDATA,
-            DummyDataSourceConfig(
-                enabled=provider_block.get("enabled", True),
-                priority=provider_block.get("priority", 1),
-                timeout=provider_block.get("timeout", 5.0),
-                retry_count=provider_block.get("retry_count", 3),
-                fallback_enabled=provider_block.get("fallback_enabled", False),
-                fallback_sources=provider_block.get("fallback_sources", []),
-                config=provider_block.get("config", {}),
-            ),
-        )
-        fake_manager.config = SimpleNamespace(
-            app=SimpleNamespace(env="dev"),
-            data_sources=settings_data.get("data_sources"),
-        )
-
-    monkeypatch.setattr(module, "_update_settings", fake_update_settings)
 
     async def fake_ensure(manager):  # noqa: ANN001
         return fake_manager
@@ -314,8 +321,9 @@ async def test_config_roundtrip(fake_environment):
     assert config["code"] == 0
     assert config["data"]["enabled"] is True
 
+    fake_request = SimpleNamespace(headers={})
     updated = await module.update_data_source_config(
-        "amazingdata", module.ConfigUpdateRequest(enabled=False, priority=5)
+        fake_request, "amazingdata", module.ConfigUpdateRequest(enabled=False, priority=5)
     )
     assert updated["code"] == 0
     assert updated["data"]["enabled"] is False

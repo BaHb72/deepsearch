@@ -344,9 +344,7 @@ async def get_latest_tick(symbol: str):
 
     try:
         # 尝试从统一数据源管理器获取
-        from deepsearch.infrastructure.providers.managers.data_source_manager import (
-            get_data_source_manager,
-        )
+        from deepsearch.utils.data_sources import get_data_source_manager
 
         manager = get_data_source_manager()
         if not manager.initialized:
@@ -395,9 +393,7 @@ async def get_latest_orderbook(symbol: str):
     logger.info(f"收到获取盘口数据请求: {symbol}")
 
     # 使用统一数据源管理器
-    from deepsearch.infrastructure.providers.managers.data_source_manager import (
-        get_data_source_manager,
-    )
+    from deepsearch.utils.data_sources import get_data_source_manager
 
     try:
         data_source_manager = get_data_source_manager()

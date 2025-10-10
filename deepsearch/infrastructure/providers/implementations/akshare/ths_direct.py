@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Mapping, Optional, cast
 
 from loguru import logger
 
@@ -115,12 +115,15 @@ class ThsDirectProvider:
             if df is not None:
                 # 根据返回数据类型处理
                 if hasattr(df, "to_dict"):
-                    if not df.empty:
-                        result = df.to_dict("records")
+                    if not getattr(df, "empty", False):
+                        records_any = df.to_dict("records")
+                        result = cast(List[Dict[str, Any]], records_any)
                     else:
-                        result = {}
+                        result = []
+                elif isinstance(df, Mapping):
+                    result = [dict(df)]
                 else:
-                    result = df
+                    result = []
 
                 logger.info("成功获取概念板块简介")
                 return {"success": True, "data": result, "source": "ths_direct"}

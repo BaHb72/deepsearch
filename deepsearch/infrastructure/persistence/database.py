@@ -7,9 +7,10 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
-from typing import Literal, Optional, TypedDict, cast
+from typing import Any, Literal, Optional, TypedDict, cast
 
 from sqlalchemy import text
+from sqlalchemy.engine import Result
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from deepsearch.core.components.data_components import DatabaseComponent
@@ -104,7 +105,7 @@ class DatabaseService(DatabaseServiceProtocol):
         """执行写操作并返回受影响行数。"""
         normalized_params = self._normalize_params(params)
         async with self.get_session() as session:
-            result = await session.execute(text(query), normalized_params)
+            result: Result[Any] = await session.execute(text(query), normalized_params)
             rowcount = result.rowcount
             return int(rowcount or 0)
 
@@ -112,14 +113,14 @@ class DatabaseService(DatabaseServiceProtocol):
         """批量查询并返回行字典列表。"""
         normalized_params = self._normalize_params(params)
         async with self.get_session() as session:
-            result = await session.execute(text(query), normalized_params)
+            result: Result[Any] = await session.execute(text(query), normalized_params)
             return [self._normalize_row(row) for row in result.mappings().all()]
 
     async def fetch_one(self, query: str, params: SQLParams | None = None) -> RowDict | None:
         """查询单条记录。"""
         normalized_params = self._normalize_params(params)
         async with self.get_session() as session:
-            result = await session.execute(text(query), normalized_params)
+            result: Result[Any] = await session.execute(text(query), normalized_params)
             mapping = result.mappings().first()
             if mapping is None:
                 return None
@@ -129,7 +130,11 @@ class DatabaseService(DatabaseServiceProtocol):
         """初始化数据库表结构"""
         from .models.base import Base
 
-        async with self.db.engine.begin() as conn:
+        engine = self.db.engine
+        if engine is None:
+            raise RuntimeError("数据库引擎尚未初始化，无法创建表结构")
+
+        async with engine.begin() as conn:
             # 创建所有表
             await conn.run_sync(Base.metadata.create_all)
             self.logger.info("数据库表结构创建完成")
