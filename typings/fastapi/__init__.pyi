@@ -6,7 +6,17 @@ class Response:
     media_type: Optional[str]
     status_code: int
     headers: Mapping[str, Any]
+    background: Any | None
     body_iterator: Any
+    def __init__(
+        self,
+        content: Any = ...,
+        *,
+        status_code: int = ...,
+        headers: Mapping[str, Any] | None = ...,
+        media_type: str | None = ...,
+        background: Any | None = ...,
+    ) -> None: ...
     async def __call__(self, scope: Mapping[str, Any], receive: Callable[[], Awaitable[Any]], send: Callable[[Mapping[str, Any]], Awaitable[None]]) -> None: ...
 
 class Request:
@@ -73,7 +83,14 @@ status: Any
 
 def Depends(dependency: Optional[Callable[..., Any]] = ..., *, use_cache: bool = ...) -> Any: ...
 
-def Query(default: Any = ..., *, description: Optional[str] = ..., ge: Optional[float] = ..., le: Optional[float] = ...) -> Any: ...
+def Query(
+    default: Any = ...,
+    *,
+    description: Optional[str] = ...,
+    ge: Optional[float] = ...,
+    le: Optional[float] = ...,
+    regex: Optional[str] = ...,
+) -> Any: ...
 
 def Body(default: Any = ..., *args: Any, **kwargs: Any) -> Any: ...
 

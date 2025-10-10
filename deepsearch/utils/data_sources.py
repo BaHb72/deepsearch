@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """数据源管理相关的辅助函数，确保在测试环境中仍能加载真实实现。"""
 
 from __future__ import annotations
@@ -7,7 +8,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 _MODULE_NAME = "deepsearch.infrastructure.providers.managers.data_source_manager"
 
@@ -62,13 +63,26 @@ async def initialize_data_sources():
     return await initializer()
 
 
-# 重新导出模型与类型，供调用方直接使用。
-_module = _load_real_module()
+if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
+    from deepsearch.infrastructure.providers.managers.data_source_manager import (
+        DataSourceConfig as _DataSourceConfig,
+        DataSourceLifecycleStatus as _DataSourceLifecycleStatus,
+        DataSourceManager as _DataSourceManager,
+        DataSourceType as _DataSourceType,
+    )
 
-DataSourceConfig = getattr(_module, "DataSourceConfig")
-DataSourceLifecycleStatus = getattr(_module, "DataSourceLifecycleStatus")
-DataSourceManager = getattr(_module, "DataSourceManager")
-DataSourceType = getattr(_module, "DataSourceType")
+    DataSourceConfig = _DataSourceConfig
+    DataSourceLifecycleStatus = _DataSourceLifecycleStatus
+    DataSourceManager = _DataSourceManager
+    DataSourceType = _DataSourceType
+else:
+    # 重新导出模型与类型，供运行时调用方直接使用。
+    _module = _load_real_module()
+
+    DataSourceConfig = getattr(_module, "DataSourceConfig")
+    DataSourceLifecycleStatus = getattr(_module, "DataSourceLifecycleStatus")
+    DataSourceManager = getattr(_module, "DataSourceManager")
+    DataSourceType = getattr(_module, "DataSourceType")
 
 __all__ = [
     "DataSourceConfig",

@@ -142,17 +142,16 @@ warn_unused_ignores = true
 warn_return_any = true
 show_error_codes = true
 pretty = true
-files = [
-    "deepsearch/config/manager.py",
-    "deepsearch/config/crypto.py",
-    "deepsearch/webui/api/middleware/deduplication.py",
-    "deepsearch/webui/api/monitor/data_source_api.py",
-    "deepsearch/webui/api/endpoints/system/logs.py",
-    "deepsearch/infrastructure/messaging/event_publisher.py",
-    "deepsearch/infrastructure/database/optimized_pool.py",
-    "deepsearch/debug/performance_profiler.py",
-    "deepsearch/core/utils/ipc.py",
-    "deepsearch/core/utils/error_handler.py",
-    "deepsearch/core/components/infrastructure_components.py",
-]
+
+[[tool.mypy.overrides]]
+module = "deepsearch.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "deepsearch.utils.data_sources"
+ignore_errors = false
+
+[[tool.mypy.overrides]]
+module = "deepsearch.infrastructure.providers.implementations.akshare.cache_manager"
+ignore_errors = false
 

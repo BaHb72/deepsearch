@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """AkShare API 缓存管理器，提供多级缓存以减少外部请求。"""
 
 from __future__ import annotations

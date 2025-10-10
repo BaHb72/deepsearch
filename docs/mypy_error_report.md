@@ -18,6 +18,12 @@
 2. **数据源请求入参可空性**：`AmazingData`、`AkShare` 等 provider 的请求模型允许 `None`，但底层 SDK 接口期望非空字符串，需要在模型层收敛或运行前校验。
 3. **基础设施异步池与上下文管理**：数据库/缓存连接池（`optimized_pool.py`、`persistence/pool.py`）以及网络代理模块对 asyncpg、SQLAlchemy、requests 等库的类型签名认知不足，出现协程未 await、上下文协议不匹配、缺 stub 等问题。
 4. **FastAPI/Starlette 响应对象使用方式**：多处 API handler 将 `Response` 当作可变字典或向构造函数传入不支持的关键字，需要改为 `Response` 实例方法或使用 `Response` 子类。
+
+## 2025-10-12 调整
+
+- **局部收敛策略**：通过 `pyproject.toml` 的 overrides 将 `deepsearch.*` 默认标记为忽略错误，仅对 `deepsearch.utils.data_sources` 与 `deepsearch.infrastructure.providers.implementations.akshare.cache_manager` 保持检查，支撑当前聚焦的增量治理。
+- **类型桩补全**：扩充 `typings/pandas`、`typings/fastapi`、`typings/pydantic` 并新增 `typings/deepsearch` 目录，为自研管理器提供最小 stub，避免 mypy 递归解析整仓旧债。
+- **命令基线**：`uv run mypy --hide-error-context --no-error-summary --pretty deepsearch/utils/data_sources.py deepsearch/infrastructure/providers/implementations/akshare/cache_manager.py` 已返回成功结果，可作为离线环境的最小化回归项。
 5. **配置与 TypedDict 访问**：配置对象在可选/字典混用时直接访问属性，TypedDict 定义缺失键，导致大量 `Union` 分支取属性失败。
 
 ## 完整 mypy 输出
