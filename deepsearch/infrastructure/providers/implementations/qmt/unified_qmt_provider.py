@@ -287,7 +287,7 @@ class UnifiedQMTProvider(DataProvider):
 
         # 调用后端获取数据
         try:
-            self._require_backend()
+            backend = self._require_backend()
         except RuntimeError:
             logger.error("QMT后端未初始化")
             return pd.DataFrame()
@@ -295,7 +295,7 @@ class UnifiedQMTProvider(DataProvider):
         start = start_date or ""
         end = end_date or ""
         adjust_value = adjust or "none"
-        df = await self.backend.get_kline(symbol, period, start, end, count, adjust_value)
+        df = await backend.get_kline(symbol, period, start, end, count, adjust_value)
 
         # 缓存数据
         if not df.empty:
@@ -591,7 +591,7 @@ class StandardQMTBackend(QMTBackend):
             data = json.dumps(msg, ensure_ascii=False) + "\n"
             self.socket.sendall(data.encode("utf-8"))
 
-    def _receive_message(self) -> Dict:
+    def _receive_message(self) -> Dict[str, Any]:
         """接收QMT脚本响应"""
         if self.socket:
             # 设置socket超时为4秒（留1秒给其他处理）
@@ -600,7 +600,7 @@ class StandardQMTBackend(QMTBackend):
             try:
                 data = self.socket.recv(65536)
                 if data:
-                    return json.loads(data.decode("utf-8"))
+                    return cast(Dict[str, Any], json.loads(data.decode("utf-8")))
             except socket.timeout:
                 logger.warning("QMT响应超时（4秒）")
                 return {}

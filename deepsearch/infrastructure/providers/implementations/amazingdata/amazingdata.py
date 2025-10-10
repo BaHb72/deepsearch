@@ -120,6 +120,9 @@ class AmazingDataSDKProtocol(Protocol):
     def logout(self) -> None:
         ...
 
+    def update_password(self, username: str, old_password: str, new_password: str) -> bool:
+        ...
+
 from deepsearch.infrastructure.providers.interfaces.base import (
     DataProvider,
     DataProviderConfig,
@@ -941,7 +944,7 @@ class AmazingDataProvider(DataProvider):
                         period=period,
                         start_date=request.start_date,
                         end_date=request.end_date,
-                        adjust=request.adjust,
+                        adjust=request.adjust or "none",
                     ),
                 )
 
@@ -961,7 +964,8 @@ class AmazingDataProvider(DataProvider):
                 symbol = request.symbol
                 if symbol is None:
                     raise DataProviderError("财务数据请求缺少股票代码")
-                report_type = request.extra_params.get("report_type", "balance_sheet")
+                report_type_raw = request.extra_params.get("report_type", "balance_sheet")
+                report_type = str(report_type_raw)
                 return cast(
                     pd.DataFrame,
                     await self.get_financial_data(
@@ -984,7 +988,7 @@ class AmazingDataProvider(DataProvider):
                 period=period,
                 start_date=request.start_date,
                 end_date=request.end_date,
-                adjust=request.adjust,
+                adjust=request.adjust or "none",
             ),
         )
 
@@ -1763,7 +1767,7 @@ class AmazingDataProvider(DataProvider):
 
     async def get_stock_list(
         self, limit: Optional[int] = None, **kwargs
-    ) -> Optional[list[StockListItem]]:
+    ) -> Optional[list[dict[str, Any]]]:
         """获取股票列表 - 实现抽象方法"""
         try:
             self._before_query()
@@ -1771,7 +1775,7 @@ class AmazingDataProvider(DataProvider):
             loop = asyncio.get_event_loop()
             stock_list = await loop.run_in_executor(None, sdk.BaseData.get_stock_list)
 
-            records: list[StockListItem] = []
+            records: list[dict[str, Any]] = []
 
             source_iter: Sequence[Mapping[str, object]]
             if isinstance(stock_list, pd.DataFrame):
@@ -1839,7 +1843,7 @@ class AmazingDataProvider(DataProvider):
                 if short_name:
                     stock["short_name"] = short_name
 
-                records.append(stock)
+                records.append(dict(stock))
 
             if limit is not None and limit > 0:
                 records = records[:limit]
@@ -1857,7 +1861,7 @@ class AmazingDataProvider(DataProvider):
         end_date: Optional[str] = None,
         limit: int = 100,
         **kwargs,
-    ) -> Optional[list[KlineBarMessage]]:
+    ) -> Optional[list[dict[str, Any]]]:
         """获取K线数据 - 实现抽象方法"""
         try:
             df = await self.get_kline(
@@ -1870,9 +1874,9 @@ class AmazingDataProvider(DataProvider):
             )
 
             if df.empty:
-                return []
+                return cast(list[dict[str, Any]], [])
 
-            entries: list[KlineBarMessage] = []
+            entries: list[dict[str, Any]] = []
             df = df.reset_index()
             for _, row in df.iterrows():
                 kline: KlineBarMessage = {
@@ -1890,7 +1894,7 @@ class AmazingDataProvider(DataProvider):
                     "volume": _ensure_float(row.get("volume")),
                     "amount": _ensure_float(row.get("amount")),
                 }
-                entries.append(kline)
+                entries.append(dict(kline))
 
             return entries
         except Exception as e:

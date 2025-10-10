@@ -19,7 +19,6 @@ from loguru import logger
 from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
 
 # AmazingData SDK
-from ._sdk_loader import HAS_AMAZINGDATA, ad
 from .amazingdata import AmazingDataProvider, ProviderConfigLike, SubscriptionCallback
 
 
@@ -38,19 +37,20 @@ class AmazingDataExtended(AmazingDataProvider):
         """确保数据对象已初始化"""
         if not self._initialized_objects and self._connected:
             try:
+                sdk = self._require_sdk()
                 loop = asyncio.get_event_loop()
 
                 # 初始化基础数据对象
-                self._base_data = await loop.run_in_executor(None, ad.BaseData)
+                self._base_data = await loop.run_in_executor(None, sdk.BaseData)
 
                 # 初始化信息数据对象
-                self._info_data = await loop.run_in_executor(None, ad.InfoData)
+                self._info_data = await loop.run_in_executor(None, sdk.InfoData)
 
                 # 获取交易日历
                 calendar = await self.get_calendar()
                 if calendar:
                     # 初始化市场数据对象
-                    self._market_data = await loop.run_in_executor(None, ad.MarketData, calendar)
+                    self._market_data = await loop.run_in_executor(None, sdk.MarketData, calendar)
 
                 self._initialized_objects = True
                 logger.info("AmazingData 数据对象初始化成功")
@@ -421,12 +421,19 @@ class AmazingDataExtended(AmazingDataProvider):
         try:
             effective_period = period
             if effective_period is None:
-                sdk = getattr(self, "_sdk", None) or (ad if hasattr(ad, "constant") else None)
+                try:
+                    sdk = self._require_sdk()
+                except DataProviderError:
+                    sdk = None
+
                 if sdk is not None:
-                    try:
-                        effective_period = sdk.constant.Period.day.value
-                    except AttributeError:
-                        logger.warning("AmazingData SDK 未提供周期常量，退回默认日线")
+                    constant = getattr(sdk, "constant", None)
+                    if constant is not None:
+                        try:
+                            effective_period = constant.Period.day.value
+                        except AttributeError:
+                            logger.warning("AmazingData SDK 未提供周期常量，退回默认日线")
+
                 if effective_period is None:
                     effective_period = "day"
 
@@ -976,9 +983,14 @@ class AmazingDataExtended(AmazingDataProvider):
             return False
 
         try:
+            sdk = self._require_sdk()
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None, ad.update_password, self.config.username, old_password, new_password
+                None,
+                sdk.update_password,
+                self.config.username,
+                old_password,
+                new_password,
             )
 
             if result:

@@ -32,6 +32,9 @@ class ProxyResultPayload(TypedDict, total=False):
     error: Optional[str]
     error_type: Optional[str]
     timestamp: float
+    data: Any
+    rows: list[dict[str, Any]] | list[Any]
+    value: Any
 
 
 class SubscribeResultPayload(TypedDict, total=False):

@@ -38,6 +38,14 @@
   - AmazingData 实体与 WebUI 接口交互时，`None` 可空字段未在模型层收敛。
   详细输出参见命令原始日志摘录。【b95b63†L1-L39】【44503e†L1-L17】【bfe71e†L1-L103】【bf9fc2†L1-L120】【6134f6†L1-L120】【47325d†L1-L120】【40038e†L1-L46】
 
+## 2025-10-13 数据源模块治理进展
+
+- **AmazingData 参数收敛**：`amazingdata.py` 统一在请求调度层补齐 `adjust`、`report_type` 等字段的默认值，并在 `get_stock_list` / `get_kline_data` 中输出 `list[dict[str, Any]]`，与 `DataProvider` 抽象类的协定保持一致。
+- **安全包装器 TypedDict 扩展**：`amazingdata_safe_wrapper.py` 为代理返回结果补充 `data`、`rows`、`value` 字段，使 mypy 能够识别 DataFrame/行集回传的动态结构。
+- **扩展实现 SDK 保障**：`amazingdata_extended.py` 全面改用基类的 `_require_sdk()` 收敛 `ad` 模块，并在缺失周期常量时回退到日线，解决 `Module | None` 属性访问报错。
+- **QMT 后端判空**：`unified_qmt_provider.py` 在调用 `get_kline` 前收窄 `backend`，同时对标准版响应 `json.loads` 结果显式 cast，消除 `Optional` 成员访问警告。
+- **最新基线**：针对上述四个模块执行 `uv run mypy --hide-error-context --no-error-summary --pretty <modules>` 时，仅剩 `deepsearch/config/settings.py` 的 `BusInstanceConfig` 判空问题随依赖链一并输出，目标模块已恢复为零错误。
+
 ## 2025-10-14 代理配置与 asyncpg 桩修复
 
 - **新增内容**：
