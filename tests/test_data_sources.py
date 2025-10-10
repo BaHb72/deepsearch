@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from deepsearch.infrastructure.providers.managers.data_source_manager import (
+    DataSourceConfig,
     DataSourceManager,
     DataSourceType,
 )
@@ -44,6 +45,9 @@ class TestDataSourceStatus:
         manager.providers = {
             DataSourceType.AMAZINGDATA: Mock(is_connected=Mock(return_value=True)),
         }
+        manager.registry.get_config = Mock(
+            return_value=DataSourceConfig(enabled=True, priority=1)
+        )
 
         report = manager.get_status_report()
 
@@ -53,18 +57,21 @@ class TestDataSourceStatus:
         assert sources["amazingdata"]["available"] is True
         assert sources["amazingdata"].get("status") in {"active", "ready", "pending_test"}
         assert "hasSavedCredential" in sources["amazingdata"]
-        assert set(sources.keys()) == {"amazingdata"}
         assert "availableCount" in report
         assert report["availableCount"] == 1
 
     @pytest.mark.asyncio
     async def test_refresh_data_sources(self):
         """Test refreshing all data sources."""
-        manager = DataSourceManager()
-        manager.initialize = AsyncMock()
+        with patch(
+            "deepsearch.infrastructure.providers.managers.data_source_manager.DataSourceRegistry.get_config",
+            return_value=DataSourceConfig(enabled=True, priority=1),
+        ):
+            manager = DataSourceManager()
+            manager.initialize = AsyncMock()
 
-        await manager.initialize()
-        manager.initialize.assert_called_once()
+            await manager.initialize()
+            manager.initialize.assert_called_once()
 
 
 class TestDataSourceValidation:

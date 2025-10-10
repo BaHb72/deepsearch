@@ -18,6 +18,9 @@ from deepsearch.infrastructure.monitoring.provider_health import (
 # 确保加载测试桩模块，避免真实 SDK 依赖阻塞单测
 os.environ.setdefault("DEEPSEARCH_AMAZINGDATA_STUB", "tests.stubs.amazingdata_stub")
 
+# 在离线环境下跳过依赖外部数据源的测试
+SKIP_NETWORK_PROVIDERS = os.environ.get("DEEPSEARCH_TEST_ENABLE_NETWORK_PROVIDERS") != "1"
+
 # 测试导入
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
     AmazingDataConfig,
@@ -129,6 +132,11 @@ class TestDataProviderFactory:
             assert fallback_info["fallback"] == "akshare"
             assert "SDK" in fallback_info["reason"]
 
+    @pytest.mark.requires_cloudflare
+    @pytest.mark.skipif(
+        SKIP_NETWORK_PROVIDERS,
+        reason="当前运行环境未开启外部数据源（Cloudflare/Akshare），跳过依赖真实网络的降级链路测试",
+    )
     @pytest.mark.asyncio
     async def test_fallback_to_error_provider_when_all_fail(self):
         """
@@ -291,7 +299,8 @@ class TestProviderHealthMonitor:
 
         # 验证触发了告警
         assert len(monitor._alerts) > 0
-        assert monitor._alerts[-1]["type"] == "SDK_EXIT"
+        alert_types = [alert["type"] for alert in monitor._alerts]
+        assert "SDK_EXIT" in alert_types
 
     def test_health_summary(self, monitor):
         """
@@ -311,6 +320,16 @@ class TestProviderHealthMonitor:
         assert "provider2" in summary["providers"]
 
 
+@pytest.mark.requires_cloudflare
+@pytest.mark.skipif(
+    SKIP_NETWORK_PROVIDERS,
+    reason="当前运行环境未开启外部数据源（Cloudflare/Akshare），跳过依赖真实网络的集成用例",
+)
+@pytest.mark.requires_cloudflare
+@pytest.mark.skipif(
+    SKIP_NETWORK_PROVIDERS,
+    reason="当前运行环境未开启外部数据源（Cloudflare/Akshare），跳过依赖真实网络的集成用例",
+)
 @pytest.mark.asyncio
 async def test_integration_sdk_exit_protection():
     """

@@ -31,6 +31,7 @@
 ### 2025-10-10 排查记录
 
 - `tests/test_amazingdata_isolation.py::TestSDKIsolation::test_safe_login_catches_system_exit` 失败原因：用例尝试通过 `patch("AmazingData.ad.login")` 注入 `SystemExit`，但 `_login()` 实际调用的是在 `deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata` 模块内导入的 `ad.login`，补丁目标路径不匹配，导致真正的 SDK 登录逻辑被执行并返回成功值，未触发预期的 `DataProviderError`。修复思路是将补丁指向真实引用的模块路径或在测试前显式覆盖 `AmazingDataProvider._sdk` 对象。【F:tests/test_amazingdata_isolation.py†L41-L55】【F:deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata.py†L137-L354】【F:deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata.py†L495-L632】
+- `tests/test_mock_data_provider.py` 曾因夹带的 `patch("deepsearch.config.get_config")` 未覆盖模块内缓存函数，`MockDataProvider` 初始化直接读取真实配置导致 `RuntimeError: MockDataProvider只能在测试环境中使用`。现已改为补丁 `tests.test_mock_data_provider.get_config` 并在 API 场景下通过桩模块验证数据结构，同时引入 `asyncio.wait_for` 限制 `DataProviderFactory.get_provider_async` 的等待时间，防止用例在异步降级链路中卡死。【F:tests/test_mock_data_provider.py†L1-L191】【14361f†L1-L128】
 
 ### 2025-10-10 全量执行结果（最新补充）
 

@@ -4,7 +4,6 @@ app:
   env: prod
   debug: false
   data_dir: ./data
-
 runtime:
   mode: full
 log:
@@ -183,4 +182,3 @@ notifications:
   retry_delay: 1.0
   title_template: 测试默认标题 {symbol}
   body_template: 最新价格：{price}
-
