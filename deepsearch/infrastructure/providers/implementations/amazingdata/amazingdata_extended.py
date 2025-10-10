@@ -19,7 +19,7 @@ from loguru import logger
 from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
 
 # AmazingData SDK
-from ._sdk_loader import ad
+from ._sdk_loader import HAS_AMAZINGDATA, ad
 from .amazingdata import AmazingDataProvider, ProviderConfigLike
 
 
@@ -411,7 +411,7 @@ class AmazingDataExtended(AmazingDataProvider):
             code_list: 代码列表
             begin_date: 开始日期
             end_date: 结束日期
-            period: 周期，如ad.constant.Period.day.value
+            period: 周期，默认退回日线 ("day")
 
         Returns:
             字典，key为代码，value为DataFrame
@@ -419,12 +419,20 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            if period is None:
-                period = ad.constant.Period.day.value
+            effective_period = period
+            if effective_period is None:
+                sdk = getattr(self, "_sdk", None) or (ad if hasattr(ad, "constant") else None)
+                if sdk is not None:
+                    try:
+                        effective_period = sdk.constant.Period.day.value
+                    except AttributeError:
+                        logger.warning("AmazingData SDK 未提供周期常量，退回默认日线")
+                if effective_period is None:
+                    effective_period = "day"
 
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
-                None, self._market_data.query_kline, code_list, begin_date, end_date, period
+                None, self._market_data.query_kline, code_list, begin_date, end_date, effective_period
             )
 
             logger.info("成功获取历史K线数据")

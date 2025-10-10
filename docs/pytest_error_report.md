@@ -37,6 +37,8 @@
 - `uv run pytest` 再次全量执行时成功收集 609 项用例，但在 18% 左右进入 `tests/test_amazingdata_all_apis.py::TestAccountManagement::test_login` 等场景便集中报错，pytest 输出显示上述用例均直接标记为 `ERROR`，导致后续 AmazingData 相关用例持续失败并阻塞整体进度。【63d8e9†L1-L36】【489742†L1-L5】【c581e7†L1-L4】【6c5d00†L1-L6】【30164b†L1-L4】【560fcf†L1-L4】【c0a31b†L1-L9】
 - 通过 `uv run pytest tests/test_amazingdata_all_apis.py::TestAccountManagement::test_login -vv` 单独复现，`mock.patch` 无法找到 `deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_extended.HAS_AMAZINGDATA` 属性，抛出 `AttributeError` 并提前终止，说明批量 ERROR 的根源在于缺失该特性位标记。【ae808d†L1-L18】
 - 全量执行在 `tests/test_amazingdata_isolation.py::TestDataProviderFactory::test_fallback_to_error_provider_when_all_fail` 附近停止响应，只能通过发送 `SIGQUIT` 强制退出，建议修复上述属性缺口后再重新运行全套 pytest，以免覆盖率数据库阻塞测试进程。【c6c121†L1-L4】
+- `tests/test_amazingdata_all_apis.py::TestHistoricalData::test_query_kline` 失败原因：示例环境未加载真实 SDK，`ad.constant.Period.day` 缺失导致默认周期推断抛出 `AttributeError`。已在 `AmazingDataExtended.query_kline` 内优先复用实例化阶段缓存的 `_sdk`，若常量仍不可用则退回字符串日线常量并记录告警，目前用例已稳定通过。【F:deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py†L403-L440】【e12823†L1-L3】
+- 受限网络环境下执行 `uv run pytest` 仍会在 Akshare、Cloudflare 等外部行情调用阶段遭遇 SSL 校验或 DNS 解析失败，同时伴随 Loguru 尝试写入已关闭标准输出的告警；需在具备外网访问与可信证书的环境中复测，以验证真实数据源链路。【9f9bf0†L1-L80】
 
 ## 初步分析
 
