@@ -15,6 +15,14 @@ from pydantic import BaseModel, Field
 from deepsearch.config import get_config
 from deepsearch.webui.api.providers import get_akshare_provider
 
+
+def _format_last_check(value: Any) -> str | None:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, str):
+        return value
+    return None
+
 # 创建路由
 router = APIRouter(prefix="/api/workers", tags=["Workers Proxy"])
 
@@ -148,7 +156,7 @@ async def get_status() -> WorkersStatusResponse:
         workers_detail: list[WorkerDetail] = []
         for url in getattr(provider, "worker_urls", []):
             stats_raw = getattr(provider, "worker_stats", {}).get(url, {})
-            last_check = stats_raw.get("last_check")
+            last_check_str = _format_last_check(stats_raw.get("last_check"))
             stats: WorkerStats = {
                 "total_requests": int(stats_raw.get("total_requests", 0)),
                 "success_count": int(stats_raw.get("success_count", 0)),
@@ -156,7 +164,7 @@ async def get_status() -> WorkersStatusResponse:
                 "fail_streak": int(stats_raw.get("fail_streak", 0)),
                 "success_streak": int(stats_raw.get("success_streak", 0)),
                 "avg_latency": float(stats_raw.get("avg_latency", 0.0)),
-                "last_check": last_check.isoformat() if hasattr(last_check, "isoformat") else None,
+                "last_check": last_check_str,
                 "last_transition": int(stats_raw.get("last_transition", 0)),
             }
             workers_detail.append(
@@ -170,7 +178,7 @@ async def get_status() -> WorkersStatusResponse:
                     "fail_streak": stats["fail_streak"],
                     "success_streak": stats["success_streak"],
                     "avg_latency": stats["avg_latency"],
-                    "last_check": stats["last_check"],
+                    "last_check": last_check_str,
                     "last_transition": stats.get("last_transition", 0),
                     "stats": stats,
                 }
@@ -303,7 +311,7 @@ async def list_workers() -> dict[str, Any]:
             total_requests = int(stats_raw.get("total_requests", 0))
             success_count = int(stats_raw.get("success_count", 0))
             success_rate = success_count / total_requests if total_requests else 0.0
-            last_check = stats_raw.get("last_check")
+            last_check_str = _format_last_check(stats_raw.get("last_check"))
             stats: WorkerStats = {
                 "total_requests": total_requests,
                 "success_count": success_count,
@@ -311,7 +319,7 @@ async def list_workers() -> dict[str, Any]:
                 "fail_streak": int(stats_raw.get("fail_streak", 0)),
                 "success_streak": int(stats_raw.get("success_streak", 0)),
                 "avg_latency": float(stats_raw.get("avg_latency", 0.0)),
-                "last_check": last_check.isoformat() if hasattr(last_check, "isoformat") else None,
+                "last_check": last_check_str,
             }
 
             workers.append(
@@ -325,7 +333,7 @@ async def list_workers() -> dict[str, Any]:
                     "fail_streak": stats["fail_streak"],
                     "success_streak": stats["success_streak"],
                     "avg_latency": stats["avg_latency"],
-                    "last_check": stats["last_check"],
+                    "last_check": last_check_str,
                     "last_transition": int(stats_raw.get("last_transition", 0)),
                     "stats": stats | {"success_rate": success_rate},
                 }

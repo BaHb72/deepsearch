@@ -191,7 +191,7 @@ class MultiLevelCache:
         # 初始化 L2 Redis
         if self.config.l2_enabled:
             try:
-                self.l2_cache = await aioredis.from_url(
+                self.l2_cache = aioredis.from_url(
                     f"redis://{self.config.l2_host}:{self.config.l2_port}/{self.config.l2_db}",
                     password=self.config.l2_password,
                     encoding="utf-8",
@@ -643,6 +643,12 @@ class MultiLevelCache:
 
         # 关闭 Redis 连接
         if self.l2_cache:
-            await self.l2_cache.close()
+            close_coro = getattr(self.l2_cache, "aclose", None)
+            if callable(close_coro):
+                await close_coro()
+            else:
+                close_sync = getattr(self.l2_cache, "close", None)
+                if callable(close_sync):
+                    close_sync()
 
         self._logger.info("多级缓存系统已关闭")

@@ -10,24 +10,46 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from threading import Lock
-from typing import Any, Final, Literal, MutableMapping, NotRequired, Optional, TypedDict, Union, cast
+import importlib
+from typing import TYPE_CHECKING, Any, Final, Literal, MutableMapping, NotRequired, Optional, TypedDict, Union, cast
 
 from loguru import logger
 
-try:
-    from deepsearch.application.services.market.market_service import MarketService
-except ImportError:  # pragma: no cover
-    MarketService = cast(Any, None)
+if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
+    from deepsearch.application.services.market.akshare_direct_service import (
+        AkShareDirectService as AkShareDirectServiceType,
+    )
+    from deepsearch.application.services.market.eastmoney_service import (
+        EastMoneyService as EastMoneyServiceType,
+    )
+    from deepsearch.application.services.market.market_service import (
+        MarketService as MarketServiceType,
+    )
+else:
+    AkShareDirectServiceType = Any
+    EastMoneyServiceType = Any
+    MarketServiceType = Any
 
-try:
-    from deepsearch.application.services.market.eastmoney_service import EastMoneyService
-except ImportError:  # pragma: no cover
-    EastMoneyService = cast(Any, None)
+def _load_symbol(module_name: str, attr: str) -> Any:
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError:  # pragma: no cover - 可选依赖
+        return None
+    return getattr(module, attr, None)
 
-try:
-    from deepsearch.application.services.market.akshare_direct_service import AkShareDirectService
-except ImportError:  # pragma: no cover
-    AkShareDirectService = cast(Any, None)
+
+_MarketServiceImpl = cast(Any, _load_symbol("deepsearch.application.services.market.market_service", "MarketService"))
+_EastMoneyServiceImpl = cast(
+    Any,
+    _load_symbol("deepsearch.application.services.market.eastmoney_service", "EastMoneyService"),
+)
+_AkShareDirectServiceImpl = cast(
+    Any,
+    _load_symbol(
+        "deepsearch.application.services.market.akshare_direct_service",
+        "AkShareDirectService",
+    ),
+)
 
 
 class DataSourceType(str, Enum):
@@ -124,7 +146,7 @@ class DataProviderFactory:
             provider_type: Type of provider to get
                 - "akshare": AkShareProxyProvider
                 - "unified": DataSourceManager
-                - "market": MarketService
+                - "market": MarketServiceType
                 - "qmt": QMTDataProvider
 
         Returns:
@@ -156,16 +178,16 @@ class DataProviderFactory:
                     )
 
                     default_provider = AkShareProxyProvider()
-                    if MarketService is None:
+                    if _MarketServiceImpl is None:
                         raise RuntimeError("MarketService implementation is unavailable")
-                    cls._instances[normalized_type] = MarketService(default_provider)
+                    cls._instances[normalized_type] = _MarketServiceImpl(default_provider)
 
                 elif normalized_type == "qmt":
-                    from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import (
-                        MiniQMTProvider,
+                    logger.warning(
+                        "QMT provider requires explicit asynchronous initialization. "
+                        "Use get_provider_async('qmt') in application bootstrapping."
                     )
-
-                    cls._instances[normalized_type] = MiniQMTProvider()
+                    return None
 
                 else:
                     raise ValueError(f"Unknown provider type: {provider_type}")
@@ -205,16 +227,15 @@ class DataProviderFactory:
                         )
 
                         akshare_provider = cls._instances.get("akshare") or AkShareProxyProvider()
-                        if MarketService is None:
+                        if _MarketServiceImpl is None:
                             raise RuntimeError("MarketService implementation is unavailable")
-                        instance = MarketService(akshare_provider)
+                        instance = _MarketServiceImpl(akshare_provider)
 
                     elif normalized_type == "qmt":
-                        from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import (
-                            MiniQMTProvider,
+                        logger.warning(
+                            "QMT provider requires dedicated environment; returning None"
                         )
-
-                        instance = MiniQMTProvider()
+                        instance = None
 
                     elif normalized_type == "amazingdata":
                         init_success = False
@@ -506,27 +527,27 @@ async def get_unified_manager():
 
 async def get_market_service():
     """FastAPI dependency for Market Service."""
-    if EastMoneyService is not None:
+    if _EastMoneyServiceImpl is not None:
         try:
             logger.info("Using EastMoneyService for fast real market data")
-            return EastMoneyService()
+            return _EastMoneyServiceImpl()
         except Exception as e1:
             logger.warning(f"EastMoneyService failed: {e1}, trying AkShareDirectService")
     else:
         logger.warning("EastMoneyService implementation not available; skipping")
 
-    if AkShareDirectService is not None:
+    if _AkShareDirectServiceImpl is not None:
         try:
             logger.info("Using AkShareDirectService for real market data")
-            return AkShareDirectService()
+            return _AkShareDirectServiceImpl()
         except Exception as e2:
             logger.error(f"AkShareDirectService failed: {e2}")
     else:
         logger.warning("AkShareDirectService implementation not available; skipping")
 
-    if MarketService is not None:
+    if _MarketServiceImpl is not None:
         logger.info("Falling back to MarketService default implementation")
-        return MarketService(None)
+        return _MarketServiceImpl(None)
 
     raise RuntimeError(
         "No market service implementation available; please configure a market data service."

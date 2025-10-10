@@ -185,7 +185,7 @@ async def update_source_config(config: SourceConfigRequest):
 
 @router.get("/stock/{symbol}")
 async def get_stock_info(
-    symbol: str = Path(..., description="股票代码"), response: Response = None
+    symbol: str = Path(..., description="股票代码"), response: Optional[Response] = None
 ):
     """
     获取股票基本信息
@@ -247,7 +247,7 @@ async def get_kline_data(
     period: str = Query("1d", description="K线周期"),
     start_date: Optional[str] = Query(None, description="开始日期"),
     end_date: Optional[str] = Query(None, description="结束日期"),
-    response: Response = None,
+    response: Optional[Response] = None,
 ):
     """
     获取K线数据

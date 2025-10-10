@@ -1154,3 +1154,11 @@ deepsearch/webui/server.py:408: note: By default the bodies of untyped functions
 - 新增 `deepsearch.application.services.market` 下的最小桩文件，封堵 WebUI 依赖缺失导致的 `import-not-found`。
 - 最新基线：`uv run mypy --hide-error-context --no-error-summary --pretty deepsearch` 仍剩余 **117** 条错误，主要集中在 Analytics 组件、数据源工厂、旧版数据 API 及 QMT 网关等区域，后续将继续按模块拆解治理。
 
+## 2025-10-13 - WebUI 数据 API & Redis 桩增补
+
+- 为 `redis`/`redis.asyncio` 桩补充 `from_url`、`delete(*names: str | bytes)` 等接口定义，并扩展 FastAPI `Response.render`、Pandas `Timestamp.to_pydatetime`、SQLAlchemy `sql.Select` 泛型支持，解决缓存初始化与响应渲染的属性缺失报错。
+- 重写 WebUI `chart_api` 的 K 线获取与指标计算流程，改为走 `DataSourceManager.get_kline_data` 并对原始字典做日期归一化，消除对不存在的 `get_kline` 方法和 `Series.to_pydatetime` 的引用。
+- 调整 AmazingData API：补齐配置判空逻辑、统一本地路径兜底 `_resolve_local_path`、在登出流程中调用 `unsubscribe_all`/`stop_async`，并将订阅接口签名与 `AmazingDataExtended` 对齐。
+- 修正系统数据库检测中 DuckDB 连接变量的类型推断，以及 Workers Proxy 报表的时间戳归一化策略，确保 mypy 可识别 `None` 与 `datetime` 的联合类型。
+- 最新基线：`UV_HTTP_TIMEOUT=600 uv run mypy --hide-error-context --no-error-summary --pretty deepsearch` 仍剩余 **50** 条错误，集中在 Analytics 组件、AkShare/QMT 管理器及依赖缺失的监控模块，后续需继续拆分治理。
+

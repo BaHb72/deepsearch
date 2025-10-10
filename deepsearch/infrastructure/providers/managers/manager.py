@@ -217,9 +217,11 @@ class DataProviderManager:
                 miniqmt_enabled = bool(getattr(miniqmt_config, "enabled", False))
 
             if miniqmt_enabled:
-                from .miniqmt import MiniQMTProvider
+                from deepsearch.infrastructure.providers.implementations.qmt.unified_qmt_provider import (
+                    UnifiedQMTProvider,
+                )
 
-                self._miniqmt_provider = MiniQMTProvider()
+                self._miniqmt_provider = UnifiedQMTProvider()
                 await self._miniqmt_provider.initialize_async()
                 self._providers["miniqmt"] = self._miniqmt_provider
                 logger.info("MiniQMT 提供者初始化成功")
