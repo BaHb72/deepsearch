@@ -4,6 +4,7 @@ AmazingData SDK 隔离机制测试用例
 测试SDK退出保护、降级机制、错误处理等功能。
 """
 
+import os
 import asyncio
 from unittest.mock import patch
 
@@ -13,6 +14,9 @@ from deepsearch.infrastructure.monitoring.provider_health import (
     ProviderHealthMonitor,
     ProviderStatus,
 )
+
+# 确保加载测试桩模块，避免真实 SDK 依赖阻塞单测
+os.environ.setdefault("DEEPSEARCH_AMAZINGDATA_STUB", "tests.stubs.amazingdata_stub")
 
 # 测试导入
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
@@ -44,7 +48,9 @@ class TestSDKIsolation:
         测试: safe_login能够捕获SystemExit
         """
         # 模拟SDK调用exit(0)
-        with patch("AmazingData.ad.login") as mock_login:
+        with patch(
+            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.ad.login"
+        ) as mock_login:
             mock_login.side_effect = SystemExit(0)
 
             # 调用_login应该捕获SystemExit并返回错误
@@ -59,7 +65,9 @@ class TestSDKIsolation:
         """
         测试: safe_login能够捕获SystemExit(1)
         """
-        with patch("AmazingData.ad.login") as mock_login:
+        with patch(
+            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.ad.login"
+        ) as mock_login:
             mock_login.side_effect = SystemExit(1)
 
             with pytest.raises(Exception) as exc_info:
