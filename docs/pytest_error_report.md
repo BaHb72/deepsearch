@@ -32,6 +32,12 @@
 
 - `tests/test_amazingdata_isolation.py::TestSDKIsolation::test_safe_login_catches_system_exit` 失败原因：用例尝试通过 `patch("AmazingData.ad.login")` 注入 `SystemExit`，但 `_login()` 实际调用的是在 `deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata` 模块内导入的 `ad.login`，补丁目标路径不匹配，导致真正的 SDK 登录逻辑被执行并返回成功值，未触发预期的 `DataProviderError`。修复思路是将补丁指向真实引用的模块路径或在测试前显式覆盖 `AmazingDataProvider._sdk` 对象。【F:tests/test_amazingdata_isolation.py†L41-L55】【F:deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata.py†L137-L354】【F:deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata.py†L495-L632】
 
+### 2025-10-10 全量执行结果（最新补充）
+
+- `uv run pytest` 再次全量执行时成功收集 609 项用例，但在 18% 左右进入 `tests/test_amazingdata_all_apis.py::TestAccountManagement::test_login` 等场景便集中报错，pytest 输出显示上述用例均直接标记为 `ERROR`，导致后续 AmazingData 相关用例持续失败并阻塞整体进度。【63d8e9†L1-L36】【489742†L1-L5】【c581e7†L1-L4】【6c5d00†L1-L6】【30164b†L1-L4】【560fcf†L1-L4】【c0a31b†L1-L9】
+- 通过 `uv run pytest tests/test_amazingdata_all_apis.py::TestAccountManagement::test_login -vv` 单独复现，`mock.patch` 无法找到 `deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_extended.HAS_AMAZINGDATA` 属性，抛出 `AttributeError` 并提前终止，说明批量 ERROR 的根源在于缺失该特性位标记。【ae808d†L1-L18】
+- 全量执行在 `tests/test_amazingdata_isolation.py::TestDataProviderFactory::test_fallback_to_error_provider_when_all_fail` 附近停止响应，只能通过发送 `SIGQUIT` 强制退出，建议修复上述属性缺口后再重新运行全套 pytest，以免覆盖率数据库阻塞测试进程。【c6c121†L1-L4】
+
 ## 初步分析
 
 ### 2025-10-09 更新
