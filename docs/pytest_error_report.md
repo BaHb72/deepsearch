@@ -28,6 +28,10 @@
 - `uv run pytest tests/api/test_notification_api.py -vv` ✅：通知配置读写链路完全通过，自动生成的 `settings.dev.yaml` 在用例结束后恢复原状。【907ae7†L1-L11】【d18148†L1-L23】
 - `uv run pytest tests/api/test_data_source_api.py::TestDataSourceAPI::test_update_data_source_config -vv` ✅：测试模式下更新 AmazingData 配置返回启用状态，Cloudflare 代理初始化失败仅标记为网络告警，不再阻断配置变更。【9eed42†L1-L11】【2299bb†L1-L6】
 
+### 2025-10-10 排查记录
+
+- `tests/test_amazingdata_isolation.py::TestSDKIsolation::test_safe_login_catches_system_exit` 失败原因：用例尝试通过 `patch("AmazingData.ad.login")` 注入 `SystemExit`，但 `_login()` 实际调用的是在 `deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata` 模块内导入的 `ad.login`，补丁目标路径不匹配，导致真正的 SDK 登录逻辑被执行并返回成功值，未触发预期的 `DataProviderError`。修复思路是将补丁指向真实引用的模块路径或在测试前显式覆盖 `AmazingDataProvider._sdk` 对象。【F:tests/test_amazingdata_isolation.py†L41-L55】【F:deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata.py†L137-L354】【F:deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata.py†L495-L632】
+
 ## 初步分析
 
 ### 2025-10-09 更新
