@@ -48,12 +48,17 @@ def reset_data_source_monitor():
     monitor.reset_metrics()
 
 
+MODULE_UNDER_TEST = "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata"
+
+
 @pytest.fixture()
-def fake_ad_module():
+def fake_ad_module(monkeypatch):
     _fake_ad.login.reset_mock()
     _fake_ad.logout.reset_mock()
     _fake_ad.login.return_value = 0
     _fake_ad.login.side_effect = None
+    monkeypatch.setattr(f"{MODULE_UNDER_TEST}.HAS_AMAZINGDATA", True, raising=False)
+    monkeypatch.setattr(f"{MODULE_UNDER_TEST}.ad", _fake_ad, raising=False)
     return _fake_ad
 
 

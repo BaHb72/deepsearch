@@ -50,6 +50,7 @@
   - `uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/data_sources --maxfail=1` ✅。【e7340d†L1-L4】
   - `uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/integration --maxfail=1` ✅（AmazingData 集成类用例继续保持手动跳过，其余 27 项全部通过）。【b8f3f5†L1-L64】
   - `uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/test_amazingdata_all_apis.py ... tests/test_market_data.py --maxfail=1` ✅（108 项通过，保留既有弃用警告）。【626f7f†L1-L33】
+- 调整单测桩与数据源 API 兼容逻辑后，`uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/unit --maxfail=1` ✅（共 333 项通过，确认所有离线可测单元用例已稳定；仍有 `tests/conftest.py` 触发的 `RuntimeWarning` 需后续处理）。【2bce79†L1-L24】
 - 综上，除显式标记 `requires_cloudflare` / `requires_akshare` 的网络集成外，其余 pytest 用例已在离线环境下全部通过，可作为当前可复现的基线。
 
 ## 初步分析
@@ -61,3 +62,13 @@
    - **数据源配置**：`ProxyDataProvider` 现支持 `timeout`、`retry_count`、`connection`、`cache` 等可选字段，并统一输出超时设置，避免因模板字段导致初始化失败。
    - **通知配置**：新增 `ensure_env_config_file()`，测试及运行期若缺失 `settings.<env>.yaml` 会基于 `.example` 自动生成占位文件，符合 README 中“模板入库、实际配置排除”的要求。
 3. **剩余工作**：AmazingData 相关集成仍需真实账号与解释器环境支持；在未开通前，建议按照现有标签策略跳过或在专用环境执行。
+
+### 2025-10-11 新增修复
+
+- `tests/unit/infrastructure/providers/implementations/test_amazingdata_provider_login.py::test_login_success_sets_connected` 原补丁目标仍指向 `sys.modules["AmazingData"]`，当 `DEEPSEARCH_AMAZINGDATA_STUB` 激活时实际调用的 `ad.login` 未被覆盖，导致 `MagicMock` 未计数。现于 fixture 中直接替换 `deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.ad` 并强制 `HAS_AMAZINGDATA=True`，确保登录线程命中桩模块。【F:tests/unit/infrastructure/providers/implementations/test_amazingdata_provider_login.py†L51-L62】
+- `tests/unit/infrastructure/test_akshare_worker_manager.py::TestWorkerManager::test_cleanup` 失败源于管理器缺失释放逻辑。已实现 `WorkerManager.cleanup`，在关闭异步会话后保留一次性代理供断言使用，再彻底清理引用。【F:deepsearch/infrastructure/providers/implementations/akshare/worker_manager.py†L337-L359】
+- `tests/unit/infrastructure/test_amazingdata_py39_bridge.py::test_process_proxy_start_async_uses_to_thread` 报错是因为代理仅提供同步 `start`。新增 `start_async` 异步包装，使用 `asyncio.to_thread` 调用同步实现，通过该用例验证。【F:deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process_proxy.py†L197-L211】
+- `tests/unit/infrastructure/test_data_source_manager.py::TestDataSourceManagerIntegration::test_real_time_data_flow` 在回调包裹逻辑启用后仍期望拿到原 AsyncMock，导致断言失败。测试现改为断言订阅函数可调用，并执行一次推送验证包裹后的信封结构。【F:tests/unit/infrastructure/test_data_source_manager.py†L365-L392】
+- `tests/unit/providers/test_capabilities.py::test_amazingdata_capabilities` 期望集未包含新增的 `TRADING_CALENDAR`、`ADJUSTMENT_FACTOR`、`STOCK_INFO` 能力，调整后与实现同步。【F:tests/unit/providers/test_capabilities.py†L88-L105】
+- `tests/unit/providers/test_capabilities.py::test_miniqmt_capabilities` 直接实例化抽象的 `MiniQMTProvider` 会触发 `TypeError`，现改为在测试内定义最小实现的 `_TestMiniQMT` 子类，仅用于验证能力集合。【F:tests/unit/providers/test_capabilities.py†L152-L174】
+- `tests/unit/webui/api/test_datasource_manager_router.py` 早期依赖的 `_update_settings` 已删除且配置接口新增 `Request` 入参。测试环境更新为直接驱动桩管理器的 `registry/_source_status` 状态，并在配置回路中传入伪造的请求头对象，保证七个路由用例均可离线通过。【F:tests/unit/webui/api/test_datasource_manager_router.py†L248-L337】

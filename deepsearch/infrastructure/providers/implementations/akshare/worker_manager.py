@@ -333,3 +333,28 @@ class WorkerManager:
             }
 
         return stats
+
+    async def cleanup(self) -> None:
+        """释放底层 HTTP 连接并重置状态。"""
+
+        session = self._session
+        self._session_proxy = None
+
+        if session is None:
+            return
+
+        close = getattr(session, "close", None)
+        if close is None:
+            self._session = None
+            return
+
+        try:
+            result = close()
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as exc:  # pragma: no cover - 仅用于记录异常
+            logger.warning(f"关闭 AkShare worker 会话时出现异常: {exc}")
+        finally:
+            # 暂存原始会话以便测试验证关闭流程，随后彻底清理
+            self._session_proxy = _SessionCloseProxy(session)
+            self._session = None

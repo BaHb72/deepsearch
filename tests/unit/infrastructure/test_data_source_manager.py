@@ -377,4 +377,17 @@ class TestDataSourceManagerIntegration:
         success = await manager.subscribe_realtime(["000001"], callback)
 
         assert success is True
-        provider.subscribe_realtime.assert_called_with(["000001"], callback)
+        assert provider.subscribe_realtime.await_count == 1
+        args, _kwargs = provider.subscribe_realtime.await_args
+        assert args[0] == ["000001"]
+        subscribed = args[1]
+        assert callable(subscribed)
+
+        sample = {"price": 12.3}
+        subscribed(sample)
+        await asyncio.sleep(0)
+
+        callback.assert_awaited_once()
+        envelope = callback.await_args.args[0]
+        assert envelope["payload"] == sample
+        assert envelope["metadata"]["source"] == DataSourceType.AMAZINGDATA.value
