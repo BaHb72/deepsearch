@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Query
 from loguru import logger
 
-from deepsearch.infrastructure.providers.managers.data_source_manager import get_data_source_manager
+from deepsearch.utils.data_sources import get_data_source_manager
 from deepsearch.webui.api.common.response_format import APIResponse, ErrorCodes
 
 router = APIRouter(prefix="/api/data")

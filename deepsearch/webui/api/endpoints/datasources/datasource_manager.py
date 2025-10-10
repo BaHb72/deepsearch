@@ -18,7 +18,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from deepsearch.infrastructure.cache.cache_manager import CacheManager
-from deepsearch.infrastructure.providers.managers.data_source_manager import (
+from deepsearch.utils.data_sources import (
     DataSourceConfig,
     DataSourceLifecycleStatus,
     DataSourceManager,

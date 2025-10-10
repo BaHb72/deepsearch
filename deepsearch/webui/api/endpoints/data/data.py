@@ -18,9 +18,7 @@ from deepsearch.infrastructure.persistence.database import DatabaseService
 from deepsearch.observability.logger import logger
 
 if TYPE_CHECKING:  # pragma: no cover
-    from deepsearch.infrastructure.providers.managers.data_source_manager import (
-        DataSourceManager,
-    )
+    from deepsearch.utils.data_sources import DataSourceManager
 
 router = APIRouter()
 
@@ -55,9 +53,7 @@ def get_analytics_db() -> AnalyticsDB:
 def get_data_service() -> "DataSourceManager":
     """获取数据服务实例（用于测试兼容）"""
     # 返回一个模拟服务对象
-    from deepsearch.infrastructure.providers.managers.data_source_manager import (
-        DataSourceManager,
-    )
+    from deepsearch.utils.data_sources import DataSourceManager
 
     return DataSourceManager.get_instance()
 

@@ -9,10 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 
-from deepsearch.infrastructure.providers.managers.data_source_manager import (
-    DataSourceType,
-    get_data_source_manager,
-)
+from deepsearch.utils.data_sources import DataSourceType, get_data_source_manager
 from deepsearch.webui.api.common.response_format import success_response
 from deepsearch.webui.api.utils import sanitize_for_json
 

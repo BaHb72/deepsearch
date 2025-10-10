@@ -195,9 +195,7 @@ class DataProviderFactory:
                         instance = AkShareProxyProvider()
 
                     elif normalized_type == "unified":
-                        from deepsearch.infrastructure.providers.managers.data_source_manager import (
-                            get_data_source_manager,
-                        )
+                        from deepsearch.utils.data_sources import get_data_source_manager
 
                         instance = get_data_source_manager()
 
@@ -226,29 +224,46 @@ class DataProviderFactory:
                         try:
                             from deepsearch.config import get_config
                             from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
-                                AmazingDataConfig,
                                 AmazingDataProvider,
+                                ensure_amazingdata_provider_config,
                             )
 
                             app_config = get_config()
-                            amazingdata_config = app_config.get("amazingdata", {})
-                            network_provider = amazingdata_config.get("network_provider", "telecom")
-                            server_config = amazingdata_config.get("servers", {}).get(
-                                network_provider, {}
-                            )
+                            data_sources_cfg = getattr(app_config, "data_sources", {})
+                            if isinstance(data_sources_cfg, dict):
+                                providers_cfg = data_sources_cfg.get("providers", {})
+                            else:
+                                providers_cfg = {}
 
-                            config = AmazingDataConfig(
-                                username=amazingdata_config.get("username", ""),
-                                password=amazingdata_config.get("password", ""),
-                                host=server_config.get("host", "101.230.159.234"),
-                                port=server_config.get("port", 8600),
-                                timeout=10,
-                                retry_count=2,
-                                heartbeat_interval=60,
-                                auto_reconnect=True,
-                            )
+                            provider_entry = providers_cfg.get("amazingdata", {})
+                            raw_config = provider_entry.get("config", {})
 
-                            provider = AmazingDataProvider(config)
+                            connection_cfg = raw_config.get("connection", {})
+                            subscription_cfg = raw_config.get("subscription", {})
+                            cache_cfg = raw_config.get("cache", {})
+
+                            config_payload = {
+                                "username": connection_cfg.get("username", ""),
+                                "password": connection_cfg.get("password", ""),
+                                "host": connection_cfg.get("host", "101.230.159.234"),
+                                "port": connection_cfg.get("port", 8600),
+                                "timeout": float(connection_cfg.get("timeout", 10)),
+                                "retry_count": int(connection_cfg.get("max_retries", 3)),
+                                "heartbeat_interval": connection_cfg.get("heartbeat_interval", 60),
+                                "auto_reconnect": connection_cfg.get("auto_reconnect", True),
+                                "reconnect_interval": connection_cfg.get("reconnect_interval", 10),
+                                "subscription_batch_size": subscription_cfg.get("batch_size", 100),
+                                "max_subscriptions": subscription_cfg.get("max_symbols", 500),
+                                "subscription_enabled": subscription_cfg.get("enabled", True),
+                                "cache_enabled": cache_cfg.get("enabled", True),
+                                "cache_ttl": cache_cfg.get("ttl", 300),
+                                "worker_env": provider_entry.get("worker_env", {}),
+                                "tgw_log_path": connection_cfg.get("tgw_log_path", ""),
+                            }
+
+                            provider_config = ensure_amazingdata_provider_config(config_payload)
+
+                            provider = AmazingDataProvider(provider_config)
                             await provider.initialize()
                             chosen_instance = provider
                             init_success = True

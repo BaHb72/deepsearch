@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.infrastructure.providers.managers.data_source_manager import get_data_source_manager
+from deepsearch.utils.data_sources import get_data_source_manager
 from deepsearch.webui.api.common.response_format import (
     APIResponse,
     ErrorCodes,
