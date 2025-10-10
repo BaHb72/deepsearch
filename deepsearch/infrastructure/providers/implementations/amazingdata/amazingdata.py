@@ -112,6 +112,7 @@ class AmazingDataSDKProtocol(Protocol):
     BaseData: Any
     MarketData: Any
     InfoData: Any
+    KLine: Any
     SubscribeData: Callable[..., Any]
 
     def login(self, username: str, password: str, host: str, port: int) -> int:

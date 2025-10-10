@@ -37,6 +37,7 @@ from .amazingdata_types import KlineBarMessage, StockListItem
 
 from .amazingdata import (
     AmazingDataConfig,
+    AmazingDataSDKProtocol,
     ProviderConfigLike,
     ensure_amazingdata_provider_config,
 )
@@ -164,12 +165,14 @@ class OptimizedThreadPoolManager:
 class OptimizedHeartbeat:
     """优化的心跳机制"""
 
-    def __init__(self, config):
+    def __init__(self, config, sdk_getter: Callable[[], AmazingDataSDKProtocol]):
         self.config = config
         self.base_interval = 60  # 基础间隔
         self.current_interval = self.base_interval
         self.consecutive_failures = 0
         self.last_activity = time.time()
+
+        self._sdk_getter = sdk_getter
 
         # 自适应参数
         self.min_interval = 30
@@ -198,7 +201,8 @@ class OptimizedHeartbeat:
         """最小数据查询作为心跳"""
         # 查询今天的交易日历（最小数据）
         today = datetime.now().strftime("%Y%m%d")
-        return ad.BaseData.get_trading_calendar(today, today)
+        sdk = self._sdk_getter()
+        return sdk.BaseData.get_trading_calendar(today, today)
 
     def _on_success(self):
         """心跳成功处理"""
@@ -701,16 +705,18 @@ class OptimizedAmazingDataProvider(DataProvider):
         provider_config = ensure_amazingdata_provider_config(config)
         super().__init__(provider_config)
 
-        if not HAS_AMAZINGDATA:
+        if not HAS_AMAZINGDATA or ad is None:
             raise ImportError("AmazingData SDK 未安装")
 
         self.config: AmazingDataConfig = provider_config
+
+        self._sdk: AmazingDataSDKProtocol = cast(AmazingDataSDKProtocol, ad)
 
         # 优化的组件
         self.thread_pool = OptimizedThreadPoolManager()
         self.cache = OptimizedCacheManager(ttl=300)
         self.subscription_manager = SubscriptionManager()
-        self.heartbeat = OptimizedHeartbeat(provider_config)
+        self.heartbeat = OptimizedHeartbeat(provider_config, self._require_sdk)
 
         # 并发控制
         self.rate_limiter = RateLimiter(rate=100, burst=20)
@@ -725,6 +731,11 @@ class OptimizedAmazingDataProvider(DataProvider):
 
         # 任务管理
         self._heartbeat_task: asyncio.Task[None] | None = None
+
+    def _require_sdk(self) -> AmazingDataSDKProtocol:
+        """确保 SDK 在运行时可用，并向类型检查器收窄可选类型。"""
+
+        return self._sdk
 
     async def connect(self) -> bool:
         """连接到数据源"""
@@ -771,9 +782,10 @@ class OptimizedAmazingDataProvider(DataProvider):
             logger.info("正在登录 AmazingData (优化版本)...")
 
             # 使用优化的线程池执行登录
+            sdk = self._require_sdk()
             result = await asyncio.wait_for(
                 self.thread_pool.execute_async(
-                    ad.login,
+                    sdk.login,
                     self.config.username,
                     self.config.password,
                     self.config.host,
@@ -802,7 +814,8 @@ class OptimizedAmazingDataProvider(DataProvider):
         """登出 AmazingData"""
         try:
             if self._connected:
-                await self.thread_pool.execute_async(ad.logout)
+                sdk = self._require_sdk()
+                await self.thread_pool.execute_async(sdk.logout)
                 self._connected = False
                 logger.info("AmazingData 已登出")
         except Exception as e:
@@ -845,9 +858,11 @@ class OptimizedAmazingDataProvider(DataProvider):
 
             self.monitoring.counters["cache_misses"] += 1
 
+            sdk = self._require_sdk()
+
             async def fetch() -> pd.DataFrame:
                 result = await self.thread_pool.execute_async(
-                    ad.KLine.get_kline, symbol, period, start_date, end_date, count, adjust
+                    sdk.KLine.get_kline, symbol, period, start_date, end_date, count, adjust
                 )
 
                 df = OptimizedDataConverter.convert_kline_vectorized(result)
@@ -929,22 +944,23 @@ class OptimizedAmazingDataProvider(DataProvider):
 
     async def get_stock_list(
         self, limit: Optional[int] = None, **kwargs
-    ) -> Optional[list[StockListItem]]:
+    ) -> Optional[list[dict[str, Any]]]:
         """获取股票列表 - 实现抽象方法"""
         try:
             # 限流
             await self.rate_limiter.acquire()
 
             # 通过优化的线程池执行
-            result = await self.thread_pool.execute_async(ad.BaseData.get_stock_list)
+            sdk = self._require_sdk()
+            result = await self.thread_pool.execute_async(sdk.BaseData.get_stock_list)
 
             if not result:
                 return None
 
             # 转换为标准格式
-            stock_list: list[StockListItem] = []
+            stock_list: list[dict[str, Any]] = []
             for item in result:
-                stock_info: StockListItem = {
+                stock_info: dict[str, Any] = {
                     "symbol": str(item.get("code", "")),
                     "name": str(item.get("name", "")),
                     "exchange": str(item.get("exchange", "")),
@@ -971,7 +987,7 @@ class OptimizedAmazingDataProvider(DataProvider):
         end_date: Optional[str] = None,
         limit: int = 100,
         **kwargs,
-    ) -> Optional[list[KlineBarMessage]]:
+    ) -> Optional[list[dict[str, Any]]]:
         """获取K线数据 - 实现抽象方法"""
         try:
             # 调用已有的get_kline方法
@@ -989,10 +1005,10 @@ class OptimizedAmazingDataProvider(DataProvider):
 
             # 转换为字典列表格式
             df = df.reset_index()
-            kline_data: list[KlineBarMessage] = []
+            kline_data: list[dict[str, Any]] = []
 
             for _, row in df.iterrows():
-                kline_item: KlineBarMessage = {
+                kline_item: dict[str, Any] = {
                     "symbol": symbol,
                     "period": period,
                     "datetime": (

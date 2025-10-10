@@ -1127,3 +1127,11 @@ deepsearch/webui/server.py:408: note: By default the bodies of untyped functions
 
 > 备注：当前主要卡在第三方依赖缺少桩文件与多个组件判空逻辑，后续需优先梳理 Redis/RediTimeSeries/psycopg/SQLAlchemy 的类型支持，并统一整理 `Optional` 配置模型的访问方式。
 
+## 2025-10-11 - AmazingData 类型桩与领域实体兜底
+
+- 为 `AmazingData` 模块补充最小 `.pyi` 类型桩，覆盖登录、登出、K 线查询、BaseData 以及实时订阅接口，修复 `Module has no attribute` 报错。
+- 优化 AmazingData 优化版数据源的 SDK 获取流程，统一通过 `_require_sdk()` 收窄类型，并在心跳、登录与股票/行情查询中返回 `dict[str, Any]`，解决 `Module | None` 与覆写签名不匹配问题。
+- 新增 `deepsearch.domain.entities` 包装层，实现 `Price`、`Stock`、`Trade`、`Order` 等值对象与实体，补齐单测导入依赖。
+- 调整 `Settings.get_timeseries_config` 的兜底分支，避免对 `dict` 调用 `.config` 导致的联合类型访问错误。
+- 最新一次 `uv run mypy --hide-error-context --no-error-summary --pretty deepsearch` 输出显示，剩余问题集中在数据库诊断接口、系统监控 API 与 QMT/AkShare 其它模块，将在后续批次继续清理。
+
