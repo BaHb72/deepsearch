@@ -556,7 +556,11 @@ async def get_health_status() -> HealthResponse:
         overall_status = "healthy"
 
         # 检查CPU使用率
-        cpu_usage = psutil.cpu_percent(interval=0.1)
+        cpu_raw = psutil.cpu_percent(interval=0.1)
+        if isinstance(cpu_raw, (list, tuple)):
+            cpu_usage = float(cpu_raw[0]) if cpu_raw else 0.0
+        else:
+            cpu_usage = float(cpu_raw)
         cpu_check = {
             "name": "CPU Usage",
             "status": "pass" if cpu_usage < 80 else "warn" if cpu_usage < 90 else "fail",

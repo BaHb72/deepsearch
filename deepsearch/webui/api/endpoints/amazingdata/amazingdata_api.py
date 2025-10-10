@@ -544,7 +544,11 @@ async def get_income(request: StockListRequest):
     """
     try:
         provider = await get_amazingdata_provider()
-        result = await provider.get_income(request.code_list, request.local_path, request.is_local)
+        result = await provider.get_income(
+            request.code_list,
+            request.local_path or "",
+            request.is_local,
+        )
         return {"status": "success", "data": dataframe_to_dict(result), "message": "利润表获取成功"}
     except Exception as e:
         logger.error(f"获取利润表失败: {e}")
@@ -560,7 +564,9 @@ async def get_profit_express(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_profit_express(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            request.local_path or "",
+            request.is_local,
         )
         return {
             "status": "success",
@@ -581,7 +587,9 @@ async def get_profit_notice(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_profit_notice(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            request.local_path or "",
+            request.is_local,
         )
         return {
             "status": "success",
@@ -605,7 +613,9 @@ async def get_share_holder(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_share_holder(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            request.local_path or "",
+            request.is_local,
         )
         return {
             "status": "success",
@@ -626,7 +636,9 @@ async def get_holder_num(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_holder_num(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            request.local_path or "",
+            request.is_local,
         )
         return {
             "status": "success",
@@ -647,7 +659,9 @@ async def get_equity_structure(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_equity_structure(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            request.local_path or "",
+            request.is_local,
         )
         return {
             "status": "success",
@@ -668,7 +682,9 @@ async def get_equity_pledge_freeze(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_equity_pledge_freeze(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            request.local_path or "",
+            request.is_local,
         )
         return {
             "status": "success",
@@ -689,7 +705,9 @@ async def get_equity_restricted(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_equity_restricted(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            request.local_path or "",
+            request.is_local,
         )
         return {
             "status": "success",
@@ -713,7 +731,9 @@ async def get_dividend(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_dividend(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            request.local_path or "",
+            request.is_local,
         )
         return {
             "status": "success",
@@ -734,7 +754,9 @@ async def get_right_issue(request: StockListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_right_issue(
-            request.code_list, request.local_path, request.is_local
+            request.code_list,
+            request.local_path or "",
+            request.is_local,
         )
         return {
             "status": "success",

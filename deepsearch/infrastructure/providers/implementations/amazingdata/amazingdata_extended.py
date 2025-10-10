@@ -20,7 +20,7 @@ from deepsearch.infrastructure.providers.interfaces.base import DataProviderErro
 
 # AmazingData SDK
 from ._sdk_loader import HAS_AMAZINGDATA, ad
-from .amazingdata import AmazingDataProvider, ProviderConfigLike
+from .amazingdata import AmazingDataProvider, ProviderConfigLike, SubscriptionCallback
 
 
 class AmazingDataExtended(AmazingDataProvider):
@@ -898,6 +898,64 @@ class AmazingDataExtended(AmazingDataProvider):
         except Exception as e:
             logger.error(f"获取龙虎榜数据失败: {e}")
             return None
+
+    # ================== 实时订阅接口 ==================
+
+    async def subscribe_index_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅指数快照，复用通用订阅能力。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_stock_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅股票快照。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_future_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅期货快照。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_etf_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅 ETF 快照。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_kzz_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅可转债快照。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_hkt_snapshot(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅港股通快照。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="snapshot")
+
+    async def subscribe_kline(
+        self, code_list: list[str], callback: SubscriptionCallback
+    ) -> bool:
+        """订阅 K 线推送。"""
+
+        return await self.subscribe_quote(code_list, callback, data_type="kline")
+
+    async def unsubscribe_all(self) -> bool:
+        """取消所有订阅，兼容 WebAPI 的统一退出逻辑。"""
+
+        if not self._subscriptions:
+            return True
+        return await self.unsubscribe_quote(list(self._subscriptions.keys()))
 
     # ================== 账户管理接口 ==================
 

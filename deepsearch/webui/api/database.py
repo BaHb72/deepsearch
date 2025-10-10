@@ -541,7 +541,7 @@ async def get_database_tables(
                 tables = tables[:limit]
 
             # 初始仅返回表名，默认不统计列与行，保证快速响应
-            table_info = [
+            table_info: list[dict[str, object]] = [
                 {"name": t, "columns": None, "rows": None, "type": "table"} for t in tables
             ]
 
@@ -549,7 +549,8 @@ async def get_database_tables(
             if fetch_columns:
                 for t in table_info:
                     try:
-                        cols = inspector.get_columns(t["name"])
+                        name = cast(str, t.get("name"))
+                        cols = inspector.get_columns(name)
                         t["columns"] = len(cols)
                     except Exception as e:
                         t["columns"] = None
@@ -562,7 +563,8 @@ async def get_database_tables(
                     t = table_info[i]
                     try:
                         # 使用引号包裹表名以降低 SQL 注入/保留字风险（表名来自系统元数据，仍做基本保护）
-                        quoted_name = _quote_identifier(t["name"])
+                        name = cast(str, t.get("name"))
+                        quoted_name = _quote_identifier(name)
                         result = await conn.execute(text(f'SELECT COUNT(*) FROM {quoted_name}'))  # nosec B608 - 标识符已通过 _quote_identifier 校验
                         t["rows"] = result.scalar()
                     except Exception as e:

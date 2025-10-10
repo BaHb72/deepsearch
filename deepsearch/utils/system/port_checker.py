@@ -5,7 +5,7 @@
 """
 
 import socket
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 class PortChecker:
@@ -50,9 +50,15 @@ class PortChecker:
 
         # ZeroMQ 端口
         for bus_name, bus_config in config.message_bus.buses.items():
-            if bus_config.enabled and hasattr(bus_config.config, "pub_port"):
-                ports[f"{bus_name}_pub"] = bus_config.config.pub_port
-                ports[f"{bus_name}_sub"] = bus_config.config.sub_port
+            if not bus_config.enabled:
+                continue
+            config_obj: Any = getattr(bus_config, "config", None)
+            pub_port = getattr(config_obj, "pub_port", None)
+            sub_port = getattr(config_obj, "sub_port", None)
+            if isinstance(pub_port, int):
+                ports[f"{bus_name}_pub"] = pub_port
+            if isinstance(sub_port, int):
+                ports[f"{bus_name}_sub"] = sub_port
 
         # Redis 端口（如果配置了）
         if hasattr(config, "redis") and config.redis:
@@ -146,7 +152,7 @@ class PortChecker:
         return listen_ports
 
     @staticmethod
-    def check_port_conflicts() -> List[Dict[str, any]]:
+    def check_port_conflicts() -> List[Dict[str, Any]]:
         """
         检查端口冲突
 
@@ -237,7 +243,8 @@ class PortChecker:
             print("=" * 60)
             for issue in service_issues:
                 print(f"\n{issue['service']} (端口 {issue['port']}) - {issue['issue']}")
-                if "redis" in issue["service"].lower():
+                service_name = issue.get("service")
+                if isinstance(service_name, str) and "redis" in service_name.lower():
                     print("  提示: 请启动 Redis 服务，或禁用缓存配置")
             print("=" * 60)
 

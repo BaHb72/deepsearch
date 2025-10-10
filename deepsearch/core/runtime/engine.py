@@ -999,7 +999,7 @@ class MainEngine:
                 self._logger.info("Server.serve() was cancelled")
                 # 确保服务器正确关闭
                 if server:
-                    server.should_exit = True
+                    setattr(server, "should_exit", True)
                     # 给服务器一些时间来清理
                     await asyncio.sleep(0.5)
                 raise
@@ -1021,14 +1021,14 @@ class MainEngine:
         except asyncio.CancelledError:
             self._logger.info("WebUI task cancelled, cleaning up...")
             if server:
-                server.should_exit = True
+                setattr(server, "should_exit", True)
             # 不重新抛出，让任务正常结束
         except Exception as e:
             self._logger.error(f"WebUI task error: {e}", exc_info=True)
         finally:
             # 确保资源被清理
             if server:
-                server.should_exit = True
+                    setattr(server, "should_exit", True)
             self._logger.info("WebUI task cleanup completed")
 
     # ==================== 组件访问 ====================

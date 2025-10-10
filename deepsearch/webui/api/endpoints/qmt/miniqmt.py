@@ -7,11 +7,15 @@ MiniQMT API 端点
 from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional
 
+from datetime import datetime
+from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
+
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel
 
 from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTProvider
+from deepsearch.infrastructure.providers.managers.manager import DataProviderManager
 
 # 创建 API 路由
 router = APIRouter(prefix="/api/miniqmt", tags=["MiniQMT"])
@@ -62,8 +66,10 @@ def get_miniqmt_provider() -> MiniQMTProvider:
 
             # 获取数据提供者管理器
             data_manager = manager.get_component("data_provider_manager")
-            if data_manager:
-                _miniqmt_provider = data_manager.get_provider("miniqmt")
+            if isinstance(data_manager, DataProviderManager):
+                provider_candidate = data_manager.get_provider("miniqmt")
+                if isinstance(provider_candidate, MiniQMTProvider):
+                    _miniqmt_provider = provider_candidate
         except Exception as e:
             logger.error(f"获取 MiniQMT 提供者失败: {e}")
 
@@ -205,7 +211,18 @@ async def get_realtime_data(
 
         if response.success:
             # 转换 DataFrame 为 JSON
-            data = response.data.to_dict("records") if response.data is not None else []
+            payload = response.data
+            if payload is None:
+                data: List[Dict[str, Any]] = []
+            elif hasattr(payload, "to_dict"):
+                records_any = getattr(payload, "to_dict")("records")
+                data = cast(List[Dict[str, Any]], records_any)
+            elif isinstance(payload, Mapping):
+                data = [dict(payload)]
+            elif isinstance(payload, Sequence):
+                data = [dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload]
+            else:
+                data = []
 
             return {
                 "success": True,
@@ -259,8 +276,18 @@ async def get_history_data(
         response = await provider.get_data(request)
 
         if response.success:
-            # 转换 DataFrame 为 JSON
-            data = response.data.to_dict("records") if response.data is not None else []
+            payload = response.data
+            if payload is None:
+                data = []
+            elif hasattr(payload, "to_dict"):
+                records_any = getattr(payload, "to_dict")("records")
+                data = cast(List[Dict[str, Any]], records_any)
+            elif isinstance(payload, Mapping):
+                data = [dict(payload)]
+            elif isinstance(payload, Sequence):
+                data = [dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload]
+            else:
+                data = []
 
             return {
                 "success": True,
@@ -311,8 +338,18 @@ async def get_minute_data(
         response = await provider.get_data(request)
 
         if response.success:
-            # 转换 DataFrame 为 JSON
-            data = response.data.to_dict("records") if response.data is not None else []
+            payload = response.data
+            if payload is None:
+                data = []
+            elif hasattr(payload, "to_dict"):
+                records_any = getattr(payload, "to_dict")("records")
+                data = cast(List[Dict[str, Any]], records_any)
+            elif isinstance(payload, Mapping):
+                data = [dict(payload)]
+            elif isinstance(payload, Sequence):
+                data = [dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload]
+            else:
+                data = []
 
             return {
                 "success": True,

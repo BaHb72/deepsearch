@@ -133,7 +133,10 @@ class _WindowsWorkingSetLimiter:
         self.limit_bytes = max(0, limit_bytes)
         self._ctypes: Any = ctypes
         self._wintypes = wintypes
-        kernel32 = ctypes.windll.kernel32
+        windll = getattr(ctypes, "windll", None)
+        if windll is None:
+            raise RuntimeError("ctypes.windll 在当前平台不可用")
+        kernel32 = windll.kernel32
         self._kernel32: Any = kernel32
         kernel32.OpenProcess.restype = wintypes.HANDLE
         kernel32.CloseHandle.restype = wintypes.BOOL

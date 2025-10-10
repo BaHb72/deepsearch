@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, TypedDict, cast
 import aiohttp
 from loguru import logger
 
-from ..base import ProxyConfig
+from ..interfaces.base import ProxyConfig
 from .pool import ProxyPool
 from .validator import ProxyValidator, ProxyValidationResult
 

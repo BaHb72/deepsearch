@@ -1066,12 +1066,12 @@ async def _execute_connection_test(request: TestConnectionRequest) -> Dict[str, 
                     else:
                         import psycopg2
 
-                        conn = psycopg2.connect(conn_string)
-                        cur = conn.cursor()
+                        sync_conn = psycopg2.connect(conn_string)
+                        cur = sync_conn.cursor()
                         cur.execute("SELECT version()")
                         version = cur.fetchone()
                         cur.close()
-                        conn.close()
+                        sync_conn.close()
                         result["success"] = True
                         result["message"] = "连接成功"
                         result["details"]["version"] = version[0] if version else "Unknown"

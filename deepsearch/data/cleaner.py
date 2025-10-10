@@ -258,16 +258,17 @@ class DataCleaner:
         mode_raw = cast(object, modes.iloc[0])
         if isinstance(mode_raw, pd.Timedelta):
             mode_diff = mode_raw
-        elif isinstance(mode_raw, np.timedelta64):
-            mode_diff = pd.Timedelta(mode_raw)
         elif isinstance(mode_raw, timedelta):
             mode_diff = pd.Timedelta(mode_raw)
         else:
-            normalized = str(mode_raw) if isinstance(mode_raw, (int, float)) else mode_raw
-            mode_diff = cast(
-                pd.Timedelta,
-                pd.to_timedelta(cast(TimedeltaScalar, normalized)),
-            )
+            try:
+                mode_diff = pd.Timedelta(mode_raw)
+            except (TypeError, ValueError):
+                normalized = str(mode_raw) if isinstance(mode_raw, (int, float)) else mode_raw
+                mode_diff = cast(
+                    pd.Timedelta,
+                    pd.to_timedelta(cast(TimedeltaScalar, normalized)),
+                )
 
         # 推断频率
         if mode_diff <= pd.Timedelta(minutes=1):

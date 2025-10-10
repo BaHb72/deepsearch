@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 
 from deepsearch.config import get_config
-from deepsearch.infrastructure.providers.base import DataSourceType
+from deepsearch.infrastructure.providers.interfaces.base import DataSourceType
 
 
 @dataclass

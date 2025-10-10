@@ -4,19 +4,20 @@ Strategy API Endpoints
 FastAPI routes for strategy management and backtesting.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from deepsearch.strategies import get_strategy_manager
-from deepsearch.strategies.services.backtest_service import get_backtest_service
-from deepsearch.strategy.strategies import (
-    MeanReversionStrategy,
-    MomentumStrategy,
-    MovingAverageStrategy,
+from deepsearch.strategies.managers.manager import get_strategy_manager
+from deepsearch.strategies.services.backtest_service import (
+    StrategyComparisonConfig,
+    get_backtest_service,
 )
+from deepsearch.strategies.implementations.mean_reversion import MeanReversionStrategy
+from deepsearch.strategies.implementations.momentum import MomentumStrategy
+from deepsearch.strategies.implementations.moving_average import MovingAverageStrategy
 
 # API Router
 router = APIRouter(prefix="/api/strategy", tags=["strategy"])
@@ -372,8 +373,10 @@ async def compare_strategies(request: CompareRequest):
             )
 
         # Run comparison
+        typed_strategies = cast(list[StrategyComparisonConfig], strategies)
+
         results = await service.compare_strategies(
-            strategies=strategies,
+            strategies=typed_strategies,
             symbols=request.symbols,
             start_date=request.start_date,
             end_date=request.end_date,

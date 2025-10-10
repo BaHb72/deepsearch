@@ -9,7 +9,7 @@ import json
 import socket
 import struct
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import pandas as pd
 from loguru import logger
@@ -64,23 +64,23 @@ class MiniQMTProvider(DataProvider):
         self.password = ""
 
         # 连接状态
-        self.socket = None
+        self.socket: Optional[socket.socket] = None
         self.connected = False
         self.reconnect_attempts = 0
         self.max_reconnect_attempts = 5
 
         # 订阅管理
-        self.subscribed_symbols = set()
-        self.symbol_callbacks = {}
+        self.subscribed_symbols: set[str] = set()
+        self.symbol_callbacks: dict[str, list[Callable[[Dict[str, Any]], Awaitable[None] | None]]] = {}
 
         # 心跳管理
         self.last_heartbeat = time.time()
         self.heartbeat_interval = 30  # 30秒心跳
-        self.heartbeat_task = None
+        self.heartbeat_task: Optional[asyncio.Task[None]] = None
 
         # 数据接收
-        self.receive_task = None
-        self.data_queue = asyncio.Queue(maxsize=10000)
+        self.receive_task: Optional[asyncio.Task[None]] = None
+        self.data_queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue(maxsize=10000)
 
     def get_capabilities(self) -> set[DataCapability]:
         """返回 MiniQMT 支持的数据能力集合。"""
@@ -100,14 +100,21 @@ class MiniQMTProvider(DataProvider):
 
         config = get_config()
 
-        if hasattr(config, "miniqmt"):
-            miniqmt_config = config.miniqmt
-            if hasattr(miniqmt_config, "connection"):
-                conn = miniqmt_config.connection
-                self.host = getattr(conn, "host", self.host)
-                self.port = getattr(conn, "port", self.port)
-                self.username = getattr(conn, "username", self.username)
-                self.password = getattr(conn, "password", self.password)
+        miniqmt_config: Any = getattr(config, "miniqmt", None)
+        connection: Any = None
+
+        if isinstance(miniqmt_config, dict):
+            connection = miniqmt_config.get("connection")
+            self.host = str(miniqmt_config.get("host", self.host))
+            self.port = int(miniqmt_config.get("port", self.port))
+        elif miniqmt_config is not None:
+            connection = getattr(miniqmt_config, "connection", None)
+
+        if connection is not None:
+            self.host = str(getattr(connection, "host", self.host))
+            self.port = int(getattr(connection, "port", self.port))
+            self.username = str(getattr(connection, "username", self.username))
+            self.password = str(getattr(connection, "password", self.password))
 
         logger.info(f"MiniQMT 配置: {self.host}:{self.port}")
 

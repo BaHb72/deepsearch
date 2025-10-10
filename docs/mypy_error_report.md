@@ -38,6 +38,28 @@
   - AmazingData 实体与 WebUI 接口交互时，`None` 可空字段未在模型层收敛。
   详细输出参见命令原始日志摘录。【b95b63†L1-L39】【44503e†L1-L17】【bfe71e†L1-L103】【bf9fc2†L1-L120】【6134f6†L1-L120】【47325d†L1-L120】【40038e†L1-L46】
 
+# 2025-10-12 离线治理进展
+
+- **新增第三方类型桩**：补齐 `asyncpg`、`psycopg`, `requests`、`urllib3`、`jose` 等最小 `.pyi`，并在 `typings/deepsearch` 下扩展缺失包，缓解 `name-defined` 与 `import-not-found` 报错。
+- **运行时模块补注**：`ProxyConfig`、`MiniQMTProvider`、`AmazingDataExtended`、`system_data_service`、`monitor_api` 等模块补充注解与参数规范，解决 CPU 使用率取值为 `list[float]`、可空本地路径、订阅接口缺失等问题。
+- **数据库工具优化**：`port_checker`、`database_manager` 与 `database` 路由引入 `cast` 与同步/异步连接分支，避免 `dict[str, Any]` 与 `AsyncConnection` 类型混淆。
+- **最新执行**：`uv run mypy --hide-error-context --no-error-summary --pretty deepsearch` 仍失败，约 270 个历史问题尚待处理，集中在 SQLAlchemy stub 缺失（`AsyncSession.add/delete`、`AsyncSession.add_all`）、DataProvider 接口覆写、`DataSourceType`/`DataCapability` 枚举扩展以及 WebUI/AmazingData/TSA 适配层。详见日志【0ba6a5†L1-L400】【0a0ca4†L1-L120】。
+- **后续建议**：优先补充 SQLAlchemy/psycopg 官方 stub 或自建最小声明，梳理数据源协议与 WebAPI 参数的可空性，并针对 QMT/AkShare/AmazingData 适配器建立 `.pyi` 或 TypedDict，以逐步清理剩余错误。
+
+## 2025-10-12 再次全量扫描
+
+- **新增缓解措施**：为 Cloudflare 提供者、MiniQMT 采集器、AkShare 历史接口以及多项基础设施组件补充运行时注解与 `.pyi` 桩文件，局部解决 pandas 按位运算、psutil 进程指标、asyncpg/SQLAlchemy 上下文协议等高频告警。
+- **执行命令**：`uv run mypy --hide-error-context --no-error-summary --pretty deepsearch`
+- **最新结果**：仍有 **289** 处错误（详见 `mypy.log`），主要新增/遗留风险包括：
+  1. WebUI 层大量依赖 FastAPI/Starlette 可选组件（`Security`、`UploadFile`、`Response.mount` 等）缺乏 stub，导致入参、返回值类型判定失败。
+  2. `multilevel_cache.py`、`optimized_pool.py`、`query_optimizer.py` 等基础设施模块调用 asyncpg、requests、SQLAlchemy API 时缺少显式 TypedDict 或 stub 支撑，事务与连接池属性仍被视为不存在。
+  3. `AmazingDataExtended`、`AkShareProxyProvider` 等运行时新增的属性未在类型层声明，`.pyi` 需要继续补齐或在实现内加上 `cast`/TypedDict。
+  4. 系统工具、端口检测与监控模块依旧混用动态结构，并引用 Windows 特定 API（如 `ctypes.windll`），需按平台拆分与显式 `typing.cast` 才能收敛。
+- **建议**：
+  - 先补齐 FastAPI、requests、psycopg2、pyarrow 等第三方 stub，再针对 WebUI/API 层逐一清理 `Any` 与非法索引；
+  - 为 `AmazingData`、`AkShare` 等 provider 在 `typings/` 下补充 `.pyi` 文件，或改用 `TypedDict` 显式建模配置/响应字段；
+  - 对于无短期治理计划的历史模块，可考虑在 `pyproject.toml` 中增加逐包 overrides，隔离后续增量任务的检查范围。
+
 
 ## 完整 mypy 输出
 

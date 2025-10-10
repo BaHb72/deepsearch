@@ -48,6 +48,10 @@ class WebSocket:
 class WebSocketDisconnect(Exception):
     code: int
 
+class JSONResponse(Response):
+    media_type: Optional[str]
+    def render(self, content: Any) -> bytes: ...
+
 class HTTPException(Exception):
     status_code: int
     detail: Any
@@ -100,6 +104,13 @@ def Header(default: Any = ..., *args: Any, **kwargs: Any) -> Any: ...
 
 def Cookie(default: Any = ..., *args: Any, **kwargs: Any) -> Any: ...
 
+def Security(
+    dependency: Callable[..., Any],
+    scopes: Sequence[str] | None = ...,
+    *,
+    use_cache: bool = ...,
+) -> Any: ...
+
 __all__ = [
     "APIRouter",
     "FastAPI",
@@ -110,10 +121,12 @@ __all__ = [
     "Path",
     "Header",
     "Cookie",
+    "Security",
     "Request",
     "Response",
     "WebSocket",
     "WebSocketDisconnect",
+    "JSONResponse",
     "BackgroundTasks",
     "status",
 ]

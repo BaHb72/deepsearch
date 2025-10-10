@@ -6,12 +6,18 @@
 import os
 import re
 from datetime import date
-from typing import Any, Dict, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
 
 import duckdb
 import pandas as pd
 
 from deepsearch.observability.logger import logger
+
+
+if TYPE_CHECKING:
+    from duckdb import DuckDBPyConnection
+else:  # pragma: no cover - runtime fallback for typing only
+    DuckDBPyConnection = Any
 
 
 class AnalyticsDB:
@@ -52,7 +58,7 @@ class AnalyticsDB:
             os.makedirs(db_dir, exist_ok=True)
 
         self.db_path = db_path
-        self.conn: Optional[duckdb.DuckDBPyConnection] = None
+        self.conn: Optional[DuckDBPyConnection] = None
         self.logger = logger.bind(module="分析数据库")
 
     def connect(self) -> None:

@@ -15,13 +15,13 @@ from loguru import logger
 
 # 临时的缓存实现
 class StockInfoCache:
-    def __init__(self):
-        self._cache = {}
+    def __init__(self) -> None:
+        self._cache: dict[str, Dict[str, Any]] = {}
 
-    def get(self, symbol):
+    def get(self, symbol: str) -> Dict[str, Any] | None:
         return self._cache.get(symbol)
 
-    def set(self, symbol, data):
+    def set(self, symbol: str, data: Dict[str, Any]) -> None:
         self._cache[symbol] = data
 
 
@@ -34,11 +34,10 @@ def get_stock_info_cache():
 
 try:
     import pandas as pd
+except ImportError:  # pragma: no cover - 可选依赖
+    pd = None  # type: ignore[assignment]
 
-    HAS_PANDAS = True
-except ImportError:
-    HAS_PANDAS = False
-    pd = None
+HAS_PANDAS = pd is not None
 
 
 class ProxyDataProvider:
@@ -71,8 +70,8 @@ class ProxyDataProvider:
         configured_retry = retry_count if retry_count is not None else connection.get("retry_count")
         self._retry_count = int(configured_retry) if configured_retry is not None else 3
 
-        self.session = None
-        self._cache = {}
+        self.session: aiohttp.ClientSession | None = None
+        self._cache: dict[str, tuple[float, Dict[str, Any]]] = {}
         self._cache_ttl = {"realtime": 5, "minute": 60, "daily": 300, "info": 3600}
         self._cache_config = cache or {}
         self._extra_options = kwargs
@@ -162,13 +161,11 @@ class ProxyDataProvider:
                 return None
 
             # 获取data字段
-            data = hist_data.get("data", [])
-            if not data:
+            data_raw = hist_data.get("data", [])
+            if not isinstance(data_raw, list):
                 return None
 
-            # 应用限制
-            if limit and limit > 0:
-                data = data[-limit:]
+            data = data_raw[-limit:] if limit and limit > 0 else data_raw
 
             logger.info(f"CloudFlare返回{len(data)}条K线数据")
             return data
@@ -626,15 +623,26 @@ class ProxyDataProvider:
         """兼容原有接口"""
         # 判断请求类型
         if path == "stock_zh_a_hist":
+            symbol_value = params.get("symbol")
+            if not isinstance(symbol_value, str):
+                return {"error": "symbol 参数缺失"}
+            period_value = params.get("period", "daily")
+            period = str(period_value) if isinstance(period_value, str) else "daily"
+            start_date = params.get("start_date")
+            end_date = params.get("end_date")
+            adjust_value = params.get("adjust", "")
+            adjust = str(adjust_value) if isinstance(adjust_value, str) else ""
             return await self.get_stock_hist(
-                params.get("symbol"),
-                params.get("period", "daily"),
-                params.get("start_date"),
-                params.get("end_date"),
-                params.get("adjust", ""),
+                symbol=symbol_value,
+                period=period,
+                start_date=start_date if isinstance(start_date, str) else None,
+                end_date=end_date if isinstance(end_date, str) else None,
+                adjust=adjust,
             )
         elif path == "stock_zh_a_spot_em":
-            return await self.get_realtime_quote(params.get("symbol", "000001"))
+            symbol_raw = params.get("symbol", "000001")
+            symbol = str(symbol_raw)
+            return await self.get_realtime_quote(symbol)
         else:
             logger.warning(f"未支持的API: {path}")
             return {"data": [], "error": f"Unsupported API: {path}"}

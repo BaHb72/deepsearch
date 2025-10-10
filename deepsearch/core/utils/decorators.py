@@ -13,7 +13,7 @@ from typing import Any, Callable, Optional, TypeVar, cast
 
 from deepsearch.observability import get_logger
 
-from .interfaces import ComponentLifecycleError
+from .exceptions import ComponentLifecycleError
 
 # 类型变量
 F = TypeVar("F", bound=Callable[..., Any])

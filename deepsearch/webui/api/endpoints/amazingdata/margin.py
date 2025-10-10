@@ -3,7 +3,7 @@ AmazingData 融资融券与龙虎榜数据接口
 修正调用签名以匹配 provider，并补充本地过滤逻辑
 """
 
-from typing import List, Optional
+from typing import List, Optional, Sequence, cast
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
@@ -47,13 +47,15 @@ def _apply_date_filter(data: Optional[pd.DataFrame], start: Optional[str], end: 
     return data
 
 
-def _apply_column_selection(data: Optional[pd.DataFrame], columns: Optional[List[str]]) -> Optional[pd.DataFrame]:
+def _apply_column_selection(
+    data: Optional[pd.DataFrame], columns: Optional[Sequence[str]]
+) -> Optional[pd.DataFrame]:
     if data is None or data.empty or not columns:
         return data
     valid = [column for column in columns if column in data.columns]
     if not valid:
         return data
-    return data.loc[:, valid]
+    return cast(pd.DataFrame, data.loc[:, valid])
 
 
 @router.get("/margin-summary", summary="获取融资融券汇总")

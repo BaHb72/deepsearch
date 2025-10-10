@@ -238,7 +238,7 @@ class PerformanceTracker:
         self._collect_thread = None
         self._last_disk_io = None
         self._last_network_io = None
-        self._process = psutil.Process()
+        self._process: psutil.Process = psutil.Process()
 
         # 初始化默认告警规则
         self._init_default_alert_rules()
@@ -375,7 +375,11 @@ class PerformanceTracker:
     def _collect_system_metrics(self) -> SystemMetrics:
         """采集系统指标"""
         # CPU使用率
-        cpu_percent = psutil.cpu_percent(interval=None)
+        cpu_percent_raw = psutil.cpu_percent(interval=None)
+        if isinstance(cpu_percent_raw, list):
+            cpu_percent = float(sum(cpu_percent_raw) / len(cpu_percent_raw)) if cpu_percent_raw else 0.0
+        else:
+            cpu_percent = float(cpu_percent_raw)
 
         # 内存使用
         memory = psutil.virtual_memory()
@@ -400,9 +404,14 @@ class PerformanceTracker:
 
         # 进程信息
         try:
-            process_info = self._process.as_dict(attrs=["num_threads", "num_fds"])
-            thread_count = process_info.get("num_threads", 0)
-            open_files = process_info.get("num_fds", 0)
+            process_info: dict[str, object] = {}
+            as_dict = getattr(self._process, "as_dict", None)
+            if callable(as_dict):
+                process_info = cast(dict[str, object], as_dict(attrs=["num_threads", "num_fds"]))
+            raw_thread = process_info.get("num_threads", 0) if process_info else 0
+            raw_fds = process_info.get("num_fds", 0) if process_info else 0
+            thread_count = int(raw_thread) if isinstance(raw_thread, (int, float)) else 0
+            open_files = int(raw_fds) if isinstance(raw_fds, (int, float)) else 0
         except Exception:
             thread_count = open_files = 0
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Optional, TYPE_CHECKING
+from typing import Any, AsyncIterator, Optional, TYPE_CHECKING, cast
 
 from uvicorn.config import Config, LOGGING_CONFIG
 from uvicorn.server import Server
@@ -20,7 +20,7 @@ from deepsearch.webui.api.models import WebServerConfig
 
 
 if TYPE_CHECKING:
-    from asyncio import WindowsProactorEventLoopPolicy as WindowsEventLoopPolicyBase
+    from asyncio import AbstractEventLoopPolicy as WindowsEventLoopPolicyBase
 elif hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
     WindowsEventLoopPolicyBase = asyncio.WindowsProactorEventLoopPolicy
 else:  # pragma: no cover - 非 Windows 平台兜底
@@ -135,7 +135,7 @@ class ServerManager:
         if config_model.headers is not None:
             config_kwargs["headers"] = [tuple(header) for header in config_model.headers]
 
-        config = Config(app=app, **config_kwargs)
+        config = Config(app=app, **cast(dict[str, Any], config_kwargs))
 
         if config_model.extras:
             for key, value in config_model.extras.items():

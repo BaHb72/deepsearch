@@ -280,7 +280,7 @@ class AkShareAdapter(IAkShareProvider):
             if result.empty:
                 return []
             return [
-                AkShareAdapter._normalize_row(row)
+                AkShareAdapter._normalize_row(cast(Mapping[str, Any], row))
                 for row in result.to_dict(orient="records")
                 if isinstance(row, dict)
             ]
@@ -290,7 +290,7 @@ class AkShareAdapter(IAkShareProvider):
                 if data.empty:
                     return []
                 return [
-                    AkShareAdapter._normalize_row(row)
+                    AkShareAdapter._normalize_row(cast(Mapping[str, Any], row))
                     for row in data.to_dict(orient="records")
                     if isinstance(row, dict)
                 ]
@@ -309,7 +309,7 @@ class AkShareAdapter(IAkShareProvider):
             if result.empty:
                 return []
             return [
-                AkShareAdapter._normalize_row(row)
+                AkShareAdapter._normalize_row(cast(Mapping[str, Any], row))
                 for row in result.to_dict(orient="records")
                 if isinstance(row, dict)
             ]
@@ -319,7 +319,7 @@ class AkShareAdapter(IAkShareProvider):
                 if data.empty:
                     return []
                 return [
-                    AkShareAdapter._normalize_row(row)
+                    AkShareAdapter._normalize_row(cast(Mapping[str, Any], row))
                     for row in data.to_dict(orient="records")
                     if isinstance(row, dict)
                 ]
