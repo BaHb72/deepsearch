@@ -41,6 +41,17 @@
 - `tests/test_amazingdata_all_apis.py::TestHistoricalData::test_query_kline` 失败原因：示例环境未加载真实 SDK，`ad.constant.Period.day` 缺失导致默认周期推断抛出 `AttributeError`。已在 `AmazingDataExtended.query_kline` 内优先复用实例化阶段缓存的 `_sdk`，若常量仍不可用则退回字符串日线常量并记录告警，目前用例已稳定通过。【F:deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py†L403-L440】【e12823†L1-L3】
 - 受限网络环境下执行 `uv run pytest` 仍会在 Akshare、Cloudflare 等外部行情调用阶段遭遇 SSL 校验或 DNS 解析失败，同时伴随 Loguru 尝试写入已关闭标准输出的告警；需在具备外网访问与可信证书的环境中复测，以验证真实数据源链路。【9f9bf0†L1-L80】
 
+### 2025-10-11 最新进展
+
+- `DataProviderFactory.clear_all()` 在存在已缓存实例时会持有 `_lock` 后直接调用同样会尝试获取该锁的 `clear_instance()`，导致 `tests/test_mock_data_provider.py::TestAPIWithMockData::test_api_fallback_in_production` 等用例在批量执行时死锁。现已改为先复制实例键列表并在锁外逐一调用 `clear_instance`，彻底消除重入问题。【F:deepsearch/webui/api/providers.py†L209-L234】
+- 关闭覆盖率统计后，分批运行所有不依赖外部网络的 pytest 集合，结果如下：
+  - `uv run pytest --no-cov tests/test_mock_data_provider.py -vv` ✅。【be9ee2†L1-L5】
+  - `uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/api --maxfail=1` ✅（31 项全部通过，仅余 `pkg_resources` 弃用告警）。【719514†L1-L24】
+  - `uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/data_sources --maxfail=1` ✅。【e7340d†L1-L4】
+  - `uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/integration --maxfail=1` ✅（AmazingData 集成类用例继续保持手动跳过，其余 27 项全部通过）。【b8f3f5†L1-L64】
+  - `uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/test_amazingdata_all_apis.py ... tests/test_market_data.py --maxfail=1` ✅（108 项通过，保留既有弃用警告）。【626f7f†L1-L33】
+- 综上，除显式标记 `requires_cloudflare` / `requires_akshare` 的网络集成外，其余 pytest 用例已在离线环境下全部通过，可作为当前可复现的基线。
+
 ## 初步分析
 
 ### 2025-10-09 更新

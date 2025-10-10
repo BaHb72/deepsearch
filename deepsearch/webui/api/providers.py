@@ -402,9 +402,13 @@ class DataProviderFactory:
     @classmethod
     def clear_all(cls):
         """Clear all provider instances."""
+        # NOTE: ``clear_instance`` 会获取 ``_lock``，因此不能在已持有锁的情况下直接调用，
+        # 否则会因为 ``threading.Lock`` 不可重入而造成死锁（在 pytest 批量执行时会卡住）。
         with cls._lock:
-            for provider_type in list(cls._instances.keys()):
-                cls.clear_instance(provider_type)
+            provider_types = list(cls._instances.keys())
+
+        for provider_type in provider_types:
+            cls.clear_instance(provider_type)
 
     @classmethod
     def get_stats(cls) -> ProviderFactoryStats:
