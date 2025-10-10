@@ -739,16 +739,22 @@ async def update_data_source_config(request: Request, source: str, payload: Conf
     update_data = payload.model_dump(exclude_unset=True)
     if "enabled" in update_data:
         desired_enabled = bool(update_data["enabled"])
-        previous_enabled = config.enabled
-        config.enabled = desired_enabled
+        pending_reactivation = bool(status_entry.get("pending_reactivation"))
+        was_soft_disabled = (
+            status_entry.get("degraded_reason") == "disabled_by_config"
+            or status_entry.get("reason") == "disabled_by_config"
+            or pending_reactivation
+        )
+        updated_fields = set(update_data.keys())
         if desired_enabled:
-            was_soft_disabled = (
-                status_entry.get("degraded_reason") == "disabled_by_config"
-                or status_entry.get("reason") == "disabled_by_config"
-                or not previous_enabled
-            )
-            if test_mode and was_soft_disabled:
+            only_toggle = updated_fields == {"enabled"}
+            if test_mode and was_soft_disabled and only_toggle:
+                logger.info(
+                    "检测到测试模式启用请求，暂不立即恢复 {}，标记待复测状态",
+                    source_type.value,
+                )
                 manager.mark_test_reactivation_pending(source_type)
+                config.enabled = False
             else:
                 manager.enable_provider(source_type)
         else:
