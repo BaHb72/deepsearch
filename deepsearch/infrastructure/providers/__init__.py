@@ -4,10 +4,12 @@
 提供统一的数据源访问能力，支持多数据源与降级管理。
 """
 
+from typing import Any, cast
+
 try:
     from .implementations.akshare.akshare import AkShareProxyProvider
 except Exception:  # pragma: no cover - 降级场景下容忍缺少依赖
-    AkShareProxyProvider = None
+    AkShareProxyProvider = cast(Any, None)
 
 
 def _safe_import(path: str, name: str):

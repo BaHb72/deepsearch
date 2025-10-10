@@ -639,7 +639,7 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
                 sync_client.ping()
 
                 # 获取 Redis 信息
-                info = sync_client.info()
+                info = dict(sync_client.info())
                 redis_version = info.get("redis_version", "Unknown")
 
                 # 关闭连接

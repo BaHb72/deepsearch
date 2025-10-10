@@ -1146,3 +1146,11 @@ deepsearch/webui/server.py:408: note: By default the bodies of untyped functions
 - 调整 `Settings.get_timeseries_config` 的兜底分支，避免对 `dict` 调用 `.config` 导致的联合类型访问错误。
 - 最新一次 `uv run mypy --hide-error-context --no-error-summary --pretty deepsearch` 输出显示，剩余问题集中在数据库诊断接口、系统监控 API 与 QMT/AkShare 其它模块，将在后续批次继续清理。
 
+## 2025-10-12 - Redis/AkShare/市场 API 批次治理
+
+- 扩充 `sqlalchemy`、`fastapi`、`redis` 与 `duckdb` 最小类型桩，补齐 `Result.scalar_one_or_none`、`Response.headers` 可写性、`Redis.scan` 以及 DuckDB 关系对象的 `df()/fetchone()` 等接口定义，解除缓存与分析模块的属性缺失报错。
+- 调整 `AkShareRequestHandler` 的返回值判定、同步数据库 URL 兜底、查询优化器的配置探测逻辑，并在 Redis 缓存 `setex` 调用前统一换算 TTL 秒数，修复缓存、数据库初始化与慢查询监控的类型告警。
+- 更新市场数据 API：补充 QMT/MiniQMT 真实类引用、等待实时行情协程，以及为 Redis/系统配置等路由补充 `dict(...)` 转换与可空处理，使 WebUI 侧相关 mypy 错误显著下降。
+- 新增 `deepsearch.application.services.market` 下的最小桩文件，封堵 WebUI 依赖缺失导致的 `import-not-found`。
+- 最新基线：`uv run mypy --hide-error-context --no-error-summary --pretty deepsearch` 仍剩余 **117** 条错误，主要集中在 Analytics 组件、数据源工厂、旧版数据 API 及 QMT 网关等区域，后续将继续按模块拆解治理。
+

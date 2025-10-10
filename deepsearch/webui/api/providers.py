@@ -162,10 +162,10 @@ class DataProviderFactory:
 
                 elif normalized_type == "qmt":
                     from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import (
-                        MiniQMTDataProvider,
+                        MiniQMTProvider,
                     )
 
-                    cls._instances[normalized_type] = MiniQMTDataProvider()
+                    cls._instances[normalized_type] = MiniQMTProvider()
 
                 else:
                     raise ValueError(f"Unknown provider type: {provider_type}")
@@ -211,15 +211,15 @@ class DataProviderFactory:
 
                     elif normalized_type == "qmt":
                         from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import (
-                            MiniQMTDataProvider,
+                            MiniQMTProvider,
                         )
 
-                        instance = MiniQMTDataProvider()
+                        instance = MiniQMTProvider()
 
                     elif normalized_type == "amazingdata":
                         init_success = False
                         fallback_reason = None
-                        chosen_instance = None
+                        chosen_instance: Any | None = None
 
                         try:
                             from deepsearch.config import get_config

@@ -237,7 +237,8 @@ class UnifiedCache:
         if self.redis_client:
             try:
                 serialized = pickle.dumps(value)
-                self.redis_client.setex(full_key, timedelta(seconds=ttl), serialized)
+                ttl_seconds = int(timedelta(seconds=ttl).total_seconds())
+                self.redis_client.setex(full_key, ttl_seconds, serialized)
                 logger.debug(f"缓存设置: {full_key}, TTL: {ttl}秒")
             except Exception as e:
                 logger.error(f"Redis 写入失败: {e}")

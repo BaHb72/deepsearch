@@ -218,7 +218,7 @@ class RequestHandler:
                 return cast(Dict[str, Any], cached)
 
         # 准备请求
-        async def _do_fetch():
+        async def _do_fetch() -> Dict[str, Any]:
             for attempt in range(max_retries):
                 try:
                     result = await self._fetch_direct(f"/api/{api_name}", params)
@@ -229,7 +229,12 @@ class RequestHandler:
                         ttl = self._get_dynamic_cache_ttl(api_name)
                         self.cache_manager.set(api_name, params, result, ttl)
 
-                    return result
+                    if not isinstance(result, dict):
+                        raise TypeError(
+                            f"AkShare 请求返回类型异常: 期望 dict, 实际 {type(result)!r}"
+                        )
+
+                    return cast(Dict[str, Any], result)
 
                 except asyncio.TimeoutError:
                     if attempt < max_retries - 1:

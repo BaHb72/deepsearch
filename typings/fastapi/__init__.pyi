@@ -5,7 +5,7 @@ _R = TypeVar("_R")
 class Response:
     media_type: Optional[str]
     status_code: int
-    headers: Mapping[str, Any]
+    headers: MutableMapping[str, str]
     background: Any | None
     body_iterator: Any
     def __init__(
