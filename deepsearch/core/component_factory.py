@@ -15,7 +15,7 @@ from .interfaces import Component, ComponentType
 if TYPE_CHECKING:
     from deepsearch.core.components.data_components import CacheComponent, DatabaseComponent
     from deepsearch.event.engine.engine import EventEngine
-    from deepsearch.messaging.composite_bus import CompositeMessageBus
+    from deepsearch.messaging.bus import CompositeMessageBus
 
 T = TypeVar("T", bound=Component)
 
@@ -100,8 +100,9 @@ class ComponentFactory:
         """
         # 检查是否为单例
         if name in self._singleton_instances:
-            if self._singleton_instances[name] is not None:
-                return self._singleton_instances[name]
+            instance = self._singleton_instances[name]
+            if instance is not None:
+                return instance
 
         # 获取组件类
         if name not in self._component_registry:
@@ -223,7 +224,7 @@ class DatabaseComponentFactory:
         Returns:
             数据库组件实例
         """
-        from ..components.data_components import DatabaseComponent
+        from .components.data_components import DatabaseComponent
 
         # 如果没有提供配置，尝试获取默认配置
         if config is None:
@@ -271,7 +272,7 @@ class CacheComponentFactory:
         Returns:
             缓存组件实例
         """
-        from ..components.data_components import CacheComponent
+        from .components.data_components import CacheComponent
 
         # 如果没有提供配置，尝试获取默认配置
         if config is None:
@@ -339,7 +340,7 @@ class MessageBusFactory:
         Returns:
             消息总线实例
         """
-        from deepsearch.messaging.composite_bus import CompositeMessageBus
+        from deepsearch.messaging.bus import CompositeMessageBus
 
         # 如果没有提供配置，使用默认配置
         if config is None:

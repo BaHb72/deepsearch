@@ -85,6 +85,21 @@ class FastAPI:
 
 status: Any
 
+
+class UploadFile:
+    filename: str | None
+    content_type: str | None
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+
+    async def read(self) -> bytes: ...
+    async def write(self, data: bytes) -> None: ...
+    async def close(self) -> None: ...
+
+
+def File(default: Any = ..., *args: Any, **kwargs: Any) -> Any: ...
+
+
 def Depends(dependency: Optional[Callable[..., Any]] = ..., *, use_cache: bool = ...) -> Any: ...
 
 def Query(
@@ -127,6 +142,8 @@ __all__ = [
     "WebSocket",
     "WebSocketDisconnect",
     "JSONResponse",
+    "UploadFile",
+    "File",
     "BackgroundTasks",
     "status",
 ]

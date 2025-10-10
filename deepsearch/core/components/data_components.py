@@ -7,11 +7,15 @@ import inspect
 import re
 from contextlib import suppress
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from deepsearch.config import get_config
 from deepsearch.core.async_component import AsyncComponent
@@ -28,8 +32,8 @@ class DatabaseComponent(AsyncComponent[Any]):
 
     def __init__(self):
         super().__init__("database", ComponentType.EXTERNAL, "数据库")
-        self._engine = None
-        self._session_factory = None
+        self._engine: AsyncEngine | None = None
+        self._session_factory: Callable[[], AsyncSession] | None = None
         self._is_timescale_enabled = False
         self._timeout_manager = get_timeout_manager()
 
@@ -89,7 +93,7 @@ class DatabaseComponent(AsyncComponent[Any]):
             db_config = config.database if config else None
 
             # 检查是否应该自动连接
-            if not db_config.main.auto_connect:
+            if not db_config or not db_config.main.auto_connect:
                 store, key = self._get_store_and_key()
                 store.save_connectivity_status(key, {"state": "disconnected", "retrying": False})
                 self._logger.info("数据库组件已初始化（未连接）- auto_connect=false")
@@ -123,6 +127,16 @@ class DatabaseComponent(AsyncComponent[Any]):
         if not self._session_factory:
             raise ComponentLifecycleError(self.name, "get_session", "Database not initialized")
         return self._session_factory()
+
+    @property
+    def engine(self) -> AsyncEngine | None:
+        """Expose the underlying async engine for consumers requiring direct access."""
+        return self._engine
+
+    @property
+    def is_timescale_enabled(self) -> bool:
+        """Whether the component has enabled TimescaleDB features."""
+        return self._is_timescale_enabled
 
     def _get_extra_status_info(self) -> Dict[str, Any]:
         """提供额外的状态信息"""
@@ -254,7 +268,7 @@ class DatabaseComponent(AsyncComponent[Any]):
         )
 
         # 创建会话工厂
-        self._session_factory = sessionmaker(
+        self._session_factory = async_sessionmaker(
             self._engine, class_=AsyncSession, expire_on_commit=False
         )
 
@@ -406,7 +420,7 @@ class CacheComponent(AsyncComponent[Any]):
             cache_config = config.database.cache if config and config.database else None
 
             # 检查是否启用
-            if not cache_config.enabled:
+            if not cache_config or not cache_config.enabled:
                 self._logger.info("Redis 缓存功能已禁用")
                 return None  # 返回None表示没有资源
 

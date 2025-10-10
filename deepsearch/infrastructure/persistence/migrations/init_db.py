@@ -34,9 +34,13 @@ async def init_database(drop_existing: bool = False) -> None:
 
         if drop_existing:
             logger.warning("删除现有表结构...")
-            from .models.base import Base
+            from ..models import Base
 
-            async with db_component.engine.begin() as conn:
+            engine = db_component.engine
+            if engine is None:
+                raise RuntimeError("数据库引擎未初始化，无法删除表结构")
+
+            async with engine.begin() as conn:
                 # 删除所有表
                 await conn.run_sync(Base.metadata.drop_all)
                 logger.info("现有表结构已删除")
@@ -45,7 +49,7 @@ async def init_database(drop_existing: bool = False) -> None:
         await db_service.init_database()
 
         # 执行健康检查
-        health = await db_component.health_check()
+        health = await db_component.health_check_async()
         logger.info(f"数据库健康状态: {health}")
 
         logger.info("数据库初始化完成!")
@@ -64,7 +68,7 @@ async def create_sample_data() -> None:
     from datetime import datetime, timedelta
     from decimal import Decimal
 
-    from .models.market import Market1Min, MarketTick
+    from ..models import Market1Min, MarketTick
 
     logger.info("创建示例数据...")
 
