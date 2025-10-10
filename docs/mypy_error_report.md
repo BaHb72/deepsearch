@@ -55,6 +55,17 @@
   - `deepsearch/utils/network/proxy_client.py` 去除冗余 `type: ignore`，`ProxyValidator` 接受浮点超时，避免因精度换算触发 `arg-type` 错误。
 - **执行记录**：`uv run mypy --hide-error-context --no-error-summary --pretty deepsearch` 仍失败；最新输出表明 QMT、AkShare、AmazingData 适配器、Timeseries 存储及数据库配置等模块依旧存在大量类型不匹配与缺失 stub 的历史债务，后续需继续分批治理。【7f38a4†L1-L1】【2372fb†L1-L120】
 
+## 2025-10-14 分类治理（Redis/AkShare/QMT）
+
+- **Redis/TimeSeries 桩文件**：新增 `typings/redis` 与 `typings/redistimeseries` 最小声明，补足 `Redis` 客户端的 `close`、`hset`、`pipeline` 等方法，并提供 `Client.range/add` 等接口，使 `deepsearch/infrastructure/persistence/timeseries.py` 能被 mypy 正常解析。
+- **数据库连接协议**：扩展 `typings/psycopg`，为 `AsyncConnection` 加入 `__aenter__/__aexit__`、`cursor.execute` 及可选 `dsn`，修复系统配置 API 在 `async with await psycopg.AsyncConnection.connect(...)` 场景下的缺口。
+- **AkShare 提供者对齐**：
+  - `RequestPriority` 新增 `MEDIUM` 同义值，消除历史代码引用枚举不存在项的异常。
+  - `RequestHandler` 引入 `_require_session`、严格判定缓存与 JSON 解析的返回类型，并统一缓存读取/写入的参数签名，确保 `_fetch_with_fallback` 返回 `dict[str, Any]`。
+  - `AkShareProxyProvider` 暴露 `worker_urls`、`worker_stats`、`worker_health` 等只读视图，并提供 `_fetch_with_fallback` 与 `reset_worker` 等桥接方法，`webui/api/proxy.py` 随之切换到新接口，避免直接操作内部状态。
+- **MiniQMT 消息管道**：`miniqmt.py` 在 `_process_message` 前置 `dict` 判定，并在回调路径上使用 `inspect.isawaitable` 防止 `Optional` 协程误 await，同步为 `_receive_message`、`_connect` 补足返回类型与兜底分支。
+- **最新结果**：全量 mypy 仍报告 **170** 个错误（较前一轮减少 14 项），集中在 WebUI 模板继承、AkShare 历史方法返回值与数据库诊断等模块，后续需要进一步梳理。【c46f92†L1-L2】
+
 # 2025-10-12 离线治理进展
 
 - **新增第三方类型桩**：补齐 `asyncpg`、`psycopg`, `requests`、`urllib3`、`jose` 等最小 `.pyi`，并在 `typings/deepsearch` 下扩展缺失包，缓解 `name-defined` 与 `import-not-found` 报错。

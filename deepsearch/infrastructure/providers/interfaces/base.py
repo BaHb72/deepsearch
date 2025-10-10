@@ -35,6 +35,7 @@ class DataProviderConfig:
     priority: int = 100
     timeout: float = 30.0
     retry_count: int = 3
+    retry_delay: float = 1.0
     config: Dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

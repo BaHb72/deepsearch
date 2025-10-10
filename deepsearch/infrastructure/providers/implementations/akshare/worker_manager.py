@@ -309,6 +309,23 @@ class WorkerManager:
         """记录失败请求"""
         self._update_worker_state(url, False)
 
+    async def check_worker_health(self, url: str) -> bool:
+        return await self._check_worker_health(url)
+
+    def reset_worker(self, url: str) -> None:
+        if url not in self.workers:
+            return
+        worker = self.workers[url]
+        worker["state"] = WorkerState.SUSPICIOUS
+        worker["errors"] = 0
+        worker["success_rate"] = 100.0
+        worker["response_time"] = 0.0
+        worker["last_error"] = None
+        worker["last_check"] = None
+
+    def get_health_flags(self) -> Dict[str, bool]:
+        return {url: info["state"] == WorkerState.HEALTHY for url, info in self.workers.items()}
+
     def get_statistics(self) -> Dict[str, Any]:
         """获取 Worker 节点统计信息"""
 

@@ -7,7 +7,7 @@ import asyncio
 import base64
 import json
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 import aiohttp
 from loguru import logger
@@ -32,14 +32,15 @@ class RequestHandler:
             worker_manager: Worker管理器实例
         """
         self.worker_manager = worker_manager
-        self.session = None
+        self.session: aiohttp.ClientSession | None = None
 
         # 获取配置
         config = get_config()
         self.auth_key = "akshare_proxy_auth_2024"
-        if config and hasattr(config, "cloudflare_workers"):
-            if hasattr(config.cloudflare_workers, "auth_key"):
-                self.auth_key = config.cloudflare_workers.auth_key
+        workers_config = getattr(config, "cloudflare_workers", None) if config else None
+        auth_key = getattr(workers_config, "auth_key", None)
+        if isinstance(auth_key, str) and auth_key:
+            self.auth_key = auth_key
 
         # 请求优化器
         self.request_optimizer = RequestOptimizer()
@@ -55,8 +56,14 @@ class RequestHandler:
 
     async def initialize(self):
         """初始化异步会话"""
-        if not self.session:
+        if self.session is None:
             self.session = aiohttp.ClientSession()
+
+    def _require_session(self) -> aiohttp.ClientSession:
+        session = self.session
+        if session is None:
+            raise RuntimeError("HTTP session is not initialized")
+        return session
 
     def _generate_auth_headers(self) -> Dict[str, str]:
         """
@@ -113,7 +120,8 @@ class RequestHandler:
                 path.replace("/api/", ""), is_batch="batch" in path or "all" in params
             )
 
-            async with self.session.post(
+            session = self._require_session()
+            async with session.post(
                 url,
                 json=request_data,
                 headers=headers,
@@ -123,7 +131,7 @@ class RequestHandler:
 
                 if response.status == 200:
                     try:
-                        result = json.loads(response_text)
+                        result = cast(Dict[str, Any], json.loads(response_text))
 
                         # 处理 Worker 返回的错误
                         if result.get("error"):
@@ -202,14 +210,12 @@ class RequestHandler:
             响应数据
         """
         # 生成缓存键
-        cache_key = f"{api_name}:{json.dumps(params, sort_keys=True)}"
-
         # 尝试从缓存获取
         if use_cache:
-            cached = self.cache_manager.get(cache_key)
-            if cached:
+            cached = self.cache_manager.get(api_name, params)
+            if isinstance(cached, dict):
                 logger.debug(f"缓存命中: {api_name}")
-                return cached
+                return cast(Dict[str, Any], cached)
 
         # 准备请求
         async def _do_fetch():
@@ -221,7 +227,7 @@ class RequestHandler:
                     if use_cache and result and not result.get("error"):
                         # 根据API类型设置不同的缓存时间
                         ttl = self._get_dynamic_cache_ttl(api_name)
-                        self.cache_manager.set(cache_key, result, ttl)
+                        self.cache_manager.set(api_name, params, result, ttl)
 
                     return result
 

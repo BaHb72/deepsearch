@@ -84,6 +84,8 @@ class AkShareProxyProvider:
         # 监控任务
         self._monitor_task = None
 
+        self.strategy = self.worker_manager.strategy
+
         logger.info(f"AkShare代理提供者初始化完成，Worker数量: {len(worker_urls)}")
 
     def get_capabilities(self) -> set[DataCapability]:
@@ -447,7 +449,49 @@ class AkShareProxyProvider:
             await self.initialize()
         return await self.request_handler.call_api(api_name, params)
 
+    async def _fetch_with_fallback(
+        self, api_name: str, params: Dict[str, Any], *, max_retries: int = 3, use_cache: bool = True
+    ) -> Dict[str, Any]:
+        if not self._initialized:
+            await self.initialize()
+        return await self.request_handler._fetch_with_fallback(
+            api_name, params, max_retries=max_retries, use_cache=use_cache
+        )
+
     # ==================== 管理方法 ====================
+
+    @property
+    def worker_urls(self) -> List[str]:
+        return list(self.worker_manager.worker_urls)
+
+    def _build_worker_stats(self) -> Dict[str, Dict[str, Any]]:
+        snapshot: Dict[str, Dict[str, Any]] = {}
+        for url, info in self.worker_manager.workers.items():
+            snapshot[url] = {
+                "state": info["state"].value,
+                "total_requests": info["requests"],
+                "success_count": info["requests"] - info["errors"],
+                "fail_count": info["errors"],
+                "fail_streak": 0,
+                "success_streak": 0,
+                "avg_latency": info["response_time"],
+                "last_check": info["last_check"],
+            }
+        return snapshot
+
+    @property
+    def worker_stats(self) -> Dict[str, Dict[str, Any]]:
+        return self._build_worker_stats()
+
+    @property
+    def worker_health(self) -> Dict[str, bool]:
+        return self.worker_manager.get_health_flags()
+
+    async def _check_worker_health(self, url: str) -> bool:
+        return await self.worker_manager.check_worker_health(url)
+
+    def reset_worker(self, url: str) -> None:
+        self.worker_manager.reset_worker(url)
 
     def get_statistics(self) -> Dict[str, Any]:
         """

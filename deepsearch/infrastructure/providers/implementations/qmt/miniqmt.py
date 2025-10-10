@@ -5,11 +5,12 @@ MiniQMT 数据提供者
 """
 
 import asyncio
+import inspect
 import json
 import socket
 import struct
 import time
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 import pandas as pd
 from loguru import logger
@@ -201,6 +202,8 @@ class MiniQMTProvider(DataProvider):
             self.connected = False
             return False
 
+        return False
+
     async def _disconnect(self) -> None:
         """断开 MiniQMT 连接"""
         if self.socket:
@@ -275,7 +278,7 @@ class MiniQMTProvider(DataProvider):
             # 读取消息内容
             data = await asyncio.get_event_loop().run_in_executor(None, self.socket.recv, length)
 
-            return json.loads(data.decode("utf-8"))
+            return cast(Dict[str, Any], json.loads(data.decode("utf-8")))
 
         except Exception as e:
             logger.error(f"接收消息失败: {e}")
@@ -324,19 +327,25 @@ class MiniQMTProvider(DataProvider):
                 logger.error(f"接收数据异常: {e}")
                 await asyncio.sleep(1)
 
-    async def _process_message(self, msg: Dict) -> None:
+    async def _process_message(self, msg: Dict[str, Any]) -> None:
         """处理接收到的消息"""
         msg_type = msg.get("type")
 
         if msg_type == "TICK":
             # 处理 tick 数据
-            await self._process_tick_data(msg.get("data"))
+            data = msg.get("data")
+            if isinstance(data, dict):
+                await self._process_tick_data(data)
         elif msg_type == "KLINE":
             # 处理 K线数据
-            await self._process_kline_data(msg.get("data"))
+            data = msg.get("data")
+            if isinstance(data, dict):
+                await self._process_kline_data(data)
         elif msg_type == "ORDERBOOK":
             # 处理盘口数据
-            await self._process_orderbook_data(msg.get("data"))
+            data = msg.get("data")
+            if isinstance(data, dict):
+                await self._process_orderbook_data(data)
         elif msg_type == "HEARTBEAT":
             # 心跳响应
             self.last_heartbeat = time.time()
@@ -344,7 +353,7 @@ class MiniQMTProvider(DataProvider):
             # 错误消息
             logger.error(f"MiniQMT 错误: {msg.get('message')}")
 
-    async def _process_tick_data(self, data: Dict) -> None:
+    async def _process_tick_data(self, data: Dict[str, Any]) -> None:
         """处理 tick 数据"""
         if not data:
             return
@@ -356,9 +365,11 @@ class MiniQMTProvider(DataProvider):
         symbol = data.get("symbol")
         if symbol in self.symbol_callbacks:
             for callback in self.symbol_callbacks[symbol]:
-                await callback(data)
+                result = callback(data)
+                if inspect.isawaitable(result):
+                    await result
 
-    async def _process_kline_data(self, data: Dict) -> None:
+    async def _process_kline_data(self, data: Dict[str, Any]) -> None:
         """处理 K线数据"""
         if not data:
             return
@@ -366,7 +377,7 @@ class MiniQMTProvider(DataProvider):
         # 将数据放入队列
         await self.data_queue.put({"type": "kline", "data": data, "timestamp": time.time()})
 
-    async def _process_orderbook_data(self, data: Dict) -> None:
+    async def _process_orderbook_data(self, data: Dict[str, Any]) -> None:
         """处理盘口数据"""
         if not data:
             return
