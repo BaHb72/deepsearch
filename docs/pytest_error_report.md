@@ -50,7 +50,8 @@
   - `uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/data_sources --maxfail=1` ✅。【e7340d†L1-L4】
   - `uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/integration --maxfail=1` ✅（AmazingData 集成类用例继续保持手动跳过，其余 27 项全部通过）。【b8f3f5†L1-L64】
   - `uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/test_amazingdata_all_apis.py ... tests/test_market_data.py --maxfail=1` ✅（108 项通过，保留既有弃用警告）。【626f7f†L1-L33】
-- 调整单测桩与数据源 API 兼容逻辑后，`uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/unit --maxfail=1` ✅（共 333 项通过，确认所有离线可测单元用例已稳定；仍有 `tests/conftest.py` 触发的 `RuntimeWarning` 需后续处理）。【2bce79†L1-L24】
+- 调整单测桩与数据源 API 兼容逻辑后，`uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/unit --maxfail=1` ✅（共 333 项通过，确认所有离线可测单元用例已稳定）。【2bce79†L1-L24】
+- 2025-10-11 新增修复：在数据库与缓存组件的连接自检中引入 `asyncio.create_task` 并在异常路径主动取消任务，同时在 Redis 关闭流程中动态判断 `close/aclose/wait_closed` 是否可等待，彻底消除了未等待协程的 `RuntimeWarning` 与 MagicMock 关闭报错。`uv run pytest --no-cov -m "not requires_cloudflare and not requires_akshare" tests/unit --maxfail=1 -W error::RuntimeWarning` ✅ 可验证离线单测在严格告警策略下依旧全部通过。【61124f†L1-L118】【F:deepsearch/core/components/data_components.py†L1-L37】【F:deepsearch/core/components/data_components.py†L238-L303】【F:deepsearch/core/components/data_components.py†L423-L478】
 - 综上，除显式标记 `requires_cloudflare` / `requires_akshare` 的网络集成外，其余 pytest 用例已在离线环境下全部通过，可作为当前可复现的基线。
 
 ## 初步分析

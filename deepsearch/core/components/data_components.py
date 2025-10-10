@@ -3,7 +3,9 @@
 包含数据库和缓存等数据存储组件
 """
 
+import inspect
 import re
+from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -265,7 +267,20 @@ class DatabaseComponent(AsyncComponent[Any]):
                     await conn.execute(text("SELECT 1"))
                     self._logger.info("数据库连接成功")
 
-            await asyncio.wait_for(_test_connection(), timeout=connect_timeout)
+            test_task = asyncio.create_task(_test_connection())
+            try:
+                await asyncio.wait_for(test_task, timeout=connect_timeout)
+            except asyncio.TimeoutError:
+                test_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await test_task
+                raise
+            except Exception:
+                if not test_task.done():
+                    test_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await test_task
+                raise
         except asyncio.TimeoutError:
             # 连接超时，清理资源
             if self._engine:
@@ -454,7 +469,20 @@ class CacheComponent(AsyncComponent[Any]):
             async def _test_connection():
                 await self._redis_client.ping()
 
-            await asyncio.wait_for(_test_connection(), timeout=connect_timeout)
+            test_task = asyncio.create_task(_test_connection())
+            try:
+                await asyncio.wait_for(test_task, timeout=connect_timeout)
+            except asyncio.TimeoutError:
+                test_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await test_task
+                raise
+            except Exception:
+                if not test_task.done():
+                    test_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await test_task
+                raise
 
             self._connected = True
             self._connection_error = None
@@ -486,14 +514,21 @@ class CacheComponent(AsyncComponent[Any]):
         """停止缓存服务"""
         if self._redis_client:
             try:
-                if hasattr(self._redis_client, "close"):
-                    await self._redis_client.close()
-                    if hasattr(self._redis_client, "wait_closed"):
-                        await self._redis_client.wait_closed()
-                    else:
-                        await self._redis_client.aclose()
-                elif hasattr(self._redis_client, "aclose"):
-                    await self._redis_client.aclose()
+                close_method = getattr(self._redis_client, "close", None)
+                if close_method:
+                    close_result = close_method()
+                    if inspect.isawaitable(close_result):
+                        await close_result
+                alternate_close = getattr(self._redis_client, "aclose", None)
+                if alternate_close and alternate_close is not close_method:
+                    alt_result = alternate_close()
+                    if inspect.isawaitable(alt_result):
+                        await alt_result
+                wait_closed = getattr(self._redis_client, "wait_closed", None)
+                if wait_closed:
+                    wait_result = wait_closed()
+                    if inspect.isawaitable(wait_result):
+                        await wait_result
             except Exception as e:
                 self._logger.error(f"关闭 Redis 连接时出错: {e}")
             finally:
