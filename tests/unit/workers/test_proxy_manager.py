@@ -14,7 +14,7 @@ def manager() -> WorkersProxyManager:
 
 def test_cache_backward_compatibility(manager: WorkersProxyManager) -> None:
     key = "legacy"
-    manager._cache[key] = ("data", datetime.now())  # type: ignore[assignment]
+    manager._cache[key] = ("data", datetime.now())
 
     assert manager._get_cached(key) == "data"
 

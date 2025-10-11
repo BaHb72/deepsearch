@@ -34,7 +34,7 @@ class DatabaseComponent(AsyncComponent[Any]):
         super().__init__("database", ComponentType.EXTERNAL, "数据库")
         self._engine: AsyncEngine | None = None
         self._session_factory: Callable[[], AsyncSession] | None = None
-        self._is_timescale_enabled = False
+        self._is_timescale_enabled: bool = False
         self._timeout_manager = get_timeout_manager()
 
         self._instance = self
@@ -150,13 +150,15 @@ class DatabaseComponent(AsyncComponent[Any]):
         if not self._engine:
             return False
 
-        engine_for_check = self._engine
+        try:
+            sync_engine = self._engine.sync_engine
+        except AttributeError:
+            self._logger.error("当前数据库引擎不支持同步健康检查接口")
+            return False
 
         try:
-            conn = engine_for_check.connect()
-            conn.execute(text("SELECT 1"))
-            if hasattr(conn, "close"):
-                conn.close()
+            with sync_engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
             return True
         except Exception as exc:
             self._logger.error(f"数据库健康检查失败: {exc}")
@@ -353,7 +355,7 @@ class DatabaseComponent(AsyncComponent[Any]):
 
     def get_status_info(self) -> Dict[str, Any]:
         """获取详细状态信息"""
-        info = super().get_status_info()
+        info: Dict[str, Any] = super().get_status_info()
 
         # 添加数据库连接信息
         if self._engine:
@@ -624,7 +626,7 @@ class CacheComponent(AsyncComponent[Any]):
             ),
         }
 
-    async def get_status(self) -> Dict[str, Any]:
+    async def get_status_details(self) -> Dict[str, Any]:
         """获取缓存组件状态信息"""
         status = {
             "connected": self._connected,

@@ -1,10 +1,15 @@
 import sys
 import types
+from typing import cast
 
-if "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_realtime" not in sys.modules:
-    sys.modules[
-        "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_realtime"
-    ] = types.SimpleNamespace(AmazingDataRealtime=None)
+_REALTIME_MODULE = (
+    "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_realtime"
+)
+
+if _REALTIME_MODULE not in sys.modules:
+    placeholder = types.ModuleType(_REALTIME_MODULE)
+    setattr(placeholder, "AmazingDataRealtime", None)
+    sys.modules[_REALTIME_MODULE] = placeholder
 
 import pytest
 
@@ -116,7 +121,7 @@ def test_convert_subscription_snapshot_enforces_structure():
     assert typed["type"] == "snapshot"
     data = typed["data"]
     assert isinstance(data, dict)
-    quote: SnapshotQuote = data  # type: ignore[assignment]
+    quote = cast(SnapshotQuote, data)
     assert quote["symbol"] == "SZ.000001"
     assert pytest.approx(quote["last"]) == 12.3
 

@@ -1,10 +1,11 @@
 """RiskManager type-safety regression tests."""
 
-from typing import Any
+from typing import cast
 
 import pytest
 
 from deepsearch.strategies.managers.risk_manager import RiskManager
+from deepsearch.strategies.interfaces.types import StrategyOrder
 
 
 @pytest.fixture
@@ -13,7 +14,7 @@ def risk_manager() -> RiskManager:
 
 
 def test_check_order_missing_strategy_id(risk_manager: RiskManager) -> None:
-    order: dict[str, Any] = {"symbol": "AAPL", "size": 10, "price": 100.0, "side": "BUY"}
+    order: StrategyOrder = {"symbol": "AAPL", "size": 10, "price": 100.0, "side": "BUY"}
 
     result = risk_manager.check_order(order)
 
@@ -22,13 +23,16 @@ def test_check_order_missing_strategy_id(risk_manager: RiskManager) -> None:
 
 
 def test_check_order_success_path(risk_manager: RiskManager) -> None:
-    order: dict[str, Any] = {
-        "strategy_id": "alpha",
-        "symbol": "AAPL",
-        "size": 5,
-        "price": 120.5,
-        "side": "buy",
-    }
+    order = cast(
+        StrategyOrder,
+        {
+            "strategy_id": "alpha",
+            "symbol": "AAPL",
+            "size": 5,
+            "price": 120.5,
+            "side": "buy",
+        },
+    )
 
     result = risk_manager.check_order(order)
 

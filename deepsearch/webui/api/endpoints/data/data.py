@@ -323,15 +323,15 @@ async def query_market_data(query: MarketDataQuery) -> MarketDataResponse:
         db_service = get_db_service()
         async with db_service.get_session() as session:
             if query.data_type == "minute":
-                statement, params = _build_minute_query(query)
-                result = await session.execute(statement, params)
+                minute_statement, minute_params = _build_minute_query(query)
+                result = await session.execute(minute_statement, minute_params)
                 rows = result.scalars().all()
                 data = _convert_minute_rows(rows)
                 return MarketDataResponse(count=len(data), data=data)
 
             if query.data_type == "tick":
-                statement, params = _build_tick_query(query)
-                result = await session.execute(statement, params)
+                tick_statement, tick_params = _build_tick_query(query)
+                result = await session.execute(tick_statement, tick_params)
                 rows = result.scalars().all()
                 data = _convert_tick_rows(rows)
                 return MarketDataResponse(count=len(data), data=data)

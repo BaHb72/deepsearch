@@ -5,22 +5,35 @@
 
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
 class CircularDependencyFixer:
     def __init__(self):
+        self.report: Dict[str, Any] = {}
+        self.circular_deps: List[List[str]] = []
+        self.module_deps: Dict[str, List[str]] = {}
         self.load_analysis_report()
-        self.fixes = []
+        self.fixes: List[Dict[str, Any]] = []
 
     def load_analysis_report(self):
         """加载依赖分析报告"""
         report_file = Path("dependency_analysis_report.json")
         if report_file.exists():
             with open(report_file, "r", encoding="utf-8") as f:
-                self.report = json.load(f)
-                self.circular_deps = self.report.get("circular_dependencies", [])
-                self.module_deps = self.report.get("module_dependencies", {})
+                raw_report = json.load(f)
+                if isinstance(raw_report, dict):
+                    self.report = raw_report
+                self.circular_deps = [
+                    list(cycle) for cycle in self.report.get("circular_dependencies", [])
+                    if isinstance(cycle, list)
+                ]
+                raw_module_deps = self.report.get("module_dependencies", {})
+                if isinstance(raw_module_deps, dict):
+                    self.module_deps = {
+                        module: list(deps) if isinstance(deps, list) else []
+                        for module, deps in raw_module_deps.items()
+                    }
         else:
             print("[!] 未找到依赖分析报告，请先运行 analyze_dependencies.py")
             exit(1)
@@ -48,7 +61,7 @@ class CircularDependencyFixer:
 
     def identify_patterns(self) -> Dict[str, List[List[str]]]:
         """识别循环依赖模式"""
-        patterns = {
+        patterns: Dict[str, List[List[str]]] = {
             "core_centric": [],  # 以core为中心的循环
             "config_cycle": [],  # config相关的循环
             "observability_cycle": [],  # observability相关的循环

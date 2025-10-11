@@ -1,6 +1,7 @@
 import os
 import sys
 import types
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -19,7 +20,7 @@ from deepsearch.observability.monitoring.data_source_monitor import (
 )
 
 # Register a fake AmazingData module ahead of importing the provider
-_fake_ad = types.ModuleType("AmazingData")
+_fake_ad: Any = types.ModuleType("AmazingData")
 _fake_ad.login = MagicMock()
 _fake_ad.logout = MagicMock()
 _fake_ad.BaseData = types.SimpleNamespace(get_trading_calendar=MagicMock())

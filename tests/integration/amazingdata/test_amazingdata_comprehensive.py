@@ -7,6 +7,7 @@ AmazingData 数据源综合测试脚本
 """
 
 import asyncio
+import importlib.util
 import json
 import os
 import sys
@@ -14,7 +15,7 @@ import time
 import traceback
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Any, Dict, Iterable, List, Protocol, TypeVar, cast
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -23,32 +24,84 @@ import pandas as pd
 
 from deepsearch.config import get_config
 
+# 为 colorama 定义最小协议，确保缺失依赖时依旧具备类型约束
+
+
+class _ColorProtocol(Protocol):
+    RESET: str
+    RED: str
+    GREEN: str
+    YELLOW: str
+    CYAN: str
+    MAGENTA: str
+    BLUE: str
+    WHITE: str
+
+
+class _StyleProtocol(Protocol):
+    BRIGHT: str
+    DIM: str
+    NORMAL: str
+    RESET_ALL: str
+
+
+class _TqdmCallable(Protocol):
+    def __call__(self, iterable: Iterable[Any], *args: Any, **kwargs: Any) -> Iterable[Any]:
+        ...
+
+
 # 尝试导入彩色输出库
 try:
-    from colorama import Fore, Style, init
+    from colorama import Fore as _ForeInstance, Style as _StyleInstance, init
 
     init(autoreset=True)
+    Fore: _ColorProtocol = _ForeInstance
+    Style: _StyleProtocol = _StyleInstance
     HAS_COLOR = True
 except ImportError:
     HAS_COLOR = False
 
-    class Fore:
-        GREEN = RED = YELLOW = CYAN = MAGENTA = BLUE = WHITE = RESET = ""
+    class _FallbackFore:
+        RESET = ""
+        RED = ""
+        GREEN = ""
+        YELLOW = ""
+        CYAN = ""
+        MAGENTA = ""
+        BLUE = ""
+        WHITE = ""
 
-    class Style:
-        BRIGHT = DIM = RESET_ALL = ""
+    class _FallbackStyle:
+        BRIGHT = ""
+        DIM = ""
+        NORMAL = ""
+        RESET_ALL = ""
+
+    Fore = cast(_ColorProtocol, _FallbackFore())
+    Style = cast(_StyleProtocol, _FallbackStyle())
 
 
 # 尝试导入进度条库
-try:
-    from tqdm import tqdm
+T = TypeVar("T")
+
+_tqdm_spec = importlib.util.find_spec("tqdm")
+if _tqdm_spec is not None:
+    from tqdm import tqdm as _tqdm_impl
 
     HAS_TQDM = True
-except ImportError:
+    _tqdm_callable: _TqdmCallable = _tqdm_impl
+else:
     HAS_TQDM = False
 
-    def tqdm(x, **kwargs):
-        return x
+    def _tqdm_fallback(iterable: Iterable[Any], *args: Any, **kwargs: Any) -> Iterable[Any]:
+        return iterable
+
+    _tqdm_callable = _tqdm_fallback
+
+
+def tqdm(iterable: Iterable[T], **kwargs: Any) -> Iterable[T]:
+    result = _tqdm_callable(iterable, **kwargs)
+    return cast(Iterable[T], result)
 
 
 @dataclass
@@ -313,7 +366,7 @@ class AmazingDataTester:
         try:
             print(f"{Fore.CYAN}获取A股股票列表...{Style.RESET_ALL}")
             # 使用AmazingData BaseData获取股票列表
-            stock_list = ad.BaseData.get_stock_list()
+            stock_list = ad.BaseData().get_stock_list()
 
             if (
                 stock_list is not None

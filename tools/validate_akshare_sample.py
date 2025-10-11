@@ -12,7 +12,8 @@ import pandas as pd
 try:
     import akshare as ak
 
-    print(f"AkShare version: {ak.__version__}")
+    version = getattr(ak, "__version__", "unknown")
+    print(f"AkShare version: {version}")
 except ImportError:
     print("AkShare not installed!")
     exit(1)

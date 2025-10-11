@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.utils.data_sources import get_data_source_manager
+from deepsearch.utils.data_sources import DataSourceManager, DataSourceType, get_data_source_manager
 from deepsearch.webui.api.common.response_format import (
     APIResponse,
     ErrorCodes,
@@ -28,24 +28,23 @@ router = APIRouter(prefix="/api/data", tags=["market_data"])
 STUB_SOURCE_LABEL = "stub"
 
 
-def _resolve_source_label(manager: Any, source: Optional[Any], prefer_stub: bool = False) -> str:
+def _resolve_source_label(
+    manager: DataSourceManager, source: Optional[DataSourceType], prefer_stub: bool = False
+) -> str:
     """根据当前数据源状态推断响应头所需的来源标识。"""
 
-    if source and getattr(source, "value", ""):
+    if isinstance(source, DataSourceType):
         return source.value
 
     available_sources = []
-    get_available = getattr(manager, "get_available_sources", None)
-    if callable(get_available):
-        try:
-            available_sources = list(get_available())
-        except Exception as lookup_error:  # pragma: no cover - 调试辅助
-            logger.debug(f"获取可用数据源失败: {lookup_error}")
+    try:
+        available_sources = list(manager.get_available_sources())
+    except Exception as lookup_error:  # pragma: no cover - 调试辅助
+        logger.debug(f"获取可用数据源失败: {lookup_error}")
 
     for candidate in available_sources:
-        candidate_value = getattr(candidate, "value", None)
-        if isinstance(candidate_value, str) and candidate_value:
-            return candidate_value
+        if isinstance(candidate, DataSourceType):
+            return candidate.value
 
     return STUB_SOURCE_LABEL if prefer_stub else "unknown"
 

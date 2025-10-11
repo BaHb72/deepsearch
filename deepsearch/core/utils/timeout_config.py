@@ -4,6 +4,7 @@
 统一管理系统中所有的超时配置，避免硬编码，提高可维护性。
 """
 
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Optional
@@ -108,7 +109,9 @@ class TimeoutManager:
         Args:
             custom_configs: 自定义超时配置，会覆盖默认配置
         """
-        self.configs = self.DEFAULT_CONFIGS.copy()
+        # 使用深拷贝避免默认配置在不同管理器实例之间共享同一个 TimeoutConfig 对象
+        # 浅拷贝会导致调用方修改返回的配置对象时污染全局默认值
+        self.configs = deepcopy(self.DEFAULT_CONFIGS)
         if custom_configs:
             self.configs.update(custom_configs)
 

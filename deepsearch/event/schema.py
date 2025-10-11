@@ -102,9 +102,12 @@ class SchemaRegistry:
 
     def export_schemas(self) -> Dict[str, JsonSchemaValue]:
         """Export all schemas as JSON Schema"""
-        return {
-            event_type: schema.model_json_schema() for event_type, schema in self._schemas.items()
-        }
+        exported: Dict[str, JsonSchemaValue] = {}
+        for event_type, schema in self._schemas.items():
+            schema_cls = cast("type[BaseModel]", schema)
+            json_schema = cast(Callable[[], JsonSchemaValue], schema_cls.model_json_schema)
+            exported[event_type] = json_schema()
+        return exported
 
 
 # ==============================================================================

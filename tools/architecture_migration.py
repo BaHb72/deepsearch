@@ -15,7 +15,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 
 @dataclass
@@ -51,7 +51,7 @@ class CodeAnalyzer:
         self.class_map: Dict[str, List[str]] = defaultdict(list)
         self.function_map: Dict[str, List[str]] = defaultdict(list)
 
-    def analyze_file(self, file_path: Path) -> Dict:
+    def analyze_file(self, file_path: Path) -> Optional[Dict[str, Any]]:
         """Analyze a single Python file."""
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -59,7 +59,7 @@ class CodeAnalyzer:
 
             tree = ast.parse(content)
 
-            analysis = {
+            analysis: Dict[str, Any] = {
                 "path": str(file_path),
                 "imports": self._extract_imports(tree),
                 "classes": self._extract_classes(tree),

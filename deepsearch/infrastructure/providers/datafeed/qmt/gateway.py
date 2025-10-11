@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional, Set, cast
 
 from loguru import logger
 
-from deepsearch.core.interfaces.component import Component
 from deepsearch.event.engine.engine import EventEngine
 from deepsearch.event.schema import Event
 from deepsearch.infrastructure.providers.datafeed.qmt.models import OrderBook, TickData, TradeData
@@ -19,6 +18,7 @@ from deepsearch.messaging.bus import MessageBus
 
 from deepsearch.messaging.types import MessageEnvelope
 from .receiver import QMTReceiver
+from deepsearch.infrastructure.providers.interfaces.payloads import ReceiverStats
 
 # 定义QMT相关事件类型
 EVENT_QMT_TICK = "EVENT_QMT_TICK"
@@ -30,7 +30,17 @@ EVENT_QMT_ORDER = "EVENT_QMT_ORDER"
 EVENT_QMT_CONNECTION = "EVENT_QMT_CONNECTION"
 
 
-class QMTGateway(Component):
+EMPTY_RECEIVER_STATS: ReceiverStats = {
+    "running": False,
+    "uptime": 0.0,
+    "clients": {"connected": 0, "authenticated": 0},
+    "messages": {"total": 0, "types": {}},
+    "data": {"total_bytes": 0, "rate": 0.0},
+    "errors": 0,
+}
+
+
+class QMTGateway:
     """QMT数据网关"""
 
     def __init__(self, event_engine: EventEngine, message_bus: MessageBus, config: Dict):
@@ -42,10 +52,9 @@ class QMTGateway(Component):
             message_bus: 消息总线
             config: 配置信息
         """
-        super().__init__()
         self.event_engine = event_engine
         self.message_bus = message_bus
-        self.config = config
+        self.config: Dict[str, Any] = dict(config)
 
         # QMT接收器
         self.receiver: Optional[QMTReceiver] = None
@@ -128,8 +137,8 @@ class QMTGateway(Component):
         """检查网关是否运行中"""
         return bool(self.receiver and self.receiver.running)
 
-    def get_status(self) -> Dict:
-        """��ȡ����״̬"""
+    def get_status(self) -> Dict[str, Any]:
+        """获取当前网关运行状态。"""
         start_time = cast(Optional[float], self.stats.get("start_time"))
         uptime = time.time() - start_time if start_time else 0.0
         tick_count = cast(int, self.stats.get("tick_count", 0))
@@ -138,6 +147,13 @@ class QMTGateway(Component):
         last_update = cast(Optional[float], self.stats.get("last_update"))
 
         tick_rate = tick_count / uptime if uptime > 0 else 0.0
+
+        receiver_stats = EMPTY_RECEIVER_STATS
+        if self.receiver is not None:
+            try:
+                receiver_stats = self.receiver.get_stats()
+            except Exception:
+                receiver_stats = EMPTY_RECEIVER_STATS
 
         return {
             "running": self.is_running(),
@@ -152,7 +168,7 @@ class QMTGateway(Component):
                 "tick_rate": tick_rate,
                 "last_update": last_update,
             },
-            "receiver": self.receiver.get_stats() if self.receiver else {},
+            "receiver": receiver_stats,
         }
     async def _handle_tick_data(self, client_id: str, msg: MessageEnvelope) -> None:
         """处理Tick数据"""
@@ -275,7 +291,7 @@ class QMTGateway(Component):
                 return
 
             # 创建TradeData对象
-            from deepsearch.qmt.models.trade import OrderSide
+                from deepsearch.infrastructure.providers.datafeed.qmt.models.trade import OrderSide
 
             trade = TradeData(
                 symbol=data.get("symbol", ""),

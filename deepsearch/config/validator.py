@@ -1,11 +1,11 @@
-"""
-配置验证器 - 确保配置与运行时行为一致
-"""
+"""配置验证器 - 确保配置与运行时行为一致"""
+
+from __future__ import annotations
 
 import importlib.util
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Mapping, cast
+from typing import Any, Dict, List, Mapping, Optional, Set, cast
 
 from loguru import logger
 from pydantic import ValidationError
@@ -34,7 +34,7 @@ class ValidationResult:
 class ConfigValidator:
     """配置验证器"""
 
-    def __init__(self, config):
+    def __init__(self, config: Any) -> None:
         self.config = config
         self.results: List[ValidationResult] = []
 
@@ -56,10 +56,10 @@ class ConfigValidator:
 
         return self.results
 
-    def _validate_data_sources(self):
+    def _validate_data_sources(self) -> None:
         """验证数据源配置"""
         data_sources = getattr(self.config, "data_sources", None)
-        validated_amazing_configs: set[int] = set()
+        validated_amazing_configs: Set[int] = set()
 
         if data_sources and data_sources.get("providers"):
             providers_raw = data_sources.get("providers")
@@ -248,7 +248,7 @@ class ConfigValidator:
             validated = AmazingDataConfigModel.model_validate(data)
             return cast(AmazingDataConfigModel, validated)
         except ValidationError as exc:
-            issues = []
+            issues: List[str] = []
             for error in exc.errors():
                 loc = ".".join(str(part) for part in error.get("loc", ()))
                 msg = error.get("msg", "配置校验失败")
@@ -291,7 +291,7 @@ class ConfigValidator:
             )
 
 
-    def _validate_top_level_amazingdata(self, validated_ids: set[int]) -> bool:
+    def _validate_top_level_amazingdata(self, validated_ids: Set[int]) -> bool:
         """校验顶层 AmazingData 配置，避免重复记录错误。"""
 
         amazingdata_attr = getattr(self.config, "amazingdata", None)
@@ -332,7 +332,7 @@ class ConfigValidator:
 
         return None
 
-    def _validate_qmt_config(self):
+    def _validate_qmt_config(self) -> None:
         """验证QMT配置"""
         if not hasattr(self.config, "qmt"):
             return
@@ -367,7 +367,7 @@ class ConfigValidator:
                         )
                     )
 
-    def _validate_conflicts(self):
+    def _validate_conflicts(self) -> None:
         """验证配置冲突"""
         # 检查QMT Only Mode与其他数据源的冲突
         qmt_only = False
@@ -397,7 +397,7 @@ class ConfigValidator:
                     )
                 )
 
-    def _validate_dependencies(self):
+    def _validate_dependencies(self) -> None:
         """验证依赖关系"""
         # 检查Redis依赖
         if hasattr(self.config, "cache") and self.config.cache.enabled:
@@ -432,7 +432,7 @@ class ConfigValidator:
 
         return False
 
-    def print_report(self):
+    def print_report(self) -> None:
         """打印验证报告"""
         if not self.results:
             logger.success("✓ 配置验证通过，没有发现问题")
@@ -486,7 +486,7 @@ class ConfigValidator:
         }
 
 
-def validate_config(config) -> ConfigValidator:
+def validate_config(config: Any) -> ConfigValidator:
     """验证配置的便捷函数"""
     validator = ConfigValidator(config)
     validator.validate()

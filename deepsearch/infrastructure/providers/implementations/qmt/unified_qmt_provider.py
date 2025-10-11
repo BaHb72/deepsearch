@@ -9,6 +9,8 @@ Version: 2.0.0
 from __future__ import annotations
 
 import asyncio
+import importlib
+import importlib.util
 import json
 import queue
 import socket
@@ -105,6 +107,88 @@ class UnifiedQMTProvider(DataProvider):
         # 智能缓存系统
         self.cache_manager = SmartCacheManager()
 
+    async def initialize(self) -> bool:
+        """满足 DataProvider 接口的初始化协议。"""
+
+        try:
+            await self._initialize_source()
+        except Exception as exc:
+            logger.error(f"初始化QMT数据源失败: {exc}")
+            return False
+
+        try:
+            await self._start_source()
+        except Exception as exc:
+            logger.warning(f"启动QMT数据源时出现警告: {exc}")
+
+        return True
+
+    async def get_stock_list(
+        self, limit: Optional[int] = None, **kwargs: Any
+    ) -> Optional[List[Dict[str, Any]]]:
+        """返回统一格式的股票列表，主要用于接口兼容。"""
+
+        try:
+            payload = await self.get_special_data("stock_list", limit=limit, **kwargs)
+        except Exception as exc:
+            logger.debug(f"获取QMT股票列表失败: {exc}")
+            return None
+
+        if not isinstance(payload, list):
+            return None
+
+        normalized: List[Dict[str, Any]] = []
+        for item in payload:
+            if isinstance(item, Mapping):
+                normalized.append(dict(item))
+
+        if limit is not None:
+            return normalized[:limit]
+        return normalized
+
+    async def get_kline_data(
+        self,
+        symbol: str,
+        period: str = "1d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: int = 100,
+        adjust: str = "none",
+        **kwargs: Any,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """以列表形式返回K线数据，兼容旧版数据源接口。"""
+
+        adjust_value = str(kwargs.get("adjust", adjust))
+        adjust_value = str(kwargs.get("dividend_type", adjust_value))
+
+        dataframe = await self.get_kline(
+            symbol=symbol,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+            count=limit,
+            adjust=adjust_value,
+        )
+
+        if dataframe.empty:
+            return []
+
+        records = cast(List[Dict[str, Any]], dataframe.reset_index().to_dict("records"))
+        normalized: List[Dict[str, Any]] = []
+        for record in records:
+            normalized_record: Dict[str, Any] = {}
+            for key, value in record.items():
+                if hasattr(value, "isoformat"):
+                    try:
+                        normalized_record[key] = value.isoformat()
+                        continue
+                    except Exception:
+                        pass
+                normalized_record[key] = value
+            normalized.append(normalized_record)
+
+        return normalized
+
 
     def _require_backend(self) -> "QMTBackend":
         """确保后端已初始化。"""
@@ -147,8 +231,11 @@ class UnifiedQMTProvider(DataProvider):
         """自动检测QMT模式"""
         # 先尝试MiniQMT（更直接）
         try:
-            import xtquant.xtdata as xtdata
+            xtdata_spec = importlib.util.find_spec("xtquant.xtdata")
+            if xtdata_spec is None:
+                raise ImportError
 
+            xtdata = importlib.import_module("xtquant.xtdata")
             get_full_tick = getattr(xtdata, "get_full_tick", None)
             if callable(get_full_tick):
                 test_data = get_full_tick(["000001.SZ"])
@@ -434,15 +521,13 @@ class MiniQMTBackend(QMTBackend):
     """MiniQMT后端实现"""
 
     def __init__(self):
-        self.xtdata = None
+        self.xtdata: Any | None = None
         self.connected = False
 
     async def initialize(self) -> bool:
         """初始化MiniQMT连接"""
         try:
-            import xtquant.xtdata as xtdata
-
-            self.xtdata = xtdata
+            self.xtdata = importlib.import_module("xtquant.xtdata")
             self.connected = True
             logger.info("✅ MiniQMT后端初始化成功")
             return True
@@ -454,12 +539,16 @@ class MiniQMTBackend(QMTBackend):
         self, symbol: str, period: str, start_date: str, end_date: str, count: int, adjust: str
     ) -> pd.DataFrame:
         """获取K线数据"""
-        if not self.connected:
+        xtdata = self.xtdata
+
+        if not self.connected or xtdata is None:
             return pd.DataFrame()
 
         try:
             # 下载数据
-            self.xtdata.download_history_data(
+            assert xtdata is not None
+
+            xtdata.download_history_data(
                 stock_code=symbol,
                 period=period,
                 start_time=start_date or "",
@@ -473,7 +562,7 @@ class MiniQMTBackend(QMTBackend):
             # 获取数据
             field_list = ["time", "open", "high", "low", "close", "volume", "amount"]
 
-            data = self.xtdata.get_market_data(
+            data = xtdata.get_market_data(
                 field_list=field_list, stock_list=[symbol], period=period, count=count
             )
 
@@ -501,11 +590,15 @@ class MiniQMTBackend(QMTBackend):
 
     async def get_realtime_quote(self, symbols: List[str]) -> QuotePayloadMapping:
         """获取实时行情"""
-        if not self.connected:
+        xtdata = self.xtdata
+
+        if not self.connected or xtdata is None:
             return {}
 
         try:
-            tick_data = self.xtdata.get_full_tick(symbols)
+            assert xtdata is not None
+
+            tick_data = xtdata.get_full_tick(symbols)
 
             result: QuotePayloadMapping = {}
             for symbol in symbols:
@@ -531,12 +624,16 @@ class MiniQMTBackend(QMTBackend):
 
     async def subscribe_quote(self, symbols: List[str], callback: Optional[QuoteCallback]) -> bool:
         """订阅行情"""
-        if not self.connected:
+        xtdata = self.xtdata
+
+        if not self.connected or xtdata is None:
             return False
 
         try:
+            assert xtdata is not None
+
             for symbol in symbols:
-                self.xtdata.subscribe_quote(stock_code=symbol, period="tick", callback=callback)
+                xtdata.subscribe_quote(stock_code=symbol, period="tick", callback=callback)
             return True
         except Exception as e:
             logger.error(f"MiniQMT订阅失败: {e}")
@@ -544,7 +641,12 @@ class MiniQMTBackend(QMTBackend):
 
     async def get_special_data(self, data_type: str, **kwargs) -> Any:
         """获取特殊数据"""
-        # MiniQMT的特殊数据实现
+        xtdata = self.xtdata
+
+        if not self.connected or xtdata is None:
+            return None
+
+        # MiniQMT的特殊数据实现暂未开放
         return None
 
 

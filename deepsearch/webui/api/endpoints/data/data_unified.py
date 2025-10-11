@@ -4,7 +4,7 @@
 提供单一入口访问所有数据源
 """
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
@@ -108,17 +108,21 @@ async def get_stock_info(
                 pass
 
         manager = get_data_source_manager()
-        result = await manager.fetch_stock_info(symbol=symbol, preferred_source=preferred_source)
+        result_raw = await manager.fetch_stock_info(symbol=symbol, preferred_source=preferred_source)
+        result: Dict[str, Any] = dict(result_raw) if isinstance(result_raw, dict) else {}
 
         # 确保返回正确的股票名称
-        if result.get("name", "").startswith("股票") and not result.get("error"):
+        name_hint = result.get("name", "") if isinstance(result, dict) else ""
+        if name_hint.startswith("股票") and not result.get("error"):
             # 如果名称是默认的，尝试从其他源获取
             for source_type in [DataSourceType.CLOUDFLARE, DataSourceType.QMT]:
                 if source_type != preferred_source:
-                    alt_result = await manager.fetch_stock_info(
+                    alt_raw = await manager.fetch_stock_info(
                         symbol=symbol, preferred_source=source_type
                     )
-                    if alt_result.get("name") and not alt_result["name"].startswith("股票"):
+                    alt_result = dict(alt_raw) if isinstance(alt_raw, dict) else {}
+                    alt_name = alt_result.get("name")
+                    if isinstance(alt_name, str) and not alt_name.startswith("股票"):
                         return success_response(sanitize_for_json(alt_result))
 
         return success_response(sanitize_for_json(result))
@@ -221,7 +225,7 @@ async def compare_data_sources(
         results = {}
 
         for source_type in DataSourceType:
-            if not manager.sources[source_type].available:
+            if not manager.is_source_available(source_type):
                 continue
 
             try:

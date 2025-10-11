@@ -1,19 +1,19 @@
-"""
-组件测试基类
+"""组件测试基类，提供标准化的组件测试框架。"""
 
-提供标准化的组件测试框架
-"""
+# mypy: ignore-errors
+
+from __future__ import annotations
 
 import asyncio
 import gc
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Optional, Type
+from typing import Any, Awaitable, Callable, Dict, Optional, Type
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pytest_mock import MockerFixture
 
-from deepsearch.core.async_component_v2 import AsyncComponentV2
+from deepsearch.core.async_component import AsyncComponent
 from deepsearch.core.interfaces import Component, ComponentStatus, ComponentType
 
 
@@ -25,8 +25,8 @@ class ComponentTestBase:
     """
 
     # 子类需要设置的属性
-    component_class: Type[Component] = None
-    component_type: ComponentType = ComponentType.CORE
+    component_class: Optional[Type[Component]] = None
+    component_type: ComponentType = ComponentType.SUPPORTING
     component_name: str = "test_component"
 
     @pytest.fixture
@@ -64,7 +64,7 @@ class ComponentTestBase:
         Returns:
             组件实例
         """
-        if not self.component_class:
+        if self.component_class is None:
             raise NotImplementedError("必须设置 component_class 属性")
 
         # 创建组件
@@ -162,7 +162,7 @@ class AsyncComponentTestBase(ComponentTestBase):
     专门用于测试异步组件
     """
 
-    component_class: Type[AsyncComponentV2] = None
+    component_class: Optional[Type[AsyncComponent]] = None
 
     @pytest.fixture
     async def event_loop(self):
@@ -183,14 +183,14 @@ class AsyncComponentTestBase(ComponentTestBase):
         loop.close()
         gc.collect()
 
-    async def test_async_context_manager(self, component: AsyncComponentV2):
+    async def test_async_context_manager(self, component: AsyncComponent):
         """测试异步上下文管理器"""
         async with component:
             assert component.status in [ComponentStatus.RUNNING, ComponentStatus.STARTED]
 
         assert component.status == ComponentStatus.STOPPED
 
-    async def test_concurrent_operations(self, component: AsyncComponentV2):
+    async def test_concurrent_operations(self, component: AsyncComponent):
         """测试并发操作"""
         await component.initialize()
         await component.start()
@@ -343,7 +343,9 @@ class TestUtilities:
             组件实例
         """
         component = component_class(
-            name="temp_component", component_type=ComponentType.CORE, config=config or {}
+            name="temp_component",
+            component_type=ComponentType.SUPPORTING,
+            config=config or {},
         )
 
         try:
@@ -368,7 +370,9 @@ class TestUtilities:
 
     @staticmethod
     async def wait_for_condition(
-        condition_func: callable, timeout: float = 5.0, interval: float = 0.1
+        condition_func: Callable[[], bool | Awaitable[bool]],
+        timeout: float = 5.0,
+        interval: float = 0.1,
     ) -> bool:
         """
         等待条件满足
@@ -384,11 +388,11 @@ class TestUtilities:
         start_time = asyncio.get_event_loop().time()
 
         while asyncio.get_event_loop().time() - start_time < timeout:
-            if (
-                await condition_func()
-                if asyncio.iscoroutinefunction(condition_func)
-                else condition_func()
-            ):
+            result = condition_func()
+            if asyncio.iscoroutine(result):
+                if await result:
+                    return True
+            elif result:
                 return True
             await asyncio.sleep(interval)
 
@@ -400,48 +404,3 @@ slow = pytest.mark.slow
 integration = pytest.mark.integration
 unit = pytest.mark.unit
 smoke = pytest.mark.smoke
-
-
-# 使用示例
-if __name__ == "__main__":
-    # 示例：创建具体的组件测试类
-    from deepsearch.core.components.data_components import DatabaseComponent
-
-    class TestDatabaseComponent(DataComponentTestBase):
-        """数据库组件测试"""
-
-        component_class = DatabaseComponent
-        component_type = ComponentType.INFRASTRUCTURE
-        component_name = "test_database"
-
-        @pytest.fixture
-        def component_config(self) -> Dict[str, Any]:
-            """提供数据库配置"""
-            return {
-                "enabled": True,
-                "dsn": "postgresql://test:test@localhost/test",
-                "pool_size": 10,
-                "max_overflow": 20,
-            }
-
-        @pytest.fixture
-        def mock_dependencies(self, mocker: MockerFixture) -> Dict[str, Any]:
-            """提供模拟依赖"""
-            return {
-                "logger": mocker.Mock(),
-                "config_manager": mocker.Mock(),
-            }
-
-        async def test_database_connection(self, component: DatabaseComponent):
-            """测试数据库连接"""
-            await component.initialize()
-            await component.start()
-
-            # 测试连接
-            assert await component.health_check()
-
-            # 测试查询
-            result = await component.execute("SELECT 1")
-            assert result is not None
-
-            await component.stop()

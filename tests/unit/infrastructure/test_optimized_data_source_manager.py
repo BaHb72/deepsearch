@@ -1,6 +1,7 @@
 """OptimizedDataSourceManager 的补充单元测试"""
 
 import asyncio
+import asyncio
 import sys
 from types import ModuleType
 from typing import Dict
@@ -16,7 +17,7 @@ from deepsearch.infrastructure.providers.registry import DataProviderRegistry
 @pytest.fixture
 def isolated_registry() -> DataProviderRegistry:
     """为每个测试提供干净的注册表实例"""
-    DataProviderRegistry._instance = None  # type: ignore[attr-defined]
+    setattr(DataProviderRegistry, "_instance", None)
     registry = DataProviderRegistry()
     registry._providers.clear()
     registry._instances.clear()

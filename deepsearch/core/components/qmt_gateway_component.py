@@ -13,13 +13,16 @@ from loguru import logger
 from deepsearch.event.engine.engine import EventEngine
 from deepsearch.event.schema import Event
 from deepsearch.infrastructure.providers.datafeed.qmt.gateway import (
+    EMPTY_RECEIVER_STATS,
     EVENT_QMT_CONNECTION,
     EVENT_QMT_ORDERBOOK,
     EVENT_QMT_TICK,
     EVENT_QMT_TRADE,
 )
 from deepsearch.infrastructure.providers.datafeed.qmt.models import OrderBook, TickData, TradeData
+from deepsearch.infrastructure.providers.datafeed.qmt.models.trade import OrderSide
 from deepsearch.infrastructure.providers.datafeed.qmt.receiver import QMTReceiver
+from deepsearch.infrastructure.providers.interfaces.payloads import ReceiverStats
 from deepsearch.messaging.bus import MessageBus
 
 from ..async_component import AsyncComponent
@@ -35,19 +38,20 @@ class QMTGatewayComponent(AsyncComponent):
         message_bus: MessageBus,
         config: Optional[Dict[str, Any]] = None,
     ):
-        config = config or {}
+        normalized_config: Dict[str, Any] = dict(config or {})
         super().__init__(
-            "qmt_gateway_optimized", ComponentType.BUSINESS, "QMT网关(优化)", config=config
+            "qmt_gateway_optimized", ComponentType.BUSINESS, "QMT网关(优化)", config=normalized_config
         )
         self.event_engine = event_engine
         self.message_bus = message_bus
-        self.priority = self.config.get("priority", 1)
+        self._component_config: Dict[str, Any] = normalized_config
+        self.config = self._component_config
+        self.priority = self._component_config.get("priority", 1)
         self.receiver: Optional[QMTReceiver] = None
         self._initialize_runtime_state()
 
     def _initialize_runtime_state(self) -> None:
-        config_dict: Dict[str, Any] = self.config if isinstance(self.config, dict) else {}
-        data_config = config_dict.get("data", {})
+        data_config = cast(Dict[str, Any], self._component_config.get("data", {}))
         self._tick_cache: Dict[str, TickData] = {}  # symbol -> TickData
         self._orderbook_cache: Dict[str, OrderBook] = {}  # symbol -> OrderBook
         self._cache_timestamps: Dict[str, float] = {}  # symbol -> timestamp
@@ -90,11 +94,13 @@ class QMTGatewayComponent(AsyncComponent):
 
         try:
             # 创建接收器
+            receiver_config = cast(Dict[str, Any], self._component_config.get("receiver", {}))
+            security_config = cast(Dict[str, Any], self._component_config.get("security", {}))
             self.receiver = QMTReceiver(
-                host=self.config.get("receiver", {}).get("host", "0.0.0.0"),
-                port=self.config.get("receiver", {}).get("tcp_port", 9999),
-                auth_enabled=self.config.get("security", {}).get("enable_auth", False),
-                auth_token=self.config.get("security", {}).get("token", ""),
+                host=receiver_config.get("host", "0.0.0.0"),
+                port=receiver_config.get("tcp_port", 9999),
+                auth_enabled=security_config.get("enable_auth", False),
+                auth_token=security_config.get("token", ""),
             )
 
             # 注册优化的消息处理器
@@ -169,10 +175,10 @@ class QMTGatewayComponent(AsyncComponent):
 
     def is_running(self) -> bool:
         """检查网关是否运行中"""
-        return self.receiver and self.receiver.running
+        return bool(self.receiver and self.receiver.running)
 
-    def get_status(self) -> Dict:
-        """获取网关状态"""
+    def get_statistics(self) -> Dict[str, Any]:
+        """提供给 AsyncComponent 状态面板的运行统计信息。"""
         uptime = time.time() - self.stats["start_time"] if self.stats["start_time"] else 0
 
         # 计算平均处理时间
@@ -180,6 +186,13 @@ class QMTGatewayComponent(AsyncComponent):
         if self.stats["processing_times"]:
             recent_times = self.stats["processing_times"][-100:]  # 最近100次
             avg_processing_time = sum(recent_times) / len(recent_times)
+
+        receiver_stats: ReceiverStats = EMPTY_RECEIVER_STATS
+        if self.receiver is not None:
+            try:
+                receiver_stats = self.receiver.get_stats()
+            except Exception:
+                receiver_stats = EMPTY_RECEIVER_STATS
 
         return {
             "running": self.is_running(),
@@ -197,7 +210,7 @@ class QMTGatewayComponent(AsyncComponent):
                 "avg_processing_time_ms": avg_processing_time * 1000,
                 "last_update": self.stats["last_update"],
             },
-            "receiver": self.receiver.get_stats() if self.receiver else {},
+            "receiver": receiver_stats,
         }
 
     async def _handle_tick_batch(self, client_id: str, msg: Dict):
@@ -350,8 +363,6 @@ class QMTGatewayComponent(AsyncComponent):
             data = msg.get("data", {})
 
             # 创建TradeData对象
-            from deepsearch.infrastructure.providers.datafeed.qmt.models import OrderSide
-
             trade = TradeData(
                 symbol=data.get("symbol", ""),
                 exchange=data.get("exchange", ""),

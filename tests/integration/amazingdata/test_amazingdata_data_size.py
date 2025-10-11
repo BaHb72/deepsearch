@@ -94,7 +94,7 @@ except Exception as e:
 print("\n[4] 对比测试：获取交易日历（数据量小）...")
 start_time = time.time()
 try:
-    calendar = base_data.get_calendar()
+    calendar = base_data.get_trading_calendar("20240101", "20240131")
     elapsed = time.time() - start_time
     print(f"✓ 获取交易日历成功，耗时: {elapsed:.2f}秒")
     if calendar is not None:
