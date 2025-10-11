@@ -11,6 +11,8 @@
 3. 新增兼容层 `deepsearch/interfaces/data/`，为旧版调用方提供 `AdjustType/PeriodType/SecurityType/DataCache/AmazingDataProvider` 等别名，减少示例与测试中的硬编码导入。
 4. 通过 `importlib` 改造 `deepsearch` 内部多个模块（如 QMT 适配器、AmazingData 工具、RedisTimeSeries 存储等），在可选依赖缺失时优雅降级，避免 `ImportError`。
 5. 基于最新扫描结果，继续修复 `tools/validate_all_datasources.py` 与 `unified_qmt_provider` 的静态导入问题，完成本轮代码同步。
+6. 通过新增 `pyrightconfig.json` 显式引入 `typings/` 与 `third_party/amazingdata/src`，并扩充 AmazingData 类型桩，
+   让 `tests/integration/amazingdata/*` 能识别占位 SDK，导入缺失问题下降至仅余实际逻辑空值告警。
 
 ## 最新诊断概览
 > 数据来源：`pyright --outputjson`（2025-10-10 执行）。
@@ -34,4 +36,5 @@
 3. **策略示例与文档**：批量更新策略示例、教程脚本与 WebUI API，使其依赖新的 `MarketService` 与 `AmazingDataProvider` 兼容层，避免直接访问已废弃模块。
 4. **工具脚本收敛**：逐一消除 `tools/validate_all_datasources.py` 等工具中的 `Optional` 判空与类型不匹配问题，必要时引入局部 `Protocol` 或 `TypedDict` 描述第三方返回数据。
 5. **持续追踪**：在每轮修改后执行 `pyright --outputjson` 并记录差异，确保诊断总量持续下降，直至全部导入问题消除。
+6. **配套依赖桩完善**：为 `colorama`、`tqdm` 等仅用于调试输出的依赖补齐最小类型桩，统一处理 CLI 工具中的降级逻辑，避免重复出现的 `reportAssignmentType` 告警。
 
