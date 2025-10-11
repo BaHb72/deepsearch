@@ -11,9 +11,9 @@ import json
 import os
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,6 +24,27 @@ from deepsearch.config import get_config
 from deepsearch.infrastructure.persistence.duckdb_path import resolve_duckdb_path
 
 
+def _import_optional(module_name: str) -> Any:
+    """以 Any 形式加载可选依赖，便于在缺失类型桩时降级处理。"""
+
+    return importlib.import_module(module_name)
+
+
+async def _await_callable(
+    call: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any
+) -> Any:
+    """帮助等待一个声明为 Awaitable 的可调用对象，统一类型推断。"""
+
+    return await call(*args, **kwargs)
+
+
+async def _await_if_awaitable(result: Any) -> None:
+    """若返回值可等待则等待执行，用于兼容 sync/async 混合接口。"""
+
+    if hasattr(result, "__await__"):
+        await cast(Awaitable[Any], result)
+
+
 @dataclass
 class ValidationResult:
     """验证结果"""
@@ -32,82 +53,86 @@ class ValidationResult:
     is_available: bool
     latency_ms: float
     error_message: Optional[str] = None
-    test_results: Dict[str, Any] = None
-    timestamp: float = None
-
-    def __post_init__(self):
-        if self.timestamp is None:
-            self.timestamp = time.time()
-        if self.test_results is None:
-            self.test_results = {}
+    test_results: Dict[str, Any] = field(default_factory=dict)
+    timestamp: float = field(default_factory=time.time)
 
 
 class DataSourceValidator:
     """数据源验证器"""
 
     def __init__(self):
-        self.config = get_config()
-        self.results = []
+        self.config: Any = get_config()
+        self.results: List[ValidationResult] = []
         self.test_symbol = "000001"  # 测试用股票代码
 
     async def validate_amazingdata(self) -> ValidationResult:
         """验证AmazingData数据源"""
         logger.info("验证 AmazingData 数据源...")
         start_time = time.time()
+        has_sdk: bool = False
 
         try:
+            amazingdata_cfg = getattr(self.config, "amazingdata", None)
+            if amazingdata_cfg is None:
+                raise RuntimeError("未在配置中找到 AmazingData 段")
+
+            if not getattr(amazingdata_cfg, "enabled", False):
+                raise RuntimeError("AmazingData未启用")
+
+            connection = getattr(amazingdata_cfg, "connection", None)
+            if connection is None:
+                raise RuntimeError("AmazingData 缺少连接配置")
+
+            connection_data = cast(Any, connection)
+
             # 检查是否安装了AmazingData SDK
-            has_sdk = False
             sdk_spec = importlib.util.find_spec("amazingdata.datafeeds")
             if sdk_spec is None:
                 raise ImportError("AmazingData SDK未安装")
 
-            datafeeds = importlib.import_module("amazingdata.datafeeds")
+            datafeeds = _import_optional("amazingdata.datafeeds")
             BaseData = getattr(datafeeds, "BaseData")
             MarketData = getattr(datafeeds, "MarketData")
             has_sdk = True
 
             # 测试连接
-            if has_sdk and self.config.amazingdata.enabled:
-                base_data = BaseData()
-                base_data.login(
-                    username=self.config.amazingdata.connection.username,
-                    password=self.config.amazingdata.connection.password,
-                    ip=self.config.amazingdata.connection.host,
-                    port=self.config.amazingdata.connection.port,
-                )
+            base_data = BaseData()
+            base_data.login(
+                username=getattr(connection_data, "username", ""),
+                password=getattr(connection_data, "password", ""),
+                ip=getattr(connection_data, "host", ""),
+                port=getattr(connection_data, "port", 0),
+            )
 
-                # 测试获取股票列表
-                test_start = time.time()
-                stock_list = base_data.get_all_stockcode()
-                list_latency = (time.time() - test_start) * 1000
+            # 测试获取股票列表
+            test_start = time.time()
+            stock_list = base_data.get_all_stockcode()
+            list_latency = (time.time() - test_start) * 1000
 
-                # 测试获取实时行情
-                market_data = MarketData()
-                test_start = time.time()
-                quote = market_data.get_quotes(self.test_symbol)
-                quote_latency = (time.time() - test_start) * 1000
+            # 测试获取实时行情
+            market_data = MarketData()
+            test_start = time.time()
+            quote = market_data.get_quotes(self.test_symbol)
+            quote_latency = (time.time() - test_start) * 1000
 
-                # 登出
-                base_data.logout()
+            # 登出
+            base_data.logout()
 
-                latency = (time.time() - start_time) * 1000
+            latency = (time.time() - start_time) * 1000
 
-                return ValidationResult(
-                    source_name="AmazingData",
-                    is_available=True,
-                    latency_ms=latency,
-                    test_results={
-                        "sdk_installed": True,
-                        "login_success": True,
-                        "stock_list_count": len(stock_list) if stock_list else 0,
-                        "stock_list_latency_ms": list_latency,
-                        "quote_latency_ms": quote_latency,
-                        "has_quote_data": quote is not None,
-                    },
-                )
-            else:
-                raise Exception("AmazingData未启用")
+            return ValidationResult(
+                source_name="AmazingData",
+                is_available=True,
+                latency_ms=latency,
+                test_results={
+                    "sdk_installed": True,
+                    "login_success": True,
+                    "stock_list_count": len(stock_list) if stock_list else 0,
+                    "stock_list_latency_ms": list_latency,
+                    "quote_latency_ms": quote_latency,
+                    "has_quote_data": quote is not None,
+                },
+            )
 
         except Exception as e:
             latency = (time.time() - start_time) * 1000
@@ -116,7 +141,7 @@ class DataSourceValidator:
                 is_available=False,
                 latency_ms=latency,
                 error_message=str(e),
-                test_results={"sdk_installed": has_sdk if "has_sdk" in locals() else False},
+                test_results={"sdk_installed": has_sdk},
             )
 
     async def validate_qmt(self) -> ValidationResult:
@@ -145,15 +170,23 @@ class DataSourceValidator:
             ws_latency = 5000
 
             try:
-                import aiohttp
+                aiohttp = _import_optional("aiohttp")
 
-                async with aiohttp.ClientSession() as session:
-                    async with session.ws_connect(
-                        "ws://127.0.0.1:9998", timeout=aiohttp.ClientTimeout(total=5)
-                    ) as ws:
-                        ws_available = True
-                        ws_latency = (time.time() - ws_test_start) * 1000
-                        await ws.close()
+                session_factory = cast(Any, aiohttp.ClientSession)
+                session = session_factory()
+                try:
+                    timeout = aiohttp.ClientTimeout(total=5)
+                    ws_connect = cast(Callable[..., Awaitable[Any]], getattr(session, "ws_connect"))
+                    ws = await _await_callable(ws_connect, "ws://127.0.0.1:9998", timeout=timeout)
+                    ws_available = True
+                    ws_latency = (time.time() - ws_test_start) * 1000
+                    close = getattr(ws, "close", None)
+                    if callable(close):
+                        await _await_if_awaitable(close())
+                finally:
+                    close_session = getattr(session, "close", None)
+                    if callable(close_session):
+                        await _await_if_awaitable(close_session())
             except Exception:
                 pass
 
@@ -187,9 +220,15 @@ class DataSourceValidator:
         start_time = time.time()
 
         try:
-            import aiohttp
+            cloudflare_cfg = getattr(self.config, "cloudflare_workers", None)
+            if cloudflare_cfg is None:
+                raise RuntimeError("未配置 Cloudflare Workers 代理")
 
-            proxy_url = self.config.cloudflare_workers.url
+            proxy_url = getattr(cloudflare_cfg, "url", None)
+            if not proxy_url:
+                raise RuntimeError("Cloudflare Workers 缺少可用的 url")
+
+            aiohttp = _import_optional("aiohttp")
 
             # 测试连接
             async with aiohttp.ClientSession() as session:
@@ -245,7 +284,7 @@ class DataSourceValidator:
         start_time = time.time()
 
         try:
-            import akshare as ak
+            ak = _import_optional("akshare")
 
             # 测试获取股票列表
             list_start = time.time()
@@ -291,22 +330,28 @@ class DataSourceValidator:
         logger.info("验证数据库连接...")
         start_time = time.time()
 
-        test_results = {}
+        database_cfg = getattr(self.config, "database", None)
+        if database_cfg is None:
+            raise RuntimeError("未找到数据库配置")
+
+        test_results: Dict[str, Any] = {}
         all_available = True
         errors = []
 
         # 测试PostgreSQL
-        if self.config.database.main.enabled:
+        main_db = getattr(database_cfg, "main", None)
+        if getattr(main_db, "enabled", False):
             try:
-                import asyncpg
+                asyncpg = _import_optional("asyncpg")
 
                 pg_start = time.time()
+                main_conn = cast(Any, main_db)
                 conn = await asyncpg.connect(
-                    host=self.config.database.main.host,
-                    port=self.config.database.main.port,
-                    database=self.config.database.main.database,
-                    user=self.config.database.main.username,
-                    password=self.config.database.main.password,
+                    host=getattr(main_conn, "host", ""),
+                    port=getattr(main_conn, "port", 0),
+                    database=getattr(main_conn, "database", ""),
+                    user=getattr(main_conn, "username", ""),
+                    password=getattr(main_conn, "password", ""),
                 )
                 await conn.close()
                 test_results["postgresql"] = {
@@ -319,15 +364,17 @@ class DataSourceValidator:
                 errors.append(f"PostgreSQL: {e}")
 
         # 测试Redis
-        if self.config.database.cache.enabled:
+        cache_db = getattr(database_cfg, "cache", None)
+        if getattr(cache_db, "enabled", False):
             try:
-                import redis.asyncio as aioredis
+                aioredis = _import_optional("redis.asyncio")
 
                 redis_start = time.time()
-                redis_client = await aioredis.from_url(
-                    f"redis://{self.config.database.cache.host}:{self.config.database.cache.port}",
-                    password=self.config.database.cache.password or None,
-                    db=self.config.database.cache.db,
+                cache_conn = cast(Any, cache_db)
+                redis_client = aioredis.from_url(
+                    f"redis://{getattr(cache_conn, 'host', '')}:{getattr(cache_conn, 'port', 0)}",
+                    password=getattr(cache_conn, "password", None) or None,
+                    db=getattr(cache_conn, "db", 0),
                 )
                 await redis_client.ping()
                 await redis_client.close()
@@ -341,12 +388,14 @@ class DataSourceValidator:
                 errors.append(f"Redis: {e}")
 
         # 测试DuckDB
-        if self.config.database.analytics.enabled:
+        analytics_db = getattr(database_cfg, "analytics", None)
+        if getattr(analytics_db, "enabled", False):
             try:
-                import duckdb
+                duckdb = _import_optional("duckdb")
 
                 duckdb_start = time.time()
-                db_path = resolve_duckdb_path(self.config.database.analytics.path)
+                analytics_conn = cast(Any, analytics_db)
+                db_path = resolve_duckdb_path(getattr(analytics_conn, "path", ""))
                 conn = duckdb.connect(db_path)
                 conn.execute("SELECT 1").fetchall()
                 conn.close()
@@ -382,17 +431,27 @@ class DataSourceValidator:
             self.validate_database_connections(),
         ]
 
-        self.results = await asyncio.gather(*tasks, return_exceptions=True)
+        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # 处理异常结果
-        for i, result in enumerate(self.results):
-            if isinstance(result, Exception):
-                self.results[i] = ValidationResult(
-                    source_name=f"Unknown_{i}",
+        normalized_results: List[ValidationResult] = []
+
+        for index, result in enumerate(raw_results):
+            if isinstance(result, ValidationResult):
+                normalized_results.append(result)
+                continue
+
+            error_message = str(result)
+            source_name = getattr(result, "source_name", None)
+            normalized_results.append(
+                ValidationResult(
+                    source_name=source_name if isinstance(source_name, str) else f"Unknown_{index}",
                     is_available=False,
                     latency_ms=0,
-                    error_message=str(result),
+                    error_message=error_message,
                 )
+            )
+
+        self.results = normalized_results
 
         return self.results
 

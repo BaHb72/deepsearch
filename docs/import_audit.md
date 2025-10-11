@@ -13,6 +13,8 @@
 5. 基于最新扫描结果，继续修复 `tools/validate_all_datasources.py` 与 `unified_qmt_provider` 的静态导入问题，完成本轮代码同步。
 6. 通过新增 `pyrightconfig.json` 显式引入 `typings/` 与 `third_party/amazingdata/src`，并扩充 AmazingData 类型桩，
    让 `tests/integration/amazingdata/*` 能识别占位 SDK，导入缺失问题下降至仅余实际逻辑空值告警。
+7. 重构 `tools/validate_all_datasources.py`，为配置访问与可选依赖导入补充显式判空与 Any 降级工具函数，
+   解决 `ValidationResult` 联合类型残留及 `aiohttp`、`asyncpg` 等缺失桩导致的报错。
 
 ## 最新诊断概览
 > 数据来源：`pyright --outputjson`（2025-10-10 执行）。
