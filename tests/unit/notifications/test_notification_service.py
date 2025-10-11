@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import httpx
 import pytest
+from httpx import Request, Response
+from typing import cast
 
 from deepsearch.config.models.notifications import NotificationCategoryConfig, NotificationsConfig
 from deepsearch.infrastructure.notifications import (
@@ -11,6 +12,7 @@ from deepsearch.infrastructure.notifications import (
     NotificationService,
     QuotaExceededError,
 )
+from deepsearch.infrastructure.notifications.client import XtuisClient
 
 
 class DummyClient:
@@ -21,7 +23,9 @@ class DummyClient:
         self.payload = payload or {"ok": True}
         self.calls: list[dict] = []
 
-    async def send(self, *, channel: str, token: str, title: str, content: str | None = None) -> httpx.Response:  # type: ignore[override]
+    async def send(
+        self, *, channel: str, token: str, title: str, content: str | None = None
+    ) -> Response:
         self.calls.append(
             {
                 "channel": channel,
@@ -30,8 +34,8 @@ class DummyClient:
                 "content": content,
             }
         )
-        request = httpx.Request("GET", f"https://{channel}.example/send")
-        return httpx.Response(self.status_code, json=self.payload, request=request)
+        request = Request("GET", f"https://{channel}.example/send")
+        return Response(self.status_code, content=b"", request=request)
 
     async def aclose(self) -> None:  # pragma: no cover - tests不会触发
         pass
@@ -72,7 +76,9 @@ async def test_notification_service_send_success() -> None:
         },
     )
     client = DummyClient(status_code=200, payload={"message": "ok"})
-    service = NotificationService(config, client=client, quota_guard=NotificationQuotaGuard())
+    service = NotificationService(
+        config, client=cast(XtuisClient, client), quota_guard=NotificationQuotaGuard()
+    )
 
     result = await service.send(title="Test", content="Body", channel="wechat", category="alert")
 
@@ -98,7 +104,9 @@ async def test_notification_service_quota_exceeded() -> None:
         },
     )
     client = DummyClient()
-    service = NotificationService(config, client=client, quota_guard=NotificationQuotaGuard())
+    service = NotificationService(
+        config, client=cast(XtuisClient, client), quota_guard=NotificationQuotaGuard()
+    )
 
     await service.send(title="First", content="Body", channel="wechat", category="alert")
 

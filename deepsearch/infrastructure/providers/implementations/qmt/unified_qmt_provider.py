@@ -457,12 +457,16 @@ class MiniQMTBackend(QMTBackend):
         self, symbol: str, period: str, start_date: str, end_date: str, count: int, adjust: str
     ) -> pd.DataFrame:
         """获取K线数据"""
-        if not self.connected:
+        xtdata = self.xtdata
+
+        if not self.connected or xtdata is None:
             return pd.DataFrame()
 
         try:
             # 下载数据
-            self.xtdata.download_history_data(
+            assert xtdata is not None
+
+            xtdata.download_history_data(
                 stock_code=symbol,
                 period=period,
                 start_time=start_date or "",
@@ -476,7 +480,7 @@ class MiniQMTBackend(QMTBackend):
             # 获取数据
             field_list = ["time", "open", "high", "low", "close", "volume", "amount"]
 
-            data = self.xtdata.get_market_data(
+            data = xtdata.get_market_data(
                 field_list=field_list, stock_list=[symbol], period=period, count=count
             )
 
@@ -504,11 +508,15 @@ class MiniQMTBackend(QMTBackend):
 
     async def get_realtime_quote(self, symbols: List[str]) -> QuotePayloadMapping:
         """获取实时行情"""
-        if not self.connected:
+        xtdata = self.xtdata
+
+        if not self.connected or xtdata is None:
             return {}
 
         try:
-            tick_data = self.xtdata.get_full_tick(symbols)
+            assert xtdata is not None
+
+            tick_data = xtdata.get_full_tick(symbols)
 
             result: QuotePayloadMapping = {}
             for symbol in symbols:
@@ -534,12 +542,16 @@ class MiniQMTBackend(QMTBackend):
 
     async def subscribe_quote(self, symbols: List[str], callback: Optional[QuoteCallback]) -> bool:
         """订阅行情"""
-        if not self.connected:
+        xtdata = self.xtdata
+
+        if not self.connected or xtdata is None:
             return False
 
         try:
+            assert xtdata is not None
+
             for symbol in symbols:
-                self.xtdata.subscribe_quote(stock_code=symbol, period="tick", callback=callback)
+                xtdata.subscribe_quote(stock_code=symbol, period="tick", callback=callback)
             return True
         except Exception as e:
             logger.error(f"MiniQMT订阅失败: {e}")
@@ -547,7 +559,12 @@ class MiniQMTBackend(QMTBackend):
 
     async def get_special_data(self, data_type: str, **kwargs) -> Any:
         """获取特殊数据"""
-        # MiniQMT的特殊数据实现
+        xtdata = self.xtdata
+
+        if not self.connected or xtdata is None:
+            return None
+
+        # MiniQMT的特殊数据实现暂未开放
         return None
 
 

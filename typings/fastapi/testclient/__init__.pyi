@@ -1,0 +1,26 @@
+from __future__ import annotations
+
+from typing import Any, MutableMapping, Protocol
+
+
+class _Response(Protocol):
+    status_code: int
+
+
+class TestClient:
+    cookies: MutableMapping[str, str]
+
+    def __init__(self, app: Any, base_url: str | None = ..., **kwargs: Any) -> None: ...
+
+    def __enter__(self) -> TestClient: ...
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: Any) -> None: ...
+
+    def get(self, url: str, **kwargs: Any) -> _Response: ...
+
+    def post(self, url: str, data: Any | None = ..., json: Any | None = ..., **kwargs: Any) -> _Response: ...
+
+    def mount(self, prefix: str, app: Any) -> None: ...
+
+
+__all__ = ["TestClient"]
