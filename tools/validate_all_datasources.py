@@ -5,6 +5,8 @@ DeepSearch 数据源综合验证工具
 """
 
 import asyncio
+import importlib
+import importlib.util
 import json
 import os
 import sys
@@ -55,13 +57,15 @@ class DataSourceValidator:
 
         try:
             # 检查是否安装了AmazingData SDK
-            try:
-                from amazingdata.datafeeds import BaseData, MarketData
+            has_sdk = False
+            sdk_spec = importlib.util.find_spec("amazingdata.datafeeds")
+            if sdk_spec is None:
+                raise ImportError("AmazingData SDK未安装")
 
-                has_sdk = True
-            except ImportError:
-                has_sdk = False
-                raise Exception("AmazingData SDK未安装")
+            datafeeds = importlib.import_module("amazingdata.datafeeds")
+            BaseData = getattr(datafeeds, "BaseData")
+            MarketData = getattr(datafeeds, "MarketData")
+            has_sdk = True
 
             # 测试连接
             if has_sdk and self.config.amazingdata.enabled:

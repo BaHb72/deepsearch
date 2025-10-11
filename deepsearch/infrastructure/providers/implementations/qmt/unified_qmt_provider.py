@@ -9,6 +9,8 @@ Version: 2.0.0
 from __future__ import annotations
 
 import asyncio
+import importlib
+import importlib.util
 import json
 import queue
 import socket
@@ -147,8 +149,11 @@ class UnifiedQMTProvider(DataProvider):
         """自动检测QMT模式"""
         # 先尝试MiniQMT（更直接）
         try:
-            import xtquant.xtdata as xtdata
+            xtdata_spec = importlib.util.find_spec("xtquant.xtdata")
+            if xtdata_spec is None:
+                raise ImportError
 
+            xtdata = importlib.import_module("xtquant.xtdata")
             get_full_tick = getattr(xtdata, "get_full_tick", None)
             if callable(get_full_tick):
                 test_data = get_full_tick(["000001.SZ"])
@@ -434,15 +439,13 @@ class MiniQMTBackend(QMTBackend):
     """MiniQMT后端实现"""
 
     def __init__(self):
-        self.xtdata = None
+        self.xtdata: Any | None = None
         self.connected = False
 
     async def initialize(self) -> bool:
         """初始化MiniQMT连接"""
         try:
-            import xtquant.xtdata as xtdata
-
-            self.xtdata = xtdata
+            self.xtdata = importlib.import_module("xtquant.xtdata")
             self.connected = True
             logger.info("✅ MiniQMT后端初始化成功")
             return True
