@@ -291,7 +291,7 @@ class QMTGateway:
                 return
 
             # 创建TradeData对象
-                from deepsearch.infrastructure.providers.datafeed.qmt.models.trade import OrderSide
+            from deepsearch.infrastructure.providers.datafeed.qmt.models.trade import OrderSide
 
             trade = TradeData(
                 symbol=data.get("symbol", ""),
