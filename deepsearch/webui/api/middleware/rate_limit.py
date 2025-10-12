@@ -289,8 +289,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # 测试模式下跳过限流，避免集成测试被 429 干扰
         test_mode_active = request.headers.get("X-Test-Mode", "").lower() == "true"
+        app_state = None
+        scope_app = request.scope.get("app")
+        if scope_app is not None:
+            app_state = getattr(scope_app, "state", None)
+
         test_mode_active = test_mode_active or bool(
-            getattr(request.app.state, "rate_limit_test_mode", False)
+            getattr(app_state, "rate_limit_test_mode", False)
         )
         test_mode_active = test_mode_active or os.getenv(
             "DEEPSEARCH_TEST_MODE", ""

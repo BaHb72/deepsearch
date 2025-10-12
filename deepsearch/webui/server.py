@@ -19,8 +19,9 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import builtins
-from typing import Optional as _Optional
-builtins.Optional = _Optional
+
+if not TYPE_CHECKING:
+    setattr(builtins, "Optional", Optional)
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware

@@ -9,6 +9,7 @@ Date: 2025-09-18
 """
 
 import asyncio
+from types import ModuleType
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, cast
@@ -1010,10 +1011,12 @@ class AmazingDataExtended(AmazingDataProvider):
 # --- Dynamic SDK forwarding and test patchable symbols ---
 # Expose ad and HAS_AMAZINGDATA so tests can monkeypatch them on this module
 try:  # pragma: no cover - optional dependency wiring
-    from ._sdk_loader import ad as ad, HAS_AMAZINGDATA as HAS_AMAZINGDATA  # type: ignore
+    from ._sdk_loader import ad as _loader_ad, HAS_AMAZINGDATA
 except Exception:  # Safe fallbacks for test environments without SDK
-    ad = None  # type: ignore
-    HAS_AMAZINGDATA = False  # type: ignore
+    _loader_ad = None
+    HAS_AMAZINGDATA = False
+
+ad: Optional[ModuleType] = _loader_ad
 
 # Candidate real SDK module names to import lazily
 _SDK_CANDIDATES = ("amazingdata", "tgw", "amazingdata_sdk")
@@ -1050,7 +1053,7 @@ _ALIAS = {
 }
 
 
-def __getattr__(name: str):  # type: ignore
+def __getattr__(name: str) -> Any:
     """
     Delegate unknown attributes to the real SDK module.
     This allows tests or legacy code to resolve symbols on this shim module.

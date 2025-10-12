@@ -3,6 +3,7 @@
 包含数据库和缓存等数据存储组件
 """
 
+import importlib
 import inspect
 import re
 from contextlib import suppress
@@ -153,12 +154,19 @@ class DatabaseComponent(AsyncComponent[Any]):
         engine_to_use = self._engine
         sync_engine = getattr(self._engine, "sync_engine", None)
 
+        async_module = None
         try:
-            from sqlalchemy.ext.asyncio import AsyncEngine as _AsyncEngine  # type: ignore
+            async_module = importlib.import_module("sqlalchemy.ext.asyncio")
         except Exception:  # pragma: no cover - SQLAlchemy 版本差异
-            _AsyncEngine = None  # type: ignore
+            async_module = None
 
-        if _AsyncEngine is not None and isinstance(self._engine, _AsyncEngine):
+        async_engine_cls: type[Any] | None = None
+        if async_module is not None:
+            candidate = getattr(async_module, "AsyncEngine", None)
+            if isinstance(candidate, type):
+                async_engine_cls = candidate
+
+        if async_engine_cls is not None and isinstance(self._engine, async_engine_cls):
             sync_engine = getattr(self._engine, "sync_engine", None)
 
         if sync_engine is not None:

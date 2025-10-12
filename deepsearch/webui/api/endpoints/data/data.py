@@ -559,7 +559,7 @@ async def get_stocks(limit: int = Query(100, description="返回股票数量限�
 @router.get("/kline", response_model=None)
 async def get_kline_data(
     request: Request,
-    symbol: str = Query(..., min_length=1, description="股票代码"),
+    symbol: str = Query(..., description="股票代码"),
     period: str = Query("1d", description="周期"),
     start_date: Optional[str] = Query(None, description="开始日期"),
     end_date: Optional[str] = Query(None, description="结束日期"),
@@ -569,6 +569,9 @@ async def get_kline_data(
 
     # 测试模式下（API测试），统一返回包装结构 {code, data, ...}
     test_mode = request.headers.get("X-Test-Mode", "").lower() == "true"
+
+    if not symbol:
+        raise HTTPException(status_code=422, detail="symbol must not be empty")
 
     try:
         # 日期范围校验：当同时提供了开始和结束日期时，结束日期不得早于开始日期
