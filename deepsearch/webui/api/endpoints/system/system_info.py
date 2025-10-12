@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from deepsearch.config import get_config
 from deepsearch.core.runtime.engine import MainEngine
-from deepsearch.webui.dependencies import get_engine
+from deepsearch.webui.dependencies import get_engine, get_engine_optional
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -111,7 +111,7 @@ def _ensure_float(value: object) -> float:
 
 
 @router.get("/info", response_model=SystemInfoResponse)
-async def get_system_info(engine: MainEngine = Depends(get_engine)) -> SystemInfoResponse:
+async def get_system_info(engine: MainEngine | None = Depends(get_engine_optional)) -> SystemInfoResponse:
     """
     ��ȡϵͳ��Ϣ
 
@@ -124,7 +124,7 @@ async def get_system_info(engine: MainEngine = Depends(get_engine)) -> SystemInf
     try:
         config = get_config()
 
-        engine_status_raw = engine.get_status()
+        engine_status_raw = engine.get_status() if engine is not None else {}
 
         bus_config = config.message_bus
         bus_types = [

@@ -262,8 +262,11 @@ class DataSyncService:
             logger.error(f"增量同步 {table_name} 失败: {e}")
 
     async def sync_historical_data(
-        self, start_date: str, end_date: str, symbols: Optional[List[str]] = None
-    ):
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        symbols: Optional[List[str]] = None,
+    ) -> None:
         """
         同步历史数据
 

@@ -120,7 +120,8 @@ class EnhancedDataProviderManager:
             try:
                 self._akshare_provider = AkShareProxyProvider()
                 await asyncio.wait_for(self._akshare_provider.initialize(), timeout=15.0)
-                self._providers["akshare"] = self._akshare_provider
+                provider = cast(DataProvider, self._akshare_provider)
+                self._providers["akshare"] = provider
                 self.provider_health["akshare"] = {"status": "healthy", "note": "Fallback initialization"}
                 logger.info("✅ AkShare备用数据源初始化成功")
             except Exception as e:
@@ -245,7 +246,8 @@ class EnhancedDataProviderManager:
                 )
                 
                 # 注册到提供者列表
-                self._providers["akshare"] = self._akshare_provider
+                provider = cast(DataProvider, self._akshare_provider)
+                self._providers["akshare"] = provider
                 
                 logger.info("✅ AkShare初始化成功")
                 self.provider_health["akshare"] = {"status": "healthy"}
@@ -523,13 +525,19 @@ class EnhancedDataProviderManager:
 
         try:
             raw_quotes: object
-            if hasattr(provider, 'get_realtime_quote'):
-                raw_quotes = await provider.get_realtime_quote(symbols)
-            elif hasattr(provider, 'get_realtime_quotes'):
-                raw_quotes = await provider.get_realtime_quotes(symbols)
+            quote_callable = getattr(provider, 'get_realtime_quote', None)
+            if callable(quote_callable):
+                raw_quotes = await cast(Callable[[List[str]], Awaitable[object]], quote_callable)(symbols)
             else:
-                # AkShare接口
-                raw_quotes = await provider.get_realtime_data(symbols)
+                quotes_callable = getattr(provider, 'get_realtime_quotes', None)
+                if callable(quotes_callable):
+                    raw_quotes = await cast(Callable[[List[str]], Awaitable[object]], quotes_callable)(symbols)
+                else:
+                    akshare_callable = getattr(provider, 'get_realtime_data', None)
+                    if callable(akshare_callable):
+                        raw_quotes = await cast(Callable[[List[str]], Awaitable[object]], akshare_callable)(symbols)
+                    else:
+                        raise DataProviderError("数据提供者不支持实时行情接口")
 
             quotes = self._normalize_quote_map(raw_quotes)
 
@@ -682,8 +690,8 @@ class EnhancedDataProviderManager:
             return capability in [
                 DataCapability.KLINE_DATA,
                 DataCapability.REALTIME_QUOTES,
-                DataCapability.SUBSCRIPTION,
-                DataCapability.LEVEL2_DATA
+                DataCapability.REALTIME_QUOTE,
+                DataCapability.LEVEL2_DATA,
             ]
 
         # AkShare支持基础能力
@@ -920,11 +928,35 @@ class EnhancedDataProviderManager:
             
             if provider:
                 # 批量查询
-                results = []
+                results: List[Any] = []
                 for symbol in symbols:
                     try:
-                        result = await provider.get_realtime_quote(symbol)
-                        results.append(result)
+                        quote_callable = getattr(provider, 'get_realtime_quote', None)
+                        if callable(quote_callable):
+                            payload = await cast(Callable[[List[str]], Awaitable[object]], quote_callable)([symbol])
+                            if isinstance(payload, Mapping):
+                                results.append(payload.get(symbol))
+                            else:
+                                results.append(payload)
+                            continue
+
+                        multi_callable = getattr(provider, 'get_realtime_quotes', None)
+                        if callable(multi_callable):
+                            payload = await cast(Callable[[List[str]], Awaitable[object]], multi_callable)([symbol])
+                            if isinstance(payload, Mapping):
+                                results.append(payload.get(symbol))
+                            else:
+                                results.append(payload)
+                            continue
+
+                        akshare_callable = getattr(provider, 'get_realtime_data', None)
+                        if callable(akshare_callable):
+                            results.append(
+                                await cast(Callable[[List[str]], Awaitable[object]], akshare_callable)([symbol])
+                            )
+                            continue
+
+                        raise DataProviderError("数据提供者不支持实时行情接口")
                     except Exception as e:
                         logger.error(f"获取 {symbol} 实时行情失败: {e}")
                         results.append({'error': str(e)})

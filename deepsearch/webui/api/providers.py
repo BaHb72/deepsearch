@@ -549,11 +549,36 @@ async def get_market_service():
         logger.info("Falling back to MarketService default implementation")
         return _MarketServiceImpl(None)
 
-    raise RuntimeError(
-        "No market service implementation available; please configure a market data service."
-    )
+    class _FallbackMarketService:
+        data_provider = None
+
+        async def get_market_overview(self):
+            from datetime import datetime
+
+            return {
+                'indices': [],
+                'breadth': {},
+                'capital': {},
+                'timestamp': datetime.utcnow().isoformat(),
+                'stale': True,
+                'data_source': 'fallback',
+                'total_market_cap': 0,
+                'total_volume': 0,
+                'market_sentiment': 'unknown',
+            }
+
+        async def get_top_gainers(self):
+            return []
+
+        async def get_top_losers(self):
+            return []
+
+    logger.warning('Using fallback MarketService stub; real providers are unavailable')
+    return _FallbackMarketService()
 
 
 async def get_qmt_provider():
     """FastAPI dependency for QMT provider."""
     return await DataProviderFactory.get_provider_async("qmt")
+
+

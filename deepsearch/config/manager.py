@@ -8,14 +8,19 @@
 - 配置合并和覆盖
 """
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Callable, Dict, Mapping, Optional, Union, cast
 
 import yaml
 from loguru import logger
 
 from deepsearch.utils.system.singleton import Singleton
+
+ConfigDict = Dict[str, Any]
+WatcherCallback = Callable[[str, Any, ConfigDict], None]
 
 
 class ConfigurationError(Exception):
@@ -28,10 +33,10 @@ class ConfigManager(metaclass=Singleton):
     """配置管理器（单例）"""
 
     def __init__(self):
-        self._config: Dict[str, Any] = {}
+        self._config: ConfigDict = {}
         self._config_path: Optional[Path] = None
         self._env: str = os.getenv("DEEPSEARCH_ENV", "prod")
-        self._watchers: list = []
+        self._watchers: list[WatcherCallback] = []
 
     def load(self, config_path: Optional[Union[str, Path]] = None) -> None:
         """
@@ -54,7 +59,12 @@ class ConfigManager(metaclass=Singleton):
 
         try:
             with open(self._config_path, "r", encoding="utf-8") as f:
-                self._config = yaml.safe_load(f) or {}
+                raw_config = yaml.safe_load(f)
+                if isinstance(raw_config, dict):
+                    self._config = cast(ConfigDict, raw_config)
+                else:
+                    logger.warning("配置文件内容不是字典，回退到默认配置")
+                    self._config = {}
 
             # 合并环境特定配置
             self._merge_env_config()
@@ -71,7 +81,7 @@ class ConfigManager(metaclass=Singleton):
     def _find_config_file(self) -> Optional[Path]:
         """查找配置文件"""
         # 查找顺序
-        search_paths = [
+        search_paths: list[Path] = [
             Path.cwd() / "config.yaml",
             Path.cwd() / "config.yml",
             Path.cwd() / "settings" / f"settings.{self._env}.yaml",
@@ -95,21 +105,34 @@ class ConfigManager(metaclass=Singleton):
             return
         try:
             with open(env_config_path, "r", encoding="utf-8") as f:
-                env_config = yaml.safe_load(f) or {}
+                env_config_raw = yaml.safe_load(f)
+                env_config: ConfigDict
+                if isinstance(env_config_raw, dict):
+                    env_config = cast(ConfigDict, env_config_raw)
+                else:
+                    logger.warning("环境配置文件内容不是字典，跳过合并")
+                    return
                 self._config = self._deep_merge(self._config, env_config)
                 logger.info(f"合并环境配置: {env_config_path}")
         except Exception as e:
             logger.error(f"加载环境配置失败: {e}")
 
-    def _deep_merge(self, base: dict, override: dict) -> dict:
+    def _deep_merge(
+        self, base: Mapping[str, Any], override: Mapping[str, Any]
+    ) -> ConfigDict:
         """深度合并两个字典"""
-        result = base.copy()
+        result: ConfigDict = dict(base)
 
         for key, value in override.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = self._deep_merge(result[key], value)
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, Mapping)
+            ):
+                nested_base = cast(Mapping[str, Any], result[key])
+                result[key] = self._deep_merge(nested_base, value)
             else:
-                result[key] = value
+                result[key] = cast(Any, value)
 
         return result
 
@@ -214,6 +237,8 @@ class ConfigManager(metaclass=Singleton):
         # 设置最终值
         config[keys[-1]] = value
         logger.debug(f"配置已更新: {key} = {value}")
+        for watcher in self._watchers:
+            watcher(key, value, self._config)
 
     def save(self, path: Optional[Union[str, Path]] = None) -> None:
         """
@@ -241,13 +266,17 @@ class ConfigManager(metaclass=Singleton):
         else:
             logger.warning("没有配置文件路径，无法重新加载")
 
-    def get_all(self) -> Dict[str, Any]:
+    def get_all(self) -> ConfigDict:
         """获取所有配置"""
         return self._config.copy()
 
-    def update(self, config: Dict[str, Any]) -> None:
+    def update(self, config: Mapping[str, Any]) -> None:
         """更新配置（合并）"""
         self._config = self._deep_merge(self._config, config)
+
+    def register_watcher(self, callback: WatcherCallback) -> None:
+        """注册配置变更监听器"""
+        self._watchers.append(callback)
 
     @property
     def env(self) -> str:

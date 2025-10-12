@@ -1,164 +1,148 @@
-"""
-Pytest configuration and fixtures for DeepSearch tests.
-"""
+"""项目级 pytest 固件。
 
-import asyncio
-import gc
+除 WebUI 的 ``client`` 固件外，这里还集中提供在多个测试模块中
+复用的简单数据提供者与配置对象模拟，避免各测试文件重复定义
+或遗漏导致的 "fixture not found" 错误。
+"""
+from __future__ import annotations
+
+import os
+from types import SimpleNamespace
+from typing import Any, Dict
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from fastapi.testclient import TestClient
+
+from deepsearch.webui.server import app
+
+os.environ.setdefault("DEEPSEARCH_TEST_MODE", "true")
 
 
 @pytest.fixture(scope="function")
-def event_loop():
-    """
-    Create an isolated event loop for each test function.
+def client() -> TestClient:
+    """提供轻量级 FastAPI TestClient。"""
 
-    使用function级别的作用域确保每个测试都有独立的事件循环，
-    避免测试之间的状态污染和并发问题。
-    """
-    # 创建新的事件循环
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    yield loop
-
-    # 清理：取消所有未完成的任务
+    app.state.rate_limit_test_mode = True
+    client = TestClient(app, headers={"X-Test-Mode": "true"})
     try:
-        pending = asyncio.all_tasks(loop)
-        for task in pending:
-            task.cancel()
-
-        # 等待所有任务完成取消
-        if pending:
-            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        yield client
     finally:
-        # 关闭事件循环
-        loop.close()
-
-        # 清理事件循环引用
-        asyncio.set_event_loop(None)
-
-        # 强制垃圾回收
-        gc.collect()
+        client.close()
 
 
-@pytest.fixture(autouse=True)
-def reset_singletons():
+@pytest.fixture(scope="function")
+def mock_config() -> SimpleNamespace:
+    """构造可变的配置对象模拟。
+
+    采用 ``SimpleNamespace`` 便于在测试内部直接修改字段，
+    同时包含最常用的 ``app``、``database`` 与 ``amazingdata``
+    结构，以满足配置相关测试的读取需求。
     """
-    自动重置单例对象，确保测试隔离。
 
-    这个fixture会在每个测试前后自动运行，
-    清理可能存在的单例状态。
-    """
-    # 测试前不需要做什么
-    yield
+    def _build_main_db() -> SimpleNamespace:
+        main_db = SimpleNamespace(
+            enabled=True,
+            type="postgresql",
+            host="localhost",
+            port=5432,
+            database="deepsearch",
+            username="postgres",
+            password="",
+            auto_connect=False,
+        )
 
-    # 测试后清理单例
-    # 这里可以添加具体的单例重置逻辑
-    # 例如：ConfigManager._instance = None
-    gc.collect()
+        def _get_url() -> str:
+            user = main_db.username
+            password_part = f":{main_db.password}" if main_db.password else ""
+            return (
+                f"postgresql://{user}{password_part}@{main_db.host}:{main_db.port}/"
+                f"{main_db.database}"
+            )
 
+        main_db.get_url = _get_url  # type: ignore[attr-defined]
+        return main_db
 
-@pytest.fixture
-def mock_config():
-    """Mock configuration for testing."""
-    config = Mock()
-    config.database.main.enabled = True
-    config.database.cache.enabled = True
-    config.data_providers.amazingdata.enabled = True
-    config.data_providers.qmt.enabled = True
-    config.data_providers.akshare.enabled = True
-    config.data_providers.akshare.config = {"mode": "worker", "proxy": {"enabled": True}}
-    config.data_providers.cloudflare.enabled = True
-    config.webui.enabled = True  # 添加WebUI配置
-    config.webui.backend_port = 8000
-    config.webui.frontend_port = 3000
+    config = SimpleNamespace(
+        app=SimpleNamespace(name="DeepSearch", env="test", debug=False),
+        database=SimpleNamespace(
+            main=_build_main_db(),
+            cache=SimpleNamespace(
+                enabled=True,
+                host="localhost",
+                port=6379,
+                username="",
+                password="",
+                db=0,
+            ),
+        ),
+        amazingdata=SimpleNamespace(
+            connection=SimpleNamespace(
+                username="demo_user",
+                password="demo_password",
+                host="localhost",
+                port=8600,
+                timeout=10,
+            ),
+        ),
+        data_providers={
+            "amazingdata": {"enabled": True, "priority": 1},
+            "cloudflare": {"enabled": True, "priority": 2},
+        },
+    )
+
     return config
 
 
-@pytest.fixture
-async def isolated_redis_mock():
-    """
-    隔离的Redis mock，每个测试独立。
+@pytest.fixture(scope="function")
+def test_data_provider() -> AsyncMock:
+    """创建通用的数据提供者模拟。"""
 
-    使用新的名称避免与旧的fixture冲突，
-    并提供更完整的mock实现。
-    """
-    redis = AsyncMock()
-
-    # 模拟Redis基本操作
-    redis.get = AsyncMock(return_value=None)
-    redis.set = AsyncMock(return_value=True)
-    redis.setex = AsyncMock(return_value=True)
-    redis.delete = AsyncMock(return_value=1)
-    redis.exists = AsyncMock(return_value=False)
-    redis.expire = AsyncMock(return_value=True)
-    redis.ttl = AsyncMock(return_value=-2)
-
-    # 模拟Redis批量操作
-    redis.mget = AsyncMock(return_value=[])
-    redis.mset = AsyncMock(return_value=True)
-    redis.pipeline = AsyncMock(return_value=AsyncMock())
-
-    # 模拟Redis连接管理
-    redis.ping = AsyncMock(return_value=True)
-    redis.close = AsyncMock()
-    redis.wait_closed = AsyncMock()
-
-    yield redis
-
-    # 清理：确保mock被正确关闭
-    await redis.close()
-    await redis.wait_closed()
-
-
-@pytest.fixture
-async def mock_redis():
-    """
-    兼容性fixture，使用isolated_redis_mock。
-
-    保留这个fixture是为了向后兼容。
-    """
-    redis = AsyncMock()
-
-    # 模拟Redis基本操作
-    redis.get = AsyncMock(return_value=None)
-    redis.set = AsyncMock(return_value=True)
-    redis.setex = AsyncMock(return_value=True)
-    redis.delete = AsyncMock(return_value=1)
-    redis.exists = AsyncMock(return_value=False)
-    redis.expire = AsyncMock(return_value=True)
-    redis.ttl = AsyncMock(return_value=-2)
-
-    # 模拟Redis批量操作
-    redis.mget = AsyncMock(return_value=[])
-    redis.mset = AsyncMock(return_value=True)
-    redis.pipeline = AsyncMock(return_value=AsyncMock())
-
-    # 模拟Redis连接管理
-    redis.ping = AsyncMock(return_value=True)
-    redis.close = AsyncMock()
-    redis.wait_closed = AsyncMock()
-
-    return redis
-
-
-@pytest.fixture
-def test_data_provider():
-    """Mock data provider for testing."""
     provider = AsyncMock()
+    provider.is_connected = Mock(return_value=True)
     provider.get_realtime_quote = AsyncMock(
         return_value={
             "symbol": "000001",
-            "name": "平安银行",
             "price": 10.5,
-            "change": 0.5,
-            "change_pct": 5.0,
-            "volume": 1000000,
-            "timestamp": "2025-09-13 10:00:00",
+            "change": 0.12,
+            "change_pct": 1.15,
+            "volume": 1_200_000,
         }
     )
-    provider.get_kline_data = AsyncMock(return_value=[])
-    provider.is_connected = Mock(return_value=True)
+    provider.get_multiple_quotes = AsyncMock(
+        return_value=[
+            {
+                "symbol": "000001",
+                "price": 10.5,
+                "change": 0.12,
+                "change_pct": 1.15,
+                "volume": 1_200_000,
+            },
+            {
+                "symbol": "000002",
+                "price": 11.2,
+                "change": -0.05,
+                "change_pct": -0.45,
+                "volume": 980_000,
+            },
+        ]
+    )
+    provider.supported_data_types = ["realtime_quote", "multiple_quotes"]
     return provider
+
+
+@pytest.fixture(scope="function")
+def mock_redis() -> SimpleNamespace:
+    """提供可按需配置的 Redis 客户端模拟。"""
+
+    redis_methods: Dict[str, Any] = {
+        "info": AsyncMock(),
+        "flushall": AsyncMock(),
+        "keys": AsyncMock(),
+        "delete": AsyncMock(),
+        "ttl": AsyncMock(),
+        "expire": AsyncMock(),
+    }
+    redis_namespace = SimpleNamespace(**redis_methods)
+    redis_namespace.connection_pool = SimpleNamespace()  # 便于额外属性访问
+    return redis_namespace

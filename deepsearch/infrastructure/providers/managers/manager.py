@@ -44,6 +44,7 @@ from deepsearch.infrastructure.providers.interfaces.capabilities import (
     check_provider_capability,
     get_capable_providers,
 )
+from deepsearch.infrastructure.providers.interfaces.payloads import DataPayload
 
 AutoSource = Literal["auto"]
 ProviderName = str
@@ -510,7 +511,8 @@ class DataProviderManager:
         if raw_result is None:
             return DataResponse(success=False, error="数据源返回空结果", metadata=metadata)
 
-        return DataResponse(success=True, data=raw_result, metadata=metadata)
+        payload = cast(DataPayload, raw_result)
+        return DataResponse(success=True, data=payload, metadata=metadata)
 
     def register_provider(self, provider: DataProvider) -> None:
         """

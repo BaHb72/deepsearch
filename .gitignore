@@ -144,3 +144,5 @@ nul
 runs/
 D?Stockcodedeepsearch.pre-commit-config.yaml
 
+!/third_party/amazingdata/src/amazingdata/AmazingData-1.0.10-cp313-none-any.whl
+!/third_party/tgw/tgw-1.0.8.1-py3-none-any.whl

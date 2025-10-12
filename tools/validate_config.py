@@ -1,33 +1,30 @@
 #!/usr/bin/env python
-"""
-配置文件验证工具
-用于检查DeepSearch配置文件的合理性和安全性
+"""配置文件验证工具"""
 
-使用方法:
-    python tools/validate_config.py --env dev
-    python tools/validate_config.py --env prod
-    python tools/validate_config.py --file deepsearch/config/settings.dev.yaml
-"""
+from __future__ import annotations
 
 import argparse
 import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import yaml
+
+
+ConfigMessages = Dict[str, list[str]]
 
 
 class ConfigValidator:
     """配置文件验证器"""
 
-    def __init__(self):
-        self.errors: List[str] = []
-        self.warnings: List[str] = []
-        self.info: List[str] = []
+    def __init__(self) -> None:
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
+        self.info: list[str] = []
 
-    def validate(self, config_path: str) -> Tuple[bool, Dict[str, List[str]]]:
+    def validate(self, config_path: str) -> Tuple[bool, ConfigMessages]:
         """
         验证配置文件
 
@@ -43,10 +40,16 @@ class ConfigValidator:
 
         try:
             with open(config_path, "r", encoding="utf-8") as f:
-                config = yaml.safe_load(f)
+                config_raw = yaml.safe_load(f)
         except Exception as e:
             self.errors.append(f"配置文件解析失败: {e}")
             return False, self._get_results()
+
+        if not isinstance(config_raw, dict):
+            self.errors.append("配置文件格式应为字典")
+            return False, self._get_results()
+
+        config: Dict[str, Any] = dict(config_raw)
 
         # 检测环境
         env = config.get("app", {}).get("env", "unknown")
@@ -64,11 +67,11 @@ class ConfigValidator:
 
         return len(self.errors) == 0, self._get_results()
 
-    def _get_results(self) -> Dict[str, List[str]]:
+    def _get_results(self) -> ConfigMessages:
         """获取验证结果"""
         return {"errors": self.errors, "warnings": self.warnings, "info": self.info}
 
-    def _validate_basic(self, config: Dict[str, Any], env: str):
+    def _validate_basic(self, config: Mapping[str, Any], env: str) -> None:
         """基础配置验证"""
         app = config.get("app", {})
 
@@ -80,7 +83,7 @@ class ConfigValidator:
         if not app.get("name"):
             self.errors.append("缺少应用名称配置")
 
-    def _validate_security(self, config: Dict[str, Any], env: str):
+    def _validate_security(self, config: Mapping[str, Any], env: str) -> None:
         """安全配置验证"""
         # 检查敏感信息
         self._check_password_strength(config)
@@ -92,7 +95,7 @@ class ConfigValidator:
         if env == "prod" and "*" in origins:
             self.warnings.append("生产环境不建议CORS允许所有域名")
 
-    def _validate_database(self, config: Dict[str, Any], env: str):
+    def _validate_database(self, config: Mapping[str, Any], env: str) -> None:
         """数据库配置验证"""
         db = config.get("database", {}).get("main", {})
 
@@ -116,7 +119,7 @@ class ConfigValidator:
         if env == "prod" and not db.get("pool"):
             self.warnings.append("生产环境建议配置数据库连接池")
 
-    def _validate_redis(self, config: Dict[str, Any], env: str):
+    def _validate_redis(self, config: Mapping[str, Any], env: str) -> None:
         """Redis配置验证"""
         redis = config.get("database", {}).get("cache", {})
 
@@ -131,7 +134,7 @@ class ConfigValidator:
         elif password and not self._is_env_var(password) and env == "prod":
             self.errors.append("生产环境Redis密码不应明文存储")
 
-    def _validate_data_sources(self, config: Dict[str, Any], env: str):
+    def _validate_data_sources(self, config: Mapping[str, Any], env: str) -> None:
         """数据源配置验证"""
         # 检查新旧配置格式
         has_new = "data_sources" in config
@@ -156,7 +159,7 @@ class ConfigValidator:
                     self.errors.append("AmazingData密码必须使用环境变量")
 
             # 检查优先级
-            priorities = {}
+            priorities: Dict[int, str] = {}
             for name, provider in providers.items():
                 priority = provider.get("priority")
                 if priority is not None:
@@ -175,7 +178,7 @@ class ConfigValidator:
             if count > 1:
                 self.warnings.append("配置文件中存在多处amazingdata配置")
 
-    def _validate_logging(self, config: Dict[str, Any], env: str):
+    def _validate_logging(self, config: Mapping[str, Any], env: str) -> None:
         """日志配置验证"""
         log = config.get("log", {})
 
@@ -193,7 +196,7 @@ class ConfigValidator:
         if env == "prod" and not log.get("enable_json"):
             self.info.append("生产环境建议启用JSON格式日志便于分析")
 
-    def _validate_performance(self, config: Dict[str, Any], env: str):
+    def _validate_performance(self, config: Mapping[str, Any], env: str) -> None:
         """性能配置验证"""
         # 检查缓存配置
         cache_config = config.get("performance", {}).get("cache", {})
@@ -205,17 +208,17 @@ class ConfigValidator:
         if env == "prod" and workers < 2:
             self.warnings.append("生产环境建议配置多个工作进程")
 
-    def _validate_monitoring(self, config: Dict[str, Any], env: str):
+    def _validate_monitoring(self, config: Mapping[str, Any], env: str) -> None:
         """监控配置验证"""
         monitoring = config.get("monitoring", {})
         if env == "prod" and not monitoring.get("enabled"):
             self.warnings.append("生产环境建议启用监控")
 
-    def _check_password_strength(self, config: Dict[str, Any]):
+    def _check_password_strength(self, config: Mapping[str, Any]) -> None:
         """检查密码强度"""
 
         # 递归查找所有password字段
-        def find_passwords(obj, path=""):
+        def find_passwords(obj: Any, path: str = "") -> None:
             if isinstance(obj, dict):
                 for key, value in obj.items():
                     new_path = f"{path}.{key}" if path else key
@@ -231,11 +234,11 @@ class ConfigValidator:
 
         find_passwords(config)
 
-    def _check_api_keys(self, config: Dict[str, Any]):
+    def _check_api_keys(self, config: Mapping[str, Any]) -> None:
         """检查API密钥"""
 
         # 递归查找所有api_key字段
-        def find_api_keys(obj, path=""):
+        def find_api_keys(obj: Any, path: str = "") -> None:
             if isinstance(obj, dict):
                 for key, value in obj.items():
                     new_path = f"{path}.{key}" if path else key
@@ -294,7 +297,7 @@ class ConfigValidator:
         return False
 
 
-def print_results(results: Dict[str, List[str]]):
+def print_results(results: Mapping[str, Sequence[str]]) -> None:
     """打印验证结果"""
     errors = results.get("errors", [])
     warnings = results.get("warnings", [])
@@ -325,7 +328,7 @@ def print_results(results: Dict[str, List[str]]):
     print(f"\n统计: {len(errors)} 个错误, {len(warnings)} 个警告, {len(info)} 条信息")
 
 
-def main():
+def main() -> None:
     """主函数"""
     parser = argparse.ArgumentParser(description="验证DeepSearch配置文件")
     group = parser.add_mutually_exclusive_group(required=True)

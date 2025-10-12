@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import copy
 import sys
 from pathlib import Path
 from typing import Any, Dict, Final, cast
@@ -12,7 +13,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.config import get_config, reload_config
+from deepsearch.config import Settings, get_config, reload_config
 from deepsearch.constants import YAML_ENCODING
 
 # Windows 兼容性：设置事件循环策略
@@ -121,6 +122,65 @@ class ConfigUpdate(BaseModel):
     value: Any
 
 
+def _build_config_payload(config: Settings) -> Dict[str, Any]:
+    """将配置对象转换为脱敏后的字典。"""
+
+    config_dir = Path(__file__).parent.parent.parent.parent.parent / "config"
+    env = config.app.env
+    config_path = config_dir / f"settings.{env}.yaml"
+
+    if not config_path.exists():
+        return {
+            "error": "配置文件不存在",
+            "message": f"请创建配置文件: {config_path}",
+            "config_missing": True,
+            "config_path": str(config_path),
+            "env": env,
+        }
+
+    config_dict: Dict[str, Any] = config.model_dump()
+
+    if "security" in config_dict and config_dict["security"] is not None:
+        config_dict["security"] = {
+            "api_key": MASKED_SECRET if config_dict["security"].get("api_key") else None,
+            "secret_key": MASKED_SECRET if config_dict["security"].get("secret_key") else None,
+        }
+
+    if "database" in config_dict:
+        if "main" in config_dict["database"] and "password" in config_dict["database"]["main"]:
+            if config_dict["database"]["main"]["password"]:
+                config_dict["database"]["main"]["has_saved_password"] = True
+                config_dict["database"]["main"]["password"] = MASKED_SECRET
+            else:
+                config_dict["database"]["main"]["has_saved_password"] = False
+        if "cache" in config_dict["database"] and "password" in config_dict["database"]["cache"]:
+            if config_dict["database"]["cache"]["password"]:
+                config_dict["database"]["cache"]["has_saved_password"] = True
+                config_dict["database"]["cache"]["password"] = MASKED_SECRET
+            else:
+                config_dict["database"]["cache"]["has_saved_password"] = False
+
+    return config_dict
+
+
+async def _reload_and_export_config() -> Dict[str, Any]:
+    """重新加载配置并返回脱敏后的字典表示。"""
+
+    def _reload() -> Dict[str, Any]:
+        reloaded = reload_config()
+        return _build_config_payload(reloaded)
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        return await loop.run_in_executor(None, _reload)
+
+    return _reload()
+
+
 @router.get("")
 async def get_configuration() -> Dict[str, Any]:
     """
@@ -130,7 +190,6 @@ async def get_configuration() -> Dict[str, Any]:
         系统配置字典
     """
     try:
-        # 检查settings是否为None
         config = get_config()
         if config is None:
             return {
@@ -140,52 +199,7 @@ async def get_configuration() -> Dict[str, Any]:
                 "env": "unknown",
             }
 
-        # 检查配置文件是否存在
-        # 从 deepsearch/webui/api/endpoints/system/config.py 向上5级到达 deepsearch/config
-        config_dir = Path(__file__).parent.parent.parent.parent.parent / "config"
-        env = config.app.env
-        config_path = config_dir / f"settings.{env}.yaml"
-
-        if not config_path.exists():
-            return {
-                "error": "配置文件不存在",
-                "message": f"请创建配置文件: {config_path}",
-                "config_missing": True,
-                "config_path": str(config_path),
-                "env": env,
-            }
-
-        # 将配置转换为字典格式
-        config_dict: Dict[str, Any] = config.model_dump()
-
-        # 移除敏感信息
-        if "security" in config_dict and config_dict["security"] is not None:
-            config_dict["security"] = {
-                "api_key": MASKED_SECRET if config_dict["security"].get("api_key") else None,
-                "secret_key": MASKED_SECRET if config_dict["security"].get("secret_key") else None,
-            }
-
-        # 对数据库密码进行脱敏处理
-        if "database" in config_dict:
-            if "main" in config_dict["database"] and "password" in config_dict["database"]["main"]:
-                if config_dict["database"]["main"]["password"]:
-                    # 添加标志表示是否有保存的密码
-                    config_dict["database"]["main"]["has_saved_password"] = True
-                    config_dict["database"]["main"]["password"] = MASKED_SECRET
-                else:
-                    config_dict["database"]["main"]["has_saved_password"] = False
-            if (
-                "cache" in config_dict["database"]
-                and "password" in config_dict["database"]["cache"]
-            ):
-                if config_dict["database"]["cache"]["password"]:
-                    # 添加标志表示是否有保存的密码
-                    config_dict["database"]["cache"]["has_saved_password"] = True
-                    config_dict["database"]["cache"]["password"] = MASKED_SECRET
-                else:
-                    config_dict["database"]["cache"]["has_saved_password"] = False
-
-        return config_dict
+        return _build_config_payload(config)
 
     except Exception as e:
         logger.error(f"获取配置失败：{e}")
@@ -248,100 +262,171 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
                 logger.warning(f"Failed to parse existing config: {e}")
                 existing_config = {}
 
-        # 准备要保存的配置
-        save_data = {}
+        # 准备要保存的配置，默认继承现有内容避免丢失未编辑的字段
+        save_data: Dict[str, Any]
+        if existing_config:
+            save_data = copy.deepcopy(existing_config)
+        else:
+            save_data = {}
 
-        # 处理各个配置部分
-        if "app" in config_data:
-            save_data["app"] = config_data["app"]
+        def _update_section(name: str) -> None:
+            if name in config_data:
+                value = config_data[name]
+                if value is None:
+                    save_data.pop(name, None)
+                else:
+                    save_data[name] = copy.deepcopy(value)
 
-        if "log" in config_data:
-            save_data["log"] = config_data["log"]
+        for section in (
+            "app",
+            "log",
+            "message_bus",
+            "webui",
+            "monitoring",
+            "notifications",
+            "runtime",
+            "performance",
+            "debug",
+            "health_check",
+            "qmt",
+            "miniqmt",
+            "amazingdata",
+            "cloudflare",
+            "cloudflare_workers",
+            "data_sources",
+            "data_providers",
+        ):
+            _update_section(section)
 
         # 处理数据库配置
         if "database" in config_data:
             db_config = config_data["database"]
-            # 如果是新格式（包含main和cache）
-            if "main" in db_config or "cache" in db_config:
-                save_data["database"] = {
-                    "main": db_config.get("main", {}),
-                    "cache": db_config.get("cache", {}),
-                }
-                # 处理主数据库密码保存逻辑
-                if "main" in save_data["database"]:
-                    # 获取现有密码
-                    existing_password = (
-                        existing_config.get("database", {}).get("main", {}).get("password", "")
-                    )
+            if db_config is None:
+                save_data.pop("database", None)
+            elif isinstance(db_config, dict):
+                existing_db = copy.deepcopy(existing_config.get("database", {}))
+                merged_db: Dict[str, Any] = copy.deepcopy(existing_db)
 
-                    if "password" in save_data["database"]["main"]:
-                        remember_password = db_config.get("main", {}).get("rememberPassword", False)
-                        password = save_data["database"]["main"]["password"]
+                if "url" in db_config:
+                    merged_db["url"] = db_config["url"]
 
-                        if password == MASKED_SECRET:
-                            # 脱敏密码，使用现有密码
-                            save_data["database"]["main"]["password"] = existing_password
-                        elif remember_password and password:
-                            # 新密码且记住密码
-                            save_data["database"]["main"]["password"] = password
+                # 处理主数据库配置
+                if "main" in db_config and isinstance(db_config["main"], dict):
+                    main_updates = dict(db_config["main"])
+                    main_existing = copy.deepcopy(existing_db.get("main", {}))
+                    main_updates.pop("has_saved_password", None)
+                    remember_password = bool(main_updates.pop("rememberPassword", False))
+                    existing_password = main_existing.get("password", "")
+
+                    if "password" in main_updates:
+                        password_value = main_updates["password"]
+                        if password_value == MASKED_SECRET:
+                            main_updates["password"] = existing_password
+                        elif remember_password and password_value:
+                            main_updates["password"] = password_value
                         else:
-                            # 不记住密码或密码为空
-                            save_data["database"]["main"]["password"] = ""  # nosec B105 B106 - 清空已保存密码
+                            main_updates["password"] = ""
                     else:
-                        # 如果没有密码字段，保持现有密码
-                        save_data["database"]["main"]["password"] = existing_password
+                        if "password" in main_existing:
+                            main_updates["password"] = main_existing["password"]
 
-                # 删除临时的rememberPassword字段
-                if (
-                    "main" in save_data["database"]
-                    and "rememberPassword" in save_data["database"]["main"]
-                ):
-                    del save_data["database"]["main"]["rememberPassword"]
-                # 处理缓存数据库密码保存逻辑
-                if "cache" in save_data["database"]:
-                    # 获取现有密码
-                    existing_cache_password = (
-                        existing_config.get("database", {}).get("cache", {}).get("password", "")
-                    )
+                    merged_main = {**main_existing, **main_updates}
+                    merged_db["main"] = merged_main
 
-                    if "password" in save_data["database"]["cache"]:
-                        cache_password = save_data["database"]["cache"]["password"]
+                # 处理缓存数据库配置
+                if "cache" in db_config and isinstance(db_config["cache"], dict):
+                    cache_updates = dict(db_config["cache"])
+                    cache_existing = copy.deepcopy(existing_db.get("cache", {}))
+                    cache_updates.pop("has_saved_password", None)
+                    existing_cache_password = cache_existing.get("password", "")
+
+                    if "password" in cache_updates:
+                        cache_password = cache_updates["password"]
                         if cache_password == MASKED_SECRET:
-                            # 脱敏密码，使用现有密码
-                            save_data["database"]["cache"]["password"] = existing_cache_password
+                            cache_updates["password"] = existing_cache_password
                         elif cache_password:
-                            # 新密码，明文保存
-                            save_data["database"]["cache"]["password"] = cache_password
+                            cache_updates["password"] = cache_password
                         else:
-                            # 密码为空
-                            save_data["database"]["cache"]["password"] = ""  # nosec B105 B106 - 清空已保存密码
+                            cache_updates["password"] = ""
                     else:
-                        # 如果没有密码字段，保持现有密码
-                        save_data["database"]["cache"]["password"] = existing_cache_password
+                        if "password" in cache_existing:
+                            cache_updates["password"] = cache_existing["password"]
 
-            # 兼容旧格式
-            elif "url" in db_config:
-                save_data["database"] = {"url": db_config["url"]}
+                    if cache_updates.get("username") == MASKED_SECRET:
+                        cache_updates["username"] = cache_existing.get("username", "")
 
-        if "message_bus" in config_data:
-            save_data["message_bus"] = config_data["message_bus"]
+                    merged_cache = {**cache_existing, **cache_updates}
+                    merged_db["cache"] = merged_cache
 
-        if "webui" in config_data:
-            save_data["webui"] = config_data["webui"]
+                # 合并其他数据库子配置（如 analytics 等）
+                for key, value in db_config.items():
+                    if key not in {"main", "cache", "url"}:
+                        merged_db[key] = value
 
-        if "monitoring" in config_data:
-            save_data["monitoring"] = config_data["monitoring"]
+                save_data["database"] = merged_db
 
         if "security" in config_data:
-            # 不保存脱敏的安全信息
-            security = config_data["security"]
-            save_security = {}
-            if security.get("api_key") and security["api_key"] != MASKED_SECRET:
-                save_security["api_key"] = security["api_key"]
-            if security.get("secret_key") and security["secret_key"] != MASKED_SECRET:
-                save_security["secret_key"] = security["secret_key"]
+            security_payload = config_data["security"] or {}
+            existing_security = existing_config.get("security", {})
+            save_security: Dict[str, Any] = {}
+
+            if "api_key" in security_payload:
+                api_key = security_payload.get("api_key")
+                if api_key == MASKED_SECRET:
+                    if existing_security:
+                        save_security["api_key"] = existing_security.get("api_key", "")
+                elif api_key:
+                    save_security["api_key"] = api_key
+                else:
+                    save_security["api_key"] = ""
+
+            if "secret_key" in security_payload:
+                secret_key = security_payload.get("secret_key")
+                if secret_key == MASKED_SECRET:
+                    if existing_security:
+                        save_security["secret_key"] = existing_security.get("secret_key", "")
+                elif secret_key:
+                    save_security["secret_key"] = secret_key
+                else:
+                    save_security["secret_key"] = ""
+
+            # 清理空值，避免写入冗余字段
+            save_security = {
+                key: value
+                for key, value in save_security.items()
+                if value not in (None, "")
+            }
+
             if save_security:
                 save_data["security"] = save_security
+            else:
+                save_data.pop("security", None)
+
+        # 合并未显式处理的其他键，确保新增字段不会丢失
+        handled_keys = {
+            "app",
+            "log",
+            "database",
+            "message_bus",
+            "webui",
+            "monitoring",
+            "security",
+            "notifications",
+            "runtime",
+            "performance",
+            "debug",
+            "health_check",
+            "qmt",
+            "miniqmt",
+            "amazingdata",
+            "cloudflare",
+            "cloudflare_workers",
+            "data_sources",
+            "data_providers",
+        }
+        for key, value in config_data.items():
+            if key not in handled_keys:
+                save_data[key] = copy.deepcopy(value)
 
         # 创建备份
         if config_path.exists():
@@ -356,7 +441,7 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.info(f"配置已保存到: {config_path}")
 
         try:
-            reload_config()
+            updated_config = await _reload_and_export_config()
         except Exception as reload_error:
             logger.error(f"保存后重新加载配置失败: {reload_error}")
             return {
@@ -364,9 +449,6 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
                 "message": f"配置已写入文件，但重新加载失败: {reload_error}",
                 "path": str(config_path),
             }
-
-        # 返回最新配置，便于前端立即刷新展示
-        updated_config = await get_configuration()
 
         return {
             "success": True,

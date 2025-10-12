@@ -8,7 +8,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 _MODULE_NAME = "deepsearch.infrastructure.providers.managers.data_source_manager"
 
@@ -49,10 +49,11 @@ def _call(module_attr: str, *args: Any, **kwargs: Any) -> Any:
     return target(*args, **kwargs)
 
 
-def get_data_source_manager():
+def get_data_source_manager() -> "DataSourceManager":
     """获取真实的数据源管理器实例。"""
 
-    return _call("get_data_source_manager")
+    manager = _call("get_data_source_manager")
+    return cast("DataSourceManager", manager)
 
 
 async def initialize_data_sources():

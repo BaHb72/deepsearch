@@ -7,7 +7,7 @@ import asyncio
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import aiohttp
 import akshare as ak
@@ -41,7 +41,7 @@ class OptimizedCloudFlareProxy:
         )
 
         # 请求缓存
-        self.cache = {}
+        self.cache: Dict[str, Tuple[float, Any]] = {}
         self.cache_ttl = 60  # 缓存60秒
 
     async def test_connection(self):
@@ -65,7 +65,9 @@ class OptimizedCloudFlareProxy:
                 print(f"[FAIL] 健康检查失败: {e}")
                 return False
 
-    async def fetch_with_cache(self, url: str, params: Dict = None) -> Any:
+    async def fetch_with_cache(
+        self, url: str, params: Dict[str, Any] | None = None
+    ) -> Any:
         """带缓存的请求"""
         # 生成缓存键
         cache_key = f"{url}:{json.dumps(params or {}, sort_keys=True)}"
@@ -78,14 +80,14 @@ class OptimizedCloudFlareProxy:
 
         # 发起请求
         async with aiohttp.ClientSession(connector=self.connector, timeout=self.timeout) as session:
-            async with session.get(url, params=params) as resp:
+            async with session.get(url, params=params or None) as resp:
                 data = await resp.json()
 
                 # 更新缓存
                 self.cache[cache_key] = (time.time(), data)
                 return data
 
-    async def batch_fetch(self, requests: List[Dict]) -> List[Any]:
+    async def batch_fetch(self, requests: List[Dict[str, Any]]) -> List[Any]:
         """批量请求"""
         tasks = []
         for req in requests:

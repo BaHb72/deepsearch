@@ -7,11 +7,12 @@
 import asyncio
 import json
 from datetime import timedelta
-from typing import Any, Awaitable, Callable, Dict, Optional, Set, Union, cast
+from typing import Any, Awaitable, Callable, Dict, Mapping, Optional, Set, Union, cast
 
-from fastapi import Request, Response
 from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.requests import Request
+from starlette.responses import Response
 from starlette.types import ASGIApp
 
 try:
@@ -242,7 +243,7 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app: ASGIApp, ttl: int = 5, include_paths: Optional[Set[str]] = None):
         # FastAPI 应用满足 ASGI 协议，此处忽略 mypy 的类型误报
-        super().__init__(app)  # type: ignore[arg-type]
+        super().__init__(app)
         self.deduplicator = RequestDeduplicator(ttl)
         self.include_paths = include_paths or {
             "/api/qmt/orderbook",
@@ -270,19 +271,23 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
                 if body:
                     params.update(json.loads(body))
                 # 重新创建request以便后续使用
-                from starlette.requests import Request as StarletteRequest
-
                 # 创建新的request对象，包含原始body
-                async def receive():
+                async def receive() -> dict[str, object]:
                     return {
                         "type": "http.request",
                         "body": body,
+                        "more_body": False,
                     }
 
-                request = cast(
-                    Request,
-                    StarletteRequest(scope=request.scope, receive=receive, send=request._send),
-                )
+                send_callable_raw = getattr(request, "_send", None)
+                if send_callable_raw is None:
+                    request = Request(scope=request.scope, receive=receive)
+                else:
+                    send_callable = cast(
+                        Callable[[Mapping[str, object]], Awaitable[None]],
+                        send_callable_raw,
+                    )
+                    request = Request(scope=request.scope, receive=receive, send=send_callable)
             except Exception as e:
                 logger.debug(f"解析POST参数失败: {e}")
 

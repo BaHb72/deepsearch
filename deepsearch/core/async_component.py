@@ -311,6 +311,10 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
         # 简单检查状态
         return bool(self.state.is_healthy())
 
+    def health_check(self) -> bool:
+        """满足 Component 协议对同步健康检查的要求。"""
+        return self.health_check_sync()
+
     # 兼容旧接口
     def _health_check(self) -> bool:
         """兼容旧的健康检查接口"""

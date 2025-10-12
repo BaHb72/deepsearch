@@ -91,7 +91,7 @@ class RecordingResult:
     def __init__(self, has_row: bool):
         self._has_row = has_row
 
-    def first(self) -> tuple[int] | None:  # type: ignore[override]
+    def first(self) -> tuple[int] | None:
         return (1,) if self._has_row else None
 
 

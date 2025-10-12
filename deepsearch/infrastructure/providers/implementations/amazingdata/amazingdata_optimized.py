@@ -165,14 +165,15 @@ class OptimizedThreadPoolManager:
 class OptimizedHeartbeat:
     """优化的心跳机制"""
 
-    def __init__(self, config, sdk_getter: Callable[[], AmazingDataSDKProtocol]):
+    def __init__(self, config, sdk_getter: Optional[Callable[[], AmazingDataSDKProtocol]] = None):
         self.config = config
         self.base_interval = 60  # 基础间隔
         self.current_interval = self.base_interval
         self.consecutive_failures = 0
         self.last_activity = time.time()
 
-        self._sdk_getter = sdk_getter
+        # sdk_getter 可选，默认使用已加载的 AmazingData SDK 句柄（在测试中为 MagicMock）
+        self._sdk_getter = sdk_getter or self._build_default_sdk_getter()
 
         # 自适应参数
         self.min_interval = 30
@@ -181,6 +182,17 @@ class OptimizedHeartbeat:
 
         # 线程池（用于心跳）
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    @staticmethod
+    def _build_default_sdk_getter() -> Callable[[], AmazingDataSDKProtocol]:
+        """构造一个默认的 SDK 获取函数，确保类型安全并在缺失时抛出明确异常。"""
+
+        def _getter() -> AmazingDataSDKProtocol:
+            if not HAS_AMAZINGDATA or ad is None:
+                raise RuntimeError("AmazingData SDK 未加载或初始化失败")
+            return cast(AmazingDataSDKProtocol, ad)
+
+        return _getter
 
     async def send_heartbeat(self):
         """发送优化的心跳"""

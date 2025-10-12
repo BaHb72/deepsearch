@@ -7,16 +7,23 @@
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, TypedDict
 
 # 项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent
 
 
-def scan_frontend_apis() -> Dict[str, List[Dict]]:
+class _FrontendApi(TypedDict):
+    function: str
+    url: str
+    method: str
+    file: str
+
+
+def scan_frontend_apis() -> Dict[str, List[_FrontendApi]]:
     """扫描前端API文件，提取所有API定义"""
     frontend_api_dir = PROJECT_ROOT / "deepsearch/webui/frontend/src/api"
-    apis = {}
+    apis: Dict[str, List[_FrontendApi]] = {}
 
     # 排除request.js
     exclude_files = ["request.js"]
@@ -55,21 +62,28 @@ def scan_frontend_apis() -> Dict[str, List[Dict]]:
                     func_name = name
 
             apis[module_name].append(
-                {
-                    "function": func_name,
-                    "url": url,
-                    "method": method,
-                    "file": f"src/api/{api_file.name}",
-                }
+                _FrontendApi(
+                    function=func_name,
+                    url=url,
+                    method=method,
+                    file=f"src/api/{api_file.name}",
+                )
             )
 
     return apis
 
 
-def scan_backend_apis() -> Dict[str, List[Dict]]:
+class _BackendApi(TypedDict):
+    function: str
+    path: str
+    method: str
+    file: str
+
+
+def scan_backend_apis() -> Dict[str, List[_BackendApi]]:
     """扫描后端API文件，提取所有路由定义"""
     backend_api_dir = PROJECT_ROOT / "deepsearch/webui/api"
-    apis = {}
+    apis: Dict[str, List[_BackendApi]] = {}
 
     for api_file in backend_api_dir.glob("*.py"):
         if api_file.name == "__init__.py":
@@ -94,12 +108,12 @@ def scan_backend_apis() -> Dict[str, List[Dict]]:
             func_name = func_match.group(1) if func_match else "unknown"
 
             apis[module_name].append(
-                {
-                    "function": func_name,
-                    "path": path,
-                    "method": method,
-                    "file": f"webui/api/{api_file.name}",
-                }
+                _BackendApi(
+                    function=func_name,
+                    path=path,
+                    method=method,
+                    file=f"webui/api/{api_file.name}",
+                )
             )
 
     return apis

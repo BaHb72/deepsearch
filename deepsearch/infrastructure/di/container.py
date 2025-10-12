@@ -8,7 +8,7 @@ import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Type, TypeVar
+from typing import Any, Callable, Dict, Optional, Type, TypeVar, cast
 
 from loguru import logger
 
@@ -60,7 +60,7 @@ class ServiceScope(IServiceProvider):
         """获取服务实例"""
         # 先检查作用域实例
         if service_type in self._scoped_instances:
-            return self._scoped_instances[service_type]
+            return cast(T, self._scoped_instances[service_type])
 
         # 从容器解析
         instance = self.container.resolve_in_scope(service_type, self)
@@ -172,22 +172,22 @@ class DIContainer:
         # 处理单例
         if descriptor.lifetime == ServiceLifetime.SINGLETON:
             if service_type in self._singletons:
-                return self._singletons[service_type]
+                return cast(T, self._singletons[service_type])
 
             instance = self._create_instance(descriptor, scope)
-            if instance:
+            if instance is not None:
                 self._singletons[service_type] = instance
-            return instance
+            return cast(Optional[T], instance)
 
         # 处理作用域
         if descriptor.lifetime == ServiceLifetime.SCOPED:
             instance = self._create_instance(descriptor, scope)
-            if instance:
+            if instance is not None:
                 scope.cache_scoped(service_type, instance)
-            return instance
+            return cast(Optional[T], instance)
 
         # 处理瞬态
-        return self._create_instance(descriptor, scope)
+        return cast(Optional[T], self._create_instance(descriptor, scope))
 
     def _create_instance(self, descriptor: ServiceDescriptor, scope: ServiceScope) -> Optional[Any]:
         """

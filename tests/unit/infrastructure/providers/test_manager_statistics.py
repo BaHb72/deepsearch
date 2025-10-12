@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from typing import Any, Dict, List, Optional
+
 import pytest
 
 from deepsearch.infrastructure.providers.interfaces.base import (
@@ -31,7 +33,7 @@ class DummyProvider(DataProvider):
         enabled: bool = True,
         priority: int = 100,
         extras: dict[str, object] | None = None,
-        stats: object | None = None,
+        stats: dict[str, object] | str | None = None,
         healthy: bool = True,
         status: str = "running",
         capabilities: set[DataCapability] | None = None,
@@ -44,7 +46,7 @@ class DummyProvider(DataProvider):
             config=extras or {},
         )
         super().__init__(config)
-        self._stats = stats
+        self._raw_stats = stats
         self._healthy = healthy
         self.status = status
         self._capabilities = capabilities or set()
@@ -53,37 +55,45 @@ class DummyProvider(DataProvider):
     async def initialize(self) -> bool:
         return True
 
-    async def get_stock_list(self, limit=None, **kwargs):  # type: ignore[override]
+    async def get_stock_list(
+        self, limit: Optional[int] = None, **kwargs: Any
+    ) -> Optional[List[Dict[str, Any]]]:
         return None
 
     async def get_kline_data(
         self,
         symbol: str,
         period: str = "1d",
-        start_date: str | None = None,
-        end_date: str | None = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
         limit: int = 100,
-        **kwargs,
-    ):  # type: ignore[override]
+        **kwargs: Any,
+    ) -> Optional[List[Dict[str, Any]]]:
         return None
 
-    async def get_realtime_quotes(self, symbols):  # type: ignore[override]
+    async def get_realtime_quotes(
+        self, symbols: List[str]
+    ) -> Optional[List[Dict[str, Any]]]:
         return None
 
-    async def get_stock_info(self, symbol):  # type: ignore[override]
+    async def get_stock_info(self, symbol: str) -> Optional[Dict[str, Any]]:
         return None
 
-    async def get_order_book(self, symbol):  # type: ignore[override]
+    async def get_order_book(self, symbol: str) -> Optional[Dict[str, Any]]:
         return None
 
     async def get_data(self, request: DataRequest) -> DataResponse:
         self.last_request = request
         return DataResponse(success=True, data=[{"echo": request.request_type}], metadata={})
 
-    def get_statistics(self):  # type: ignore[override]
-        return self._stats
+    def get_statistics(self) -> Dict[str, object]:
+        if isinstance(self._raw_stats, dict):
+            return dict(self._raw_stats)
+        if self._raw_stats is None:
+            return {}
+        return {"value": self._raw_stats}
 
-    def get_capabilities(self):  # type: ignore[override]
+    def get_capabilities(self) -> set[DataCapability]:
         return set(self._capabilities)
 
     def is_healthy(self) -> bool:

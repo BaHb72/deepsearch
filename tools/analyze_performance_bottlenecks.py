@@ -12,7 +12,7 @@ import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import psutil
 
@@ -31,7 +31,7 @@ class PerformanceMetric:
     unit: str
     threshold: float
     status: str  # 'good', 'warning', 'critical'
-    details: Dict[str, Any] = None
+    details: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -46,17 +46,17 @@ class Bottleneck:
     impact_score: float
     description: str
     solution: str
-    code_snippet: str = None
+    code_snippet: Optional[str] = None
 
 
 class PerformanceAnalyzer:
     """性能分析器"""
 
     def __init__(self):
-        self.metrics = []
-        self.bottlenecks = []
-        self.log_data = []
-        self.monitor_data = {}
+        self.metrics: List[PerformanceMetric] = []
+        self.bottlenecks: List[Bottleneck] = []
+        self.log_data: List[Dict[str, Any]] = []
+        self.monitor_data: Dict[str, Any] = {}
 
     async def load_monitoring_data(self):
         """加载监控数据"""
@@ -86,14 +86,18 @@ class PerformanceAnalyzer:
 
     async def analyze_latency_bottlenecks(self) -> List[Bottleneck]:
         """分析延迟瓶颈"""
-        bottlenecks = []
+        bottlenecks: List[Bottleneck] = []
 
         # 分析各数据源延迟
-        source_latencies = defaultdict(list)
+        source_latencies: defaultdict[str, List[float]] = defaultdict(list)
         for record in self.log_data:
             if "performance" in record and "latency_ms" in record["performance"]:
                 source = record.get("source_type", "unknown")
-                latency = record["performance"]["latency_ms"]
+                latency_raw = record["performance"]["latency_ms"]
+                try:
+                    latency = float(latency_raw)
+                except (TypeError, ValueError):
+                    continue
                 source_latencies[source].append(latency)
 
         # 计算统计指标

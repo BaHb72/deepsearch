@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from collections import defaultdict, deque
 from collections.abc import MutableMapping
@@ -14,10 +15,10 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, DefaultDict, Optional, cast
 
-from fastapi import Request, Response
-from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 
 from deepsearch.webui.api.models import RateLimitSnapshot, RateLimitStatsPayload
@@ -118,7 +119,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             exclude_paths: 不限流的路径集合
         """
         # FastAPI 应用满足 ASGI 协议，此处忽略 mypy 的类型误报
-        super().__init__(app)  # type: ignore[arg-type]
+        super().__init__(app)
 
         global _middleware_instance
         _middleware_instance = self
@@ -287,7 +288,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # 测试模式下跳过限流，避免集成测试被 429 干扰
-        if request.headers.get("X-Test-Mode", "").lower() == "true":
+        test_mode_active = request.headers.get("X-Test-Mode", "").lower() == "true"
+        app_state = None
+        scope_app = request.scope.get("app")
+        if scope_app is not None:
+            app_state = getattr(scope_app, "state", None)
+
+        test_mode_active = test_mode_active or bool(
+            getattr(app_state, "rate_limit_test_mode", False)
+        )
+        test_mode_active = test_mode_active or os.getenv(
+            "DEEPSEARCH_TEST_MODE", ""
+        ).lower() == "true"
+
+        if test_mode_active:
             bypass_response: Response = await call_next(request)
             bypass_headers = cast(MutableMapping[str, str], bypass_response.headers)
             bypass_headers.setdefault("X-RateLimit-Mode", "test-bypass")

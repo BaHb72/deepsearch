@@ -169,6 +169,8 @@ def update_internal_imports(file_path: Path) -> bool:
             print(f"Updated internal imports: {file_path.name}")
             return True
 
+        return False
+
     except Exception as e:
         print(f"Error updating internal imports in {file_path}: {e}")
         return False

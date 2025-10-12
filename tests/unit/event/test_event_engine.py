@@ -6,12 +6,19 @@
 
 import threading
 import time
-from typing import List
+from typing import Any, Dict, List, cast
 from unittest.mock import Mock
 
 import pytest
 
 from deepsearch.event.engine.engine import BatchHandler, Event, EventEngine, HandlerManager
+
+
+def _event_payload(event: Event) -> Dict[str, Any]:
+    """确保事件数据以字典形式返回，便于类型检查。"""
+
+    assert isinstance(event.data, dict)
+    return cast(Dict[str, Any], event.data)
 
 
 class TestEvent:
@@ -368,8 +375,9 @@ class TestEventEngine:
         """测试事件优先级处理"""
         processed_order = []
 
-        def handler(event: Event):
-            processed_order.append(event.data["id"])
+        def handler(event: Event) -> None:
+            payload = _event_payload(event)
+            processed_order.append(cast(int, payload["id"]))
 
         engine.register(event_type="TEST", handler=handler)
         engine.start()
@@ -520,11 +528,12 @@ class TestEventEngine:
 
     def test_batch_processing(self, batch_engine):
         """测试批处理功能"""
-        processed_batches = []
+        processed_batches: List[List[int]] = []
 
         class TestBatchHandler(BatchHandler):
             def process_batch(self, events: List[Event]) -> None:
-                processed_batches.append([e.data["id"] for e in events])
+                batch_ids = [cast(int, _event_payload(e)["id"]) for e in events]
+                processed_batches.append(batch_ids)
 
         handler = TestBatchHandler()
         batch_engine.register(event_type="BATCH_TEST", handler=handler)
