@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 from typing import Any, Dict
 from unittest.mock import AsyncMock, Mock
@@ -15,12 +16,15 @@ from fastapi.testclient import TestClient
 
 from deepsearch.webui.server import app
 
+os.environ.setdefault("DEEPSEARCH_TEST_MODE", "true")
+
 
 @pytest.fixture(scope="function")
 def client() -> TestClient:
     """提供轻量级 FastAPI TestClient。"""
 
-    client = TestClient(app)
+    app.state.rate_limit_test_mode = True
+    client = TestClient(app, headers={"X-Test-Mode": "true"})
     try:
         yield client
     finally:

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from collections import defaultdict, deque
 from collections.abc import MutableMapping
@@ -287,7 +288,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # 测试模式下跳过限流，避免集成测试被 429 干扰
-        if request.headers.get("X-Test-Mode", "").lower() == "true":
+        test_mode_active = request.headers.get("X-Test-Mode", "").lower() == "true"
+        test_mode_active = test_mode_active or bool(
+            getattr(request.app.state, "rate_limit_test_mode", False)
+        )
+        test_mode_active = test_mode_active or os.getenv(
+            "DEEPSEARCH_TEST_MODE", ""
+        ).lower() == "true"
+
+        if test_mode_active:
             bypass_response: Response = await call_next(request)
             bypass_headers = cast(MutableMapping[str, str], bypass_response.headers)
             bypass_headers.setdefault("X-RateLimit-Mode", "test-bypass")
