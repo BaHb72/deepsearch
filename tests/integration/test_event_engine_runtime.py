@@ -1,5 +1,6 @@
 import asyncio
 import time
+from typing import Any, Callable, List, Tuple, cast
 
 import pytest
 
@@ -7,7 +8,16 @@ from deepsearch.core.interfaces.component import MonitoringHook
 from deepsearch.event.engine.engine import BatchHandler, Event, EventEngine
 
 
-async def wait_for_condition(condition, timeout=0.5, interval=0.01):
+def _event_payload(event: Event) -> dict[str, Any]:
+    """将事件数据转换为具名字典以便类型系统识别。"""
+
+    assert isinstance(event.data, dict)
+    return cast(dict[str, Any], event.data)
+
+
+async def wait_for_condition(
+    condition: Callable[[], bool], timeout: float = 0.5, interval: float = 0.01
+) -> bool:
     start = time.perf_counter()
     while time.perf_counter() - start < timeout:
         if condition():
@@ -18,32 +28,40 @@ async def wait_for_condition(condition, timeout=0.5, interval=0.01):
 
 class RecordingHook(MonitoringHook):
     def __init__(self) -> None:
-        self.starts = []
-        self.completes = []
+        self.starts: List[Tuple[str, str]] = []
+        self.completes: List[Tuple[str, str, float, Exception | None]] = []
 
-    def on_handler_start(self, handler_name, event_type) -> None:
+    def on_handler_start(self, handler_name: str, event_type: str) -> None:
         self.starts.append((handler_name, event_type))
 
-    def on_handler_complete(self, handler_name, event_type, duration, error) -> None:
+    def on_handler_complete(
+        self,
+        handler_name: str,
+        event_type: str,
+        duration: float,
+        error: Exception | None = None,
+    ) -> None:
         self.completes.append((handler_name, event_type, duration, error))
 
 
 class CollectingBatchHandler(BatchHandler):
     def __init__(self) -> None:
-        self.calls = []
+        self.calls: List[List[int]] = []
 
-    def process_batch(self, events):
-        self.calls.append([event.data["id"] for event in events])
+    def process_batch(self, events: List[Event]) -> None:
+        ids = [cast(int, _event_payload(event)["id"]) for event in events]
+        self.calls.append(ids)
 
 
 @pytest.mark.asyncio
 async def test_monitoring_hook_tracks_handler_lifecycle():
     engine = EventEngine(max_workers=0)
     hook = RecordingHook()
-    results = []
+    results: List[int] = []
 
     def handler(event: Event) -> None:
-        results.append(event.data["value"])
+        payload = _event_payload(event)
+        results.append(cast(int, payload["value"]))
 
     engine.add_monitoring_hook(hook)
     engine.register("HOOK_EVENT", handler)
@@ -101,7 +119,7 @@ async def test_enable_and_disable_batch_processing_runtime():
 @pytest.mark.asyncio
 async def test_update_periodic_interval_runtime():
     engine = EventEngine(max_workers=0)
-    timestamps = []
+    timestamps: List[float] = []
 
     def handler(event: Event) -> None:
         timestamps.append(time.perf_counter())
@@ -126,8 +144,8 @@ async def test_update_periodic_interval_runtime():
 @pytest.mark.asyncio
 async def test_general_handler_receives_events_and_can_unregister():
     engine = EventEngine(max_workers=0)
-    specific_calls = []
-    general_calls = []
+    specific_calls: List[str] = []
+    general_calls: List[str] = []
 
     def specific_handler(event: Event) -> None:
         specific_calls.append(event.type)
@@ -205,10 +223,11 @@ async def test_snapshot_reflects_batch_and_schedule_state():
 async def test_remove_monitoring_hook_stops_tracking():
     engine = EventEngine(max_workers=0)
     hook = RecordingHook()
-    observed = []
+    observed: List[int] = []
 
     def handler(event: Event) -> None:
-        observed.append(event.data["value"])
+        payload = _event_payload(event)
+        observed.append(cast(int, payload["value"]))
 
     engine.add_monitoring_hook(hook)
     engine.register("MONITOR_EVENT", handler)

@@ -178,13 +178,6 @@ def setup_global_exception_handlers(app):
             content={"error": "请求参数无效", "details": str(exc), "path": str(request.url)},
         )
 
-    @app.exception_handler(404)
-    async def not_found_handler(request, exc):
-        """处理404错误"""
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={"error": "请求的资源不存在", "path": str(request.url)},
-        )
 
     @app.exception_handler(500)
     async def internal_error_handler(request, exc):

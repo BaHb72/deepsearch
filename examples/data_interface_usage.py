@@ -6,6 +6,7 @@
 
 import asyncio
 from datetime import datetime, timedelta
+from typing import cast
 
 import pandas as pd
 from loguru import logger
@@ -203,7 +204,7 @@ class DataInterfaceExample:
                 try:
                     # 尝试获取数据
                     df = await self.provider.get_kline(symbol)
-                    return df
+                    return cast(pd.DataFrame, df)
 
                 except AuthenticationError as e:
                     logger.error(f"认证失败: {e.message}")

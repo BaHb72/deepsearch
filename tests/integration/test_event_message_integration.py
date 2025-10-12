@@ -8,6 +8,7 @@ import asyncio
 import pickle
 import time
 import zlib
+from collections.abc import Mapping
 
 import pytest
 
@@ -271,10 +272,11 @@ class TestEventMessageIntegration:
     @pytest.mark.asyncio
     async def test_event_priority(self, event_engine):
         """测试事件优先级处理"""
-        processed_events = []
+        processed_events: list[int] = []
 
         def priority_handler(event: Event):
-            processed_events.append(event.data.get("priority", 0))
+            priority_source = event.data if isinstance(event.data, Mapping) else {}
+            processed_events.append(int(priority_source.get("priority", 0)))
 
         event_engine.register("PRIORITY_EVENT", priority_handler)
 

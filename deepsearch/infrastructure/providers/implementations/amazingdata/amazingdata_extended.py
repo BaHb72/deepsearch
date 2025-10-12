@@ -1005,3 +1005,60 @@ class AmazingDataExtended(AmazingDataProvider):
         except Exception as e:
             logger.error(f"修改密码失败: {e}")
             return False
+
+
+# --- Dynamic SDK forwarding and test patchable symbols ---
+# Expose ad and HAS_AMAZINGDATA so tests can monkeypatch them on this module
+try:  # pragma: no cover - optional dependency wiring
+    from ._sdk_loader import ad as ad, HAS_AMAZINGDATA as HAS_AMAZINGDATA  # type: ignore
+except Exception:  # Safe fallbacks for test environments without SDK
+    ad = None  # type: ignore
+    HAS_AMAZINGDATA = False  # type: ignore
+
+# Candidate real SDK module names to import lazily
+_SDK_CANDIDATES = ("amazingdata", "tgw", "amazingdata_sdk")
+
+__sdk_mod = None  # cache loaded SDK module
+
+
+def _load_sdk():
+    global __sdk_mod
+    if __sdk_mod is not None:
+        return __sdk_mod
+    last_exc = None
+    for name in _SDK_CANDIDATES:
+        try:
+            import importlib
+
+            __sdk_mod = importlib.import_module(name)
+            return __sdk_mod
+        except Exception as e:  # pragma: no cover - import errors are environment-specific
+            last_exc = e
+    raise RuntimeError(
+        f"Cannot import AmazingData SDK; tried {_SDK_CANDIDATES}. Last error: {last_exc!r}"
+    )
+
+
+# Alias map to tolerate different naming styles across SDKs
+_ALIAS = {
+    "onSnapshotindex": "on_snapshot_index",
+    "onSnapshotfuture": "on_snapshot_future",
+    "onSnapshotetf": "on_snapshot_etf",
+    "onSnapshotkzz": "on_snapshot_kzz",
+    "onSnapshothkt": "on_snapshot_hkt",
+    "OnKLine": "on_kline",
+}
+
+
+def __getattr__(name: str):  # type: ignore
+    """
+    Delegate unknown attributes to the real SDK module.
+    This allows tests or legacy code to resolve symbols on this shim module.
+    """
+    sdk = _load_sdk()
+    if hasattr(sdk, name):
+        return getattr(sdk, name)
+    alt = _ALIAS.get(name)
+    if alt and hasattr(sdk, alt):
+        return getattr(sdk, alt)
+    raise AttributeError(f"SDK has no attribute: {name}")

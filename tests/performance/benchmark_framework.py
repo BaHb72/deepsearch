@@ -81,7 +81,7 @@ class PerformanceMonitor:
 
     def __init__(self):
         self.process = psutil.Process()
-        self.samples = []
+        self.samples: list[dict[str, float | int]] = []
         self.monitoring = False
 
     async def start_monitoring(self, interval: float = 0.1):
@@ -130,7 +130,7 @@ class CacheBenchmark:
         # Initialize cache
         cache = CacheManager(l1_max_size=1000, l1_ttl=300)
 
-        latencies = []
+        latencies: list[float] = []
         monitor = PerformanceMonitor()
         monitor_task = asyncio.create_task(monitor.start_monitoring())
 
@@ -186,8 +186,12 @@ class CacheBenchmark:
             await cache.set(f"key_{i}", f"value_{i}")
 
         # Benchmark with realistic access pattern
+        weight_array = np.array(weights, dtype=float)
+        total_weight = float(weight_array.sum())
+        probabilities = weight_array / total_weight if total_weight else weight_array
+
         for _ in range(num_operations):
-            key = np.random.choice(keys, p=weights / sum(weights))
+            key = str(np.random.choice(keys, p=probabilities))
             op_start = time.time()
             value = await cache.get(key)
             if value is None:
@@ -222,7 +226,7 @@ class DatabaseBenchmark:
         # This would connect to actual database
         # For now, simulate with delays
 
-        latencies = []
+        latencies: list[float] = []
         monitor = PerformanceMonitor()
         monitor_task = asyncio.create_task(monitor.start_monitoring())
 
@@ -259,9 +263,9 @@ class DatabaseBenchmark:
         latencies = []
         start_time = time.time()
 
-        async def simulate_connection():
+        async def simulate_connection() -> float:
             conn_start = time.time()
-            await asyncio.sleep(0.01 + np.random.exponential(0.005))
+            await asyncio.sleep(0.01 + float(np.random.exponential(0.005)))
             return (time.time() - conn_start) * 1000
 
         # Concurrent connections
@@ -294,7 +298,7 @@ class APIBenchmark:
     ) -> BenchmarkResult:
         """Benchmark a specific API endpoint."""
 
-        latencies = []
+        latencies: list[float] = []
         errors = 0
 
         async def make_request(session):
@@ -553,7 +557,7 @@ class BenchmarkRunner:
             
             <h2>Summary</h2>
             <p>Total benchmarks: {len(suite.results)}</p>
-            <p>Total duration: {(suite.end_time - suite.start_time).total_seconds():.2f} seconds</p>
+            <p>Total duration: {self._format_duration(suite)}</p>
             
             <h2>Results</h2>
             <table>
@@ -595,6 +599,13 @@ class BenchmarkRunner:
             f.write(html_content)
 
         print(f"Report generated: {html_file}")
+
+    def _format_duration(self, suite: BenchmarkSuite) -> str:
+        """Format suite duration with None-safe handling."""
+        if suite.end_time is None:
+            return "N/A"
+        duration = suite.end_time - suite.start_time
+        return f"{duration.total_seconds():.2f} seconds"
 
     def _create_charts(self, suite: BenchmarkSuite, timestamp: str):
         """Create performance charts."""

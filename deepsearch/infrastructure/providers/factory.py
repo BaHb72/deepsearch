@@ -182,8 +182,9 @@ class DataProviderFactory:
                 return provider
 
         # 创建新实例
-        provider = self.registry.get_provider_instance(name)
-        if provider:
+        provider_obj = self.registry.get_provider_instance(name)
+        if isinstance(provider_obj, BaseDataProvider):
+            provider = provider_obj
             init_method = getattr(provider, "initialize", None)
             if callable(init_method):
                 try:
@@ -241,7 +242,7 @@ class DataProviderFactory:
 
             # 尝试获取提供者
             provider = await self._get_specific_provider(provider_info.name)
-            if provider:
+            if provider is not None:
                 return provider
 
         return None
@@ -276,7 +277,7 @@ class DataProviderFactory:
                 continue
 
             provider = await self._get_specific_provider(provider_info.name)
-            if provider:
+            if provider is not None:
                 return provider
 
         return None
@@ -338,7 +339,7 @@ class DataProviderFactory:
                 continue
 
             provider = await self._get_specific_provider(provider_info.name)
-            if provider:
+            if provider is not None:
                 return provider
 
         return None
@@ -366,7 +367,7 @@ class DataProviderFactory:
         provider_scores = []
         for provider_info in providers:
             # 基础分数 = 优先级
-            score = provider_info.priority
+            score = float(provider_info.priority)
 
             # 性能加成
             if provider_info.name in self._performance_stats:
@@ -391,7 +392,7 @@ class DataProviderFactory:
                 continue
 
             provider = await self._get_specific_provider(provider_info.name)
-            if provider:
+            if provider is not None:
                 return provider
 
         return None
@@ -436,7 +437,9 @@ class DataProviderFactory:
                 health = await with_timeout(
                     provider.health_check(), timeout=timeout_value, default={"status": "timeout"}
                 )
-                return health.get("status") != "error"
+                if isinstance(health, dict):
+                    return health.get("status") != "error"
+                return bool(health)
             except Exception:
                 return False
         return True

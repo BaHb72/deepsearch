@@ -20,11 +20,11 @@ class SafeArchitectureMigration:
         self.project_root = Path(project_root)
         self.deepsearch_root = self.project_root / "deepsearch"
         self.backup_dir = self.project_root / f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        self.migration_log = []
-        self.errors = []
+        self.migration_log: List[str] = []
+        self.errors: List[str] = []
 
         # 定义迁移映射
-        self.migration_map = {
+        self.migration_map: Dict[str, str] = {
             # services -> application/services
             "services/market": "application/services/market",
             "services/data": "application/services/data",
@@ -40,7 +40,7 @@ class SafeArchitectureMigration:
         }
 
         # 需要保留的目录（不迁移）
-        self.preserve_dirs = {
+        self.preserve_dirs: Set[str] = {
             "webui",  # Web界面暂时保留
             "config",  # 配置文件保留
             "event",  # 事件系统保留
@@ -50,7 +50,7 @@ class SafeArchitectureMigration:
         }
 
         # 废弃的目录（准备删除）
-        self.deprecated_dirs = {
+        self.deprecated_dirs: Set[str] = {
             "storage",  # 已迁移到database
             "backtest_old",  # 旧的回测系统
             "core_old",  # 旧的核心引擎
@@ -139,7 +139,7 @@ class SafeArchitectureMigration:
 
     def generate_import_map(self) -> Dict[str, str]:
         """生成import映射表"""
-        import_map = {}
+        import_map: Dict[str, str] = {}
 
         for old_path, new_path in self.migration_map.items():
             old_module = f"deepsearch.{old_path.replace('/', '.')}"
@@ -150,7 +150,7 @@ class SafeArchitectureMigration:
 
     def find_files_to_migrate(self) -> List[Tuple[Path, Path]]:
         """查找需要迁移的文件"""
-        files_to_migrate = []
+        files_to_migrate: List[Tuple[Path, Path]] = []
 
         for old_dir, new_dir in self.migration_map.items():
             old_path = self.deepsearch_root / old_dir
@@ -166,7 +166,7 @@ class SafeArchitectureMigration:
 
     def find_deprecated_files(self) -> List[Path]:
         """查找废弃的文件"""
-        deprecated_files = []
+        deprecated_files: List[Path] = []
 
         for deprecated_dir in self.deprecated_dirs:
             dir_path = self.deepsearch_root / deprecated_dir
@@ -188,7 +188,7 @@ class SafeArchitectureMigration:
 
     def generate_report(self) -> str:
         """生成迁移报告"""
-        report = []
+        report: List[str] = []
         report.append("=" * 60)
         report.append("Architecture Migration Report")
         report.append("=" * 60)

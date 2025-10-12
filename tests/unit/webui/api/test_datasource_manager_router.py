@@ -37,24 +37,28 @@ class DummyDataSourceConfig:
 
 # 注入精简版本 data_source_manager，避免真实依赖触发导入失败
 stub_manager_module = ModuleType("deepsearch.infrastructure.providers.managers.data_source_manager")
-stub_manager_module.DataSourceConfig = DummyDataSourceConfig
-stub_manager_module.DataSourceType = DummyDataSourceType
-stub_manager_module.DataSourceLifecycleStatus = Enum(
-    "DummyLifecycleStatus",
-    [
-        ("DRAFT", "draft"),
-        ("PENDING_TEST", "pending_test"),
-        ("TESTING", "testing"),
-        ("READY", "ready"),
-        ("ACTIVE", "active"),
-        ("DEGRADED", "degraded"),
-        ("ERROR", "error"),
-        ("OFFLINE", "offline"),
-    ],
+setattr(stub_manager_module, "DataSourceConfig", DummyDataSourceConfig)
+setattr(stub_manager_module, "DataSourceType", DummyDataSourceType)
+setattr(
+    stub_manager_module,
+    "DataSourceLifecycleStatus",
+    Enum(
+        "DummyLifecycleStatus",
+        [
+            ("DRAFT", "draft"),
+            ("PENDING_TEST", "pending_test"),
+            ("TESTING", "testing"),
+            ("READY", "ready"),
+            ("ACTIVE", "active"),
+            ("DEGRADED", "degraded"),
+            ("ERROR", "error"),
+            ("OFFLINE", "offline"),
+        ],
+    ),
 )
-stub_manager_module.DataSourceManager = object
-stub_manager_module.get_data_source_manager = lambda: None
-stub_manager_module.initialize_data_sources = lambda: None
+setattr(stub_manager_module, "DataSourceManager", object)
+setattr(stub_manager_module, "get_data_source_manager", lambda: None)
+setattr(stub_manager_module, "initialize_data_sources", lambda: None)
 sys.modules["deepsearch.infrastructure.providers.managers.data_source_manager"] = (
     stub_manager_module
 )
@@ -88,17 +92,18 @@ class FakeManager:
         self.initialized = True
         self.registry = FakeRegistry()
         self.providers = {DummyDataSourceType.AMAZINGDATA: object()}
-        self._status = {
+        self._status_sources: Dict[str, Dict[str, Any]] = {
+            DummyDataSourceType.AMAZINGDATA.value: {
+                "status": "active",
+                "available": True,
+                "reason": "healthy",
+                "config": {"enabled": True, "priority": 1},
+            }
+        }
+        self._status: Dict[str, Any] = {
             "initialized": True,
             "availableCount": 1,
-            "sources": {
-                DummyDataSourceType.AMAZINGDATA.value: {
-                    "status": "active",
-                    "available": True,
-                    "reason": "healthy",
-                    "config": {"enabled": True, "priority": 1},
-                }
-            },
+            "sources": self._status_sources,
         }
         self._source_status: Dict[DummyDataSourceType, Dict[str, Any]] = {
             DummyDataSourceType.AMAZINGDATA: {
@@ -144,7 +149,7 @@ class FakeManager:
         return True
 
     def _transition_status(self, source_type, status, **updates):
-        entry = self._status["sources"].setdefault(source_type.value, {})
+        entry = self._status_sources.setdefault(source_type.value, {})
         entry["status"] = status.value if hasattr(status, "value") else status
         entry.update(updates)
         runtime_entry = self._source_status.setdefault(source_type, {})
@@ -155,7 +160,7 @@ class FakeManager:
         config = self.registry.get_config(source_type)
         if config:
             config.enabled = False
-        entry = self._status["sources"].setdefault(source_type.value, {})
+        entry = self._status_sources.setdefault(source_type.value, {})
         entry.update(
             {"status": "degraded", "available": False, "degraded_reason": "disabled_by_config"}
         )
@@ -171,7 +176,7 @@ class FakeManager:
         config = self.registry.get_config(source_type)
         if config:
             config.enabled = True
-        entry = self._status["sources"].setdefault(source_type.value, {})
+        entry = self._status_sources.setdefault(source_type.value, {})
         entry.update({"status": "active", "available": True})
         entry.pop("degraded_reason", None)
         entry.pop("pending_reactivation", None)
@@ -278,7 +283,7 @@ def fake_environment(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_data_source_status(fake_environment):
-    result = await module.get_data_source_status()  # type: ignore[call-arg]
+    result = await module.get_data_source_status()
     assert result["code"] == 0
     sources = result["data"]["sources"]
     assert DummyDataSourceType.AMAZINGDATA.value in sources
@@ -286,7 +291,7 @@ async def test_get_data_source_status(fake_environment):
 
 @pytest.mark.asyncio
 async def test_get_data_source_monitor(fake_environment):
-    result = await module.get_data_source_monitor()  # type: ignore[call-arg]
+    result = await module.get_data_source_monitor()
     assert result["code"] == 0
     payload = result["data"]
     assert payload["overview"]["total"] == len(payload["sources"])
@@ -296,7 +301,7 @@ async def test_get_data_source_monitor(fake_environment):
 @pytest.mark.asyncio
 async def test_switch_data_source(fake_environment):
     fake_manager, _, _ = fake_environment
-    response = await module.switch_data_source(module.SwitchRequest(source="amazingdata"))  # type: ignore[arg-type]
+    response = await module.switch_data_source(module.SwitchRequest(source="amazingdata"))
     assert response["code"] == 0
     assert fake_manager.switch_calls == [DummyDataSourceType.AMAZINGDATA]
 
@@ -310,7 +315,9 @@ async def test_test_data_source(fake_environment):
 
 @pytest.mark.asyncio
 async def test_refresh_cache(fake_environment):
-    response = await module.refresh_data_source_cache(module.CacheRefreshRequest(source="amazingdata"))  # type: ignore[arg-type]
+    response = await module.refresh_data_source_cache(
+        module.CacheRefreshRequest(source="amazingdata")
+    )
     assert response["code"] == 0
     assert "cacheStats" in response["data"]
 

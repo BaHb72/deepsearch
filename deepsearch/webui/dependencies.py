@@ -51,6 +51,18 @@ def get_engine(context: ApplicationContext = Depends(get_app_context)) -> MainEn
         )
 
 
+def get_engine_optional(context: ApplicationContext = Depends(get_app_context)) -> MainEngine | None:
+    """
+    获取可选引擎依赖：当引擎未初始化时返回 None，而不是抛出 503。
+
+    用于允许系统信息等端点在引擎未就绪时也能返回降级信息。
+    """
+    try:
+        return context.get_engine()
+    except RuntimeError:
+        return None
+
+
 def get_component_manager(engine: MainEngine = Depends(get_engine)) -> ComponentManager:
     """
     获取组件管理器依赖

@@ -15,10 +15,22 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, DefaultDict, Deque, Dict, List, Optional, TypedDict, cast
+from typing import Any, Callable, DefaultDict, Deque, Dict, List, Optional, Protocol, TypedDict, cast
 
 import psutil
 from loguru import logger
+
+
+class DiskIOSnapshot(Protocol):
+    read_bytes: int
+    write_bytes: int
+    read_count: int
+    write_count: int
+
+
+class NetworkIOSnapshot(Protocol):
+    bytes_sent: int
+    bytes_recv: int
 
 
 class MetricLevel(Enum):
@@ -236,8 +248,8 @@ class PerformanceTracker:
         # 状态
         self._running = False
         self._collect_thread = None
-        self._last_disk_io = None
-        self._last_network_io = None
+        self._last_disk_io: DiskIOSnapshot | None = None
+        self._last_network_io: NetworkIOSnapshot | None = None
         self._process: psutil.Process = psutil.Process()
 
         # 初始化默认告警规则

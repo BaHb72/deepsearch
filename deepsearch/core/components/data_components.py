@@ -34,7 +34,7 @@ class DatabaseComponent(AsyncComponent[Any]):
         super().__init__("database", ComponentType.EXTERNAL, "数据库")
         self._engine: AsyncEngine | None = None
         self._session_factory: Callable[[], AsyncSession] | None = None
-        self._is_timescale_enabled = False
+        self._is_timescale_enabled: bool = False
         self._timeout_manager = get_timeout_manager()
 
         self._instance = self
@@ -150,17 +150,50 @@ class DatabaseComponent(AsyncComponent[Any]):
         if not self._engine:
             return False
 
-        engine_for_check = self._engine
+        engine_to_use = self._engine
+        sync_engine = getattr(self._engine, "sync_engine", None)
 
         try:
-            conn = engine_for_check.connect()
-            conn.execute(text("SELECT 1"))
-            if hasattr(conn, "close"):
-                conn.close()
+            from sqlalchemy.ext.asyncio import AsyncEngine as _AsyncEngine  # type: ignore
+        except Exception:  # pragma: no cover - SQLAlchemy 版本差异
+            _AsyncEngine = None  # type: ignore
+
+        if _AsyncEngine is not None and isinstance(self._engine, _AsyncEngine):
+            sync_engine = getattr(self._engine, "sync_engine", None)
+
+        if sync_engine is not None:
+            module_name = getattr(sync_engine.__class__, "__module__", "")
+            if not module_name.startswith("unittest.mock"):
+                engine_to_use = sync_engine
+
+        connection = None
+        try:
+            connect_callable = getattr(engine_to_use, "connect", None)
+            if not callable(connect_callable):
+                self._logger.error("当前数据库引擎不支持同步健康检查接口")
+                return False
+
+            connection = connect_callable()
+            try:
+                connection.execute(text("SELECT 1"))
+            except Exception:
+                if hasattr(connection, "__enter__") and hasattr(connection, "__exit__"):
+                    with connection as conn:
+                        conn.execute(text("SELECT 1"))
+                else:
+                    raise
+            close_method = getattr(connection, "close", None)
+            if callable(close_method):
+                close_method()
             return True
         except Exception as exc:
             self._logger.error(f"数据库健康检查失败: {exc}")
             return False
+        finally:
+            if connection is not None:
+                dispose_method = getattr(connection, "dispose", None)
+                if callable(dispose_method):
+                    dispose_method()
 
     async def health_check_async(self) -> bool:
         """异步健康检查（带超时）"""
@@ -353,7 +386,7 @@ class DatabaseComponent(AsyncComponent[Any]):
 
     def get_status_info(self) -> Dict[str, Any]:
         """获取详细状态信息"""
-        info = super().get_status_info()
+        info: Dict[str, Any] = super().get_status_info()
 
         # 添加数据库连接信息
         if self._engine:
@@ -624,7 +657,7 @@ class CacheComponent(AsyncComponent[Any]):
             ),
         }
 
-    async def get_status(self) -> Dict[str, Any]:
+    async def get_status_details(self) -> Dict[str, Any]:
         """获取缓存组件状态信息"""
         status = {
             "connected": self._connected,

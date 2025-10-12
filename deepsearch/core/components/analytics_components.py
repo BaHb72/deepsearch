@@ -1,21 +1,24 @@
-"""
-分析组件模块
+"""分析组件模块，负责 DuckDB 数据分析与同步。"""
 
-负责DuckDB数据分析和数据同步
-从原unified_components.py拆分而来
-"""
+from __future__ import annotations
 
 import asyncio
 import concurrent.futures
 import inspect
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional
 
 from deepsearch.config import get_config
+from deepsearch.config.models.database import AnalyticsDatabaseConfig
 
 from ..async_component import AsyncComponent
 from ..interfaces import ComponentType
 from ..utils.exceptions import error_context
-from ..utils.timeout_config import TimeoutCategory, TimeoutManager
+from ..utils.timeout_config import TimeoutCategory, get_timeout_manager
+
+if TYPE_CHECKING:  # pragma: no cover - 仅用于类型检查
+    from deepsearch.infrastructure.persistence.duckdb_analytics import DuckDBAnalytics
+    from deepsearch.infrastructure.providers.managers.data_sync_service import DataSyncService
+    from .data_components import DatabaseComponent
 
 
 class AnalyticsComponent(AsyncComponent):
@@ -23,11 +26,11 @@ class AnalyticsComponent(AsyncComponent):
 
     def __init__(self):
         super().__init__("analytics", ComponentType.INFRASTRUCTURE, "数据分析")
-        self._analytics_db = None
-        self._sync_service = None
-        self._database_component = None
-        self._config = None
-        self._timeout_manager = TimeoutManager()
+        self._analytics_db: DuckDBAnalytics | None = None
+        self._sync_service: DataSyncService | None = None
+        self._database_component: DatabaseComponent | None = None
+        self._config: AnalyticsDatabaseConfig | None = None
+        self._timeout_manager = get_timeout_manager()
 
     async def _do_initialize(self) -> None:
         """初始化分析组件"""
@@ -37,10 +40,12 @@ class AnalyticsComponent(AsyncComponent):
         with error_context(self.name, "initialize"):
             # 获取配置
             config = get_config()
-            analytics_config = config.database.analytics if config and config.database else None
+            analytics_config = (
+                config.database.analytics if config and config.database else None
+            )
             self._config = analytics_config
 
-            if not analytics_config.enabled:
+            if not analytics_config or not analytics_config.enabled:
                 self._logger.info("分析数据库已禁用")
                 return
 
@@ -73,13 +78,14 @@ class AnalyticsComponent(AsyncComponent):
                 self._sync_service.set_analytics_db(self._analytics_db)
                 await self._sync_service.start()
                 self._logger.info(
-                    f"数据同步服务已启动，同步间隔: {analytics_config.sync_interval}秒"
+                    "数据同步服务已启动，同步间隔: %s秒",
+                    analytics_config.sync_interval,
                 )
 
             self._instance = self
             self._logger.info("分析组件初始化完成")
 
-    def set_database_component(self, database_component):
+    def set_database_component(self, database_component: DatabaseComponent | None) -> None:
         """设置数据库组件（用于数据同步）"""
         self._database_component = database_component
 
@@ -176,6 +182,19 @@ class AnalyticsComponent(AsyncComponent):
 
         return info
 
+    def _normalize_statistics(self, result: Any) -> Dict[str, Any]:
+        """将统计结果规范化为字典，避免向外暴露 Any。"""
+
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, Mapping):
+            return dict(result)
+        if result is None:
+            return {}
+
+        self._logger.debug("未识别的统计结果类型: %s", type(result).__name__)
+        return {"value": result}
+
     def get_statistics(self) -> Dict[str, Any]:
         """获取统计信息"""
         if self._analytics_db and hasattr(self._analytics_db, "get_statistics"):
@@ -191,13 +210,13 @@ class AnalyticsComponent(AsyncComponent):
                     with concurrent.futures.ThreadPoolExecutor() as executor:
                         # 使用 lambda 包装以正确处理协程
                         future = executor.submit(lambda: asyncio.run(stats_method()))
-                        return future.result()
+                        return self._normalize_statistics(future.result())
                 except RuntimeError:
                     # 不在异步环境中，直接运行
-                    return asyncio.run(stats_method())
+                    return self._normalize_statistics(asyncio.run(stats_method()))
             else:
                 # 同步方法，直接调用
-                return stats_method()
+                return self._normalize_statistics(stats_method())
         return {}
 
     async def get_statistics_async(self) -> Dict[str, Any]:
@@ -218,7 +237,7 @@ class AnalyticsComponent(AsyncComponent):
                 )
                 if inspect.isawaitable(result):
                     result = await asyncio.wait_for(result, timeout=timeout)
-            return result if result is not None else {}
+            return self._normalize_statistics(result)
         except asyncio.TimeoutError:
             self._logger.warning(f"Get statistics timeout after {timeout} seconds")
             return {"error": "Timeout getting statistics"}
@@ -226,7 +245,9 @@ class AnalyticsComponent(AsyncComponent):
             self._logger.error(f"Failed to get statistics: {e}")
             return {"error": str(e)}
 
-    async def execute_query(self, query: str, params: Optional[Dict] = None) -> Any:
+    async def execute_query(
+        self, query: str, params: Optional[Mapping[str, Any]] = None
+    ) -> Any:
         """执行分析查询（带超时）"""
         if not self._analytics_db:
             raise RuntimeError("Analytics DB not initialized")

@@ -15,7 +15,7 @@ class DependencyAnalyzer:
         self.root_path = Path(root_path)
         self.imports: Dict[str, Set[str]] = defaultdict(set)
         self.module_deps: Dict[str, Set[str]] = defaultdict(set)
-        self.circular_deps: List[Tuple[str, str]] = []
+        self.circular_deps: List[Tuple[str, ...]] = []
         self.coupling_scores: Dict[str, float] = {}
 
     def analyze(self):

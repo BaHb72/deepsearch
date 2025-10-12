@@ -14,10 +14,10 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, DefaultDict, Optional, cast
 
-from fastapi import Request, Response
-from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 
 from deepsearch.webui.api.models import RateLimitSnapshot, RateLimitStatsPayload
@@ -118,7 +118,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             exclude_paths: 不限流的路径集合
         """
         # FastAPI 应用满足 ASGI 协议，此处忽略 mypy 的类型误报
-        super().__init__(app)  # type: ignore[arg-type]
+        super().__init__(app)
 
         global _middleware_instance
         _middleware_instance = self

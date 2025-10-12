@@ -100,7 +100,7 @@ class AkShareDataFeed(IDataFeed):
                 out.append(r)
             return out
 
-        import pandas as pd  # type: ignore
+        import pandas as pd
 
         df = pd.DataFrame(data)
         if df.empty:

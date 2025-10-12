@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-__all__ = ["ILogSpi", "TGWClient", "login", "logout"]
+__all__ = ["ILogSpi", "TGWClient", "login", "logout", "__version__"]
+
+__version__ = "0.0.0-stub"
 
 
 class ILogSpi(Protocol):

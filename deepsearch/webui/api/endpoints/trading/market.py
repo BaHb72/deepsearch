@@ -3,7 +3,7 @@
 提供市场概览、板块行情、异动监控等接口
 """
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from deepsearch.webui.api.providers import get_market_service
 
-router = APIRouter(prefix="/api/market", tags=["市场数据"])
+router = APIRouter(prefix="/api/trading/market", tags=["�г�����"])
 
 # 数据源状态缓存
 _data_source_status_cache = {
@@ -22,15 +22,17 @@ _data_source_status_cache = {
 
 
 class MarketOverviewResponse(BaseModel):
-    """市场概览响应"""
+    """�г�������Ӧ"""
 
-    indices: List[dict]  # 指数数据
-    breadth: dict  # 市场宽度
-    capital: dict  # 资金流向
-    timestamp: str  # 时间戳
-    stale: bool  # 是否为缓存数据
-    data_source: str = "unknown"  # 数据源
-
+    indices: List[dict]  # ָ������
+    breadth: dict  # �г�����
+    capital: dict  # �ʽ�����
+    total_market_cap: float = 0.0
+    total_volume: float = 0.0
+    market_sentiment: str = "unknown"
+    timestamp: str  # ʱ���
+    stale: bool  # �Ƿ�Ϊ��������
+    data_source: str = "unknown"  # ����Դ
 
 class SectorResponse(BaseModel):
     """板块数据响应"""
@@ -469,7 +471,7 @@ async def get_stock_changes(
 
 @router.get("/zt-pool", response_model=List[ZTPoolItem])
 async def get_zt_pool(
-    date: str = Query(None, description="日期，格式：20241231"), service=Depends(get_market_service)
+    date: Optional[str] = Query(None, description="日期，格式：20241231"), service=Depends(get_market_service)
 ):
     """
     获取涨停股池数据
@@ -526,3 +528,30 @@ async def refresh_market_data(
     except Exception as e:
         logger.error(f"刷新市场数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+
+@router.get("/top-gainers")
+async def get_top_gainers(limit: int = Query(10, ge=1, le=100), service=Depends(get_market_service)):
+    """涨幅榜（前N名）"""
+    try:
+        result = await service.get_top_gainers(limit=limit)
+        return result or []
+    except Exception as e:
+        logger.error(f"获取涨幅榜失败: {e}")
+        # 在依赖不可用或实现缺失时，返回空列表以保持端点稳定性
+        return []
+
+
+@router.get("/top-losers")
+async def get_top_losers(limit: int = Query(10, ge=1, le=100), service=Depends(get_market_service)):
+    """跌幅榜（前N名）"""
+    try:
+        result = await service.get_top_losers(limit=limit)
+        return result or []
+    except Exception as e:
+        logger.error(f"获取跌幅榜失败: {e}")
+        # 在依赖不可用或实现缺失时，返回空列表以保持端点稳定性
+        return []

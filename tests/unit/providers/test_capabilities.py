@@ -3,7 +3,7 @@
 import importlib
 import sys
 from types import ModuleType, SimpleNamespace
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import pytest
 
@@ -49,7 +49,7 @@ def test_akshare_proxy_capabilities(monkeypatch: pytest.MonkeyPatch, dummy_confi
 
 def test_amazingdata_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
     # AmazingData 包的 __init__ 依赖实时模块，缺失 SDK 时会抛异常，这里注入占位模块避免导入失败。
-    stub_module = ModuleType("amazingdata_realtime_stub")
+    stub_module: Any = ModuleType("amazingdata_realtime_stub")
     stub_module.AmazingDataRealtime = object()
     monkeypatch.setitem(
         sys.modules,
@@ -106,7 +106,7 @@ def test_amazingdata_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_miniqmt_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
-    stub_base = ModuleType("qmt_base_stub")
+    stub_base: Any = ModuleType("qmt_base_stub")
 
     class _DataProvider:
         def __init__(self, config):
@@ -147,18 +147,27 @@ def test_miniqmt_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, base_name, stub_base)
     monkeypatch.delitem(sys.modules, miniqmt_name, raising=False)
 
-    miniqmt_module = importlib.import_module(miniqmt_name)
+    miniqmt_module: Any = importlib.import_module(miniqmt_name)
 
     class _TestMiniQMT(miniqmt_module.MiniQMTProvider):
         async def initialize(self) -> bool:
             return True
 
-        async def get_stock_list(self, limit=None, **kwargs):
+        async def get_stock_list(
+            self, limit: Optional[int] = None, **kwargs: Any
+        ) -> Optional[List[Dict[str, Any]]]:
             return []
 
         async def get_kline_data(
-            self, symbol: str, period: str = "1d", start_date=None, end_date=None, limit: int = 100, **kwargs
-        ):
+            self,
+            symbol: str,
+            period: str = "1d",
+            start_date: Optional[str] = None,
+            end_date: Optional[str] = None,
+            limit: int = 100,
+            adjust: str = "none",
+            **kwargs: Any,
+        ) -> Optional[List[Dict[str, Any]]]:
             return []
 
     provider = _TestMiniQMT()
@@ -176,25 +185,26 @@ def test_miniqmt_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_unified_qmt_capabilities() -> None:
     class _UnifiedQMTStub(UnifiedQMTProvider):
-        async def initialize(self) -> bool:  # type: ignore[override]
+        async def initialize(self) -> bool:
             return True
 
-        async def get_stock_list(  # type: ignore[override]
+        async def get_stock_list(
             self,
             limit: Optional[int] = None,
-            **kwargs,
-        ) -> Optional[list]:
+            **kwargs: Any,
+        ) -> Optional[List[Dict[str, Any]]]:
             return []
 
-        async def get_kline_data(  # type: ignore[override]
+        async def get_kline_data(
             self,
             symbol: str,
             period: str = "1d",
             start_date: Optional[str] = None,
             end_date: Optional[str] = None,
             limit: int = 100,
-            **kwargs,
-        ) -> Optional[list]:
+            adjust: str = "none",
+            **kwargs: Any,
+        ) -> Optional[List[Dict[str, Any]]]:
             return []
 
     provider = _UnifiedQMTStub()

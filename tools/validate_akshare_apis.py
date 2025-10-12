@@ -1,6 +1,6 @@
-"""
-AkShare API 全面验证脚本
-系统地测试所有AkShare API接口，记录成功/失败状态和性能指标
+# -*- coding: utf-8 -*-
+"""AkShare API 全面验证脚本
+系统地测试所有AkShare API接口, 记录成功/失败状态和性能指标
 """
 
 import inspect
@@ -11,10 +11,28 @@ import time
 import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ContextManager,
+    Dict,
+    Iterable,
+    List,
+    Literal,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Tuple,
+    TypedDict,
+    cast,
+)
 
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent))
+
+if TYPE_CHECKING:
+    from tqdm import tqdm as _TqdmType
 
 try:
     import akshare as ak
@@ -27,13 +45,36 @@ except ImportError as e:
     sys.exit(1)
 
 
+StatusLiteral = Literal["unknown", "success", "failed", "empty", "timeout"]
+
+
+class APIResult(TypedDict, total=False):
+    function_name: str
+    category: str
+    status: StatusLiteral
+    error: Optional[str]
+    error_type: Optional[str]
+    traceback: Optional[str]
+    response_time: Optional[float]
+    data_shape: object
+    data_sample: object
+    params_used: Optional[Mapping[str, object]]
+    timestamp: str
+
+
+class CheckpointData(TypedDict, total=False):
+    tested: List[str]
+    results: List[APIResult]
+    last_update: str
+
+
 class AkShareAPIValidator:
     """AkShare API 验证器"""
 
     def __init__(self, checkpoint_file: str = "akshare_validation_checkpoint.json"):
         self.checkpoint_file = checkpoint_file
-        self.results = []
-        self.checkpoint_data = self.load_checkpoint()
+        self.results: List[APIResult] = []
+        self.checkpoint_data: CheckpointData = self.load_checkpoint()
         self.start_time = datetime.now()
 
         # 配置日志
@@ -53,7 +94,7 @@ class AkShareAPIValidator:
         )
 
         # API分类
-        self.api_categories = {
+        self.api_categories: Dict[str, List[str]] = {
             "stock": [],  # 股票
             "index": [],  # 指数
             "fund": [],  # 基金
@@ -71,7 +112,7 @@ class AkShareAPIValidator:
         }
 
         # 测试参数配置
-        self.test_params = {
+        self.test_params: Dict[str, object] = {
             # 股票相关默认参数
             "symbol": "000001",
             "stock": "000001",
@@ -107,17 +148,56 @@ class AkShareAPIValidator:
             "concept": "人工智能",
         }
 
-    def load_checkpoint(self) -> Dict:
+    def load_checkpoint(self) -> CheckpointData:
         """加载检查点数据"""
         if os.path.exists(self.checkpoint_file):
             try:
                 with open(self.checkpoint_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    raw_data = cast(MutableMapping[str, object], json.load(f))
+                    tested_raw = raw_data.get("tested", [])
+                    tested: List[str] = []
+                    if isinstance(tested_raw, Iterable) and not isinstance(
+                        tested_raw, (str, bytes)
+                    ):
+                        tested = [item for item in tested_raw if isinstance(item, str)]
+
+                    results_raw = raw_data.get("results", [])
+                    results: List[APIResult] = []
+                    if isinstance(results_raw, Iterable):
+                        for item in results_raw:
+                            if isinstance(item, MutableMapping):
+                                result: APIResult = {
+                                    "function_name": cast(str, item.get("function_name", "")),
+                                    "category": cast(str, item.get("category", "unknown")),
+                                    "status": cast(StatusLiteral, item.get("status", "unknown")),
+                                    "error": cast(Optional[str], item.get("error")),
+                                    "error_type": cast(Optional[str], item.get("error_type")),
+                                    "traceback": cast(Optional[str], item.get("traceback")),
+                                    "response_time": cast(Optional[float], item.get("response_time")),
+                                    "data_shape": item.get("data_shape"),
+                                    "data_sample": item.get("data_sample"),
+                                    "params_used": cast(
+                                        Optional[Mapping[str, object]], item.get("params_used")
+                                    ),
+                                    "timestamp": cast(str, item.get("timestamp", datetime.now().isoformat())),
+                                }
+                                results.append(result)
+
+                    checkpoint: CheckpointData = {
+                        "tested": tested,
+                        "results": results,
+                    }
+
+                    last_update = raw_data.get("last_update")
+                    if isinstance(last_update, str):
+                        checkpoint["last_update"] = last_update
+
+                    return checkpoint
             except Exception as e:
                 logger.error(f"Failed to load checkpoint: {e}")
         return {"tested": [], "results": []}
 
-    def save_checkpoint(self):
+    def save_checkpoint(self) -> None:
         """保存检查点数据"""
         try:
             self.checkpoint_data["tested"] = [r["function_name"] for r in self.results]
@@ -193,14 +273,14 @@ class AkShareAPIValidator:
 
         return self.api_categories
 
-    def get_function_params(self, func_name: str) -> Tuple[List[str], Dict[str, Any]]:
+    def get_function_params(self, func_name: str) -> Tuple[List[str], Dict[str, object]]:
         """获取函数参数信息"""
         try:
             func = getattr(ak, func_name)
             sig = inspect.signature(func)
 
-            required_params = []
-            optional_params = {}
+            required_params: List[str] = []
+            optional_params: Dict[str, object] = {}
 
             for param_name, param in sig.parameters.items():
                 if param.default == inspect.Parameter.empty:
@@ -213,9 +293,9 @@ class AkShareAPIValidator:
             logger.debug(f"Failed to get params for {func_name}: {e}")
             return [], {}
 
-    def generate_test_params(self, func_name: str, required_params: List[str]) -> Dict[str, Any]:
+    def generate_test_params(self, func_name: str, required_params: List[str]) -> Dict[str, object]:
         """生成测试参数"""
-        test_params = {}
+        test_params: Dict[str, object] = {}
 
         for param in required_params:
             # 尝试从预定义参数中匹配
@@ -264,13 +344,15 @@ class AkShareAPIValidator:
 
         return test_params
 
-    def test_single_api(self, func_name: str, category: str) -> Dict:
+    def test_single_api(self, func_name: str, category: str) -> APIResult:
         """测试单个API"""
-        result = {
+        result: APIResult = {
             "function_name": func_name,
             "category": category,
             "status": "unknown",
             "error": None,
+            "error_type": None,
+            "traceback": None,
             "response_time": None,
             "data_shape": None,
             "data_sample": None,
@@ -372,7 +454,9 @@ class AkShareAPIValidator:
 
         return result
 
-    def run_validation(self, categories: List[str] = None, max_workers: int = 5):
+    def run_validation(
+        self, categories: Optional[Sequence[str]] = None, max_workers: int = 5
+    ) -> None:
         """运行验证测试"""
         # 发现所有API
         self.discover_apis()
@@ -388,7 +472,12 @@ class AkShareAPIValidator:
         logger.info(f"Starting validation of {total_apis} APIs...")
 
         # 使用进度条
-        with tqdm(total=total_apis, desc="Testing APIs") as pbar:
+        progress_context = cast(
+            ContextManager["_TqdmType[Any]"],
+            tqdm(total=total_apis, desc="Testing APIs"),
+        )
+        with progress_context as pbar:
+            progress = cast("_TqdmType[Any]", pbar)
             # 串行执行，避免并发问题
             for category, api_list in test_categories.items():
                 if not api_list:
@@ -404,8 +493,8 @@ class AkShareAPIValidator:
                     if len(self.results) % 10 == 0:
                         self.save_checkpoint()
 
-                    pbar.update(1)
-                    pbar.set_postfix(
+                    progress.update(1)
+                    progress.set_postfix(
                         {
                             "current": func_name,
                             "success": sum(1 for r in self.results if r["status"] == "success"),
@@ -422,7 +511,7 @@ class AkShareAPIValidator:
 
     def generate_report(self) -> str:
         """生成验证报告"""
-        report_lines = []
+        report_lines: List[str] = []
 
         # 报告标题
         report_lines.append("# AkShare API Validation Report")
@@ -450,7 +539,7 @@ class AkShareAPIValidator:
         # 按类别统计
         report_lines.append("\n## Statistics by Category\n")
 
-        category_stats = {}
+        category_stats: Dict[str, Dict[str, int]] = {}
         for result in self.results:
             category = result["category"]
             if category not in category_stats:
@@ -490,10 +579,12 @@ class AkShareAPIValidator:
         report_lines.append("\n## Performance Analysis\n")
 
         successful_apis = [
-            r for r in self.results if r["status"] == "success" and r["response_time"]
+            r
+            for r in self.results
+            if r["status"] == "success" and r["response_time"] is not None
         ]
         if successful_apis:
-            response_times = [r["response_time"] for r in successful_apis]
+            response_times = [cast(float, r["response_time"]) for r in successful_apis]
             avg_time = sum(response_times) / len(response_times)
             min_time = min(response_times)
             max_time = max(response_times)
@@ -503,8 +594,8 @@ class AkShareAPIValidator:
             report_lines.append(f"- **Slowest API**: {max_time:.3f}s")
 
             # 找出最快和最慢的API
-            fastest = min(successful_apis, key=lambda x: x["response_time"])
-            slowest = max(successful_apis, key=lambda x: x["response_time"])
+            fastest = min(successful_apis, key=lambda x: cast(float, x["response_time"]))
+            slowest = max(successful_apis, key=lambda x: cast(float, x["response_time"]))
 
             report_lines.append(
                 f"- **Fastest Function**: `{fastest['function_name']}` ({fastest['response_time']:.3f}s)"
@@ -519,17 +610,19 @@ class AkShareAPIValidator:
             report_lines.append("\n## Failed APIs\n")
 
             # 按错误类型分组
-            error_types = {}
+            error_types: Dict[str, List[APIResult]] = {}
             for api in failed_apis:
-                error_type = api.get("error_type", "Unknown")
-                if error_type not in error_types:
-                    error_types[error_type] = []
-                error_types[error_type].append(api)
+                error_type_value = api.get("error_type")
+                error_type = error_type_value if isinstance(error_type_value, str) else "Unknown"
+                error_types.setdefault(error_type, []).append(api)
 
             for error_type, apis in sorted(error_types.items()):
                 report_lines.append(f"\n### {error_type} ({len(apis)} APIs)\n")
                 for api in apis[:5]:  # 只显示前5个
-                    report_lines.append(f"- **{api['function_name']}**: {api['error'][:100]}")
+                    error_detail = api["error"] or ""
+                    report_lines.append(
+                        f"- **{api['function_name']}**: {error_detail[:100]}"
+                    )
                 if len(apis) > 5:
                     report_lines.append(f"- ... and {len(apis) - 5} more")
 
@@ -538,28 +631,36 @@ class AkShareAPIValidator:
 
         # 按类别组织成功的API
         for category in ["stock", "index", "fund", "macro"]:
-            category_success = [
-                r for r in self.results if r["category"] == category and r["status"] == "success"
-            ]
+                category_success = [
+                    r for r in self.results if r["category"] == category and r["status"] == "success"
+                ]
 
-            if category_success:
-                report_lines.append(
-                    f"\n### {category.capitalize()} APIs ({len(category_success)} available)\n"
-                )
-
-                # 按响应时间排序，推荐最快的
-                category_success.sort(key=lambda x: x.get("response_time", float("inf")))
-
-                for api in category_success[:10]:  # 显示前10个
-                    params = api.get("params_used", {})
-                    param_str = (
-                        ", ".join([f"{k}={v}" for k, v in params.items()])
-                        if params
-                        else "no params"
-                    )
+                if category_success:
                     report_lines.append(
-                        f"- **{api['function_name']}** - {api.get('response_time', 'N/A')}s - ({param_str})"
+                        f"\n### {category.capitalize()} APIs ({len(category_success)} available)\n"
                     )
+
+                    # 按响应时间排序，推荐最快的
+                    category_success.sort(
+                        key=lambda x: cast(float, x["response_time"]) if x["response_time"] is not None else float("inf")
+                    )
+
+                    for api in category_success[:10]:  # 显示前10个
+                        params = api.get("params_used")
+                        if isinstance(params, Mapping):
+                            param_str = ", ".join(f"{k}={v}" for k, v in params.items())
+                        else:
+                            param_str = "no params"
+
+                        response_value = api["response_time"]
+                        response_display = (
+                            f"{cast(float, response_value):.3f}s"
+                            if isinstance(response_value, (int, float))
+                            else "N/A"
+                        )
+                        report_lines.append(
+                            f"- **{api['function_name']}** - {response_display} - ({param_str})"
+                        )
 
                 if len(category_success) > 10:
                     report_lines.append(f"- ... and {len(category_success) - 10} more")
@@ -572,7 +673,11 @@ class AkShareAPIValidator:
         report_lines.append("|----------|----------|--------|---------------|-------|")
 
         for result in sorted(self.results, key=lambda x: x["function_name"]):
-            response_time = f"{result['response_time']:.3f}s" if result["response_time"] else "N/A"
+            response_time = (
+                f"{cast(float, result['response_time']):.3f}s"
+                if result["response_time"] is not None
+                else "N/A"
+            )
             error = (
                 result["error"][:50] + "..."
                 if result["error"] and len(result["error"]) > 50
@@ -599,7 +704,7 @@ class AkShareAPIValidator:
 
         return "\n".join(report_lines)
 
-    def save_report(self, filename: str = None):
+    def save_report(self, filename: Optional[str] = None) -> None:
         """保存报告到文件"""
         if filename is None:
             filename = (
@@ -633,7 +738,7 @@ class AkShareAPIValidator:
         logger.info(f"Detailed results saved to {json_filename}")
 
 
-def main():
+def main() -> None:
     """主函数"""
     print("=" * 60)
     print("AkShare API Comprehensive Validation Tool")
@@ -643,6 +748,8 @@ def main():
 
     # 检查命令行参数
     import sys
+
+    categories: Optional[List[str]]
 
     if len(sys.argv) > 1:
         arg = sys.argv[1]

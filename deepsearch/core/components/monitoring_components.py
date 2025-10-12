@@ -165,8 +165,10 @@ class MonitorComponent(AsyncComponent):
     def get_statistics(self) -> Dict[str, Any]:
         """获取监控统计信息"""
         instance = self._instance
-        if instance:
-            return instance.get_metrics()
+        if instance and hasattr(instance, "get_metrics"):
+            metrics = instance.get_metrics()
+            if isinstance(metrics, dict):
+                return metrics
         return {}
 
     def _get_component_statistics(self) -> Dict[str, Any]:

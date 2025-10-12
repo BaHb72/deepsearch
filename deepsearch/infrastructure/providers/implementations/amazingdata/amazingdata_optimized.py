@@ -165,14 +165,15 @@ class OptimizedThreadPoolManager:
 class OptimizedHeartbeat:
     """优化的心跳机制"""
 
-    def __init__(self, config, sdk_getter: Callable[[], AmazingDataSDKProtocol]):
+    def __init__(self, config, sdk_getter: Optional[Callable[[], AmazingDataSDKProtocol]] = None):
         self.config = config
         self.base_interval = 60  # 基础间隔
         self.current_interval = self.base_interval
         self.consecutive_failures = 0
         self.last_activity = time.time()
 
-        self._sdk_getter = sdk_getter
+        # sdk_getter 可选，默认使用已加载的 AmazingData SDK 句柄（在测试中为 MagicMock）
+        self._sdk_getter = sdk_getter or (lambda: ad)
 
         # 自适应参数
         self.min_interval = 30
