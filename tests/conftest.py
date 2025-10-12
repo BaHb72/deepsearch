@@ -20,8 +20,11 @@ from deepsearch.webui.server import app
 def client() -> TestClient:
     """提供轻量级 FastAPI TestClient。"""
 
-    with TestClient(app) as c:
-        yield c
+    client = TestClient(app)
+    try:
+        yield client
+    finally:
+        client.close()
 
 
 @pytest.fixture(scope="function")
