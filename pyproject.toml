@@ -117,8 +117,8 @@ python-preference = "only-system"
 compile-bytecode = true
 
 [tool.uv.sources]
-amazingdata = { path = "third_party/amazingdata" }
-tgw = { path = "third_party/tgw" }
+amazingdata = { url = "https://bahbai.com/packages/AmazingData-1.0.12-cp313-none-any.whl" }
+tgw = { url = "https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl" }
 
 [tool.uv.pip]
 index-url = "https://pypi.org/simple"

@@ -113,8 +113,11 @@ wheels = [
 
 [[package]]
 name = "amazingdata"
-version = "1.0.10"
-source = { directory = "third_party/amazingdata" }
+version = "1.0.12"
+source = { url = "https://bahbai.com/packages/AmazingData-1.0.12-cp313-none-any.whl" }
+wheels = [
+    { url = "https://bahbai.com/packages/AmazingData-1.0.12-cp313-none-any.whl", hash = "sha256:269a07bf0b40527eea9c6d80249fada05c907404641d213a43d57f9a37df3bca" },
+]
 
 [[package]]
 name = "annotated-types"
@@ -815,7 +818,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.9.0" },
     { name = "aioredis", specifier = ">=2.0.1" },
     { name = "akshare", specifier = "==1.17.54" },
-    { name = "amazingdata", directory = "third_party/amazingdata" },
+    { name = "amazingdata", url = "https://bahbai.com/packages/AmazingData-1.0.12-cp313-none-any.whl" },
     { name = "anyio", specifier = ">=4.9.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "backtrader", specifier = ">=1.9.78.123" },
@@ -863,7 +866,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0.41" },
     { name = "ta-lib", specifier = ">=0.6.5" },
     { name = "tabulate", specifier = ">=0.9.0" },
-    { name = "tgw", directory = "third_party/tgw" },
+    { name = "tgw", url = "https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl" },
     { name = "twisted", specifier = ">=25.5.0" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.33.0" },
@@ -3171,7 +3174,16 @@ wheels = [
 [[package]]
 name = "tgw"
 version = "1.0.8.1"
-source = { directory = "third_party/tgw" }
+source = { url = "https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl" }
+dependencies = [
+    { name = "pandas" },
+]
+wheels = [
+    { url = "https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl", hash = "sha256:555c66c38fa138bf235ab0f711457755f97dae83720b7a52c6f97cfeb261a1b5" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pandas" }]
 
 [[package]]
 name = "tinycss2"
