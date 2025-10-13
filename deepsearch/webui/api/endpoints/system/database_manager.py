@@ -6,7 +6,7 @@
 
 import asyncio
 import inspect
-from contextlib import suppress
+from contextlib import closing, suppress
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, cast
 
@@ -109,6 +109,33 @@ _STATUS_FROM_COMPONENT: Dict[ComponentStatus, str] = {
 }
 
 _VALID_RUNTIME_STATUSES = {"connected", "connecting", "disconnected", "error"}
+
+
+def _is_proactor_event_loop(loop: asyncio.AbstractEventLoop) -> bool:
+    """检查当前事件循环是否为 Windows Proactor 实现。"""
+
+    proactor_cls = getattr(asyncio, "ProactorEventLoop", None)
+    if proactor_cls is None:
+        return False
+    return isinstance(loop, proactor_cls)
+
+
+def _fetch_postgresql_version_sync(conn_string: str) -> str:
+    """在同步上下文中执行 PostgreSQL 版本查询。"""
+
+    if "psycopg" in globals():
+        connect_fn = psycopg.connect  # type: ignore[attr-defined]
+    else:
+        import psycopg2  # noqa: F401
+
+        connect_fn = psycopg2.connect  # type: ignore[attr-defined]
+
+    with closing(connect_fn(conn_string)) as conn:  # type: ignore[call-arg]
+        with closing(conn.cursor()) as cur:
+            cur.execute("SELECT version()")
+            version_row = cur.fetchone()
+
+    return version_row[0] if version_row else "Unknown"
 
 
 def _normalize_status(value: Optional[str]) -> Optional[str]:
@@ -1055,26 +1082,35 @@ async def _execute_connection_test(request: TestConnectionRequest) -> Dict[str, 
                 if request.password:
                     conn_string += f" password={request.password}"
                 try:
+                    version_info: Optional[str] = None
                     if "psycopg" in globals():
-                        async with await psycopg.AsyncConnection.connect(conn_string) as conn:
-                            async with conn.cursor() as cur:
-                                await cur.execute("SELECT version()")
-                                version = await cur.fetchone()
-                                result["success"] = True
-                                result["message"] = "连接成功"
-                                result["details"]["version"] = version[0] if version else "Unknown"
-                    else:
-                        import psycopg2
+                        use_thread = False
+                        try:
+                            loop = asyncio.get_running_loop()
+                            use_thread = _is_proactor_event_loop(loop)
+                        except RuntimeError:
+                            use_thread = False
 
-                        sync_conn = psycopg2.connect(conn_string)
-                        cur = sync_conn.cursor()
-                        cur.execute("SELECT version()")
-                        version = cur.fetchone()
-                        cur.close()
-                        sync_conn.close()
+                        if use_thread:
+                            logger.debug("检测到 ProactorEventLoop，使用同步连接测试 PostgreSQL")
+                            version_info = await asyncio.to_thread(
+                                _fetch_postgresql_version_sync, conn_string
+                            )
+                        else:
+                            async with await psycopg.AsyncConnection.connect(conn_string) as conn:
+                                async with conn.cursor() as cur:
+                                    await cur.execute("SELECT version()")
+                                    version = await cur.fetchone()
+                                    version_info = version[0] if version else "Unknown"
+                    else:
+                        version_info = await asyncio.to_thread(
+                            _fetch_postgresql_version_sync, conn_string
+                        )
+
+                    if version_info is not None:
                         result["success"] = True
                         result["message"] = "连接成功"
-                        result["details"]["version"] = version[0] if version else "Unknown"
+                        result["details"]["version"] = version_info
                 except Exception as exc:  # pragma: no cover - network issues
                     result["message"] = f"连接失败: {exc}"
         elif conn_type == "duckdb":
