@@ -120,7 +120,7 @@ def _is_proactor_event_loop(loop: asyncio.AbstractEventLoop) -> bool:
     return isinstance(loop, proactor_cls)
 
 
-def _fetch_postgresql_version_sync(conn_string: str) -> str:
+def _fetch_postgresql_version_sync(conn_params: Mapping[str, Any]) -> str:
     """在同步上下文中执行 PostgreSQL 版本查询。"""
 
     if "psycopg" in globals():
@@ -130,12 +130,29 @@ def _fetch_postgresql_version_sync(conn_string: str) -> str:
 
         connect_fn = psycopg2.connect  # type: ignore[attr-defined]
 
-    with closing(connect_fn(conn_string)) as conn:  # type: ignore[call-arg]
+    with closing(connect_fn(**conn_params)) as conn:  # type: ignore[arg-type]
         with closing(conn.cursor()) as cur:
             cur.execute("SELECT version()")
             version_row = cur.fetchone()
 
     return version_row[0] if version_row else "Unknown"
+
+
+def _build_postgresql_conn_params(request: "TestConnectionRequest") -> Dict[str, Any]:
+    """根据请求构造 PostgreSQL 连接参数，确保特殊字符安全。"""
+
+    params: Dict[str, Any] = {
+        "host": request.host,
+        "port": request.port,
+        "dbname": request.database or "postgres",
+    }
+
+    if request.username:
+        params["user"] = request.username
+    if request.password:
+        params["password"] = request.password
+
+    return params
 
 
 def _normalize_status(value: Optional[str]) -> Optional[str]:
@@ -1076,11 +1093,7 @@ async def _execute_connection_test(request: TestConnectionRequest) -> Dict[str, 
             if not PSYCOPG_AVAILABLE:
                 result["message"] = "PostgreSQL驱动未安装"
             else:
-                conn_string = f"host={request.host} port={request.port} dbname={request.database or 'postgres'}"
-                if request.username:
-                    conn_string += f" user={request.username}"
-                if request.password:
-                    conn_string += f" password={request.password}"
+                conn_params = _build_postgresql_conn_params(request)
                 try:
                     version_info: Optional[str] = None
                     if "psycopg" in globals():
@@ -1094,17 +1107,17 @@ async def _execute_connection_test(request: TestConnectionRequest) -> Dict[str, 
                         if use_thread:
                             logger.debug("检测到 ProactorEventLoop，使用同步连接测试 PostgreSQL")
                             version_info = await asyncio.to_thread(
-                                _fetch_postgresql_version_sync, conn_string
+                                _fetch_postgresql_version_sync, conn_params
                             )
                         else:
-                            async with await psycopg.AsyncConnection.connect(conn_string) as conn:
+                            async with await psycopg.AsyncConnection.connect(**conn_params) as conn:
                                 async with conn.cursor() as cur:
                                     await cur.execute("SELECT version()")
                                     version = await cur.fetchone()
                                     version_info = version[0] if version else "Unknown"
                     else:
                         version_info = await asyncio.to_thread(
-                            _fetch_postgresql_version_sync, conn_string
+                            _fetch_postgresql_version_sync, conn_params
                         )
 
                     if version_info is not None:
