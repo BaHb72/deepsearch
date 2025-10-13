@@ -2,7 +2,7 @@ import axios from 'axios'
 import messageManager from '@/utils/messageManager'
 import {logApiError} from '@/utils/errorTracker'
 import backendStatus from '@/utils/backendStatus'
-import {clearPortCache, getBackendUrl} from '@/utils/portDetector'
+import {clearPortCache} from '@/utils/portDetector'
 import { debugAxiosInstance } from '@/utils/debugApi'
 
 // 调试日志工具
@@ -174,20 +174,21 @@ request.interceptors.response.use(
                 case 404:
                     errorMessage = '请求地址不存在'
                     break
-                case 422:
+                case 422: {
                     // FastAPI的ValidationError返回422状态码
                     const validationDetail = error.response.data?.detail
                     errorMessage = typeof validationDetail === 'string'
                         ? validationDetail
                         : '请求参数验证失败'
                     break
+                }
                 case 500:
                     errorMessage = '服务器内部错误'
                     break
                 case 503:
                     errorMessage = '服务不可用'
                     break
-                default:
+                default: {
                     // 处理可能是对象的detail字段（如FastAPI的ValidationError）
                     const detail = error.response.data?.detail
                     if (typeof detail === 'object' && detail !== null) {
@@ -218,6 +219,8 @@ request.interceptors.response.use(
                         // detail是字符串或不存在
                         errorMessage = detail || error.response.data?.message || '请求失败'
                     }
+                    break
+                }
             }
             // 记录HTTP错误也算失败
             backendStatus.recordFailure()

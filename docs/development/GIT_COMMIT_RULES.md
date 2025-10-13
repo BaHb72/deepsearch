@@ -42,7 +42,7 @@
 - **敏感配置**：`config/.crypto_key`、`.crypto_key`、任何真实密钥或证书；如需示例，使用占位符并放入 `.example` 文件。
 
 ## 6. 条件性提交与特别约定
-- **依赖锁文件**：修改 Python 依赖时同步更新 `uv.lock`；前端依赖变更需要更新 `package.json` 与 `pnpm-lock.yaml`（如存在），但禁用 `package-lock.json`。
+- **依赖锁文件**：修改 Python 依赖时同步更新 `uv.lock`；前端依赖变更需更新 `package.json`，并确保 `packageManager` 字段标明所用 npm 版本，锁文件仍遵循仓库禁用 `package-lock.json` 的约定。
 - **迁移脚本**：新增数据库或数据结构迁移脚本必须纳入版本库，并在文档中标记执行顺序。
 - **示例与数据**：示例数据需确保脱敏且体积小于 1 MB，可放置在 `examples/` 或 `tests/fixtures/`；真实行情或交易数据不得入库。
 - **QMT 脚本**：`deepsearch/infrastructure/providers/datafeed/qmt/scripts/` 下脚本需保持 GBK 编码，提交前人工校验编码声明 `# encoding:gbk` 是否存在。

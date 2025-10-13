@@ -5,6 +5,74 @@
 import request from '@/api/request'
 import { extractData, logApiResponse } from '@/utils/apiResponse'
 
+const isPlainObject = value => value != null && typeof value === 'object' && !Array.isArray(value)
+
+const pickMessage = (...candidates) => {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim()
+      if (trimmed) {
+        return trimmed
+      }
+    }
+  }
+  return undefined
+}
+
+const normalizeTestResult = (apiResponse, payload) => {
+  const payloadObject = isPlainObject(payload) ? payload : undefined
+  const apiResponseObject = isPlainObject(apiResponse) ? apiResponse : undefined
+
+  const successFromPayload = typeof payloadObject?.success === 'boolean'
+    ? payloadObject.success
+    : undefined
+  const successFromApi = typeof apiResponseObject?.success === 'boolean'
+    ? apiResponseObject.success
+    : undefined
+
+  const success = successFromPayload ?? successFromApi ?? true
+
+  const message = pickMessage(
+    payloadObject?.message,
+    typeof payload === 'string' ? payload : undefined,
+    apiResponseObject?.message,
+    success ? '连接测试成功' : '连接测试失败'
+  )
+
+  const latency = typeof payloadObject?.latency === 'number'
+    ? payloadObject.latency
+    : typeof payload === 'number'
+      ? payload
+      : undefined
+
+  const details = isPlainObject(payloadObject?.details)
+    ? payloadObject.details
+    : undefined
+
+  const error = success
+    ? undefined
+    : pickMessage(
+        typeof payloadObject?.error === 'string'
+          ? payloadObject.error
+          : isPlainObject(payloadObject?.error)
+            ? payloadObject.error.message ?? payloadObject.error.code
+            : undefined,
+        typeof apiResponseObject?.error === 'string'
+          ? apiResponseObject.error
+          : isPlainObject(apiResponseObject?.error)
+            ? apiResponseObject.error.message ?? apiResponseObject.error.code
+            : undefined
+      )
+
+  return {
+    success,
+    message: message ?? (success ? '连接测试成功' : '连接测试失败'),
+    latency,
+    error,
+    details
+  }
+}
+
 // ==================== 数据库连接管理 ====================
 
 /**
@@ -100,7 +168,8 @@ export async function testDatabaseConnection(connection) {
     })
     const apiResponse = extractData(response)
     logApiResponse('testDatabaseConnection', apiResponse)
-    return extractData(apiResponse)
+    const payload = extractData(apiResponse)
+    return normalizeTestResult(apiResponse, payload)
   } catch (err) {
     console.error('[systemConfig.js] testDatabaseConnection 请求失败:', err)
     throw err

@@ -35,6 +35,8 @@ export interface DataSource {
   avgResponseTime?: number
   error?: string
   reason?: string
+  hasSavedCredential?: boolean
+  rememberCredential?: boolean
 }
 
 export interface DatabaseConnection {

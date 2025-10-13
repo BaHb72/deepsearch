@@ -18,8 +18,12 @@ export function extractData(response) {
     return null
   }
 
-  // 检查是否是APIResponse格式 (包含success字段)
-  if (typeof response === 'object' && 'success' in response) {
+  // 检查是否是APIResponse格式 (包含success字段并带有data/error/code等元信息)
+  if (
+    typeof response === 'object' &&
+    'success' in response &&
+    ('data' in response || 'error' in response || 'code' in response)
+  ) {
     // APIResponse格式
     if (response.success) {
       // 成功响应，返回data字段

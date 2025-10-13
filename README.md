@@ -82,6 +82,8 @@ deepsearch/
    npm install
    cd ..\..\..
    ```
+   > 📎 **注意**：仓库约定不提交 `package-lock.json`。在 Windows 终端执行 `npm install` 后，请确认未将该文件纳入提交；如已生成，请运行
+   > `Remove-Item package-lock.json` 或手动删除。
 6. AmazingData 运行在隔离解释器：按 `docs/datasources/amazingdata/` 指南配置 `runtime/interpreters/py39/`，并在 `settings.<env>.yaml` 中填写 `amazingdata.connection.python_interpreter_path`。
 
 ## 启动方式

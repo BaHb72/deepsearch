@@ -6,8 +6,11 @@
 
 import asyncio
 import inspect
-from contextlib import suppress
+import os
+import threading
+from contextlib import closing, suppress
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, cast
 
 import duckdb
@@ -16,6 +19,8 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from deepsearch.config import get_config
+from deepsearch.config.crypto import decrypt_password, encrypt_password
+from deepsearch.config.manager import ConfigManager
 from deepsearch.core.interfaces.component import Component, ComponentStatus
 from deepsearch.core.runtime.context import get_context
 from deepsearch.infrastructure.persistence.duckdb_path import resolve_duckdb_path
@@ -109,6 +114,50 @@ _STATUS_FROM_COMPONENT: Dict[ComponentStatus, str] = {
 }
 
 _VALID_RUNTIME_STATUSES = {"connected", "connecting", "disconnected", "error"}
+
+
+def _is_proactor_event_loop(loop: asyncio.AbstractEventLoop) -> bool:
+    """检查当前事件循环是否为 Windows Proactor 实现。"""
+
+    proactor_cls = getattr(asyncio, "ProactorEventLoop", None)
+    if proactor_cls is None:
+        return False
+    return isinstance(loop, proactor_cls)
+
+
+def _fetch_postgresql_version_sync(conn_params: Mapping[str, Any]) -> str:
+    """在同步上下文中执行 PostgreSQL 版本查询。"""
+
+    if "psycopg" in globals():
+        connect_fn = psycopg.connect  # type: ignore[attr-defined]
+    else:
+        import psycopg2  # noqa: F401
+
+        connect_fn = psycopg2.connect  # type: ignore[attr-defined]
+
+    with closing(connect_fn(**conn_params)) as conn:  # type: ignore[arg-type]
+        with closing(conn.cursor()) as cur:
+            cur.execute("SELECT version()")
+            version_row = cur.fetchone()
+
+    return version_row[0] if version_row else "Unknown"
+
+
+def _build_postgresql_conn_params(request: "TestConnectionRequest") -> Dict[str, Any]:
+    """根据请求构造 PostgreSQL 连接参数，确保特殊字符安全。"""
+
+    params: Dict[str, Any] = {
+        "host": request.host,
+        "port": request.port,
+        "dbname": request.database or "postgres",
+    }
+
+    if request.username:
+        params["user"] = request.username
+    if request.password:
+        params["password"] = request.password
+
+    return params
 
 
 def _normalize_status(value: Optional[str]) -> Optional[str]:
@@ -320,6 +369,183 @@ class DeactivateConnectionOptions(BaseModel):
 database_connections: Dict[int, DatabaseConnection] = {}
 next_id = 1
 
+_connections_lock = threading.RLock()
+_ENV_NAME = os.getenv("APP__ENV", "prod")
+
+
+def _resolve_config_dir() -> Path:
+    base = Path(__file__).resolve()
+    for _ in range(5):
+        parent = base.parent
+        if parent == base:
+            break
+        base = parent
+    return base / "config"
+
+
+_CONFIG_DIR = _resolve_config_dir()
+_CONNECTIONS_FILE = _CONFIG_DIR / f"database_connections.{_ENV_NAME}.yaml"
+
+_connections_config_manager = ConfigManager()
+_connections_manager_loaded = False
+
+
+def _serialize_datetime_field(value: Optional[datetime]) -> Optional[str]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc).isoformat()
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def _parse_datetime_field(value: Any) -> Optional[datetime]:
+    if value in (None, "", 0):
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value)
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except Exception:
+        return None
+
+
+def _serialize_connection(connection: DatabaseConnection) -> Dict[str, Any]:
+    data = connection.dict()
+    for field_name in ("created_at", "updated_at", "last_test_time"):
+        data[field_name] = _serialize_datetime_field(data.get(field_name))
+
+    password = data.get("password") or ""
+    if password:
+        try:
+            data["password"] = f"encrypted:{encrypt_password(password)}"
+        except Exception as exc:
+            logger.warning(f"数据库连接密码加密失败: {exc}")
+            data["password"] = password
+    else:
+        data["password"] = ""
+    return data
+
+
+def _deserialize_connection_payload(payload: Mapping[str, Any]) -> Optional[DatabaseConnection]:
+    data = dict(payload)
+    try:
+        conn_id = data.get("id")
+        if conn_id is None:
+            return None
+        data["id"] = int(conn_id)
+
+        if data.get("port") is not None:
+            try:
+                data["port"] = int(data["port"])
+            except (TypeError, ValueError):
+                data["port"] = 0
+
+        for field_name in ("created_at", "updated_at", "last_test_time"):
+            data[field_name] = _parse_datetime_field(data.get(field_name))
+
+        password = data.get("password")
+        if isinstance(password, str) and password:
+            if password.startswith("encrypted:"):
+                try:
+                    password = decrypt_password(password.split(":", 1)[1])
+                except Exception as exc:  # pragma: no cover - best effort
+                    logger.warning(f"数据库连接密码解密失败: {exc}")
+                    password = ""
+            data["password"] = password or ""
+
+        return DatabaseConnection(**data)
+    except Exception as exc:  # pragma: no cover - 防御性处理
+        logger.warning(f"数据库连接配置解析失败: {exc}")
+        return None
+
+
+def _reset_next_id_locked() -> None:
+    global next_id
+    next_id = max(database_connections.keys(), default=0) + 1
+
+
+def _ensure_connections_manager_loaded() -> None:
+    global _connections_manager_loaded
+    if _connections_manager_loaded:
+        return
+
+    _CONNECTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if not _CONNECTIONS_FILE.exists():
+        _connections_config_manager.update({"database_connections": []})
+        _connections_config_manager.save(_CONNECTIONS_FILE)
+
+    _connections_config_manager.load(_CONNECTIONS_FILE)
+    _connections_manager_loaded = True
+
+
+def _persist_connections() -> None:
+    try:
+        _ensure_connections_manager_loaded()
+    except Exception as exc:  # pragma: no cover - configuration fallback
+        logger.error(f"无法初始化数据库连接配置管理器: {exc}")
+        return
+
+    with _connections_lock:
+        snapshot = list(sorted(database_connections.values(), key=lambda c: c.id or 0))
+    serialized = [_serialize_connection(conn) for conn in snapshot]
+
+    _connections_config_manager.set("database_connections", serialized)
+    try:
+        _connections_config_manager.save()
+    except Exception as exc:  # pragma: no cover - IO 错误只记录不阻断
+        logger.error(f"保存数据库连接配置失败: {exc}")
+
+
+def _load_connections_from_storage() -> bool:
+    try:
+        _ensure_connections_manager_loaded()
+    except Exception as exc:
+        logger.error(f"初始化数据库连接配置失败: {exc}")
+        return False
+
+    payload = _connections_config_manager.get_all()
+    entries = payload.get("database_connections")
+    if not isinstance(entries, list) or not entries:
+        return False
+
+    loaded: Dict[int, DatabaseConnection] = {}
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        connection = _deserialize_connection_payload(item)
+        if connection is None or connection.id is None:
+            continue
+        loaded[int(connection.id)] = connection
+
+    if not loaded:
+        return False
+
+    with _connections_lock:
+        database_connections.clear()
+        database_connections.update(loaded)
+        _reset_next_id_locked()
+
+    logger.info(f"已从 {_CONNECTIONS_FILE.name} 加载 {len(loaded)} 条数据库连接配置")
+    return True
+
+
+def _update_connection_test_metadata(connection_id: int, success: bool, message: Optional[str]) -> None:
+    """更新连接的最近测试信息并持久化。"""
+    with _connections_lock:
+        connection = database_connections.get(connection_id)
+        if connection is None:
+            return
+        now = datetime.now(timezone.utc)
+        connection.last_test_time = now
+        connection.last_test_result = message or ("连接测试成功" if success else "连接测试失败")
+        connection.status = "connected" if success else "error"
+        connection.updated_at = now
+
+    _persist_connections()
+
 
 def _save_activation_state(
     connection_id: int, state: str, enabled: bool, error: Optional[str] = None
@@ -401,63 +627,74 @@ def _build_connection_payload(
 def get_next_id() -> int:
     """获取下一个ID"""
     global next_id
-    current_id = next_id
-    next_id += 1
+    with _connections_lock:
+        current_id = next_id
+        next_id += 1
     return current_id
 
 
 # 初始化一些默认连接
 def init_default_connections():
-    """初始化默认数据库连接"""
-    global database_connections
+    """初始化默认数据库连接（用于缺省配置）"""
+    global database_connections, next_id
+    with _connections_lock:
+        database_connections.clear()
+        next_id = 1
 
-    # PostgreSQL主数据库
-    postgres_conn = DatabaseConnection(
-        id=get_next_id(),
-        name="主数据库",
-        type="postgresql",
-        host="localhost",
-        port=5432,
-        database="deepsearch",
-        username="postgres",
-        password="",  # nosec B106 - 示例连接默认不保存密码
-        enabled=True,
-        created_at=datetime.now(),
-        status="online",
-    )
-    database_connections[postgres_conn.id] = postgres_conn
+        now = datetime.now()
+        postgres_conn = DatabaseConnection(
+            id=get_next_id(),
+            name="示例数据库",
+            type="postgresql",
+            host="localhost",
+            port=5432,
+            database="deepsearch",
+            username="postgres",
+            password="",  # nosec B106 - 示例连接默认不保存密码
+            enabled=True,
+            created_at=now,
+            status="online",
+        )
+        database_connections[postgres_conn.id] = postgres_conn
 
-    # DuckDB分析数据库
-    duckdb_conn = DatabaseConnection(
-        id=get_next_id(),
-        name="分析数据库",
-        type="duckdb",
-        host="localhost",
-        port=0,  # DuckDB不需要端口
-        database="data/analytics/market.duckdb",
-        enabled=True,
-        created_at=datetime.now(),
-        status="online",
-    )
-    database_connections[duckdb_conn.id] = duckdb_conn
+        duckdb_conn = DatabaseConnection(
+            id=get_next_id(),
+            name="分析数据库",
+            type="duckdb",
+            host="localhost",
+            port=0,
+            database="data/analytics/market.duckdb",
+            enabled=True,
+            created_at=datetime.now(),
+            status="online",
+        )
+        database_connections[duckdb_conn.id] = duckdb_conn
 
-    # Redis缓存
-    redis_conn = DatabaseConnection(
-        id=get_next_id(),
-        name="缓存数据库",
-        type="redis",
-        host="localhost",
-        port=6379,
-        database="0",
-        enabled=True,
-        created_at=datetime.now(),
-        status="online",
-    )
-    database_connections[redis_conn.id] = redis_conn
+        redis_conn = DatabaseConnection(
+            id=get_next_id(),
+            name="缓存数据库",
+            type="redis",
+            host="localhost",
+            port=6379,
+            database="0",
+            enabled=True,
+            created_at=datetime.now(),
+            status="online",
+        )
+        database_connections[redis_conn.id] = redis_conn
 
 
-# 初始化默认数据
-init_default_connections()
+def initialize_connection_store() -> None:
+    if _load_connections_from_storage():
+        return
+    logger.info("未检测到持久化的数据库连接配置，使用默认模板")
+    init_default_connections()
+    _persist_connections()
+
+
+# 初始化连接配置
+initialize_connection_store()
+
 
 
 @router.get("/connections")
@@ -477,6 +714,9 @@ async def get_connections():
         engine, components = _get_engine_and_components()
         engine_running = bool(engine and getattr(engine, "is_running", lambda: False)())
 
+        with _connections_lock:
+            connections_snapshot = list(database_connections.values())
+
         connections_list = []
 
         config = None
@@ -490,7 +730,7 @@ async def get_connections():
         cache_cfg = getattr(database_config, "cache", None) if database_config else None
         analytics_cfg = getattr(database_config, "analytics", None) if database_config else None
 
-        for conn in database_connections.values():
+        for conn in connections_snapshot:
             conn_dict = conn.dict()
             for field in ("created_at", "updated_at", "last_test_time"):
                 value = conn_dict.get(field)
@@ -674,28 +914,27 @@ async def create_connection(connection: DatabaseConnection):
     创建新的数据库连接
 
     Args:
-        connection: 数据库连接配置
+        connection: 数据库连接数据
 
     Returns:
-        创建的数据库连接
+        创建后的数据库连接
     """
     try:
-        # 检查名称是否重复
-        for conn in database_connections.values():
-            if conn.name == connection.name:
-                return APIResponse.error(
-                    code=ErrorCodes.DATABASE_ALREADY_EXISTS,
-                    message=f"数据库连接 '{connection.name}' 已存在",
-                )
+        with _connections_lock:
+            for existing in database_connections.values():
+                if existing.name == connection.name:
+                    return APIResponse.error(
+                        code=ErrorCodes.DATABASE_ALREADY_EXISTS,
+                        message=f"数据库连接 '{connection.name}' 已存在",
+                    )
 
-        # 创建新连接
-        connection.id = get_next_id()
-        connection.created_at = datetime.now()
-        connection.updated_at = datetime.now()
-        connection.status = "unknown"
-
-        database_connections[connection.id] = connection
-        connection_id = connection.id
+            connection.id = get_next_id()
+            now = datetime.now()
+            connection.created_at = now
+            connection.updated_at = now
+            connection.status = "unknown"
+            database_connections[connection.id] = connection
+            connection_id = connection.id
 
         activation_state: ActivationStateLiteral = (
             "active" if connection.enabled else "inactive"
@@ -705,6 +944,7 @@ async def create_connection(connection: DatabaseConnection):
             _save_connectivity_state(connection_id, "disconnected")
 
         logger.info(f"创建数据库连接: {connection.name}")
+        _persist_connections()
 
         response_payload = connection.dict()
         response_payload["activation"] = ActivationStateSchema(
@@ -734,7 +974,8 @@ async def activate_connection(
 ):
     """启用指定连接并更新状态仓库。"""
     try:
-        connection = database_connections.get(connection_id)
+        with _connections_lock:
+            connection = database_connections.get(connection_id)
         if not connection:
             return APIResponse.error(
                 code=ErrorCodes.DATABASE_NOT_FOUND,
@@ -742,10 +983,11 @@ async def activate_connection(
                 status_code=404,
             )
 
-        connection.enabled = True
-        connection.status = "active"
-        connection.updated_at = datetime.now()
-        database_connections[connection_id] = connection
+        with _connections_lock:
+            connection.enabled = True
+            connection.status = "active"
+            connection.updated_at = datetime.now()
+            database_connections[connection_id] = connection
 
         _save_activation_state(connection_id, "pending", True)
 
@@ -783,9 +1025,10 @@ async def activate_connection(
             _save_connectivity_state(connection_id, connectivity_state)
 
         if connectivity_state == "error":
-            connection.enabled = False
-            connection.status = "error"
-            database_connections[connection_id] = connection
+            with _connections_lock:
+                connection.enabled = False
+                connection.status = "error"
+                database_connections[connection_id] = connection
             _save_activation_state(connection_id, "error", False, error=detail)
             error_payload = _build_connection_payload(
                 connection,
@@ -794,6 +1037,7 @@ async def activate_connection(
                 connectivity_state="error",
                 detail=detail,
             )
+            _persist_connections()
             return APIResponse.error(
                 code=ErrorCodes.DATABASE_CONNECTION_FAILED,
                 message=detail or "数据库连接失败",
@@ -812,6 +1056,7 @@ async def activate_connection(
             last_success_at=last_success_at,
         )
 
+        _persist_connections()
         return APIResponse.success(data=response_payload, message=message)
     except Exception as e:
         logger.error(f"启用数据库连接失败: {e}")
@@ -827,9 +1072,10 @@ async def deactivate_connection(
     connection_id: int,
     options: DeactivateConnectionOptions = DeactivateConnectionOptions(),
 ):
-    """禁用指定连接并更新状态仓库。"""
+    """停用指定连接并更新状态存储。"""
     try:
-        connection = database_connections.get(connection_id)
+        with _connections_lock:
+            connection = database_connections.get(connection_id)
         if not connection:
             return APIResponse.error(
                 code=ErrorCodes.DATABASE_NOT_FOUND,
@@ -837,16 +1083,17 @@ async def deactivate_connection(
                 status_code=404,
             )
 
-        connection.enabled = False
-        connection.status = "inactive"
-        connection.updated_at = datetime.now()
-        database_connections[connection_id] = connection
+        with _connections_lock:
+            connection.enabled = False
+            connection.status = "inactive"
+            connection.updated_at = datetime.now()
+            database_connections[connection_id] = connection
 
         _save_activation_state(connection_id, "inactive", False)
 
         detail: Optional[str] = None
         connectivity_state: ConnectivityStateLiteral = "disconnected"
-        message = "数据库连接已禁用"
+        message = "数据库连接已停用"
         if options.disconnect and (connection.type or "").lower() in {
             "postgresql",
             "mysql",
@@ -885,15 +1132,18 @@ async def deactivate_connection(
         response_payload["deprecated"] = DeprecatedStateSchema(
             enabled=False, connected=False, status=f"inactive_{connectivity_state}"
         ).model_dump()
-        if detail:
-            response_payload["status_detail"] = detail
-        return APIResponse.success(data=response_payload, message=message)
+
+        logger.info(f"停用数据库连接: {connection.name}")
+        _persist_connections()
+
+        return APIResponse.success(
+            data=response_payload,
+            message=f"数据库连接 '{connection.name}' 已停用",
+        )
     except Exception as e:
-        logger.error(f"禁用数据库连接失败: {e}")
+        logger.error(f"停用数据库连接失败: {e}")
         return APIResponse.error(
-            code=ErrorCodes.INTERNAL_ERROR,
-            message=f"禁用连接失败: {str(e)}",
-            status_code=500,
+            code=ErrorCodes.INTERNAL_ERROR, message=f"停用数据库连接失败: {str(e)}", status_code=500
         )
 
 
@@ -904,26 +1154,25 @@ async def update_connection(connection_id: int, connection: DatabaseConnection):
 
     Args:
         connection_id: 连接ID
-        connection: 更新的连接配置
+        connection: 更新后的连接数据
 
     Returns:
-        更新后的连接配置
+        更新后的连接信息
     """
     try:
-        if connection_id not in database_connections:
-            return APIResponse.error(
-                code=ErrorCodes.DATABASE_NOT_FOUND,
-                message=f"数据库连接 ID {connection_id} 不存在",
-                status_code=404,
-            )
+        with _connections_lock:
+            existing = database_connections.get(connection_id)
+            if existing is None:
+                return APIResponse.error(
+                    code=ErrorCodes.DATABASE_NOT_FOUND,
+                    message=f"数据库连接 ID {connection_id} 不存在",
+                    status_code=404,
+                )
 
-        # 保留原有的创建时间和ID
-        existing = database_connections[connection_id]
-        connection.id = connection_id
-        connection.created_at = existing.created_at
-        connection.updated_at = datetime.now()
-
-        database_connections[connection_id] = connection
+            connection.id = connection_id
+            connection.created_at = existing.created_at
+            connection.updated_at = datetime.now()
+            database_connections[connection_id] = connection
 
         activation_state: ActivationStateLiteral = (
             "active" if connection.enabled else "inactive"
@@ -933,6 +1182,7 @@ async def update_connection(connection_id: int, connection: DatabaseConnection):
             _save_connectivity_state(connection_id, "disconnected")
 
         logger.info(f"更新数据库连接: {connection.name}")
+        _persist_connections()
 
         response_payload = connection.dict()
         response_payload["activation"] = ActivationStateSchema(
@@ -944,7 +1194,7 @@ async def update_connection(connection_id: int, connection: DatabaseConnection):
         ).model_dump()
         response_payload["deprecated"] = DeprecatedStateSchema(
             enabled=connection.enabled,
-            connected=False,
+            connected=connectivity_state == "connected",
             status=f"{activation_state}_{connectivity_state}",
         ).model_dump()
         return APIResponse.success(
@@ -969,19 +1219,20 @@ async def delete_connection(connection_id: int):
         删除结果
     """
     try:
-        if connection_id not in database_connections:
-            return APIResponse.error(
-                code=ErrorCodes.DATABASE_NOT_FOUND,
-                message=f"数据库连接 ID {connection_id} 不存在",
-                status_code=404,
-            )
-
-        connection = database_connections.pop(connection_id)
+        with _connections_lock:
+            if connection_id not in database_connections:
+                return APIResponse.error(
+                    code=ErrorCodes.DATABASE_NOT_FOUND,
+                    message=f"数据库连接 ID {connection_id} 不存在",
+                    status_code=404,
+                )
+            connection = database_connections.pop(connection_id)
 
         _save_activation_state(connection_id, "inactive", False)
         _save_connectivity_state(connection_id, "disconnected")
 
         logger.info(f"删除数据库连接: {connection.name}")
+        _persist_connections()
 
         return APIResponse.success(
             data={"id": connection_id, "name": connection.name},
@@ -996,12 +1247,16 @@ async def delete_connection(connection_id: int):
 
 @router.post("/test")
 async def test_connection(request: TestConnectionRequest):
-    """测试数据库连接并在已有连接时写回状态库。"""
+    """执行数据库连接测试，同时更新运行时状态仓库。"""
     try:
         result = await _execute_connection_test(request)
         connection_id = request.connection_id
+        success = bool(result.get("success"))
+        raw_message = result.get("message")
+        message_text = raw_message if isinstance(raw_message, str) and raw_message else None
+
         if connection_id is not None and connection_id in database_connections:
-            if result.get("success"):
+            if success:
                 _save_connectivity_state(
                     connection_id,
                     "connected",
@@ -1012,22 +1267,38 @@ async def test_connection(request: TestConnectionRequest):
                 _save_connectivity_state(
                     connection_id,
                     "error",
-                    last_error=result.get("message"),
+                    last_error=message_text,
                 )
-        if result.get("success"):
-            return APIResponse.success(data=result, message="连接测试成功")
-        raw_message = result.get("message")
-        message = raw_message if isinstance(raw_message, str) and raw_message else "连接失败"
+            _update_connection_test_metadata(
+                connection_id,
+                success=success,
+                message=message_text,
+            )
+
+        if success:
+            return APIResponse.success(data=result, message=message_text or "连接测试成功")
+        message = message_text or "测试失败"
         return APIResponse.error(
             code=ErrorCodes.DATABASE_CONNECTION_FAILED,
             message=message,
             details=result,
         )
     except Exception as exc:
-        logger.error(f"测试数据库连接失败: {exc}")
+        logger.error(f"执行数据库连接测试失败: {exc}")
+        if request.connection_id is not None and request.connection_id in database_connections:
+            _save_connectivity_state(
+                request.connection_id,
+                "error",
+                last_error=str(exc),
+            )
+            _update_connection_test_metadata(
+                request.connection_id,
+                success=False,
+                message=str(exc),
+            )
         return APIResponse.error(
             code=ErrorCodes.INTERNAL_ERROR,
-            message=f"测试过程中出现异常: {exc}",
+            message=f"测试过程中发生异常: {exc}",
             status_code=500,
         )
 
@@ -1049,32 +1320,37 @@ async def _execute_connection_test(request: TestConnectionRequest) -> Dict[str, 
             if not PSYCOPG_AVAILABLE:
                 result["message"] = "PostgreSQL驱动未安装"
             else:
-                conn_string = f"host={request.host} port={request.port} dbname={request.database or 'postgres'}"
-                if request.username:
-                    conn_string += f" user={request.username}"
-                if request.password:
-                    conn_string += f" password={request.password}"
+                conn_params = _build_postgresql_conn_params(request)
                 try:
+                    version_info: Optional[str] = None
                     if "psycopg" in globals():
-                        async with await psycopg.AsyncConnection.connect(conn_string) as conn:
-                            async with conn.cursor() as cur:
-                                await cur.execute("SELECT version()")
-                                version = await cur.fetchone()
-                                result["success"] = True
-                                result["message"] = "连接成功"
-                                result["details"]["version"] = version[0] if version else "Unknown"
-                    else:
-                        import psycopg2
+                        use_thread = False
+                        try:
+                            loop = asyncio.get_running_loop()
+                            use_thread = _is_proactor_event_loop(loop)
+                        except RuntimeError:
+                            use_thread = False
 
-                        sync_conn = psycopg2.connect(conn_string)
-                        cur = sync_conn.cursor()
-                        cur.execute("SELECT version()")
-                        version = cur.fetchone()
-                        cur.close()
-                        sync_conn.close()
+                        if use_thread:
+                            logger.debug("检测到 ProactorEventLoop，使用同步连接测试 PostgreSQL")
+                            version_info = await asyncio.to_thread(
+                                _fetch_postgresql_version_sync, conn_params
+                            )
+                        else:
+                            async with await psycopg.AsyncConnection.connect(**conn_params) as conn:
+                                async with conn.cursor() as cur:
+                                    await cur.execute("SELECT version()")
+                                    version = await cur.fetchone()
+                                    version_info = version[0] if version else "Unknown"
+                    else:
+                        version_info = await asyncio.to_thread(
+                            _fetch_postgresql_version_sync, conn_params
+                        )
+
+                    if version_info is not None:
                         result["success"] = True
                         result["message"] = "连接成功"
-                        result["details"]["version"] = version[0] if version else "Unknown"
+                        result["details"]["version"] = version_info
                 except Exception as exc:  # pragma: no cover - network issues
                     result["message"] = f"连接失败: {exc}"
         elif conn_type == "duckdb":
@@ -1223,11 +1499,13 @@ async def _run_monitor_iteration() -> None:
                 )
                 continue
             detail = result.get("message") or "数据库连接异常"
-            connection.enabled = False
-            connection.status = "error"
-            database_connections[connection_id] = connection
+            with _connections_lock:
+                connection.enabled = False
+                connection.status = "error"
+                database_connections[connection_id] = connection
             _save_activation_state(connection_id, "error", False, error=detail)
             _save_connectivity_state(connection_id, "error", last_error=detail)
+            _persist_connections()
         except Exception as exc:  # pragma: no cover - best effort monitoring
             logger.warning(f"数据库连接监控失败 (ID={connection_id}): {exc}")
 

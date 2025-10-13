@@ -84,6 +84,17 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
     initialValues?.hasSavedCredential ?? initialValues?.has_saved_credential
   )
   const [credentialEditable, setCredentialEditable] = React.useState(!hasSavedCredential)
+  const hasInitialValues = Boolean(
+    initialValues && Object.keys(initialValues).length > 0
+  )
+  const initialRememberCredential =
+    typeof initialValues?.rememberCredential === 'boolean'
+      ? initialValues.rememberCredential
+      : hasSavedCredential
+        ? true
+        : hasInitialValues
+          ? false
+          : true
 
   const lastTestTime = initialValues?.lastTestTime || initialValues?.last_test_time || null
   const testSummary = normalizeTestSummary(
@@ -107,6 +118,13 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
         } else if (payload.config.password === '' || payload.config.password == null) {
           delete payload.config.password
         }
+      }
+
+      const rememberCredentialValue = rawValues?.rememberCredential
+      if (typeof rememberCredentialValue === 'boolean') {
+        payload.rememberCredential = rememberCredentialValue
+      } else if (payload.rememberCredential == null) {
+        payload.rememberCredential = true
       }
 
       return payload
@@ -257,6 +275,7 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
         enabled: true,
         priority: 1,
         ...initialValues,
+        rememberCredential: initialRememberCredential,
         config: {
           timeout: 30000,
           retryCount: 3,
@@ -370,62 +389,53 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
             </Col>
             <Col span={12}>
               {credentialEditable ? (
-
-            <>
-
-              <Form.Item
-
-                name={['config', 'password']}
-
-                label="密码"
-
-                rules={[{ required: true, message: '请输入密码' }]}
-
-              >
-
-                <Input.Password placeholder="请输入密码" />
-
-              </Form.Item>
-
-              {hasSavedCredential && (
-
-                <Form.Item colon={false} label=" " style={{ marginTop: -16, marginBottom: 8 }}>
-
-                  <Button type="link" onClick={handleCancelCredentialEdit} style={{ paddingLeft: 0 }}>
-
-                    保留已保存的凭证
-
-                  </Button>
-
+                <>
+                  <Form.Item
+                    name={['config', 'password']}
+                    label="密码"
+                    rules={[{ required: true, message: '请输入密码' }]}
+                  >
+                    <Input.Password placeholder="请输入密码" />
+                  </Form.Item>
+                  {hasSavedCredential && (
+                    <Form.Item
+                      colon={false}
+                      label=" "
+                      style={{ marginTop: -16, marginBottom: 8 }}
+                    >
+                      <Button
+                        type="link"
+                        onClick={handleCancelCredentialEdit}
+                        style={{ paddingLeft: 0 }}
+                      >
+                        保留已保存的凭证
+                      </Button>
+                    </Form.Item>
+                  )}
+                </>
+              ) : (
+                <Form.Item label="密码">
+                  <Space>
+                    <Tag color="blue" style={{ margin: 0 }}>已保存</Tag>
+                    <span style={{ color: '#8c8c8c' }}>
+                      系统已保存凭证，如需修改请点击更新。
+                    </span>
+                    <Button type="link" onClick={handleEnableCredentialInput}>
+                      更新凭证
+                    </Button>
+                  </Space>
                 </Form.Item>
-
               )}
-
-            </>
-
-          ) : (
-
-            <Form.Item label="密码">
-
-              <Space>
-
-                <Tag color="blue" style={{ margin: 0 }}>已保存</Tag>
-
-                <span style={{ color: '#8c8c8c' }}>系统已保存凭证，如需修改请点击更新。</span>
-
-                <Button type="link" onClick={handleEnableCredentialInput}>
-
-                  更新凭证
-
-                </Button>
-
-              </Space>
-
-            </Form.Item>
-
-          )}
-
-           </Col>
+              <Form.Item
+                name="rememberCredential"
+                label="记住凭证"
+                valuePropName="checked"
+                tooltip="启用后系统会在配置文件中保留该数据源的登录信息，重启服务后也无需重新填写。"
+                style={{ marginTop: credentialEditable ? 0 : 8 }}
+              >
+                <Switch checkedChildren="记住" unCheckedChildren="不保存" />
+              </Form.Item>
+            </Col>
           </Row>
         </>
       )}
