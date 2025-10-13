@@ -8,6 +8,7 @@ from types import ModuleType, SimpleNamespace
 from typing import Any, Dict, List
 
 import pytest
+import yaml
 
 
 class DummyDataSourceType(Enum):
@@ -251,10 +252,13 @@ class FakeMonitor:
 
 
 @pytest.fixture
-def fake_environment(monkeypatch):
+def fake_environment(monkeypatch, tmp_path):
     fake_manager = FakeManager()
     fake_monitor = FakeMonitor()
     cache_calls: List[Any] = []
+
+    # 将配置目录指向临时路径，避免测试污染实际配置
+    setattr(fake_manager.config, "config_dir", tmp_path)
 
     async def fake_ensure(manager):  # noqa: ANN001
         return fake_manager
@@ -334,6 +338,62 @@ async def test_config_roundtrip(fake_environment):
     )
     assert updated["code"] == 0
     assert updated["data"]["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_datasource_persists_credentials(fake_environment, tmp_path):
+    fake_manager, _, _ = fake_environment
+    fake_request = SimpleNamespace(headers={})
+
+    payload = module.ConfigUpdateRequest.model_validate(
+        {
+            "enabled": True,
+            "config": {
+                "host": "demo.example.com",
+                "port": 8600,
+                "username": "user",
+                "password": "secret",
+            },
+            "rememberCredential": True,
+        }
+    )
+
+    result = await module.update_data_source_config(fake_request, "amazingdata", payload)
+    assert result["code"] == 0
+
+    config_path = tmp_path / "settings.dev.yaml"
+    persisted = yaml.safe_load(config_path.read_text())
+    provider_entry = persisted["data_sources"]["providers"]["amazingdata"]
+    assert provider_entry["has_saved_credential"] is True
+    assert provider_entry["config"]["password"] == "secret"
+
+
+@pytest.mark.asyncio
+async def test_update_datasource_forgets_credentials(fake_environment, tmp_path):
+    fake_manager, _, _ = fake_environment
+    fake_request = SimpleNamespace(headers={})
+
+    payload = module.ConfigUpdateRequest.model_validate(
+        {
+            "enabled": True,
+            "config": {
+                "host": "demo.example.com",
+                "port": 8600,
+                "username": "user",
+                "password": "secret",
+            },
+            "rememberCredential": False,
+        }
+    )
+
+    result = await module.update_data_source_config(fake_request, "amazingdata", payload)
+    assert result["code"] == 0
+
+    config_path = tmp_path / "settings.dev.yaml"
+    persisted = yaml.safe_load(config_path.read_text())
+    provider_entry = persisted["data_sources"]["providers"]["amazingdata"]
+    assert provider_entry["has_saved_credential"] is False
+    assert "password" not in provider_entry["config"]
 
 
 @pytest.mark.asyncio

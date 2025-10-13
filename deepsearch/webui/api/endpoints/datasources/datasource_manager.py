@@ -7,16 +7,22 @@
 
 from __future__ import annotations
 
+import copy
+import os
 import time
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
+
+import yaml
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
+from deepsearch.constants import YAML_ENCODING
 from deepsearch.infrastructure.cache.cache_manager import CacheManager
 from deepsearch.utils.data_sources import (
     DataSourceConfig,
@@ -72,8 +78,21 @@ class CacheRefreshRequest(BaseModel):
     source: Optional[str] = Field(None, description="需要刷新的数据源，可为空表示全部")
 
 
+SENSITIVE_KEY_MARKERS = (
+    "password",
+    "secret",
+    "token",
+    "apikey",
+    "api_key",
+    "key",
+    "username",
+)
+
+
 class ConfigUpdateRequest(BaseModel):
     """数据源配置更新请求"""
+
+    model_config = ConfigDict(populate_by_name=True)
 
     enabled: Optional[bool] = None
     priority: Optional[int] = Field(None, ge=1, description="优先级（数值越小优先级越高）")
@@ -82,6 +101,250 @@ class ConfigUpdateRequest(BaseModel):
     fallback_enabled: Optional[bool] = Field(None, description="是否启用降级")
     fallback_sources: Optional[List[str]] = Field(None, description="降级备选数据源列表")
     config: Optional[Dict[str, Any]] = None
+    remember_credential: Optional[bool] = Field(
+        None,
+        alias="rememberCredential",
+        description="是否持久化保存凭证信息",
+    )
+
+
+# ---------------------------------------------------------------------------
+# 配置持久化辅助
+# ---------------------------------------------------------------------------
+
+
+def _is_sensitive_key(key: str) -> bool:
+    lowered = str(key).lower()
+    return any(marker in lowered for marker in SENSITIVE_KEY_MARKERS)
+
+
+def _resolve_settings_path(manager: DataSourceManager) -> Path:
+    config_obj = getattr(manager, "config", None)
+    base_dir_override = getattr(config_obj, "config_dir", None)
+    if base_dir_override:
+        base_dir = Path(base_dir_override)
+    else:
+        base_dir = Path(__file__).resolve().parents[5] / "config"
+
+    env_value: Optional[str] = None
+    if config_obj is not None:
+        app_section = getattr(config_obj, "app", None)
+        env_value = getattr(app_section, "env", None) if app_section else None
+        if not env_value:
+            env_value = getattr(config_obj, "env", None)
+
+    if not env_value:
+        env_value = os.getenv("APP__ENV", "prod")
+
+    return base_dir / f"settings.{env_value}.yaml"
+
+
+def _deep_merge_dict(
+    base: Optional[Dict[str, Any]], updates: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    result: Dict[str, Any] = copy.deepcopy(base) if isinstance(base, dict) else {}
+    if not isinstance(updates, dict):
+        return result
+
+    for key, value in updates.items():
+        if isinstance(value, dict):
+            existing = result.get(key)
+            nested_base = existing if isinstance(existing, dict) else {}
+            result[key] = _deep_merge_dict(nested_base, value)
+        elif value is None:
+            result.pop(key, None)
+        elif isinstance(value, str) and value == "":
+            result.pop(key, None)
+        else:
+            result[key] = value
+
+    return result
+
+
+def _prune_empty(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned: Dict[str, Any] = {}
+        for key, sub_value in value.items():
+            cleaned_value = _prune_empty(sub_value)
+            if cleaned_value in (None, ""):
+                continue
+            if isinstance(cleaned_value, dict) and not cleaned_value:
+                continue
+            if isinstance(cleaned_value, list) and not cleaned_value:
+                continue
+            cleaned[key] = cleaned_value
+        return cleaned
+    if isinstance(value, list):
+        cleaned_list = []
+        for item in value:
+            cleaned_item = _prune_empty(item)
+            if cleaned_item in (None, ""):
+                continue
+            if isinstance(cleaned_item, dict) and not cleaned_item:
+                continue
+            if isinstance(cleaned_item, list) and not cleaned_item:
+                continue
+            cleaned_list.append(cleaned_item)
+        return cleaned_list
+    return value
+
+
+def _strip_sensitive_keys(payload: Dict[str, Any]) -> Dict[str, Any]:
+    result: Dict[str, Any] = {}
+    for key, value in payload.items():
+        if isinstance(value, dict):
+            nested = _strip_sensitive_keys(value)
+            if nested or not _is_sensitive_key(key):
+                result[key] = nested
+        elif _is_sensitive_key(key):
+            continue
+        else:
+            result[key] = value
+    return result
+
+
+def _merge_provider_config_for_persistence(
+    config: DataSourceConfig,
+    update_payload: Optional[Dict[str, Any]],
+    existing_entry: Optional[Dict[str, Any]],
+    remember_flag: Optional[bool],
+) -> Tuple[Dict[str, Any], bool]:
+    existing_config_section = (
+        existing_entry.get("config") if isinstance(existing_entry, dict) else {}
+    )
+    new_config_section = (
+        copy.deepcopy(update_payload)
+        if isinstance(update_payload, dict)
+        else copy.deepcopy(config.config)
+    )
+    merged_config = _deep_merge_dict(existing_config_section, new_config_section)
+    merged_config = _prune_empty(merged_config)
+
+    if remember_flag is False:
+        persisted_config = _strip_sensitive_keys(merged_config)
+        has_saved = False
+    else:
+        persisted_config = merged_config
+        has_saved = DataSourceManager._infer_saved_credential_from_config(persisted_config)
+
+    return persisted_config, has_saved
+
+
+def _update_runtime_data_sources(
+    manager: DataSourceManager, provider_key: str, provider_entry: Dict[str, Any]
+) -> None:
+    try:
+        config_obj = getattr(manager, "config", None)
+        if config_obj is None:
+            return
+
+        current_section = getattr(config_obj, "data_sources", None)
+        if current_section is None:
+            setattr(
+                config_obj,
+                "data_sources",
+                {"providers": {provider_key: copy.deepcopy(provider_entry)}},
+            )
+            return
+
+        if isinstance(current_section, dict):
+            providers_dict = current_section.setdefault("providers", {})
+            providers_dict[provider_key] = copy.deepcopy(provider_entry)
+            return
+
+        providers_value = getattr(current_section, "providers", None)
+        if isinstance(providers_value, dict):
+            providers_value[provider_key] = copy.deepcopy(provider_entry)
+        else:
+            setattr(
+                current_section,
+                "providers",
+                {provider_key: copy.deepcopy(provider_entry)},
+            )
+    except Exception as exc:  # pragma: no cover - 防御性处理
+        logger.debug(f"更新运行时数据源配置失败: {exc}")
+
+
+def _persist_data_source_config(
+    manager: DataSourceManager,
+    source_type: DataSourceType,
+    config: DataSourceConfig,
+    remember_flag: Optional[bool],
+    update_payload: Dict[str, Any],
+) -> bool:
+    settings_path = _resolve_settings_path(manager)
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing_content = ""
+    existing_data: Dict[str, Any] = {}
+    if settings_path.exists():
+        existing_content = settings_path.read_text(encoding=YAML_ENCODING)
+        try:
+            existing_data = yaml.safe_load(existing_content) or {}
+        except Exception as exc:  # pragma: no cover - 解析失败时重建
+            logger.warning(f"解析现有配置失败，将重新生成: {exc}")
+            existing_data = {}
+
+    data_sources_section = existing_data.setdefault("data_sources", {})
+    providers_section = data_sources_section.setdefault("providers", {})
+    provider_key = source_type.value
+    existing_entry = providers_section.get(provider_key, {})
+
+    persisted_config, has_saved = _merge_provider_config_for_persistence(
+        config,
+        update_payload.get("config") if update_payload else None,
+        existing_entry if isinstance(existing_entry, dict) else {},
+        remember_flag,
+    )
+
+    provider_entry: Dict[str, Any]
+    if isinstance(existing_entry, dict):
+        provider_entry = copy.deepcopy(existing_entry)
+    else:
+        provider_entry = {}
+
+    provider_entry.update(
+        {
+            "enabled": bool(config.enabled),
+            "priority": int(config.priority),
+            "timeout": float(config.timeout),
+            "retry_count": int(config.retry_count),
+            "fallback_enabled": bool(config.fallback_enabled),
+            "fallback_sources": [
+                item.value if isinstance(item, DataSourceType) else str(item)
+                for item in (config.fallback_sources or [])
+            ],
+        }
+    )
+    provider_entry["config"] = sanitize_for_json(persisted_config)
+    provider_entry["has_saved_credential"] = bool(has_saved)
+
+    if config.provider_name:
+        provider_entry["provider_name"] = config.provider_name
+    elif "provider_name" in provider_entry and not provider_entry["provider_name"]:
+        provider_entry.pop("provider_name", None)
+
+    providers_section[provider_key] = provider_entry
+    data_sources_section["providers"] = providers_section
+
+    _update_runtime_data_sources(manager, provider_key, provider_entry)
+
+    cleaned_data = _prune_empty(existing_data)
+
+    if existing_content:
+        backup_path = settings_path.with_suffix(settings_path.suffix + ".bak")
+        backup_path.write_text(existing_content, encoding=YAML_ENCODING)
+
+    with settings_path.open("w", encoding=YAML_ENCODING) as fh:
+        yaml.safe_dump(
+            cleaned_data,
+            fh,
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+        )
+
+    return bool(has_saved)
 
 
 # ---------------------------------------------------------------------------
@@ -737,6 +1000,7 @@ async def update_data_source_config(request: Request, source: str, payload: Conf
     status_entry = manager._source_status.get(source_type, {})
 
     update_data = payload.model_dump(exclude_unset=True)
+    remember_flag = update_data.pop("remember_credential", None)
     if "enabled" in update_data:
         desired_enabled = bool(update_data["enabled"])
         pending_reactivation = bool(status_entry.get("pending_reactivation"))
@@ -771,6 +1035,27 @@ async def update_data_source_config(request: Request, source: str, payload: Conf
         config.fallback_sources = list(update_data["fallback_sources"] or [])
     if "config" in update_data and update_data["config"] is not None:
         config.config = dict(update_data["config"])
+
+    persisted_has_saved: Optional[bool] = None
+    try:
+        persisted_has_saved = _persist_data_source_config(
+            manager,
+            source_type,
+            config,
+            remember_flag,
+            update_data,
+        )
+    except Exception as exc:  # pragma: no cover - 写入失败时不阻塞 API
+        logger.error(f"写入数据源配置失败: {exc}")
+
+    if persisted_has_saved is not None:
+        config.has_saved_credential = persisted_has_saved
+    elif remember_flag is False:
+        config.has_saved_credential = False
+    elif remember_flag is True:
+        config.has_saved_credential = DataSourceManager._infer_saved_credential_from_config(
+            config.config
+        )
 
     status_entry = manager._source_status.get(source_type, {})
     if "enabled" in update_data:
