@@ -438,6 +438,7 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
             </Col>
           </Row>
         </>
+      )}
 
       {sourceType === 'cloudflare' && (
         <Form.Item

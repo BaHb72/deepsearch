@@ -319,9 +319,10 @@ def _persist_data_source_config(
     provider_entry["config"] = sanitize_for_json(persisted_config)
     provider_entry["has_saved_credential"] = bool(has_saved)
 
-    if config.provider_name:
-        provider_entry["provider_name"] = config.provider_name
-    elif "provider_name" in provider_entry and not provider_entry["provider_name"]:
+    provider_name = getattr(config, "provider_name", None)
+    if provider_name:
+        provider_entry["provider_name"] = provider_name
+    elif not provider_entry.get("provider_name"):
         provider_entry.pop("provider_name", None)
 
     providers_section[provider_key] = provider_entry
