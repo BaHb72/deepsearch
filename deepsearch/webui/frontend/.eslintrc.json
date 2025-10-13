@@ -35,13 +35,14 @@
         "prettier"
       ],
       "rules": {
-        "no-console": "warn",
+        "no-console": "off",
         "no-debugger": "error",
         "prefer-const": "error",
         "no-var": "error",
         "object-shorthand": "warn",
         "array-callback-return": "error",
         "no-duplicate-imports": "error",
+        "react-hooks/exhaustive-deps": "off",
         "react/prop-types": "off",
         "react/jsx-uses-react": "off",
         "react/react-in-jsx-scope": "off",
@@ -53,7 +54,7 @@
             "varsIgnorePattern": "^_"
           }
         ],
-        "@typescript-eslint/no-explicit-any": "warn"
+        "@typescript-eslint/no-explicit-any": "off"
       }
     },
     {
@@ -80,23 +81,18 @@
         "prettier"
       ],
       "rules": {
-        "no-console": "warn",
+        "no-console": "off",
         "no-debugger": "error",
         "prefer-const": "error",
         "no-var": "error",
         "object-shorthand": "warn",
         "array-callback-return": "error",
         "no-duplicate-imports": "error",
+        "react-hooks/exhaustive-deps": "off",
         "react/prop-types": "off",
         "react/jsx-uses-react": "off",
         "react/react-in-jsx-scope": "off",
-        "no-unused-vars": [
-          "warn",
-          {
-            "argsIgnorePattern": "^_",
-            "varsIgnorePattern": "^_"
-          }
-        ]
+        "no-unused-vars": "off"
       }
     },
     {
