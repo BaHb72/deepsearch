@@ -575,12 +575,12 @@ export const useDatabaseStore = create<DatabaseState>()(
           const cacheKey = generateCacheKey('database:connections')
           cacheService.set(cacheKey, normalizedConnections, state.cacheTime)
         } catch (error) {
-          const errorObj: StoreError = {
+          const errorObj = {
             code: 'FETCH_ERROR',
             message: error instanceof Error ? error.message : '获取数据库连接失败',
             details: error,
             timestamp: now
-          }
+          } as StoreError
 
           set(draft => {
             draft.loading = false
@@ -610,26 +610,35 @@ export const useDatabaseStore = create<DatabaseState>()(
             set(draft => {
               draft.dataSources = cached.sources
               draft.dataSourceSummary = cached.summary
-              draft.dataSourceHealth = cached.health ?? null
-              draft.lastSourcesFetch = requestTimestamp
-            })
-            return
-          }
-        } else {
-          cacheService.invalidate('datasource:')
-        }
-
-        set(draft => {
-      refreshDataSourcesStatus: async () => {
-        await get().fetchDataSourcesStatus(true)
-      },
+              draft.dataSourceHealth = cached.health ?? null          const errorObj = {
+            code: 'DATASOURCE_FETCH_ERROR',
+            message: error instanceof Error ? error.message : '获取数据源状态失败',
+            details: error,
+            timestamp: requestTimestamp,
+          } as StoreError
+          const errorObj = {
+          } as StoreError
+          const errorObj = {
+          } as StoreError
 
-      activateConnection: async (id: number, options: UnknownRecord = {}) => {
-        set(draft => {
-          draft.error = null
-        })
-
-        try {
+          const errorObj = {
+            code: 'CREATE_ERROR',
+            message: error instanceof Error ? error.message : '创建连接失败',
+            details: error,
+            timestamp: Date.now()
+          } as StoreError
+          const errorObj = {
+            code: 'UPDATE_ERROR',
+            message: error instanceof Error ? error.message : '更新连接失败',
+            details: error,
+            timestamp: Date.now()
+          } as StoreError
+          const errorObj = {
+            code: 'DELETE_ERROR',
+            message: error instanceof Error ? error.message : '删除连接失败',
+            details: error,
+            timestamp: Date.now()
+          } as StoreError
           const payload = await activateDatabaseConnection(id, options)
           const normalized = normalizeConnection((payload ?? {}) as UnknownRecord)
 
