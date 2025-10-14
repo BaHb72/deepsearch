@@ -278,9 +278,14 @@ def fake_environment(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "_manager", lambda: fake_manager)
     monkeypatch.setattr(module, "_ensure_manager", fake_ensure)
     monkeypatch.setattr(module, "_monitor", lambda: fake_monitor)
+
+    async def fake_test_login(config):  # noqa: ANN001
+        return True, 12.0, None
+
     monkeypatch.setattr(module.cache_manager, "clear_pattern", fake_clear_pattern)
     monkeypatch.setattr(module.cache_manager, "clear", fake_clear)
     monkeypatch.setattr(module.cache_manager, "get_stats", lambda: {"overall_hit_rate": 0.66})
+    monkeypatch.setattr(module, "_test_amazingdata_login", fake_test_login)
 
     return fake_manager, fake_monitor, cache_calls
 
