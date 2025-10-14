@@ -4,35 +4,35 @@
 
 import React from 'react'
 import {
-  Card,
-  Table,
-  Button,
-  Space,
-  Tag,
-  Modal,
-  Form,
-  Input,
-  Select,
-  InputNumber,
-  Switch,
-  Popconfirm,
-  Spin,
-  Empty
+    Button,
+    Card,
+    Empty,
+    Form,
+    Input,
+    InputNumber,
+    Modal,
+    Popconfirm,
+    Select,
+    Space,
+    Spin,
+    Switch,
+    Table,
+    Tag
 } from 'antd'
 import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  DatabaseOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  SyncOutlined,
-  LoadingOutlined
+    CheckCircleOutlined,
+    CloseCircleOutlined,
+    DatabaseOutlined,
+    DeleteOutlined,
+    EditOutlined,
+    LoadingOutlined,
+    PlusOutlined,
+    SyncOutlined
 } from '@ant-design/icons'
 
 // 使用 Zustand Store
-import { useDatabaseStore } from '@/stores'
-import type { DatabaseConnection, CreateConnectionDTO } from '@/stores/types'
+import {useDatabaseStore} from '@/stores'
+import type {CreateConnectionDTO, DatabaseConnection} from '@/stores/types'
 
 const { Option } = Select
 
@@ -46,7 +46,9 @@ const DatabaseConfigWithStore: React.FC = () => {
     createConnection,
     updateConnection,
     deleteConnection,
-    testConnection
+      testConnection,
+      activateConnection,
+      deactivateConnection
   } = useDatabaseStore()
 
   // Modal 状态
@@ -61,6 +63,8 @@ const DatabaseConfigWithStore: React.FC = () => {
     testing: false,
     result: null as any
   })
+
+    const [toggleLoading, setToggleLoading] = React.useState<Record<number, boolean>>({})
 
   const [form] = Form.useForm()
 
@@ -168,6 +172,29 @@ const DatabaseConfigWithStore: React.FC = () => {
   }
 
   // 表格列定义
+    const handleToggle = async (record: DatabaseConnection, enabled: boolean) => {
+        if (!record || typeof record.id !== 'number') {
+            return
+        }
+        const key = record.id
+        setToggleLoading(prev => ({...prev, [key]: true}))
+        try {
+            if (enabled) {
+                await activateConnection(record.id, {connectImmediately: false})
+            } else {
+                await deactivateConnection(record.id, {disconnect: true})
+            }
+        } catch (error) {
+            console.error('启用状态切换失败:', error)
+        } finally {
+            setToggleLoading(prev => {
+                const next = {...prev}
+                delete next[key]
+                return next
+            })
+        }
+    }
+
   const columns = [
     {
       title: '连接名称',
@@ -199,17 +226,69 @@ const DatabaseConfigWithStore: React.FC = () => {
       )
     },
     {
+        title: '启用状态',
+        dataIndex: 'enabled',
+        key: 'enabled',
+        render: (_: any, record: DatabaseConnection) => {
+            const isEnabled = record.activation?.enabled ?? record.enabled ?? false
+            return (
+                <Switch
+                    checked={isEnabled}
+                    onChange={value => handleToggle(record, value)}
+                    loading={Boolean(toggleLoading[record.id])}
+                    disabled={Boolean(toggleLoading[record.id])}
+                    checkedChildren="启用"
+                    unCheckedChildren="禁用"
+                />
+            )
+        }
+    },
+      {
       title: '状态',
       dataIndex: 'connected',
       key: 'connected',
-      render: (connected: boolean, record: DatabaseConnection) => (
-        <Tag
-          icon={connected ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
-          color={connected ? 'success' : 'default'}
-        >
-          {connected ? '已连接' : record.status === 'connecting' ? '连接中...' : '未连接'}
-        </Tag>
-      )
+          render: (_: boolean, record: DatabaseConnection) => {
+              const isEnabled = record.activation?.enabled ?? record.enabled ?? false
+              const connectivityState = record.connectivity?.state ?? (isEnabled ? 'unknown' : 'inactive')
+
+              if (!isEnabled) {
+                  return (
+                      <Tag icon={<CloseCircleOutlined/>} color="default">
+                          未启用
+                      </Tag>
+                  )
+              }
+
+              if (connectivityState === 'connected') {
+                  return (
+                      <Tag icon={<CheckCircleOutlined/>} color="success">
+                          已连接
+                      </Tag>
+                  )
+              }
+
+              if (connectivityState === 'connecting' || connectivityState === 'pending') {
+                  return (
+                      <Tag icon={<SyncOutlined spin/>} color="processing">
+                          连接中...
+                      </Tag>
+                  )
+              }
+
+              if (connectivityState === 'error') {
+                  return (
+                      <Tag icon={<CloseCircleOutlined/>} color="error">
+                          连接失败
+                      </Tag>
+                  )
+              }
+
+              return (
+                  <Tag icon={<CloseCircleOutlined/>} color="default">
+                      未连接
+                  </Tag>
+              )
+          }
     },
     {
       title: '操作',

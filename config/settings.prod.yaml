@@ -1,0 +1,15 @@
+data_sources:
+  providers:
+    amazingdata:
+      enabled: false
+      priority: 1
+      timeout: 10.0
+      retry_count: 3
+      fallback_enabled: true
+      fallback_sources:
+        - cloudflare
+        - akshare
+      config:
+        timeout: 5000
+      has_saved_credential: false
+      provider_name: amazingdata

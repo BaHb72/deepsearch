@@ -63,6 +63,7 @@ dependencies = [
     "chardet>=5.2.0",
     "ruff>=0.13.1",
     "python-dateutil>=2.9.0.post0",
+    "types-pywin32>=311.0.0.20251008",
 ]
 
 [project.optional-dependencies]

@@ -8,19 +8,19 @@ DeepSearch 应用程序的主配置类。
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from deepsearch.constants import LOG_DIR
-
 from .loader import load_yaml_config
 from .models import (
     AmazingDataConfig,
     AppConfig,
     CloudflareWorkersConfig,
     DatabaseConfig,
+    DatabaseConnectionConfigModel,
     DebugConfig,
     HealthCheckConfig,
     LogConfig,
@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     notifications: Optional[NotificationsConfig] = None  # 通知推送配置
     data_providers: Optional[DataFeedConfig] = None
     data_sources: Optional[Dict[str, Any]] = None  # 统一的数据源配置
+    database_connections: Optional[List[DatabaseConnectionConfigModel]] = None  # �����������б�
 
     @property
     def zeromq(self) -> ZeroMQConfig:

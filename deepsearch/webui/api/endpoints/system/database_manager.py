@@ -20,7 +20,10 @@ from pydantic import BaseModel, Field
 
 from deepsearch.config import get_config
 from deepsearch.config.crypto import decrypt_password, encrypt_password
-from deepsearch.config.manager import ConfigManager
+from deepsearch.config.services.database_connections import (
+    load_database_connections,
+    persist_database_connections,
+)
 from deepsearch.core.interfaces.component import Component, ComponentStatus
 from deepsearch.core.runtime.context import get_context
 from deepsearch.infrastructure.persistence.duckdb_path import resolve_duckdb_path
@@ -386,8 +389,8 @@ def _resolve_config_dir() -> Path:
 _CONFIG_DIR = _resolve_config_dir()
 _CONNECTIONS_FILE = _CONFIG_DIR / f"database_connections.{_ENV_NAME}.yaml"
 
-_connections_config_manager = ConfigManager()
 _connections_manager_loaded = False
+_connections_payload_cache: Optional[Dict[str, Any]] = None
 
 
 def _serialize_datetime_field(value: Optional[datetime]) -> Optional[str]:
@@ -468,16 +471,21 @@ def _reset_next_id_locked() -> None:
 
 
 def _ensure_connections_manager_loaded() -> None:
-    global _connections_manager_loaded
+    global _connections_manager_loaded, _connections_payload_cache
     if _connections_manager_loaded:
         return
 
     _CONNECTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
     if not _CONNECTIONS_FILE.exists():
-        _connections_config_manager.update({"database_connections": []})
-        _connections_config_manager.save(_CONNECTIONS_FILE)
+        _connections_payload_cache = persist_database_connections(
+            _CONNECTIONS_FILE,
+            [],
+            {},
+        )
+    else:
+        _, payload = load_database_connections(_CONNECTIONS_FILE)
+        _connections_payload_cache = payload
 
-    _connections_config_manager.load(_CONNECTIONS_FILE)
     _connections_manager_loaded = True
 
 
@@ -492,10 +500,15 @@ def _persist_connections() -> None:
         snapshot = list(sorted(database_connections.values(), key=lambda c: c.id or 0))
     serialized = [_serialize_connection(conn) for conn in snapshot]
 
-    _connections_config_manager.set("database_connections", serialized)
     try:
-        _connections_config_manager.save()
-    except Exception as exc:  # pragma: no cover - IO 错误只记录不阻断
+        new_payload = persist_database_connections(
+            _CONNECTIONS_FILE,
+            serialized,
+            _connections_payload_cache,
+        )
+        _connections_payload_cache = new_payload
+    except Exception as exc:  # pragma: no cover - IO ����ֻ��¼�����
+        logger.error(f"�������ݿ���������ʧ��: {exc}")
         logger.error(f"保存数据库连接配置失败: {exc}")
 
 
@@ -506,23 +519,24 @@ def _load_connections_from_storage() -> bool:
         logger.error(f"初始化数据库连接配置失败: {exc}")
         return False
 
-    payload = _connections_config_manager.get_all()
-    entries = payload.get("database_connections")
-    if not isinstance(entries, list) or not entries:
+    models, payload = load_database_connections(_CONNECTIONS_FILE)
+    _connections_payload_cache = payload
+    if not models:
         return False
 
     loaded: Dict[int, DatabaseConnection] = {}
-    for item in entries:
-        if not isinstance(item, dict):
-            continue
-        connection = _deserialize_connection_payload(item)
+    for model in models:
+        connection = _deserialize_connection_payload(model.model_dump(mode="python"))
         if connection is None or connection.id is None:
             continue
-        loaded[int(connection.id)] = connection
+        loaded[connection.id] = connection
 
-    if not loaded:
-        return False
-
+    with _connections_lock:
+        database_connections.clear()
+        database_connections.update(loaded)
+    _reset_next_id_locked()
+    logger.info(f"��ʼ���������ݿ����ӵ���: {len(loaded)}")
+    return True
     with _connections_lock:
         database_connections.clear()
         database_connections.update(loaded)

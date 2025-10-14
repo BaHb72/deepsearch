@@ -1,45 +1,45 @@
-import React, { useEffect } from 'react'
+import React, {useEffect} from 'react'
 import {
-  Card,
-  Table,
-  Button,
-  Space,
-  Tag,
-  Badge,
-  Modal,
-  Form,
-  Input,
-  Select,
-  Switch,
-  InputNumber,
-  Popconfirm,
-  Tooltip,
-  Row,
-  Col,
-  Alert,
-  App as AntApp
+    Alert,
+    App as AntApp,
+    Badge,
+    Button,
+    Card,
+    Col,
+    Form,
+    Input,
+    InputNumber,
+    Modal,
+    Popconfirm,
+    Row,
+    Select,
+    Space,
+    Switch,
+    Table,
+    Tag,
+    Tooltip
 } from 'antd'
 import {
-  ApiOutlined,
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  ThunderboltOutlined,
-  CloudOutlined,
-  ExclamationCircleOutlined
+    ApiOutlined,
+    CloudOutlined,
+    DeleteOutlined,
+    EditOutlined,
+    ExclamationCircleOutlined,
+    PlusOutlined,
+    ThunderboltOutlined
 } from '@ant-design/icons'
-import { useModal } from '@/hooks'
+import {useModal} from '@/hooks'
 import {
-  createDataSource,
-  updateDataSource,
-  deleteDataSource,
-  testDataSource,
-  toggleDataSource,
-  updateDataSourceConfig,
-  fetchGlobalDataSourceConfig
+    createDataSource,
+    deleteDataSource,
+    fetchGlobalDataSourceConfig,
+    testDataSource,
+    toggleDataSource,
+    updateDataSource,
+    updateDataSourceConfig
 } from '@/api/systemConfig'
-import { DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary } from '@/utils/dataSourceStatus'
-import { useDataSourceStatus } from '@/stores'
+import {DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary} from '@/utils/dataSourceStatus'
+import {useDataSourceStatus} from '@/stores'
 
 const { Option } = Select
 
