@@ -29,7 +29,9 @@ import {
   deleteDatabaseConnection,
   testDatabaseConnection,
   fetchDataSources,
-  fetchDataSourceHealth
+  fetchDataSourceHealth,
+  activateDatabaseConnection,
+  deactivateDatabaseConnection
 } from '@/api/systemConfig'
 
 import { cacheService } from '@/dataCenter/cache.service'
@@ -467,6 +469,8 @@ interface DatabaseState {
   updateConnection: (id: number, data: UpdateConnectionDTO) => Promise<void>
   deleteConnection: (id: number) => Promise<void>
   testConnection: (id: number) => Promise<TestResult>
+  activateConnection: (id: number, options?: UnknownRecord) => Promise<void>
+  deactivateConnection: (id: number, options?: UnknownRecord) => Promise<void>
   selectConnection: (id: number | null) => void
   clearError: () => void
   fetchDataSourcesStatus: (force?: boolean) => Promise<void>
@@ -595,10 +599,102 @@ export const useDatabaseStore = create<DatabaseState>()(
         }
 
         set(draft => {
-          draft.dataSourcesLoading = true
-          draft.dataSourcesError = null
-        })
-
+      refreshDataSourcesStatus: async () => {
+        await get().fetchDataSourcesStatus(true)
+      },
+
+      activateConnection: async (id: number, options: UnknownRecord = {}) => {
+        set(draft => {
+          draft.error = null
+        })
+
+        try {
+          const payload = await activateDatabaseConnection(id, options)
+          const normalized = normalizeConnection((payload ?? {}) as UnknownRecord)
+
+          set(draft => {
+            const index = draft.connections.findIndex(connection => connection.id === normalized.id)
+            if (index >= 0) {
+              draft.connections[index] = normalized
+            } else {
+              draft.connections.push(normalized)
+            }
+          })
+
+          cacheService.invalidate('database:connections')
+          message.success('数据库连接已启用')
+        } catch (error) {
+          const messageText =
+            typeof (error as any)?.response?.data?.message === 'string'
+              ? (error as any).response.data.message
+              : error instanceof Error
+                ? error.message
+                : '启用连接失败'
+
+          const errorObj: StoreError = {
+            code: 'ACTIVATE_ERROR',
+            message: messageText,
+            details: error as UnknownRecord,
+            timestamp: Date.now()
+          }
+
+          set(draft => {
+            draft.error = errorObj
+          })
+
+          message.error(messageText)
+          throw error
+        }
+      },
+
+      deactivateConnection: async (id: number, options: UnknownRecord = {}) => {
+        set(draft => {
+          draft.error = null
+        })
+
+        try {
+          const payload = await deactivateDatabaseConnection(id, options)
+          const normalized = normalizeConnection((payload ?? {}) as UnknownRecord)
+
+          set(draft => {
+            const index = draft.connections.findIndex(connection => connection.id === normalized.id)
+            if (index >= 0) {
+              draft.connections[index] = normalized
+            } else {
+              draft.connections.push(normalized)
+            }
+          })
+
+          cacheService.invalidate('database:connections')
+          message.success('数据库连接已停用')
+        } catch (error) {
+          const messageText =
+            typeof (error as any)?.response?.data?.message === 'string'
+              ? (error as any).response.data.message
+              : error instanceof Error
+                ? error.message
+                : '停用连接失败'
+
+          const errorObj: StoreError = {
+            code: 'DEACTIVATE_ERROR',
+            message: messageText,
+            details: error as UnknownRecord,
+            timestamp: Date.now()
+          }
+
+          set(draft => {
+            draft.error = errorObj
+          })
+
+          message.error(messageText)
+          throw error
+        }
+      },
+
+      createConnection: async (data: CreateConnectionDTO) => {
+        set(draft => {
+          draft.loading = true
+
         try {
           const requestOptions = force ? { dedupe: false } : undefined
           const [sourcesList, health] = await Promise.all([
