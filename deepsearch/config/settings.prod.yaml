@@ -16,11 +16,11 @@ database:
   main:
     enabled: true
     type: postgresql
-    host: updated-host
+    host: localhost
     port: 5432
     database: deepsearch
     username: postgres
-    password: updated-secret
+    password: '123456'
     path: ./data/deepsearch.db
     auto_connect: false
     echo: false

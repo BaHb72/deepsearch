@@ -670,11 +670,14 @@ const DataSourceConfig = () => {
 
     if (enabled) {
       message.loading({
-        content: '正在启用并测试数据源...',
+          content: '正在尝试启用数据源...',
         key: loadingKey,
         duration: 0,
       })
     }
+
+      let shouldRollback = false
+      let rollbackMessage = ''
 
     try {
       const response = await toggleDataSource(id, enabled)
@@ -711,7 +714,7 @@ const DataSourceConfig = () => {
 
       if (!enabled) {
         message.success({
-          content: '数据源已禁用',
+            content: '数据源已停用',
           key: loadingKey,
         })
         return
@@ -729,24 +732,17 @@ const DataSourceConfig = () => {
             ? `${Math.round(testResult.latency_ms)}ms`
             : '成功'
           message.success({
-            content: `数据源已启用，连通性测试通过（${latency}）`,
+              content: `数据源已启用，自检通过耗时${latency}。`,
             key: loadingKey,
           })
         } else {
-          const warningMsg = testResult?.message || '数据源已启用，但连通性测试失败'
-          message.warning({
-            content: warningMsg,
-            key: loadingKey,
-            duration: 8,
-          })
+            shouldRollback = true
+            rollbackMessage = testResult?.message || '数据源自检失败，已自动恢复为停用状态'
         }
       } catch (testError) {
-        console.error('自动测试数据源失败:', testError)
-        message.warning({
-          content: '数据源已启用，但测试请求失败，请手动测试',
-          key: loadingKey,
-          duration: 8,
-        })
+          console.error('自动自检数据源失败:', testError)
+          shouldRollback = true
+          rollbackMessage = '数据源启用失败：自检过程发生异常，已恢复为停用状态'
       }
     } catch (error) {
       console.error('Toggle datasource error:', error)
@@ -755,6 +751,24 @@ const DataSourceConfig = () => {
         key: loadingKey,
       })
     } finally {
+        if (shouldRollback && enabled) {
+            try {
+                await toggleDataSource(id, false)
+                message.error({
+                    content: rollbackMessage || '数据源自检失败，已自动恢复为停用状态',
+                    key: loadingKey,
+                    duration: 8,
+                })
+            } catch (rollbackError) {
+                console.error('Rollback datasource toggle failed:', rollbackError)
+                message.error({
+                    content: rollbackMessage ? `${rollbackMessage}；尝试恢复为停用状态失败，请手动停用。` : '尝试恢复为停用状态失败，请手动停用。',
+                    key: loadingKey,
+                    duration: 8,
+                })
+            }
+        }
+
       await refreshAll()
       setToggleLoading(prev => ({ ...prev, [id]: false }))
     }
@@ -1406,3 +1420,4 @@ const DataSourceConfig = () => {
 }
 
 export default DataSourceConfig
+

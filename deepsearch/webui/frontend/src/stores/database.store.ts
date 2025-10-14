@@ -1,42 +1,41 @@
-import type { JsonObject, JsonValue, UnknownRecord } from '@/types/common'
+import type {JsonObject, JsonValue, UnknownRecord} from '@/types/common'
 /**
  * 数据库状态管理 Store
  */
-
-import { create } from 'zustand'
-import { immer } from 'zustand/middleware/immer'
-import { devtools } from 'zustand/middleware'
-import { message } from 'antd'
+import {create} from 'zustand'
+import {immer} from 'zustand/middleware/immer'
+import {devtools} from 'zustand/middleware'
+import {message} from 'antd'
 
 import {
-  DatabaseConnection,
-  CreateConnectionDTO,
-  UpdateConnectionDTO,
-  TestResult,
-  StoreError,
-  DataSource,
-  DataSourceStatusSummary,
-  DataSourceSummaryStatus,
-  DataSourceHealthReport,
-  DataSourceMetricsSnapshot,
-  DataSourceProxy
+    CreateConnectionDTO,
+    DatabaseConnection,
+    DataSource,
+    DataSourceHealthReport,
+    DataSourceMetricsSnapshot,
+    DataSourceProxy,
+    DataSourceStatusSummary,
+    DataSourceSummaryStatus,
+    StoreError,
+    TestResult,
+    UpdateConnectionDTO
 } from './types'
 
 import {
-  fetchDatabaseConnections,
-  createDatabaseConnection,
-  updateDatabaseConnection,
-  deleteDatabaseConnection,
-  testDatabaseConnection,
-  fetchDataSources,
-  fetchDataSourceHealth,
-  activateDatabaseConnection,
-  deactivateDatabaseConnection
+    activateDatabaseConnection,
+    createDatabaseConnection,
+    deactivateDatabaseConnection,
+    deleteDatabaseConnection,
+    fetchDatabaseConnections,
+    fetchDataSourceHealth,
+    fetchDataSources,
+    testDatabaseConnection,
+    updateDatabaseConnection
 } from '@/api/systemConfig'
 
-import { cacheService } from '@/dataCenter/cache.service'
-import { requestManager, generateCacheKey } from '@/dataCenter/utils'
-import { DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary } from '@/utils/dataSourceStatus'
+import {cacheService} from '@/dataCenter/cache.service'
+import {generateCacheKey, requestManager} from '@/dataCenter/utils'
+import {DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary} from '@/utils/dataSourceStatus'
 
 const normalizeConnection = (connection: Partial<DatabaseConnection> & UnknownRecord): DatabaseConnection => {
   if (!connection) {
@@ -556,10 +555,13 @@ export const useDatabaseStore = create<DatabaseState>()(
           draft.error = null
         })
 
+          const requestOptions = force ? {dedupe: false} : undefined
+
         try {
           const rawConnections = await requestManager.execute(
             'database:fetchConnections',
-            () => fetchDatabaseConnections(force)
+              () => fetchDatabaseConnections(force),
+              requestOptions
           )
 
           const normalizedConnections = Array.isArray(rawConnections)
@@ -591,182 +593,313 @@ export const useDatabaseStore = create<DatabaseState>()(
         }
       },
 
-      fetchDataSourcesStatus: async (force = false) => {
-        const state = get()
-        const requestTimestamp = Date.now()
-
-        if (!force) {
-          if (state.dataSourcesLoading) {
-            return
-          }
-
-          if (requestTimestamp - state.lastSourcesFetch < state.cacheTime && state.dataSources.length > 0) {
-            return
-          }
-
-          const cacheKey = generateCacheKey('datasource:status')
-          const cached = cacheService.getWithStats<{ sources: DataSource[]; summary: DataSourceStatusSummary; health: DataSourceHealthReport | null }>(cacheKey)
-          if (cached) {
-            set(draft => {
-              draft.dataSources = cached.sources
-              draft.dataSourceSummary = cached.summary
-        } catch (error) {
-          const datasourceFetchError = {
-            code: 'DATASOURCE_FETCH_ERROR',
-            message: error instanceof Error ? error.message : '获取数据源状态失败',
-            details: error,
-            timestamp: requestTimestamp,
-          } as StoreError
+      fetchDataSourcesStatus: async (force = false) => {
 
-          set(draft => {
-            if (requestTimestamp < draft.lastSourcesFetch) {
-              return
-            }
-            draft.dataSourcesLoading = false
-            draft.dataSourcesError = datasourceFetchError
-          })
+        const state = get()
 
-          console.error('[DatabaseStore] 获取数据源状态失败:', error)
-        }
-          const activateError = {
-            code: 'ACTIVATE_ERROR',
-            message: resolveRequestErrorMessage(error, '启用连接失败'),
-            details: error,
-            timestamp: Date.now(),
-          } as StoreError
-          set(draft => {
-            draft.error = activateError
-          message.error(activateError.message)
-          const deactivateError = {
-            code: 'DEACTIVATE_ERROR',
-            message: resolveRequestErrorMessage(error, '停用连接失败'),
-            details: error,
-            timestamp: Date.now(),
-          } as StoreError
+        const requestTimestamp = Date.now()
 
-          set(draft => {
-            draft.error = deactivateError
-          })
 
-          message.error(deactivateError.message)
-          throw error
-          const createConnectionError = {
-            code: 'CREATE_ERROR',
-            message: error instanceof Error ? error.message : '创建连接失败',
-            details: error,
-            timestamp: Date.now(),
-          } as StoreError
-            draft.error = createConnectionError
-          message.error(createConnectionError.message)
-          const updateConnectionError = {
-            code: 'UPDATE_ERROR',
-            message: error instanceof Error ? error.message : '更新连接失败',
-            details: error,
-            timestamp: Date.now(),
-          } as StoreError
-          set(draft => {
-            draft.error = updateConnectionError
-          })
 
-          message.error(updateConnectionError.message)
-          throw error
-        } finally {
-        } catch (error) {
-          const deleteConnectionError = {
-            code: 'DELETE_ERROR',
-            message: error instanceof Error ? error.message : '删除连接失败',
-            details: error,
-            timestamp: Date.now(),
-          } as StoreError
+        if (!force) {
 
-          set(draft => {
-            draft.error = deleteConnectionError
-          })
+          if (state.dataSourcesLoading) {
 
-          message.error(deleteConnectionError.message)
-          throw error
-        } finally {
+            return
 
-          cacheService.invalidate('database:connections')
-          message.success('数据库连接已停用')
-        } catch (error) {
-          const messageText = resolveRequestErrorMessage(error, '停用连接失败')
-
-          const errorObj: StoreError = {
-            code: 'DEACTIVATE_ERROR',
-            message: messageText,
-            details: error,
-            timestamp: Date.now()
           }
 
+
+
+          if (requestTimestamp - state.lastSourcesFetch < state.cacheTime && state.dataSources.length > 0) {
+
+            return
+
+          }
+
+
+
+          const cacheKey = generateCacheKey('datasource:status')
+
+            const cached = cacheService.getWithStats<{
+
+                sources: DataSource[]
+
+                summary: DataSourceStatusSummary
+
+                health: DataSourceHealthReport | null
+
+            }>(cacheKey)
+
+
+
+          if (cached) {
+
+            set(draft => {
+
+              draft.dataSources = cached.sources
+
+              draft.dataSourceSummary = cached.summary
+
+                draft.dataSourceHealth = cached.health
+
+                draft.dataSourcesLoading = false
+
+                draft.dataSourcesError = null
+
+                draft.lastSourcesFetch = requestTimestamp
+
+            })
+
+              return
+
+          }
+
+        }
+
+
           set(draft => {
-            draft.error = errorObj
+
+              draft.dataSourcesLoading = true
+
+              draft.dataSourcesError = null
+
           })
 
-          message.error(messageText)
-          throw error
+
+
+        try {
+
+          const requestOptions = force ? { dedupe: false } : undefined
+
+
+            const [sourcesList, health] = await Promise.all([
+
+            requestManager.execute('datasource:list', () => fetchDataSources(), requestOptions),
+
+                requestManager.execute('datasource:health', () => fetchDataSourceHealth(), requestOptions)
+
+          ])
+
+
+
+          const healthReport = health && typeof health === 'object' ? (health as DataSourceHealthReport) : null
+
+
+            const normalizedSources = Array.isArray(sourcesList)
+
+            ? sourcesList.map((item: JsonValue) => normalizeDataSource(item))
+
+            : []
+
+
+
+          const summary = buildDataSourceSummary(normalizedSources, healthReport)
+
+
+
+          set(draft => {
+
+            if (requestTimestamp < draft.lastSourcesFetch) {
+
+              return
+
+            }
+
+            draft.dataSources = normalizedSources
+
+            draft.dataSourceSummary = summary
+
+            draft.dataSourceHealth = healthReport
+
+            draft.dataSourcesLoading = false
+
+            draft.dataSourcesError = null
+
+            draft.lastSourcesFetch = requestTimestamp
+
+          })
+
+
+
+          const cacheKey = generateCacheKey('datasource:status')
+
+          if (requestTimestamp >= get().lastSourcesFetch) {
+
+            cacheService.set(cacheKey, { sources: normalizedSources, summary, health: healthReport }, state.cacheTime)
+
+          }
+
+        } catch (error) {
+
+          const errorObj: StoreError = {
+
+            code: 'DATASOURCE_FETCH_ERROR',
+
+            message: error instanceof Error ? error.message : '获取数据源状态失败',
+
+            details: error,
+
+            timestamp: requestTimestamp,
+
+          }
+
+
+
+          set(draft => {
+
+            if (requestTimestamp < draft.lastSourcesFetch) {
+
+              return
+
+            }
+
+            draft.dataSourcesLoading = false
+
+            draft.dataSourcesError = errorObj
+
+          })
+
+
+
+          console.error('[DatabaseStore] 获取数据源状态失败:', error)
+
         }
+
       },
 
-      createConnection: async (data: CreateConnectionDTO) => {
-        set(draft => {
-          draft.loading = true
 
-        try {
-          const requestOptions = force ? { dedupe: false } : undefined
-          const [sourcesList, health] = await Promise.all([
-            requestManager.execute('datasource:list', () => fetchDataSources(), requestOptions),
-            requestManager.execute('datasource:health', () => fetchDataSourceHealth(), requestOptions),
-          ])
-
-          const healthReport = health && typeof health === 'object' ? (health as DataSourceHealthReport) : null
-          const normalizedSources = Array.isArray(sourcesList)
-            ? sourcesList.map((item: JsonValue) => normalizeDataSource(item))
-            : []
-
-          const summary = buildDataSourceSummary(normalizedSources, healthReport)
-
-          set(draft => {
-            if (requestTimestamp < draft.lastSourcesFetch) {
-              return
-            }
-            draft.dataSources = normalizedSources
-            draft.dataSourceSummary = summary
-            draft.dataSourceHealth = healthReport
-            draft.dataSourcesLoading = false
-            draft.dataSourcesError = null
-            draft.lastSourcesFetch = requestTimestamp
-          })
-
-          const cacheKey = generateCacheKey('datasource:status')
-          if (requestTimestamp >= get().lastSourcesFetch) {
-            cacheService.set(cacheKey, { sources: normalizedSources, summary, health: healthReport }, state.cacheTime)
-          }
-        } catch (error) {
-          const errorObj: StoreError = {
-            code: 'DATASOURCE_FETCH_ERROR',
-            message: error instanceof Error ? error.message : '获取数据源状态失败',
-            details: error,
-            timestamp: requestTimestamp,
-          }
-
-          set(draft => {
-            if (requestTimestamp < draft.lastSourcesFetch) {
-              return
-            }
-            draft.dataSourcesLoading = false
-            draft.dataSourcesError = errorObj
-          })
-
-          console.error('[DatabaseStore] 获取数据源状态失败:', error)
-        }
-      },
-
+
       refreshDataSourcesStatus: async () => {
-        await get().fetchDataSourcesStatus(true)
+
+          await get().fetchDataSourcesStatus(true)
+
       },
 
-      createConnection: async (data: CreateConnectionDTO) => {
+
+        activateConnection: async (id: number, options: UnknownRecord = {}) => {
+
+            set(draft => {
+
+                draft.loading = true
+
+                draft.error = null
+
+            })
+
+
+            try {
+
+                await activateDatabaseConnection(id, options)
+
+                cacheService.invalidate('database:')
+
+                message.success('数据库连接已启用')
+
+                await get().fetchConnections(true)
+                await get().fetchDataSourcesStatus(true)
+
+            } catch (error) {
+
+                const activateError: StoreError = {
+
+                    code: 'ACTIVATE_ERROR',
+
+                    message: resolveRequestErrorMessage(error, '启用连接失败'),
+
+                    details: error,
+
+                    timestamp: Date.now(),
+
+                }
+
+
+                set(draft => {
+
+                    draft.error = activateError
+
+                })
+
+
+                message.error(activateError.message)
+
+                throw error
+
+            } finally {
+
+                set(draft => {
+
+                    draft.loading = false
+
+                })
+
+            }
+
+        },
+
+
+        deactivateConnection: async (id: number, options: UnknownRecord = {}) => {
+
+            set(draft => {
+
+                draft.loading = true
+
+                draft.error = null
+
+            })
+
+
+            try {
+
+                await deactivateDatabaseConnection(id, options)
+
+                cacheService.invalidate('database:')
+
+                message.success('数据库连接已停用')
+
+                await get().fetchConnections(true)
+                await get().fetchDataSourcesStatus(true)
+
+            } catch (error) {
+
+                const deactivateError: StoreError = {
+
+                    code: 'DEACTIVATE_ERROR',
+
+                    message: resolveRequestErrorMessage(error, '停用连接失败'),
+
+                    details: error,
+
+                    timestamp: Date.now(),
+
+                }
+
+
+                set(draft => {
+
+                    draft.error = deactivateError
+
+                })
+
+
+                message.error(deactivateError.message)
+
+                throw error
+
+            } finally {
+
+                set(draft => {
+
+                    draft.loading = false
+
+                })
+
+            }
+
+      },
+
+
+        createConnection: async (data: CreateConnectionDTO) => {
         set(draft => {
           draft.loading = true
           draft.error = null
@@ -777,6 +910,7 @@ export const useDatabaseStore = create<DatabaseState>()(
           cacheService.invalidate('database:')
           message.success('创建连接成功')
           await get().fetchConnections(true)
+            await get().fetchDataSourcesStatus(true)
         } catch (error) {
           const errorObj: StoreError = {
             code: 'CREATE_ERROR',
@@ -805,10 +939,25 @@ export const useDatabaseStore = create<DatabaseState>()(
         })
 
         try {
-          await updateDatabaseConnection(id, preparePayload(data))
+            const current = get().connections.find(item => item.id === id)
+            const mergedValues: Record<string, JsonValue> = {
+                ...(current ? {...current} : {}),
+                ...data,
+            }
+            const payload = preparePayload(mergedValues)
+
+            if (
+                current?.password &&
+                (mergedValues.password === undefined || mergedValues.password === null || mergedValues.password === '')
+            ) {
+                payload.password = current.password
+            }
+
+            await updateDatabaseConnection(id, payload)
           cacheService.invalidate('database:')
           message.success('更新连接成功')
           await get().fetchConnections(true)
+            await get().fetchDataSourcesStatus(true)
         } catch (error) {
           const errorObj: StoreError = {
             code: 'UPDATE_ERROR',
@@ -846,6 +995,7 @@ export const useDatabaseStore = create<DatabaseState>()(
             })
           }
           await get().fetchConnections(true)
+            await get().fetchDataSourcesStatus(true)
         } catch (error) {
           const errorObj: StoreError = {
             code: 'DELETE_ERROR',

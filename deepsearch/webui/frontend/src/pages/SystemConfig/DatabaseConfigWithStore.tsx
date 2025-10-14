@@ -311,7 +311,7 @@ const DatabaseConfigWithStore: React.FC = () => {
           <Popconfirm
             title="确定要删除这个连接吗？"
             onConfirm={() => handleDelete(record.id)}
-            okText="确定"
+            okText="保存"
             cancelText="取消"
           >
             <Button

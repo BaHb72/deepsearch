@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import yaml
-
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
@@ -24,13 +23,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from deepsearch.constants import YAML_ENCODING
 from deepsearch.infrastructure.cache.cache_manager import CacheManager
-from deepsearch.utils.data_sources import (
-    DataSourceConfig,
-    DataSourceLifecycleStatus,
-    DataSourceManager,
-    DataSourceType,
-    get_data_source_manager,
-)
 from deepsearch.observability.monitoring.data_source_monitor import (
     AccessRecord,
     DataAccessType,
@@ -41,6 +33,13 @@ from deepsearch.observability.monitoring.data_source_monitor import (
 )
 from deepsearch.observability.monitoring.data_source_monitor import (
     get_monitor,
+)
+from deepsearch.utils.data_sources import (
+    DataSourceConfig,
+    DataSourceLifecycleStatus,
+    DataSourceManager,
+    DataSourceType,
+    get_data_source_manager,
 )
 from deepsearch.webui.api.common.response_format import APIResponse, ErrorCodes
 from deepsearch.webui.api.utils import sanitize_for_json
@@ -369,6 +368,47 @@ def _monitor() -> Optional[DataSourceMonitor]:
     except Exception as exc:  # pragma: no cover - 监控组件缺失时允许降级
         logger.debug(f"数据源监控组件不可用: {exc}")
         return None
+
+
+async def _test_amazingdata_login(config: DataSourceConfig) -> Tuple[bool, float, Optional[str]]:
+    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+        ensure_amazingdata_provider_config,
+    )
+    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_extended import (
+        AmazingDataExtended,
+    )
+
+    if not config.config:
+        return False, 0.0, "未配置 AmazingData 登录信息"
+
+    payload = copy.deepcopy(config.config)
+    start_time = time.perf_counter()
+
+    try:
+        provider_config = ensure_amazingdata_provider_config(payload)
+    except Exception as exc:
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        return False, latency_ms, f"配置错误: {exc}"
+
+    tester = AmazingDataExtended(provider_config)
+    try:
+        success = await tester.initialize()
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        if not success:
+            return False, latency_ms, "登录失败"
+        return True, latency_ms, None
+    except Exception as exc:
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        return False, latency_ms, str(exc)
+    finally:
+        try:
+            await tester._logout()
+        except Exception:
+            pass
+        try:
+            await tester._stop_source()
+        except Exception:
+            pass
 
 
 def _resolve_source(manager: DataSourceManager, source: Optional[str]) -> Optional[DataSourceType]:
@@ -869,6 +909,40 @@ async def test_data_source(
             code=ErrorCodes.DATASOURCE_NOT_FOUND,
             message=f"未知数据源标识: {source}",
             status_code=404,
+        )
+
+    if source_type == DataSourceType.AMAZINGDATA:
+        config = manager.registry.get_config(source_type)
+        if config is None:
+            return APIResponse.error(
+                code=ErrorCodes.DATASOURCE_NOT_FOUND,
+                message="未找到 AmazingData 配置",
+                status_code=404,
+            )
+
+        success, latency_ms, error_detail = await _test_amazingdata_login(config)
+        update_datasource_status_after_test(source_type.value, success, int(latency_ms))
+
+        payload = {
+            "success": success,
+            "source": source_type.value,
+            "latency_ms": latency_ms,
+            "data": None if not success else {"action": "login"},
+        }
+        if error_detail:
+            payload["error"] = error_detail
+
+        message = "登录成功" if success else (error_detail or "登录失败")
+        if success:
+            return APIResponse.success(payload, message)
+        return JSONResponse(
+            status_code=500,
+            content=APIResponse.error(
+                code=ErrorCodes.DATASOURCE_TEST_FAILED,
+                message=message,
+                data=payload,
+                status_code=500,
+            ),
         )
 
     test_symbol = symbol or DEFAULT_TEST_SYMBOL
