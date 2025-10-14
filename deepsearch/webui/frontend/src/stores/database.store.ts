@@ -145,6 +145,18 @@ const resolveRequestErrorMessage = (error: unknown, fallback: string): string =>
   return fallback
 }
 
+const createStoreError = (
+  code: StoreError['code'],
+  message: string,
+  details: unknown,
+  timestamp?: number
+): StoreError => ({
+  code,
+  message,
+  details: details as JsonValue,
+  timestamp: timestamp ?? Date.now()
+})
+
 const normalizeDateValue = (value: JsonValue): string | null => {
   if (!value) {
     return null
@@ -575,16 +587,11 @@ export const useDatabaseStore = create<DatabaseState>()(
           const cacheKey = generateCacheKey('database:connections')
           cacheService.set(cacheKey, normalizedConnections, state.cacheTime)
         } catch (error) {
-          const errorObj = {
-            code: 'FETCH_ERROR',
-            message: error instanceof Error ? error.message : '获取数据库连接失败',
-            details: error,
-            timestamp: now
-          } as StoreError
+          const messageText = error instanceof Error ? error.message : '获取数据库连接失败'
 
           set(draft => {
             draft.loading = false
-            draft.error = errorObj
+            draft.error = createStoreError('FETCH_ERROR', messageText, error, now)
           })
 
           console.error('[DatabaseStore] 获取数据库连接失败:', error)
@@ -610,85 +617,52 @@ export const useDatabaseStore = create<DatabaseState>()(
             set(draft => {
               draft.dataSources = cached.sources
               draft.dataSourceSummary = cached.summary
-              draft.dataSourceHealth = cached.health ?? null          const errorObj = {
-            code: 'DATASOURCE_FETCH_ERROR',
-            message: error instanceof Error ? error.message : '获取数据源状态失败',
-            details: error,
-            timestamp: requestTimestamp,
-          } as StoreError
-          const errorObj = {
-          } as StoreError
-          const errorObj = {
-          } as StoreError
-
-          const errorObj = {
-            code: 'CREATE_ERROR',
-            message: error instanceof Error ? error.message : '创建连接失败',
-            details: error,
-            timestamp: Date.now()
-          } as StoreError
-          const errorObj = {
-            code: 'UPDATE_ERROR',
-            message: error instanceof Error ? error.message : '更新连接失败',
-            details: error,
-            timestamp: Date.now()
-          } as StoreError
-          const errorObj = {
-            code: 'DELETE_ERROR',
-            message: error instanceof Error ? error.message : '删除连接失败',
-            details: error,
-            timestamp: Date.now()
-          } as StoreError
-          const payload = await activateDatabaseConnection(id, options)
-          const normalized = normalizeConnection((payload ?? {}) as UnknownRecord)
-
-          set(draft => {
-            const index = draft.connections.findIndex(connection => connection.id === normalized.id)
-            if (index >= 0) {
-              draft.connections[index] = normalized
-            } else {
-              draft.connections.push(normalized)
-            }
-          })
-
-          cacheService.invalidate('database:connections')
-          message.success('数据库连接已启用')
         } catch (error) {
-          const messageText = resolveRequestErrorMessage(error, '启用连接失败')
-
-          const errorObj: StoreError = {
-            code: 'ACTIVATE_ERROR',
-            message: messageText,
-            details: error,
-            timestamp: Date.now()
-          }
+          const messageText = error instanceof Error ? error.message : '获取数据源状态失败'
 
           set(draft => {
-            draft.error = errorObj
-          })
-
-          message.error(messageText)
-          throw error
-        }
-      },
-
-      deactivateConnection: async (id: number, options: UnknownRecord = {}) => {
-        set(draft => {
-          draft.error = null
-        })
-
-        try {
-          const payload = await deactivateDatabaseConnection(id, options)
-          const normalized = normalizeConnection((payload ?? {}) as UnknownRecord)
-
-          set(draft => {
-            const index = draft.connections.findIndex(connection => connection.id === normalized.id)
-            if (index >= 0) {
-              draft.connections[index] = normalized
-            } else {
-              draft.connections.push(normalized)
+            if (requestTimestamp < draft.lastSourcesFetch) {
+              return
             }
+            draft.dataSourcesLoading = false
+            draft.dataSourcesError = createStoreError('DATASOURCE_FETCH_ERROR', messageText, error, requestTimestamp)
           })
+
+          console.error('[DatabaseStore] 获取数据源状态失败:', error)
+        }
+            draft.error = createStoreError('ACTIVATE_ERROR', messageText, error)
+          set(draft => {
+            draft.error = createStoreError('DEACTIVATE_ERROR', messageText, error)
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '创建连接失败'
+
+          set(draft => {
+            draft.error = createStoreError('CREATE_ERROR', errorMessage, error)
+          })
+
+          message.error(errorMessage)
+          throw error
+        } finally {
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '更新连接失败'
+
+          set(draft => {
+            draft.error = createStoreError('UPDATE_ERROR', errorMessage, error)
+          })
+
+          message.error(errorMessage)
+          throw error
+        } finally {
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '删除连接失败'
+
+          set(draft => {
+            draft.error = createStoreError('DELETE_ERROR', errorMessage, error)
+          })
+
+          message.error(errorMessage)
+          throw error
+        } finally {
 
           cacheService.invalidate('database:connections')
           message.success('数据库连接已停用')
