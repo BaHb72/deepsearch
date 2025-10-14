@@ -124,6 +124,27 @@ const normalizeConnection = (connection: Partial<DatabaseConnection> & UnknownRe
   return normalized
 }
 
+interface ErrorWithResponse {
+  response?: {
+    data?: {
+      message?: unknown
+    }
+  }
+}
+
+const resolveRequestErrorMessage = (error: unknown, fallback: string): string => {
+  const responseMessage = (error as ErrorWithResponse)?.response?.data?.message
+  if (typeof responseMessage === 'string' && responseMessage.trim().length > 0) {
+    return responseMessage
+  }
+
+  if (error instanceof Error && typeof error.message === 'string' && error.message.trim().length > 0) {
+    return error.message
+  }
+
+  return fallback
+}
+
 const normalizeDateValue = (value: JsonValue): string | null => {
   if (!value) {
     return null
@@ -624,17 +645,12 @@ export const useDatabaseStore = create<DatabaseState>()(
           cacheService.invalidate('database:connections')
           message.success('数据库连接已启用')
         } catch (error) {
-          const messageText =
-            typeof (error as any)?.response?.data?.message === 'string'
-              ? (error as any).response.data.message
-              : error instanceof Error
-                ? error.message
-                : '启用连接失败'
+          const messageText = resolveRequestErrorMessage(error, '启用连接失败')
 
           const errorObj: StoreError = {
             code: 'ACTIVATE_ERROR',
             message: messageText,
-            details: error as UnknownRecord,
+            details: error,
             timestamp: Date.now()
           }
 
@@ -668,17 +684,12 @@ export const useDatabaseStore = create<DatabaseState>()(
           cacheService.invalidate('database:connections')
           message.success('数据库连接已停用')
         } catch (error) {
-          const messageText =
-            typeof (error as any)?.response?.data?.message === 'string'
-              ? (error as any).response.data.message
-              : error instanceof Error
-                ? error.message
-                : '停用连接失败'
+          const messageText = resolveRequestErrorMessage(error, '停用连接失败')
 
           const errorObj: StoreError = {
             code: 'DEACTIVATE_ERROR',
             message: messageText,
-            details: error as UnknownRecord,
+            details: error,
             timestamp: Date.now()
           }
 
