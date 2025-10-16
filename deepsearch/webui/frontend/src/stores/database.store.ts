@@ -37,6 +37,8 @@ import {cacheService} from '@/dataCenter/cache.service'
 import {generateCacheKey, requestManager} from '@/dataCenter/utils'
 import {DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary} from '@/utils/dataSourceStatus'
 
+const PASSWORD_PLACEHOLDER = '***'
+
 const normalizeConnection = (connection: Partial<DatabaseConnection> & UnknownRecord): DatabaseConnection => {
   if (!connection) {
     throw new Error('无效的数据库连接数据')
@@ -466,6 +468,9 @@ const preparePayload = (values: Record<string, JsonValue>) => {
   delete payload.status_source
   delete payload.status_detail
   delete payload.active_connection
+    delete payload.masked_password
+    delete payload.has_saved_password
+    delete (payload as Record<string, unknown>).hasSavedPassword
   return payload
 }
 
@@ -945,12 +950,18 @@ export const useDatabaseStore = create<DatabaseState>()(
                 ...data,
             }
             const payload = preparePayload(mergedValues)
+            const passwordValue = mergedValues.password
+            const shouldKeepCurrentPassword =
+                Boolean(current?.password) &&
+                (passwordValue === undefined ||
+                    (typeof passwordValue === 'string' && passwordValue.trim() === PASSWORD_PLACEHOLDER))
 
-            if (
-                current?.password &&
-                (mergedValues.password === undefined || mergedValues.password === null || mergedValues.password === '')
-            ) {
+            if (shouldKeepCurrentPassword) {
                 payload.password = current.password
+            } else if (passwordValue === null) {
+                payload.password = ''
+            } else if (passwordValue === '') {
+                payload.password = ''
             }
 
             await updateDatabaseConnection(id, payload)
