@@ -4,9 +4,16 @@ import json
 import sys
 import time
 from types import ModuleType
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
 import redis
+from redis.client import Redis
+from deepsearch.config.models import RedisConfig
+from deepsearch.event.engine.engine import Event
+from deepsearch.observability import get_logger
+
+if TYPE_CHECKING:
+    from redistimeseries.client import Client as RedisTSClient
 
 
 def _ensure_redis_compat() -> None:
@@ -30,15 +37,14 @@ def _ensure_redis_compat() -> None:
     setattr(redis, "_compat", compat_module)
 
 
-_ensure_redis_compat()
+def _load_ts_client_class():
+    _ensure_redis_compat()
+    from redistimeseries.client import Client
 
-import redistimeseries.client as ts
-from redis.client import Redis
+    return Client
 
-# Import configuration defaults
-from deepsearch.config.models import RedisConfig
-from deepsearch.event.engine.engine import Event
-from deepsearch.observability import get_logger
+
+RedisTSClient = _load_ts_client_class()
 
 # ==============================================================================
 # Constants
@@ -133,7 +139,7 @@ class RedisTimeSeriesStorage:
 
         # Initialize clients
         self.redis_client: Optional[Redis] = None
-        self.ts_client: Optional[ts.Client] = None
+        self.ts_client: Optional[RedisTSClient] = None
         self._connected = False
 
         # Connect to Redis
@@ -162,7 +168,7 @@ class RedisTimeSeriesStorage:
             self.redis_client.ping()
 
             # 创建 RedisTimeSeries 客户端
-            self.ts_client = ts.Client(self.redis_client)
+            self.ts_client = RedisTSClient(self.redis_client)
             self._connected = True
 
             logger.info(f"RedisTimeSeries 存储初始化完成: {self.host}:{self.port}/{self.db}")
@@ -181,7 +187,7 @@ class RedisTimeSeriesStorage:
         assert self.redis_client is not None
         return self.redis_client
 
-    def _require_ts(self) -> ts.Client:
+    def _require_ts(self) -> RedisTSClient:
         self._ensure_connected()
         assert self.ts_client is not None
         return self.ts_client

@@ -51,7 +51,7 @@ deepsearch/
 
 ## 环境准备
 
-> ⚠️ 默认在 **Windows PowerShell/CMD** 中运行 `uv`、`python`、`npm` 等命令；WSL 仅允许只读操作（如查看文件、grep）。
+> ⚠️ 默认在 **Windows PowerShell/CMD** 中运行 `uv`、`python`、`npm` 等命令；WSL 仅允许只读操作（如查看文件、grep），所有依赖安装必须在 Windows 环境执行。
 
 1. 克隆仓库并进入目录：
    ```powershell

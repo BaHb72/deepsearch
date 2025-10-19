@@ -10,6 +10,21 @@ from typing import Mapping, Optional, Sequence, Union, cast
 import pandas as pd
 from loguru import logger
 
+from .amazingdata_types import (
+    FIELD_MAPPING,
+    DragonTigerRecord,
+    DragonTigerSeat,
+    KlineBarMessage,
+    OrderBookSnapshot,
+    RawDataMapping,
+    RawDataSequence,
+    ShareholderSeat,
+    ShareholderSnapshot,
+    SnapshotQuote,
+    SubscriptionMessage,
+    TickMessage,
+)
+
 def _coalesce(*values: object | None) -> object | None:
     """按顺序返回首个有效值，支持保留零值与布尔假值"""
 
@@ -61,22 +76,6 @@ def _ensure_int(value: object | None, default: int = 0) -> int:
         except ValueError:
             return default
     return default
-
-from .amazingdata_types import (
-    FIELD_MAPPING,
-    DragonTigerRecord,
-    DragonTigerSeat,
-    KlineBarMessage,
-    OrderBookSnapshot,
-    RawDataMapping,
-    RawDataSequence,
-    ShareholderSeat,
-    ShareholderSnapshot,
-    SnapshotQuote,
-    SubscriptionData,
-    SubscriptionMessage,
-    TickMessage,
-)
 
 RawFrameInput = Union[
     RawDataSequence,

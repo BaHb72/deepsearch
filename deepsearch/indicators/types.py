@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, TypeAlias
+from typing import TypeAlias
 
 import numpy as np
 

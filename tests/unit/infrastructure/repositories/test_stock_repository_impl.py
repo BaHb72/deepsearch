@@ -1,4 +1,5 @@
 from __future__ import annotations
+import pytest
 
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -76,10 +77,9 @@ sys.modules[
     "deepsearch.infrastructure.providers.interfaces.repositories.base"
 ] = repositories_base_module
 
-import pytest
 
-from deepsearch.infrastructure.repositories.stock_repository_impl import StockRepository
-from deepsearch.infrastructure.persistence.types import (
+from deepsearch.infrastructure.repositories.stock_repository_impl import StockRepository  # noqa: E402
+from deepsearch.infrastructure.persistence.types import (  # noqa: E402
     DatabaseServiceProtocol,
     DatabaseSessionProtocol,
 )

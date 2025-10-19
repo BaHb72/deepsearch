@@ -6,7 +6,6 @@
 """
 
 import asyncio
-import inspect
 from typing import Any, Callable, Dict, Optional, cast
 
 from deepsearch.config import get_config

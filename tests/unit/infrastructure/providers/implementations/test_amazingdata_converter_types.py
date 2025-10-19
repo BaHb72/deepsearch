@@ -1,6 +1,7 @@
 import sys
 import types
 from typing import cast
+import pytest
 
 _REALTIME_MODULE = (
     "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_realtime"
@@ -11,18 +12,17 @@ if _REALTIME_MODULE not in sys.modules:
     setattr(placeholder, "AmazingDataRealtime", None)
     sys.modules[_REALTIME_MODULE] = placeholder
 
-import pytest
 
-from deepsearch.infrastructure.providers.implementations.amazingdata import (
+from deepsearch.infrastructure.providers.implementations.amazingdata import (  # noqa: E402
     amazingdata as provider_module,
 )
-from deepsearch.infrastructure.providers.implementations.amazingdata import (
+from deepsearch.infrastructure.providers.implementations.amazingdata import (  # noqa: E402
     amazingdata_converter as converter_module,
 )
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_converter import (
+from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_converter import (  # noqa: E402
     AmazingDataConverter,
 )
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_types import (
+from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_types import (  # noqa: E402
     DragonTigerRecord,
     ShareholderSnapshot,
     SnapshotQuote,

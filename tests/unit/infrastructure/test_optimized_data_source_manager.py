@@ -1,7 +1,6 @@
 """OptimizedDataSourceManager 的补充单元测试"""
 
 import asyncio
-import asyncio
 import sys
 from types import ModuleType
 from typing import Dict

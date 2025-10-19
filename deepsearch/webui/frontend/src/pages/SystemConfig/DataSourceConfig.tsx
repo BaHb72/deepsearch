@@ -1,45 +1,45 @@
-import React, { useEffect } from 'react'
+import React, {useEffect} from 'react'
 import {
-  Card,
-  Table,
-  Button,
-  Space,
-  Tag,
-  Badge,
-  Modal,
-  Form,
-  Input,
-  Select,
-  Switch,
-  InputNumber,
-  Popconfirm,
-  Tooltip,
-  Row,
-  Col,
-  Alert,
-  App as AntApp
+    Alert,
+    App as AntApp,
+    Badge,
+    Button,
+    Card,
+    Col,
+    Form,
+    Input,
+    InputNumber,
+    Modal,
+    Popconfirm,
+    Row,
+    Select,
+    Space,
+    Switch,
+    Table,
+    Tag,
+    Tooltip
 } from 'antd'
 import {
-  ApiOutlined,
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  ThunderboltOutlined,
-  CloudOutlined,
-  ExclamationCircleOutlined
+    ApiOutlined,
+    CloudOutlined,
+    DeleteOutlined,
+    EditOutlined,
+    ExclamationCircleOutlined,
+    PlusOutlined,
+    ThunderboltOutlined
 } from '@ant-design/icons'
-import { useModal } from '@/hooks'
+import {useModal} from '@/hooks'
 import {
-  createDataSource,
-  updateDataSource,
-  deleteDataSource,
-  testDataSource,
-  toggleDataSource,
-  updateDataSourceConfig,
-  fetchGlobalDataSourceConfig
+    createDataSource,
+    deleteDataSource,
+    fetchGlobalDataSourceConfig,
+    testDataSource,
+    toggleDataSource,
+    updateDataSource,
+    updateDataSourceConfig
 } from '@/api/systemConfig'
-import { DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary } from '@/utils/dataSourceStatus'
-import { useDataSourceStatus } from '@/stores'
+import {DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary} from '@/utils/dataSourceStatus'
+import {useDataSourceStatus} from '@/stores'
 
 const { Option } = Select
 
@@ -90,11 +90,7 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
   const initialRememberCredential =
     typeof initialValues?.rememberCredential === 'boolean'
       ? initialValues.rememberCredential
-      : hasSavedCredential
-        ? true
-        : hasInitialValues
-          ? false
-          : true
+      : true
 
   const lastTestTime = initialValues?.lastTestTime || initialValues?.last_test_time || null
   const testSummary = normalizeTestSummary(
@@ -629,6 +625,10 @@ const DataSourceConfig = () => {
     await refreshStatus()
   }, [refreshStatus])
 
+  const handleTestSuccess = React.useCallback(() => {
+    // 状态面板有轮询刷新，这里不立即重载配置，避免清空临时凭证
+  }, [])
+
   const handleCreate = async (values) => {
     try {
       await createDataSource(values)
@@ -670,11 +670,14 @@ const DataSourceConfig = () => {
 
     if (enabled) {
       message.loading({
-        content: '正在启用并测试数据源...',
+          content: '正在尝试启用数据源...',
         key: loadingKey,
         duration: 0,
       })
     }
+
+      let shouldRollback = false
+      let rollbackMessage = ''
 
     try {
       const response = await toggleDataSource(id, enabled)
@@ -711,7 +714,7 @@ const DataSourceConfig = () => {
 
       if (!enabled) {
         message.success({
-          content: '数据源已禁用',
+            content: '数据源已停用',
           key: loadingKey,
         })
         return
@@ -729,24 +732,17 @@ const DataSourceConfig = () => {
             ? `${Math.round(testResult.latency_ms)}ms`
             : '成功'
           message.success({
-            content: `数据源已启用，连通性测试通过（${latency}）`,
+              content: `数据源已启用，自检通过耗时${latency}。`,
             key: loadingKey,
           })
         } else {
-          const warningMsg = testResult?.message || '数据源已启用，但连通性测试失败'
-          message.warning({
-            content: warningMsg,
-            key: loadingKey,
-            duration: 8,
-          })
+            shouldRollback = true
+            rollbackMessage = testResult?.message || '数据源自检失败，已自动恢复为停用状态'
         }
       } catch (testError) {
-        console.error('自动测试数据源失败:', testError)
-        message.warning({
-          content: '数据源已启用，但测试请求失败，请手动测试',
-          key: loadingKey,
-          duration: 8,
-        })
+          console.error('自动自检数据源失败:', testError)
+          shouldRollback = true
+          rollbackMessage = '数据源启用失败：自检过程发生异常，已恢复为停用状态'
       }
     } catch (error) {
       console.error('Toggle datasource error:', error)
@@ -755,6 +751,24 @@ const DataSourceConfig = () => {
         key: loadingKey,
       })
     } finally {
+        if (shouldRollback && enabled) {
+            try {
+                await toggleDataSource(id, false)
+                message.error({
+                    content: rollbackMessage || '数据源自检失败，已自动恢复为停用状态',
+                    key: loadingKey,
+                    duration: 8,
+                })
+            } catch (rollbackError) {
+                console.error('Rollback datasource toggle failed:', rollbackError)
+                message.error({
+                    content: rollbackMessage ? `${rollbackMessage}；尝试恢复为停用状态失败，请手动停用。` : '尝试恢复为停用状态失败，请手动停用。',
+                    key: loadingKey,
+                    duration: 8,
+                })
+            }
+        }
+
       await refreshAll()
       setToggleLoading(prev => ({ ...prev, [id]: false }))
     }
@@ -1291,6 +1305,7 @@ const DataSourceConfig = () => {
             </Tooltip>
           </Space>
         }
+        maskClosable={false}
       >
         <Space size={[16, 16]} wrap>
           {DATA_SOURCE_STATUS_ORDER.map(statusKey => {
@@ -1398,7 +1413,7 @@ const DataSourceConfig = () => {
         <DataSourceForm
           initialValues={editModal.data || undefined}
           onSubmit={editModal.data ? handleUpdate : handleCreate}
-          onTestSuccess={refreshAll}
+          onTestSuccess={handleTestSuccess}
         />
       </Modal>
     </>
@@ -1406,3 +1421,4 @@ const DataSourceConfig = () => {
 }
 
 export default DataSourceConfig
+

@@ -14,7 +14,6 @@ from loguru import logger
 
 from deepsearch.config import get_config
 from deepsearch.core.runtime.context import get_context
-from deepsearch.infrastructure.providers.datafeed.qmt.gateway import QMTGateway
 
 if TYPE_CHECKING:
     from deepsearch.core.managers.component_manager import ComponentManager

@@ -10,7 +10,7 @@ Version: 1.0.0
 
 from decimal import ROUND_HALF_UP, Decimal, getcontext
 from collections.abc import Sequence
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 # 设置全局精度（小数位数）
 # 金融计算通常需要4-10位精度

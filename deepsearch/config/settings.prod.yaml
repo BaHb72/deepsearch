@@ -16,11 +16,11 @@ database:
   main:
     enabled: true
     type: postgresql
-    host: updated-host
+    host: localhost
     port: 5432
     database: deepsearch
     username: postgres
-    password: updated-secret
+    password: '123456'
     path: ./data/deepsearch.db
     auto_connect: false
     echo: false
@@ -28,7 +28,6 @@ database:
     enabled: true
     host: localhost
     port: 6379
-    username: ''
     password: updated-cache
     db: 0
     pool_size: 10
@@ -40,9 +39,6 @@ database:
     max_idle_time: 300
     idle_check_interval: 60
     auto_start_windows: true
-    windows_service_names: []
-    startup_binary_path: null
-    startup_arguments: []
     startup_command:
     - wsl.exe
     - -d
@@ -80,12 +76,10 @@ webui:
   frontend_port: 3000
   enable_cors: true
   reload: false
-  workers: null
 data_sources:
   default: amazingdata
   fallback_order:
   - amazingdata
-  - cloudflare
   - akshare
   circuit_breaker:
     enabled: true
@@ -97,17 +91,15 @@ data_sources:
     timeout: 5
     retry_count: 3
     backoff_factor: 2
-  providers:
-    amazingdata:
-      enabled: false
-      priority: 1
-      fallback_sources:
-      - cloudflare
-      - akshare
-      has_saved_credential: false
-      worker_env: {}
-      config:
-        connection:
+    providers:
+      amazingdata:
+        enabled: false
+        priority: 1
+        fallback_sources:
+        - akshare
+        has_saved_credential: false
+        config:
+          implementation_mode: process
           username: your_amazingdata_username
           password: your_amazingdata_password
           host: 101.230.159.234
@@ -138,23 +130,54 @@ data_sources:
           metrics_enabled: true
           log_slow_requests: true
           slow_request_threshold: 1000
-        timeout: 5000
-    cloudflare:
-      enabled: true
-      priority: 2
-      has_saved_credential: false
-      config:
-        worker_url: https://your-cloudflare-worker.example.com
-        timeout: 30
-        retry_count: 3
+          timeout: 5000
     akshare:
       enabled: true
       priority: 3
       config:
-        mode: direct
+        mode: proxy
         timeout: 30
         proxy:
-          enabled: false
+          worker_url: https://your-cloudflare-worker.example.com
+          timeout: 30
+          retry_count: 3
+          fallback_to_direct: true
+          cache:
+            enabled: true
+            ttl: 300
+  providers:
+    amazingdata:
+      enabled: false
+      priority: 1
+      timeout: 10.0
+      retry_count: 3
+      fallback_enabled: true
+      fallback_sources:
+      - akshare
+      config:
+        host: 1.2.3.4
+        timeout: 5000
+        implementation_mode: process
+      has_saved_credential: false
+      provider_name: amazingdata
+    akshare:
+      enabled: true
+      priority: 2
+      timeout: 30.0
+      retry_count: 3
+      fallback_enabled: false
+      config:
+        mode: proxy
+        timeout: 30
+        proxy:
+          enabled: true
+          worker_url: https://your-cloudflare-worker.example.com
+          timeout: 30
+          retry_count: 3
+          fallback_to_direct: true
+          cache:
+            enabled: true
+            ttl: 300
 notifications:
   enabled: true
   wechat_token: unit-test-token

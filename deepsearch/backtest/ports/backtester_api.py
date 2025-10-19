@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Backtrader 接口抽象."""
+
+from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import IO, Protocol, TypeVar

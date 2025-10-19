@@ -9,6 +9,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Type
 
 from deepsearch.observability import get_logger
+from ..adapters.unified_backtrader_adapter import (
+    UnifiedBacktraderAdapter as BacktraderStrategyAdapter,
+)
+from ..data.data_feed import DeepSearchDataFeed
+from ..interfaces.strategy import BaseStrategy
+from ..utils.results import BacktestResult
 
 bt: Any
 
@@ -20,14 +26,6 @@ try:
 except ImportError:
     HAS_BACKTRADER = False
     bt = None
-
-from ..adapters.unified_backtrader_adapter import (
-    UnifiedBacktraderAdapter as BacktraderStrategyAdapter,
-)
-from ..data.data_feed import DeepSearchDataFeed
-from ..interfaces.strategy import BaseStrategy
-from ..utils.results import BacktestResult
-
 
 class BacktestEngine:
     """

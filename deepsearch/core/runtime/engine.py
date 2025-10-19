@@ -15,15 +15,6 @@ from concurrent.futures import TimeoutError
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Literal, Optional, Type, TypeVar, cast
 
-_T = TypeVar("_T")
-
-
-RuntimeMode = Literal["all", "engine", "webui"]
-RuntimeModeInput = Literal["all", "engine", "webui", "full"]
-
-VALID_RUNTIME_MODES: tuple[RuntimeMode, ...] = ("all", "engine", "webui")
-
-
 from deepsearch.config import get_config
 from deepsearch.constants import EVENT_SYSTEM_EXIT, EVENT_SYSTEM_READY
 from deepsearch.event.engine.engine import Event
@@ -49,6 +40,15 @@ from ..utils.container import AsyncContainer, ServiceProvider
 from ..utils.exceptions import error_context
 from ..utils.ipc import EngineIPCServer
 from .context import get_context
+
+_T = TypeVar("_T")
+
+
+RuntimeMode = Literal["all", "engine", "webui"]
+RuntimeModeInput = Literal["all", "engine", "webui", "full"]
+
+VALID_RUNTIME_MODES: tuple[RuntimeMode, ...] = ("all", "engine", "webui")
+
 
 # Cloudflare Tunnel 组件已移除（使用 Workers 代理方案）
 

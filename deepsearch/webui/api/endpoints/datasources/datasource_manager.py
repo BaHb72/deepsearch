@@ -16,21 +16,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import yaml
-
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from deepsearch.constants import YAML_ENCODING
+from deepsearch.config.loader import ensure_env_config_file
 from deepsearch.infrastructure.cache.cache_manager import CacheManager
-from deepsearch.utils.data_sources import (
-    DataSourceConfig,
-    DataSourceLifecycleStatus,
-    DataSourceManager,
-    DataSourceType,
-    get_data_source_manager,
-)
 from deepsearch.observability.monitoring.data_source_monitor import (
     AccessRecord,
     DataAccessType,
@@ -41,6 +34,13 @@ from deepsearch.observability.monitoring.data_source_monitor import (
 )
 from deepsearch.observability.monitoring.data_source_monitor import (
     get_monitor,
+)
+from deepsearch.utils.data_sources import (
+    DataSourceConfig,
+    DataSourceLifecycleStatus,
+    DataSourceManager,
+    DataSourceType,
+    get_data_source_manager,
 )
 from deepsearch.webui.api.common.response_format import APIResponse, ErrorCodes
 from deepsearch.webui.api.utils import sanitize_for_json
@@ -82,10 +82,12 @@ SENSITIVE_KEY_MARKERS = (
     "password",
     "secret",
     "token",
+    "access_token",
+    "refresh_token",
     "apikey",
     "api_key",
-    "key",
-    "username",
+    "secret_key",
+    "private_key",
 )
 
 
@@ -108,6 +110,21 @@ class ConfigUpdateRequest(BaseModel):
     )
 
 
+class DataSourceTestRequest(BaseModel):
+    """Data source test payload"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    timeout: Optional[float] = Field(None, gt=0, description="Test timeout (seconds)")
+    retry_count: Optional[int] = Field(None, ge=0, description="Retry attempts")
+    fallback_enabled: Optional[bool] = Field(None, description="Enable fallback during test")
+    fallback_sources: Optional[List[str]] = Field(None, description="Fallback source order")
+    config: Optional[Dict[str, Any]] = Field(None, description="Ephemeral configuration overrides")
+    remember_credential: Optional[bool] = Field(
+        None, alias="rememberCredential", description="Flag to keep credential state after test"
+    )
+
+
 # ---------------------------------------------------------------------------
 # 配置持久化辅助
 # ---------------------------------------------------------------------------
@@ -121,10 +138,6 @@ def _is_sensitive_key(key: str) -> bool:
 def _resolve_settings_path(manager: DataSourceManager) -> Path:
     config_obj = getattr(manager, "config", None)
     base_dir_override = getattr(config_obj, "config_dir", None)
-    if base_dir_override:
-        base_dir = Path(base_dir_override)
-    else:
-        base_dir = Path(__file__).resolve().parents[5] / "config"
 
     env_value: Optional[str] = None
     if config_obj is not None:
@@ -136,7 +149,33 @@ def _resolve_settings_path(manager: DataSourceManager) -> Path:
     if not env_value:
         env_value = os.getenv("APP__ENV", "prod")
 
-    return base_dir / f"settings.{env_value}.yaml"
+    candidate_dirs: list[Path] = []
+    if base_dir_override:
+        candidate_dirs.append(Path(base_dir_override))
+
+    loader_dir = Path(ensure_env_config_file.__code__.co_filename).resolve().parent
+    if loader_dir not in candidate_dirs:
+        candidate_dirs.append(loader_dir)
+
+    repo_config_dir = Path(__file__).resolve().parents[5] / "config"
+    if repo_config_dir not in candidate_dirs:
+        candidate_dirs.append(repo_config_dir)
+
+    workspace_config_dir = Path.cwd() / "config"
+    if workspace_config_dir not in candidate_dirs:
+        candidate_dirs.append(workspace_config_dir)
+
+    for directory in candidate_dirs:
+        candidate = directory / f"settings.{env_value}.yaml"
+        if candidate.exists():
+            return candidate
+
+    try:
+        return ensure_env_config_file(env_value, config_dir=loader_dir)
+    except Exception:
+        target = candidate_dirs[0] / f"settings.{env_value}.yaml"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        return target
 
 
 def _deep_merge_dict(
@@ -219,6 +258,7 @@ def _merge_provider_config_for_persistence(
     )
     merged_config = _deep_merge_dict(existing_config_section, new_config_section)
     merged_config = _prune_empty(merged_config)
+    merged_config["implementation_mode"] = "process"
 
     if remember_flag is False:
         persisted_config = _strip_sensitive_keys(merged_config)
@@ -348,6 +388,74 @@ def _persist_data_source_config(
     return bool(has_saved)
 
 
+
+def _flatten_amazingdata_credentials(payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    result: Dict[str, Any] = {}
+    if not isinstance(payload, dict):
+        return result
+
+    def _collect(source: Dict[str, Any]) -> None:
+        for key in ("username", "password", "host", "port"):
+            value = source.get(key)
+            if value in (None, ""):
+                continue
+            result[key] = value
+
+    _collect(payload)
+    connection_section = payload.get("connection")
+    if isinstance(connection_section, dict):
+        _collect(connection_section)
+    return result
+
+
+def _normalize_amazingdata_credentials(raw: Dict[str, Any]) -> Dict[str, str]:
+    normalized: Dict[str, str] = {}
+    for key in ("username", "password", "host", "port"):
+        if key not in raw:
+            continue
+        value = raw.get(key)
+        if value is None:
+            continue
+        if key == "port":
+            try:
+                normalized[key] = str(int(value))
+            except (TypeError, ValueError):
+                continue
+        else:
+            value_str = str(value).strip()
+            if value_str:
+                normalized[key] = value_str
+    return normalized
+
+
+def _get_provider_credentials(provider: Any) -> Dict[str, Any]:
+    config_obj = getattr(provider, "config", None)
+    if config_obj is None:
+        return {}
+    return {
+        "username": getattr(config_obj, "username", None),
+        "password": getattr(config_obj, "password", None),
+        "host": getattr(config_obj, "host", None),
+        "port": getattr(config_obj, "port", None),
+    }
+
+
+def _can_reuse_amazingdata_provider(provider: Any, requested: Dict[str, Any]) -> bool:
+    desired = _normalize_amazingdata_credentials(requested)
+    if not desired:
+        return True
+
+    existing_raw = _get_provider_credentials(provider)
+    existing = _normalize_amazingdata_credentials(existing_raw)
+
+    for key, value in desired.items():
+        if existing.get(key) != value:
+            return False
+    return True
+
+
+
+
 # ---------------------------------------------------------------------------
 # 内部工具函数
 # ---------------------------------------------------------------------------
@@ -369,6 +477,70 @@ def _monitor() -> Optional[DataSourceMonitor]:
     except Exception as exc:  # pragma: no cover - 监控组件缺失时允许降级
         logger.debug(f"数据源监控组件不可用: {exc}")
         return None
+
+
+async def _test_amazingdata_login(config: DataSourceConfig) -> Tuple[bool, float, Optional[str]]:
+    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+        ensure_amazingdata_provider_config,
+    )
+    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper import (
+        test_connection as test_amazingdata_connection,
+    )
+
+    credentials_override = _flatten_amazingdata_credentials(config.config)
+    manager = await _ensure_manager(_manager())
+    existing_provider = manager.providers.get(DataSourceType.AMAZINGDATA)
+
+    if existing_provider and _can_reuse_amazingdata_provider(existing_provider, credentials_override):
+        reuse_start = time.perf_counter()
+        ensure_callable = getattr(existing_provider, "ensure_session", None)
+        try:
+            if callable(ensure_callable):
+                reuse_success = await ensure_callable()
+            else:
+                reuse_success = bool(getattr(existing_provider, "is_connected", lambda: False)())
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - reuse_start) * 1000
+            return False, latency_ms, str(exc)
+        else:
+            latency_ms = (time.perf_counter() - reuse_start) * 1000
+            if reuse_success:
+                logger.info("AmazingData 自检复用了现有会话，无需重新登录")
+                return True, latency_ms, None
+
+    if not config.config:
+        return False, 0.0, "未配置 AmazingData 登录信息"
+
+    payload = copy.deepcopy(config.config)
+    start_time = time.perf_counter()
+
+    try:
+        provider_config = ensure_amazingdata_provider_config(payload)
+    except Exception as exc:
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        return False, latency_ms, f"配置错误: {exc}"
+
+    try:
+        # Use safe wrapper to avoid triggering SDK logout crash
+        result = test_amazingdata_connection(
+            provider_config.username,
+            provider_config.password,
+            host=provider_config.host,
+            port=provider_config.port,
+        )
+        latency_ms = result.get("latency_ms")
+        if latency_ms is None:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+        else:
+            latency_ms = float(latency_ms)
+        success = bool(result.get("success"))
+        error_detail = result.get("error")
+        if success:
+            return True, latency_ms, None
+        return False, latency_ms, error_detail or "登录失败"
+    except Exception as exc:
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        return False, latency_ms, str(exc)
 
 
 def _resolve_source(manager: DataSourceManager, source: Optional[str]) -> Optional[DataSourceType]:
@@ -511,6 +683,38 @@ def _extract_sources_context(
                 }
             proxy_map.setdefault(target_name, []).append((proxy_name, info, metrics, meta))
 
+    akshare_info = sources.get("akshare")
+    if akshare_info:
+        config_info = akshare_info.get("config") or {}
+        proxy_cfg = config_info.get("proxy")
+        if isinstance(proxy_cfg, dict) and proxy_cfg:
+            proxy_enabled = str(config_info.get("mode", "")).lower() == "proxy"
+            synthesized_info = {
+                "status": akshare_info.get("status"),
+                "available": proxy_enabled,
+                "reason": akshare_info.get("reason"),
+                "lastTransition": akshare_info.get("lastTransition"),
+                "lastTestTime": akshare_info.get("lastTestTime"),
+                "testSummary": akshare_info.get("testSummary"),
+                "hasSavedCredential": akshare_info.get("hasSavedCredential", False),
+                "config": {
+                    **proxy_cfg,
+                    "enabled": proxy_enabled,
+                },
+            }
+            proxy_meta = PROXY_SOURCE_MAP.get(
+                "cloudflare",
+                {"target": "akshare", "display_name": "Cloudflare 代理", "kind": "proxy"},
+            )
+            proxy_map.setdefault("akshare", []).append(
+                (
+                    "cloudflare",
+                    synthesized_info,
+                    None,
+                    proxy_meta,
+                )
+            )
+
     return sources, metrics_map, proxy_map
 
 
@@ -523,7 +727,8 @@ def _assemble_sources_payload(
 
     payload: List[Dict[str, Any]] = []
     for source_name, info in sources.items():
-        config_info = info.get("config", {})
+        config_info = dict(info.get("config", {}) or {})
+        config_info.setdefault("enabled", info.get("available", False))
         metrics_payload = _build_metrics_payload(metrics_map.get(source_name))
         proxies = [
             _build_proxy_payload(proxy_name, proxy_info, proxy_metrics, proxy_meta)
@@ -858,7 +1063,11 @@ async def switch_data_source(request: SwitchRequest):
 
 @router.post("/test/{source}")
 async def test_data_source(
-    source: str, symbol: Optional[str] = Query(None, description="测试使用的标的")
+    source: str,
+    symbol: Optional[str] = Query(None, description="测试使用的标的"),
+    payload: Optional[DataSourceTestRequest] = Body(
+        None, description="Temporary data source overrides for testing",
+    ),
 ):
     """触发单个数据源自检"""
 
@@ -869,6 +1078,63 @@ async def test_data_source(
             code=ErrorCodes.DATASOURCE_NOT_FOUND,
             message=f"未知数据源标识: {source}",
             status_code=404,
+        )
+
+    if source_type == DataSourceType.AMAZINGDATA:
+        config = manager.registry.get_config(source_type)
+        if config is None:
+            return APIResponse.error(
+                code=ErrorCodes.DATASOURCE_NOT_FOUND,
+                message="未找到 AmazingData 配置",
+                status_code=404,
+            )
+
+        test_config = copy.deepcopy(config)
+        payload_data: Dict[str, Any] = {}
+        if isinstance(payload, DataSourceTestRequest):
+            payload_data = payload.model_dump(exclude_unset=True)
+        elif payload is not None:
+            logger.debug("Ignoring unexpected AmazingData test payload type: %s", type(payload))
+
+        timeout_value = payload_data.get("timeout")
+        if timeout_value is not None:
+            test_config.timeout = float(timeout_value)
+        retry_value = payload_data.get("retry_count")
+        if retry_value is not None:
+            test_config.retry_count = int(retry_value)
+        fallback_enabled_value = payload_data.get("fallback_enabled")
+        if fallback_enabled_value is not None:
+            test_config.fallback_enabled = bool(fallback_enabled_value)
+        fallback_sources_value = payload_data.get("fallback_sources")
+        if fallback_sources_value is not None:
+            test_config.fallback_sources = list(fallback_sources_value)
+        config_override = payload_data.get("config")
+        if config_override is not None:
+            test_config.config = _deep_merge_dict(test_config.config, config_override)
+
+        success, latency_ms, error_detail = await _test_amazingdata_login(test_config)
+        update_datasource_status_after_test(source_type.value, success, int(latency_ms))
+
+        payload = {
+            "success": success,
+            "source": source_type.value,
+            "latency_ms": latency_ms,
+            "data": None if not success else {"action": "login"},
+        }
+        if error_detail:
+            payload["error"] = error_detail
+
+        message = "登录成功" if success else (error_detail or "登录失败")
+        if success:
+            return APIResponse.success(payload, message)
+        return JSONResponse(
+            status_code=500,
+            content=APIResponse.error(
+                code=ErrorCodes.DATASOURCE_TEST_FAILED,
+                message=message,
+                data=payload,
+                status_code=500,
+            ),
         )
 
     test_symbol = symbol or DEFAULT_TEST_SYMBOL
@@ -1034,8 +1300,35 @@ async def update_data_source_config(request: Request, source: str, payload: Conf
         config.fallback_enabled = bool(update_data["fallback_enabled"])
     if "fallback_sources" in update_data:
         config.fallback_sources = list(update_data["fallback_sources"] or [])
+    persist_payload: Dict[str, Any] = update_data
     if "config" in update_data and update_data["config"] is not None:
-        config.config = dict(update_data["config"])
+        incoming_config = dict(update_data["config"])
+        existing_config = config.config if isinstance(config.config, dict) else {}
+        merged_config = _deep_merge_dict(existing_config, incoming_config)
+        merged_config = _prune_empty(merged_config)
+        config.config = merged_config
+        if source_type == DataSourceType.AKSHARE:
+            proxy_cfg = merged_config.get("proxy") if isinstance(merged_config, dict) else None
+            if isinstance(proxy_cfg, dict):
+                proxy_enabled = proxy_cfg.get("enabled")
+                if isinstance(proxy_enabled, str):
+                    proxy_enabled = proxy_enabled.lower() in {"1", "true", "yes", "on"}
+                if proxy_enabled:
+                    merged_config["mode"] = "proxy"
+                else:
+                    if merged_config.get("mode") == "proxy":
+                        merged_config["mode"] = "direct"
+                    merged_config.setdefault("mode", "direct")
+        persist_payload = dict(update_data)
+        persist_payload["config"] = copy.deepcopy(config.config)
+
+    if isinstance(config.config, dict):
+        config.config["implementation_mode"] = "process"
+        if (
+            isinstance(persist_payload, dict)
+            and isinstance(persist_payload.get("config"), dict)
+        ):
+            persist_payload["config"]["implementation_mode"] = "process"
 
     persisted_has_saved: Optional[bool] = None
     try:
@@ -1044,7 +1337,7 @@ async def update_data_source_config(request: Request, source: str, payload: Conf
             source_type,
             config,
             remember_flag,
-            update_data,
+            persist_payload,
         )
     except Exception as exc:  # pragma: no cover - 写入失败时不阻塞 API
         logger.error(f"写入数据源配置失败: {exc}")

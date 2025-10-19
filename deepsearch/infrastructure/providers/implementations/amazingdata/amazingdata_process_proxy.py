@@ -23,7 +23,7 @@ from enum import Enum
 from multiprocessing import connection
 from multiprocessing.managers import SyncManager
 from pathlib import Path
-from typing import Any, Dict, Optional, Protocol, TypedDict, cast
+from typing import Any, Callable, Dict, Optional, Protocol, TypedDict, cast
 
 from loguru import logger
 
@@ -876,7 +876,7 @@ class AmazingDataProcessProxy:
                         break
                     continue
                 else:
-                    method = getattr(ad, request.method, None)
+                    method = AmazingDataProcessProxy._resolve_callable(ad, request.method)
                     if method is None:
                         response = ProxyResponse(
                             request_id=request.request_id,
@@ -925,3 +925,23 @@ class AmazingDataProcessProxy:
 
         logger.info("Worker process exiting")
 
+    @staticmethod
+    def _resolve_callable(target: Any, method_path: str) -> Callable[..., Any] | None:
+        """支持带点路径的属性访问，必要时自动实例化类。"""
+
+        current = target
+        for attr in method_path.split("."):
+            if not attr:
+                continue
+            candidate = getattr(current, attr, None)
+            if candidate is None:
+                return None
+            if isinstance(candidate, type):
+                try:
+                    current = candidate()
+                    continue
+                except Exception:  # pragma: no cover - 仅在实例化失败时触发
+                    return None
+            current = candidate
+
+        return current if callable(current) else None

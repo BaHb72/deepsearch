@@ -3,12 +3,17 @@
 包含数据库和缓存等数据存储组件
 """
 
+import asyncio
+import copy
 import importlib
 import inspect
+import ipaddress
+import os
+import platform
 import re
 from contextlib import suppress
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -27,6 +32,66 @@ from deepsearch.infrastructure.persistence.runtime_state.database_status_store i
     get_database_status_store,
 )
 
+LOCAL_HOST_CANDIDATES = {"localhost", "127.0.0.1", "::1"}
+
+
+def _is_running_in_wsl() -> bool:
+    if platform.system().lower() != "linux":
+        return False
+
+    release = platform.release().lower()
+    if "microsoft" in release or "wsl" in release:
+        return True
+
+    if os.environ.get("WSL_INTEROP"):
+        return True
+    return False
+
+
+def _resolve_windows_host_ip(logger: Any) -> Optional[str]:
+    """解析 Windows 宿主机在 WSL 中的 IP 地址。"""
+    resolv_path = "/etc/resolv.conf"
+    try:
+        with open(resolv_path, "r", encoding="utf-8", errors="ignore") as fp:
+            for raw_line in fp:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if not line.startswith("nameserver"):
+                    continue
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                candidate = parts[1]
+                try:
+                    ip_obj = ipaddress.ip_address(candidate)
+                except ValueError:
+                    continue
+                if ip_obj.version == 4:
+                    return candidate
+    except FileNotFoundError:
+        logger.debug("未找到 %s，无法解析 Windows 宿主机 IP", resolv_path)
+    except Exception as exc:  # pragma: no cover - 防御性日志
+        logger.debug("解析 Windows 宿主机 IP 失败: %s", exc)
+    return None
+
+
+def _is_connection_related_error(error: Exception) -> bool:
+    from redis.exceptions import ConnectionError as RedisConnectionError
+
+    if isinstance(error, (RedisConnectionError, asyncio.TimeoutError, OSError)):
+        return True
+
+    cause = getattr(error, "__cause__", None)
+    if isinstance(cause, (RedisConnectionError, OSError)):
+        return True
+    return False
+
+
+def _should_try_windows_host(host: str) -> bool:
+    host = (host or "").strip()
+    return host in LOCAL_HOST_CANDIDATES
+
 
 class DatabaseComponent(AsyncComponent[Any]):
     """数据库组件 - 管理数据库连接和操作"""
@@ -37,6 +102,7 @@ class DatabaseComponent(AsyncComponent[Any]):
         self._session_factory: Callable[[], AsyncSession] | None = None
         self._is_timescale_enabled: bool = False
         self._timeout_manager = get_timeout_manager()
+        self._active_db_host: Optional[str] = None
 
         self._instance = self
 
@@ -277,90 +343,65 @@ class DatabaseComponent(AsyncComponent[Any]):
         if not db_config or not db_config.main.enabled:
             raise RuntimeError("数据库功能未启用")
 
-        # 获取数据库URL
-        db_url = db_config.main.get_url()
-        if not db_url:
-            raise RuntimeError("数据库 URL 未配置")
-
-        # 创建异步引擎
-        if db_url.startswith("postgresql://"):
-            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-
-        # 获取连接超时配置
         connect_timeout = self._timeout_manager.get_timeout(TimeoutCategory.DB_CONNECT)
-
         store.save_connectivity_status(key, {"state": "connecting", "retrying": False})
 
-        self._engine = create_async_engine(
-            db_url,
-            echo=(db_config.main.echo if db_config else False),
-            pool_size=20,
-            max_overflow=10,
-            pool_pre_ping=True,
-            pool_recycle=3600,
-            connect_args={
-                "server_settings": {
-                    "application_name": "deepsearch",
-                    "jit": "off",  # 关闭JIT以提高稳定性
-                },
-                "timeout": connect_timeout,
-                "command_timeout": connect_timeout,
-            },
-        )
+        main_config = db_config.main
+        candidate_hosts = self._build_database_host_candidates(main_config.host)
 
-        # 创建会话工厂
-        self._session_factory = async_sessionmaker(
-            self._engine, class_=AsyncSession, expire_on_commit=False
-        )
+        last_error: Optional[str] = None
+        last_exception: Optional[Exception] = None
 
-        # 测试连接（带超时）
-        try:
-            import asyncio
+        for attempt, host in enumerate(candidate_hosts):
+            if attempt > 0:
+                self._logger.info("尝试使用备用数据库地址 %s:%s", host, main_config.port)
 
-            async def _test_connection():
-                async with self._engine.begin() as conn:
-                    await conn.execute(text("SELECT 1"))
-                    self._logger.info("数据库连接成功")
-
-            test_task = asyncio.create_task(_test_connection())
             try:
-                await asyncio.wait_for(test_task, timeout=connect_timeout)
+                await self._attempt_database_connection(
+                    db_config=db_config,
+                    main_config=main_config,
+                    host=host,
+                    connect_timeout=connect_timeout,
+                )
+                last_error = None
+                last_exception = None
+                break
             except asyncio.TimeoutError:
-                test_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await test_task
-                raise
-            except Exception:
-                if not test_task.done():
-                    test_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await test_task
-                raise
-        except asyncio.TimeoutError:
-            # 连接超时，清理资源
-            if self._engine:
-                await self._engine.dispose()
-            self._engine = None
-            self._session_factory = None
+                last_error = f"数据库连接超时 ({connect_timeout}秒)"
+                last_exception = None
+                self._logger.warning(
+                    "数据库连接 %s:%s 超时 (%s秒)",
+                    host,
+                    main_config.port,
+                    connect_timeout,
+                )
+            except Exception as exc:
+                last_exception = exc
+                last_error = f"数据库连接失败: {exc}"
+                self._logger.error("数据库连接 %s:%s 失败: %s", host, main_config.port, exc)
+
+            if attempt + 1 < len(candidate_hosts):
+                store.save_connectivity_status(
+                    key,
+                    {
+                        "state": "connecting",
+                        "last_error": last_error,
+                        "retrying": True,
+                    },
+                )
+
+        if self._engine is None or self._session_factory is None:
             store.save_connectivity_status(
                 key,
                 {
                     "state": "error",
-                    "last_error": f"数据库连接超时 ({connect_timeout}秒)",
+                    "last_error": last_error or "数据库连接失败",
                     "retrying": False,
                 },
             )
-            raise RuntimeError(f"数据库连接超时 ({connect_timeout}秒)")
-        except Exception as e:
-            # 连接失败，清理资源
-            if self._engine:
-                await self._engine.dispose()
-            self._engine = None
-            self._session_factory = None
-            store.save_connectivity_status(
-                key, {"state": "error", "last_error": str(e), "retrying": False}
-            )
-            raise RuntimeError(f"数据库连接失败: {e}")
+            if last_exception is not None:
+                raise RuntimeError(last_error or "数据库连接失败") from last_exception
+            raise RuntimeError(last_error or "数据库连接失败")
 
         store.save_connectivity_status(
             key,
@@ -385,12 +426,88 @@ class DatabaseComponent(AsyncComponent[Any]):
             await self._engine.dispose()
             self._engine = None
             self._session_factory = None
+            self._active_db_host = None
             self._logger.info("数据库连接已断开")
             store.save_connectivity_status(
                 key, {"state": "disconnected", "last_error": None, "retrying": False}
             )
         else:
             store.save_connectivity_status(key, {"state": "disconnected", "retrying": False})
+
+    def _build_database_host_candidates(self, host: str) -> List[str]:
+        candidates: List[str] = [host]
+        if _is_running_in_wsl() and _should_try_windows_host(host):
+            fallback_host = _resolve_windows_host_ip(self._logger)
+            if fallback_host and fallback_host not in candidates:
+                candidates.append(fallback_host)
+        return candidates
+
+    async def _attempt_database_connection(
+        self,
+        *,
+        db_config: Any,
+        main_config: Any,
+        host: str,
+        connect_timeout: float,
+    ) -> None:
+        temp_config = copy.deepcopy(main_config)
+        temp_config.host = host
+
+        db_url = temp_config.get_url()
+        if not db_url:
+            raise RuntimeError("数据库 URL 未配置")
+
+        if db_url.startswith("postgresql://"):
+            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+
+        engine = create_async_engine(
+            db_url,
+            echo=(db_config.main.echo if db_config else False),
+            pool_size=20,
+            max_overflow=10,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+            connect_args={
+                "server_settings": {
+                    "application_name": "deepsearch",
+                    "jit": "off",
+                },
+                "timeout": connect_timeout,
+                "command_timeout": connect_timeout,
+            },
+        )
+
+        session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+        async def _test_connection() -> None:
+            async with engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+            self._logger.info("数据库连接成功 (%s:%s)", host, main_config.port)
+
+        test_task = asyncio.create_task(_test_connection())
+        try:
+            await asyncio.wait_for(test_task, timeout=connect_timeout)
+        except asyncio.TimeoutError:
+            test_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await test_task
+            await engine.dispose()
+            raise
+        except Exception:
+            if not test_task.done():
+                test_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await test_task
+            await engine.dispose()
+            raise
+
+        # 关闭旧引擎（若存在）
+        if self._engine:
+            await self._engine.dispose()
+
+        self._engine = engine
+        self._session_factory = session_factory
+        self._active_db_host = host
 
     def get_status_info(self) -> Dict[str, Any]:
         """获取详细状态信息"""
@@ -401,9 +518,10 @@ class DatabaseComponent(AsyncComponent[Any]):
             info["connection_status"] = "connected"
             config = get_config()
             if config and config.database:
+                active_host = self._active_db_host or config.database.main.host
                 info["connection_info"] = {
                     "type": config.database.main.type,
-                    "host": config.database.main.host,
+                    "host": active_host,
                     "port": config.database.main.port,
                     "database": config.database.main.database,
                 }
@@ -490,57 +608,70 @@ class CacheComponent(AsyncComponent[Any]):
     async def _connect_to_redis(self) -> None:
         """建立Redis连接（带超时保护）"""
         try:
-            import asyncio
-
             import redis.asyncio as aioredis
 
             # 获取连接超时配置
             connect_timeout = self._timeout_manager.get_timeout(TimeoutCategory.CACHE_GET)
 
             # 创建连接池
-            pool = aioredis.ConnectionPool(
-                host=self._redis_config["host"],
-                port=self._redis_config["port"],
-                db=self._redis_config["db"],
-                username=self._redis_config.get("username"),
-                password=self._redis_config.get("password"),
-                decode_responses=True,
-                max_connections=self._redis_config.get("pool_size", 10),
-                socket_keepalive=self._redis_config.get("socket_keepalive", True),
-                socket_keepalive_options={
-                    1: 1,  # TCP_KEEPIDLE
-                    2: 1,  # TCP_KEEPINTVL
-                    3: 3,  # TCP_KEEPCNT
-                },
-                socket_connect_timeout=connect_timeout,
-                socket_timeout=connect_timeout,
-                retry_on_timeout=self._redis_config.get("retry_on_timeout", True),
-                health_check_interval=self._redis_config.get("health_check_interval", 30),
-            )
+            pool_kwargs: Dict[str, Any] = {
+                "host": self._redis_config["host"],
+                "port": self._redis_config["port"],
+                "db": self._redis_config["db"],
+                "username": self._redis_config.get("username"),
+                "password": self._redis_config.get("password"),
+                "decode_responses": True,
+                "max_connections": self._redis_config.get("pool_size", 10),
+                "socket_keepalive": self._redis_config.get("socket_keepalive", True),
+                "socket_connect_timeout": connect_timeout,
+                "socket_timeout": connect_timeout,
+                "retry_on_timeout": self._redis_config.get("retry_on_timeout", True),
+                "health_check_interval": self._redis_config.get("health_check_interval", 30),
+            }
 
-            self._redis_client = aioredis.Redis(connection_pool=pool)
+            keepalive_options = self._build_keepalive_options()
+            if keepalive_options:
+                pool_kwargs["socket_keepalive_options"] = keepalive_options
 
-            # 测试连接（带超时）
-            async def _test_connection():
-                await self._redis_client.ping()
+            current_kwargs = dict(pool_kwargs)
+            attempted_keepalive_fix = False
+            attempted_windows_host = False
 
-            test_task = asyncio.create_task(_test_connection())
-            try:
-                await asyncio.wait_for(test_task, timeout=connect_timeout)
-            except asyncio.TimeoutError:
-                test_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await test_task
-                raise
-            except Exception:
-                if not test_task.done():
-                    test_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await test_task
-                raise
+            while True:
+                try:
+                    await self._initialize_redis_client(aioredis, current_kwargs, connect_timeout)
+                    break
+                except Exception as exc:
+                    if (
+                        not attempted_keepalive_fix
+                        and self._should_disable_keepalive(exc, current_kwargs)
+                    ):
+                        attempted_keepalive_fix = True
+                        current_kwargs = dict(current_kwargs)
+                        current_kwargs["socket_keepalive"] = False
+                        current_kwargs.pop("socket_keepalive_options", None)
+                        self._logger.warning(
+                            "当前环境不支持配置的 TCP keepalive 选项，已禁用 keepalive 后重试 Redis 连接"
+                        )
+                        continue
+
+                    if not attempted_windows_host:
+                        fallback_kwargs = self._prepare_windows_host_retry(current_kwargs, exc)
+                        if fallback_kwargs:
+                            attempted_windows_host = True
+                            current_kwargs = fallback_kwargs
+                            host_for_log = fallback_kwargs.get("host")
+                            if host_for_log:
+                                self._logger.info(
+                                    "检测到 WSL 环境，尝试使用宿主机 IP %s 连接 Redis", host_for_log
+                                )
+                            continue
+
+                    raise
 
             self._connected = True
             self._connection_error = None
+            self._redis_config["host"] = current_kwargs.get("host", self._redis_config["host"])
             self._logger.info(
                 f"成功连接到 Redis {self._redis_config['host']}:{self._redis_config['port']}"
             )
@@ -555,6 +686,131 @@ class CacheComponent(AsyncComponent[Any]):
             self._connection_error = str(e)
             self._logger.error(f"Redis 连接失败: {e}")
             raise
+
+    def _build_keepalive_options(self) -> Optional[Dict[int, int]]:
+        """构建跨平台可用的 TCP keepalive 参数。"""
+        if not self._redis_config:
+            return None
+
+        if not self._redis_config.get("socket_keepalive", True):
+            return None
+
+        try:
+            import socket
+        except Exception as exc:  # pragma: no cover - 防御性处理
+            self._logger.debug("socket 模块不可用，跳过 keepalive 配置: %s", exc)
+            return None
+
+        option_map: Dict[int, int] = {}
+        option_candidates = [
+            ("TCP_KEEPIDLE", 1),
+            ("TCP_KEEPALIVE", 1),  # macOS 使用 TCP_KEEPALIVE 常量
+            ("TCP_KEEPINTVL", 1),
+            ("TCP_KEEPCNT", 3),
+        ]
+
+        for name, value in option_candidates:
+            option = getattr(socket, name, None)
+            if option is None:
+                continue
+            try:
+                option_map[int(option)] = value
+            except (TypeError, ValueError):
+                continue
+
+        if not option_map:
+            self._logger.debug("当前平台未提供可用的 TCP keepalive 常量，跳过 keepalive 配置")
+            return None
+
+        return option_map
+
+    async def _initialize_redis_client(
+        self,
+        aioredis: Any,
+        pool_kwargs: Dict[str, Any],
+        connect_timeout: float,
+    ) -> None:
+        """根据给定参数建立 Redis 连接并执行连通性探测。"""
+        import asyncio
+        from redis.exceptions import ConnectionError as RedisConnectionError
+
+        pool = aioredis.ConnectionPool(**pool_kwargs)
+        client = aioredis.Redis(connection_pool=pool)
+
+        async def _test_connection() -> None:
+            await client.ping()
+
+        test_task = asyncio.create_task(_test_connection())
+        try:
+            await asyncio.wait_for(test_task, timeout=connect_timeout)
+        except asyncio.TimeoutError:
+            test_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await test_task
+            await client.close()
+            raise
+        except RedisConnectionError:
+            if not test_task.done():
+                test_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await test_task
+            await client.close()
+            raise
+        except Exception:
+            if not test_task.done():
+                test_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await test_task
+            await client.close()
+            raise
+
+        self._redis_client = client
+
+    def _should_disable_keepalive(self, error: Exception, pool_kwargs: Dict[str, Any]) -> bool:
+        """判断异常是否由于 keepalive 参数导致，并决定是否尝试禁用 keepalive。"""
+        if not pool_kwargs.get("socket_keepalive", True):
+            return False
+
+        message = str(error).lower()
+        if "invalid argument" in message:
+            return True
+
+        errno_value = getattr(error, "errno", None)
+        if errno_value == 22:
+            return True
+
+        from redis.exceptions import ConnectionError as RedisConnectionError
+
+        if isinstance(error, RedisConnectionError):
+            cause = getattr(error, "__cause__", None)
+            if cause is not None and getattr(cause, "errno", None) == 22:
+                return True
+
+        return False
+
+    def _prepare_windows_host_retry(
+        self, pool_kwargs: Dict[str, Any], error: Exception
+    ) -> Optional[Dict[str, Any]]:
+        """在 WSL 环境下尝试使用宿主机 IP 重试连接。"""
+        if not _is_running_in_wsl():
+            return None
+
+        host = str(pool_kwargs.get("host", "")).strip()
+        if not _should_try_windows_host(host):
+            return None
+
+        if not _is_connection_related_error(error):
+            return None
+
+        windows_host_ip = _resolve_windows_host_ip(self._logger)
+        if not windows_host_ip:
+            return None
+
+        new_kwargs = dict(pool_kwargs)
+        new_kwargs["host"] = windows_host_ip
+        # 禁用 keepalive options，避免上次失败的配置残留
+        new_kwargs.pop("socket_keepalive_options", None)
+        return new_kwargs
 
     async def _do_start(self) -> None:
         """启动缓存服务"""

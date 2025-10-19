@@ -4,7 +4,7 @@ QMT DataFeed 实现
 实现 IDataFeed 接口，提供统一的数据访问接口
 """
 
-from typing import Any, Dict, List, Optional, Union, cast, TYPE_CHECKING
+from typing import Any, Dict, List, Union, cast, TYPE_CHECKING
 
 from loguru import logger
 

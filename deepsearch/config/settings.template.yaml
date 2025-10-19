@@ -105,7 +105,7 @@ data_sources:
       has_saved_credential: false
       type: amazingdata
       config:
-        implementation_mode: legacy
+        implementation_mode: process
         connection:
           username: your_amazingdata_username
           password: your_amazingdata_password

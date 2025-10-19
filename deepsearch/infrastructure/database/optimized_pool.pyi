@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 @dataclass

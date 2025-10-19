@@ -131,9 +131,9 @@ class AmazingDataConfig(BaseModel):
     """AmazingData 配置"""
 
     enabled: bool = Field(default=False, description="是否启用")
-    implementation_mode: Literal["legacy", "optimized"] = Field(
-        default="legacy",
-        description="指定使用的实现模式，legacy 为原始实现，optimized 为增强实现",
+    implementation_mode: Literal["optimized", "process"] = Field(
+        default="optimized",
+        description="指定实现模式：optimized 为增强实现，process 为子进程隔离方案",
     )
     priority: int = Field(default=1, description="优先级")
     worker_env: Dict[str, str] = Field(

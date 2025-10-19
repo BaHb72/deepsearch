@@ -139,6 +139,10 @@ def _migrate_amazingdata(
     changed |= _merge_section(provider_config, "local", local_updates)
     changed |= _merge_section(provider_config, "subscription", subscription_updates)
 
+    if "implementation_mode" not in provider_config:
+        provider_config["implementation_mode"] = "process"
+        changed = True
+
     changed |= _update_has_saved_credential(provider_entry, provider_config)
 
     if legacy_block is not None:
@@ -153,53 +157,27 @@ def _migrate_cloudflare(
     legacy_providers: Dict[str, Any],
 ) -> bool:
     changed = False
+
+    cloudflare_entry = providers.pop("cloudflare", None)
     legacy_block = root_config.pop("cloudflare_workers", None)
     legacy_meta = _get_legacy_provider_meta(legacy_providers, {"cloudflare", "cloudflare_proxy"})
 
-    if not isinstance(legacy_block, dict) and not legacy_meta:
-        return False
-
-    provider_entry, created = _ensure_mapping(providers, "cloudflare")
-    changed |= created
-
-    enabled_value = _first_value(
-        provider_entry.get("enabled"),
-        _safe_get(legacy_meta, "enabled"),
-    )
-    if enabled_value is not None:
-        changed |= _set_if_absent(provider_entry, "enabled", bool(enabled_value))
-
-    priority_value = _first_value(
-        provider_entry.get("priority"),
-        _safe_get(legacy_meta, "priority"),
-    )
-    if priority_value is not None:
-        changed |= _set_if_absent(provider_entry, "priority", priority_value)
-
-    provider_config, created_config = _ensure_mapping(provider_entry, "config")
-    changed |= created_config
-
-    connection_updates: Dict[str, Any] = {}
+    proxy_enabled: Optional[bool] = None
+    proxy_updates: Dict[str, Any] = {}
     cache_updates: Dict[str, Any] = {}
 
-    if isinstance(legacy_meta, dict):
-        meta_config = _safe_get(legacy_meta, "config")
-        if isinstance(meta_config, dict):
-            for key in (
-                "worker_url",
-                "api_key",
-                "secret_key",
-                "timeout",
-                "retry_count",
-                "fallback_to_direct",
-            ):
-                value = meta_config.get(key)
-                if value is not None:
-                    connection_updates[key] = value
-            if isinstance(meta_config.get("cache"), dict):
-                cache_updates.update(meta_config["cache"])
+    def _consume(entry: Optional[Dict[str, Any]]) -> None:
+        nonlocal proxy_enabled, proxy_updates, cache_updates
+        if not isinstance(entry, dict):
+            return
 
-    if isinstance(legacy_block, dict):
+        if proxy_enabled is None and "enabled" in entry:
+            proxy_enabled = bool(entry.get("enabled"))
+
+        config_section = entry.get("config") if "config" in entry else entry
+        if not isinstance(config_section, dict):
+            return
+
         for key in (
             "worker_url",
             "api_key",
@@ -207,25 +185,68 @@ def _migrate_cloudflare(
             "timeout",
             "retry_count",
             "fallback_to_direct",
+            "workers",
         ):
-            value = legacy_block.get(key)
-            if value is not None and key not in connection_updates:
-                connection_updates[key] = value
-        workers = legacy_block.get("workers")
-        if workers and "workers" not in connection_updates:
-            connection_updates["workers"] = workers
-        if "cache_enabled" in legacy_block and "enabled" not in cache_updates:
-            cache_updates["enabled"] = legacy_block.get("cache_enabled")
-        if "cache_ttl" in legacy_block and "ttl" not in cache_updates:
-            cache_updates["ttl"] = legacy_block.get("cache_ttl")
+            value = config_section.get(key)
+            if value is not None:
+                proxy_updates.setdefault(key, value)
 
-    changed |= _merge_section(provider_config, "connection", connection_updates)
-    changed |= _merge_section(provider_config, "cache", cache_updates)
-    changed |= _update_has_saved_credential(provider_entry, provider_config)
+        cache_section = config_section.get("cache")
+        if isinstance(cache_section, dict):
+            cache_updates = _merge_dict(cache_updates, cache_section)
 
-    if legacy_block is not None:
-        changed = True
+        if "cache_enabled" in config_section:
+            cache_updates.setdefault("enabled", config_section.get("cache_enabled"))
+        if "cache_ttl" in config_section:
+            cache_updates.setdefault("ttl", config_section.get("cache_ttl"))
 
+    def _merge_dict(base: Dict[str, Any], addon: Dict[str, Any]) -> Dict[str, Any]:
+        result = dict(base or {})
+        for key, value in addon.items():
+            if isinstance(value, dict) and isinstance(result.get(key), dict):
+                result[key] = _merge_dict(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+    _consume(cloudflare_entry)
+    _consume(legacy_meta)
+    _consume(legacy_block)
+
+    if not proxy_updates and not cache_updates and proxy_enabled is None:
+        return changed
+
+    akshare_entry, created = _ensure_mapping(providers, "akshare")
+    changed |= created
+    akshare_config, created_cfg = _ensure_mapping(akshare_entry, "config")
+    changed |= created_cfg
+
+    proxy_payload: Dict[str, Any] = dict(proxy_updates)
+    if cache_updates:
+        proxy_payload["cache"] = cache_updates
+
+    if proxy_payload:
+        changed |= _merge_section(akshare_config, "proxy", proxy_payload)
+
+    if proxy_enabled is True:
+        if akshare_entry.get("enabled") is not True:
+            akshare_entry["enabled"] = True
+            changed = True
+        if akshare_config.get("mode") != "proxy":
+            akshare_config["mode"] = "proxy"
+            changed = True
+    elif proxy_enabled is False:
+        if akshare_config.get("mode") == "proxy":
+            akshare_config["mode"] = "direct"
+            changed = True
+        akshare_config.setdefault("mode", "direct")
+    else:
+        akshare_config.setdefault("mode", akshare_config.get("mode", "direct"))
+
+    akshare_entry["config"] = akshare_config
+    changed |= _update_has_saved_credential(akshare_entry, akshare_config)
+    providers["akshare"] = akshare_entry
+    changed = True
     return changed
 
 

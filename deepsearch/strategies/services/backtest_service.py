@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """回测服务，提供 Backtrader 集成的类型安全封装."""
+
+from __future__ import annotations
 
 import base64
 import io
@@ -15,7 +15,6 @@ from loguru import logger
 from deepsearch.backtest.adapters.unified_backtrader_adapter import UnifiedBacktraderAdapter
 from deepsearch.backtest.interfaces.strategy import BacktraderStrategyAdapter
 from deepsearch.backtest.ports import (
-    AnalyzerResultProto,
     BacktesterAPI,
     CerebroProto,
     FigureProto,

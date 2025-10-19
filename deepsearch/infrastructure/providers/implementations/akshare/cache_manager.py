@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 from loguru import logger
 
 if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
-    import redis as redis_module
+    pass
 
 _redis_spec = importlib.util.find_spec("redis")
 redis: ModuleType | None

@@ -5,7 +5,7 @@ HTTP 代理客户端
 
 import json
 import time
-from typing import Any, Dict, Optional, TypedDict
+from typing import Optional, TypedDict
 
 import requests
 from loguru import logger

@@ -117,7 +117,7 @@ class CircuitBreaker:
 
         try:
             result = func()
-        except BaseException as exc:
+        except BaseException:
             self._on_failure()
             raise
 

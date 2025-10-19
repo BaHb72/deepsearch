@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from __future__ import annotations
-
-"""仓储协议与分页模型的最小实现。"""
 
 from dataclasses import dataclass
 from typing import Generic, Optional, Protocol, Sequence, TypeVar

@@ -7,7 +7,7 @@ DuckDB 分析数据库管理器
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import List, Optional
 
 import duckdb
 import pandas as pd

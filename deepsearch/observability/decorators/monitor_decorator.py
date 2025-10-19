@@ -91,20 +91,20 @@ def monitor_access(
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 start_time = time.time()
                 symbol = _resolve_symbol_for_log(extract_symbol, args, kwargs)
+                symbol_label = symbol or "-"
                 try:
                     async_func = cast(Callable[..., Awaitable[Any]], monitored)
                     result = await async_func(*args, **kwargs)
                     latency_ms = (time.time() - start_time) * 1000.0
                     logger.debug(
-                        f"[MONITOR] {source.value} -> {access_type.value} "
-                        f"[{symbol or '-'}] {latency_ms:.1f}ms OK"
+                        f"[MONITOR] {source.value} -> {access_type.value} [{symbol_label}] "
+                        f"{latency_ms:.1f}ms OK"
                     )
                     return result
                 except Exception as exc:
                     latency_ms = (time.time() - start_time) * 1000.0
                     logger.warning(
-                        f"[MONITOR] {source.value} -> {access_type.value} "
-                        f"[{symbol or '-'}] FAILED: {exc}"
+                        f"[MONITOR] {source.value} -> {access_type.value} [{symbol_label}] FAILED: {exc}"
                     )
                     raise
 
@@ -114,20 +114,21 @@ def monitor_access(
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             start_time = time.time()
             symbol = _resolve_symbol_for_log(extract_symbol, args, kwargs)
+            symbol_label = symbol or "-"
             try:
                 sync_func = cast(Callable[..., Any], monitored)
                 result = sync_func(*args, **kwargs)
                 latency_ms = (time.time() - start_time) * 1000.0
                 logger.debug(
                     f"[MONITOR] {source.value} -> {access_type.value} "
-                    f"[{symbol or '-'}] {latency_ms:.1f}ms OK"
+                    f"[{symbol_label}] {latency_ms:.1f}ms OK"
                 )
                 return result
             except Exception as exc:
                 latency_ms = (time.time() - start_time) * 1000.0
                 logger.warning(
                     f"[MONITOR] {source.value} -> {access_type.value} "
-                    f"[{symbol or '-'}] FAILED: {exc}"
+                    f"[{symbol_label}] FAILED: {exc}"
                 )
                 raise
 
@@ -161,6 +162,7 @@ def batch_monitor_access(
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 start_time = time.time()
                 symbol = _resolve_symbol_for_log(extract_symbol, args, kwargs)
+                symbol_label = symbol or "-"
                 try:
                     async_func = cast(Callable[..., Awaitable[Any]], monitored)
                     result = await async_func(*args, **kwargs)
@@ -168,14 +170,14 @@ def batch_monitor_access(
                     record_count = metadata.get("record_count", 0)
                     latency_ms = (time.time() - start_time) * 1000.0
                     logger.debug(
-                        f"[MONITOR] {source.value} -> {access_type.value} "
+                        f"[MONITOR] {source.value} -> {access_type.value} {symbol_label} "
                         f"[{record_count} records] {latency_ms:.1f}ms OK"
                     )
                     return result
                 except Exception as exc:
                     latency_ms = (time.time() - start_time) * 1000.0
                     logger.warning(
-                        f"[MONITOR] {source.value} -> {access_type.value} FAILED: {exc}"
+                        f"[MONITOR] {source.value} -> {access_type.value} {symbol_label} FAILED: {exc}"
                     )
                     raise
 
@@ -205,4 +207,3 @@ def batch_monitor_access(
         return sync_wrapper
 
     return decorator
-

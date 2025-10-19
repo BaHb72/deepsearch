@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-
 class ProviderType(Enum):
     """数据提供者类型"""
 
@@ -24,14 +23,12 @@ class ProviderType(Enum):
     THS = "ths"
     CUSTOM = "custom"
 
-
 ALLOWED_PROVIDER_TYPES = {
     ProviderType.AMAZINGDATA,
     ProviderType.CLOUDFLARE,
     ProviderType.AKSHARE,
     ProviderType.CUSTOM,
 }
-
 
 @dataclass
 class ProviderInfo:
@@ -49,7 +46,6 @@ class ProviderInfo:
     def __post_init__(self):
         if self.config is None:
             self.config = {}
-
 
 class DataProviderRegistry:
     """
@@ -163,6 +159,67 @@ class DataProviderRegistry:
         """
         return self._providers.get(name)
 
+    @staticmethod
+    def _as_dict(value: Any) -> Dict[str, Any]:
+        """�������Ϊ dict ��ʽ��"""
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            return dict(value)
+        if hasattr(value, "model_dump"):
+            try:
+                return dict(value.model_dump())
+            except Exception:
+                return {}
+        if hasattr(value, "__dict__"):
+            return dict(getattr(value, "__dict__", {}))
+        return {}
+
+    def _resolve_provider_config_from_settings(self, provider_name: str) -> Dict[str, Any]:
+        """�� settings.<env>.yaml �� data_sources.providers ��Ѱ�ҽṩ���ɼ�����"""
+        try:
+            from deepsearch.config import get_config
+        except Exception:
+            return {}
+
+        app_config = get_config()
+        data_sources = getattr(app_config, "data_sources", None)
+        if not data_sources:
+            return {}
+
+        data_sources_dict = self._as_dict(data_sources)
+        providers_block = self._as_dict(data_sources_dict.get("providers"))
+        if not providers_block:
+            return {}
+
+        entry = providers_block.get(provider_name)
+        if not entry:
+            return {}
+
+        entry_dict = self._as_dict(entry)
+        if not entry_dict:
+            return {}
+
+        config_block = entry_dict.get("config")
+        payload = self._as_dict(config_block)
+        if payload:
+            return payload
+
+        meta_keys = {
+            "enabled",
+            "priority",
+            "timeout",
+            "retry_count",
+            "fallback_enabled",
+            "fallback_sources",
+            "has_saved_credential",
+            "provider_name",
+        }
+        fallback_payload = {
+            key: value for key, value in entry_dict.items() if key not in meta_keys
+        }
+        return fallback_payload if fallback_payload else {}
+
     def get_provider_instance(self, name: str, force_new: bool = False) -> Optional[Any]:
         """
         获取数据提供者实例
@@ -187,6 +244,12 @@ class DataProviderRegistry:
             return None
 
         try:
+            resolved_config = provider_info.config
+            if not resolved_config:
+                fallback_config = self._resolve_provider_config_from_settings(name)
+                if fallback_config:
+                    resolved_config = dict(fallback_config)
+                    provider_info.config = resolved_config
             # 动态导入模块
             module = importlib.import_module(provider_info.module_path)
             provider_class = getattr(module, provider_info.class_name)
@@ -200,13 +263,18 @@ class DataProviderRegistry:
                 )
                 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
                     AmazingDataConfig,
-                    AmazingDataProvider as LegacyAmazingDataProvider,
+                )
+                from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized import (
+                    OptimizedAmazingDataProvider,
+                )
+                from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process import (
+                    ProcessIsolatedAmazingDataProvider,
                 )
 
                 env_name = os.getenv("APP__ENV", "prod")
                 config_hint = f"settings.{env_name}.yaml"
 
-                raw_config = provider_info.config or {}
+                raw_config = dict(resolved_config or {})
 
                 def _extract_connection_payload(data: Dict[str, Any]) -> Dict[str, Any]:
                     if isinstance(data, dict) and "connection" in data:
@@ -221,6 +289,24 @@ class DataProviderRegistry:
                         return flattened
                     return data
 
+                def _sanitize_payload(data: Dict[str, Any]) -> None:
+                    for key in ("name", "provider_name", "type"):
+                        if key in data:
+                            data.pop(key, None)
+                    alias_map = {
+                        "retryCount": "retry_count",
+                        "RetryCount": "retry_count",
+                        "retrycount": "retry_count",
+                        "rateLimit": None,
+                        "RateLimit": None,
+                        "ratelimit": None,
+                    }
+                    for alias, target in alias_map.items():
+                        if alias in data:
+                            value = data.pop(alias)
+                            if target and target not in data:
+                                data[target] = value
+
                 def _validate_connection(source: str, data: Dict[str, Any]) -> None:
                     candidate = SettingsAmazingDataConnectionConfig.model_validate(data)
                     errors = candidate._collect_activation_errors()
@@ -230,13 +316,18 @@ class DataProviderRegistry:
 
                 def _normalize_mode(value: Any) -> Optional[str]:
                     if isinstance(value, bool):
-                        return "optimized" if value else "legacy"
+                        return "process"
                     if isinstance(value, str):
                         lowered = value.strip().lower()
-                        if lowered in {"legacy", "optimized"}:
+                        if lowered in {"optimized", "process"}:
                             return lowered
+                        if lowered == "legacy":
+                            logger.warning(
+                                "AmazingData implementation_mode=legacy 已废弃，自动切换到 process"
+                            )
+                            return "process"
                         logger.warning(
-                            f"Unknown AmazingData implementation_mode value {value!r}, falling back to legacy"
+                            f"Unknown AmazingData implementation_mode value {value!r}, falling back to process"
                         )
                     return None
 
@@ -244,19 +335,30 @@ class DataProviderRegistry:
                     flattened_config = _extract_connection_payload(raw_config)
                     _validate_connection("AmazingDataProvider registry config", flattened_config)
                     payload = dict(flattened_config)
+                    _sanitize_payload(payload)
                     mode = _normalize_mode(payload.pop("implementation_mode", None))
                 else:
-                    app_config = get_config()
-                    amazingdata_settings = getattr(app_config, "amazingdata", None)
-                    if not amazingdata_settings:
-                        raise ValueError(
-                            f"Missing amazingdata configuration in {config_hint}, please copy template and fill credentials"
-                        )
-                    payload = dict(amazingdata_settings.connection.model_dump())
-                    _validate_connection(f"{config_hint} amazingdata.connection", payload)
-                    mode = _normalize_mode(getattr(amazingdata_settings, "implementation_mode", None))
+                    fallback_config = self._resolve_provider_config_from_settings(name)
+                    if fallback_config:
+                        raw_config = dict(fallback_config)
+                        flattened_config = _extract_connection_payload(raw_config)
+                        _validate_connection("AmazingDataProvider settings config", flattened_config)
+                        payload = dict(flattened_config)
+                        _sanitize_payload(payload)
+                        mode = _normalize_mode(payload.pop("implementation_mode", None))
+                    else:
+                        app_config = get_config()
+                        amazingdata_settings = getattr(app_config, "amazingdata", None)
+                        if not amazingdata_settings:
+                            raise ValueError(
+                                f"Missing amazingdata configuration in {config_hint}, please copy template and fill credentials"
+                            )
+                        payload = dict(amazingdata_settings.connection.model_dump())
+                        _sanitize_payload(payload)
+                        _validate_connection(f"{config_hint} amazingdata.connection", payload)
+                        mode = _normalize_mode(getattr(amazingdata_settings, "implementation_mode", None))
 
-                desired_mode = mode or "legacy"
+                desired_mode = mode or "process"
 
                 stored_config = dict(payload)
                 stored_config["implementation_mode"] = desired_mode
@@ -264,37 +366,27 @@ class DataProviderRegistry:
 
                 if not force_new and name in self._instances:
                     cached_instance = self._instances[name]
-                    cached_mode = getattr(cached_instance, "_implementation_mode", "legacy")
+                    cached_mode = getattr(cached_instance, "_implementation_mode", "process")
                     if cached_mode == desired_mode:
                         return cached_instance
                     del self._instances[name]
 
-                provider_cls: type[Any] = LegacyAmazingDataProvider
-
-                if desired_mode == "optimized":
-                    try:
-                        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized import (
-                            OptimizedAmazingDataProvider,
-                        )
-
-                        provider_cls = OptimizedAmazingDataProvider
-                    except Exception as exc:
-                        logger.warning(
-                            f"Failed to load AmazingData optimized provider ({exc}), falling back to legacy"
-                        )
-                        desired_mode = "legacy"
+                if desired_mode == "process":
+                    provider_cls = ProcessIsolatedAmazingDataProvider
+                else:
+                    provider_cls = OptimizedAmazingDataProvider
 
                 config_obj = AmazingDataConfig(**payload)
                 instance = provider_cls(config_obj)
                 setattr(instance, "_implementation_mode", desired_mode)
 
-            elif provider_info.config:
+            elif resolved_config:
                 # 检查构造函数签名
                 sig = inspect.signature(provider_class.__init__)
                 if "config" in sig.parameters:
-                    instance = provider_class(config=provider_info.config)
+                    instance = provider_class(config=resolved_config)
                 else:
-                    instance = provider_class(**provider_info.config)
+                    instance = provider_class(**resolved_config)
 
             else:
                 # 检查是否需要config参数
@@ -302,9 +394,16 @@ class DataProviderRegistry:
                 params = sig.parameters
                 # 排除self参数
                 required_params = [
-                    p
-                    for p in params
-                    if p != "self" and params[p].default == inspect.Parameter.empty
+                    param_name
+                    for param_name, parameter in params.items()
+                    if param_name != "self"
+                    and parameter.default == inspect.Parameter.empty
+                    and parameter.kind
+                    in {
+                        inspect.Parameter.POSITIONAL_ONLY,
+                        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                        inspect.Parameter.KEYWORD_ONLY,
+                    }
                 ]
 
                 if required_params:
@@ -421,10 +520,8 @@ class DataProviderRegistry:
         self._instances.clear()
         logger.info("清除所有数据提供者实例缓存")
 
-
 # 全局注册表实例
 _registry: DataProviderRegistry | None = None
-
 
 def get_registry() -> DataProviderRegistry:
     """
@@ -438,7 +535,6 @@ def get_registry() -> DataProviderRegistry:
         _registry = DataProviderRegistry()
     return _registry
 
-
 def register_provider(provider_info: ProviderInfo) -> None:
     """
     注册数据提供者（便捷函数）
@@ -447,7 +543,6 @@ def register_provider(provider_info: ProviderInfo) -> None:
         provider_info: 提供者信息
     """
     get_registry().register(provider_info)
-
 
 def get_provider(name: str, force_new: bool = False) -> Optional[Any]:
     """

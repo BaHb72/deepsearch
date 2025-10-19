@@ -8,10 +8,13 @@ Version: 1.0.0
 
 import asyncio
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Mapping, Optional, TYPE_CHECKING, Union, cast
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 
 import pandas as pd
 from loguru import logger
+from deepsearch.infrastructure.providers.managers.enhanced_manager import get_data_manager
+
+from ..data.data_bridge import DataBridge
 
 bt: Any
 
@@ -28,11 +31,6 @@ if TYPE_CHECKING:
     from backtrader.feeds import PandasData as BacktraderPandasData
 else:
     BacktraderPandasData = Any
-
-from deepsearch.infrastructure.providers.managers.enhanced_manager import get_data_manager
-
-from ..data.data_bridge import DataBridge
-
 
 class UnifiedBacktraderAdapter:
     """

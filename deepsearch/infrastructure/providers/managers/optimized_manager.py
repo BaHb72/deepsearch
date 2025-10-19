@@ -18,6 +18,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Deque, Dict, List, Optional, Tuple, cast
 
+from loguru import logger
+from deepsearch.infrastructure.providers.registry import (
+    DataProviderRegistry,
+    ProviderInfo,
+    ProviderType,
+    get_registry,
+)
+
 
 def _is_valid_provider_result(result: Any) -> bool:
     """检查数据源初始化返回值是否可用"""
@@ -27,14 +35,6 @@ def _is_valid_provider_result(result: Any) -> bool:
     if isinstance(empty_attr, bool):
         return not empty_attr
     return True
-
-from loguru import logger
-from deepsearch.infrastructure.providers.registry import (
-    DataProviderRegistry,
-    ProviderInfo,
-    ProviderType,
-    get_registry,
-)
 
 
 # 熔断器状态

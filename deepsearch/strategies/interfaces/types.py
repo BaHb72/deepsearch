@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Awaitable, Callable, Literal, Mapping, Sequence, TypeAlias, TypedDict, TypeVar
+from typing import Awaitable, Callable, Literal, Mapping, Sequence, TypeAlias, TypedDict
 
 from deepsearch.messaging.types import MessageEnvelope, MessageHeaders
 

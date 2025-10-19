@@ -223,7 +223,7 @@ class AmazingDataProcessPool:
                         f"(age: {time_since_created:.1f}s > {reuse_window}s)"
                     )
                 else:
-                    logger.warning(f"[ProcessPool] Test process dead, creating new one")
+                    logger.warning("[ProcessPool] Test process dead, creating new one")
 
         # 复用失败或不存在，先清理再创建
         self.stop(test_process_id, with_logout=True)
@@ -262,22 +262,22 @@ class AmazingDataProcessPool:
         config: Optional[Mapping[str, Any]] = None,
     ) -> AmazingDataProcessProxy:
         """
-        获取或创建数据源专属进程
+        ��ȡ�򴴽�����Դר������
 
         Args:
-            datasource_id: 数据源唯一标识
-            auto_cleanup: 是否自动清理（测试场景）
-            cleanup_delay: 自动清理延迟时间
-            config: 进程配置参数
+            datasource_id: ����ԴΨһ��ʶ
+            auto_cleanup: �Ƿ��Զ����������Γ�����
+            cleanup_delay: �Զ������ӳ�ʱ��
+            config: �������ò���
 
         Returns:
-            进程代理实例
+            ���̴���ʵ��
 
         Raises:
-            RuntimeError: 进程创建失败
+            RuntimeError: ���̴���ʧ��
         """
 
-        # 为避免锁重入，空闲清理在锁外执行
+        # Ϊ���������룬��������������ִ��
         self._cleanup_idle_processes()
 
         with self.lock:
@@ -295,18 +295,20 @@ class AmazingDataProcessPool:
                 logger.debug("[ProcessPool] Max processes reached, attempting idle cleanup")
 
         if handle:
-            # 在锁外执行停机，避免重入
+            # ������ִ��ͣ������������
             self.stop(datasource_id)
+
+        config_dict = dict(config or {})
 
         with self.lock:
             if len(self._handles) >= self.max_processes:
-                # 再次检查，若仍超限直接拒绝
+                # �ٴμ�飬���Գ���ֱ�Ӿܾ�
                 raise RuntimeError(
                     f"Reached max process limit ({self.max_processes}), cannot create {datasource_id}"
                 )
 
             logger.info(f"[ProcessPool] Creating new process for {datasource_id}")
-            proxy = AmazingDataProcessProxy(restart_on_crash=not auto_cleanup)
+            proxy = self._create_proxy(config_dict, auto_cleanup)
 
             if not proxy.start():
                 raise RuntimeError(f"Failed to start process for {datasource_id}")
@@ -319,7 +321,7 @@ class AmazingDataProcessPool:
                 last_used=now,
                 auto_cleanup=auto_cleanup,
                 cleanup_delay=cleanup_delay,
-                config=dict(config or {}),
+                config=dict(config_dict),
             )
             self._handles[datasource_id] = handle
 
@@ -491,6 +493,46 @@ class AmazingDataProcessPool:
         if should_cleanup:
             logger.info(f"[ProcessPool] Auto-cleanup triggered for {datasource_id}")
             self.stop(datasource_id)
+
+    def _create_proxy(
+        self,
+        config: Mapping[str, Any],
+        auto_cleanup: bool,
+    ) -> AmazingDataProcessProxy:
+        """根据配置构造进程代理实例。"""
+
+        python_executable_raw = str(config.get("python_executable", "") or "").strip()
+        python_executable = python_executable_raw or None
+
+        raw_worker_env = config.get("worker_env")
+        worker_env: dict[str, str] | None = None
+        if isinstance(raw_worker_env, Mapping):
+            worker_env = {str(key): str(value) for key, value in raw_worker_env.items()}
+        elif isinstance(raw_worker_env, dict):
+            worker_env = {str(key): str(value) for key, value in raw_worker_env.items()}
+
+        max_workers_raw = config.get("max_workers")
+        try:
+            max_workers = int(max_workers_raw) if max_workers_raw is not None else 1
+        except (TypeError, ValueError):
+            max_workers = 1
+        max_workers = max(1, max_workers)
+
+        startup_timeout_raw = config.get("startup_timeout")
+        try:
+            startup_timeout = (
+                float(startup_timeout_raw) if startup_timeout_raw is not None else 10.0
+            )
+        except (TypeError, ValueError):
+            startup_timeout = 10.0
+
+        return AmazingDataProcessProxy(
+            max_workers=max_workers,
+            restart_on_crash=not auto_cleanup,
+            python_executable=python_executable,
+            worker_env=worker_env,
+            startup_timeout=startup_timeout,
+        )
 
     def _start_health_monitor(self) -> None:
         """启动健康监控线程"""

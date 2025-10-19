@@ -3,7 +3,7 @@
  * 包括数据库连接、数据源配置、系统模块管理
  */
 import request from '@/api/request'
-import { extractData, logApiResponse } from '@/utils/apiResponse'
+import {extractData, logApiResponse} from '@/utils/apiResponse'
 
 const isPlainObject = value => value != null && typeof value === 'object' && !Array.isArray(value)
 
@@ -71,6 +71,38 @@ const normalizeTestResult = (apiResponse, payload) => {
     error,
     details
   }
+}
+
+/**
+ * 启用数据库连接
+ * @param {number} id - 连接ID
+ * @param {object} [options] - 启用选项
+ */
+export async function activateDatabaseConnection(id, options = {}) {
+    const response = await request({
+        url: `/system/database/connections/${id}/activate`,
+        method: 'post',
+        data: options
+    })
+    const apiResponse = extractData(response)
+    logApiResponse('activateDatabaseConnection', apiResponse)
+    return extractData(apiResponse)
+}
+
+/**
+ * 停用数据库连接
+ * @param {number} id - 连接ID
+ * @param {object} [options] - 停用选项
+ */
+export async function deactivateDatabaseConnection(id, options = {}) {
+    const response = await request({
+        url: `/system/database/connections/${id}/deactivate`,
+        method: 'post',
+        data: options
+    })
+    const apiResponse = extractData(response)
+    logApiResponse('deactivateDatabaseConnection', apiResponse)
+    return extractData(apiResponse)
 }
 
 // ==================== 数据库连接管理 ====================
@@ -388,14 +420,31 @@ export async function testDataSource(dataSource) {
   const sourceId = resolveDataSourceId(dataSource) || dataSource?.type || 'amazingdata'
   const symbol = dataSource?.symbol || dataSource?.config?.symbol || '000001'
   const testType = dataSource?.test_type || dataSource?.testType || 'realtime'
+  const normalizedSource = typeof sourceId === 'string' ? sourceId.toLowerCase() : sourceId
+  const requestPayload = buildDataSourceConfigPayload(dataSource)
+  if (typeof dataSource?.rememberCredential === 'boolean') {
+    requestPayload.rememberCredential = dataSource.rememberCredential
+  }
+  const isLoginTest = normalizedSource === 'amazingdata'
 
   console.log('[systemConfig.js] 测试数据源:', { sourceId, symbol, testType })
 
   try {
-    const response = await request({
+    const requestConfig = {
       url: `/data-sources/test/${encodeURIComponent(sourceId)}`,
-      method: 'post',
-      params: { symbol, test_type: testType }
+      method: 'post'
+    }
+
+    if (!isLoginTest) {
+      requestConfig.params = { symbol, test_type: testType }
+    }
+
+    if (isLoginTest || Object.keys(requestPayload).length > 0) {
+      requestConfig.data = requestPayload
+    }
+
+    const response = await request({
+      ...requestConfig
     })
     const apiResponse = extractData(response)
     logApiResponse('testDataSource', apiResponse)

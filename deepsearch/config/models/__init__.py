@@ -15,14 +15,15 @@ from .database import (
     DatabaseConfig,
     MainDatabaseConfig,
 )
+from .database_connections import DatabaseConnectionConfigModel
 from .debug import DebugConfig
 from .health import HealthCheckConfig
 from .log import LogConfig, LogLevel
 from .monitoring import MonitoringConfig
 from .notifications import NotificationBaseUrls, NotificationCategoryConfig, NotificationsConfig
-from .runtime import RuntimeConfig, RuntimeModeSetting
 from .performance import PerformanceConfig
 from .qmt import QmtConfig
+from .runtime import RuntimeConfig, RuntimeModeSetting
 from .security import SecurityConfig
 from .webui import WebUIConfig
 from .zeromq import ZeroMQConfig
@@ -42,6 +43,7 @@ __all__ = [
     "MainDatabaseConfig",
     "CacheDatabaseConfig",
     "CacheDatabaseWSLConfig",
+    "DatabaseConnectionConfigModel",
     # 调试
     "DebugConfig",
     # 日志

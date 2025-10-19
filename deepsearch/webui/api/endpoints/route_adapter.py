@@ -8,7 +8,6 @@ API路由适配器
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
-from loguru import logger
 
 # 创建路由适配器
 router = APIRouter(prefix="/api")

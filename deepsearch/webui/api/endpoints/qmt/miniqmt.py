@@ -5,9 +5,6 @@ MiniQMT API 端点
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Mapping, Optional
-
-from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
 from fastapi import APIRouter, HTTPException, Query

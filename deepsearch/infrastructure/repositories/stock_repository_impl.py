@@ -342,7 +342,6 @@ class StockRepository(IRepository[StockEntity, str]):
         """
         # 先查询要删除的股票
         to_delete = await self.find(criteria)
-        stocks = to_delete if to_delete is not None else []
 
         # 批量删除
         deleted_count = 0

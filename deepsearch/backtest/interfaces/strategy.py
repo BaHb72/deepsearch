@@ -48,7 +48,7 @@ from deepsearch.strategies.interfaces.types import (
 
 if TYPE_CHECKING:
 
-    from backtrader import Cerebro, Strategy as BacktraderStrategyBase
+    from backtrader import Strategy as BacktraderStrategyBase
 
     from deepsearch.event.engine.engine import EventEngine
 

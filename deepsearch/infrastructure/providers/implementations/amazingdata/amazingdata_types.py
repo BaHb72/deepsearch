@@ -7,7 +7,7 @@ AmazingData 数据类型定义
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Mapping, Sequence, TypedDict, NotRequired, TypeAlias, Union
+from typing import Any, Dict, List, Optional, Mapping, Sequence, TypedDict, TypeAlias, Union
 
 
 

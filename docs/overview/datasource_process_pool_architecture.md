@@ -1,39 +1,56 @@
-# AmazingData 进程池架构说明
+# AmazingData 进程隔离架构说明
 
-> 更新时间：2025-10-04  
-> 适用范围：需要隔离旧版 SDK 或运行独立登录会话的场景
+> 更新时间：2025-10-19  
+> 适用范围：兼容旧版 SDK、隔离实验账号、批量自动化演练等需要子进程防护的环境
 
-默认情况下，DeepSearch 通过 `amazingdata_optimized.py` 在单进程内复用 SDK。仅当以下情况发生时，才需要启用进程池方案：
-- AmazingData 发布新版本 SDK，短期内必须与旧版并行验证；
-- 需要通过 Python 3.9 Worker 兼容遗留脚本（`py39_worker.py`）；
-- 某些实验环境需要将不同账号隔离，避免互相登出。
+默认运行时 DeepSearch 直接通过 `amazingdata_optimized.py` 调用最新版 SDK。  
+当遇到老版本 SDK 内存泄漏、需要特定 Python 运行时或账号隔离要求时，可启用进程隔离方案。本文同步最新实现，替换旧版“进程池流程”文档。
 
 ## 1. 组件总览
+
+| 组件 | 位置 | 作用 |
+| ---- | ---- | ---- |
+| Port 协议 | `deepsearch/ports/amazingdata_process.py` | 定义跨进程命令、登录/登出请求、健康检查接口 |
+| Adapter | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process_adapter.py` | 将 `AmazingDataProcessPort` 适配为领域层可消费的异步接口 |
+| Provider | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process.py` | `ProcessIsolatedAmazingDataProvider`，按需获取进程池代理并执行命令 |
+| ProcessPool | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process_pool.py` | 管理子进程生命周期、复用策略、后台清理与指标 |
+| ProcessProxy | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process_proxy.py` | 负责 IPC（Windows Named Pipe / multiprocessing Pipe）通信与命令调度 |
+| Worker 镜像 | `deepsearch/infrastructure/providers/implementations/amazingdata/py39_worker.py` | 在指定 Python 版本内运行真实 SDK，暴露 RPC 接口 |
+| 安全封装 | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_safe_wrapper.py` | 登录防抖、熔断、重试、降级，始终包裹 Provider |
+
+## 2. 目录结构
+
 ```
 deepsearch/infrastructure/providers/implementations/amazingdata/
-├── amazingdata_process_pool.py   # 进程池管理器（主进程）
-├── amazingdata_process_proxy.py  # 与子进程通信的代理
-├── amazingdata_safe_wrapper.py   # 登录重试、熔断、降级控制
-├── py39_worker.py                # 兼容旧版 SDK 的子进程入口
-└── amazingdata_extended.py       # 对外暴露的统一接口
+├── amazingdata.py                     # Provider 工厂入口
+├── amazingdata_process.py             # 子进程 Provider
+├── amazingdata_process_adapter.py     # Port -> Provider 适配
+├── amazingdata_process_pool.py        # 进程池管理
+├── amazingdata_process_proxy.py       # IPC 代理
+├── amazingdata_safe_wrapper.py        # 熔断 + 降级
+├── amazingdata_extended.py            # 工厂出入口（统一封装）
+├── py39_worker.py                     # 子进程执行体
+└── _sdk_loader.py                     # SDK 动态加载与版本探测
+
+deepsearch/ports/amazingdata_process.py # Port 协议与命令定义
 ```
 
-- **ProcessPool**：根据数据源 ID 维护子进程生命周期，负责创建、回收、健康检查。
-- **ProcessProxy**：封送调用参数，通过 IPC（Windows Named Pipe）与子进程交互。
-- **SafeWrapper**：在调用前处理令牌刷新、重试与失败熔断；无论是否启用进程池都必须经过包装。
-- **py39_worker**：当目标 SDK 只能在 Python 3.9 运行时，由子进程加载并暴露 RPC 接口。
+## 3. 数据流与调用流程
 
-## 2. 工作流程
-1. 上层通过 `AmazingDataExtended` 请求数据。
-2. 根据配置决定是否走进程池：
-   - **未启用**：直接调用优化实现。
-   - **启用**：`ProcessPool` 按账号/场景 ID 获取或创建独立子进程。
-3. `ProcessProxy` 将调用序列化后发送到子进程，由 `py39_worker` 执行真实 SDK 方法。
-4. 结果返回主进程，并通过 `SafeWrapper` 记录耗时、失败次数，必要时触发降级。
-5. 空闲进程达到阈值或账号下线时，`ProcessPool` 会在后台回收子进程。
+1. `AmazingDataSafeWrapper` 根据配置决定使用优化实现或 `ProcessIsolatedAmazingDataProvider`。
+2. `ProcessIsolatedAmazingDataProvider` 通过 `get_global_pool()` 获取 `AmazingDataProcessPool`，计算 `datasource_id` 并请求代理。
+3. `AmazingDataProcessPool.get_or_create()` 按账号/主机复用子进程，必要时拉起 `py39_worker.py`。
+4. 代理层将请求封装为 `ProcessCommand`（Port 定义），由 `AmazingDataProcessAdapter` 异步发送至子进程。
+5. 子进程执行真实 SDK 方法，返回 `ProcessCallResult`，包含结果、错误类型、元数据。
+6. Provider 将结果转换为领域模型（列表/字典），失败时抛出 `DataProviderError`，由 SafeWrapper 统计并触发熔断策略。
+7. 空闲 TTL 到期或达到 `max_processes` 等阈值时，`ProcessPool` 后台线程主动清理子进程。
 
-## 3. 配置开关
-示例（默认关闭）：
+> 订阅实时推送目前仍由 `amazingdata_realtime.py` 处理；进程隔离仅覆盖查询类接口。
+
+## 4. 配置要点
+
+`settings.<env>.yaml` 示例：
+
 ```yaml
 data_sources:
   providers:
@@ -41,32 +58,53 @@ data_sources:
       enabled: true
       priority: 1
       config:
+        connection:
+          username: your_username
+          password: your_password
+          host: 101.230.159.234
+          port: 8600
         isolation:
           process_pool:
-            enabled: false          # 默认关闭
-            max_processes: 4        # 上限，防止资源耗尽
-            idle_ttl: 300s          # 空闲进程回收时间
-            python_executable: null # 指定 py39 可执行文件（可选）
+            enabled: true            # 开启进程隔离
+            max_processes: 4         # 子进程数量上限
+            idle_ttl: 300s           # 空闲回收阈值
+            python_interpreter_path: "C:/Python39/python.exe"
+            worker_env:
+              AMAZINGDATA_MODE: legacy
+            startup_timeout: 30s
 ```
-> 开启前请确认目标环境已安装对应 Python 版本，并在 `docs/operations/runbooks/` 中备案。
 
-## 4. 监控与诊断
-- **指标**：`observability.metrics` 输出登录成功率、活跃进程数、重启次数。
-- **日志**：`logs/datasource/process_pool.log` 记录进程创建/销毁、异常堆栈。
-- **CLI**：`uv run python -m deepsearch.cli debug datasource processes` 可查看当前进程池快照。
-- **测试**：`tests/integration/amazingdata/test_amazingdata_py39_bridge.py` 覆盖基础行为。
+- **python_interpreter_path**：未设置时继承系统默认 Python，可通过环境变量或配置显式指定。
+- **worker_env**：以字典形式传入，确保在 Port 层使用 `MappingProxyType` 包装后仍可序列化。
+- **startup_timeout**：对应 Provider 构建 `ProcessCommand` 时的超时时间，避免子进程挂起。
+- 启用前请根据 `docs/operations/runbooks/redis_startup.md` 的模板建立本地巡检脚本，确认依赖已安装。
 
-## 5. 运维要点
-- Windows 环境下需确保防火墙允许本地 Named Pipe 通信。
-- 子进程启动失败时会自动回退到单进程模式，并触发 WARN 级别日志；请及时排查 `_sdk_loader.py` 的版本探测结果。
-- 长时间运行后建议使用 CLI 的 `cleanup` 子命令手动清理空闲进程，以避免占用句柄。
+## 5. 运维与监控
 
-## 6. 风险与缓解
-| 风险 | 描述 | 缓解措施 |
-| ---- | ---- | -------- |
-| 资源占用 | 开启过多子进程导致内存不足 | 限制 `max_processes`，开启观察告警 |
-| 版本漂移 | 主进程和子进程依赖不一致 | `py39_worker` 在启动时输出依赖版本并写入日志 |
-| 通信异常 | IPC 超时或数据包损坏 | 提供重试机制，并在 3 次失败后上报熔断 |
+- **日志**：`logs/datasource/process_pool.log`、`logs/datasource/amazingdata_process_proxy.log` 记录进程状态；登录异常会同时写入 `observability` 事件。
+- **指标**：`observability.metrics` 暴露 `process_pool.active_processes`、`process_pool.restart_count`、`amazingdata.process.error_rate` 等指标，可在 Prometheus 中抓取。
+- **CLI 辅助**：
+  - `uv run python -m deepsearch.cli debug datasource processes`：列出子进程、PID、复用次数。
+  - `uv run python -m deepsearch.cli debug datasource cleanup --force`：立即清理空闲进程。
+- **测试覆盖**：
+  - `tests/unit/infrastructure/providers/test_amazingdata_process_provider.py`
+  - `tests/integration/amazingdata/test_amazingdata_process_provider.py`
+
+## 6. 常见问题排查
+
+| 现象 | 可能原因 | 建议处理 |
+| ---- | ---- | ---- |
+| 登录卡住，超时后熔断 | 子进程未成功启动或 Named Pipe 阻塞 | 检查 `python_interpreter_path`，确认防火墙允许本地管道通信 |
+| 子进程数量不断增加 | `worker_env` 区分导致 `datasource_id` 不同 | 合并等价配置，或开启 `auto_cleanup` 并缩短 `idle_ttl` |
+| 返回数据为空但无异常 | 老版 SDK 在指定接口不返回数据 | 使用 `ProcessCommand` 的 `metadata` 辅助定位，并在 SafeWrapper 中配置降级方案 |
+| 停止服务后仍有孤儿进程 | 进程池退出前异常终止 | 执行 `cleanup --force` 或在运维脚本中追加 `taskkill /F /IM python.exe /FI "WINDOWS TITLE eq DeepSearch-AmazingData"` |
+
+## 7. 文档与索引同步
+
+- `docs/overview/document_index.md` 已指向本文，更新后请确保摘要描述匹配最新内容。
+- 若新增 Port 字段或命令，请同时维护 `deepsearch/ports/amazingdata_process.py` 的类型注释及 `.pyi` stub（如需）。
+- 与第三方交互逻辑调整时，记得在 PR 中附带运行 `python scripts/run_all_tests.py --quick` 的结果日志。
 
 ---
-若无兼容性需求，请保持进程池关闭，直接使用优化后的单进程实现即可。
+
+除非遇到以上特殊场景，仍以优化实现（单进程）为默认首选，降低部署和运维复杂度。

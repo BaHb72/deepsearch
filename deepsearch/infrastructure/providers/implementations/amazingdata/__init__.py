@@ -6,5 +6,11 @@ AmazingData 数据提供者实现
 from .amazingdata import AmazingDataProvider
 from .amazingdata_extended import AmazingDataExtended
 from .amazingdata_realtime import AmazingDataRealtime
+from .amazingdata_process import ProcessIsolatedAmazingDataProvider
 
-__all__ = ["AmazingDataProvider", "AmazingDataExtended", "AmazingDataRealtime"]
+__all__ = [
+    "AmazingDataProvider",
+    "AmazingDataExtended",
+    "AmazingDataRealtime",
+    "ProcessIsolatedAmazingDataProvider",
+]

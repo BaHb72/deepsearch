@@ -106,7 +106,7 @@ data_sources:
       worker_env:
         DEEPSEARCH_AMAZINGDATA_STUB: tests.stubs.amazingdata_stub
       config:
-        implementation_mode: legacy
+        implementation_mode: process
         connection:
           username: demo_user
           password: demo_password

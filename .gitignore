@@ -44,6 +44,9 @@ pytest-coverage.log
 logs/
 diagnostic_*.json
 diagnostic_log.json
+test_data_sources.log
+tmp_test.log
+data_source_test_report.txt
 
 # ==================== OS & Editors ====================
 .DS_Store
@@ -88,6 +91,7 @@ deepsearch/webui/frontend/jsx-backup-*/
 !/third_party/amazingdata/**
 !/third_party/tgw/
 !/third_party/tgw/**
+third_party/amazingdata/src/amazingdata/__pycache__/
 cloudflare-deploy/*.toml
 cloudflare-deploy/*.min.js
 wrangler*.toml

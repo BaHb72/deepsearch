@@ -35,7 +35,6 @@ from deepsearch.webui.api.models import (
     CapabilitySummaryData,
     CapabilitySummaryResponse,
     DataSourceSlug,
-    SourceCapabilitySummary,
     SourceMetadata,
     SourceOverview,
 )

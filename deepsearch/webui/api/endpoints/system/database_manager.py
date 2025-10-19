@@ -11,7 +11,7 @@ import threading
 from contextlib import closing, suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, Dict, Final, List, Mapping, Optional, Tuple, cast
 
 import duckdb
 from fastapi import APIRouter, FastAPI, HTTPException
@@ -20,7 +20,10 @@ from pydantic import BaseModel, Field
 
 from deepsearch.config import get_config
 from deepsearch.config.crypto import decrypt_password, encrypt_password
-from deepsearch.config.manager import ConfigManager
+from deepsearch.config.services.database_connections import (
+    load_database_connections,
+    persist_database_connections,
+)
 from deepsearch.core.interfaces.component import Component, ComponentStatus
 from deepsearch.core.runtime.context import get_context
 from deepsearch.infrastructure.persistence.duckdb_path import resolve_duckdb_path
@@ -35,6 +38,8 @@ from deepsearch.webui.api.database_states import (
     ConnectivityStateSchema,
     DeprecatedStateSchema,
 )
+
+MASKED_SECRET: Final[str] = "***"  # nosec B105 - 与前端一致的密码掩码
 
 if TYPE_CHECKING:
     from deepsearch.core import MainEngine
@@ -386,8 +391,8 @@ def _resolve_config_dir() -> Path:
 _CONFIG_DIR = _resolve_config_dir()
 _CONNECTIONS_FILE = _CONFIG_DIR / f"database_connections.{_ENV_NAME}.yaml"
 
-_connections_config_manager = ConfigManager()
 _connections_manager_loaded = False
+_connections_payload_cache: Optional[Dict[str, Any]] = None
 
 
 def _serialize_datetime_field(value: Optional[datetime]) -> Optional[str]:
@@ -429,6 +434,27 @@ def _serialize_connection(connection: DatabaseConnection) -> Dict[str, Any]:
     return data
 
 
+def _apply_password_mask(payload: Dict[str, Any], password_value: Optional[str]) -> None:
+    """在响应载荷中附带密码掩码与保存标记。"""
+    has_password = bool(password_value)
+    payload["masked_password"] = MASKED_SECRET if has_password else ""
+    payload["has_saved_password"] = has_password
+
+
+def _resolve_password_submission(
+        submitted: Optional[str], existing: Optional[str]
+) -> Optional[str]:
+    """根据提交值与已保存值计算最终入库密码。"""
+    if submitted is None:
+        return existing
+    if isinstance(submitted, str):
+        if submitted == MASKED_SECRET:
+            return existing
+        if submitted == "":
+            return ""
+    return submitted
+
+
 def _deserialize_connection_payload(payload: Mapping[str, Any]) -> Optional[DatabaseConnection]:
     data = dict(payload)
     try:
@@ -468,20 +494,26 @@ def _reset_next_id_locked() -> None:
 
 
 def _ensure_connections_manager_loaded() -> None:
-    global _connections_manager_loaded
+    global _connections_manager_loaded, _connections_payload_cache
     if _connections_manager_loaded:
         return
 
     _CONNECTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
     if not _CONNECTIONS_FILE.exists():
-        _connections_config_manager.update({"database_connections": []})
-        _connections_config_manager.save(_CONNECTIONS_FILE)
+        _connections_payload_cache = persist_database_connections(
+            _CONNECTIONS_FILE,
+            [],
+            {},
+        )
+    else:
+        _, payload = load_database_connections(_CONNECTIONS_FILE)
+        _connections_payload_cache = payload
 
-    _connections_config_manager.load(_CONNECTIONS_FILE)
     _connections_manager_loaded = True
 
 
 def _persist_connections() -> None:
+    global _connections_payload_cache
     try:
         _ensure_connections_manager_loaded()
     except Exception as exc:  # pragma: no cover - configuration fallback
@@ -492,10 +524,15 @@ def _persist_connections() -> None:
         snapshot = list(sorted(database_connections.values(), key=lambda c: c.id or 0))
     serialized = [_serialize_connection(conn) for conn in snapshot]
 
-    _connections_config_manager.set("database_connections", serialized)
     try:
-        _connections_config_manager.save()
-    except Exception as exc:  # pragma: no cover - IO 错误只记录不阻断
+        new_payload = persist_database_connections(
+            _CONNECTIONS_FILE,
+            serialized,
+            _connections_payload_cache or {},
+        )
+        _connections_payload_cache = new_payload
+    except Exception as exc:  # pragma: no cover - IO ����ֻ��¼�����
+        logger.error(f"�������ݿ���������ʧ��: {exc}")
         logger.error(f"保存数据库连接配置失败: {exc}")
 
 
@@ -506,23 +543,24 @@ def _load_connections_from_storage() -> bool:
         logger.error(f"初始化数据库连接配置失败: {exc}")
         return False
 
-    payload = _connections_config_manager.get_all()
-    entries = payload.get("database_connections")
-    if not isinstance(entries, list) or not entries:
+    models, payload = load_database_connections(_CONNECTIONS_FILE)
+    _connections_payload_cache = payload
+    if not models:
         return False
 
     loaded: Dict[int, DatabaseConnection] = {}
-    for item in entries:
-        if not isinstance(item, dict):
-            continue
-        connection = _deserialize_connection_payload(item)
+    for model in models:
+        connection = _deserialize_connection_payload(model.model_dump(mode="python"))
         if connection is None or connection.id is None:
             continue
-        loaded[int(connection.id)] = connection
+        loaded[connection.id] = connection
 
-    if not loaded:
-        return False
-
+    with _connections_lock:
+        database_connections.clear()
+        database_connections.update(loaded)
+    _reset_next_id_locked()
+    logger.info(f"��ʼ���������ݿ����ӵ���: {len(loaded)}")
+    return True
     with _connections_lock:
         database_connections.clear()
         database_connections.update(loaded)
@@ -621,6 +659,7 @@ def _build_connection_payload(
     payload.setdefault("status", f"{activation_state}_{connectivity_state}")
     if detail:
         payload["status_detail"] = detail
+    _apply_password_mask(payload, connection.password)
     return payload
 
 
@@ -896,6 +935,7 @@ async def get_connections():
             elif connectivity_state.last_error:
                 conn_dict.setdefault("status_detail", connectivity_state.last_error)
 
+            _apply_password_mask(conn_dict, conn.password)
             connections_list.append(conn_dict)
 
         return APIResponse.success(
@@ -957,6 +997,7 @@ async def create_connection(connection: DatabaseConnection):
         response_payload["deprecated"] = DeprecatedStateSchema(
             enabled=connection.enabled, connected=False, status=f"{activation_state}_disconnected"
         ).model_dump()
+        _apply_password_mask(response_payload, connection.password)
         return APIResponse.success(
             data=response_payload, message=f"数据库连接 '{connection.name}' 创建成功"
         )
@@ -1093,7 +1134,6 @@ async def deactivate_connection(
 
         detail: Optional[str] = None
         connectivity_state: ConnectivityStateLiteral = "disconnected"
-        message = "数据库连接已停用"
         if options.disconnect and (connection.type or "").lower() in {
             "postgresql",
             "mysql",
@@ -1162,17 +1202,24 @@ async def update_connection(connection_id: int, connection: DatabaseConnection):
     try:
         with _connections_lock:
             existing = database_connections.get(connection_id)
-            if existing is None:
-                return APIResponse.error(
-                    code=ErrorCodes.DATABASE_NOT_FOUND,
-                    message=f"数据库连接 ID {connection_id} 不存在",
-                    status_code=404,
-                )
+        if existing is None:
+            return APIResponse.error(
+                code=ErrorCodes.DATABASE_NOT_FOUND,
+                message=f"���ݿ����� ID {connection_id} ������",
+                status_code=404,
+            )
 
+        resolved_password = _resolve_password_submission(connection.password, existing.password)
+        if resolved_password is None:
+            resolved_password = ""
+
+        with _connections_lock:
             connection.id = connection_id
             connection.created_at = existing.created_at
             connection.updated_at = datetime.now()
+            connection.password = resolved_password
             database_connections[connection_id] = connection
+
 
         activation_state: ActivationStateLiteral = (
             "active" if connection.enabled else "inactive"
@@ -1197,6 +1244,7 @@ async def update_connection(connection_id: int, connection: DatabaseConnection):
             connected=connectivity_state == "connected",
             status=f"{activation_state}_{connectivity_state}",
         ).model_dump()
+        _apply_password_mask(response_payload, connection.password)
         return APIResponse.success(
             data=response_payload, message=f"数据库连接 '{connection.name}' 更新成功"
         )

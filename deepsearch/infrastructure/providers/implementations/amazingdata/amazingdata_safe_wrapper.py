@@ -9,7 +9,7 @@ Date: 2025-09-20
 """
 
 import time
-from typing import Any, Dict, Optional, Tuple, TypedDict, Union, cast
+from typing import Any, Dict, Optional, Tuple, TypedDict, cast
 
 import pandas as pd
 

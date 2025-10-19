@@ -10,12 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-MASKED_SECRET = "***"  # 用于识别配置中的脱敏密码占位符  # nosec B105
 from pydantic import BaseModel
 
 from deepsearch.config import get_config
 from deepsearch.webui.api.cache.unified import UnifiedCache
 from deepsearch.webui.api.cache.unified import get_cache as get_unified_cache
+
+MASKED_SECRET = "***"  # 用于识别配置中的脱敏密码占位符  # nosec B105
 
 # 创建路由器
 router = APIRouter(prefix="/cache", tags=["缓存管理"])

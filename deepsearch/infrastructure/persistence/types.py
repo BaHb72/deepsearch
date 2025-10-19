@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Type aliases and lightweight protocols for the persistence layer."""
+
+from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any, AsyncContextManager, Protocol, TypeAlias, runtime_checkable

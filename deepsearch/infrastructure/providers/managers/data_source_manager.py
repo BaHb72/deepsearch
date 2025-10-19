@@ -23,15 +23,84 @@ from deepsearch.infrastructure.providers.registry import get_registry
 
 SUPPORTED_SOURCE_TYPES = {
     DataSourceType.AMAZINGDATA,
-    DataSourceType.CLOUDFLARE,
     DataSourceType.AKSHARE,
 }
 
 DEFAULT_SOURCE_PRIORITY = {
     DataSourceType.AMAZINGDATA: 10,
-    DataSourceType.CLOUDFLARE: 20,
     DataSourceType.AKSHARE: 30,
 }
+
+_SENSITIVE_CONFIG_MARKERS = (
+    "password",
+    "secret",
+    "secret_key",
+    "private_key",
+    "token",
+    "access_token",
+    "refresh_token",
+    "apikey",
+    "api_key",
+    "username",
+)
+
+
+def _sanitize_config_snapshot(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized: Dict[str, Any] = {}
+        for key, sub_value in value.items():
+            key_str = str(key)
+            lowered = key_str.lower()
+            if any(marker in lowered for marker in _SENSITIVE_CONFIG_MARKERS):
+                continue
+            sanitized_value = _sanitize_config_snapshot(sub_value)
+            if sanitized_value is None:
+                continue
+            sanitized[key_str] = sanitized_value
+        return sanitized
+    if isinstance(value, list):
+        sanitized_list = []
+        for item in value:
+            sanitized_item = _sanitize_config_snapshot(item)
+            if sanitized_item is None:
+                continue
+            sanitized_list.append(sanitized_item)
+        return sanitized_list
+    if isinstance(value, Enum):
+        return value.value
+    return value
+
+
+# Backward compatibility for cached call sites that still reference the old helper name.
+_strip_sensitive_keys = _sanitize_config_snapshot
+
+
+def _prune_empty(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned: Dict[str, Any] = {}
+        for key, sub_value in value.items():
+            cleaned_value = _prune_empty(sub_value)
+            if cleaned_value in (None, ""):
+                continue
+            if isinstance(cleaned_value, dict) and not cleaned_value:
+                continue
+            if isinstance(cleaned_value, list) and not cleaned_value:
+                continue
+            cleaned[key] = cleaned_value
+        return cleaned
+    if isinstance(value, list):
+        cleaned_list = []
+        for item in value:
+            cleaned_item = _prune_empty(item)
+            if cleaned_item in (None, ""):
+                continue
+            if isinstance(cleaned_item, dict) and not cleaned_item:
+                continue
+            if isinstance(cleaned_item, list) and not cleaned_item:
+                continue
+            cleaned_list.append(cleaned_item)
+        return cleaned_list
+    return value
 
 
 class SourceStatusEntry(TypedDict, total=False):
@@ -253,9 +322,9 @@ class DataSourceManager:
             "amazing": DataSourceType.AMAZINGDATA,
             "amazingdata": DataSourceType.AMAZINGDATA,
             "default": DataSourceType.DEFAULT,
-            "cloudflare": DataSourceType.CLOUDFLARE,
-            "cloudflare_proxy": DataSourceType.CLOUDFLARE,
-            "akshare_proxy": DataSourceType.CLOUDFLARE,
+            "cloudflare": DataSourceType.AKSHARE,
+            "cloudflare_proxy": DataSourceType.AKSHARE,
+            "akshare_proxy": DataSourceType.AKSHARE,
             "akshare": DataSourceType.AKSHARE,
             "akshare_direct": DataSourceType.AKSHARE,
         }
@@ -415,7 +484,6 @@ class DataSourceManager:
         if not self._fallback_order:
             default_chain = [
                 DataSourceType.AMAZINGDATA,
-                DataSourceType.CLOUDFLARE,
                 DataSourceType.AKSHARE,
             ]
             self._fallback_order = [st for st in default_chain if st in SUPPORTED_SOURCE_TYPES]
@@ -439,6 +507,8 @@ class DataSourceManager:
             providers_dict = dict(providers_raw)
         else:
             providers_dict = dict(getattr(providers_raw, "__dict__", {}))
+
+        self._merge_proxy_provider(providers_dict)
 
         fallback_order_raw = data_sources.get("fallback_order")
         normalized_order = self._normalize_type_list(fallback_order_raw)
@@ -467,8 +537,8 @@ class DataSourceManager:
                 "data_sources.providers 中未找到受支持的数据源配置，已回退到 AmazingData 默认配置"
             )
             self._register_provider_config(
-                DataSourceType.AMAZINGDATA, "amazingdata", {"enabled": False}
-            )
+                    DataSourceType.AMAZINGDATA, "amazingdata", {"enabled": False}
+                )
 
     def _load_legacy_configs(self) -> None:
         """兼容旧版配置结构，仅注册 AmazingData。"""
@@ -495,10 +565,47 @@ class DataSourceManager:
         self._register_provider_config(DataSourceType.AMAZINGDATA, "amazingdata", normalized)
         self._fallback_order = [
             DataSourceType.AMAZINGDATA,
-            DataSourceType.CLOUDFLARE,
             DataSourceType.AKSHARE,
         ]
         self._default_source = DataSourceType.AMAZINGDATA
+
+    def _merge_proxy_provider(self, providers_dict: Dict[str, Any]) -> None:
+        """将独立的 Cloudflare 代理配置合并到 AkShare 配置中。"""
+
+        proxy_keys = ("cloudflare", "cloudflare_proxy", "akshare_proxy")
+        proxy_enabled: Optional[bool] = None
+        proxy_payload: Dict[str, Any] = {}
+
+        for key in proxy_keys:
+            entry = providers_dict.pop(key, None)
+            if not entry:
+                continue
+            normalized = self._ensure_dict(entry)
+            if proxy_enabled is None and "enabled" in normalized:
+                proxy_enabled = bool(normalized.get("enabled"))
+            config_block = normalized.get("config")
+            if config_block:
+                proxy_payload = self._deep_merge_dicts(proxy_payload, self._ensure_dict(config_block))
+
+        if proxy_enabled is None and not proxy_payload:
+            return
+
+        akshare_entry = providers_dict.setdefault("akshare", {})
+        akshare_normalized = self._ensure_dict(akshare_entry)
+        akshare_config = self._ensure_dict(akshare_normalized.get("config"))
+
+        if proxy_payload:
+            existing_proxy = self._ensure_dict(akshare_config.get("proxy"))
+            akshare_config["proxy"] = self._deep_merge_dicts(existing_proxy, proxy_payload)
+
+        if proxy_enabled is True:
+            akshare_config["mode"] = "proxy"
+            akshare_normalized["enabled"] = True
+        else:
+            akshare_config.setdefault("mode", akshare_config.get("mode", "direct"))
+
+        akshare_normalized["config"] = akshare_config
+        providers_dict["akshare"] = akshare_normalized
 
     def _normalize_type_list(self, values: Any) -> List[DataSourceType]:
         result: List[DataSourceType] = []
@@ -511,6 +618,16 @@ class DataSourceManager:
             if source_type and source_type in SUPPORTED_SOURCE_TYPES and source_type not in result:
                 result.append(source_type)
         return result
+
+    def is_provider_enabled(self, source: Union[str, DataSourceType]) -> bool:
+        """判断指定数据源在当前配置中是否启用。"""
+
+        source_type = self._resolve_source_type(source)
+        if source_type is None:
+            return False
+
+        config = self.registry.get_config(source_type)
+        return bool(config and config.enabled)
 
     @staticmethod
     def _extract_config_payload(normalized: Dict[str, Any]) -> Dict[str, Any]:
@@ -532,6 +649,30 @@ class DataSourceManager:
         }
         return {k: v for k, v in normalized.items() if k not in meta_keys}
 
+    def _resolve_akshare_provider_config(
+        self, config: DataSourceConfig
+    ) -> tuple[str, Dict[str, Any]]:
+        """根据 AkShare 配置决定使用直连还是 Cloudflare 代理。"""
+
+        payload = self._ensure_dict(config.config)
+        mode = str(payload.get("mode", "direct")).lower()
+        proxy_payload = self._ensure_dict(payload.get("proxy"))
+
+        direct_payload = {
+            k: v for k, v in payload.items() if k not in {"mode", "proxy"}
+        }
+
+        proxy_enabled = proxy_payload.get("enabled")
+        if isinstance(proxy_enabled, str):
+            proxy_enabled = proxy_enabled.lower() in {"1", "true", "yes", "on"}
+
+        use_proxy = mode == "proxy" or bool(proxy_enabled)
+        if use_proxy:
+            resolved_proxy = {k: v for k, v in proxy_payload.items() if k != "enabled"}
+            return "cloudflare", resolved_proxy
+
+        return "akshare", direct_payload
+
     def _register_provider_config(
         self, source_type: DataSourceType, provider_name: str, normalized: Dict[str, Any]
     ) -> None:
@@ -546,6 +687,8 @@ class DataSourceManager:
             fallback_sources = [st for st in self._fallback_order if st != source_type]
 
         config_payload = self._extract_config_payload(data)
+        if isinstance(config_payload, dict) and "implementation_mode" not in config_payload:
+            config_payload["implementation_mode"] = "process"
         has_saved = data.get("has_saved_credential")
         if has_saved is None:
             has_saved = self._infer_saved_credential_from_config(config_payload)
@@ -630,15 +773,21 @@ class DataSourceManager:
     async def _create_provider(
         self, source_type: DataSourceType, config: DataSourceConfig
     ) -> Optional[IDataSource]:
-        provider_name = self._provider_names.get(source_type, source_type.value)
         registry = get_registry()
+
+        if source_type == DataSourceType.AKSHARE:
+            provider_name, provider_payload = self._resolve_akshare_provider_config(config)
+        else:
+            provider_name = self._provider_names.get(source_type, source_type.value)
+            provider_payload = dict(config.config or {})
+
         provider_info = registry.get_provider_info(provider_name)
         if not provider_info:
             logger.warning(f"未在注册表中找到数据源 {provider_name}，跳过")
             return None
 
-        if config.config:
-            registry.update_provider_config(provider_name, config.config)
+        if provider_payload:
+            registry.update_provider_config(provider_name, provider_payload)
 
         provider_instance = registry.get_provider_instance(provider_name, force_new=True)
         if not provider_instance:
@@ -920,6 +1069,11 @@ class DataSourceManager:
                     "priority": config.priority if config else 999,
                 },
             }
+            if config and isinstance(config.config, dict):
+                detailed_config = _sanitize_config_snapshot(config.config)
+                detailed_config = _prune_empty(detailed_config)
+                if detailed_config:
+                    entry["config"].update(detailed_config)
             if status.get("test_details") is not None:
                 entry["testDetails"] = status.get("test_details")
             if status.get("degraded_reason"):
@@ -1570,7 +1724,9 @@ class DataSourceManager:
         }
 
     def enable_provider(
-        self, source: Union[str, DataSourceType], reinitialize: bool = True
+        self,
+        source: Union[str, DataSourceType],
+        reinitialize: bool = True,
     ) -> bool:
         """启用数据源并在必要时重新初始化。"""
 
@@ -1615,10 +1771,13 @@ class DataSourceManager:
         entry.pop("degraded_reason", None)
         entry.pop("pending_reactivation", None)
         logger.info(f"已启用数据源 {source_type.value}，等待重新初始化")
+
         return True
 
     def disable_provider(
-        self, source: Union[str, DataSourceType], reinitialize: bool = True
+        self,
+        source: Union[str, DataSourceType],
+        reinitialize: bool = True,
     ) -> bool:
         """禁用数据源并释放对应实例。"""
 

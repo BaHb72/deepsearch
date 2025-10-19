@@ -5,7 +5,7 @@ DeepSearchDataFeed - Backtrader 数据适配器
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional, TYPE_CHECKING, cast
+from typing import Any, Dict, TYPE_CHECKING, cast
 
 import numpy as np
 import pandas as pd

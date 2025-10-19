@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """
 数据库查询优化器模块
 
 提供查询分析、优化和索引建议
 """
+
+from __future__ import annotations
 
 import re
 import time

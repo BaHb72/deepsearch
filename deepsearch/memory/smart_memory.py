@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ctypes
 import gc
+import importlib.util
 import os
 import sys
 import threading
@@ -16,19 +17,12 @@ from collections import deque
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional, TypedDict, cast
+from typing import Any, Callable, ClassVar, Optional, TypedDict, cast
 
 import psutil
-
-# resource 模块只在类 Unix 系统可用
-try:
-    import resource as _resource_module
-except ImportError:
-    HAS_RESOURCE = False  # Windows 不支持 resource 模块
-else:
-    HAS_RESOURCE = True
-
 from loguru import logger
+
+HAS_RESOURCE = importlib.util.find_spec("resource") is not None
 
 IS_WINDOWS = sys.platform.startswith("win")
 

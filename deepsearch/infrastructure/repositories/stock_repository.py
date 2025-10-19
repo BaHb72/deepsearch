@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 """
 Stock repository implementation using PostgreSQL.
 """
+
+from __future__ import annotations
 
 from collections.abc import Mapping
 from decimal import Decimal

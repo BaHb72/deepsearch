@@ -65,6 +65,9 @@ ad.login(username: str, password: str, host: str, port: int) -> int
 ad.logout() -> None
 ```
 
+> **注意（2025-10）**：结合现网排查，AmazingData 官方 SDK 中的 `ad.logout()` 在会话收尾阶段触发底层线程清理缺陷，导致 Windows+WSL 镜像网络环境必现崩溃。为避免服务被异常终止，DeepSearch 当前禁用业务侧直接调用。
+> 临时措施：由 `OptimizedAmazingDataProvider` / `ProcessIsolatedAmazingDataProvider` 内置的连接回收逻辑托管资源释放，绕过 SDK 缺陷。在官方发布修复版本前，请勿在生产脚本中显式调用 `ad.logout()`，并关注后续 SDK 升级公告。
+
 ### ad.update_password
 功能：修改账号密码，需要在登录后调用。
 

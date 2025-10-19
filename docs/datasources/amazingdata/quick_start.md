@@ -61,7 +61,7 @@ result = ad.login(**LOGIN_PARAMS)
 if result not in (0, True):
     raise RuntimeError(f"登录失败，错误码：{result}")
 
-# 结束流程后记得 ad.logout()
+# 注意：官方 SDK 的 ad.logout() 目前存在致命崩溃 BUG，请勿直接调用，详见下文的临时方案。
 ```
 
 > 登录接口一旦失败请先检查账号状态与网络连通性（`ping host`、`Test-NetConnection`）。
@@ -227,10 +227,6 @@ async def fetch_daily():
 - 结合 `resilience_strategy.md` 与 `amazingdata_degraded_mode.md` 配置生产环境的容错机制；
 - 编写自测脚本，确保关键接口在新的 SDK 版本发布后仍能正常返回预期字段。
 
-完成以上步骤后，记得调用 `ad.logout()` 并退出虚拟环境：
-
-```python
-ad.logout()
-```
+完成以上步骤后，请直接退出脚本或关闭当前 Python 会话即可。由于官方 SDK 的 `ad.logout()` 在现网会触发崩溃 BUG，DeepSearch 会在 Provider 生命周期结束时自动回收连接，暂不建议手动调用该接口。如需强制断开，可停止对应的 Provider 进程或重启相关服务。
 
 祝你使用顺利！

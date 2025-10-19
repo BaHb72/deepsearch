@@ -32,7 +32,6 @@ from deepsearch.infrastructure.providers.interfaces.base import (
 
 # AmazingData SDK
 from ._sdk_loader import HAS_AMAZINGDATA, ad
-from .amazingdata_types import KlineBarMessage, StockListItem
 
 
 from .amazingdata import (
@@ -41,6 +40,7 @@ from .amazingdata import (
     ProviderConfigLike,
     ensure_amazingdata_provider_config,
 )
+from .amazingdata_types import KlineBarMessage, StockListItem
 
 class ErrorCode(Enum):
     """错误代码枚举"""
@@ -824,14 +824,27 @@ class OptimizedAmazingDataProvider(DataProvider):
 
     async def _logout(self) -> None:
         """登出 AmazingData"""
+        if not self._connected:
+            return
+
+        sdk = self._require_sdk()
+        username = getattr(self.config, "username", None)
+
         try:
-            if self._connected:
-                sdk = self._require_sdk()
+            try:
+                logout_args = (username,) if username else ()
+                await self.thread_pool.execute_async(sdk.logout, *logout_args)
+            except TypeError:
+                # 不同 SDK 版本可能不需要 username 参数
                 await self.thread_pool.execute_async(sdk.logout)
-                self._connected = False
-                logger.info("AmazingData 已登出")
+            logger.info("AmazingData 已登出")
+        except SystemExit as exc:
+            exit_code = getattr(exc, "code", None)
+            logger.warning("AmazingData SDK 在登出时触发 SystemExit，exit_code=%r", exit_code)
         except Exception as e:
             logger.error(f"登出失败: {e}")
+        finally:
+            self._connected = False
 
     async def get_kline(
         self,

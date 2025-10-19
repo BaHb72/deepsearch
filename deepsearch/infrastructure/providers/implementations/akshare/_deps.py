@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """AkShare 依赖加载与最小协议定义"""
+
+from __future__ import annotations
 
 from importlib import import_module
 from typing import Any, Optional, Protocol, TYPE_CHECKING, cast

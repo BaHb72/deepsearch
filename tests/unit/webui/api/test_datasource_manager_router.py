@@ -278,9 +278,14 @@ def fake_environment(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "_manager", lambda: fake_manager)
     monkeypatch.setattr(module, "_ensure_manager", fake_ensure)
     monkeypatch.setattr(module, "_monitor", lambda: fake_monitor)
+
+    async def fake_test_login(config):  # noqa: ANN001
+        return True, 12.0, None
+
     monkeypatch.setattr(module.cache_manager, "clear_pattern", fake_clear_pattern)
     monkeypatch.setattr(module.cache_manager, "clear", fake_clear)
     monkeypatch.setattr(module.cache_manager, "get_stats", lambda: {"overall_hit_rate": 0.66})
+    monkeypatch.setattr(module, "_test_amazingdata_login", fake_test_login)
 
     return fake_manager, fake_monitor, cache_calls
 
@@ -394,6 +399,47 @@ async def test_update_datasource_forgets_credentials(fake_environment, tmp_path)
     provider_entry = persisted["data_sources"]["providers"]["amazingdata"]
     assert provider_entry["has_saved_credential"] is False
     assert "password" not in provider_entry["config"]
+
+
+@pytest.mark.asyncio
+async def test_update_datasource_preserves_existing_password(fake_environment, tmp_path):
+    fake_manager, _, _ = fake_environment
+    fake_request = SimpleNamespace(headers={})
+
+    initial_payload = module.ConfigUpdateRequest.model_validate(
+        {
+            "enabled": True,
+            "config": {
+                "host": "demo.example.com",
+                "port": 8600,
+                "username": "user",
+                "password": "secret",
+            },
+            "rememberCredential": True,
+        }
+    )
+    await module.update_data_source_config(fake_request, "amazingdata", initial_payload)
+
+    follow_up_payload = module.ConfigUpdateRequest.model_validate(
+        {
+            "enabled": True,
+            "config": {
+                "host": "demo2.example.com",
+                "port": 8800,
+            },
+        }
+    )
+    result = await module.update_data_source_config(fake_request, "amazingdata", follow_up_payload)
+    assert result["code"] == 0
+
+    runtime_config = fake_manager.registry.get_config(DummyDataSourceType.AMAZINGDATA)
+    assert runtime_config is not None
+    assert runtime_config.config.get("password") == "secret"
+
+    config_path = tmp_path / "settings.dev.yaml"
+    persisted = yaml.safe_load(config_path.read_text())
+    provider_entry = persisted["data_sources"]["providers"]["amazingdata"]
+    assert provider_entry["config"]["password"] == "secret"
 
 
 @pytest.mark.asyncio

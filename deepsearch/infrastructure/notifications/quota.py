@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Dict, Optional, TypedDict, cast
+from typing import Dict, Optional, TypedDict, cast
 
 from deepsearch.config.models.notifications import NotificationCategoryConfig
 from deepsearch.infrastructure.cache.cache_manager import CacheManager

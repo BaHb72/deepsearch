@@ -6,7 +6,7 @@
 
 import copy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Type, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Type, TypeVar
 
 from deepsearch.observability import get_logger
 

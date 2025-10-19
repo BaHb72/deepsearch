@@ -10,7 +10,7 @@
 | 概览 | docs/overview/architecture_optimization_strategy.md | 当前架构现状、优化目标与阶段规划。 |
 | 概览 | docs/overview/data_interface_layer.md | 数据接口层目录结构与启用策略。 |
 | 概览 | docs/overview/data_source_management.md | WebUI 与 FastAPI 如何管理 AmazingData 配置。 |
-| 概览 | docs/overview/datasource_process_pool_architecture.md | AmazingData 进程池的使用场景与配置要点。 |
+| 概览 | docs/overview/datasource_process_pool_architecture.md | AmazingData 进程隔离方案：Port/Adapter/ProcessPool 协同与运维指引。 |
 | 开发 | docs/development/BEST_PRACTICES.md | 通用开发规范、流程与工具。 |
 | 开发 | docs/development/CODE_REVIEW.md | 代码评审关注点与常见问题。 |
 | 前端 | docs/development/frontend/zustand_integration.md | Zustand 状态管理整合方案。 |

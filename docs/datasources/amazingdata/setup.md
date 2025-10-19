@@ -117,8 +117,8 @@ if result == 0 or result is True:
     code_list = base_data.get_code_list(security_type='EXTRA_STOCK_A')
     print(f"获取到 {len(code_list)} 只股票")
 
-    # 登出
-    ad.logout()
+    # 登出（注意：官方 SDK 的 ad.logout() 存在崩溃 BUG，暂不建议直接调用）
+    # ad.logout()
 else:
     print(f"连接失败，错误码：{result}")
 ```
@@ -138,6 +138,7 @@ else:
    - 用户名密码是否正确
    - 网络是否可达服务器
    - 防火墙是否阻止了连接
+6. **登出接口**：受官方 SDK 崩溃 BUG 影响，请暂勿在脚本中直接调用 `ad.logout()`，由 DeepSearch Provider 生命周期自动回收资源。
 
 ## 故障排除
 

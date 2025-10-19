@@ -526,7 +526,7 @@ class QMTReceiver:
         try:
             client['writer'].close()
             await client['writer'].wait_closed()
-        except:
+        except Exception:
             pass
 
         # 清理记录
@@ -539,7 +539,7 @@ class QMTReceiver:
             try:
                 from deepsearch.webui.api.endpoints.qmt.qmt_subscription import subscription_manager
                 subscription_manager.remove_client(client_id)
-            except:
+            except Exception:
                 pass
 
         logger.info(f"客户端断开连接: {client_id}")

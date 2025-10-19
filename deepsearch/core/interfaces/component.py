@@ -5,7 +5,7 @@
 """
 
 from enum import Enum
-from typing import Any, Awaitable, Dict, Protocol, runtime_checkable
+from typing import Any, Dict, Protocol, runtime_checkable
 
 
 class ComponentStatus(Enum):

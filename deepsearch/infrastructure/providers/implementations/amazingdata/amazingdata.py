@@ -23,6 +23,27 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Map
 
 import pandas as pd
 from loguru import logger
+from deepsearch.infrastructure.providers.interfaces.base import (
+    DataProvider,
+    DataProviderConfig,
+    DataProviderError,
+    DataRequest,
+    DataResponse,
+    DataSourceType,
+)
+from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
+from deepsearch.observability.decorators.decorators import monitor_data_source
+from deepsearch.observability.monitoring.data_source_monitor import DataAccessType
+from deepsearch.utils.network.connection_pool import ConnectionPool, PoolConfig
+
+from ._sdk_loader import HAS_AMAZINGDATA, ad
+from .amazingdata_types import (
+    DragonTigerRecord,
+    KlineBarMessage,
+    ShareholderSeat,
+    ShareholderSnapshot,
+    StockListItem,
+)
 
 def _coalesce(*values: object | None) -> object | None:
     """按顺序返回首个有效值，避免将零值或布尔假值视为缺失"""
@@ -124,33 +145,8 @@ class AmazingDataSDKProtocol(Protocol):
     def update_password(self, username: str, old_password: str, new_password: str) -> bool:
         ...
 
-from deepsearch.infrastructure.providers.interfaces.base import (
-    DataProvider,
-    DataProviderConfig,
-    DataProviderError,
-    DataRequest,
-    DataResponse,
-    DataSourceType,
-)
-from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
-from deepsearch.observability.decorators.decorators import monitor_data_source
-from deepsearch.observability.monitoring.data_source_monitor import DataAccessType
-from deepsearch.utils.network.connection_pool import ConnectionPool, PoolConfig
-
-# AmazingData SDK
-from ._sdk_loader import HAS_AMAZINGDATA, ad
-from .amazingdata_types import (
-    DragonTigerRecord,
-    DragonTigerSeat,
-    KlineBarMessage,
-    ShareholderSeat,
-    ShareholderSnapshot,
-    StockListItem,
-)
-
-
 if TYPE_CHECKING:
-    from deepsearch.config.models.amazingdata import AmazingDataProviderConfigPayload
+    pass
 
 def async_retry(max_attempts=3, backoff_base=2, max_delay=60, jitter=True):
     """
@@ -209,6 +205,8 @@ class AmazingDataConfig(DataProviderConfig):
         tgw_log_path = kwargs.pop("tgw_log_path", "")
 
         # 调用父类初始化（只传递父类接受的参数）
+        for meta_key in ("name", "provider_name", "type", "implementation_mode"):
+            kwargs.pop(meta_key, None)
         super().__init__(name="amazingdata", **kwargs)
         self.username = username
         self.password = password
@@ -312,6 +310,7 @@ class AmazingDataProvider(DataProvider):
         self._pool_config = PoolConfig(
             min_size=2, max_size=10, idle_timeout=300, validation_interval=60, acquire_timeout=5.0
         )
+        self._login_lock: asyncio.Lock = asyncio.Lock()
 
         # 订阅管理
         self._subscriptions: dict[str, SubscriptionInfo] = {}  # {symbol: {callbacks: [], subscription_id: str}}
@@ -506,6 +505,9 @@ class AmazingDataProvider(DataProvider):
         Raises:
             DataProviderError: 包含详细错误信息
         """
+        if self._connected:
+            logger.debug("AmazingData login skipped: already connected")
+            return True
 
         sdk = self._require_sdk()
 
@@ -641,16 +643,52 @@ class AmazingDataProvider(DataProvider):
             raise DataProviderError(f"登录过程异常: {e}")
 
     async def _logout(self) -> None:
-        """登出 AmazingData"""
+        """注销 AmazingData"""
         try:
-            if self._connected:
-                loop = asyncio.get_event_loop()
-                sdk = self._require_sdk()
-                await loop.run_in_executor(None, sdk.logout)
-                self._connected = False
-                logger.info("AmazingData 已登出")
+            if not self._connected:
+                return
+
+            loop = asyncio.get_event_loop()
+            sdk = self._require_sdk()
+
+            def _do_logout() -> None:
+                username = getattr(self.config, "username", None)
+
+                try:
+                    if username:
+                        sdk.logout(username)
+                    else:
+                        sdk.logout()
+                except TypeError:
+                    sdk.logout()
+
+            await loop.run_in_executor(None, _do_logout)
+            self._connected = False
+            logger.info("AmazingData 已注销")
         except Exception as e:
-            logger.error(f"登出失败: {e}")
+            logger.error(f"注销失败: {e}")
+
+
+    async def ensure_session(self) -> bool:
+        """确保当前 AmazingData 会话有效，必要时自动重连。"""
+        if self._degraded_mode:
+            logger.warning("AmazingData 处于降级模式，暂不执行会话自检")
+            return False
+
+        if self._connection_pool is None:
+            await self._initialize_source()
+            await self._start_source()
+            return self._connected
+
+        if self._connected:
+            return True
+
+        async with self._login_lock:
+            if self._connected:
+                return True
+
+            await self._login_with_retry()
+            return self._connected
 
     async def _heartbeat_loop(self) -> None:
         """心跳循环"""
@@ -1911,3 +1949,12 @@ def create_amazingdata_provider(config: Mapping[str, Any]) -> AmazingDataProvide
     """创建 AmazingData 提供者实现"""
     provider_config = ensure_amazingdata_provider_config(config)
     return AmazingDataProvider(provider_config)
+
+
+
+try:
+    from .amazingdata_optimized import (
+        OptimizedAmazingDataProvider as AmazingDataProvider,  # type: ignore[assignment]
+    )
+except Exception:  # pragma: no cover - 导入顺序或类型检查环境可能导致临时失败��������ʱ��������˳��������ʧ��
+    pass

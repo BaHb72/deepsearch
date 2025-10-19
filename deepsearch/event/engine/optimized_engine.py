@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from types import ModuleType
-from typing import Any, Callable, DefaultDict, Deque, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Callable, DefaultDict, Deque, Dict, List, Optional, Tuple, cast
 
 from loguru import logger
 

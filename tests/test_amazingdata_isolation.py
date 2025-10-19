@@ -22,12 +22,12 @@ os.environ.setdefault("DEEPSEARCH_AMAZINGDATA_STUB", "tests.stubs.amazingdata_st
 SKIP_NETWORK_PROVIDERS = os.environ.get("DEEPSEARCH_TEST_ENABLE_NETWORK_PROVIDERS") != "1"
 
 # 测试导入
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (  # noqa: E402
     AmazingDataConfig,
     AmazingDataProvider,
 )
-from deepsearch.infrastructure.providers.mock.error_provider import MockErrorProvider
-from deepsearch.webui.api.providers import DataProviderFactory
+from deepsearch.infrastructure.providers.mock.error_provider import MockErrorProvider  # noqa: E402
+from deepsearch.webui.api.providers import DataProviderFactory  # noqa: E402
 
 
 class TestSDKIsolation:
@@ -356,7 +356,7 @@ async def test_integration_sdk_exit_protection():
         assert "amazingdata" in health_status["providers"]
 
         # 如果降级成功，provider应该不是AmazingDataProvider
-        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (  # noqa: E402
             AmazingDataProvider,
         )
 

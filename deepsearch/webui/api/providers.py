@@ -11,9 +11,14 @@ from datetime import datetime
 from enum import Enum
 from threading import Lock
 import importlib
-from typing import TYPE_CHECKING, Any, Final, Literal, MutableMapping, NotRequired, Optional, TypedDict, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, Literal, MutableMapping, NotRequired, Optional, TypedDict, Union, cast
 
 from loguru import logger
+
+from deepsearch.utils.data_sources import (
+    DataSourceType as RegistryDataSourceType,
+    get_data_source_manager,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
     from deepsearch.application.services.market.akshare_direct_service import (
@@ -162,6 +167,17 @@ class DataProviderFactory:
                     from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
                         AkShareProxyProvider,
                     )
+
+                    manager = get_data_source_manager()
+                    akshare_config = manager.registry.get_config(RegistryDataSourceType.AKSHARE)
+                    mode = ""
+                    proxy_section: Dict[str, Any] = {}
+                    if akshare_config and isinstance(akshare_config.config, dict):
+                        mode = str(akshare_config.config.get("mode", "direct")).lower()
+                        proxy_section = dict(akshare_config.config.get("proxy", {}) or {})
+                    if mode != "proxy":
+                        logger.info("AkShare 当前未启用 Cloudflare 代理，跳过代理实例初始化")
+                        raise RuntimeError("Cloudflare AkShare 代理已禁用")
 
                     cls._instances[normalized_type] = AkShareProxyProvider()
 

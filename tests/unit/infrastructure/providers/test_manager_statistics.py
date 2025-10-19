@@ -16,10 +16,7 @@ from deepsearch.infrastructure.providers.interfaces.base import (
     DataSourceType,
 )
 from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
-from deepsearch.infrastructure.providers.managers.manager import (
-    DataProviderManager,
-    ManagerStatisticsDict,
-)
+from deepsearch.infrastructure.providers.managers.manager import DataProviderManager
 
 
 class DummyProvider(DataProvider):

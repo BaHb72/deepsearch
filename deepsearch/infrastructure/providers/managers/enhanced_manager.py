@@ -8,13 +8,15 @@ Version: 4.0.0
 
 import asyncio
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Set, cast
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Set, Type, cast
 
 import pandas as pd
 from loguru import logger
 
 from ..implementations.akshare.akshare import AkShareProxyProvider
-from ..implementations.amazingdata.amazingdata import AmazingDataProvider, AmazingDataConfig
+from ..implementations.amazingdata.amazingdata import AmazingDataConfig
+from ..implementations.amazingdata.amazingdata_optimized import OptimizedAmazingDataProvider
+from ..implementations.amazingdata.amazingdata_process import ProcessIsolatedAmazingDataProvider
 from deepsearch.infrastructure.providers.interfaces.base import (
     DataProvider,
     DataProviderError
@@ -24,7 +26,11 @@ from deepsearch.infrastructure.providers.interfaces.capabilities import (
 )
 from deepsearch.infrastructure.providers.interfaces.payloads import QuotePayloadMap
 from ..implementations.qmt.unified_qmt_provider import UnifiedQMTProvider, QMTMode, SmartCacheManager
-from deepsearch.utils.patterns.request_batcher import RequestBatcher, MultiKeyBatcher
+from deepsearch.utils.patterns.request_batcher import MultiKeyBatcher
+from deepsearch.utils.data_sources import (
+    DataSourceType as RegistryDataSourceType,
+    get_data_source_manager,
+)
 
 
 class DataSourcePriority(Enum):
@@ -52,7 +58,7 @@ class EnhancedDataProviderManager:
         self._initialized = False
 
         # 数据提供者实例
-        self._amazingdata_provider: Optional[AmazingDataProvider] = None
+        self._amazingdata_provider: Optional[DataProvider] = None
         self._qmt_provider: Optional[UnifiedQMTProvider] = None
         self._akshare_provider: Optional[AkShareProxyProvider] = None
 
@@ -91,6 +97,24 @@ class EnhancedDataProviderManager:
         self.MAX_FAILURES = 3          # 最大连续失败次数
         self.CIRCUIT_OPEN_TIME = 60    # 熔断持续时间（秒）
 
+    def _is_proxy_enabled(self) -> bool:
+        """检查 Cloudflare 代理是否在配置中启用。"""
+
+        try:
+            manager = get_data_source_manager()
+        except Exception as exc:  # pragma: no cover - 配置模块不可用时视为启用
+            logger.debug(f"无法加载数据源配置，假定 AkShare 代理可用: {exc}")
+            return True
+        akshare_config = manager.registry.get_config(RegistryDataSourceType.AKSHARE)
+        if not akshare_config or not isinstance(akshare_config.config, dict):
+            return False
+        mode = str(akshare_config.config.get("mode", "direct")).lower()
+        proxy_section = akshare_config.config.get("proxy") or {}
+        enabled_flag = proxy_section.get("enabled")
+        if isinstance(enabled_flag, str):
+            enabled_flag = enabled_flag.lower() in {"1", "true", "yes", "on"}
+        return mode == "proxy" or bool(enabled_flag)
+
     async def initialize(self) -> None:
         """初始化所有数据提供者"""
         if self._initialized:
@@ -117,6 +141,10 @@ class EnhancedDataProviderManager:
             logger.error("❌ 没有任何数据源初始化成功！")
             logger.info("尝试强制初始化AkShare作为备用数据源...")
             # 强制初始化AkShare作为最后的备用方案
+            if not self._is_proxy_enabled():
+                logger.warning("跳过 AkShare 代理备用初始化：配置已禁用")
+                self.provider_health["akshare"] = {"status": "disabled", "reason": "disabled_by_config"}
+                raise DataProviderError("无法初始化任何数据源")
             try:
                 self._akshare_provider = AkShareProxyProvider()
                 await asyncio.wait_for(self._akshare_provider.initialize(), timeout=15.0)
@@ -141,27 +169,56 @@ class EnhancedDataProviderManager:
             config = get_config()
 
             # 检查是否启用
-            if hasattr(config, 'amazingdata') and config.amazingdata.enabled:
+            if hasattr(config, "amazingdata") and config.amazingdata.enabled:
                 logger.info("正在初始化AmazingData数据源...")
 
-                # 创建配置
+                connection_cfg = config.amazingdata.connection
+                subscription_cfg = config.amazingdata.subscription
+                cache_cfg = config.amazingdata.cache
+                worker_env_payload = dict(getattr(config.amazingdata, "worker_env", {}) or {})
+                extra_config: Dict[str, str] = {}
+                python_path = (connection_cfg.python_interpreter_path or "").strip()
+                if python_path:
+                    extra_config["python_interpreter_path"] = python_path
+
                 ad_config = AmazingDataConfig(
-                    username=config.amazingdata.connection.username,
-                    password=config.amazingdata.connection.password,
-                    host=config.amazingdata.connection.host,
-                    port=config.amazingdata.connection.port,
+                    username=connection_cfg.username,
+                    password=connection_cfg.password,
+                    host=connection_cfg.host,
+                    port=connection_cfg.port,
                     enabled=True,
-                    cache_enabled=config.amazingdata.cache.enabled,
-                    cache_ttl=config.amazingdata.cache.ttl,
-                    heartbeat_interval=config.amazingdata.connection.heartbeat_interval,
-                    auto_reconnect=config.amazingdata.connection.auto_reconnect,
-                    subscription_enabled=config.amazingdata.subscription.enabled,
-                    subscription_batch_size=config.amazingdata.subscription.batch_size,
-                    max_subscriptions=config.amazingdata.subscription.max_symbols
+                    priority=config.amazingdata.priority,
+                    timeout=float(connection_cfg.timeout),
+                    retry_count=connection_cfg.max_retries,
+                    cache_enabled=cache_cfg.enabled,
+                    cache_ttl=cache_cfg.ttl,
+                    heartbeat_interval=connection_cfg.heartbeat_interval,
+                    auto_reconnect=connection_cfg.auto_reconnect,
+                    subscription_enabled=subscription_cfg.enabled,
+                    subscription_batch_size=subscription_cfg.batch_size,
+                    max_subscriptions=subscription_cfg.max_symbols,
+                    worker_env=worker_env_payload,
+                    tgw_log_path=connection_cfg.tgw_log_path,
+                    config=extra_config,
                 )
 
+                implementation_mode = str(getattr(config.amazingdata, "implementation_mode", "") or "").strip().lower()
+                if implementation_mode not in {"optimized", "process"}:
+                    logger.warning(
+                        f"AmazingData implementation_mode={implementation_mode or 'undefined'} 非法，默认使用 process 模式"
+                    )
+                    implementation_mode = "process"
+
+                provider_cls: Type[DataProvider]
+                if implementation_mode == "process":
+                    provider_cls = ProcessIsolatedAmazingDataProvider
+                    logger.info("AmazingData 数据源使用进程隔离模式 (process)")
+                else:
+                    provider_cls = OptimizedAmazingDataProvider
+                    logger.info("AmazingData 数据源使用优化模式 (optimized)")
+
                 # 创建提供者
-                self._amazingdata_provider = AmazingDataProvider(ad_config)
+                self._amazingdata_provider = provider_cls(ad_config)
                 
                 # 添加超时控制，避免无限期阻塞
                 # 可通过配置调整超时时间，默认5秒
@@ -175,7 +232,7 @@ class EnhancedDataProviderManager:
                     # 注册到提供者列表
                     self._providers["amazingdata"] = self._amazingdata_provider
                     
-                    logger.info("✅ AmazingData初始化成功")
+                    logger.info("✓ AmazingData初始化成功")
                     self.provider_health["amazingdata"] = {"status": "healthy", "priority": 1}
                     
                 except asyncio.TimeoutError:
@@ -191,7 +248,7 @@ class EnhancedDataProviderManager:
             logger.warning(f"⚠️ AmazingData SDK未安装: {e}")
             self.provider_health["amazingdata"] = {"status": "not_installed"}
         except Exception as e:
-            logger.error(f"❌ AmazingData初始化失败: {e}")
+            logger.error(f"✗ AmazingData初始化失败: {e}")
             self.provider_health["amazingdata"] = {"status": "unhealthy", "error": str(e)}
 
     async def _init_qmt_provider(self):
@@ -236,8 +293,14 @@ class EnhancedDataProviderManager:
         try:
             logger.info("正在初始化AkShare数据源...")
 
+            if not self._is_proxy_enabled():
+                logger.info("⚠️ AkShare 代理已禁用，跳过初始化")
+                self.provider_health["akshare"] = {"status": "disabled", "reason": "disabled_by_config"}
+                self._akshare_provider = None
+                return
+
             self._akshare_provider = AkShareProxyProvider()
-            
+
             # 添加超时控制（AkShare通常初始化较快）
             try:
                 await asyncio.wait_for(
@@ -270,9 +333,6 @@ class EnhancedDataProviderManager:
             try:
                 # 简单测试获取一个股票的数据
                 if name == "amazingdata":
-                    # AmazingData测试 - 获取交易日历
-                    from datetime import datetime
-                    today = datetime.now().strftime('%Y%m%d')
                     if hasattr(provider, 'is_connected'):
                         healthy = provider.is_connected()
                     else:
@@ -464,7 +524,7 @@ class EnhancedDataProviderManager:
             else:
                 # 如果返回空数据且是自动模式，尝试降级
                 if source == "auto":
-                    logger.warning(f"数据源返回空数据，尝试降级")
+                    logger.warning("数据源返回空数据，尝试降级")
                     return await self._fallback_get_daily(symbol, start_date, end_date, adjust)
                 
             return df
@@ -682,7 +742,7 @@ class EnhancedDataProviderManager:
     def _provider_supports_capability(self, provider: DataProvider, capability: DataCapability) -> bool:
         """检查提供者是否支持指定能力"""
         # AmazingData支持所有能力
-        if isinstance(provider, AmazingDataProvider):
+        if isinstance(provider, (OptimizedAmazingDataProvider, ProcessIsolatedAmazingDataProvider)):
             return True
 
         # QMT支持大部分能力
@@ -862,7 +922,7 @@ class EnhancedDataProviderManager:
             try:
                 raw = await self._akshare_provider.get_realtime_data(symbols)
                 return self._normalize_quote_map(raw)
-            except:
+            except Exception:
                 pass
 
         return {}
