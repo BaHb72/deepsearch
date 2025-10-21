@@ -7,6 +7,7 @@
 import asyncio
 import inspect
 import os
+import sys
 import threading
 from contextlib import closing, suppress
 from datetime import datetime, timezone
@@ -70,6 +71,9 @@ except ImportError:
 
 # 创建路由
 router = APIRouter(tags=["Database Management"])
+
+PSYCOPG_ASYNC_AVAILABLE: Final[bool] = "psycopg" in globals()
+IS_WINDOWS: Final[bool] = sys.platform == "win32"
 
 _MONITOR_INTERVAL_SECONDS = 15.0
 _monitor_task: Optional[asyncio.Task] = None
@@ -1371,16 +1375,20 @@ async def _execute_connection_test(request: TestConnectionRequest) -> Dict[str, 
                 conn_params = _build_postgresql_conn_params(request)
                 try:
                     version_info: Optional[str] = None
-                    if "psycopg" in globals():
+                    if PSYCOPG_ASYNC_AVAILABLE:
                         use_thread = False
-                        try:
-                            loop = asyncio.get_running_loop()
-                            use_thread = _is_proactor_event_loop(loop)
-                        except RuntimeError:
-                            use_thread = False
+                        if IS_WINDOWS:
+                            try:
+                                loop = asyncio.get_running_loop()
+                            except RuntimeError:
+                                use_thread = False
+                            else:
+                                use_thread = _is_proactor_event_loop(loop)
 
                         if use_thread:
-                            logger.debug("检测到 ProactorEventLoop，使用同步连接测试 PostgreSQL")
+                            logger.opt(once=True).debug(
+                                "检测到 ProactorEventLoop，转用线程池执行同步 PostgreSQL 连接测试"
+                            )
                             version_info = await asyncio.to_thread(
                                 _fetch_postgresql_version_sync, conn_params
                             )

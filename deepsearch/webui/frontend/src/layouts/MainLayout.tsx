@@ -1,21 +1,19 @@
-import React, { useState } from 'react'
-import { ProLayout } from '@ant-design/pro-components'
-import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
-import { ConfigProvider } from 'antd'
+import React, {useState} from 'react'
+import {ProLayout} from '@ant-design/pro-components'
+import {Link, Outlet, useLocation, useNavigate} from 'react-router-dom'
+import {ConfigProvider} from 'antd'
 import {
-  DashboardOutlined,
-  UnorderedListOutlined,
-  SettingOutlined,
-  FileTextOutlined,
-  DatabaseOutlined,
-  FundOutlined,
-  MonitorOutlined,
-  CloudServerOutlined,
-  AlertOutlined,
-  AppstoreOutlined,
-  CodeOutlined,
-  BugOutlined,
-  ThunderboltOutlined
+    AlertOutlined,
+    AppstoreOutlined,
+    CloudServerOutlined,
+    DashboardOutlined,
+    DatabaseOutlined,
+    FileTextOutlined,
+    FundOutlined,
+    MonitorOutlined,
+    SettingOutlined,
+    ThunderboltOutlined,
+    UnorderedListOutlined
 } from '@ant-design/icons'
 
 // 路由配置
@@ -108,23 +106,6 @@ const routes = {
           path: '/monitor/component',
           name: '组件管理',
           icon: <AppstoreOutlined />,
-        },
-      ],
-    },
-    {
-      path: '/dev',
-      name: '开发者工具',
-      icon: <CodeOutlined />,
-      routes: [
-        {
-          path: '/dev/components',
-          name: '组件展示',
-          icon: <AppstoreOutlined />,
-        },
-        {
-          path: '/dev/api-debug',
-          name: 'API调试',
-          icon: <BugOutlined />,
         },
       ],
     },
