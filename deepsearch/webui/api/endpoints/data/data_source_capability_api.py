@@ -54,6 +54,7 @@ DATA_SOURCE_CAPABILITIES: Final[dict[DataSourceSlug, frozenset[DataCapability]]]
             DataCapability.FINANCIAL_DATA,
             DataCapability.NEWS,
             DataCapability.ANNOUNCEMENT,
+            DataCapability.BLOCK_TRADE,
             DataCapability.MARGIN_TRADING,
             DataCapability.NORTH_FLOW,
             DataCapability.KEY_INDICATORS,

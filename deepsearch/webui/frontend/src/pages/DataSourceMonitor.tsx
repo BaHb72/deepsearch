@@ -1,40 +1,40 @@
-import React, { useState, useEffect } from 'react'
+import React, {useEffect, useState} from 'react'
 import {
-  Card,
-  Row,
-  Col,
-  Progress,
-  Table,
-  Tag,
-  Space,
-  Button,
-  Badge,
-  Timeline,
-  Typography,
-  Tooltip,
-  Switch,
-  Select,
-  message,
+    Badge,
+    Button,
+    Card,
+    Col,
+    message,
+    Progress,
+    Row,
+    Select,
+    Space,
+    Switch,
+    Table,
+    Tag,
+    Timeline,
+    Tooltip,
+    Typography,
 } from 'antd'
-import { ProCard, StatisticCard } from '@ant-design/pro-components'
-import { Line, Column, Pie, Area, Gauge } from '@ant-design/charts'
+import {ProCard, StatisticCard} from '@ant-design/pro-components'
+import {Area, Column, Gauge, Line, Pie} from '@ant-design/charts'
 import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  ApiOutlined,
-  DatabaseOutlined,
-  ThunderboltOutlined,
-  WarningOutlined,
-  InfoCircleOutlined,
-  LineChartOutlined,
-  MonitorOutlined,
-  ClockCircleOutlined,
-  RiseOutlined,
-  FallOutlined,
-  ReloadOutlined,
+    ApiOutlined,
+    CheckCircleOutlined,
+    ClockCircleOutlined,
+    CloseCircleOutlined,
+    DatabaseOutlined,
+    FallOutlined,
+    InfoCircleOutlined,
+    LineChartOutlined,
+    MonitorOutlined,
+    ReloadOutlined,
+    RiseOutlined,
+    ThunderboltOutlined,
+    WarningOutlined,
 } from '@ant-design/icons'
-import { dataSourceAPI } from '../api/dataSource'
-import { getDataSourceStatusMeta, DATA_SOURCE_STATUS_ORDER, normalizeTestSummary } from '@/utils/dataSourceStatus'
+import {dataSourceAPI} from '../api/dataSource'
+import {DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary} from '@/utils/dataSourceStatus'
 
 const { Title } = Typography
 const formatDateTime = (value?: string | number | Date | null) => {
@@ -59,7 +59,7 @@ const DataSourceMonitor = () => {
   const [selectedSource, setSelectedSource] = useState('all')
   const [timeRange, setTimeRange] = useState('1h')
 
-  // 模拟实时数据
+    // 妯℃嫙瀹炴椂鏁版嵁
   const [monitorData, setMonitorData] = useState({
     statusSummary: {},
     overview: {
@@ -161,9 +161,9 @@ const DataSourceMonitor = () => {
     ],
   })
 
-  // 自动刷新
+    // 鑷姩鍒锋柊
   useEffect(() => {
-    // 初始加载数据
+      // 鍒濆鍔犺浇鏁版嵁
     fetchMonitorData()
 
     if (!autoRefresh) return
@@ -336,17 +336,17 @@ const DataSourceMonitor = () => {
     }
   }
 
-  // 事件日志
+    // 浜嬩欢鏃ュ織
   const eventLogs = [
     { time: '10:30:45', type: 'success', message: 'AmazingData 连接恢复正常' },
     { time: '10:28:12', type: 'error', message: 'Redis Cache 连接失败，错误码: TIMEOUT' },
-    { time: '10:25:30', type: 'warning', message: 'AKShare 响应时间超过阈值 (350ms)' },
+      {time: '10:25:30', type: 'warning', message: 'AKShare 响应时间超过阈值（350ms）'},
     { time: '10:20:15', type: 'info', message: '开始执行数据源健康检查' },
     { time: '10:15:00', type: 'error', message: 'QMT Gateway 连接中断' },
     { time: '10:10:22', type: 'success', message: 'PostgreSQL 性能优化完成' },
   ]
 
-  // 图表数据
+    // 鍥捐〃鏁版嵁
   const [latencyTrendData, setLatencyTrendData] = useState([
     { time: '10:00', source: 'AmazingData', value: 45 },
     { time: '10:00', source: 'CloudFlare', value: 120 },
@@ -427,7 +427,7 @@ const DataSourceMonitor = () => {
 
   const abnormalCount = statusCounts.degraded + statusCounts.error
 
-  // 图表组件
+    // 鍥捐〃缁勪欢
   const LatencyTrendChart = ({ data }) => {
     const config = {
       data,
@@ -442,10 +442,10 @@ const DataSourceMonitor = () => {
         },
       },
       xAxis: {
-        title: { text: '时间' },
+          title: {text: '鏃堕棿'},
       },
       yAxis: {
-        title: { text: '延迟 (ms)' },
+          title: {text: '寤惰繜 (ms)'},
       },
       legend: {
         position: 'top-right',
@@ -466,10 +466,10 @@ const DataSourceMonitor = () => {
         },
       },
       xAxis: {
-        title: { text: '时间' },
+          title: {text: '鏃堕棿'},
       },
       yAxis: {
-        title: { text: '成功率 (%)' },
+          title: {text: '鎴愬姛鐜?(%)'},
         min: 95,
         max: 100,
       },
@@ -554,7 +554,7 @@ const DataSourceMonitor = () => {
         },
       },
       yAxis: {
-        title: { text: '请求数' },
+          title: {text: '请求数量'},
       },
     }
     return <Column {...config} />
@@ -672,14 +672,14 @@ const DataSourceMonitor = () => {
       render: health => {
         const config = {
           healthy: { color: 'success', text: '健康' },
-          warning: { color: 'warning', text: '警告' },
+            warning: {color: 'warning', text: '告警'},
           error: { color: 'error', text: '错误' },
         }
         return <Tag color={config[health]?.color}>{config[health]?.text}</Tag>
       },
     },
     {
-      title: '延迟',
+        title: '寤惰繜',
       dataIndex: 'latency',
       key: 'latency',
       width: 100,
@@ -725,7 +725,7 @@ const DataSourceMonitor = () => {
       render: trend => getTrendIcon(trend),
     },
     {
-      title: '最后检查',
+        title: '最近检查',
       dataIndex: 'lastCheck',
       key: 'lastCheck',
       width: 100,
@@ -779,26 +779,26 @@ const DataSourceMonitor = () => {
                   unCheckedChildren="手动"
                 />
                 <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={loading}>
-                  刷新
+                    鍒锋柊
                 </Button>
               </Space>
             </Col>
           </Row>
         </ProCard>
 
-        {/* 概览统计 */}
+          {/* 姒傝缁熻 */}
         <ProCard colSpan={24}>
           <StatisticCard.Group>
             <StatisticCard
               statistic={{
-                title: '总数据源',
+                  title: '鎬绘暟鎹簮',
                 value: totalSources,
                 icon: <DatabaseOutlined style={{ fontSize: 24, color: '#1890ff' }} />,
               }}
             />
             <StatisticCard
               statistic={{
-                title: '可用',
+                  title: '鍙敤',
                 value: availableSources,
                 valueStyle: { color: '#52c41a' },
                 icon: <CheckCircleOutlined style={{ fontSize: 24, color: '#52c41a' }} />,
@@ -806,7 +806,7 @@ const DataSourceMonitor = () => {
             />
             <StatisticCard
               statistic={{
-                title: '性能异常',
+                  title: '总计异常',
                 value: abnormalCount,
                 valueStyle: { color: '#faad14' },
                 icon: <WarningOutlined style={{ fontSize: 24, color: '#faad14' }} />,
@@ -890,7 +890,7 @@ const DataSourceMonitor = () => {
           </Card>
         </ProCard>
 
-        {/* 性能趋势图表 */}
+          {/* 鎬ц兘瓒嬪娍鍥捐〃 */}
         <ProCard colSpan={12}>
           <Card title="延迟趋势" variant="borderless">
             <LatencyTrendChart data={latencyTrendData} />
@@ -917,7 +917,7 @@ const DataSourceMonitor = () => {
         </ProCard>
 
         <ProCard colSpan={8}>
-          <Card title="健康度评分" variant="borderless">
+            <Card title="健康评分" variant="borderless">
             <HealthScoreGauge score={healthScore} />
           </Card>
         </ProCard>

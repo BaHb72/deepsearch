@@ -22,7 +22,6 @@ from deepsearch.ports.amazingdata_process import (
     AmazingDataLogoutRequest,
     ProcessCommand,
 )
-
 from .amazingdata import (
     AmazingDataConfig,
     ProviderConfigLike,
@@ -30,7 +29,6 @@ from .amazingdata import (
 )
 from .amazingdata_process_adapter import AmazingDataProcessAdapter
 from .amazingdata_process_pool import AmazingDataProcessPool, get_global_pool
-
 
 TResult = TypeVar("TResult")
 
@@ -96,22 +94,40 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         return self._adapter
 
     async def _perform_login(self, adapter: AmazingDataProcessAdapter) -> None:
+        pool = self._pool
+        login_success = False
+        error_message: str | None = None
+        if pool:
+            await asyncio.to_thread(pool.wait_for_login_slot, self._datasource_id)
         try:
-            timeout_value = float(getattr(self.config, "timeout", 30.0))
-        except (TypeError, ValueError):
-            timeout_value = 10.0
-        login_request = AmazingDataLoginRequest(
-            username=getattr(self.config, "username", ""),
-            password=getattr(self.config, "password", ""),
-            host=getattr(self.config, "host", ""),
-            port=getattr(self.config, "port", 0),
-            timeout=max(timeout_value, 5.0),
-        )
-        response = await adapter.login(login_request)
-        if not response.success:
-            message = response.error or response.error_type or "登录失败"
-            raise DataProviderError(f"AmazingData 登录失败: {message}")
-
+            try:
+                timeout_value = float(getattr(self.config, "timeout", 30.0))
+            except (TypeError, ValueError):
+                timeout_value = 10.0
+            login_request = AmazingDataLoginRequest(
+                username=getattr(self.config, "username", ""),
+                password=getattr(self.config, "password", ""),
+                host=getattr(self.config, "host", ""),
+                port=getattr(self.config, "port", 0),
+                timeout=max(timeout_value, 5.0),
+            )
+            response = await adapter.login(login_request)
+            login_success = response.success
+            if not response.success:
+                error_message = response.error or response.error_type or "login_failed"
+                raise DataProviderError(f"AmazingData 登录失败: {error_message}")
+        except Exception as exc:
+            if error_message is None:
+                error_message = str(exc)
+            raise
+        finally:
+            if pool:
+                await asyncio.to_thread(
+                    pool.record_login_result,
+                    self._datasource_id,
+                    login_success,
+                    error_message,
+                )
     async def _ensure_ready(self) -> AmazingDataProcessAdapter:
         adapter = await self._ensure_adapter()
         if self._initialized:

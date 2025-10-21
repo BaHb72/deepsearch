@@ -1,4 +1,5 @@
-import type { JsonObject, JsonValue } from '@/types/common'
+import type {JsonObject, JsonValue} from '@/types/common'
+import type {DataSourceHealthStatus as ApiDataSourceHealthStatus} from '../api/dataSource'
 
 /**
  * Zustand Store 类型定义
@@ -97,6 +98,14 @@ export interface DataSourceMetricsSnapshot {
   lastAccess?: string | null
 }
 
+export interface DataSourceLoginThrottle {
+    inProgress?: boolean
+    nextAllowedAt?: string | null
+    waitSeconds?: number | null
+    backoffLevel?: number
+    failureStreak?: number
+}
+
 export interface DataSourceProxy {
   id: string
   name: string
@@ -135,6 +144,14 @@ export interface DataSource {
   metrics?: DataSourceMetricsSnapshot
   proxies?: DataSourceProxy[]
   proxyEnabled?: boolean
+    loginThrottle?: DataSourceLoginThrottle
+    pendingLogin?: boolean
+    lastLoginStartedAt?: string | null
+    lastLoginCompletedAt?: string | null
+    lastLoginSuccessAt?: string | null
+    lastLoginErrorAt?: string | null
+    lastLoginErrorReason?: string | null
+    healthStatus?: ApiDataSourceHealthStatus | null
 }
 
 // 数据源统计
@@ -156,6 +173,14 @@ export interface DataSourceStatus {
   testSummary?: string | null
   reason?: string
   hasSavedCredential?: boolean
+    loginThrottle?: DataSourceLoginThrottle
+    pendingLogin?: boolean
+    lastLoginStartedAt?: string | null
+    lastLoginCompletedAt?: string | null
+    lastLoginSuccessAt?: string | null
+    lastLoginErrorAt?: string | null
+    lastLoginErrorReason?: string | null
+    healthStatus?: ApiDataSourceHealthStatus | null
 }
 
 // 数据源健康报告

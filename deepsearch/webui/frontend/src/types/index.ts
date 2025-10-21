@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue } from './common'
+import type {JsonObject, JsonValue} from './common'
 
 // 全局类型定义
 
@@ -307,6 +307,14 @@ export interface DataConfig {
   cacheSize: number
 }
 
+export interface DataSourceLoginThrottle {
+    inProgress?: boolean
+    nextAllowedAt?: string | null
+    waitSeconds?: number | null
+    backoffLevel?: number
+    failureStreak?: number
+}
+
 export interface DataSource {
   id: string
   name: string
@@ -314,6 +322,13 @@ export interface DataSource {
   enabled: boolean
   priority: number
   config: JsonObject
+    loginThrottle?: DataSourceLoginThrottle
+    pendingLogin?: boolean
+    lastLoginStartedAt?: string | null
+    lastLoginCompletedAt?: string | null
+    lastLoginSuccessAt?: string | null
+    lastLoginErrorAt?: string | null
+    lastLoginErrorReason?: string | null
 }
 
 export interface MonitoringConfig {

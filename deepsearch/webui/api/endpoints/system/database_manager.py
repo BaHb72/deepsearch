@@ -531,8 +531,8 @@ def _persist_connections() -> None:
             _connections_payload_cache or {},
         )
         _connections_payload_cache = new_payload
-    except Exception as exc:  # pragma: no cover - IO ����ֻ��¼�����
-        logger.error(f"�������ݿ���������ʧ��: {exc}")
+    except Exception as exc:  # pragma: no cover - IO 写入失败
+        logger.error(f"写入数据库连接配置文件失败: {exc}")
         logger.error(f"保存数据库连接配置失败: {exc}")
 
 
@@ -559,7 +559,7 @@ def _load_connections_from_storage() -> bool:
         database_connections.clear()
         database_connections.update(loaded)
     _reset_next_id_locked()
-    logger.info(f"��ʼ���������ݿ����ӵ���: {len(loaded)}")
+    logger.info(f"已加载 {len(loaded)} 条数据库连接配置")
     return True
     with _connections_lock:
         database_connections.clear()
@@ -1205,7 +1205,7 @@ async def update_connection(connection_id: int, connection: DatabaseConnection):
         if existing is None:
             return APIResponse.error(
                 code=ErrorCodes.DATABASE_NOT_FOUND,
-                message=f"���ݿ����� ID {connection_id} ������",
+                message=f"数据库连接 ID {connection_id} 不存在",
                 status_code=404,
             )
 

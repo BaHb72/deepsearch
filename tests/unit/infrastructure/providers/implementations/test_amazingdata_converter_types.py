@@ -1,6 +1,7 @@
 import sys
 import types
 from typing import cast
+
 import pytest
 
 _REALTIME_MODULE = (
@@ -122,7 +123,7 @@ def test_convert_subscription_snapshot_enforces_structure():
     data = typed["data"]
     assert isinstance(data, dict)
     quote = cast(SnapshotQuote, data)
-    assert quote["symbol"] == "SZ.000001"
+    assert quote["code"] == "SZ.000001"
+    assert quote["trade_time"] == "2024-06-28 10:00:00"
     assert pytest.approx(quote["last"]) == 12.3
-
-
+    assert pytest.approx(quote["volume"]) == 123456

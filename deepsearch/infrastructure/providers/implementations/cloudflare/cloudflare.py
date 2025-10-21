@@ -6,9 +6,11 @@
 import json
 import time
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import aiohttp
 from loguru import logger
+
 
 # from deepsearch.application.services.cache.stock_info_cache import get_stock_info_cache
 
@@ -66,6 +68,7 @@ class ProxyDataProvider:
 
         configured_timeout = timeout if timeout is not None else connection.get("timeout")
         self._timeout_seconds = float(configured_timeout) if configured_timeout is not None else 30.0
+        self._healthcheck_timeout = min(max(self._timeout_seconds, 0.5), 5.0)
 
         configured_retry = retry_count if retry_count is not None else connection.get("retry_count")
         self._retry_count = int(configured_retry) if configured_retry is not None else 3
@@ -75,6 +78,26 @@ class ProxyDataProvider:
         self._cache_ttl = {"realtime": 5, "minute": 60, "daily": 300, "info": 3600}
         self._cache_config = cache or {}
         self._extra_options = kwargs
+        self._using_placeholder_worker = self._is_placeholder_worker(self.worker_url)
+
+    @staticmethod
+    def _is_placeholder_worker(worker_url: str) -> bool:
+        """
+        判断 worker_url 是否仍为占位值，避免默认配置导致的长时间等待。
+        """
+
+        try:
+            hostname = (urlparse(worker_url).hostname or "").lower()
+        except Exception:
+            hostname = (worker_url or "").lower()
+
+        if not hostname:
+            return True
+        if "your-cloudflare-worker" in hostname:
+            return True
+        if hostname.endswith("example.com"):
+            return True
+        return False
 
     def _make_timeout(self, override: Optional[float] = None) -> aiohttp.ClientTimeout:
         """构造统一的超时配置。"""
@@ -84,13 +107,20 @@ class ProxyDataProvider:
 
     async def initialize(self):
         """初始化"""
+        if self._using_placeholder_worker:
+            logger.warning(
+                "Cloudflare worker URL is placeholder (%s); skip health check and mark as unavailable",
+                self.worker_url,
+            )
+            return False
+
         logger.info(f"初始化代理数据提供者: {self.worker_url}")
 
         # 测试连接
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    f"{self.worker_url}/health", timeout=self._timeout_seconds
+                        f"{self.worker_url}/health", timeout=self._healthcheck_timeout
                 ) as response:
                     if response.status == 200:
                         data = await response.json()

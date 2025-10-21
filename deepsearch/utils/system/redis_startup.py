@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import platform
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ class _WSLRuntimeState:
 
 
 _WSL_STATE: Dict[int, _WSLRuntimeState] = {}
+_WSL_NETWORK_MODE: Optional[str] = None
 
 
 class RedisStartupError(RuntimeError):
@@ -209,6 +211,59 @@ def _get_wsl_state(config: CacheDatabaseConfig) -> _WSLRuntimeState:
     return _WSL_STATE.setdefault(id(config), _WSLRuntimeState())
 
 
+def _detect_wsl_network_mode() -> Optional[str]:
+    """
+    检测 WSL 的网络模式。
+
+    Returns:
+        MIRRORED | NAT，无法识别时返回 None
+    """
+
+    global _WSL_NETWORK_MODE
+
+    if _WSL_NETWORK_MODE is not None:
+        return _WSL_NETWORK_MODE
+
+    try:
+        result = subprocess.run(
+            ["wsl.exe", "--status"],
+            capture_output=True,
+            text=False,
+            check=False,
+        )
+    except FileNotFoundError:
+        _WSL_NETWORK_MODE = None
+        return None
+    except Exception as exc:  # pragma: no cover - WSL 状态命令执行失败
+        logger.debug(f"查询 WSL 状态失败: {exc}")
+        _WSL_NETWORK_MODE = None
+        return None
+
+    output = _merge_subprocess_output(result.stdout, result.stderr)
+    if not output:
+        _WSL_NETWORK_MODE = None
+        return None
+
+    pattern = re.compile(r"(networking|network)\s*mode\s*[:：]\s*([A-Za-z]+)", re.IGNORECASE)
+    match = pattern.search(output)
+
+    if not match:
+        pattern_cn = re.compile(r"网络模式\s*[:：]\s*([^\s]+)")
+        match = pattern_cn.search(output)
+        if match:
+            candidate = match.group(1).strip().lower()
+        else:
+            candidate = None
+    else:
+        candidate = match.group(2).strip().lower()
+
+    _WSL_NETWORK_MODE = candidate
+    if _WSL_NETWORK_MODE:
+        logger.debug(f"WSL 网络模式: {_WSL_NETWORK_MODE}")
+
+    return _WSL_NETWORK_MODE
+
+
 def _refresh_wsl_host(
     config: CacheDatabaseConfig,
     wsl_config: CacheDatabaseWSLConfig,
@@ -225,19 +280,36 @@ def _refresh_wsl_host(
         state.resolved = False
         return None
 
-    message_needed = state.last_ip != ip
+    ip_changed = state.last_ip != ip
     state.last_ip = ip
     state.resolved = True
 
-    if wsl_config.auto_resolve_ip and config.host != ip:
-        if message_needed:
-            logger.info("解析 WSL 发行版 %s IP: %s", wsl_config.distro, ip)
-            echo_fn(f"检测到 WSL {wsl_config.distro} IP: {ip}")
-        config.host = ip
-    elif message_needed:
-        logger.info("检测到 WSL 发行版 %s IP: %s", wsl_config.distro, ip)
+    network_mode = _detect_wsl_network_mode()
+    mirrored_mode = network_mode == "mirrored"
+    target_host = "127.0.0.1" if mirrored_mode else ip
+    should_update_host = wsl_config.auto_resolve_ip and config.host != target_host
 
-    return ip
+    if mirrored_mode:
+        if should_update_host:
+            logger.info(
+                "WSL %s Mirrored \u6a21\u5f0f\uff0c\u4f7f\u7528 localhost \u8bbf\u95ee Redis (WSL IP: %s)",
+                wsl_config.distro,
+                ip,
+            )
+            echo_fn("\u68c0\u6d4b\u5230 WSL Mirrored \u6a21\u5f0f\uff0c\u6539\u7528 127.0.0.1 \u8bbf\u95ee Redis")
+            config.host = target_host
+        elif ip_changed:
+            logger.info("WSL %s Mirrored \u6a21\u5f0f IP \u53d8\u66f4: %s", wsl_config.distro, ip)
+    else:
+        if should_update_host:
+            if ip_changed:
+                logger.info(f"刷新 WSL 发行版 {wsl_config.distro} 的 IP: {ip}")
+                echo_fn(f"刷新 WSL {wsl_config.distro} 的 IP: {ip}")
+            config.host = target_host
+        elif ip_changed:
+            logger.info(f"WSL 发行版 {wsl_config.distro} 的 IP 发生变化: {ip}")
+
+    return target_host
 
 
 def _resolve_wsl_ip(wsl_config: CacheDatabaseWSLConfig) -> Optional[str]:

@@ -13,7 +13,6 @@ from typing import Any, Dict, Optional, Protocol, TypedDict, cast
 
 from loguru import logger
 
-
 ProvidersMap = Dict[str, Dict[str, Any]]
 
 
@@ -66,6 +65,7 @@ class StatisticsCollector:
         self._cache_timestamp: float = 0.0
         self._cache_ttl: float = 1.0  # 默认1秒
         self._lock = threading.RLock()
+        self._provider_timeout: float = 10.0
 
         self._logger.info("StatisticsCollector initialized")
 
@@ -123,12 +123,23 @@ class StatisticsCollector:
             return snapshot
 
     def _collect_provider_data(self, provider: StatisticsProvider) -> Dict[str, Any]:
-        """执行提供者统计方法，兼容协程返回值"""
+        """ִ���ṩ��ͳ�Ʒ���������Э�̷���ֵ"""
         import asyncio
         import concurrent.futures
         import inspect
 
-        result = provider.get_statistics()
+        def _invoke_provider() -> Any:
+            return provider.get_statistics()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_invoke_provider)
+            try:
+                result = future.result(timeout=self._provider_timeout)
+            except concurrent.futures.TimeoutError as exc:  # pragma: no cover - best effort
+                raise TimeoutError(
+                    f"Statistics provider timed out after {self._provider_timeout:.1f}s"
+                ) from exc
+
         if inspect.iscoroutine(result):
             try:
                 loop = asyncio.get_running_loop()
@@ -136,14 +147,25 @@ class StatisticsCollector:
                 loop = None
 
             if loop is None:
-                return cast(Dict[str, Any], asyncio.run(result))
+                return cast(
+                    Dict[str, Any],
+                    asyncio.run(asyncio.wait_for(result, timeout=self._provider_timeout)),
+                )
 
             if loop.is_running():
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, result)
-                    return cast(Dict[str, Any], future.result(timeout=5))
+                    future = executor.submit(
+                        asyncio.run,
+                        asyncio.wait_for(result, timeout=self._provider_timeout),
+                    )
+                    return cast(Dict[str, Any], future.result(timeout=self._provider_timeout))
 
-            return cast(Dict[str, Any], loop.run_until_complete(result))
+            return cast(
+                Dict[str, Any],
+                loop.run_until_complete(
+                    asyncio.wait_for(result, timeout=self._provider_timeout)
+                ),
+            )
 
         return cast(Dict[str, Any], result)
 

@@ -14,6 +14,9 @@ from typing import Any, Dict, List, Optional, Type, Union, TypedDict, NotRequire
 from loguru import logger
 
 from deepsearch.config import get_config
+from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
+    get_global_pool,
+)
 from deepsearch.infrastructure.providers.interfaces.base import DataSourceType, IDataSource
 from deepsearch.infrastructure.providers.interfaces.runtime import (
     ProviderMessageEnvelope,
@@ -117,6 +120,13 @@ class SourceStatusEntry(TypedDict, total=False):
     has_saved_credential: bool
     metrics: NotRequired[Dict[str, object]]
     config: NotRequired[Dict[str, object]]
+    loginThrottle: NotRequired[Dict[str, Any]]
+    pendingLogin: NotRequired[bool]
+    lastLoginStartedAt: NotRequired[str]
+    lastLoginCompletedAt: NotRequired[str]
+    lastLoginSuccessAt: NotRequired[str]
+    lastLoginErrorAt: NotRequired[str]
+    lastLoginErrorReason: NotRequired[str]
 
 
 @dataclass
@@ -226,6 +236,10 @@ class DataSourceManager:
 
         # 最近一次成功使用的来源
         self._last_success_source: Optional[DataSourceType] = None
+
+        # 初始化过程并发控制
+        self._init_lock = asyncio.Lock()
+        self._initializing = False
 
         # 初始化配置
         self._load_configs()
@@ -713,52 +727,60 @@ class DataSourceManager:
         if self.initialized:
             return
 
-        self.providers.clear()
-        ordered_sources = self._determine_initialization_order()
+        async with self._init_lock:
+            if self.initialized:
+                return
 
-        for source_type in ordered_sources:
-            config = self.registry.get_config(source_type)
-            if not config:
-                self._transition_status(
-                    source_type,
-                    DataSourceLifecycleStatus.DRAFT,
-                    available=False,
-                    reason="not_configured",
-                )
-                continue
-
-            if not config.enabled:
-                entry = self._transition_status(
-                    source_type,
-                    DataSourceLifecycleStatus.DEGRADED,
-                    available=False,
-                    reason="disabled_by_config",
-                )
-                entry["degraded_reason"] = "disabled_by_config"
-                continue
-
+            self._initializing = True
             try:
-                provider = await self._create_provider(source_type, config)
-            except Exception as exc:  # pragma: no cover - 初始化失败路径
-                logger.error(f"初始化数据源 {source_type.value} 失败: {exc}")
-                self._transition_status(
-                    source_type,
-                    DataSourceLifecycleStatus.ERROR,
-                    available=False,
-                    reason=str(exc),
-                )
-                continue
+                self.providers.clear()
+                ordered_sources = self._determine_initialization_order()
 
-            if provider:
-                self.providers[source_type] = provider
-                self._transition_status(
-                    source_type,
-                    DataSourceLifecycleStatus.ACTIVE,
-                    available=True,
-                    reason="initialized",
-                )
+                for source_type in ordered_sources:
+                    config = self.registry.get_config(source_type)
+                    if not config:
+                        self._transition_status(
+                            source_type,
+                            DataSourceLifecycleStatus.DRAFT,
+                            available=False,
+                            reason="not_configured",
+                        )
+                        continue
 
-        self.initialized = True
+                    if not config.enabled:
+                        entry = self._transition_status(
+                            source_type,
+                            DataSourceLifecycleStatus.DEGRADED,
+                            available=False,
+                            reason="disabled_by_config",
+                        )
+                        entry["degraded_reason"] = "disabled_by_config"
+                        continue
+
+                    try:
+                        provider = await self._create_provider(source_type, config)
+                    except Exception as exc:  # pragma: no cover - 初始化失败路径
+                        logger.error(f"初始化数据源 {source_type.value} 失败: {exc}")
+                        self._transition_status(
+                            source_type,
+                            DataSourceLifecycleStatus.ERROR,
+                            available=False,
+                            reason=str(exc),
+                        )
+                        continue
+
+                    if provider:
+                        self.providers[source_type] = provider
+                        self._transition_status(
+                            source_type,
+                            DataSourceLifecycleStatus.ACTIVE,
+                            available=True,
+                            reason="initialized",
+                        )
+
+                self.initialized = True
+            finally:
+                self._initializing = False
 
     def _determine_initialization_order(self) -> List[DataSourceType]:
         order: List[DataSourceType] = []
@@ -1052,6 +1074,40 @@ class DataSourceManager:
             status_snapshot[source_type] = self._source_status[source_type]
 
         sources_report: Dict[str, Dict[str, Any]] = {}
+        try:
+            pool_status = get_global_pool().get_status()
+        except Exception as exc:  # pragma: no cover - diagnostics only
+            logger.debug(f"Failed to fetch AmazingData process pool status: {exc}")
+            pool_status = None
+        if pool_status:
+            processes = pool_status.get("processes", {})
+            for source_type in SUPPORTED_SOURCE_TYPES:
+                if source_type is not DataSourceType.AMAZINGDATA:
+                    continue
+                provider = self.providers.get(source_type)
+                datasource_id = getattr(provider, "_datasource_id", None) if provider else None
+                if not datasource_id:
+                    continue
+                pool_entry = processes.get(datasource_id)
+                if not pool_entry:
+                    continue
+                status_entry = status_snapshot.setdefault(source_type, {})
+                throttle_payload = pool_entry.get("throttle")
+                if throttle_payload:
+                    status_entry["loginThrottle"] = throttle_payload
+                status_entry["pendingLogin"] = bool(pool_entry.get("pending_login", False))
+                for pool_key, status_key in (
+                        ("last_login_started_at", "lastLoginStartedAt"),
+                        ("last_login_completed_at", "lastLoginCompletedAt"),
+                        ("last_login_success_at", "lastLoginSuccessAt"),
+                        ("last_login_error_at", "lastLoginErrorAt"),
+                ):
+                    value = pool_entry.get(pool_key)
+                    if value is not None:
+                        status_entry[status_key] = value
+                if pool_entry.get("last_login_error_reason") is not None:
+                    status_entry["lastLoginErrorReason"] = pool_entry.get("last_login_error_reason")
+
         for source_type in SUPPORTED_SOURCE_TYPES:
             status = status_snapshot.get(source_type, {})
             config = self.registry.get_config(source_type)
@@ -1069,6 +1125,22 @@ class DataSourceManager:
                     "priority": config.priority if config else 999,
                 },
             }
+            throttle_info = status.get("loginThrottle")
+            if throttle_info:
+                entry["loginThrottle"] = throttle_info
+            if status.get("pendingLogin") is not None:
+                entry["pendingLogin"] = bool(status.get("pendingLogin"))
+            for field_name in (
+                    "lastLoginStartedAt",
+                    "lastLoginCompletedAt",
+                    "lastLoginSuccessAt",
+                    "lastLoginErrorAt",
+            ):
+                field_value = status.get(field_name)
+                if field_value:
+                    entry[field_name] = field_value
+            if status.get("lastLoginErrorReason"):
+                entry["lastLoginErrorReason"] = status.get("lastLoginErrorReason")
             if config and isinstance(config.config, dict):
                 detailed_config = _sanitize_config_snapshot(config.config)
                 detailed_config = _prune_empty(detailed_config)

@@ -123,6 +123,14 @@ class SubscriptionRequest(BaseModel):
     period: Optional[str] = Field(None, description="订阅周期")
 
 
+class BlockTradingRequest(BaseModel):
+    """���ڽ���������"""
+
+    code_list: List[str] = Field(..., description="��Ʊ�����б�")
+    local_path: Optional[str] = Field("D://AmazingData_local_data//", description="���ػ���·��")
+    is_local: bool = Field(True, description="�Ƿ����ñ��ػ���")
+    begin_date: Optional[int] = Field(None, description="��ʼ���ڣ�YYYYMMDD��")
+    end_date: Optional[int] = Field(None, description="�������ڣ�YYYYMMDD��")
 # ================== 辅助函数 ==================
 
 
@@ -844,6 +852,29 @@ async def get_long_hu_bang(code_list: List[str] = Body(..., description="股票�
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/block-trading", summary="��ȡ���ڽ�������")
+async def get_block_trading_data(request: BlockTradingRequest) -> AmazingDataResponse:
+    """
+    3.5.9.2 ���ڽ���
+    ��ȡָ����Ʊ�б��Ĵ��ڽ�������
+    """
+    try:
+        provider = await get_amazingdata_provider()
+        result = await provider.get_block_trading(
+            request.code_list,
+            local_path=_resolve_local_path(request.local_path),
+            is_local=request.is_local,
+            begin_date=request.begin_date,
+            end_date=request.end_date,
+        )
+        return {
+            "status": "success",
+            "data": dataframe_to_dict(result),
+            "message": "���ڽ�������ȡ�ɹ�",
+        }
+    except Exception as e:
+        logger.error(f"��ȡ���ڽ�������ʧ��: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 # ================== 9. 实时行情订阅接口 ==================
 
 # 保存订阅管理器

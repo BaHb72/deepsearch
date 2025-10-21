@@ -163,6 +163,8 @@ def test_wsl_host_resolution(monkeypatch):
 
     monkeypatch.setattr(redis_startup.platform, "system", lambda: "Windows")
     monkeypatch.setattr(redis_startup, "_resolve_wsl_ip", lambda _cfg: "172.29.32.133")
+    redis_startup._WSL_NETWORK_MODE = None
+    monkeypatch.setattr(redis_startup, "_detect_wsl_network_mode", lambda: "nat")
 
     captured_hosts = []
 
@@ -176,3 +178,28 @@ def test_wsl_host_resolution(monkeypatch):
 
     assert captured_hosts == ["172.29.32.133"]
     assert config.host == "172.29.32.133"
+
+
+def test_wsl_host_resolution_mirrored(monkeypatch):
+    config = CacheDatabaseConfig(
+        host="localhost",
+        wsl=CacheDatabaseWSLConfig(enabled=True, distro="Ubuntu"),
+    )
+
+    monkeypatch.setattr(redis_startup.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(redis_startup, "_resolve_wsl_ip", lambda _cfg: "192.168.0.50")
+    redis_startup._WSL_NETWORK_MODE = None
+    monkeypatch.setattr(redis_startup, "_detect_wsl_network_mode", lambda: "mirrored")
+
+    captured_hosts = []
+
+    def _fake_can_connect(cfg):
+        captured_hosts.append(cfg.host)
+        return True
+
+    monkeypatch.setattr(redis_startup, "_can_connect", _fake_can_connect)
+
+    redis_startup.ensure_redis_running(config, echo=_noop_echo)
+
+    assert captured_hosts == ["127.0.0.1"]
+    assert config.host == "127.0.0.1"

@@ -23,9 +23,10 @@ from enum import Enum
 from multiprocessing import connection
 from multiprocessing.managers import SyncManager
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Protocol, TypedDict, cast
+from typing import Any, Callable, Dict, Mapping, Optional, Protocol, Sequence, TypedDict, cast
 
 from loguru import logger
+
 
 class RequestType(Enum):
     """请求类型枚举"""
@@ -157,6 +158,7 @@ class AmazingDataProcessProxy:
         self.manager: Optional[SyncManager] = None
         self.request_queue: Optional[WorkerQueue] = None
         self.response_queue: Optional[WorkerQueue] = None
+        self._queue_lock = threading.Lock()
 
         if self.python_executable is None:
             self._initialize_local_queues()
@@ -179,6 +181,8 @@ class AmazingDataProcessProxy:
             "process_restarts": 0,
             "last_crash_time": None,
             "last_crash_reason": None,
+            "last_health_status": None,
+            "last_health_checked_at": None,
         }
 
         # 状态记录
@@ -187,12 +191,30 @@ class AmazingDataProcessProxy:
     # ------------------------------------------------------------------
     # 初始化 / 启动
     # ------------------------------------------------------------------
-    def _initialize_local_queues(self) -> None:
-        if self.manager is None:
-            manager = mp.Manager()
-            self.manager = cast(SyncManager, manager)
-            self.request_queue = cast(WorkerQueue, manager.Queue())
-            self.response_queue = cast(WorkerQueue, manager.Queue())
+    def _initialize_local_queues(self, *, force_reset: bool = False) -> None:
+        with self._queue_lock:
+            if force_reset:
+                self._reset_local_queues_locked()
+            if self.manager is None:
+                manager = mp.Manager()
+                self.manager = cast(SyncManager, manager)
+                self.request_queue = cast(WorkerQueue, manager.Queue())
+                self.response_queue = cast(WorkerQueue, manager.Queue())
+
+    def _reset_local_queues_locked(self) -> None:
+        if self.manager is not None:
+            try:
+                self.manager.shutdown()
+            except Exception as exc:  # pragma: no cover - 调试信息
+                logger.debug(f"Manager shutdown raised: {exc}")
+            finally:
+                self.manager = None
+        self.request_queue = None
+        self.response_queue = None
+
+    def _reset_local_queues(self) -> None:
+        with self._queue_lock:
+            self._reset_local_queues_locked()
 
     def start(self) -> bool:
         """启动 Worker 进程"""
@@ -212,7 +234,7 @@ class AmazingDataProcessProxy:
 
     def _start_local_worker(self) -> bool:
         try:
-            self._initialize_local_queues()
+            self._initialize_local_queues(force_reset=True)
 
             request_queue = self.request_queue
             response_queue = self.response_queue
@@ -391,6 +413,7 @@ class AmazingDataProcessProxy:
         process_obj = self.worker_process
         if not isinstance(process_obj, mp.Process):
             self.is_running = False
+            self._reset_local_queues()
             return True
         logger.info(
             "Stopping AmazingData worker process (local mode, with_logout=%s)...", with_logout
@@ -436,6 +459,7 @@ class AmazingDataProcessProxy:
 
             self.is_running = False
             self.last_login_username = None
+            self._reset_local_queues()
             return True
         except Exception as exc:  # pragma: no cover - 防御性日志
             logger.error(f"Error stopping worker process: {exc}")
@@ -673,6 +697,8 @@ class AmazingDataProcessProxy:
         logger.error("Worker process crashed during request")
         self.stats["last_crash_time"] = time.time()
         self.stats["last_crash_reason"] = "Process died during request"
+        if self.python_executable is None:
+            self._reset_local_queues()
         if self.restart_on_crash:
             self.stats["process_restarts"] += 1
             self.start()
@@ -686,15 +712,50 @@ class AmazingDataProcessProxy:
     # ------------------------------------------------------------------
     # 健康检查与统计
     # ------------------------------------------------------------------
-    def health_check(self) -> bool:
+    def health_check(self) -> Dict[str, Any]:
+        now = time.time()
         if not self.is_running or not self._is_worker_alive():
-            return False
+            payload = {
+                "status": "error",
+                "reason": "process_not_running",
+                "timestamp": now,
+            }
+            self.stats["last_health_status"] = payload
+            self.stats["last_health_checked_at"] = now
+            return payload
+
         response = self.execute(
             "health_check",
             request_type=RequestType.HEALTH_CHECK,
             timeout=5.0,
         )
-        return response.success
+
+        if response.success and isinstance(response.result, Mapping):
+            payload = dict(response.result)
+        elif response.success:
+            payload = {
+                "status": "ok",
+                "timestamp": response.timestamp or now,
+                "resultSummary": self._summarize_probe_result(response.result),
+            }
+        else:
+            payload = {
+                "status": "error",
+                "error": response.error,
+                "errorType": response.error_type,
+                "timestamp": response.timestamp or now,
+            }
+
+        if "timestamp" not in payload or not isinstance(payload["timestamp"], (int, float)):
+            payload["timestamp"] = response.timestamp or now
+
+        # 规范化 status 字段
+        status = str(payload.get("status") or "unknown").lower()
+        payload["status"] = status
+
+        self.stats["last_health_status"] = payload
+        self.stats["last_health_checked_at"] = payload["timestamp"]
+        return payload
 
     def get_stats(self) -> Dict[str, Any]:
         return self.stats.copy()
@@ -875,6 +936,13 @@ class AmazingDataProcessProxy:
                         logger.warning(f"Logout failed: {exc}, terminating process")
                         break
                     continue
+                elif request.request_type == RequestType.HEALTH_CHECK:
+                    response = AmazingDataProcessProxy._handle_health_check(
+                        request.request_id,
+                        ad,
+                        logged_in_username,
+                        sdk_imported,
+                    )
                 else:
                     method = AmazingDataProcessProxy._resolve_callable(ad, request.method)
                     if method is None:
@@ -924,6 +992,149 @@ class AmazingDataProcessProxy:
                 response_queue.put(pickle.dumps(response.to_payload()))
 
         logger.info("Worker process exiting")
+
+    @staticmethod
+    def _handle_health_check(
+            request_id: str,
+            ad: Any | None,
+            logged_in_username: Optional[str],
+            sdk_imported: bool,
+    ) -> ProxyResponse:
+        """构建健康检查响应，避免泄露敏感信息。"""
+        timestamp = time.time()
+        payload: Dict[str, Any] = {
+            "status": "unknown",
+            "loggedIn": bool(logged_in_username),
+            "usernameHint": AmazingDataProcessProxy._mask_username(logged_in_username),
+            "pid": mp.current_process().pid,
+            "timestamp": timestamp,
+        }
+
+        if not sdk_imported or ad is None:
+            payload["status"] = "error"
+            payload["errors"] = ["sdk_not_initialized"]
+            return ProxyResponse(
+                request_id=request_id,
+                success=False,
+                result=payload,
+                error="AmazingData SDK not initialized",
+                error_type="SDKUnavailable",
+                timestamp=timestamp,
+            )
+
+        start = time.perf_counter()
+        probe_success = False
+        probe_result: Any = None
+        probe_name: Optional[str] = None
+        probe_errors: list[str] = []
+
+        candidates = AmazingDataProcessProxy._health_probe_candidates(
+            logged_in=bool(logged_in_username)
+        )
+        for path in candidates:
+            probe_ok, result, error_message = AmazingDataProcessProxy._execute_health_probe(
+                ad, path
+            )
+            if probe_ok:
+                probe_success = True
+                probe_result = result
+                probe_name = path
+                break
+            if error_message:
+                probe_errors.append(f"{path}: {error_message}")
+
+        latency_ms = round((time.perf_counter() - start) * 1000.0, 2)
+        payload["latencyMs"] = latency_ms
+
+        if probe_success and probe_name:
+            payload["status"] = "ok"
+            payload["probe"] = {
+                "name": probe_name,
+                "resultSummary": AmazingDataProcessProxy._summarize_probe_result(probe_result),
+            }
+        elif probe_errors:
+            payload["status"] = "degraded"
+            payload["errors"] = probe_errors[:2]
+        elif logged_in_username:
+            logger.warning(
+                "[Proxy] Logged in but no health probe succeeded; falling back to ok status"
+            )
+            payload["status"] = "ok"
+            payload["probe"] = {
+                "name": "fallback_logged_in",
+                "resultSummary": "logged_in_without_probe",
+            }
+            payload["warnings"] = ["probe_not_available"]
+        else:
+            payload["status"] = "degraded"
+            payload["errors"] = ["probe_not_available"]
+
+        success = payload["status"] != "error"
+        return ProxyResponse(
+            request_id=request_id,
+            success=success,
+            result=payload,
+            error=None if success else "Health probe reported error",
+            error_type=None if success else "HealthCheckError",
+            timestamp=timestamp,
+        )
+
+    @staticmethod
+    def _health_probe_candidates(*, logged_in: bool) -> tuple[str, ...]:
+        """返回健康探针的候选执行路径。登陆成功后额外尝试交易日历探针。"""
+        base_candidates = (
+            "health_check",
+            "get_version",
+            "query_api.queryLastFuncDataTime",
+            "query_api.queryTableMaxNumAndTime",
+            "query_api.queryTaskInfoTime",
+        )
+        if logged_in:
+            return ("BaseData.get_calendar",) + base_candidates
+        return base_candidates
+
+    @staticmethod
+    def _execute_health_probe(ad: Any, path: str) -> tuple[bool, Any, Optional[str]]:
+        """执行健康探针并返回结果、错误摘要。"""
+        callable_obj = AmazingDataProcessProxy._resolve_callable(ad, path)
+        if callable_obj is None:
+            return False, None, None
+        try:
+            result = callable_obj()
+            return True, result, None
+        except Exception as exc:  # pragma: no cover - 防御性日志
+            truncated = str(exc)
+            if len(truncated) > 120:
+                truncated = f"{truncated[:117]}..."
+            return False, None, truncated
+
+    @staticmethod
+    def _summarize_probe_result(result: Any) -> str:
+        """对探针结果做简要概述，避免输出敏感数据。"""
+        if result is None:
+            return "none"
+        if isinstance(result, (bool, int, float)):
+            return str(result)
+        if isinstance(result, str):
+            return result[:120]
+        if isinstance(result, Mapping):
+            keys = list(result.keys())[:5]
+            return f"mapping(keys={keys})"
+        if isinstance(result, Sequence) and not isinstance(result, (str, bytes, bytearray)):
+            size = len(result)
+            return f"sequence(len={size})"
+        return type(result).__name__
+
+    @staticmethod
+    def _mask_username(username: Optional[str]) -> Optional[str]:
+        """用户名脱敏，避免在日志中泄露。"""
+        if not username:
+            return None
+        if len(username) <= 2:
+            return "*" * len(username)
+        if len(username) <= 6:
+            return f"{username[0]}***{username[-1]}"
+        return f"{username[:3]}***{username[-2:]}"
 
     @staticmethod
     def _resolve_callable(target: Any, method_path: str) -> Callable[..., Any] | None:

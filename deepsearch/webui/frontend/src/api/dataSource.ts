@@ -14,6 +14,38 @@ export type DataSourceLifecycleStatus =
   | 'error'
   | 'offline'
 
+export interface LoginThrottleInfo {
+    inProgress?: boolean
+    nextAllowedAt?: string | null
+    waitSeconds?: number | null
+    backoffLevel?: number
+    failureStreak?: number
+}
+
+export interface DataSourceHealthStatus {
+    status?: string
+    loggedIn?: boolean
+    logged_in?: boolean
+    usernameHint?: string | null
+    username_hint?: string | null
+    pid?: number | null
+    latencyMs?: number | null
+    latency_ms?: number | null
+    latency?: number | null
+    timestamp?: string | number | null
+    checkedAt?: string | number | null
+    checked_at?: string | number | null
+    probe?: Record<string, unknown> | null
+    probeName?: string | null
+    probeSummary?: string | null
+    errors?: unknown
+    error?: string | null
+    error_type?: string | null
+    reason?: string | null
+
+    [key: string]: unknown
+}
+
 export interface DataSource {
   id?: string
   name: string
@@ -39,6 +71,16 @@ export interface DataSource {
   errors?: number
   latency?: number | null
   lastCheck?: string | null
+    loginThrottle?: LoginThrottleInfo
+    pendingLogin?: boolean
+    lastLoginStartedAt?: string | null
+    lastLoginCompletedAt?: string | null
+    lastLoginSuccessAt?: string | null
+    lastLoginErrorAt?: string | null
+    lastLoginErrorReason?: string | null
+    lastHealthStatus?: DataSourceHealthStatus | null
+    last_health_status?: DataSourceHealthStatus | null
+    healthStatus?: DataSourceHealthStatus | null
 }
 
 export interface DataSourceStatus {
@@ -55,6 +97,16 @@ export interface DataSourceStatus {
   reason?: string
   last_transition?: string
   lastTransition?: string
+    loginThrottle?: LoginThrottleInfo
+    pendingLogin?: boolean
+    lastLoginStartedAt?: string | null
+    lastLoginCompletedAt?: string | null
+    lastLoginSuccessAt?: string | null
+    lastLoginErrorAt?: string | null
+    lastLoginErrorReason?: string | null
+    lastHealthStatus?: DataSourceHealthStatus | null
+    last_health_status?: DataSourceHealthStatus | null
+    healthStatus?: DataSourceHealthStatus | null
   [key: string]: any
 }
 

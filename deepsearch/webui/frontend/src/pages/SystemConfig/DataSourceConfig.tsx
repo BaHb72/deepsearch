@@ -65,6 +65,44 @@ const formatDateTime = (input?: string | number | Date | null) => {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
+const normalizeThrottleInfo = (input: any) => {
+    if (!input || typeof input !== 'object') {
+        return null
+    }
+    const waitSeconds =
+        typeof input.waitSeconds === 'number'
+            ? input.waitSeconds
+            : typeof input.wait_seconds === 'number'
+                ? input.wait_seconds
+                : null
+    const nextAllowed =
+        typeof input.nextAllowedAt === 'string'
+            ? input.nextAllowedAt
+            : typeof input.next_allowed_at === 'string'
+                ? input.next_allowed_at
+                : null
+    const backoffLevel =
+        typeof input.backoffLevel === 'number'
+            ? input.backoffLevel
+            : typeof input.backoff_level === 'number'
+                ? input.backoff_level
+                : undefined
+    const failureStreak =
+        typeof input.failureStreak === 'number'
+            ? input.failureStreak
+            : typeof input.failure_streak === 'number'
+                ? input.failure_streak
+                : undefined
+
+    return {
+        inProgress: Boolean(input.inProgress ?? input.in_progress),
+        waitSeconds,
+        nextAllowedAt: nextAllowed ?? null,
+        backoffLevel,
+        failureStreak,
+    }
+}
+
 /**
  * @typedef {import('@/types/systemConfig').DataSource} DataSource
  * @typedef {import('@/types/systemConfig').DataSourceFormProps} DataSourceFormProps
@@ -80,13 +118,34 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
   const [sourceType, setSourceType] = React.useState(initialValues?.type || 'akshare')
   const [testing, setTesting] = React.useState(false)
 
+    const rawThrottleInfo = normalizeThrottleInfo(
+        initialValues?.loginThrottle ?? initialValues?.login_throttle ?? null
+    )
+    const pendingLogin =
+        typeof initialValues?.pendingLogin === 'boolean'
+            ? initialValues.pendingLogin
+            : typeof initialValues?.pending_login === 'boolean'
+                ? initialValues.pending_login
+                : Boolean(rawThrottleInfo?.inProgress)
+    const throttleWaitSeconds = rawThrottleInfo?.waitSeconds ?? null
+    const disableTest = pendingLogin || (typeof throttleWaitSeconds === 'number' && throttleWaitSeconds > 0.5)
+    const throttleMessage = disableTest
+        ? pendingLogin
+            ? '当前已有登录任务正在执行，请稍后再试。'
+            : `登录退避中，约 ${Math.ceil(throttleWaitSeconds ?? 0)} 秒后可再次尝试。`
+        : null
+    const throttleNextAllowed = rawThrottleInfo?.nextAllowedAt
+        ? formatDateTime(rawThrottleInfo.nextAllowedAt)
+        : null
+
+    const throttleDescription = throttleMessage && throttleNextAllowed
+        ? `${throttleMessage} 最早可重试: ${throttleNextAllowed}`
+        : throttleMessage
+
   const hasSavedCredential = Boolean(
     initialValues?.hasSavedCredential ?? initialValues?.has_saved_credential
   )
   const [credentialEditable, setCredentialEditable] = React.useState(!hasSavedCredential)
-  const hasInitialValues = Boolean(
-    initialValues && Object.keys(initialValues).length > 0
-  )
   const initialRememberCredential =
     typeof initialValues?.rememberCredential === 'boolean'
       ? initialValues.rememberCredential
@@ -129,6 +188,10 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
   )
 
   const handleTest = async () => {
+      if (disableTest) {
+          message.info(throttleDescription || '登录退避中，请稍后再试。')
+          return
+      }
     try {
       const validatedValues = await form.validateFields()
       setTesting(true)
@@ -262,6 +325,18 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
 
   return (
     <>
+        {throttleDescription && (
+            <Alert
+                type={pendingLogin ? 'info' : 'warning'}
+                showIcon
+                style={{marginBottom: 16}}
+                message={
+                    rawThrottleInfo?.failureStreak && rawThrottleInfo.failureStreak > 0
+                        ? `${throttleDescription}（连续失败 ${rawThrottleInfo.failureStreak} 次）`
+                        : throttleDescription
+                }
+            />
+        )}
       {renderTestInfo()}
       <Form
       form={form}
@@ -481,9 +556,13 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
 
       <Form.Item>
         <Space>
-          <Button onClick={handleTest} loading={testing}>
-            测试连接
-          </Button>
+            <Tooltip title={disableTest ? (throttleDescription || "登录退避中，请稍后再试。") : undefined}>
+            <span>
+              <Button onClick={handleTest} loading={testing} disabled={disableTest}>
+                测试连接
+              </Button>
+            </span>
+            </Tooltip>
           <Button type="primary" htmlType="submit">
             {initialValues ? '保存' : '创建'}
           </Button>
@@ -922,12 +1001,67 @@ const DataSourceConfig = () => {
         null
       const testSummary = normalizeTestSummary(testSummaryRaw)
 
+        const rawThrottle =
+            record.loginThrottle ??
+            record.login_throttle ??
+            healthEntry?.loginThrottle ??
+            healthEntry?.login_throttle ??
+            null
+        const loginThrottle = normalizeThrottleInfo(rawThrottle)
+        const pendingLogin =
+            typeof record.pendingLogin === 'boolean'
+                ? record.pendingLogin
+                : typeof record.pending_login === 'boolean'
+                    ? record.pending_login
+                    : typeof healthEntry?.pendingLogin === 'boolean'
+                        ? healthEntry.pendingLogin
+                        : Boolean(loginThrottle?.inProgress)
+        const waitSeconds = loginThrottle?.waitSeconds ?? null
+        const lastLoginStartedAt =
+            record.lastLoginStartedAt ??
+            record.last_login_started_at ??
+            healthEntry?.lastLoginStartedAt ??
+            healthEntry?.last_login_started_at ??
+            null
+        const lastLoginCompletedAt =
+            record.lastLoginCompletedAt ??
+            record.last_login_completed_at ??
+            healthEntry?.lastLoginCompletedAt ??
+            healthEntry?.last_login_completed_at ??
+            null
+        const lastLoginSuccessAt =
+            record.lastLoginSuccessAt ??
+            record.last_login_success_at ??
+            healthEntry?.lastLoginSuccessAt ??
+            healthEntry?.last_login_success_at ??
+            null
+        const lastLoginErrorAt =
+            record.lastLoginErrorAt ??
+            record.last_login_error_at ??
+            healthEntry?.lastLoginErrorAt ??
+            healthEntry?.last_login_error_at ??
+            null
+        const lastLoginErrorReason =
+            record.lastLoginErrorReason ??
+            record.last_login_error_reason ??
+            healthEntry?.lastLoginErrorReason ??
+            healthEntry?.last_login_error_reason ??
+            null
+
       return {
         statusValue: statusMeta.value,
         available,
         reason,
         hasSavedCredential,
         lastTestTime,
+          loginThrottle,
+          pendingLogin,
+          throttleWaitSeconds: waitSeconds,
+          lastLoginStartedAt,
+          lastLoginCompletedAt,
+          lastLoginSuccessAt,
+          lastLoginErrorAt,
+          lastLoginErrorReason,
         testSummary,
         healthEntry,
       }
@@ -1099,27 +1233,7 @@ const DataSourceConfig = () => {
         </Tooltip>
       ),
     },
-    {
-      title: '性能',
-      key: 'performance',
-      width: 160,
-      render: (_, record) => (
-        <Space size="small">
-          {record.successRate > 0 && (
-            <Tooltip title="成功率">
-              <Tag color={record.successRate >= 95 ? 'green' : record.successRate >= 80 ? 'orange' : 'red'}>
-                {record.successRate.toFixed(1)}%
-              </Tag>
-            </Tooltip>
-          )}
-          {record.avgResponseTime > 0 && (
-            <Tooltip title="平均响应时间">
-              <Tag>{record.avgResponseTime}ms</Tag>
-            </Tooltip>
-          )}
-        </Space>
-      ),
-    },
+
     {
       title: '测试信息',
       key: 'test',
@@ -1185,7 +1299,18 @@ const DataSourceConfig = () => {
       key: 'status',
       width: 180,
       render: (_, record) => {
-        const { statusValue, available, reason, hasSavedCredential, lastTestTime, testSummary } =
+          const {
+              statusValue,
+              available,
+              reason,
+              hasSavedCredential,
+              lastTestTime,
+              testSummary,
+              loginThrottle,
+              pendingLogin,
+              throttleWaitSeconds,
+              lastLoginErrorReason
+          } =
           resolveSourceStatus(record)
         const meta = getDataSourceStatusMeta(statusValue)
 
@@ -1204,6 +1329,19 @@ const DataSourceConfig = () => {
         if (hasSavedCredential) {
           tooltipLines.push('凭证: 已保存')
         }
+
+          if (pendingLogin) {
+              tooltipLines.push('登录任务: 进行中')
+          }
+          if (typeof throttleWaitSeconds === 'number' && throttleWaitSeconds > 0.5) {
+              tooltipLines.push(`退避窗口: 等待 ${Math.ceil(throttleWaitSeconds)} 秒`)
+          }
+          if (loginThrottle?.nextAllowedAt) {
+              tooltipLines.push(`最早可重试: ${formatDateTime(loginThrottle.nextAllowedAt)}`)
+          }
+          if (lastLoginErrorReason) {
+              tooltipLines.push(`最后错误: ${lastLoginErrorReason}`)
+          }
 
         const tooltipContent = (
           <div>

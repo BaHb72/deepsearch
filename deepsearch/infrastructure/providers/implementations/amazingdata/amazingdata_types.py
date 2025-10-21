@@ -278,30 +278,64 @@ class NorthFlowData:
 # Type helpers shared by AmazingData providers
 RawDataMapping: TypeAlias = Mapping[str, object]
 RawDataSequence: TypeAlias = Sequence[RawDataMapping]
+SnapshotTimestamp: TypeAlias = Union[datetime, str]
 
 
-class SnapshotQuoteBase(TypedDict):
-    symbol: str
+class FiveLevelBook(TypedDict, total=False):
+    """�������������"""
+
+    ask_price1: float
+    ask_price2: float
+    ask_price3: float
+    ask_price4: float
+    ask_price5: float
+    ask_volume1: int
+    ask_volume2: int
+    ask_volume3: int
+    ask_volume4: int
+    ask_volume5: int
+    bid_price1: float
+    bid_price2: float
+    bid_price3: float
+    bid_price4: float
+    bid_price5: float
+    bid_volume1: int
+    bid_volume2: int
+    bid_volume3: int
+    bid_volume4: int
+    bid_volume5: int
 
 
-class SnapshotQuoteOptional(TypedDict, total=False):
-    name: str
-    time: str
+class SnapshotQuoteRequired(TypedDict):
+    """Level-1 ����Ҫ�ֶΣ�Ӧ��文档 4.2.1"""
+
+    code: str
+    trade_time: SnapshotTimestamp
+    pre_close: float
     last: float
     open: float
     high: float
     low: float
     close: float
-    prev_close: float
-    avg_price: float
     volume: float
     amount: float
+    num_trades: float
+    high_limited: float
+    low_limited: float
+
+
+class SnapshotQuoteOptional(FiveLevelBook, TypedDict, total=False):
+    """Level-1 ����ѡ�ֶ�"""
+
+    iopv: float
+    trading_phase_code: str
+    name: str
     turnover: float
+    turnover_rate: float
     change: float
     change_percent: float
-    turnover_rate: float
     amplitude: float
-    iopv: float
+    avg_price: float
     nav: float
     premium_rate: float
     pre_settle: float
@@ -309,38 +343,149 @@ class SnapshotQuoteOptional(TypedDict, total=False):
     pre_open_interest: float
     open_interest: float
     open_interest_delta: float
-    trading_phase_code: str
-    limit_up: float
-    limit_down: float
+    status: str
+    error: str
     up_count: int
     down_count: int
     flat_count: int
-    status: str
-    error: str
-    bid1: float
-    bid1_volume: float
-    bid2: float
-    bid2_volume: float
-    bid3: float
-    bid3_volume: float
-    bid4: float
-    bid4_volume: float
-    bid5: float
-    bid5_volume: float
-    ask1: float
-    ask1_volume: float
-    ask2: float
-    ask2_volume: float
-    ask3: float
-    ask3_volume: float
-    ask4: float
-    ask4_volume: float
-    ask5: float
-    ask5_volume: float
 
 
-class SnapshotQuote(SnapshotQuoteBase, SnapshotQuoteOptional):
-    pass
+class SnapshotQuote(SnapshotQuoteRequired, SnapshotQuoteOptional):
+    """Level-1 �����ݽṹ"""
+
+
+class SnapshotOptionRequired(TypedDict):
+    """ETF ��Ȩ�����ݽṹ (文档 4.2.2)"""
+
+    code: str
+    trade_time: SnapshotTimestamp
+    trading_phase_code: str
+    total_long_position: int
+    volume: float
+    amount: float
+    pre_close: float
+    pre_settle: float
+    auction_price: float
+    auction_volume: int
+    last: float
+    open: float
+    high: float
+    low: float
+    close: float
+    settle: float
+    high_limited: float
+    low_limited: float
+    contract_type: str
+    expire_date: int
+    underlying_security_code: str
+    exercise_price: float
+
+
+class SnapshotOptionOptional(FiveLevelBook, TypedDict, total=False):
+    """ETF ��Ȩ����ѡ�ֶ�"""
+
+
+class SnapshotOption(SnapshotOptionRequired, SnapshotOptionOptional):
+    """ETF ��Ȩʵʱ���ݽṹ"""
+
+
+class SnapshotFutureRequired(TypedDict):
+    """�ڻ� Level-1 ���ݽṹ (文档 4.2.3)"""
+
+    code: str
+    trade_time: SnapshotTimestamp
+    action_day: str
+    trading_day: str
+    pre_close: float
+    pre_settle: float
+    pre_open_interest: int
+    open_interest: int
+    last: float
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    amount: float
+    high_limited: float
+    low_limited: float
+    average_price: float
+    settle: float
+
+
+class SnapshotFutureOptional(FiveLevelBook, TypedDict, total=False):
+    """�ڻ� Level-1 ��ѡ�ֶ�"""
+
+
+class SnapshotFuture(SnapshotFutureRequired, SnapshotFutureOptional):
+    """�ڻ�ʵʱ���ݽṹ"""
+
+
+class SnapshotIndex(TypedDict):
+    """ָ�� Level-1 ���ݽṹ (文档 4.2.4)"""
+
+    code: str
+    trade_time: SnapshotTimestamp
+    last: float
+    pre_close: float
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    amount: float
+
+
+class SnapshotHKTRequired(TypedDict):
+    """���ͨʵʱ���ݽṹ (文档 4.2.5)"""
+
+    code: str
+    trade_time: SnapshotTimestamp
+    pre_close: float
+    last: float
+    high: float
+    low: float
+    volume: float
+    amount: float
+    nominal_price: float
+    ref_price: float
+    bid_price_limit_up: float
+    bid_price_limit_down: float
+    offer_price_limit_up: float
+    offer_price_limit_down: float
+    high_limited: float
+    low_limited: float
+    trading_phase_code: str
+
+
+class SnapshotHKTOptional(FiveLevelBook, TypedDict, total=False):
+    """���ͨ Level-1 ��ѡ�ֶ�"""
+
+
+class SnapshotHKT(SnapshotHKTRequired, SnapshotHKTOptional):
+    """���ͨʵʱ���ݽṹ"""
+
+
+class KlineRecord(TypedDict):
+    """K �����ݽṹ (文档 4.2.6)"""
+
+    code: str
+    trade_time: SnapshotTimestamp
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+    amount: float
+
+
+SnapshotPayload: TypeAlias = Union[
+    SnapshotQuote,
+    SnapshotOption,
+    SnapshotFuture,
+    SnapshotIndex,
+    SnapshotHKT,
+]
 
 
 class OrderBookSnapshot(TypedDict):
@@ -411,7 +556,7 @@ class TickMessage(TypedDict, total=False):
 
 
 SubscriptionData: TypeAlias = Union[
-    SnapshotQuote,
+    SnapshotPayload,
     KlineBarMessage,
     TickMessage,
     Mapping[str, object],
@@ -482,13 +627,13 @@ FIELD_MAPPING = {
     },
     # 快照字段映射
     "snapshot": {
-        "code": "symbol",
-        "symbol": "symbol",
-        "market_code": "symbol",
+        "code": "code",
+        "symbol": "code",
+        "market_code": "code",
         "name": "name",
         "security_name": "name",
-        "time": "time",
-        "trade_time": "time",
+        "time": "trade_time",
+        "trade_time": "trade_time",
         "last": "last",
         "last_price": "last",
         "latest_price": "last",
@@ -500,8 +645,8 @@ FIELD_MAPPING = {
         "low_price": "low",
         "close": "close",
         "close_price": "close",
-        "pre_close": "prev_close",
-        "prev_close": "prev_close",
+        "pre_close": "pre_close",
+        "prev_close": "pre_close",
         "avg_price": "avg_price",
         "average_price": "avg_price",
         "volume": "volume",
@@ -515,6 +660,9 @@ FIELD_MAPPING = {
         "change": "change",
         "change_rate": "change_percent",
         "change_percent": "change_percent",
+        "num_trades": "num_trades",
+        "trade_count": "num_trades",
+        "trade_num": "num_trades",
         "iopv": "iopv",
         "nav": "nav",
         "premium_rate": "premium_rate",
@@ -524,53 +672,54 @@ FIELD_MAPPING = {
         "open_interest": "open_interest",
         "open_interest_delta": "open_interest_delta",
         "trading_phase_code": "trading_phase_code",
-        "limit_up": "limit_up",
-        "high_limited": "limit_up",
-        "limit_down": "limit_down",
-        "low_limited": "limit_down",
+        "limit_up": "high_limited",
+        "high_limited": "high_limited",
+        "limit_down": "low_limited",
+        "low_limited": "low_limited",
         "up_count": "up_count",
         "down_count": "down_count",
         "flat_count": "flat_count",
-        "bid1": "bid1",
-        "bid_price1": "bid1",
-        "bid1_volume": "bid1_volume",
-        "bid_volume1": "bid1_volume",
-        "bid2": "bid2",
-        "bid_price2": "bid2",
-        "bid2_volume": "bid2_volume",
-        "bid_volume2": "bid2_volume",
-        "bid3": "bid3",
-        "bid_price3": "bid3",
-        "bid3_volume": "bid3_volume",
-        "bid_volume3": "bid3_volume",
-        "bid4": "bid4",
-        "bid_price4": "bid4",
-        "bid4_volume": "bid4_volume",
-        "bid_volume4": "bid4_volume",
-        "bid5": "bid5",
-        "bid_price5": "bid5",
-        "bid5_volume": "bid5_volume",
-        "bid_volume5": "bid5_volume",
-        "ask1": "ask1",
-        "ask_price1": "ask1",
-        "ask1_volume": "ask1_volume",
-        "ask_volume1": "ask1_volume",
-        "ask2": "ask2",
-        "ask_price2": "ask2",
-        "ask2_volume": "ask2_volume",
-        "ask_volume2": "ask2_volume",
-        "ask3": "ask3",
-        "ask_price3": "ask3",
-        "ask3_volume": "ask3_volume",
-        "ask_volume3": "ask3_volume",
-        "ask4": "ask4",
-        "ask_price4": "ask4",
-        "ask4_volume": "ask4_volume",
-        "ask_volume4": "ask4_volume",
-        "ask5": "ask5",
-        "ask_price5": "ask5",
-        "ask5_volume": "ask5_volume",
-        "ask_volume5": "ask5_volume",
+        "status": "status",
+        "bid1": "bid_price1",
+        "bid_price1": "bid_price1",
+        "bid1_volume": "bid_volume1",
+        "bid_volume1": "bid_volume1",
+        "bid2": "bid_price2",
+        "bid_price2": "bid_price2",
+        "bid2_volume": "bid_volume2",
+        "bid_volume2": "bid_volume2",
+        "bid3": "bid_price3",
+        "bid_price3": "bid_price3",
+        "bid3_volume": "bid_volume3",
+        "bid_volume3": "bid_volume3",
+        "bid4": "bid_price4",
+        "bid_price4": "bid_price4",
+        "bid4_volume": "bid_volume4",
+        "bid_volume4": "bid_volume4",
+        "bid5": "bid_price5",
+        "bid_price5": "bid_price5",
+        "bid5_volume": "bid_volume5",
+        "bid_volume5": "bid_volume5",
+        "ask1": "ask_price1",
+        "ask_price1": "ask_price1",
+        "ask1_volume": "ask_volume1",
+        "ask_volume1": "ask_volume1",
+        "ask2": "ask_price2",
+        "ask_price2": "ask_price2",
+        "ask2_volume": "ask_volume2",
+        "ask_volume2": "ask_volume2",
+        "ask3": "ask_price3",
+        "ask_price3": "ask_price3",
+        "ask3_volume": "ask_volume3",
+        "ask_volume3": "ask_volume3",
+        "ask4": "ask_price4",
+        "ask_price4": "ask_price4",
+        "ask4_volume": "ask_volume4",
+        "ask_volume4": "ask_volume4",
+        "ask5": "ask_price5",
+        "ask_price5": "ask_price5",
+        "ask5_volume": "ask_volume5",
+        "ask_volume5": "ask_volume5",
     },
 }
 

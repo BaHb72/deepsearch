@@ -146,7 +146,7 @@ class TestBasicData:
         """测试3.5.2.7 交易日历"""
         provider._base_data.get_calendar.return_value = ["20240101", "20240102"]
         result = await provider.get_calendar()
-        assert result is not None
+        assert result == [20240101, 20240102]
 
     @pytest.mark.asyncio
     async def test_get_stock_basic(self, provider):
@@ -387,7 +387,7 @@ class TestMarginTrading:
 
 
 class TestMarketAnomaly:
-    """测试市场异动数据接口（1个）"""
+    """测试市场异动数据接口（2个）"""
 
     @pytest.mark.asyncio
     async def test_get_long_hu_bang(self, provider):
@@ -396,11 +396,25 @@ class TestMarketAnomaly:
         result = await provider.get_long_hu_bang(["000001.SZ"])
         assert result is not None
 
+    @pytest.mark.asyncio
+    async def test_get_block_trading(self, provider):
+        """����3.5.9.2 ���ڽ���"""
+        provider._info_data.block_trading.return_value = pd.DataFrame(
+            {
+                "MARKET_CODE": ["000001.SZ"],
+                "TRADE_DATE": ["20240101"],
+                "B_SHARE_PRICE": [12.3],
+                "B_SHARE_VOLUME": [100000],
+            }
+        )
+        result = await provider.get_block_trading(["000001.SZ"])
+        assert result is not None
+
 
 def test_api_coverage_summary():
     """API覆盖情况汇总"""
-    total_apis = 37
-    implemented_apis = 37  # 全部已实现
+    total_apis = 38
+    implemented_apis = 38  # 全部已实现
     coverage = (implemented_apis / total_apis) * 100
 
     print(f"\n{'='*50}")

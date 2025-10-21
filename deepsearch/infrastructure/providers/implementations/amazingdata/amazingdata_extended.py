@@ -9,16 +9,15 @@ Date: 2025-09-18
 """
 
 import asyncio
-from types import ModuleType
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union, cast
+from types import ModuleType
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Union, cast
 
 import pandas as pd
 from loguru import logger
 
 from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
-
 # AmazingData SDK
 from .amazingdata import AmazingDataProvider, ProviderConfigLike, SubscriptionCallback
 
@@ -87,7 +86,7 @@ class AmazingDataExtended(AmazingDataProvider):
 
     async def get_calendar(
         self, data_type: str = "str", market: str = "SH"
-    ) -> Optional[List[Union[str, datetime]]]:
+    ) -> Optional[List[Union[int, datetime]]]:
         """
         3.5.2.7 交易日历
         获取交易所的交易日历
@@ -97,7 +96,7 @@ class AmazingDataExtended(AmazingDataProvider):
             market: 市场，'SH'上海或'SZ'深圳
 
         Returns:
-            交易日列表
+            交易日列表，默认返回 int 格式的交易日（YYYYMMDD）
         """
         if not self._base_data:
             await self._ensure_data_objects()
@@ -108,8 +107,51 @@ class AmazingDataExtended(AmazingDataProvider):
                 None, self._base_data.get_calendar, data_type, market
             )
 
-            logger.info(f"成功获取交易日历，共{len(result) if result else 0}个交易日")
-            return cast(Optional[List[Union[str, datetime]]], result)
+            if not result:
+                logger.info("未获取到交易日历数据")
+                return None
+
+            if data_type and data_type.lower() == "datetime":
+                normalized_datetime: List[datetime] = []
+                for item in result:
+                    if isinstance(item, datetime):
+                        normalized_datetime.append(item)
+                    elif isinstance(item, str):
+                        try:
+                            normalized_datetime.append(
+                                datetime.strptime(item.replace("-", ""), "%Y%m%d")
+                            )
+                        except ValueError:
+                            logger.warning(f"交易日转换失败（str->datetime）: {item}")
+                    elif isinstance(item, (int, float)):
+                        try:
+                            normalized_datetime.append(
+                                datetime.strptime(str(int(item)), "%Y%m%d")
+                            )
+                        except ValueError:
+                            logger.warning(f"交易日转换失败（int->datetime）: {item}")
+                logger.info("成功获取交易日历 %d 个交易日 (datetime 模式)" % len(normalized_datetime))
+                return normalized_datetime if normalized_datetime else None
+
+            normalized: List[int] = []
+            for item in result:
+                if isinstance(item, int):
+                    normalized.append(item)
+                elif isinstance(item, float):
+                    normalized.append(int(item))
+                elif isinstance(item, datetime):
+                    normalized.append(int(item.strftime("%Y%m%d")))
+                elif isinstance(item, str):
+                    digits = "".join(ch for ch in item if ch.isdigit())
+                    if len(digits) == 8:
+                        normalized.append(int(digits))
+                    else:
+                        logger.warning(f"未知的交易日字符串格式: {item}")
+                else:
+                    logger.warning(f"忽略未知类型的交易日数据: {item}")
+
+            logger.info("成功获取交易日历 %d 个交易日 (int 模式)" % len(normalized))
+            return normalized if normalized else None
 
         except Exception as e:
             logger.error(f"获取交易日历失败: {e}")
@@ -906,6 +948,112 @@ class AmazingDataExtended(AmazingDataProvider):
         except Exception as e:
             logger.error(f"获取龙虎榜数据失败: {e}")
             return None
+
+    async def get_block_trading(
+            self,
+            code_list: List[str],
+            local_path: str = "D://AmazingData_local_data//",
+            is_local: bool = True,
+            begin_date: Optional[int] = None,
+            end_date: Optional[int] = None,
+    ) -> Optional[pd.DataFrame]:
+        """
+        3.5.9.2 大宗交易
+        获取指定股票列表的大宗交易数据
+        """
+        await self._ensure_data_objects()
+
+        try:
+            if local_path:
+                # 确保缓存目录存在，便于 SDK 持久化
+                Path(local_path).mkdir(parents=True, exist_ok=True)
+
+            block_method = getattr(self._info_data, "block_trading", None)
+            if block_method is None:
+                logger.error("AmazingData SDK 未提供 block_trading 接口")
+                return None
+
+            loop = asyncio.get_event_loop()
+
+            def _invoke():
+                try:
+                    return block_method(
+                        code_list,
+                        local_path=local_path,
+                        is_local=is_local,
+                        begin_date=begin_date,
+                        end_date=end_date,
+                    )
+                except TypeError:
+                    args: list[object] = [code_list]
+                    if local_path is not None:
+                        args.append(local_path)
+                        args.append(is_local)
+                        if begin_date is not None:
+                            args.append(begin_date)
+                            if end_date is not None:
+                                args.append(end_date)
+                    return block_method(*args)
+
+            result = await loop.run_in_executor(None, _invoke)
+            if result is None:
+                logger.info("未获取到大宗交易数据")
+                return None
+
+            if isinstance(result, pd.DataFrame):
+                df = result.copy()
+            elif isinstance(result, Mapping):
+                frames: list[pd.DataFrame] = []
+                for symbol, payload in result.items():
+                    if isinstance(payload, pd.DataFrame):
+                        item_df = payload.copy()
+                    else:
+                        item_df = pd.DataFrame(payload)
+                    if not item_df.empty and "symbol" not in item_df.columns:
+                        item_df["symbol"] = symbol
+                    frames.append(item_df)
+                df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+            elif isinstance(result, Sequence) and not isinstance(result, (str, bytes)):
+                df = pd.DataFrame(result)
+            else:
+                df = pd.DataFrame(result)
+
+            if df.empty:
+                logger.info("大宗交易数据为空")
+                return df
+
+            column_map = {
+                "MARKET_CODE": "symbol",
+                "TRADE_DATE": "trade_date",
+                "B_SHARE_PRICE": "price",
+                "B_SHARE_VOLUME": "volume",
+                "B_FREQUENCY": "frequency",
+                "BLOCK_AVG_VOLUME": "avg_volume",
+                "B_SHARE_AMOUNT": "amount",
+                "B_BUYER_NAME": "buyer",
+                "B_SELLER_NAME": "seller",
+            }
+            df.rename(columns=column_map, inplace=True)
+
+            numeric_columns = ["price", "volume", "frequency", "avg_volume", "amount"]
+            for col in numeric_columns:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
+
+            if "trade_date" in df.columns:
+                df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
+                df.sort_values("trade_date", inplace=True)
+
+            if "symbol" in df.columns:
+                df["symbol"] = df["symbol"].astype(str).str.strip()
+
+            logger.info("成功获取大宗交易数据")
+            return df
+
+        except Exception as e:
+            logger.error(f"获取大宗交易数据失败: {e}")
+            return None
+
 
     # ================== 实时订阅接口 ==================
 

@@ -15,6 +15,7 @@ from typing import Any, ClassVar, Deque, DefaultDict, Dict, List, Optional, Tupl
 
 from loguru import logger
 
+
 # Import DataSourceType dynamically to avoid circular import
 
 class DataSourceType(Enum):
@@ -50,6 +51,7 @@ class DataAccessType(Enum):
     TRADE_DETAIL = "trade_detail"  # 逐笔成交
     FINANCIAL_DATA = "financial_data"  # 财务数据
     NORTH_FLOW = "north_flow"  # 北向资金流向
+    BLOCK_TRADE = "block_trade"  # 大宗交易
 
 DEFAULT_MODULE_KEY = "unknown"
 

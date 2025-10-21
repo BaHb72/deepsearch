@@ -16,7 +16,7 @@ async def test_get_calendar_filters_results(monkeypatch):
         async def get_calendar(self, data_type: str = "str", market: str = "SH"):
             calls["args"] = {"data_type": data_type, "market": market}
             # 混合符合与不符合过滤条件的数据
-            return ["20240102", "20240103", "20240105"]
+            return [20240102, 20240103, 20240105]
 
     provider = DummyProvider()
 
@@ -31,7 +31,7 @@ async def test_get_calendar_filters_results(monkeypatch):
 
     assert calls["args"] == {"data_type": "str", "market": "SZ"}
     assert response["success"] is True
-    assert response["data"]["data"] == ["20240103"]
+    assert response["data"]["data"] == [20240103]
 
 
 @pytest.mark.asyncio

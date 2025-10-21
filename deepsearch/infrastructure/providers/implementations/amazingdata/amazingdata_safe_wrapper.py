@@ -9,20 +9,19 @@ Date: 2025-09-20
 """
 
 import time
-from typing import Any, Dict, Optional, Tuple, TypedDict, cast
+from typing import Any, Dict, Mapping, Optional, Tuple, TypedDict, cast
 
 import pandas as pd
-
 from loguru import logger
 
-from .amazingdata_process_pool import get_global_pool
-from .amazingdata_process_proxy import ProxyResponse, RequestType
 from deepsearch.infrastructure.providers.interfaces.runtime import (
     ProviderCallStats,
     ProviderSDKProtocol,
     ProviderStatsReport,
     ProxyRuntimeStats,
 )
+from .amazingdata_process_pool import get_global_pool
+from .amazingdata_process_proxy import ProxyResponse, RequestType
 
 
 class ProxyResultPayload(TypedDict, total=False):
@@ -45,6 +44,13 @@ class SubscribeResultPayload(TypedDict, total=False):
 
 class HealthCheckPayload(TypedDict, total=False):
     status: str
+    loggedIn: bool
+    usernameHint: Optional[str]
+    pid: int
+    latencyMs: float
+    errors: list[str]
+    probe: Dict[str, Any]
+    timestamp: float
     details: Dict[str, Any]
 
 
@@ -94,6 +100,7 @@ class AmazingDataSafeWrapper:
         self.proxy: ProviderSDKProtocol = pool.get_or_create(
             datasource_id, auto_cleanup=auto_cleanup, cleanup_delay=60.0 if auto_cleanup else 0
         )
+        self._pool = pool
 
         # 连接状态
         self.is_connected = False
@@ -106,6 +113,7 @@ class AmazingDataSafeWrapper:
             "failed_calls": 0,
             "retries": 0,
             "crashes_handled": 0,
+            "last_health_status": None,
         }
 
     def safe_login(
@@ -130,6 +138,7 @@ class AmazingDataSafeWrapper:
             (成功标志, 错误信息)
         """
         logger.info(f"[SafeWrapper] Attempting login: {username}@{host}:{port}")
+        pool = getattr(self, "_pool", None)
 
         # 首先检查进程代理是否正常
         if not self.proxy:
@@ -153,8 +162,11 @@ class AmazingDataSafeWrapper:
         for attempt in range(self.max_retries):
             if attempt > 0:
                 logger.info(f"[SafeWrapper] Retry attempt {attempt + 1}/{self.max_retries}")
-                time.sleep(2**attempt)  # 指数退避
 
+            login_success = False
+            error_message: Optional[str] = None
+            if pool:
+                pool.wait_for_login_slot(self.datasource_id)
             try:
                 # 通过进程代理执行登录
                 response = cast(
@@ -171,6 +183,7 @@ class AmazingDataSafeWrapper:
                 )
 
                 if response.success:
+                    login_success = True
                     logger.info("[SafeWrapper] Login successful")
                     self.is_connected = True
                     self.login_info = {
@@ -186,6 +199,7 @@ class AmazingDataSafeWrapper:
                     # SDK尝试退出，这是最严重的错误
                     logger.critical("[SafeWrapper] SDK attempted SystemExit during login")
                     self.stats["crashes_handled"] += 1
+                    error_message = response.error or "SystemExit"
 
                     error_msg = (
                         "AmazingData SDK崩溃（SystemExit）。可能原因：\n"
@@ -204,6 +218,7 @@ class AmazingDataSafeWrapper:
                     # 进程崩溃
                     logger.error("[SafeWrapper] Worker process crashed")
                     self.stats["crashes_handled"] += 1
+                    error_message = response.error or "ProcessCrash"
 
                     # 尝试重启进程
                     if self.auto_restart and self.proxy.start():
@@ -216,6 +231,7 @@ class AmazingDataSafeWrapper:
                 elif response.error_type == "Timeout":
                     # 超时
                     logger.warning(f"[SafeWrapper] Login timeout after {timeout}s")
+                    error_message = f"timeout_{timeout}"
                     if attempt < self.max_retries - 1:
                         continue
                     else:
@@ -225,6 +241,7 @@ class AmazingDataSafeWrapper:
                 else:
                     # 其他错误
                     logger.error(f"[SafeWrapper] Login failed: {response.error}")
+                    error_message = response.error or "unknown_error"
                     if attempt < self.max_retries - 1:
                         self.stats["retries"] += 1
                         continue
@@ -234,12 +251,16 @@ class AmazingDataSafeWrapper:
 
             except Exception as e:
                 logger.error(f"[SafeWrapper] Unexpected error: {e}")
+                error_message = str(e)
                 if attempt < self.max_retries - 1:
                     self.stats["retries"] += 1
                     continue
                 else:
                     self.stats["failed_calls"] += 1
                     return False, str(e)
+            finally:
+                if pool:
+                    pool.record_login_result(self.datasource_id, login_success, error_message)
 
         self.stats["failed_calls"] += 1
         return False, "所有重试均失败"
@@ -324,6 +345,14 @@ class AmazingDataSafeWrapper:
             是否健康
         """
         result = self.proxy.health_check()
+
+        if isinstance(result, Mapping):
+            normalized = dict(result)
+            status = str(normalized.get("status") or "unknown").lower()
+            self.stats["last_health_status"] = normalized
+            return status != "error"
+
+        self.stats["last_health_status"] = {"status": "unknown", "raw": result}
         return bool(result)
 
     def get_stats(self) -> ProviderStatsReport:
@@ -339,6 +368,7 @@ class AmazingDataSafeWrapper:
             proxy_stats = cast(ProxyRuntimeStats, self.proxy.get_stats())
         report["proxy_stats"] = proxy_stats
         report["is_connected"] = self.is_connected
+        report["last_health_status"] = self.stats.get("last_health_status")
         return report
 
     def reset_stats(self):
@@ -349,6 +379,7 @@ class AmazingDataSafeWrapper:
             "failed_calls": 0,
             "retries": 0,
             "crashes_handled": 0,
+            "last_health_status": None,
         }
 
     @staticmethod

@@ -19,10 +19,12 @@ import time
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Mapping, TYPE_CHECKING, Union, cast, Protocol, TypedDict
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Mapping, TYPE_CHECKING, Union, cast, \
+    Protocol, TypedDict
 
 import pandas as pd
 from loguru import logger
+
 from deepsearch.infrastructure.providers.interfaces.base import (
     DataProvider,
     DataProviderConfig,
@@ -35,7 +37,6 @@ from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapa
 from deepsearch.observability.decorators.decorators import monitor_data_source
 from deepsearch.observability.monitoring.data_source_monitor import DataAccessType
 from deepsearch.utils.network.connection_pool import ConnectionPool, PoolConfig
-
 from ._sdk_loader import HAS_AMAZINGDATA, ad
 from .amazingdata_types import (
     DragonTigerRecord,
@@ -44,6 +45,7 @@ from .amazingdata_types import (
     ShareholderSnapshot,
     StockListItem,
 )
+
 
 def _coalesce(*values: object | None) -> object | None:
     """按顺序返回首个有效值，避免将零值或布尔假值视为缺失"""
@@ -371,6 +373,7 @@ class AmazingDataProvider(DataProvider):
             DataCapability.KEY_INDICATORS,
             DataCapability.SHAREHOLDER_INFO,
             DataCapability.DRAGON_TIGER,
+            DataCapability.BLOCK_TRADE,
             DataCapability.MARGIN_TRADING,
             DataCapability.NORTH_FLOW,
             DataCapability.TRADING_CALENDAR,
@@ -1493,6 +1496,132 @@ class AmazingDataProvider(DataProvider):
             self._increment_stat("query_errors")
             logger.error(f"获取融资融券数据失败: {e}")
             raise DataProviderError(f"获取融资融券数据失败: {e}")
+
+    @monitor_data_source(
+        source=DataSourceType.AMAZINGDATA,
+        access_type=DataAccessType.BLOCK_TRADE,
+        extract_symbol=lambda *args, **kwargs: (
+                ",".join(args[1]) if len(args) > 1 and isinstance(args[1], list) else ",".join(
+                    kwargs.get("symbols", []))
+        ),
+    )
+    async def get_block_trading(
+            self,
+            symbols: List[str],
+            *,
+            local_path: str = "D://AmazingData_local_data//",
+            is_local: bool = True,
+            begin_date: Optional[int] = None,
+            end_date: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """
+        获取大宗交易数据
+
+        Args:
+            symbols: 股票代码列表
+            local_path: 本地缓存路径
+            is_local: 是否启用本地缓存
+            begin_date: 起始日期（YYYYMMDD）
+            end_date: 结束日期（YYYYMMDD）
+
+        Returns:
+            大宗交易 DataFrame
+        """
+        try:
+            self._before_query()
+            sdk = self._require_sdk()
+
+            if local_path:
+                Path(local_path).mkdir(parents=True, exist_ok=True)
+
+            block_method = getattr(sdk.InfoData, "block_trading", None)
+            if block_method is None:
+                raise DataProviderError("AmazingData SDK 未提供 block_trading 接口")
+
+            loop = asyncio.get_event_loop()
+
+            def _invoke():
+                try:
+                    return block_method(
+                        symbols,
+                        local_path=local_path,
+                        is_local=is_local,
+                        begin_date=begin_date,
+                        end_date=end_date,
+                    )
+                except TypeError:
+                    args: list[object] = [symbols]
+                    if local_path is not None:
+                        args.append(local_path)
+                        args.append(is_local)
+                        if begin_date is not None:
+                            args.append(begin_date)
+                            if end_date is not None:
+                                args.append(end_date)
+                    return block_method(*args)
+
+            data = await loop.run_in_executor(None, _invoke)
+            if data is None:
+                return pd.DataFrame()
+
+            if isinstance(data, pd.DataFrame):
+                df = data.copy()
+            elif isinstance(data, Mapping):
+                frames: list[pd.DataFrame] = []
+                for symbol, payload in data.items():
+                    if isinstance(payload, pd.DataFrame):
+                        item_df = payload.copy()
+                    else:
+                        item_df = pd.DataFrame(payload)
+                    if not item_df.empty and "symbol" not in item_df.columns:
+                        item_df["symbol"] = symbol
+                    frames.append(item_df)
+                df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+            elif isinstance(data, Sequence) and not isinstance(data, (str, bytes)):
+                df = pd.DataFrame(data)
+            else:
+                df = pd.DataFrame(data)
+
+            if df.empty:
+                return df
+
+            df.rename(
+                columns={
+                    "MARKET_CODE": "symbol",
+                    "TRADE_DATE": "trade_date",
+                    "B_SHARE_PRICE": "price",
+                    "B_SHARE_VOLUME": "volume",
+                    "B_FREQUENCY": "frequency",
+                    "BLOCK_AVG_VOLUME": "avg_volume",
+                    "B_SHARE_AMOUNT": "amount",
+                    "B_BUYER_NAME": "buyer",
+                    "B_SELLER_NAME": "seller",
+                },
+                inplace=True,
+            )
+
+            numeric_columns = ["price", "volume", "frequency", "avg_volume", "amount"]
+            for col in numeric_columns:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
+
+            if "trade_date" in df.columns:
+                df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
+
+            if "symbol" in df.columns:
+                df["symbol"] = df["symbol"].astype(str).str.strip()
+
+            df.sort_values(
+                by=[col for col in ("trade_date", "symbol") if col in df.columns],
+                inplace=True,
+            )
+            df.reset_index(drop=True, inplace=True)
+            return df
+
+        except Exception as e:
+            self._increment_stat("query_errors")
+            logger.error(f"获取大宗交易数据失败: {e}")
+            raise DataProviderError(f"获取大宗交易数据失败: {e}")
 
     @monitor_data_source(
         source=DataSourceType.AMAZINGDATA,
