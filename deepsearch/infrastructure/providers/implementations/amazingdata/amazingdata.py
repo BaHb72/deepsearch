@@ -43,7 +43,6 @@ from .amazingdata_types import (
     KlineBarMessage,
     ShareholderSeat,
     ShareholderSnapshot,
-    StockListItem,
 )
 
 
@@ -150,6 +149,129 @@ class AmazingDataSDKProtocol(Protocol):
 if TYPE_CHECKING:
     pass
 
+
+def fetch_stock_dataset_blocking(
+        sdk: AmazingDataSDKProtocol,
+        *,
+        security_type: str = "EXTRA_STOCK_A",
+) -> Any:
+    """在同步线程中调用 AmazingData SDK，获取股票列表原始数据。"""
+
+    errors: list[str] = []
+    security_type_value = security_type or "EXTRA_STOCK_A"
+
+    query_api = getattr(sdk, "query_api", None)
+    if query_api is not None:
+        fetch = getattr(query_api, "get_stock_list", None)
+        if callable(fetch):
+            try:
+                return fetch()
+            except TypeError:
+                try:
+                    return fetch(security_type=security_type_value)
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"query_api.get_stock_list(security_type) 调用失败: {exc}")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"query_api.get_stock_list 调用失败: {exc}")
+
+    base_cls = getattr(sdk, "BaseData", None)
+    if base_cls is not None:
+        base_instance = base_cls()
+        fetch_candidates: tuple[tuple[str, dict[str, Any]], ...] = (
+            ("get_stock_list", {}),
+            ("get_code_info", {"security_type": security_type_value}),
+            ("get_code_list", {"security_type": security_type_value}),
+        )
+
+        for method_name, extra_kwargs in fetch_candidates:
+            fetch_method = getattr(base_instance, method_name, None)
+            if callable(fetch_method):
+                try:
+                    return fetch_method(**extra_kwargs)
+                except TypeError:
+                    try:
+                        return fetch_method()
+                    except Exception as exc:  # noqa: BLE001
+                        errors.append(f"BaseData.{method_name} 调用失败: {exc}")
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"BaseData.{method_name} 调用失败: {exc}")
+
+    if errors:
+        raise RuntimeError("; ".join(errors))
+    raise RuntimeError("AmazingData SDK 未提供可用的股票列表接口")
+
+
+def normalize_stock_records(dataset: Any) -> list[dict[str, Any]]:
+    """将 AmazingData 股票列表原始数据归一化为字典列表。"""
+
+    if dataset is None:
+        return []
+
+    if isinstance(dataset, pd.DataFrame):
+        df_reset = dataset.reset_index()
+        if "code" not in df_reset.columns:
+            index_candidates = [col for col in ("index", dataset.index.name) if col and col in df_reset.columns]
+            if index_candidates:
+                df_reset = df_reset.rename(columns={index_candidates[0]: "code"})
+            elif "index" in df_reset.columns:
+                df_reset = df_reset.rename(columns={"index": "code"})
+        records: list[dict[str, Any]] = []
+        for item in df_reset.to_dict("records"):
+            record = dict(item)
+            index_value = record.pop("index", None)
+            code_value = str(record.get("code") or index_value or "")
+            record["code"] = code_value
+            record.setdefault("symbol", str(record.get("symbol", code_value)))
+            record.setdefault("name", str(record.get("name", record["symbol"])))
+            record.setdefault("status", record.get("status", "listed"))
+            records.append(record)
+        return records
+
+    if isinstance(dataset, Mapping):
+        records = []
+        for key, value in dataset.items():
+            record: dict[str, Any]
+            if isinstance(value, Mapping):
+                record = dict(value)
+            else:
+                record = {}
+            record["code"] = str(key)
+            record.setdefault("symbol", record.get("symbol", record["code"]))
+            record.setdefault("name", record.get("name", record["symbol"]))
+            record.setdefault("status", record.get("status", "listed"))
+            records.append(record)
+        return records
+
+    if isinstance(dataset, Sequence) and not isinstance(dataset, (str, bytes, bytearray)):
+        records = []
+        for entry in dataset:
+            if isinstance(entry, Mapping):
+                record = dict(entry)
+                code_value = str(
+                    record.get("code")
+                    or record.get("symbol")
+                    or record.get("market_code")
+                    or record.get("SECURITY_ID", "")
+                )
+                record.setdefault("code", code_value)
+                record.setdefault("symbol", record.get("symbol", code_value))
+                record.setdefault("name", record.get("name", record["symbol"]))
+                record.setdefault("status", record.get("status", "listed"))
+                records.append(record)
+            else:
+                code_value = str(entry)
+                records.append(
+                    {
+                        "code": code_value,
+                        "symbol": code_value,
+                        "name": code_value,
+                        "status": "listed",
+                    }
+                )
+        return records
+
+    return []
+
 def async_retry(max_attempts=3, backoff_base=2, max_delay=60, jitter=True):
     """
     异步重试装饰器，支持指数退避和抖动
@@ -205,6 +327,7 @@ class AmazingDataConfig(DataProviderConfig):
         cache_ttl = _ensure_int(kwargs.pop("cache_ttl", 300))
         worker_env_raw = kwargs.pop("worker_env", {})
         tgw_log_path = kwargs.pop("tgw_log_path", "")
+        max_retries = kwargs.pop("max_retries", None)
 
         # 调用父类初始化（只传递父类接受的参数）
         for meta_key in ("name", "provider_name", "type", "implementation_mode"):
@@ -226,6 +349,7 @@ class AmazingDataConfig(DataProviderConfig):
         self.subscription_enabled = subscription_enabled
         self.cache_enabled = cache_enabled
         self.cache_ttl = cache_ttl
+        self.max_retries = _ensure_int(max_retries) if max_retries is not None else None
         if isinstance(worker_env_raw, Mapping):
             self.worker_env = {str(k): str(v) for k, v in worker_env_raw.items()}
         else:
@@ -1940,78 +2064,15 @@ class AmazingDataProvider(DataProvider):
         try:
             self._before_query()
             sdk = self._require_sdk()
-            loop = asyncio.get_event_loop()
-            stock_list = await loop.run_in_executor(None, sdk.BaseData.get_stock_list)
-
-            records: list[dict[str, Any]] = []
-
-            source_iter: Sequence[Mapping[str, object]]
-            if isinstance(stock_list, pd.DataFrame):
-                source_iter = [cast(Mapping[str, object], item) for item in stock_list.to_dict("records")]
-            elif isinstance(stock_list, Sequence):
-                source_iter = [cast(Mapping[str, object], item) for item in stock_list if isinstance(item, Mapping)]
-            else:
-                source_iter = []
-
-            for item in source_iter:
-                symbol = str(_coalesce(item.get("code"), item.get("symbol"), item.get("market_code"), ""))
-                name = str(_coalesce(item.get("name"), item.get("security_name"), ""))
-                exchange = str(_coalesce(item.get("exchange"), item.get("market"), ""))
-                list_date = _format_date(_coalesce(item.get("list_date"), item.get("LISTDATE")))
-                delist_date = _format_date(_coalesce(item.get("delist_date"), item.get("DELISTDATE")))
-                board = str(_coalesce(item.get("board"), item.get("LISTPLATE_NAME"), ""))
-                market = str(_coalesce(item.get("market"), item.get("MARKET"), ""))
-                security_type = str(_coalesce(item.get("security_type"), item.get("SECURITY_TYPE"), ""))
-                status_raw = _coalesce(item.get("status"), item.get("STATUS"), item.get("IS_LISTED"), "active")
-                status = str(status_raw) if status_raw not in (None, "") else "active"
-                if str(status_raw).isdigit():
-                    status = "listed" if str(status_raw) == "1" else "delisted" if str(status_raw) == "3" else status
-                is_listed_value = _coalesce(item.get("is_listed"), item.get("IS_LISTED"))
-                company_id = str(_coalesce(item.get("company_id"), item.get("COMP_ID"), ""))
-                pinyin = str(_coalesce(item.get("pinyin"), item.get("PINYIN"), ""))
-                english_name = str(
-                    _coalesce(
-                        item.get("english_name"),
-                        item.get("COMP_NAME_ENG"),
-                        item.get("COMP_SNAME_ENG"),
-                        "",
-                    )
-                )
-                short_name = str(
-                    _coalesce(
-                        item.get("short_name"),
-                        item.get("SECURITY_NAME"),
-                        name,
-                    )
-                )
-
-                stock: StockListItem = {
-                    "symbol": symbol,
-                    "name": name,
-                    "exchange": exchange,
-                    "list_date": list_date,
-                    "status": status,
-                }
-                if delist_date:
-                    stock["delist_date"] = delist_date
-                if board:
-                    stock["board"] = board
-                if market:
-                    stock["market"] = market
-                if security_type:
-                    stock["security_type"] = security_type
-                if is_listed_value is not None:
-                    stock["is_listed"] = _ensure_int(is_listed_value)
-                if company_id:
-                    stock["company_id"] = company_id
-                if pinyin:
-                    stock["pinyin"] = pinyin
-                if english_name:
-                    stock["english_name"] = english_name
-                if short_name:
-                    stock["short_name"] = short_name
-
-                records.append(dict(stock))
+            security_type = str(kwargs.get("security_type", "EXTRA_STOCK_A"))
+            raw_dataset = await asyncio.to_thread(
+                fetch_stock_dataset_blocking,
+                sdk,
+                security_type=security_type,
+            )
+            records = normalize_stock_records(raw_dataset)
+            if not records:
+                return None
 
             if limit is not None and limit > 0:
                 records = records[:limit]

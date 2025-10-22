@@ -18,6 +18,7 @@ from .loader import load_yaml_config
 from .models import (
     AmazingDataConfig,
     AppConfig,
+    MarketDataConfig,
     CloudflareWorkersConfig,
     DatabaseConfig,
     DatabaseConnectionConfigModel,
@@ -59,6 +60,7 @@ class Settings(BaseSettings):
     notifications: Optional[NotificationsConfig] = None  # 通知推送配置
     data_providers: Optional[DataFeedConfig] = None
     data_sources: Optional[Dict[str, Any]] = None  # 统一的数据源配置
+    market_data: Optional[MarketDataConfig] = None  # 市场数据实时配置
     database_connections: Optional[List[DatabaseConnectionConfigModel]] = None  # �����������б�
 
     @property
@@ -107,3 +109,6 @@ class Settings(BaseSettings):
             yaml_settings,  # 只使用 YAML 配置
             init_settings,
         )
+
+
+Settings.model_rebuild()

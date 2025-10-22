@@ -158,7 +158,10 @@ data_sources:
         host: 1.2.3.4
         timeout: 5000
         implementation_mode: process
-      has_saved_credential: false
+        username: demo_user
+        password: demo_password
+        port: 8600
+      has_saved_credential: true
       provider_name: amazingdata
     akshare:
       enabled: true

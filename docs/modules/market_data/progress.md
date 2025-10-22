@@ -24,11 +24,20 @@ DeepSearch 架构解耦。
 
 ## 当前进展
 
+- 2025-10-22：完成 MarketDataCacheReader 与 `/api/market/live/{strength|order-imbalance|auction-quality}` API，对接 WebUI
+  市场数据页实时榜单，支持定时/手动刷新，并在 WebUI 启停时自动接管实时行情管线。
+
 - 2025-10-21：在 `docs/modules/market_data/` 建立模块文档目录，并归档产品规划、接口契约与指标规范。
 - 2025-10-21：输出《[市场行情模块架构草案 v1](./blueprint.md)》，明确目录结构、端口协议与数据流设计。
 - 2025-10-21：落地 `deepsearch/ports/market_data/` 端口与数据模型草稿，覆盖实时、日频与扩展能力定义。
 - 2025-10-21：形成《[市场行情模块缓存与资源方案（初稿）](./cache_and_resource_plan.md)》，明确实时/日频链路的 Redis、DuckDB
   复用策略。
+
+- 2025-10-21：补齐资金脉冲、竞价质量、盘口失衡领域计算器及单元测试，实现 `RealTimeMarketDataService` + `BoardUniverse`
+  管理板块映射，并交付 `AmazingDataMarketStreamAdapter` 完成 MarketStreamPort 对接。
+- 2025-10-21：新增 `MarketDataCacheWriter`、`MarketDataRealtimePipeline` 与 `MarketDataStreamingRunner`，支持按规划写入
+  Redis key（market:strength/* 等），并提供 AmazingData 一键化组装工厂。
+- 2025-10-21：新增 `market_data.realtime` 配置模型与 settings 样例，可在 YAML 中声明订阅板块、窗口、TTL 并驱动工厂。
 
 ## 关键约束摘要
 
@@ -41,9 +50,9 @@ DeepSearch 架构解耦。
 
 ## 下一步计划
 
-1. 基于架构草案完善端口实现计划，细化 streaming/缓存落地步骤。
-2. 结合缓存方案结论，准备 Redis/DuckDB 配置草稿并确认资源配额与调优选项。
-3. 按 `m2_mvp_tasklist.md` 细化任务拆解，补充监控与测试需求并排定执行顺序。
+1. 对接 WebAPI / WebUI 读取缓存（market:strength、order-imbalance 等），完成 MVP 数据输出。
+2. 推进 Redis/DuckDB 配置与监控落地，梳理 settings.*.yaml 中的资源配额与告警。
+3. 扩展封单稳定度、ETF 溢价等指标计算器，并在 `m2_mvp_tasklist.md` 补充监控与验收脚本。
 
 ## 风险与依赖
 

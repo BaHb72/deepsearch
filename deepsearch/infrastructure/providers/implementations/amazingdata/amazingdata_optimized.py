@@ -8,6 +8,7 @@ Version: 2.0.0
 
 import asyncio
 import concurrent.futures
+import functools
 import gc
 import hashlib
 import json
@@ -19,28 +20,26 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Sequence, Mapping, TYPE_CHECKING, Union, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 import pandas as pd
 from loguru import logger
 
 from deepsearch.infrastructure.providers.interfaces.base import (
     DataProvider,
-    DataProviderConfig,
     DataProviderError,
 )
-
 # AmazingData SDK
 from ._sdk_loader import HAS_AMAZINGDATA, ad
-
-
 from .amazingdata import (
     AmazingDataConfig,
     AmazingDataSDKProtocol,
     ProviderConfigLike,
     ensure_amazingdata_provider_config,
+    fetch_stock_dataset_blocking,
+    normalize_stock_records,
 )
-from .amazingdata_types import KlineBarMessage, StockListItem
+
 
 class ErrorCode(Enum):
     """错误代码枚举"""
@@ -146,7 +145,8 @@ class OptimizedThreadPoolManager:
             self.stats["active_threads"] += 1
             try:
                 loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(self.executor, func, *args, **kwargs)
+                wrapped = functools.partial(func, *args, **kwargs)
+                result = await loop.run_in_executor(self.executor, wrapped)
                 self.stats["completed_tasks"] += 1
                 return result
             except Exception:
@@ -977,28 +977,21 @@ class OptimizedAmazingDataProvider(DataProvider):
 
             # 通过优化的线程池执行
             sdk = self._require_sdk()
-            result = await self.thread_pool.execute_async(sdk.BaseData.get_stock_list)
+            security_type = str(kwargs.get("security_type", "EXTRA_STOCK_A"))
+            raw_dataset = await self.thread_pool.execute_async(
+                fetch_stock_dataset_blocking,
+                sdk,
+                security_type=security_type,
+            )
 
-            if not result:
+            records = normalize_stock_records(raw_dataset)
+            if not records:
                 return None
 
-            # 转换为标准格式
-            stock_list: list[dict[str, Any]] = []
-            for item in result:
-                stock_info: dict[str, Any] = {
-                    "symbol": str(item.get("code", "")),
-                    "name": str(item.get("name", "")),
-                    "exchange": str(item.get("exchange", "")),
-                    "list_date": str(item.get("list_date", "")),
-                    "status": str(item.get("status", "active")),
-                }
-                stock_list.append(stock_info)
-
-            # 如果有限制数量
             if limit and limit > 0:
-                stock_list = stock_list[:limit]
+                records = records[:limit]
 
-            return stock_list
+            return records
 
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")

@@ -7,6 +7,7 @@ FastAPI 服务器主应用
 from __future__ import annotations
 
 import asyncio
+import builtins
 import json
 import math
 import sys
@@ -18,7 +19,6 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, TYPE_CHECKING, cast
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-import builtins
 
 if not TYPE_CHECKING:
     setattr(builtins, "Optional", Optional)
@@ -412,6 +412,14 @@ class AppState:
         self.monitor_api: Optional[MonitorAPI] = None
         self.module_settings: Dict[str, Dict[str, Any]] = {}
         self.module_settings_lock = threading.RLock()
+        self.market_data_service = None
+        self.market_data_cache_writer = None
+        self.market_data_pipeline = None
+        self.market_data_runner = None
+        self.market_data_reader = None
+        self.market_data_provider = None
+        self.market_data_initializing = False
+        self.market_data_lock = asyncio.Lock()
 
     @diagnostic_logger.diagnostic_method
     def set_engine(self, engine: MainEngine) -> None:
@@ -505,6 +513,135 @@ log_diagnostic(
 )
 
 
+async def ensure_market_data_runtime(app_state: AppState, settings: Settings | None = None) -> None:
+    """确保市场数据实时运行态已初始化。"""
+
+    if getattr(app_state, "market_data_service", None) is not None:
+        return
+    if getattr(app_state, "market_data_initializing", False):
+        return
+
+    app_state.market_data_initializing = True
+    try:
+        config_obj = settings or get_config()
+        market_cfg = getattr(config_obj, "market_data", None)
+        if market_cfg is None:
+            return
+
+        realtime_cfg = getattr(market_cfg, "realtime", None)
+        if realtime_cfg is None:
+            return
+
+        try:
+            from deepsearch.webui.api.providers import DataProviderFactory, DataSourceType
+
+            provider = await DataProviderFactory.get_provider_async(DataSourceType.AMAZINGDATA)
+        except Exception as exc:
+            logger.warning("无法初始化 AmazingData 提供方: %s", exc)
+            return
+        except BaseException as critical_exc:  # pragma: no cover - 捕获 SystemExit 等异常
+            logger.error("初始化 AmazingData 提供方出现致命异常: %s", critical_exc)
+            if isinstance(critical_exc, SystemExit):
+                logger.warning("AmazingData SDK 在登录阶段触发 SystemExit，跳过实时行情管线初始化")
+            return
+
+        if provider is None:
+            logger.warning("AmazingData 提供方未就绪，跳过市场数据实时初始化")
+            return
+
+        from deepsearch.application.market_data import (
+            MarketDataCacheReader,
+            create_realtime_streaming_pipeline,
+        )
+
+        try:
+            (
+                service,
+                cache_writer,
+                pipeline,
+                runner,
+            ) = create_realtime_streaming_pipeline(provider, realtime_config=realtime_cfg)
+        except Exception as exc:
+            logger.error("构建市场数据实时管线失败: %s", exc)
+            return
+
+        app_state.market_data_service = service
+        app_state.market_data_cache_writer = cache_writer
+        app_state.market_data_pipeline = pipeline
+        app_state.market_data_runner = runner
+        app_state.market_data_reader = MarketDataCacheReader(cache_writer)
+        app_state.market_data_provider = provider
+
+        try:
+            await service.refresh_board_universe()
+        except Exception as exc:  # pragma: no cover - 运行期警告
+            logger.debug("刷新板块成分失败: %s", exc)
+
+        if getattr(realtime_cfg, "enabled", False):
+            try:
+                await runner.start()
+                logger.info(
+                    "市场数据实时管线已启动，监控板块: %s", ", ".join(str(board) for board in pipeline.boards)
+                )
+            except Exception as exc:
+                logger.error("启动市场数据实时轮询失败: %s", exc)
+        else:
+            logger.info("市场数据实时管线已初始化，但配置为禁用后台轮询")
+    finally:
+        app_state.market_data_initializing = False
+
+
+async def refresh_market_data_once(app_state: AppState) -> None:
+    """在后台任务未运行时执行一次实时刷新。"""
+
+    pipeline = getattr(app_state, "market_data_pipeline", None)
+    if pipeline is None:
+        return
+
+    runner = getattr(app_state, "market_data_runner", None)
+    runner_active = bool(
+        runner and getattr(runner, "_task", None) is not None and not runner._task.done()
+    )
+    if runner_active:
+        return
+
+    lock = getattr(app_state, "market_data_lock", None)
+    if lock is None:
+        lock = asyncio.Lock()
+        app_state.market_data_lock = lock
+
+    async with lock:
+        try:
+            await pipeline.run_once()
+        except Exception as exc:
+            logger.error("市场数据实时刷新失败: %s", exc)
+
+
+async def shutdown_market_data_runtime(app_state: AppState) -> None:
+    """关闭市场数据实时运行态，释放资源。"""
+
+    runner = getattr(app_state, "market_data_runner", None)
+    if runner is not None:
+        try:
+            await runner.stop()
+        except Exception as exc:  # pragma: no cover - 防御性日志
+            logger.debug("停止市场数据实时轮询失败: %s", exc)
+
+    writer = getattr(app_state, "market_data_cache_writer", None)
+    if writer is not None:
+        try:
+            await writer.close()
+        except Exception as exc:  # pragma: no cover - 防御性日志
+            logger.debug("关闭市场数据缓存写入器失败: %s", exc)
+
+    app_state.market_data_service = None
+    app_state.market_data_cache_writer = None
+    app_state.market_data_pipeline = None
+    app_state.market_data_runner = None
+    app_state.market_data_reader = None
+    app_state.market_data_provider = None
+
+
 def create_startup_handler(app_state: AppState) -> Callable[[], Awaitable[None]]:
     """创建启动处理函数"""
 
@@ -513,6 +650,8 @@ def create_startup_handler(app_state: AppState) -> Callable[[], Awaitable[None]]
         logger.debug("启动 Web UI 服务...")
 
         try:
+            settings = get_config()
+            await ensure_market_data_runtime(app_state, settings)
             # 检查是否已经设置了引擎
             if not app_state.engine:
                 logger.warning("No engine set, WebUI running in limited mode")
@@ -544,6 +683,7 @@ def create_shutdown_handler(app_state: AppState) -> Callable[[], Awaitable[None]
         logger.debug("关闭 Web UI 服务...")
 
         try:
+            await shutdown_market_data_runtime(app_state)
             # 停止监控广播
             await app_state.websocket_manager.stop_monitoring_broadcast()
 
@@ -687,6 +827,7 @@ def create_app() -> FastAPI:
     from deepsearch.webui.api.endpoints.trading.chart import router as trading_chart_router
     from deepsearch.webui.api.endpoints.trading.market import router as trading_market_router
     from deepsearch.webui.api.endpoints.trading.market_overview import router as trading_market_overview_router
+    from deepsearch.webui.api.endpoints.market_data.live_api import router as market_live_router
     from deepsearch.webui.api.errors import router as frontend_errors_router
     from deepsearch.webui.api.proxy import router as workers_proxy_router
     from deepsearch.webui.api.stock_comment import router as stock_comment_router
@@ -711,6 +852,7 @@ def create_app() -> FastAPI:
     app.include_router(data_router, prefix="/api/data", tags=["Data"])  # 基础数据API，提供 /stocks、/kline 等
     app.include_router(monitoring_analytics_router, tags=["Analytics"])  # 分析API，已包含 /api/analytics 前缀
     app.include_router(trading_market_overview_router, tags=["MarketOverview"])  # 市场总貌API
+    app.include_router(market_live_router, tags=["MarketLive"])  # 市场实时行情API
     app.include_router(stock_comment_router, tags=["StockComment"])  # 千股千评API
     app.include_router(notification_push_router, tags=["Notification"])  # 通知配置与推送API
     app.include_router(akshare_apis_router, tags=["AkShareAPIs"])  # AkShare API列表
@@ -855,6 +997,8 @@ def create_app() -> FastAPI:
         from deepsearch.webui.api.endpoints.market import router as market_analysis_router
 
         app.include_router(market_analysis_router, prefix="/api", tags=["Market Analysis"])
+        app.include_router(market_live_router, tags=["Market Live"])
+        logger.info("市场数据实时API已注册")
         logger.info("市场分析API已注册")
     except ImportError as e:
         logger.warning(f"市场分析API模块加载失败: {e}")

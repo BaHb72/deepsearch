@@ -40,6 +40,18 @@ class TestDataSourceAPI:
 
     def test_list_data_sources(self, test_client, api_helper):
         """测试获取数据源列表接口"""
+        update_payload = {
+            "config": {
+                "username": "demo_user",
+                "password": "demo_password",
+                "host": "1.2.3.4",
+                "port": 8600
+            },
+            "rememberCredential": True
+        }
+        update_response = test_client.put("/api/data-sources/config/amazingdata", json=update_payload)
+        api_helper.assert_success_response(update_response)
+
         response = test_client.get("/api/data-sources/list")
         data = api_helper.assert_success_response(response)
 
@@ -56,6 +68,13 @@ class TestDataSourceAPI:
             assert isinstance(item.get("config", {}), dict)
             ids.add(item["id"])
 
+        amazing = next((item for item in data if item.get("type") == "amazingdata"), None)
+        assert amazing is not None, "Ӧ������ amazingdata ����Դ"
+
+        config = amazing.get("config") or {}
+        connection_block = config.get("connection") if isinstance(config.get("connection"), dict) else {}
+        username = config.get("username") or connection_block.get("username")
+        assert username, "amazingdata ����ԴӦ����ʾ�û�����������ƾ֤������Խ�"
         assert len(ids) == len(data), "数据源ID应该唯一"
 
     def test_removed_data_source_status_endpoint(self, test_client):

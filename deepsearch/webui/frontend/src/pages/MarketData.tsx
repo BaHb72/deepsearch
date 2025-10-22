@@ -1,32 +1,54 @@
-import React, { useState, useEffect } from 'react'
+import React, {useCallback, useEffect, useState} from 'react'
 import {
-  Card,
-  Row,
-  Col,
-  Table,
-  Tag,
-  Space,
-  Button,
-  Select,
-  Tabs,
-  Typography,
-  Input,
-  Switch,
-  Badge,
+    Badge,
+    Button,
+    Card,
+    Col,
+    Input,
+    message,
+    Row,
+    Select,
+    Space,
+    Spin,
+    Switch,
+    Table,
+    Tabs,
+    Tag,
+    Typography,
 } from 'antd'
-import { ProCard, StatisticCard } from '@ant-design/pro-components'
-import { Stock, Column, DualAxes } from '@ant-design/charts'
+import {ProCard, StatisticCard} from '@ant-design/pro-components'
+import {Column, DualAxes, Stock} from '@ant-design/charts'
 import {
-  RiseOutlined,
-  FallOutlined,
-  ReloadOutlined,
-  StarOutlined,
-  StarFilled,
-  SearchOutlined,
-  ExportOutlined,
-  StockOutlined,
-  FundOutlined
+    ExportOutlined,
+    FallOutlined,
+    FundOutlined,
+    ReloadOutlined,
+    RiseOutlined,
+    SearchOutlined,
+    StarFilled,
+    StarOutlined,
+    StockOutlined
 } from '@ant-design/icons'
+import {AuctionQualityItem, marketDataLiveApi, OrderImbalanceItem, StrengthItem} from '../api/marketDataLive'
+
+type StrengthState = {
+    items: StrengthItem[];
+    windows: string[];
+    boards: string[];
+    retrievedAt: string;
+};
+
+type ImbalanceState = {
+    window: string;
+    items: OrderImbalanceItem[];
+    retrievedAt: string;
+};
+
+type AuctionState = {
+    boards: string[];
+    items: AuctionQualityItem[];
+    retrievedAt: string;
+};
 
 const { Title } = Typography
 const { Search } = Input
@@ -76,6 +98,24 @@ const MarketData = () => {
     { name: 'Liquor', change: 0.89, volume: 123456789, leadStock: 'Moutai' },
     { name: 'Healthcare', change: -1.23, volume: 234567890, leadStock: 'Hengrui' },
   ])
+
+    const [insightLoading, setInsightLoading] = useState(false)
+    const [strengthState, setStrengthState] = useState<StrengthState>({
+        items: [],
+        windows: [],
+        boards: [],
+        retrievedAt: '',
+    })
+    const [imbalanceState, setImbalanceState] = useState<ImbalanceState>({
+        window: '',
+        items: [],
+        retrievedAt: '',
+    })
+    const [auctionState, setAuctionState] = useState<AuctionState>({
+        boards: [],
+        items: [],
+        retrievedAt: '',
+    })
 
   // Auto refresh
   useEffect(() => {
@@ -243,6 +283,91 @@ const MarketData = () => {
       item.code === record.code ? { ...item, favorite: !item.favorite } : item
     ))
   }
+    const formatAmountUnit = (value?: number) => {
+        if (typeof value !== 'number' || Number.isNaN(value)) return '--'
+        const abs = Math.abs(value)
+        if (abs >= 1e9) return `${(value / 1e9).toFixed(2)}十亿`
+        if (abs >= 1e8) return `${(value / 1e8).toFixed(2)}亿`
+        if (abs >= 1e6) return `${(value / 1e6).toFixed(2)}百万`
+        if (abs >= 1e4) return `${(value / 1e4).toFixed(2)}万`
+        return value.toFixed(2)
+    }
+
+    const formatNumberValue = (value?: number, digits = 2) => {
+        if (typeof value !== 'number' || Number.isNaN(value)) return '--'
+        return value.toFixed(digits)
+    }
+
+    const formatPercentRatio = (value?: number, digits = 2) => {
+        if (typeof value !== 'number' || Number.isNaN(value)) return '--'
+        return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(digits)}%`
+    }
+
+    const formatTimestamp = (value?: string) => {
+        if (!value) return '--'
+        const date = new Date(value)
+        if (Number.isNaN(date.getTime())) return value
+        return date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'})
+    }
+
+    const fetchMarketInsights = useCallback(async () => {
+        setInsightLoading(true)
+        try {
+            const [strengthRes, imbalanceRes, auctionRes] = await Promise.all([
+                marketDataLiveApi.getStrength(),
+                marketDataLiveApi.getOrderImbalance({limit: 30}),
+                marketDataLiveApi.getAuctionQuality(),
+            ])
+
+            const strengthPayload = strengthRes.data ?? {items: [], windows: [], boards: [], retrieved_at: ''}
+            setStrengthState({
+                items: strengthPayload.items ?? [],
+                windows: strengthPayload.windows ?? [],
+                boards: strengthPayload.boards ?? [],
+                retrievedAt: strengthPayload.retrieved_at ?? '',
+            })
+
+            const imbalancePayload = imbalanceRes.data ?? {window: '', items: [], retrieved_at: ''}
+            setImbalanceState({
+                window: imbalancePayload.window ?? '',
+                items: imbalancePayload.items ?? [],
+                retrievedAt: imbalancePayload.retrieved_at ?? '',
+            })
+
+            const auctionPayload = auctionRes.data ?? {boards: [], items: [], retrieved_at: ''}
+            setAuctionState({
+                boards: auctionPayload.boards ?? [],
+                items: auctionPayload.items ?? [],
+                retrievedAt: auctionPayload.retrieved_at ?? '',
+            })
+        } catch (error) {
+            // eslint-disable-next-line no-console
+            console.warn('Failed to load realtime market insights', error)
+            message.warning('实时行情指标获取失败，请稍后再试')
+        } finally {
+            setInsightLoading(false)
+        }
+    }, [])
+
+    const handleInsightRefresh = () => {
+        fetchMarketInsights()
+    }
+
+    useEffect(() => {
+        fetchMarketInsights()
+    }, [fetchMarketInsights])
+
+    useEffect(() => {
+        if (!autoRefresh) {
+            return
+        }
+        const timer = setInterval(() => {
+            fetchMarketInsights()
+        }, 15000)
+        return () => clearInterval(timer)
+    }, [autoRefresh, fetchMarketInsights])
+
+
 
   const columns = [
     {
@@ -328,6 +453,100 @@ const MarketData = () => {
     },
   ]
 
+    const strengthColumns = [
+        {
+            title: '板块',
+            dataIndex: 'board',
+            key: 'board',
+            width: 100,
+        },
+        {
+            title: '窗口',
+            dataIndex: 'window',
+            key: 'window',
+            width: 80,
+        },
+        {
+            title: '资金总额',
+            dataIndex: 'amount_total',
+            key: 'amount_total',
+            render: (value?: number) => formatAmountUnit(value),
+        },
+        {
+            title: '资金速度',
+            dataIndex: 'speed_per_min',
+            key: 'speed_per_min',
+            render: (value?: number) => formatAmountUnit(value),
+        },
+        {
+            title: '加速度',
+            dataIndex: 'accel_per_min2',
+            key: 'accel_per_min2',
+            render: (value?: number) => formatNumberValue(value),
+        },
+    ]
+
+    const orderImbalanceColumns = [
+        {
+            title: '代码',
+            dataIndex: 'code',
+            key: 'code',
+            width: 100,
+        },
+        {
+            title: '名称',
+            dataIndex: 'name',
+            key: 'name',
+            width: 120,
+            render: (value?: string) => value || '--',
+        },
+        {
+            title: 'OBI',
+            dataIndex: 'obi',
+            key: 'obi',
+            render: (value?: number) => formatNumberValue(value),
+        },
+        {
+            title: 'EIS',
+            dataIndex: 'eis',
+            key: 'eis',
+            render: (value?: number) => formatNumberValue(value),
+        },
+        {
+            title: 'NTM',
+            dataIndex: 'ntm',
+            key: 'ntm',
+            render: (value?: number) => formatNumberValue(value, 0),
+        },
+    ]
+
+    const auctionColumns = [
+        {
+            title: '板块',
+            dataIndex: 'board',
+            key: 'board',
+            width: 120,
+        },
+        {
+            title: '资金速度',
+            dataIndex: 'speed_per_min',
+            key: 'speed_per_min',
+            render: (value?: number) => formatAmountUnit(value),
+        },
+        {
+            title: '累计成交额',
+            dataIndex: 'amount_acc',
+            key: 'amount_acc',
+            render: (value?: number) => formatAmountUnit(value),
+        },
+        {
+            title: '价格稳定度',
+            dataIndex: 'price_stability',
+            key: 'price_stability',
+            render: (value?: number) => formatNumberValue(value),
+        },
+    ]
+
   const sectorColumns = [
     {
       title: 'Sector',
@@ -411,6 +630,88 @@ const MarketData = () => {
             </Col>
           </Row>
         </ProCard>
+          <ProCard colSpan={24}>
+              <Spin spinning={insightLoading}>
+                  <Row gutter={16}>
+                      <Col span={12}>
+                          <Card
+                              title="板块资金脉冲"
+                              size="small"
+                              extra={(
+                                  <Space size="small">
+                                      {strengthState.windows.length > 0 && (
+                                          <Tag color="blue">窗口 {strengthState.windows.join(' / ')}</Tag>
+                                      )}
+                                      {strengthState.retrievedAt && (
+                                          <Tag>{formatTimestamp(strengthState.retrievedAt)}</Tag>
+                                      )}
+                                      <Button
+                                          type="link"
+                                          size="small"
+                                          icon={<ReloadOutlined spin={insightLoading}/>}
+                                          onClick={handleInsightRefresh}
+                                      >
+                                          刷新
+                                      </Button>
+                                  </Space>
+                              )}
+                          >
+                              <Table
+                                  columns={strengthColumns}
+                                  dataSource={strengthState.items.map((item, index) => ({...item, key: index}))}
+                                  pagination={{pageSize: 8, size: 'small'}}
+                                  size="small"
+                                  rowKey="key"
+                              />
+                          </Card>
+                      </Col>
+                      <Col span={6}>
+                          <Card
+                              title="委托失衡 TOP"
+                              size="small"
+                              extra={(
+                                  <Space size="small">
+                                      {imbalanceState.window && <Tag color="purple">窗口 {imbalanceState.window}</Tag>}
+                                      {imbalanceState.retrievedAt && (
+                                          <Tag>{formatTimestamp(imbalanceState.retrievedAt)}</Tag>
+                                      )}
+                                  </Space>
+                              )}
+                          >
+                              <Table
+                                  columns={orderImbalanceColumns}
+                                  dataSource={imbalanceState.items.map((item, index) => ({...item, key: index}))}
+                                  pagination={{pageSize: 6, size: 'small'}}
+                                  size="small"
+                                  rowKey="key"
+                              />
+                          </Card>
+                      </Col>
+                      <Col span={6}>
+                          <Card
+                              title="竞价质量"
+                              size="small"
+                              extra={(
+                                  <Space size="small">
+                                      {auctionState.retrievedAt && (
+                                          <Tag>{formatTimestamp(auctionState.retrievedAt)}</Tag>
+                                      )}
+                                  </Space>
+                              )}
+                          >
+                              <Table
+                                  columns={auctionColumns}
+                                  dataSource={auctionState.items.map((item, index) => ({...item, key: index}))}
+                                  pagination={false}
+                                  size="small"
+                                  rowKey="key"
+                              />
+                          </Card>
+                      </Col>
+                  </Row>
+              </Spin>
+          </ProCard>
+
 
         {/* Market Overview */}
         <ProCard colSpan={24}>

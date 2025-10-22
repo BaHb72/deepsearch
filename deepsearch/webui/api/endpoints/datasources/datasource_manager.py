@@ -21,8 +21,8 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
-from deepsearch.constants import YAML_ENCODING
 from deepsearch.config.loader import ensure_env_config_file
+from deepsearch.constants import YAML_ENCODING
 from deepsearch.infrastructure.cache.cache_manager import CacheManager
 from deepsearch.observability.monitoring.data_source_monitor import (
     AccessRecord,
@@ -408,6 +408,65 @@ def _flatten_amazingdata_credentials(payload: Optional[Dict[str, Any]]) -> Dict[
     return result
 
 
+def _resolve_amazingdata_username(manager: Optional[DataSourceManager]) -> Optional[str]:
+    """尝试从运行态或配置中提取 AmazingData 用户名。"""
+    if manager is None:
+        return None
+
+    def _extract_from_mapping(candidate: Optional[Dict[str, Any]]) -> Optional[str]:
+        if not isinstance(candidate, dict):
+            return None
+        username = _flatten_amazingdata_credentials(candidate).get("username")
+        if isinstance(username, str):
+            username = username.strip()
+            if username:
+                return username
+        return None
+
+    try:
+        registry_config = manager.registry.get_config(DataSourceType.AMAZINGDATA)
+    except Exception:
+        registry_config = None
+    else:
+        if registry_config and isinstance(registry_config.config, dict):
+            username = _extract_from_mapping(registry_config.config)
+            if username:
+                return username
+
+    config_section = getattr(getattr(manager, "config", None), "amazingdata", None)
+    if config_section is not None:
+        raw_config: Dict[str, Any] = {}
+        for attr in ("username", "password", "host", "port"):
+            if hasattr(config_section, attr):
+                raw_config[attr] = getattr(config_section, attr)
+        connection_attr = getattr(config_section, "connection", None)
+        if connection_attr is not None:
+            if isinstance(connection_attr, dict):
+                raw_config["connection"] = connection_attr
+            elif hasattr(connection_attr, "model_dump"):
+                raw_config["connection"] = connection_attr.model_dump()
+            else:
+                raw_config["connection"] = {
+                    key: getattr(connection_attr, key)
+                    for key in ("username", "password", "host", "port")
+                    if hasattr(connection_attr, key)
+                }
+        username = _extract_from_mapping(raw_config)
+        if username:
+            return username
+
+    providers = getattr(manager, "providers", {})
+    provider = None
+    if isinstance(providers, dict):
+        provider = providers.get(DataSourceType.AMAZINGDATA)
+    if provider:
+        username = _extract_from_mapping(_get_provider_credentials(provider))
+        if username:
+            return username
+
+    return None
+
+
 def _normalize_amazingdata_credentials(raw: Dict[str, Any]) -> Dict[str, str]:
     normalized: Dict[str, str] = {}
     for key in ("username", "password", "host", "port"):
@@ -722,13 +781,22 @@ def _assemble_sources_payload(
     sources: Dict[str, Dict[str, Any]],
     metrics_map: Dict[str, Any],
     proxy_map: Dict[str, List[Tuple[str, Dict[str, Any], Any, Dict[str, Any]]]],
+        manager: Optional[DataSourceManager] = None,
 ) -> List[Dict[str, Any]]:
     """构建前端所需的数据源列表。"""
 
     payload: List[Dict[str, Any]] = []
+    resolved_amazing_username: Optional[str] = None
     for source_name, info in sources.items():
         config_info = dict(info.get("config", {}) or {})
         config_info.setdefault("enabled", info.get("available", False))
+        if source_name == DataSourceType.AMAZINGDATA.value:
+            username_value = config_info.get("username")
+            if not isinstance(username_value, str) or not username_value.strip():
+                if resolved_amazing_username is None:
+                    resolved_amazing_username = _resolve_amazingdata_username(manager)
+                if resolved_amazing_username:
+                    config_info["username"] = resolved_amazing_username
         metrics_payload = _build_metrics_payload(metrics_map.get(source_name))
         proxies = [
             _build_proxy_payload(proxy_name, proxy_info, proxy_metrics, proxy_meta)
@@ -988,7 +1056,7 @@ async def list_data_sources():
     report = manager.get_status_report()
     monitor = _monitor()
     sources, metrics_map, proxy_map = _extract_sources_context(report, monitor)
-    sources_payload = _assemble_sources_payload(sources, metrics_map, proxy_map)
+    sources_payload = _assemble_sources_payload(sources, metrics_map, proxy_map, manager)
     return APIResponse.success(sources_payload, "获取数据源列表成功")
 
 
@@ -1002,7 +1070,7 @@ async def get_data_source_monitor():
 
     sources, metrics_map, proxy_map = _extract_sources_context(report, monitor)
     normalized_report = _assemble_normalized_report(report, sources, proxy_map, metrics_map)
-    sources_payload = _assemble_sources_payload(sources, metrics_map, proxy_map)
+    sources_payload = _assemble_sources_payload(sources, metrics_map, proxy_map, manager)
     response = {
         "overview": _build_overview(sources_payload, normalized_report, monitor),
         "sources": sources_payload,

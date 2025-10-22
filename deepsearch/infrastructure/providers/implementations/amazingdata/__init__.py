@@ -1,16 +1,17 @@
-"""
-AmazingData 数据提供者实现
-包含所有35个API接口的完整实现
-"""
+"""AmazingData provider exports."""
 
 from .amazingdata import AmazingDataProvider
 from .amazingdata_extended import AmazingDataExtended
-from .amazingdata_realtime import AmazingDataRealtime
 from .amazingdata_process import ProcessIsolatedAmazingDataProvider
+from .amazingdata_realtime import AmazingDataRealtime
+from .board_source import AmazingDataBoardSource
+from .market_stream_adapter import AmazingDataMarketStreamAdapter
 
 __all__ = [
     "AmazingDataProvider",
     "AmazingDataExtended",
     "AmazingDataRealtime",
     "ProcessIsolatedAmazingDataProvider",
+    "AmazingDataMarketStreamAdapter",
+    "AmazingDataBoardSource",
 ]

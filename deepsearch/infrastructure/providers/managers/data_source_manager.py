@@ -34,6 +34,7 @@ DEFAULT_SOURCE_PRIORITY = {
     DataSourceType.AKSHARE: 30,
 }
 
+# 注意：用户名需要在前端表单中回显，因此不要加入到敏感字段过滤列表中
 _SENSITIVE_CONFIG_MARKERS = (
     "password",
     "secret",
@@ -44,7 +45,6 @@ _SENSITIVE_CONFIG_MARKERS = (
     "refresh_token",
     "apikey",
     "api_key",
-    "username",
 )
 
 

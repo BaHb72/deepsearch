@@ -19,6 +19,7 @@ from .database_connections import DatabaseConnectionConfigModel
 from .debug import DebugConfig
 from .health import HealthCheckConfig
 from .log import LogConfig, LogLevel
+from .market_data import MarketDataConfig, MarketRealtimeConfig, MarketRedisConfig, MarketWindowConfig
 from .monitoring import MonitoringConfig
 from .notifications import NotificationBaseUrls, NotificationCategoryConfig, NotificationsConfig
 from .performance import PerformanceConfig
@@ -51,6 +52,10 @@ __all__ = [
     "LogLevel",
     # 监控
     "MonitoringConfig",
+    "MarketDataConfig",
+    "MarketRealtimeConfig",
+    "MarketRedisConfig",
+    "MarketWindowConfig",
     # 性能
     "PerformanceConfig",
     # 运行时
