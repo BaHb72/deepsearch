@@ -100,13 +100,19 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         if pool:
             await asyncio.to_thread(pool.wait_for_login_slot, self._datasource_id)
         try:
+            username = str(getattr(self.config, "username", "") or "").strip()
+            password = str(getattr(self.config, "password", "") or "")
+            if not username or username.replace("*", "").strip() == "":
+                raise DataProviderError("AmazingData 进程模式缺少有效的用户名配置")
+            if not password:
+                raise DataProviderError("AmazingData 进程模式缺少有效的密码配置")
             try:
                 timeout_value = float(getattr(self.config, "timeout", 30.0))
             except (TypeError, ValueError):
                 timeout_value = 10.0
             login_request = AmazingDataLoginRequest(
-                username=getattr(self.config, "username", ""),
-                password=getattr(self.config, "password", ""),
+                username=username,
+                password=password,
                 host=getattr(self.config, "host", ""),
                 port=getattr(self.config, "port", 0),
                 timeout=max(timeout_value, 5.0),

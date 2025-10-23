@@ -335,6 +335,36 @@ class DataProviderRegistry:
                             if target and target not in data:
                                 data[target] = value
 
+                def _is_masked_credential(value: Any) -> bool:
+                    if not isinstance(value, str):
+                        return True
+                    stripped = value.strip()
+                    if not stripped:
+                        return True
+                    return all(ch == "*" for ch in stripped)
+
+                def _patch_missing_credentials(target: Dict[str, Any]) -> None:
+                    username_missing = _is_masked_credential(target.get("username"))
+                    password_missing = _is_masked_credential(target.get("password"))
+                    if not username_missing and not password_missing:
+                        return
+                    fallback_config = self._resolve_provider_config_from_settings(name)
+                    if not fallback_config:
+                        logger.warning(
+                            "AmazingData 配置缺少有效凭证且未找到 settings fallback，当前用户名长度=%s",
+                            len(target.get("username") or ""),
+                        )
+                        return
+                    fallback_payload = _extract_connection_payload(dict(fallback_config))
+                    if username_missing:
+                        fallback_username = fallback_payload.get("username")
+                        if isinstance(fallback_username, str) and fallback_username.strip():
+                            target["username"] = fallback_username
+                    if password_missing:
+                        fallback_password = fallback_payload.get("password")
+                        if isinstance(fallback_password, str) and fallback_password:
+                            target["password"] = fallback_password
+
                 def _validate_connection(source: str, data: Dict[str, Any]) -> None:
                     candidate = SettingsAmazingDataConnectionConfig.model_validate(data)
                     errors = candidate._collect_activation_errors()
@@ -364,6 +394,7 @@ class DataProviderRegistry:
                     _validate_connection("AmazingDataProvider registry config", flattened_config)
                     payload = dict(flattened_config)
                     _sanitize_payload(payload)
+                    _patch_missing_credentials(payload)
                     mode = _normalize_mode(payload.pop("implementation_mode", None))
                 else:
                     fallback_config = self._resolve_provider_config_from_settings(name)
@@ -373,6 +404,7 @@ class DataProviderRegistry:
                         _validate_connection("AmazingDataProvider settings config", flattened_config)
                         payload = dict(flattened_config)
                         _sanitize_payload(payload)
+                        _patch_missing_credentials(payload)
                         mode = _normalize_mode(payload.pop("implementation_mode", None))
                     else:
                         app_config = get_config()

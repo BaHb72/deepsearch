@@ -7,10 +7,11 @@ to reduce memory usage and improve caching efficiency.
 
 from __future__ import annotations
 
+import importlib
+import os
 from datetime import datetime
 from enum import Enum
 from threading import Lock
-import importlib
 from typing import TYPE_CHECKING, Any, Dict, Literal, MutableMapping, NotRequired, Optional, TypedDict, Union, cast
 
 from loguru import logger
@@ -233,8 +234,6 @@ class DataProviderFactory:
                         instance = AkShareProxyProvider()
 
                     elif normalized_type == "unified":
-                        from deepsearch.utils.data_sources import get_data_source_manager
-
                         instance = get_data_source_manager()
 
                     elif normalized_type == "market":
@@ -258,74 +257,107 @@ class DataProviderFactory:
                         fallback_reason = None
                         chosen_instance: Any | None = None
 
-                        try:
-                            from deepsearch.config import get_config
-                            from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
-                                AmazingDataProvider,
-                                ensure_amazingdata_provider_config,
-                            )
+                        use_legacy_path = bool(os.environ.get("DEEPSEARCH_AMAZINGDATA_STUB"))
 
-                            app_config = get_config()
-                            data_sources_cfg = getattr(app_config, "data_sources", {})
-                            if isinstance(data_sources_cfg, dict):
-                                providers_cfg = data_sources_cfg.get("providers", {})
-                            else:
-                                providers_cfg = {}
-
-                            provider_entry = providers_cfg.get("amazingdata", {})
-                            raw_config = provider_entry.get("config", {})
-
-                            connection_cfg = raw_config.get("connection", {})
-                            subscription_cfg = raw_config.get("subscription", {})
-                            cache_cfg = raw_config.get("cache", {})
-
-                            config_payload = {
-                                "username": connection_cfg.get("username", ""),
-                                "password": connection_cfg.get("password", ""),
-                                "host": connection_cfg.get("host", "101.230.159.234"),
-                                "port": connection_cfg.get("port", 8600),
-                                "timeout": float(connection_cfg.get("timeout", 10)),
-                                "retry_count": int(connection_cfg.get("max_retries", 3)),
-                                "heartbeat_interval": connection_cfg.get("heartbeat_interval", 60),
-                                "auto_reconnect": connection_cfg.get("auto_reconnect", True),
-                                "reconnect_interval": connection_cfg.get("reconnect_interval", 10),
-                                "subscription_batch_size": subscription_cfg.get("batch_size", 100),
-                                "max_subscriptions": subscription_cfg.get("max_symbols", 500),
-                                "subscription_enabled": subscription_cfg.get("enabled", True),
-                                "cache_enabled": cache_cfg.get("enabled", True),
-                                "cache_ttl": cache_cfg.get("ttl", 300),
-                                "worker_env": provider_entry.get("worker_env", {}),
-                                "tgw_log_path": connection_cfg.get("tgw_log_path", ""),
-                            }
-
-                            provider_config = ensure_amazingdata_provider_config(config_payload)
-
-                            provider = AmazingDataProvider(provider_config)
-                            await provider.initialize()
-                            chosen_instance = provider
-                            init_success = True
-                            logger.info("AmazingData provider initialized successfully")
-
-                            cls._provider_health[normalized_type] = {
-                                "status": "healthy",
-                                "provider": "amazingdata",
-                                "initialized_at": datetime.now().isoformat(),
-                            }
-
-                        except ImportError as e:
-                            fallback_reason = f"AmazingData provider not available: {e}"
-                            logger.warning(fallback_reason)
-
-                        except Exception as e:
-                            fallback_reason = f"Failed to initialize AmazingData provider: {e}"
-                            logger.error(fallback_reason)
-
-                            if "SDK尝试强制退出程序" in str(e):
+                        if not use_legacy_path:
+                            try:
+                                manager = get_data_source_manager()
+                                await manager.initialize()
+                                provider = manager.get_provider(RegistryDataSourceType.AMAZINGDATA)
+                                if provider is None:
+                                    fallback_reason = (
+                                        "AmazingData provider unavailable (check credentials/config)"
+                                    )
+                                    logger.warning(fallback_reason)
+                                    cls._record_provider_failure(
+                                        "amazingdata",
+                                        "NOT_AVAILABLE",
+                                        fallback_reason,
+                                    )
+                                else:
+                                    chosen_instance = provider
+                                    init_success = True
+                                    logger.info("AmazingData provider resolved via DataSourceManager")
+                                    cls._provider_health[normalized_type] = {
+                                        "status": "healthy",
+                                        "provider": "amazingdata",
+                                        "initialized_at": datetime.now().isoformat(),
+                                    }
+                                    cls._fallback_status.pop(normalized_type, None)
+                            except Exception as e:
                                 fallback_reason = (
-                                    "CRITICAL: AmazingData SDK attempted to exit the process"
+                                    f"Failed to resolve AmazingData provider via manager: {e}"
                                 )
-                                logger.critical(fallback_reason)
-                                cls._record_provider_failure("amazingdata", "SDK_EXIT", str(e))
+                                logger.error(fallback_reason)
+                                cls._record_provider_failure("amazingdata", "INIT_FAILED", str(e))
+                                if "SDK尝试强制退出" in str(e):
+                                    logger.critical(
+                                        "CRITICAL: AmazingData SDK attempted to exit the process"
+                                    )
+                                    cls._record_provider_failure("amazingdata", "SDK_EXIT", str(e))
+                        if not init_success:
+                            try:
+                                from deepsearch.config import get_config
+                                from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+                                    AmazingDataProvider,
+                                    ensure_amazingdata_provider_config,
+                                )
+
+                                app_config = get_config()
+                                data_sources_cfg = getattr(app_config, "data_sources", {})
+                                if isinstance(data_sources_cfg, dict):
+                                    providers_cfg = data_sources_cfg.get("providers", {})
+                                else:
+                                    providers_cfg = {}
+
+                                provider_entry = providers_cfg.get("amazingdata", {})
+                                raw_config = provider_entry.get("config", {})
+
+                                connection_cfg = raw_config.get("connection", {})
+                                subscription_cfg = raw_config.get("subscription", {})
+                                cache_cfg = raw_config.get("cache", {})
+
+                                config_payload = {
+                                    "username": connection_cfg.get("username", ""),
+                                    "password": connection_cfg.get("password", ""),
+                                    "host": connection_cfg.get("host", "101.230.159.234"),
+                                    "port": connection_cfg.get("port", 8600),
+                                    "timeout": float(connection_cfg.get("timeout", 10)),
+                                    "retry_count": int(connection_cfg.get("max_retries", 3)),
+                                    "heartbeat_interval": connection_cfg.get("heartbeat_interval", 60),
+                                    "auto_reconnect": connection_cfg.get("auto_reconnect", True),
+                                    "reconnect_interval": connection_cfg.get("reconnect_interval", 10),
+                                    "subscription_batch_size": subscription_cfg.get("batch_size", 100),
+                                    "max_subscriptions": subscription_cfg.get("max_symbols", 500),
+                                    "subscription_enabled": subscription_cfg.get("enabled", True),
+                                    "cache_enabled": cache_cfg.get("enabled", True),
+                                    "cache_ttl": cache_cfg.get("ttl", 300),
+                                    "worker_env": provider_entry.get("worker_env", {}),
+                                    "tgw_log_path": connection_cfg.get("tgw_log_path", ""),
+                                }
+
+                                provider_config = ensure_amazingdata_provider_config(config_payload)
+
+                                provider = AmazingDataProvider(provider_config)
+                                await provider.initialize()
+                                chosen_instance = provider
+                                init_success = True
+                                logger.info("AmazingData legacy provider initialized successfully")
+                                cls._provider_health[normalized_type] = {
+                                    "status": "healthy",
+                                    "provider": "amazingdata",
+                                    "initialized_at": datetime.now().isoformat(),
+                                }
+                                cls._fallback_status.pop(normalized_type, None)
+                            except Exception as legacy_exc:
+                                legacy_reason = fallback_reason or f"Failed to initialize AmazingData provider: {legacy_exc}"
+                                fallback_reason = legacy_reason
+                                logger.error(legacy_reason)
+                                if "SDK尝试强制退出" in str(legacy_exc):
+                                    logger.critical("CRITICAL: AmazingData SDK attempted to exit the process")
+                                    cls._record_provider_failure("amazingdata", "SDK_EXIT", str(legacy_exc))
+                                else:
+                                    cls._record_provider_failure("amazingdata", "INIT_FAILED", str(legacy_exc))
 
                         if not init_success:
                             reason_text = fallback_reason or "unknown failure"
@@ -347,12 +379,11 @@ class DataProviderFactory:
                                     "reason": reason_text,
                                     "timestamp": datetime.now().isoformat(),
                                 }
-
                                 cls._provider_health[normalized_type] = {
                                     "status": "degraded",
                                     "provider": "akshare",
-                                    "fallback_reason": reason_text,
                                     "initialized_at": datetime.now().isoformat(),
+                                    "fallback_reason": reason_text,
                                 }
 
                                 logger.info("Successfully fell back to AkShare provider")
@@ -596,5 +627,3 @@ async def get_market_service():
 async def get_qmt_provider():
     """FastAPI dependency for QMT provider."""
     return await DataProviderFactory.get_provider_async("qmt")
-
-

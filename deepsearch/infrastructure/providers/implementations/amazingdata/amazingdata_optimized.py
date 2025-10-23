@@ -740,6 +740,7 @@ class OptimizedAmazingDataProvider(DataProvider):
         # 连接状态
         self._connected = False
         self._login_time: datetime | None = None
+        self._stats: Dict[str, Any] = {}
 
         # 任务管理
         self._heartbeat_task: asyncio.Task[None] | None = None
@@ -793,18 +794,31 @@ class OptimizedAmazingDataProvider(DataProvider):
         try:
             logger.info("正在登录 AmazingData (优化版本)...")
 
+            username = (self.config.username or "").strip()
+            password = (self.config.password or "").strip()
+            if not username or username.replace("*", "").strip() == "":
+                raise DataProviderError("AmazingData 优化版缺少有效的用户名配置")
+            if not password:
+                raise DataProviderError("AmazingData 优化版缺少有效的密码配置")
+
             # 使用优化的线程池执行登录
             sdk = self._require_sdk()
-            result = await asyncio.wait_for(
-                self.thread_pool.execute_async(
-                    sdk.login,
-                    self.config.username,
-                    self.config.password,
-                    self.config.host,
-                    self.config.port,
-                ),
-                timeout=5.0,
-            )
+            try:
+                result = await asyncio.wait_for(
+                    self.thread_pool.execute_async(
+                        sdk.login,
+                        self.config.username,
+                        self.config.password,
+                        self.config.host,
+                        self.config.port,
+                    ),
+                    timeout=5.0,
+                )
+            except SystemExit as exc:
+                exit_code = getattr(exc, "code", 0)
+                error_msg = f"SDK尝试强制退出，请查看 exit code: {exit_code}"
+                await self._trigger_alert("SDK_EXIT", error_msg)
+                raise DataProviderError(error_msg) from exc
 
             if result == 0 or result is True:
                 self._connected = True
@@ -820,7 +834,19 @@ class OptimizedAmazingDataProvider(DataProvider):
             return False
         except Exception as e:
             logger.error(f"登录异常: {e}")
+            if isinstance(e, DataProviderError):
+                raise
             return False
+
+    async def _trigger_alert(self, alert_type: str, message: str) -> None:
+        """触发告警并记录基础统计"""
+        try:
+            logger.critical(f"[ALERT][{alert_type}] {message}")
+            self.monitoring.record_event("alert", {"type": alert_type, "message": message})
+            alerts = cast(List[Dict[str, str]], self._stats.setdefault(alert_type, []))
+            alerts.append({"timestamp": datetime.now().isoformat(), "message": message})
+        except Exception as exc:
+            logger.error(f"Failed to trigger alert: {exc}")
 
     async def _logout(self) -> None:
         """登出 AmazingData"""
