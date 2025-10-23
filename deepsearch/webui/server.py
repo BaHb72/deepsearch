@@ -614,7 +614,7 @@ async def refresh_market_data_once(app_state: AppState) -> None:
         try:
             await pipeline.run_once()
         except Exception as exc:
-            logger.error("市场数据实时刷新失败: %s", exc)
+            logger.error("市场数据实时刷新失败: {}", exc)
 
 
 async def shutdown_market_data_runtime(app_state: AppState) -> None:
