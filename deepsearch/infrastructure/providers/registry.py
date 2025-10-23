@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
+
 class ProviderType(Enum):
     """数据提供者类型"""
 
@@ -277,17 +278,44 @@ class DataProviderRegistry:
                 raw_config = dict(resolved_config or {})
 
                 def _extract_connection_payload(data: Dict[str, Any]) -> Dict[str, Any]:
-                    if isinstance(data, dict) and "connection" in data:
-                        connection_cfg = data["connection"] or {}
-                        if not isinstance(connection_cfg, dict):
-                            raise ValueError(
-                                "AmazingDataProvider registration config connection field must be a dict"
-                            )
-                        flattened = dict(connection_cfg)
-                        extras = {k: v for k, v in data.items() if k != "connection"}
-                        flattened.update(extras)
-                        return flattened
-                    return data
+                    if not isinstance(data, dict) or "connection" not in data:
+                        return data
+
+                    connection_cfg = data["connection"] or {}
+                    if not isinstance(connection_cfg, dict):
+                        raise ValueError(
+                            "AmazingDataProvider registration config connection field must be a dict"
+                        )
+
+                    flattened: Dict[str, Any] = dict(connection_cfg)
+                    extras = {k: v for k, v in data.items() if k != "connection"}
+
+                    subscription_cfg = extras.pop("subscription", None)
+                    cache_cfg = extras.pop("cache", None)
+
+                    flattened.update(extras)
+
+                    if isinstance(subscription_cfg, dict):
+                        if "subscription_enabled" not in flattened:
+                            flattened["subscription_enabled"] = subscription_cfg.get("enabled", True)
+                        if (
+                                "subscription_batch_size" not in flattened
+                                and subscription_cfg.get("batch_size") is not None
+                        ):
+                            flattened["subscription_batch_size"] = subscription_cfg.get("batch_size")
+                        if (
+                                "max_subscriptions" not in flattened
+                                and subscription_cfg.get("max_symbols") is not None
+                        ):
+                            flattened["max_subscriptions"] = subscription_cfg.get("max_symbols")
+
+                    if isinstance(cache_cfg, dict):
+                        if "cache_enabled" not in flattened:
+                            flattened["cache_enabled"] = cache_cfg.get("enabled", True)
+                        if "cache_ttl" not in flattened and cache_cfg.get("ttl") is not None:
+                            flattened["cache_ttl"] = cache_cfg.get("ttl")
+
+                    return flattened
 
                 def _sanitize_payload(data: Dict[str, Any]) -> None:
                     for key in ("name", "provider_name", "type"):

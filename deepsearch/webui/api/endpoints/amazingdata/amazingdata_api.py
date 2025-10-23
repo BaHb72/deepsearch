@@ -155,13 +155,21 @@ async def get_amazingdata_provider() -> AmazingDataExtended:
                     payload = dict(direct_config)
 
             if payload is None:
-                data_sources = getattr(config, "data_sources", None)
+                data_sources_section = getattr(config, "data_sources", None)
                 amazingdata_section: Any | None = None
-                if data_sources is not None:
-                    if hasattr(data_sources, "amazingdata"):
-                        amazingdata_section = getattr(data_sources, "amazingdata")
-                    elif isinstance(data_sources, Mapping):
-                        amazingdata_section = data_sources.get("amazingdata")
+                if data_sources_section is not None:
+                    providers_section = getattr(data_sources_section, "providers", None)
+                    if providers_section is None and hasattr(data_sources_section, "model_dump"):
+                        providers_section = data_sources_section.model_dump().get("providers")
+                    if providers_section is not None and hasattr(providers_section, "get"):
+                        amazingdata_section = providers_section.get("amazingdata")
+                if amazingdata_section is None and hasattr(data_sources_section, "model_dump"):
+                    try:
+                        providers_map = data_sources_section.model_dump().get("providers", {})
+                    except Exception:
+                        providers_map = {}
+                    if isinstance(providers_map, dict):
+                        amazingdata_section = providers_map.get("amazingdata")
 
                 if amazingdata_section is not None:
                     if hasattr(amazingdata_section, "to_provider_payload"):

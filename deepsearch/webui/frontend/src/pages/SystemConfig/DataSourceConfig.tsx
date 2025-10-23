@@ -151,6 +151,47 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
       ? initialValues.rememberCredential
       : true
 
+    const initialConnection = React.useMemo(() => {
+        const connectionRaw = initialValues?.config?.connection
+        if (connectionRaw && typeof connectionRaw === 'object') {
+            return {...connectionRaw}
+        }
+        return {}
+    }, [initialValues?.config?.connection])
+
+    const formInitialValues = React.useMemo(() => {
+        const baseConfig = {
+            timeout: 30000,
+            retryCount: 3,
+            rateLimit: 100,
+            ...(initialValues?.config || {}),
+        } as Record<string, any>
+
+        if (initialValues?.config?.connection && typeof initialValues.config.connection === 'object') {
+            baseConfig.connection = {...initialValues.config.connection}
+        }
+
+        if (initialValues?.type === 'amazingdata') {
+            if (initialConnection.host !== undefined && baseConfig.host === undefined) {
+                baseConfig.host = initialConnection.host
+            }
+            if (initialConnection.port !== undefined && baseConfig.port === undefined) {
+                baseConfig.port = initialConnection.port
+            }
+            if (initialConnection.username !== undefined && baseConfig.username === undefined) {
+                baseConfig.username = initialConnection.username
+            }
+        }
+
+        return {
+            enabled: true,
+            priority: 1,
+            ...initialValues,
+            rememberCredential: initialRememberCredential,
+            config: baseConfig,
+        }
+    }, [initialConnection, initialRememberCredential, initialValues])
+
   const lastTestTime = initialValues?.lastTestTime || initialValues?.last_test_time || null
   const testSummary = normalizeTestSummary(
     initialValues?.testSummary ?? initialValues?.test_summary ?? null
@@ -160,7 +201,8 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
     setSourceType(initialValues?.type || 'akshare')
     setCredentialEditable(!hasSavedCredential)
     form.resetFields()
-  }, [form, initialValues?.id, initialValues?.type, hasSavedCredential])
+      form.setFieldsValue(formInitialValues)
+  }, [form, formInitialValues, initialValues?.type, hasSavedCredential])
 
   const buildDataSourcePayload = React.useCallback(
     (rawValues: Record<string, any>) => {
@@ -173,6 +215,57 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
         } else if (payload.config.password === '' || payload.config.password == null) {
           delete payload.config.password
         }
+
+          if ((payload.type ?? sourceType) === 'amazingdata') {
+              const {
+                  host,
+                  port,
+                  username,
+                  password,
+                  connection: nestedConnection,
+                  ...restConfig
+              } = payload.config
+
+              const connectionPayload = {
+                  ...(nestedConnection && typeof nestedConnection === 'object' ? nestedConnection : {}),
+              }
+
+              if (
+                  (!nestedConnection || typeof nestedConnection !== 'object') &&
+                  Object.keys(connectionPayload).length === 0
+              ) {
+                  Object.assign(connectionPayload, initialConnection)
+              } else if (Object.keys(initialConnection).length) {
+                  for (const [key, value] of Object.entries(initialConnection)) {
+                      if (!(key in connectionPayload)) {
+                          connectionPayload[key] = value
+                      }
+                  }
+              }
+
+              if (host !== undefined) {
+                  connectionPayload.host = host
+              }
+              if (port !== undefined) {
+                  connectionPayload.port = port
+              }
+              if (username !== undefined) {
+                  connectionPayload.username = username
+              }
+
+              if (credentialEditable || !hasSavedCredential) {
+                  if (password !== undefined) {
+                      connectionPayload.password = password
+                  }
+              }
+
+              const cleanedConfig = {...restConfig}
+              if (Object.keys(connectionPayload).length > 0) {
+                  cleanedConfig.connection = connectionPayload
+              }
+
+              payload.config = cleanedConfig
+          }
       }
 
       const rememberCredentialValue = rawValues?.rememberCredential
@@ -184,7 +277,7 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
 
       return payload
     },
-    [credentialEditable, hasSavedCredential]
+      [credentialEditable, hasSavedCredential, initialConnection, sourceType]
   )
 
   const handleTest = async () => {
@@ -339,23 +432,12 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }) => {
         )}
       {renderTestInfo()}
       <Form
-      form={form}
-      layout="vertical"
-      key={initialValues?.id ?? 'create'}
-      initialValues={{
-        enabled: true,
-        priority: 1,
-        ...initialValues,
-        rememberCredential: initialRememberCredential,
-        config: {
-          timeout: 30000,
-          retryCount: 3,
-          rateLimit: 100,
-          ...initialValues?.config
-        }
-      }}
-      onFinish={handleFinish}
-    >
+          form={form}
+          layout="vertical"
+          key={initialValues?.id ?? 'create'}
+          initialValues={formInitialValues}
+          onFinish={handleFinish}
+      >
       <Row gutter={16}>
         <Col span={12}>
           <Form.Item

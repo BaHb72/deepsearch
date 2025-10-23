@@ -489,7 +489,17 @@ class DataSourceManager:
         self._fallback_order = []
         self._default_source = None
 
-        data_sources = getattr(self.config, "data_sources", None) or {}
+        raw_data_sources = getattr(self.config, "data_sources", None)
+        if raw_data_sources:
+            if hasattr(raw_data_sources, "model_dump"):
+                data_sources = cast(Dict[str, Any], raw_data_sources.model_dump())
+            elif isinstance(raw_data_sources, dict):
+                data_sources = dict(raw_data_sources)
+            else:
+                data_sources = dict(getattr(raw_data_sources, "__dict__", {}))
+        else:
+            data_sources = {}
+
         if data_sources:
             self._load_data_sources_config(data_sources)
         else:
@@ -633,6 +643,58 @@ class DataSourceManager:
                 result.append(source_type)
         return result
 
+    def _coerce_float(
+            self,
+            value: Any,
+            *,
+            default: float,
+            field: str,
+            provider: str,
+    ) -> float:
+        if value is None:
+            return default
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return default
+            try:
+                return float(stripped)
+            except ValueError:
+                pass
+        logger.warning(
+            f"���Դ {provider} �ֶ� {field} ֵ {value!r} ����ת��Ϊ float����ʹ��Ĭ��ֵ {default}"
+        )
+        return default
+
+    def _coerce_int(
+            self,
+            value: Any,
+            *,
+            default: int,
+            field: str,
+            provider: str,
+    ) -> int:
+        if value is None:
+            return default
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return default
+            try:
+                return int(stripped)
+            except ValueError:
+                pass
+        logger.warning(
+            f"���Դ {provider} �ֶ� {field} ֵ {value!r} ����ת��Ϊ int����ʹ��Ĭ��ֵ {default}"
+        )
+        return default
+
     def is_provider_enabled(self, source: Union[str, DataSourceType]) -> bool:
         """判断指定数据源在当前配置中是否启用。"""
 
@@ -693,8 +755,13 @@ class DataSourceManager:
         data = self._ensure_dict(normalized)
         enabled = bool(data.get("enabled", True))
         priority = int(data.get("priority", DEFAULT_SOURCE_PRIORITY.get(source_type, 100)))
-        timeout = float(data.get("timeout", 10.0))
-        retry_count = int(data.get("retry_count", 3))
+        timeout = self._coerce_float(data.get("timeout"), default=10.0, field="timeout", provider=provider_name)
+        retry_count = self._coerce_int(
+            data.get("retry_count"),
+            default=3,
+            field="retry_count",
+            provider=provider_name,
+        )
         fallback_enabled = bool(data.get("fallback_enabled", True))
         fallback_sources = self._normalize_type_list(data.get("fallback_sources"))
         if fallback_enabled and not fallback_sources and self._fallback_order:

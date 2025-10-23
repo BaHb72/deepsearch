@@ -80,6 +80,7 @@ data_sources:
   default: amazingdata
   fallback_order:
   - amazingdata
+  - cloudflare
   - akshare
   circuit_breaker:
     enabled: true
@@ -91,30 +92,28 @@ data_sources:
     timeout: 5
     retry_count: 3
     backoff_factor: 2
-    providers:
-      amazingdata:
-        enabled: false
-        priority: 1
-        fallback_sources:
+  providers:
+    amazingdata:
+      enabled: false
+      priority: 1
+      fallback_sources:
         - akshare
-        has_saved_credential: false
-        config:
-          implementation_mode: process
-          username: your_amazingdata_username
-          password: your_amazingdata_password
+      has_saved_credential: true
+      config:
+        implementation_mode: process
+        connection:
+          username: 212200038719
+          password: 212200038719@2025
           host: 101.230.159.234
           port: 8600
-          timeout: 10
+          timeout: 5000
           heartbeat_interval: 60
           auto_reconnect: true
           reconnect_interval: 10
           max_retries: 3
           network_provider: telecom
-          tgw_log_path: C:/Galaxy/gateway/logs
           python_interpreter_path: runtime/interpreters/py39/Scripts/python.exe
-        local:
-          path: D:/AmazingData/cache
-          use_local: false
+          tgw_log_path: C:/Galaxy/gateway/logs
         subscription:
           enabled: true
           batch_size: 100
@@ -133,44 +132,9 @@ data_sources:
           timeout: 5000
     akshare:
       enabled: true
-      priority: 3
-      config:
-        mode: proxy
-        timeout: 30
-        proxy:
-          worker_url: https://your-cloudflare-worker.example.com
-          timeout: 30
-          retry_count: 3
-          fallback_to_direct: true
-          cache:
-            enabled: true
-            ttl: 300
-  providers:
-    amazingdata:
-      enabled: false
-      priority: 1
-      timeout: 10.0
-      retry_count: 3
-      fallback_enabled: true
-      fallback_sources:
-      - akshare
-      config:
-        host: 1.2.3.4
-        timeout: 5000
-        implementation_mode: process
-        username: demo_user
-        password: demo_password
-        port: 8600
-      has_saved_credential: true
-      provider_name: amazingdata
-    akshare:
-      enabled: true
       priority: 2
-      timeout: 30.0
-      retry_count: 3
-      fallback_enabled: false
       config:
-        mode: proxy
+        mode: direct
         timeout: 30
         proxy:
           enabled: true

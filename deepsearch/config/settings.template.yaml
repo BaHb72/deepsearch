@@ -72,29 +72,21 @@ database:
 
 # 数据源统一配置
 data_sources:
-  default: amazingdata  # 默认数据源
-
-  # 降级优先级
+  default: amazingdata
   fallback_order:
     - amazingdata
     - cloudflare
     - akshare
-
-  # 熔断器配置
   circuit_breaker:
     enabled: true
-    failure_threshold: 5  # 失败次数阈值
-    recovery_timeout: 60  # 恢复超时（秒）
-    half_open_attempts: 3  # 半开状态尝试次数
-
-  # 故障转移配置
+    failure_threshold: 5
+    recovery_timeout: 60
+    half_open_attempts: 3
   failover:
     enabled: true
-    timeout: 5  # 超时时间（秒）
-    retry_count: 3  # 重试次数
-    backoff_factor: 2  # 退避因子
-
-  # 数据提供者配置
+    timeout: 5
+    retry_count: 3
+    backoff_factor: 2
   providers:
     amazingdata:
       enabled: true
@@ -103,7 +95,6 @@ data_sources:
         - cloudflare
         - akshare
       has_saved_credential: false
-      type: amazingdata
       config:
         implementation_mode: process
         connection:
@@ -111,41 +102,45 @@ data_sources:
           password: your_amazingdata_password
           host: 101.230.159.234
           port: 8600
-          network_provider: telecom
           timeout: 10
-          max_retries: 3
           heartbeat_interval: 60
           auto_reconnect: true
           reconnect_interval: 10
-        local:
-          path: D://AmazingData_local_data//
-          use_local: true
+          max_retries: 3
+          network_provider: telecom
         subscription:
           enabled: true
           batch_size: 100
           max_symbols: 500
           auto_resubscribe: true
+        cache:
+          enabled: true
+          ttl: 300
+          max_size: 10000
     cloudflare:
       enabled: true
       priority: 2
-      has_saved_credential: false
-      type: cloudflare
       config:
         worker_url: https://your-cloudflare-worker.example.com
         timeout: 30
         retry_count: 3
+        fallback_to_direct: true
     akshare:
       enabled: true
       priority: 3
-      type: akshare
       config:
-        mode: direct
+        mode: proxy
         timeout: 30
         proxy:
-          enabled: false
+          enabled: true
+          worker_url: https://akshare-proxy.example.com
+          timeout: 15
+          retry_count: 3
+          fallback_to_direct: true
+          cache:
+            enabled: true
+            ttl: 300
 
-
-# 消息总线配置
 message_bus:
   buses:
     inmem:

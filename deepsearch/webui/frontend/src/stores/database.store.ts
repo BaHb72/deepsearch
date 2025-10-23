@@ -297,6 +297,35 @@ const normalizeDataSource = (source: JsonObject): DataSource => {
     throw new Error('无效的数据源数据')
   }
 
+    const rawConfig =
+        source.config && typeof source.config === 'object'
+            ? (source.config as JsonObject)
+            : ({} as JsonObject)
+    const configForState: Record<string, any> = {...rawConfig}
+
+    const isAmazingData =
+        (typeof source.type === 'string' && source.type.toLowerCase() === 'amazingdata') ||
+        (typeof rawConfig.provider_name === 'string' &&
+            rawConfig.provider_name.toLowerCase() === 'amazingdata')
+
+    if (isAmazingData) {
+        const connectionRaw =
+            rawConfig.connection && typeof rawConfig.connection === 'object'
+                ? (rawConfig.connection as JsonObject)
+                : undefined
+        if (connectionRaw) {
+            if (configForState.host === undefined && connectionRaw.host !== undefined) {
+                configForState.host = connectionRaw.host
+            }
+            if (configForState.port === undefined && connectionRaw.port !== undefined) {
+                configForState.port = connectionRaw.port
+            }
+            if (configForState.username === undefined && connectionRaw.username !== undefined) {
+                configForState.username = connectionRaw.username
+            }
+        }
+    }
+
   const statusMeta = getDataSourceStatusMeta(source.status)
   const lastTestTime = normalizeDateValue(
     source.lastTestTime ?? source.last_test_time ?? source.last_tested_at
@@ -350,7 +379,7 @@ const normalizeDataSource = (source: JsonObject): DataSource => {
   // - 其次回退到 config.enabled（部分后端实现将其内嵌在 config）
   // - 默认值改为 false，避免缺失字段时误判为已启用
   const enabledRawTop = (source as any).enabled ?? (source as any).is_enabled
-  const enabledFromConfig = (source as any)?.config?.enabled
+    const enabledFromConfig = (configForState as any)?.enabled
   const enabled =
     typeof enabledRawTop === 'boolean'
       ? enabledRawTop
@@ -360,11 +389,11 @@ const normalizeDataSource = (source: JsonObject): DataSource => {
 
   return {
     id: (source.id ?? source.name ?? source.type ?? Date.now()) as number | string,
-    name: source.name ?? source.config?.name ?? '未命名数据源',
+      name: source.name ?? (configForState as any)?.name ?? '未命名数据源',
     type: source.type ?? 'unknown',
     enabled,
     priority: Number(source.priority ?? 0),
-    config: source.config ?? {},
+      config: configForState,
     status: statusMeta.value,
     available,
     lastTestTime,

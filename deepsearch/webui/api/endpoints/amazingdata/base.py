@@ -50,11 +50,30 @@ async def get_amazingdata_provider() -> AmazingDataExtended:
             from deepsearch.config import get_config
 
             config = get_config()
-            data_sources = getattr(config, "data_sources", None)
-            amazingdata_config = getattr(data_sources, "amazingdata", None)
+            data_sources_section = getattr(config, "data_sources", None)
+            amazingdata_config = None
+            if data_sources_section is not None:
+                providers_section = getattr(data_sources_section, "providers", None)
+                if providers_section is None and hasattr(data_sources_section, "model_dump"):
+                    providers_section = data_sources_section.model_dump().get("providers")
+                if providers_section is not None and hasattr(providers_section, "get"):
+                    amazingdata_config = providers_section.get("amazingdata")
+            if amazingdata_config is None and hasattr(data_sources_section, "model_dump"):
+                try:
+                    providers_map = data_sources_section.model_dump().get("providers", {})
+                except Exception:
+                    providers_map = {}
+                if isinstance(providers_map, dict):
+                    amazingdata_config = providers_map.get("amazingdata")
             if amazingdata_config is None:
                 raise HTTPException(status_code=500, detail="AmazingData 配置缺失")
-            provider = AmazingDataExtended(amazingdata_config.model_dump())
+            if hasattr(amazingdata_config, "model_dump"):
+                amazingdata_payload = amazingdata_config.model_dump()
+            elif isinstance(amazingdata_config, Mapping):
+                amazingdata_payload = dict(amazingdata_config)
+            else:
+                raise HTTPException(status_code=500, detail="AmazingData 配置格式不受支持")
+            provider = AmazingDataExtended(amazingdata_payload)
             await provider.initialize()
         return provider
     except Exception as e:

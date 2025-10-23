@@ -20,6 +20,7 @@ from .models import (
     AppConfig,
     MarketDataConfig,
     CloudflareWorkersConfig,
+    DataSourcesConfig,
     DatabaseConfig,
     DatabaseConnectionConfigModel,
     DebugConfig,
@@ -59,7 +60,7 @@ class Settings(BaseSettings):
     cloudflare_workers: Optional[CloudflareWorkersConfig] = None  # Workers 代理配置
     notifications: Optional[NotificationsConfig] = None  # 通知推送配置
     data_providers: Optional[DataFeedConfig] = None
-    data_sources: Optional[Dict[str, Any]] = None  # 统一的数据源配置
+    data_sources: Optional[DataSourcesConfig] = None  # 统一的数据源配置
     market_data: Optional[MarketDataConfig] = None  # 市场数据实时配置
     database_connections: Optional[List[DatabaseConnectionConfigModel]] = None  # �����������б�
 

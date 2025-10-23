@@ -35,21 +35,42 @@ DeepSearch 的数据源管理功能用于维护 AmazingData 连接信息、健�
 关键段落示例：
 ```yaml
 data_sources:
+  default: amazingdata
+  fallback_order:
+    - amazingdata
+    - cloudflare
+    - akshare
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    recovery_timeout: 60
+  failover:
+    enabled: true
+    timeout: 5
+    retry_count: 3
+    backoff_factor: 2
   providers:
     amazingdata:
       enabled: true
       priority: 1
+      fallback_sources:
+        - cloudflare
+        - akshare
       config:
+        implementation_mode: process
         connection:
           username: your_username
           password: your_password
           host: 101.230.159.234
           port: 8600
-          backup_hosts:
-            - 140.206.44.234:8600
-        retry:
-          max_attempts: 3
-          backoff: 5s
+          timeout: 10
+          heartbeat_interval: 60
+          auto_reconnect: true
+          reconnect_interval: 10
+        subscription:
+          enabled: true
+          batch_size: 100
+          max_symbols: 500
         cache:
           enabled: true
           ttl: 300
