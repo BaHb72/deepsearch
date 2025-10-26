@@ -521,6 +521,8 @@ class DataSourceManager:
         if not self._default_source and self._fallback_order:
             self._default_source = self._fallback_order[0]
 
+        self._update_fallback_order_config()
+
     def _load_data_sources_config(self, data_sources: Dict[str, Any]) -> None:
         """解析 data_sources.providers 配置并注册数据源。"""
 
@@ -630,6 +632,151 @@ class DataSourceManager:
 
         akshare_normalized["config"] = akshare_config
         providers_dict["akshare"] = akshare_normalized
+
+    def _update_fallback_order_config(self) -> None:
+        """���� runtime config �е� fallback_order �� default ����"""
+        fallback_values = [item.value for item in self._fallback_order]
+        default_value = self._default_source.value if self._default_source else None
+
+        data_sources_section = getattr(self.config, "data_sources", None)
+        if isinstance(data_sources_section, dict):
+            if fallback_values:
+                data_sources_section["fallback_order"] = fallback_values
+            else:
+                data_sources_section.pop("fallback_order", None)
+            if default_value:
+                data_sources_section["default"] = default_value
+            else:
+                data_sources_section.pop("default", None)
+            return
+
+        if data_sources_section is None:
+            return
+
+        if hasattr(data_sources_section, "fallback_order"):
+            try:
+                data_sources_section.fallback_order = list(fallback_values)
+            except Exception:  # pragma: no cover - ���ͱ����쳣
+                logger.debug("�� runtime config д�� fallback_order ʱ�����쳣", exc_info=True)
+
+        if hasattr(data_sources_section, "default"):
+            try:
+                data_sources_section.default = default_value
+            except Exception:  # pragma: no cover - ���ͱ����쳣
+                logger.debug("�� runtime config д�� default ʱ�����쳣", exc_info=True)
+
+    def _update_provider_snapshot(self, source_type: DataSourceType, config: DataSourceConfig) -> None:
+        """ͬ���� runtime config �е�����Դ������� fallback ���ã�����������ͨ�� UI ����ʾ"""
+        data_sources_section = getattr(self.config, "data_sources", None)
+        fallback_sources_raw = list(config.fallback_sources or [])
+        fallback_sources_str = [item.value if isinstance(item, DataSourceType) else str(item) for item in
+                                fallback_sources_raw]
+        enabled_flag = bool(config.enabled)
+        fallback_enabled_flag = bool(fallback_sources_raw)
+
+        def _apply(entry: Any) -> None:
+            if isinstance(entry, dict):
+                entry["fallback_sources"] = fallback_sources_str
+                entry["fallback_enabled"] = fallback_enabled_flag
+                entry["enabled"] = enabled_flag
+                return
+            if hasattr(entry, "fallback_sources"):
+                try:
+                    entry.fallback_sources = list(fallback_sources_raw)
+                except Exception:
+                    entry.fallback_sources = list(fallback_sources_str)
+            if hasattr(entry, "fallback_enabled"):
+                entry.fallback_enabled = fallback_enabled_flag
+            if hasattr(entry, "enabled"):
+                entry.enabled = enabled_flag
+
+        if isinstance(data_sources_section, dict):
+            providers_section = data_sources_section.setdefault("providers", {})
+            entry = providers_section.setdefault(source_type.value, {})
+            _apply(entry)
+            return
+
+        if data_sources_section is None:
+            return
+
+        providers_attr = getattr(data_sources_section, "providers", None)
+        if providers_attr is None:
+            setattr(data_sources_section, "providers", {source_type.value: {}})
+            providers_attr = getattr(data_sources_section, "providers")
+
+        if isinstance(providers_attr, dict):
+            entry = providers_attr.setdefault(source_type.value, {})
+            _apply(entry)
+        else:
+            existing_entry = getattr(providers_attr, source_type.value, None)
+            if existing_entry is None:
+                try:
+                    setattr(providers_attr, source_type.value, {})
+                    existing_entry = getattr(providers_attr, source_type.value)
+                except Exception:
+                    logger.debug(
+                        "providers �ṹ�����ɱ� dict ���޷��Զ�ͬ���ڴ�� config ������� fallback ���ð�",
+                        exc_info=True,
+                    )
+                    return
+            _apply(existing_entry)
+
+    def _handle_akshare_disabled(self, config: DataSourceConfig) -> None:
+        """���������� AkShare ����ʱ��Ҫ�����߼�"""
+        config.fallback_sources = []
+        config.fallback_enabled = False
+
+        if isinstance(config.config, dict):
+            proxy_cfg = config.config.get("proxy")
+            if isinstance(proxy_cfg, dict):
+                proxy_cfg["enabled"] = False
+            config.config["mode"] = "direct"
+
+        removed = False
+        if DataSourceType.AKSHARE in self._fallback_order:
+            self._fallback_order = [
+                source for source in self._fallback_order if source != DataSourceType.AKSHARE
+            ]
+            removed = True
+
+        if self._default_source == DataSourceType.AKSHARE:
+            self._default_source = self._fallback_order[0] if self._fallback_order else None
+            removed = True
+
+        for other_type, other_config in list(self.registry._configs.items()):
+            if other_type == DataSourceType.AKSHARE:
+                continue
+            if DataSourceType.AKSHARE in other_config.fallback_sources:
+                other_config.fallback_sources = [
+                    source for source in other_config.fallback_sources if source != DataSourceType.AKSHARE
+                ]
+                if not other_config.fallback_sources:
+                    other_config.fallback_enabled = False
+                self._update_provider_snapshot(other_type, other_config)
+                removed = True
+
+        self._update_provider_snapshot(DataSourceType.AKSHARE, config)
+
+        if removed:
+            self._update_fallback_order_config()
+
+    def _handle_akshare_enabled(self, config: DataSourceConfig) -> None:
+        """�������� AkShare ����ʱ���� fallback ��ͬ���߼�"""
+        if DataSourceType.AKSHARE not in self._fallback_order:
+            self._fallback_order.append(DataSourceType.AKSHARE)
+
+        if not self._default_source:
+            self._default_source = self._fallback_order[0]
+
+        if config.fallback_enabled and not config.fallback_sources:
+            config.fallback_sources = [
+                source for source in self._fallback_order if source != DataSourceType.AKSHARE
+            ]
+        elif not config.fallback_enabled:
+            config.fallback_sources = []
+
+        self._update_provider_snapshot(DataSourceType.AKSHARE, config)
+        self._update_fallback_order_config()
 
     def _normalize_type_list(self, values: Any) -> List[DataSourceType]:
         result: List[DataSourceType] = []
@@ -1898,6 +2045,12 @@ class DataSourceManager:
             return True
 
         config.enabled = True
+        if source_type == DataSourceType.AKSHARE:
+            self._handle_akshare_enabled(config)
+        else:
+            self._update_provider_snapshot(source_type, config)
+            self._update_fallback_order_config()
+
         if reinitialize and self.initialized:
             self.initialized = False
 
@@ -1934,6 +2087,11 @@ class DataSourceManager:
             return True
 
         config.enabled = False
+        if source_type == DataSourceType.AKSHARE:
+            self._handle_akshare_disabled(config)
+        else:
+            self._update_provider_snapshot(source_type, config)
+            self._update_fallback_order_config()
 
         provider = self.providers.pop(source_type, None)
         if provider and hasattr(provider, "close"):

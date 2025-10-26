@@ -113,7 +113,7 @@ data_sources:
 
 - 监控线程每 30 秒轮询 `AmazingDataProcessProxy.health_check()`，根据 `ok`/`degraded`/`error` 三种状态更新进程元数据，仅当状态变为
   `error` 时才触发自动重启。
-- Worker 内置轻量探针，优先调用 SDK 自带的 `health_check`，若缺失则回退到 `get_version` 及 `query_api`
-  系列方法，并仅返回延迟、探针名称、错误摘要等脱敏信息。
+- Worker 探针优先调用 SDK 自带的 `health_check`，如缺失则回退至 `get_version`
+  以及 `BaseData.get_calendar` / `BaseData.get_code_list` 等轻量接口，用于确认连通性并记录摘要/时延。
 - 状态为 `degraded` 时记录警告但保持进程存活，便于排查网络或登录异常；恢复到 `ok` 会自动写入恢复日志。
 - `AmazingDataSafeWrapper.get_stats()` 暴露 `last_health_status` 字段，监控中心与前端面板可直接读取并展示健康详情。

@@ -78,6 +78,60 @@ def _ensure_float(value: object | None, default: float = 0.0) -> float:
             return default
     return default
 
+
+def _resolve_constant_variant(namespace: object | None, names: Sequence[str],
+                              fallback: Any | None = None) -> Any | None:
+    """���Դ���� namespace ��ȡָ�����ֵ�������ȡ�������� value �ֶΡ�"""
+    if namespace is None:
+        return fallback
+    for name in names:
+        candidate = getattr(namespace, name, None)
+        if candidate is None:
+            continue
+        return getattr(candidate, "value", candidate)
+    return fallback
+
+
+def _normalize_date_to_int(value: object | None) -> Optional[int]:
+    """�������ڸ�ʽΪ YYYYMMDD ����������ע����."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        digits = f"{int(value):08d}"
+    else:
+        digits = "".join(ch for ch in str(value) if ch.isdigit())
+    if len(digits) != 8 or not digits.isdigit():
+        return None
+    try:
+        return int(digits)
+    except ValueError:
+        return None
+
+
+def _create_market_data_instance(sdk: Any) -> Any:
+    """���� MarketData ʵ���Ա���� query_kline/query_snapshot ����"""
+    market_cls = getattr(sdk, "MarketData", None)
+    if market_cls is None:
+        raise DataProviderError("AmazingData SDK 缺少 MarketData 类，无法查询行情数据")
+
+    try:
+        return market_cls()
+    except TypeError:
+        base_cls = getattr(sdk, "BaseData", None)
+        calendar = None
+        if base_cls is not None:
+            try:
+                base_instance = base_cls()
+                calendar = base_instance.get_calendar()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"获取市场日历失败，将尝试使用默认参数初始化 MarketData: {exc}")
+        try:
+            if calendar is not None:
+                return market_cls(calendar)
+            return market_cls()
+        except TypeError as exc:
+            raise DataProviderError(f"AmazingData MarketData 初始化失败: {exc}") from exc
+
 def _ensure_int(value: object | None, default: int = 0) -> int:
     """将任意对象转换为 int，失败时返回默认值"""
     if value is None:
@@ -160,27 +214,13 @@ def fetch_stock_dataset_blocking(
     errors: list[str] = []
     security_type_value = security_type or "EXTRA_STOCK_A"
 
-    query_api = getattr(sdk, "query_api", None)
-    if query_api is not None:
-        fetch = getattr(query_api, "get_stock_list", None)
-        if callable(fetch):
-            try:
-                return fetch()
-            except TypeError:
-                try:
-                    return fetch(security_type=security_type_value)
-                except Exception as exc:  # noqa: BLE001
-                    errors.append(f"query_api.get_stock_list(security_type) 调用失败: {exc}")
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"query_api.get_stock_list 调用失败: {exc}")
-
     base_cls = getattr(sdk, "BaseData", None)
     if base_cls is not None:
         base_instance = base_cls()
         fetch_candidates: tuple[tuple[str, dict[str, Any]], ...] = (
-            ("get_stock_list", {}),
-            ("get_code_info", {"security_type": security_type_value}),
             ("get_code_list", {"security_type": security_type_value}),
+            ("get_code_info", {"security_type": security_type_value}),
+            ("get_stock_list", {}),
         )
 
         for method_name, extra_kwargs in fetch_candidates:
@@ -374,6 +414,12 @@ def ensure_amazingdata_provider_config(config_like: ProviderConfigLike) -> Amazi
         data = dict(config_like)
     else:
         data = dict(getattr(config_like, "__dict__", {}))
+
+    connection_section = data.get("connection")
+    if isinstance(connection_section, Mapping):
+        merged = dict(connection_section)
+        merged.update({k: v for k, v in data.items() if k != "connection"})
+        data = merged
 
     worker_env_raw = data.get("worker_env")
     if isinstance(worker_env_raw, Mapping):
@@ -1190,44 +1236,94 @@ class AmazingDataProvider(DataProvider):
             self._before_query()
             sdk = self._require_sdk()
 
-            # 转换周期格式
-            period_map = {
-                "1m": sdk.constant.Period.m1.value,
-                "5m": sdk.constant.Period.m5.value,
-                "15m": sdk.constant.Period.m15.value,
-                "30m": sdk.constant.Period.m30.value,
-                "60m": sdk.constant.Period.m60.value,
-                "1d": sdk.constant.Period.day.value,
-                "1w": sdk.constant.Period.week.value,
-                "1M": sdk.constant.Period.month.value,
-            }
-            ad_period = period_map.get(period, sdk.constant.Period.day.value)
+            constant = getattr(sdk, "constant", None)
+            period_ns = getattr(constant, "Period", None) if constant is not None else None
+            adjust_ns = getattr(constant, "Adjust", None) if constant is not None else None
 
-            # 转换复权类型
-            adjust_map = {
-                "none": sdk.constant.Adjust.none.value,
-                "qfq": sdk.constant.Adjust.forward.value,
-                "hfq": sdk.constant.Adjust.backward.value,
+            period_aliases: dict[str, list[str]] = {
+                "1m": ["m1", "min1"],
+                "5m": ["m5", "min5"],
+                "15m": ["m15", "min15"],
+                "30m": ["m30", "min30"],
+                "60m": ["m60", "min60"],
+                "1d": ["day", "d1"],
+                "1w": ["week"],
+                "1M": ["month"],
+                "tick": ["tick"],
             }
-            ad_adjust = adjust_map.get(adjust, sdk.constant.Adjust.none.value)
-
-            # 调用 SDK 获取数据
-            loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(
-                None,
-                sdk.MarketData.get_kline_data,
-                [symbol],  # 股票列表
-                ad_period,  # 周期
-                start_date or "",  # 开始时间
-                end_date or "",  # 结束时间
-                count,  # 条数
-                ad_adjust,  # 复权类型
-                True,  # 是否填充停牌数据
+            ad_period = _resolve_constant_variant(
+                period_ns,
+                period_aliases.get(period, [period]),
+                fallback=period,
             )
+
+            adjust_aliases: dict[str, list[str]] = {
+                "none": ["none"],
+                "qfq": ["forward", "pre"],
+                "hfq": ["backward", "post"],
+            }
+            ad_adjust = _resolve_constant_variant(
+                adjust_ns,
+                adjust_aliases.get(adjust, [adjust]),
+                fallback=adjust,
+            )
+
+            begin_date_value = _normalize_date_to_int(start_date)
+            end_date_value = _normalize_date_to_int(end_date)
+
+            query_errors: list[str] = []
+
+            def _query_with_new_api() -> Any:
+                market_obj = _create_market_data_instance(sdk)
+                query_method = getattr(market_obj, "query_kline", None)
+                if query_method is None:
+                    raise AttributeError("query_kline not available")
+                query_kwargs: dict[str, Any] = {}
+                if begin_date_value is not None:
+                    query_kwargs["begin_date"] = begin_date_value
+                if end_date_value is not None:
+                    query_kwargs["end_date"] = end_date_value
+                if ad_period is not None:
+                    query_kwargs["period"] = ad_period
+                if ad_adjust is not None:
+                    query_kwargs["adjust"] = ad_adjust
+                if count > 0:
+                    query_kwargs["count"] = count
+                return query_method([symbol], **query_kwargs)
+
+            data: Any | None = None
+            try:
+                data = await asyncio.to_thread(_query_with_new_api)
+            except Exception as exc:  # noqa: BLE001
+                query_errors.append(str(exc))
+                logger.debug(f"query_kline 调用失败，尝试使用 get_kline_data: {exc}")
+
+            market_cls = getattr(sdk, "MarketData", None)
+            legacy_callable = getattr(market_cls, "get_kline_data", None) if market_cls is not None else None
+            if (not data or symbol not in data) and callable(legacy_callable):
+
+                def _query_with_legacy() -> Any:
+                    legacy_period = ad_period if ad_period is not None else period
+                    legacy_adjust = ad_adjust if ad_adjust is not None else adjust
+                    return legacy_callable(
+                        [symbol],
+                        legacy_period,
+                        start_date or "",
+                        end_date or "",
+                        count,
+                        legacy_adjust,
+                        True,
+                    )
+
+                try:
+                    data = await asyncio.to_thread(_query_with_legacy)
+                except Exception as exc:  # noqa: BLE001
+                    query_errors.append(str(exc))
+                    logger.error(f"get_kline_data 调用失败: {exc}")
 
             if data and symbol in data:
                 df = pd.DataFrame(data[symbol])
-                # 标准化列名
+                # 标准化字段
                 df.rename(
                     columns={
                         "time": "datetime",
@@ -1241,14 +1337,19 @@ class AmazingDataProvider(DataProvider):
                     inplace=True,
                 )
 
-                # 设置时间索引
                 if "datetime" in df.columns:
                     df["datetime"] = pd.to_datetime(df["datetime"])
                     df.set_index("datetime", inplace=True)
 
                 return df
-            else:
-                return pd.DataFrame()
+
+            logger.warning(
+                "未能获取到 %s 的 K 线数据，错误信息: %s",
+                symbol,
+                "; ".join(query_errors) if query_errors else "无",
+            )
+            return pd.DataFrame()
+
 
         except Exception as e:
             self._increment_stat("query_errors")
@@ -1278,36 +1379,101 @@ class AmazingDataProvider(DataProvider):
             self._before_query()
             sdk = self._require_sdk()
 
-            # 调用 SDK 获取快照数据
-            loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(None, sdk.MarketData.get_snapshot, symbols)
+            query_errors: list[str] = []
 
-            result = {}
-            if data is not None and (
-                isinstance(data, dict) and data or isinstance(data, pd.DataFrame) and not data.empty
-            ):
-                for symbol in symbols:
-                    if symbol in data:
-                        snapshot = data[symbol]
-                        result[symbol] = {
-                            "symbol": symbol,
-                            "name": snapshot.get("name", ""),
-                            "last": snapshot.get("last_price", 0),
-                            "open": snapshot.get("open", 0),
-                            "high": snapshot.get("high", 0),
-                            "low": snapshot.get("low", 0),
-                            "close": snapshot.get("prev_close", 0),
-                            "volume": snapshot.get("volume", 0),
-                            "amount": snapshot.get("amount", 0),
-                            "bid1": snapshot.get("bid1", 0),
-                            "ask1": snapshot.get("ask1", 0),
-                            "bid1_volume": snapshot.get("bid1_volume", 0),
-                            "ask1_volume": snapshot.get("ask1_volume", 0),
-                            "change": snapshot.get("change", 0),
-                            "change_percent": snapshot.get("change_percent", 0),
-                            "time": snapshot.get("time", ""),
-                            "status": snapshot.get("status", ""),
-                        }
+            def _query_snapshot() -> Any:
+                market_obj = _create_market_data_instance(sdk)
+                query_method = getattr(market_obj, "query_snapshot", None)
+                if query_method is None:
+                    raise AttributeError("query_snapshot not available")
+                today = int(datetime.now().strftime("%Y%m%d"))
+                return query_method(symbols, begin_date=today, end_date=today)
+
+            data: Any | None = None
+            try:
+                data = await asyncio.to_thread(_query_snapshot)
+            except Exception as exc:  # noqa: BLE001
+                query_errors.append(str(exc))
+                logger.debug(f"query_snapshot 调用失败，尝试使用 get_snapshot: {exc}")
+
+            market_cls = getattr(sdk, "MarketData", None)
+            legacy_snapshot = getattr(market_cls, "get_snapshot", None) if market_cls is not None else None
+            if (data is None or not data) and callable(legacy_snapshot):
+                try:
+                    data = await asyncio.to_thread(lambda: legacy_snapshot(symbols))
+                except Exception as exc:  # noqa: BLE001
+                    query_errors.append(str(exc))
+                    logger.error(f"get_snapshot 调用失败: {exc}")
+
+            result: Dict[str, Dict[str, Any]] = {}
+            if data is None:
+                return result
+
+            symbol_payloads: Dict[str, Any] = {}
+            if isinstance(data, pd.DataFrame):
+                if "code" in data.columns:
+                    for code, frame in data.groupby("code"):
+                        symbol_payloads[str(code)] = frame
+                else:
+                    symbol_payloads = {symbols[0]: data} if symbols else {}
+            elif isinstance(data, Mapping):
+                symbol_payloads = {str(key): value for key, value in data.items()}
+
+            for symbol in symbols:
+                payload = symbol_payloads.get(symbol) or symbol_payloads.get(symbol.replace(".", ""))
+                row: Mapping[str, Any] | None = None
+                if isinstance(payload, pd.DataFrame):
+                    if payload.empty:
+                        continue
+                    row = payload.iloc[-1].to_dict()
+                elif isinstance(payload, Mapping):
+                    row = dict(payload)
+                elif isinstance(payload, Sequence) and payload and isinstance(payload[-1], Mapping):
+                    row = dict(payload[-1])
+
+                if row is None:
+                    continue
+
+                name = _coalesce(row.get("name"), row.get("SECURITY_NAME"), row.get("security_name"), "")
+                last_value = _coalesce(row.get("last"), row.get("close"), row.get("last_price"), row.get("price"))
+                open_value = _coalesce(row.get("open"), row.get("open_price"))
+                high_value = row.get("high")
+                low_value = row.get("low")
+                prev_close = _coalesce(row.get("prev_close"), row.get("pre_close"))
+                volume_value = row.get("volume")
+                amount_value = row.get("amount")
+                bid_price = _coalesce(row.get("bid_price1"), row.get("bid1"))
+                ask_price = _coalesce(row.get("ask_price1"), row.get("ask1"))
+                bid_volume = _coalesce(row.get("bid_volume1"), row.get("bid1_volume"))
+                ask_volume = _coalesce(row.get("ask_volume1"), row.get("ask1_volume"))
+                change_value = _coalesce(row.get("change"), row.get("price_change"))
+                change_percent = _coalesce(row.get("change_percent"), row.get("chg"))
+                trade_time_raw = _coalesce(row.get("trade_time"), row.get("time"))
+                if isinstance(trade_time_raw, datetime):
+                    trade_time = trade_time_raw.isoformat()
+                else:
+                    trade_time = str(trade_time_raw or "")
+                status_value = _coalesce(row.get("status"), row.get("trading_phase_code"), "")
+
+                result[symbol] = {
+                    "symbol": symbol,
+                    "name": str(name),
+                    "last": _ensure_float(last_value),
+                    "open": _ensure_float(open_value),
+                    "high": _ensure_float(high_value),
+                    "low": _ensure_float(low_value),
+                    "close": _ensure_float(prev_close),
+                    "volume": _ensure_float(volume_value),
+                    "amount": _ensure_float(amount_value),
+                    "bid1": _ensure_float(bid_price),
+                    "ask1": _ensure_float(ask_price),
+                    "bid1_volume": _ensure_int(bid_volume),
+                    "ask1_volume": _ensure_int(ask_volume),
+                    "change": _ensure_float(change_value),
+                    "change_percent": _ensure_float(change_percent),
+                    "time": trade_time,
+                    "status": str(status_value or ""),
+                }
 
             return result
 

@@ -368,6 +368,22 @@ def _persist_data_source_config(
     providers_section[provider_key] = provider_entry
     data_sources_section["providers"] = providers_section
 
+    if hasattr(manager, "_fallback_order"):
+        fallback_values = [
+            item.value if isinstance(item, DataSourceType) else str(item)
+            for item in getattr(manager, "_fallback_order", [])
+        ]
+        if fallback_values:
+            data_sources_section["fallback_order"] = fallback_values
+        else:
+            data_sources_section.pop("fallback_order", None)
+
+    default_source = getattr(manager, "_default_source", None)
+    if isinstance(default_source, DataSourceType):
+        data_sources_section["default"] = default_source.value
+    elif "default" in data_sources_section:
+        data_sources_section.pop("default", None)
+
     _update_runtime_data_sources(manager, provider_key, provider_entry)
 
     cleaned_data = _prune_empty(existing_data)

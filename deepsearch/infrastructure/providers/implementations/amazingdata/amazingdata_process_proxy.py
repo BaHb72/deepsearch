@@ -48,6 +48,9 @@ class ProxyRequestPayload(TypedDict):
     args: tuple[Any, ...]
     kwargs: Dict[str, Any]
     timeout: float
+    alt_methods: tuple[str, ...]
+    alt_args: tuple[tuple[Any, ...], ...]
+    kwargs_patches: tuple[Dict[str, Any], ...]
 
 class ProxyResponsePayload(TypedDict):
     """IPC 响应序列化结构"""
@@ -68,7 +71,7 @@ class WorkerQueue(Protocol):
 
 @dataclass
 class ProxyRequest:
-    """代理请求数据结构"""
+    """IPC 请求数据结构"""
 
     request_id: str
     request_type: RequestType
@@ -76,6 +79,36 @@ class ProxyRequest:
     args: tuple[Any, ...]
     kwargs: Dict[str, Any]
     timeout: float = 30.0
+    alt_methods: tuple[str, ...] = tuple()
+    alt_args: tuple[tuple[Any, ...], ...] = tuple()
+    kwargs_patches: tuple[Dict[str, Any], ...] = tuple()
+
+    def to_payload(self) -> ProxyRequestPayload:
+        return {
+            "request_id": self.request_id,
+            "request_type": self.request_type,
+            "method": self.method,
+            "args": self.args,
+            "kwargs": dict(self.kwargs),
+            "timeout": self.timeout,
+            "alt_methods": self.alt_methods,
+            "alt_args": self.alt_args,
+            "kwargs_patches": tuple(dict(patch) for patch in self.kwargs_patches),
+        }
+
+    @classmethod
+    def from_payload(cls, payload: ProxyRequestPayload) -> "ProxyRequest":
+        return cls(
+            request_id=payload["request_id"],
+            request_type=payload["request_type"],
+            method=payload["method"],
+            args=tuple(payload["args"]),
+            kwargs=dict(payload["kwargs"]),
+            timeout=payload["timeout"],
+            alt_methods=tuple(payload.get("alt_methods", ())),
+            alt_args=tuple(tuple(args) for args in payload.get("alt_args", ())),
+            kwargs_patches=tuple(dict(patch) for patch in payload.get("kwargs_patches", ())),
+        )
 
     def to_payload(self) -> ProxyRequestPayload:
         return {
@@ -532,6 +565,9 @@ class AmazingDataProcessProxy:
         *args,
         request_type: RequestType = RequestType.GET_DATA,
         timeout: float = 30.0,
+            alt_methods: Sequence[str] | None = None,
+            alt_args: Sequence[Sequence[Any]] | None = None,
+            kwargs_patches: Sequence[Mapping[str, Any]] | None = None,
         **kwargs,
     ) -> ProxyResponse:
         if not self.is_running or not self._is_worker_alive():
@@ -556,9 +592,12 @@ class AmazingDataProcessProxy:
             request_id=request_id,
             request_type=request_type,
             method=method,
-            args=args,
-            kwargs=kwargs,
+            args=tuple(args),
+            kwargs=dict(kwargs),
             timeout=timeout,
+            alt_methods=tuple(alt_methods or ()),
+            alt_args=tuple(tuple(a) for a in (alt_args or ())),
+            kwargs_patches=tuple(dict(patch) for patch in (kwargs_patches or ())),
         )
 
         self.stats["requests_sent"] += 1
@@ -944,20 +983,57 @@ class AmazingDataProcessProxy:
                         sdk_imported,
                     )
                 else:
-                    method = AmazingDataProcessProxy._resolve_callable(ad, request.method)
-                    if method is None:
+                    base_kwargs = dict(request.kwargs)
+                    attempts = [(request.method, tuple(request.args), base_kwargs)]
+
+                    for idx, alt_method in enumerate(request.alt_methods):
+                        alt_args = tuple(request.args)
+                        if idx < len(request.alt_args):
+                            alt_args = tuple(request.alt_args[idx])
+                        alt_kwargs = dict(base_kwargs)
+                        if idx < len(request.kwargs_patches):
+                            patch_source = dict(request.kwargs_patches[idx])
+                            remove_keys = patch_source.pop("__remove__", ())
+                            if isinstance(remove_keys, str):
+                                remove_keys = (remove_keys,)
+                            for key in remove_keys:
+                                alt_kwargs.pop(str(key), None)
+                            alt_kwargs.update(patch_source)
+                        attempts.append((alt_method, alt_args, alt_kwargs))
+
+                    response: ProxyResponse | None = None
+                    last_error: Optional[str] = None
+                    for method_path, call_args, call_kwargs in attempts:
+                        target = AmazingDataProcessProxy._resolve_callable(ad, method_path)
+                        if target is None:
+                            last_error = f"Method {method_path} not found"
+                            continue
+                        try:
+                            result = target(*tuple(call_args), **call_kwargs)
+                            response = ProxyResponse(
+                                request_id=request.request_id,
+                                success=True,
+                                result=result,
+                            )
+                            break
+                        except (AttributeError, TypeError) as exc:  # pragma: no cover - 调整fallback日志
+                            last_error = f"{method_path}: {exc}"
+                            continue
+                        except Exception as exc:  # pragma: no cover - 记录真实异常
+                            response = ProxyResponse(
+                                request_id=request.request_id,
+                                success=False,
+                                error=str(exc),
+                                error_type=type(exc).__name__,
+                            )
+                            break
+
+                    if response is None:
                         response = ProxyResponse(
                             request_id=request.request_id,
                             success=False,
-                            error=f"Method {request.method} not found",
+                            error=last_error or f"Method {request.method} not found",
                             error_type="AttributeError",
-                        )
-                    else:
-                        result = method(*request.args, **request.kwargs)
-                        response = ProxyResponse(
-                            request_id=request.request_id,
-                            success=True,
-                            result=result,
                         )
 
                 response.timestamp = time.time()
@@ -1085,12 +1161,9 @@ class AmazingDataProcessProxy:
         base_candidates = (
             "health_check",
             "get_version",
-            "query_api.queryLastFuncDataTime",
-            "query_api.queryTableMaxNumAndTime",
-            "query_api.queryTaskInfoTime",
         )
         if logged_in:
-            return ("BaseData.get_calendar",) + base_candidates
+            return ("BaseData.get_calendar", "BaseData.get_code_list") + base_candidates
         return base_candidates
 
     @staticmethod

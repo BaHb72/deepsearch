@@ -362,15 +362,24 @@ class DataProviderFactory:
                         if not init_success:
                             reason_text = fallback_reason or "unknown failure"
                             logger.warning(f"Falling back to AkShare due to: {reason_text}")
+                            akshare_provider = None
                             try:
-                                from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
-                                    AkShareProxyProvider,
-                                )
+                                manager_for_fallback = get_data_source_manager()
+                                await manager_for_fallback.initialize()
+                                if manager_for_fallback.is_provider_enabled(RegistryDataSourceType.AKSHARE):
+                                    akshare_provider = manager_for_fallback.get_provider(RegistryDataSourceType.AKSHARE)
+                                    if akshare_provider is None:
+                                        logger.warning(
+                                            "AkShare provider configured but unavailable; skip AkShare fallback"
+                                        )
+                                else:
+                                    logger.info("AkShare provider disabled in configuration; skip AkShare fallback")
+                            except Exception as akshare_exc:
+                                logger.error(f"Failed to resolve AkShare fallback: {akshare_exc}")
+                                cls._record_provider_failure("akshare", "NOT_AVAILABLE", str(akshare_exc))
 
-                                fallback_provider = AkShareProxyProvider()
-                                if hasattr(fallback_provider, "initialize"):
-                                    await fallback_provider.initialize()
-                                chosen_instance = fallback_provider
+                            if akshare_provider:
+                                chosen_instance = akshare_provider
                                 init_success = True
 
                                 cls._fallback_status[normalized_type] = {
@@ -386,11 +395,7 @@ class DataProviderFactory:
                                     "fallback_reason": reason_text,
                                 }
 
-                                logger.info("Successfully fell back to AkShare provider")
-
-                            except Exception as e:
-                                logger.error(f"Failed to initialize AkShare fallback: {e}")
-                                cls._record_provider_failure("akshare", "INIT_FAILED", str(e))
+                                logger.info("Successfully resolved AkShare provider via DataSourceManager")
 
                         if not init_success:
                             reason_text = fallback_reason or "unknown failure"

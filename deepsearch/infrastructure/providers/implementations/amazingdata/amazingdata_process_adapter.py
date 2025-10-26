@@ -14,7 +14,6 @@ from deepsearch.ports.amazingdata_process import (
     ProcessCommand,
     ProcessCommandType,
 )
-
 from .amazingdata_process_proxy import (
     AmazingDataProcessProxy,
     ProxyResponse,
@@ -54,6 +53,9 @@ class AmazingDataProcessAdapter(AmazingDataProcessPort):
                 *tuple(command.args),
                 request_type=request_type,
                 timeout=command.timeout,
+                alt_methods=tuple(command.alt_methods),
+                alt_args=tuple(command.alt_args),
+                kwargs_patches=tuple(dict(patch) for patch in command.kwargs_patches),
                 **dict(command.kwargs),
             )
 

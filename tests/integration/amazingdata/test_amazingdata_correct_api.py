@@ -9,8 +9,6 @@ from datetime import datetime, timedelta
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import pandas as pd
-
 from deepsearch.config import get_config
 
 
@@ -99,25 +97,20 @@ def test_amazingdata():
         traceback.print_exc()
         return False
 
+    base_data = None
+    market_data = None
+
     # 2. 查询股票列表
     print("\n[2] 查询股票列表...")
     try:
-        # 尝试导入查询API模块
-        from AmazingData import query_api
-
-        # 获取股票列表
-        if hasattr(query_api, "get_stock_list"):
-            stock_list = query_api.get_stock_list()
-            if stock_list:
-                print(f"    [OK] 获取{len(stock_list)}只股票")
-                if isinstance(stock_list, list) and len(stock_list) > 0:
-                    print(f"    示例: {stock_list[:5]}")
-        elif hasattr(query_api, "query_stock_list"):
-            stock_list = query_api.query_stock_list()
-            if stock_list:
-                print(f"    [OK] 获取{len(stock_list)}只股票")
+        base_data = ad.BaseData()
+        stock_list = base_data.get_code_list(security_type="EXTRA_STOCK_A")
+        if stock_list:
+            print(f"    [OK] 获取{len(stock_list)}只股票")
+            preview = list(stock_list)[:5]
+            print(f"    示例: {preview}")
         else:
-            print("    [INFO] 股票列表API不可用")
+            print("    [INFO] 未返回股票列表")
     except Exception as e:
         print(f"    [WARNING] 查询股票列表失败: {e}")
 
@@ -125,67 +118,51 @@ def test_amazingdata():
     print("\n[3] 查询实时行情...")
     test_code = "000001"  # 平安银行
     try:
-        from AmazingData import query_api
-
-        # 尝试不同的API名称
-        if hasattr(query_api, "get_realtime_quotes"):
-            quotes = query_api.get_realtime_quotes([test_code])
-            if quotes:
-                print("    [OK] 获取实时行情")
-                print(f"    数据: {quotes}")
-        elif hasattr(query_api, "query_realtime_quotes"):
-            quotes = query_api.query_realtime_quotes([test_code])
-            if quotes:
-                print("    [OK] 获取实时行情")
-        elif hasattr(query_api, "get_snapshot"):
-            snapshot = query_api.get_snapshot([test_code])
-            if snapshot:
-                print("    [OK] 获取快照数据")
+        calendar = None
+        if base_data is not None:
+            calendar = base_data.get_calendar()
+        market_data = ad.MarketData(calendar) if calendar else ad.MarketData()
+        today = int(datetime.now().strftime("%Y%m%d"))
+        snapshot = market_data.query_snapshot([test_code], begin_date=today, end_date=today)
+        if isinstance(snapshot, dict) and snapshot.get(test_code):
+            print("    [OK] 获取实时行情")
         else:
-            print("    [INFO] 实时行情API不可用")
+            print("    [INFO] 实时行情接口未返回数据")
     except Exception as e:
         print(f"    [WARNING] 查询实时行情失败: {e}")
 
     # 4. 查询K线数据
     print("\n[4] 查询K线数据...")
     try:
-        from AmazingData import query_api
-
+        if market_data is None:
+            market_data = ad.MarketData()
         end_date = datetime.now()
         start_date = end_date - timedelta(days=30)
-
-        # 尝试不同的API名称
-        if hasattr(query_api, "get_kline_data"):
-            kline = query_api.get_kline_data(
-                test_code, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"), "1d"
-            )
-            if kline is not None:
-                print("    [OK] 获取K线数据")
-                if isinstance(kline, pd.DataFrame):
-                    print(f"    共{len(kline)}条记录")
-        elif hasattr(query_api, "query_history_bars"):
-            bars = query_api.query_history_bars(
-                test_code, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d")
-            )
-            if bars:
-                print("    [OK] 获取历史K线")
+        period_value = getattr(getattr(ad.constant, "Period", None), "day", None)
+        period_value = getattr(period_value, "value", "day")
+        kline_dict = market_data.query_kline(
+            [test_code],
+            begin_date=int(start_date.strftime("%Y%m%d")),
+            end_date=int(end_date.strftime("%Y%m%d")),
+            period=period_value,
+        )
+        records = kline_dict.get(test_code) if isinstance(kline_dict, dict) else None
+        if records:
+            print(f"    [OK] 获取K线数据，共{len(records)}条")
         else:
-            print("    [INFO] K线数据API不可用")
+            print("    [INFO] K线接口未返回数据")
     except Exception as e:
         print(f"    [WARNING] 查询K线数据失败: {e}")
 
-    # 5. 查询可用的API函数
-    print("\n[5] 可用的查询API函数:")
+    # 5. 查询常用能力概览
+    print("\n[5] 常用能力概览:")
     try:
-        from AmazingData import query_api
-
-        api_functions = [attr for attr in dir(query_api) if not attr.startswith("_")]
-        for func in api_functions[:10]:  # 只显示前10个
-            print(f"    - {func}")
-        if len(api_functions) > 10:
-            print(f"    ... 还有 {len(api_functions) - 10} 个函数")
+        base_attrs = [attr for attr in dir(base_data or ad.BaseData()) if not attr.startswith("_")]
+        market_attrs = [attr for attr in dir(market_data or ad.MarketData()) if not attr.startswith("_")]
+        print(f"    BaseData: {base_attrs[:8]}")
+        print(f"    MarketData: {market_attrs[:8]}")
     except Exception as e:
-        print(f"    [WARNING] 无法获取API函数列表: {e}")
+        print(f"    [WARNING] 无法列举接口能力: {e}")
 
     # 6. 登出
     print("\n[6] 登出...")
