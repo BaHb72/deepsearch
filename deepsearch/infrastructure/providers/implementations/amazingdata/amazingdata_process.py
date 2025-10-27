@@ -104,6 +104,8 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         self._last_disconnect_at: datetime | None = None
         self._last_error: str | None = None
         self._last_health_status: Dict[str, Any] | None = None
+        self._last_code_list_branch: str | None = None
+        self._last_code_list_security_type: str | None = None
 
     def _build_datasource_id(self) -> str:
         username = getattr(self.config, "username", "") or "anonymous"
@@ -308,6 +310,14 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
     def is_connected(self) -> bool:
         return self._connected and self._initialized
 
+    @property
+    def last_code_list_branch(self) -> str | None:
+        return self._last_code_list_branch
+
+    @property
+    def last_code_list_security_type(self) -> str | None:
+        return self._last_code_list_security_type
+
     async def get_stock_list(
         self,
         limit: Optional[int] = None,
@@ -320,6 +330,7 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                 or config_section.get("security_type")
         )
         normalized_security_type = _normalize_security_type_value(requested_security_type)
+        self._last_code_list_security_type = normalized_security_type
 
         security_type_candidates: list[str] = []
         for candidate in (
@@ -418,13 +429,27 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                     raise
 
         records = normalize_stock_records(raw_result)
+        self._last_code_list_branch = branch_used
         if not records:
             if branch_used:
-                logger.warning("AmazingData 股票代码表为空 (branch=%s)", branch_used)
+                logger.warning(
+                    "AmazingData 股票代码表为空 (branch=%s, security_type=%s)",
+                    branch_used,
+                    normalized_security_type,
+                )
+            else:
+                logger.warning(
+                    "AmazingData 股票代码表为空 (branch=unknown, security_type=%s)",
+                    normalized_security_type,
+                )
             return None
 
-        if branch_used:
-            logger.debug("AmazingData 股票代码表加载成功 (branch=%s, size=%s)", branch_used, len(records))
+        logger.info(
+            "Using AmazingData.fetch_code_list (branch=%s, security_type=%s, count=%s)",
+            branch_used or "unknown",
+            normalized_security_type,
+            len(records),
+        )
 
         if limit and limit > 0:
             records = records[:limit]

@@ -145,6 +145,30 @@ data_sources:
           cache:
             enabled: true
             ttl: 300
+market_data:
+  realtime:
+    enabled: true
+    boards:
+      - 上证
+      - 深证
+    interval_seconds: 1.0
+    request_timeout_seconds: 3.0
+    capital_windows:
+      - name: 1m
+        duration_seconds: 60
+      - name: 5m
+        duration_seconds: 300
+    order_window:
+      name: 1m
+      duration_seconds: 60
+    capital_limit: 50
+    order_limit: 100
+    redis:
+      url: redis://localhost:6379/6
+      strength_ttl: 180
+      imbalance_ttl: 180
+      auction_ttl: 180
+      max_strength_entries: 50
 notifications:
   enabled: true
   wechat_token: unit-test-token
