@@ -7,8 +7,10 @@ os.environ.setdefault("DEEPSEARCH_AMAZINGDATA_STUB", "tests.stubs.amazingdata_st
 
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process import (  # noqa: E402
     DEFAULT_HIST_CODE_LIST_START,
-    DEFAULT_LOCAL_DATA_PATH,
     ProcessIsolatedAmazingDataProvider,
+)
+from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (  # noqa: E402
+    DEFAULT_LOCAL_DATA_PATH,
 )
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (  # noqa: E402
     shutdown_pool,

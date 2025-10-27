@@ -244,9 +244,10 @@ security:
     retention_days: 365
 market_data:
   realtime:
-    enabled: false
+    enabled: true
     boards: [ ]
-    interval_seconds: 5.0
+    interval_seconds: 1.0
+    request_timeout_seconds: 3.0
     capital_windows:
       - name: 1m
         duration_seconds: 60

@@ -45,6 +45,9 @@ from .amazingdata_types import (
     ShareholderSnapshot,
 )
 
+DEFAULT_HIST_CODE_LIST_START = 20130101
+DEFAULT_LOCAL_DATA_PATH = "D://AmazingData_local_data//"
+
 
 def _coalesce(*values: object | None) -> object | None:
     """按顺序返回首个有效值，避免将零值或布尔假值视为缺失"""
@@ -106,6 +109,26 @@ def _normalize_date_to_int(value: object | None) -> Optional[int]:
         return int(digits)
     except ValueError:
         return None
+
+
+def resolve_local_cache_path(
+        config: "AmazingDataConfig | None",
+        candidate: object | None,
+) -> str:
+    """解析代码表本地缓存路径，优先使用显式参数，其次读取配置项。"""
+
+    for item in (
+            candidate,
+            getattr(config, "local_path", None) if config else None,
+            getattr(config, "config", {}).get("local_path") if config else None,
+            getattr(config, "config", {}).get("local_cache_path") if config else None,
+    ):
+        if not item:
+            continue
+        text = str(item).strip()
+        if text:
+            return text
+    return DEFAULT_LOCAL_DATA_PATH
 
 
 def _create_market_data_instance(sdk: Any) -> Any:
@@ -208,6 +231,9 @@ def fetch_stock_dataset_blocking(
         sdk: AmazingDataSDKProtocol,
         *,
         security_type: str = "EXTRA_STOCK_A",
+        start_date: object | None = None,
+        end_date: object | None = None,
+        local_path: object | None = None,
 ) -> Any:
     """在同步线程中调用 AmazingData SDK，获取股票列表原始数据。"""
 
@@ -220,21 +246,82 @@ def fetch_stock_dataset_blocking(
         fetch_candidates: tuple[tuple[str, dict[str, Any]], ...] = (
             ("get_code_list", {"security_type": security_type_value}),
             ("get_code_info", {"security_type": security_type_value}),
-            ("get_stock_list", {}),
         )
 
         for method_name, extra_kwargs in fetch_candidates:
             fetch_method = getattr(base_instance, method_name, None)
-            if callable(fetch_method):
+            if not callable(fetch_method):
+                continue
+            try:
+                result = fetch_method(**extra_kwargs)
+            except TypeError as exc:  # pragma: no cover - SDK 兼容性差异
+                logger.debug("BaseData.%s 参数不兼容: %s，尝试无参调用", method_name, exc)
                 try:
-                    return fetch_method(**extra_kwargs)
-                except TypeError:
+                    result = fetch_method()
+                except Exception as inner_exc:  # noqa: BLE001
+                    errors.append(f"BaseData.{method_name} 调用失败: {inner_exc}")
+                    continue
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"BaseData.{method_name} 调用失败: {exc}")
+                continue
+
+            if result is None:
+                logger.warning("BaseData.%s 返回空结果，继续尝试其他分支", method_name)
+                continue
+            logger.debug("通过 BaseData.%s 获取股票代码表成功", method_name)
+            return result
+
+        hist_method = getattr(base_instance, "get_hist_code_list", None)
+        if callable(hist_method):
+            start_normalized = _normalize_date_to_int(start_date) or DEFAULT_HIST_CODE_LIST_START
+            end_normalized = _normalize_date_to_int(end_date)
+            if end_normalized is None:
+                end_normalized = int(datetime.now().strftime("%Y%m%d"))
+            if end_normalized < start_normalized:
+                start_normalized, end_normalized = end_normalized, start_normalized
+
+            cache_path = str(local_path or DEFAULT_LOCAL_DATA_PATH).strip() or DEFAULT_LOCAL_DATA_PATH
+            try:
+                Path(cache_path).mkdir(parents=True, exist_ok=True)
+            except Exception as path_exc:  # pragma: no cover - 环境依赖
+                logger.debug("创建本地缓存目录 %s 失败: %s", cache_path, path_exc)
+
+            hist_kwargs: dict[str, object] = {
+                "security_type": security_type_value,
+                "start_date": start_normalized,
+                "end_date": end_normalized,
+                "local_path": cache_path,
+                "is_local": False,
+            }
+            try:
+                result = hist_method(**hist_kwargs)
+            except TypeError as exc:
+                message = str(exc)
+                if "unexpected keyword argument 'is_local'" in message:
+                    logger.debug("BaseData.get_hist_code_list 不支持 is_local，使用兼容模式调用")
+                    hist_kwargs.pop("is_local", None)
                     try:
-                        return fetch_method()
-                    except Exception as exc:  # noqa: BLE001
-                        errors.append(f"BaseData.{method_name} 调用失败: {exc}")
-                except Exception as exc:  # noqa: BLE001
-                    errors.append(f"BaseData.{method_name} 调用失败: {exc}")
+                        result = hist_method(**hist_kwargs)
+                    except Exception as compat_exc:  # noqa: BLE001
+                        errors.append(f"BaseData.get_hist_code_list 兼容调用失败: {compat_exc}")
+                        result = None
+                else:
+                    errors.append(f"BaseData.get_hist_code_list 调用失败: {exc}")
+                    result = None
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"BaseData.get_hist_code_list 调用失败: {exc}")
+                result = None
+
+            if result is not None:
+                logger.debug(
+                    "通过 BaseData.get_hist_code_list 获取股票代码表成功 (start=%s, end=%s, path=%s)",
+                    start_normalized,
+                    end_normalized,
+                    cache_path,
+                )
+                return result
+            logger.warning("BaseData.get_hist_code_list 返回空结果 (start=%s, end=%s)", start_normalized,
+                           end_normalized)
 
     if errors:
         raise RuntimeError("; ".join(errors))
@@ -2231,10 +2318,16 @@ class AmazingDataProvider(DataProvider):
             self._before_query()
             sdk = self._require_sdk()
             security_type = str(kwargs.get("security_type", "EXTRA_STOCK_A"))
+            start_date = kwargs.get("start_date")
+            end_date = kwargs.get("end_date")
+            local_path = resolve_local_cache_path(self.config, kwargs.get("local_path"))
             raw_dataset = await asyncio.to_thread(
                 fetch_stock_dataset_blocking,
                 sdk,
                 security_type=security_type,
+                start_date=start_date,
+                end_date=end_date,
+                local_path=local_path,
             )
             records = normalize_stock_records(raw_dataset)
             if not records:

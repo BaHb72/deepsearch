@@ -30,19 +30,18 @@ from .amazingdata import (
     ProviderConfigLike,
     ensure_amazingdata_provider_config,
     normalize_stock_records,
+    resolve_local_cache_path,
     _normalize_date_to_int,
     _coalesce,
     _ensure_float,
     _ensure_int,
+    DEFAULT_HIST_CODE_LIST_START,
 )
 from .amazingdata_process_adapter import AmazingDataProcessAdapter
 from .amazingdata_process_pool import AmazingDataProcessPool, get_global_pool
 from .amazingdata_types import AmazingDataSecurityType
 
 TResult = TypeVar("TResult")
-
-DEFAULT_HIST_CODE_LIST_START = 20130101
-DEFAULT_LOCAL_DATA_PATH = "D://AmazingData_local_data//"
 
 _SECURITY_VALUE_LOOKUP: Dict[str, str] = {
     item.value.lower(): item.value for item in AmazingDataSecurityType
@@ -85,21 +84,6 @@ def _normalize_security_type_value(value: object | None) -> str:
     logger.debug("AmazingData security_type %s 未命中映射，保持原值", text)
     return text
 
-
-def _resolve_local_cache_path(config: AmazingDataConfig, candidate: object | None) -> str:
-    """����ʹ�õı��ر켣·����Ҫʱʹ��Ĭ��·����"""
-    for item in (
-            candidate,
-            getattr(config, "local_path", None),
-            config.config.get("local_path"),
-            config.config.get("local_cache_path"),
-    ):
-        if not item:
-            continue
-        text = str(item).strip()
-        if text:
-            return text
-    return DEFAULT_LOCAL_DATA_PATH
 
 
 class ProcessIsolatedAmazingDataProvider(DataProvider):
@@ -348,18 +332,17 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
 
         raw_result: Any | None = None
         last_error: DataProviderError | None = None
+        branch_used: str | None = None
         for candidate in security_type_candidates:
             command = ProcessCommand[Any](
                 method="BaseData.get_code_list",
                 kwargs={"security_type": candidate},
-                alt_methods=("BaseData.get_code_info", "BaseData.get_stock_list"),
-                kwargs_patches=(
-                    {},
-                    {"__remove__": ("security_type",)},
-                ),
+                alt_methods=("BaseData.get_code_info",),
+                kwargs_patches=(),
             )
             try:
                 raw_result = await self._execute(command)
+                branch_used = f"BaseData.get_code_list[{candidate}]"
                 break
             except DataProviderError as exc:
                 last_error = exc
@@ -376,7 +359,7 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             if fallback_end < fallback_start:
                 fallback_start, fallback_end = fallback_end, fallback_start
 
-            local_path = _resolve_local_cache_path(self.config, kwargs.get("local_path"))
+            local_path = resolve_local_cache_path(self.config, kwargs.get("local_path"))
             try:
                 Path(local_path).mkdir(parents=True, exist_ok=True)
             except Exception as path_exc:  # pragma: no cover - 环境依赖
@@ -403,6 +386,10 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             )
             try:
                 raw_result = await self._execute(fallback_command)
+                branch_used = (
+                    f"BaseData.get_hist_code_list[{hist_security_type}]"
+                    f"(start={fallback_start},end={fallback_end})"
+                )
             except DataProviderError as fallback_exc:
                 fallback_message = str(fallback_exc)
                 if "unexpected keyword argument 'is_local'" in fallback_message:
@@ -415,6 +402,10 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                     )
                     try:
                         raw_result = await self._execute(compat_command)
+                        branch_used = (
+                            f"BaseData.get_hist_code_list[{hist_security_type}]"
+                            f"(start={fallback_start},end={fallback_end},compat)"
+                        )
                     except DataProviderError as compat_exc:
                         if last_error is not None:
                             combined = f"{last_error}; BaseData.get_hist_code_list fallback failed: {compat_exc}"
@@ -428,7 +419,12 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
 
         records = normalize_stock_records(raw_result)
         if not records:
+            if branch_used:
+                logger.warning("AmazingData 股票代码表为空 (branch=%s)", branch_used)
             return None
+
+        if branch_used:
+            logger.debug("AmazingData 股票代码表加载成功 (branch=%s, size=%s)", branch_used, len(records))
 
         if limit and limit > 0:
             records = records[:limit]

@@ -228,6 +228,7 @@ def create_realtime_streaming_pipeline(
     capital_limit_final = config.capital_limit if config else capital_limit
     order_limit_final = config.order_limit if config else order_limit
     runner_interval = config.interval_seconds if config else interval_seconds
+    step_timeout = config.request_timeout_seconds if config else 3.0
 
     pipeline = MarketDataRealtimePipeline(
         service=service,
@@ -244,6 +245,7 @@ def create_realtime_streaming_pipeline(
         boards=boards_tuple,
         interval_seconds=runner_interval,
         step=pipeline.run_once,
+        step_timeout_seconds=step_timeout,
     )
 
     return service, cache_writer, pipeline, runner

@@ -32,9 +32,12 @@ class MarketRedisConfig(BaseModel):
 class MarketRealtimeConfig(BaseModel):
     """Realtime market data pipeline configuration."""
 
-    enabled: bool = Field(default=False, description="Enable realtime streaming pipeline")
+    enabled: bool = Field(default=True, description="Enable realtime streaming pipeline")
     boards: List[str] = Field(default_factory=list, description="Boards to aggregate")
-    interval_seconds: float = Field(default=5.0, gt=0, description="Runner loop interval")
+    interval_seconds: float = Field(default=1.0, gt=0, description="Runner loop interval")
+    request_timeout_seconds: float = Field(
+        default=3.0, gt=0, description="Maximum duration for each polling request"
+    )
     capital_windows: List[MarketWindowConfig] = Field(default_factory=list)
     order_window: Optional[MarketWindowConfig] = None
     auction_window: Optional[MarketWindowConfig] = None

@@ -40,7 +40,7 @@ dependencies = [
     "httpx>=0.28.1",
     "python-jose[cryptography]>=3.5.0",
     # ==== 数据获取依赖 ====
-    "amazingdata==1.0.15",
+    "amazingdata==1.0.17",
     "tgw==1.0.8.1",
     "akshare==1.17.65",
     "aiohttp>=3.13.0",
@@ -119,7 +119,7 @@ python-preference = "only-system"
 compile-bytecode = true
 
 [tool.uv.sources]
-amazingdata = { url = "https://bahbai.com/packages/AmazingData-1.0.15-cp313-none-any.whl" }
+amazingdata = { url = "https://bahbai.com/packages/AmazingData-1.0.17-cp313-none-any.whl" }
 tgw = { url = "https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl" }
 
 [tool.uv.pip]

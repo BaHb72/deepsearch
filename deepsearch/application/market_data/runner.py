@@ -17,7 +17,8 @@ class MarketDataStreamingRunner:
 
     service: RealTimeMarketDataService
     boards: Sequence[str]
-    interval_seconds: float = 5.0
+    interval_seconds: float = 1.0
+    step_timeout_seconds: float = 3.0
     step: Callable[[], Awaitable[None]] | None = None
     _task: asyncio.Task[None] | None = field(default=None, init=False)
     _stop_event: asyncio.Event = field(default_factory=asyncio.Event, init=False)
@@ -46,9 +47,17 @@ class MarketDataStreamingRunner:
             while not self._stop_event.is_set():
                 try:
                     if self.step is not None:
-                        await self.step()
+                        await asyncio.wait_for(
+                            self.step(), timeout=self.step_timeout_seconds
+                        )
                     else:
-                        await self._default_step()
+                        await asyncio.wait_for(
+                            self._default_step(), timeout=self.step_timeout_seconds
+                        )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "实时行情轮询超时 (timeout=%.2fs)", self.step_timeout_seconds
+                    )
                 except Exception as exc:  # pragma: no cover - defensive logging
                     logger.exception("Real-time market data loop error: {}", exc)
                 try:

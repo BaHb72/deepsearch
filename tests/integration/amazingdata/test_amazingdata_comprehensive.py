@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pandas as pd
 
 from deepsearch.config import get_config
+from helpers import fetch_code_list
 
 # 为 colorama 定义最小协议，确保缺失依赖时依旧具备类型约束
 
@@ -365,14 +366,9 @@ class AmazingDataTester:
         start_time = time.time()
         try:
             print(f"{Fore.CYAN}获取A股股票列表...{Style.RESET_ALL}")
-            # 使用AmazingData BaseData获取股票列表
-            stock_list = ad.BaseData().get_stock_list()
+            stock_list = fetch_code_list(ad)
 
-            if (
-                stock_list is not None
-                and isinstance(stock_list, pd.DataFrame)
-                and not stock_list.empty
-            ):
+            if not stock_list.empty:
                 result = TestResult(
                     name="股票列表获取",
                     status="success",

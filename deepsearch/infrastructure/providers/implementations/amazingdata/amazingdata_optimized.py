@@ -38,6 +38,7 @@ from .amazingdata import (
     ensure_amazingdata_provider_config,
     fetch_stock_dataset_blocking,
     normalize_stock_records,
+    resolve_local_cache_path,
 )
 
 
@@ -1004,10 +1005,16 @@ class OptimizedAmazingDataProvider(DataProvider):
             # 通过优化的线程池执行
             sdk = self._require_sdk()
             security_type = str(kwargs.get("security_type", "EXTRA_STOCK_A"))
+            start_date = kwargs.get("start_date")
+            end_date = kwargs.get("end_date")
+            local_path = resolve_local_cache_path(self.config, kwargs.get("local_path"))
             raw_dataset = await self.thread_pool.execute_async(
                 fetch_stock_dataset_blocking,
                 sdk,
                 security_type=security_type,
+                start_date=start_date,
+                end_date=end_date,
+                local_path=local_path,
             )
 
             records = normalize_stock_records(raw_dataset)

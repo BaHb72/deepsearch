@@ -625,7 +625,11 @@ async def refresh_market_data_once(app_state: AppState) -> None:
 
     async with lock:
         try:
-            await asyncio.wait_for(pipeline.run_once(), timeout=5.0)
+            runner_timeout = 3.0
+            if runner is not None:
+                runner_timeout = getattr(runner, "step_timeout_seconds", runner_timeout)
+            timeout_budget = max(5.0, runner_timeout)
+            await asyncio.wait_for(pipeline.run_once(), timeout=timeout_budget)
         except asyncio.TimeoutError:
             logger.warning("market data refresh timed out; serving stale cache")
         except Exception as exc:
