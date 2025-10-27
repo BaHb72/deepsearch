@@ -889,6 +889,7 @@ class AmazingDataProcessProxy:
         logger.info(f"Worker process started (PID: {mp.current_process().pid})")
 
         logged_in_username = None
+        login_errors: list[str] = []
 
         while True:
             try:
@@ -930,23 +931,47 @@ class AmazingDataProcessProxy:
                     continue
 
                 if request.request_type == RequestType.LOGIN:
-                    result = ad.login(*request.args, **request.kwargs)
-                    if result == 0 or result is True:
-                        if request.args:
-                            logged_in_username = request.args[0]
-                            logger.info(f"Login successful, saved username: {logged_in_username}")
-                        response = ProxyResponse(
-                            request_id=request.request_id,
-                            success=True,
-                            result=result,
-                        )
-                    else:
+                    try:
+                        result = ad.login(*request.args, **request.kwargs)
+                    except SystemExit as exc:  # pragma: no cover - SDK behaviour
+                        exit_code = getattr(exc, "code", None)
+                        logger.critical(f"SDK called SystemExit during login: {exit_code}")
+                        code_value = "unknown" if exit_code is None else exit_code
+                        login_errors = [
+                            f"sdk_system_exit:{code_value}",
+                            "tgw_push_init_failed",
+                        ]
+                        logged_in_username = None
                         response = ProxyResponse(
                             request_id=request.request_id,
                             success=False,
-                            error=f"Login failed with code: {result}",
-                            result=result,
+                            error=f"SDK attempted to exit with code: {exit_code}",
+                            error_type="SystemExit",
+                            result={
+                                "exit_code": exit_code,
+                                "stage": "login",
+                            },
                         )
+                    else:
+                        if result == 0 or result is True:
+                            if request.args:
+                                logged_in_username = request.args[0]
+                                logger.info(f"Login successful, saved username: {logged_in_username}")
+                            login_errors = []
+                            response = ProxyResponse(
+                                request_id=request.request_id,
+                                success=True,
+                                result=result,
+                            )
+                        else:
+                            logged_in_username = None
+                            login_errors = [f"login_failed:{result}"]
+                            response = ProxyResponse(
+                                request_id=request.request_id,
+                                success=False,
+                                error=f"Login failed with code: {result}",
+                                result=result,
+                            )
                 elif request.request_type == RequestType.LOGOUT:
                     logger.info("Attempting safe logout...")
                     try:
@@ -970,6 +995,7 @@ class AmazingDataProcessProxy:
 
                         logger.info("Logout completed without crash")
                         logged_in_username = None
+                        login_errors = []
                         break
                     except Exception as exc:
                         logger.warning(f"Logout failed: {exc}, terminating process")
@@ -981,6 +1007,7 @@ class AmazingDataProcessProxy:
                         ad,
                         logged_in_username,
                         sdk_imported,
+                        login_errors,
                     )
                 else:
                     base_kwargs = dict(request.kwargs)
@@ -1075,6 +1102,7 @@ class AmazingDataProcessProxy:
             ad: Any | None,
             logged_in_username: Optional[str],
             sdk_imported: bool,
+            login_errors: Sequence[str] | None = None,
     ) -> ProxyResponse:
         """构建健康检查响应，避免泄露敏感信息。"""
         timestamp = time.time()
@@ -1103,6 +1131,7 @@ class AmazingDataProcessProxy:
         probe_result: Any = None
         probe_name: Optional[str] = None
         probe_errors: list[str] = []
+        captured_errors: list[str] = list(login_errors or [])
 
         candidates = AmazingDataProcessProxy._health_probe_candidates(
             logged_in=bool(logged_in_username)
@@ -1131,6 +1160,9 @@ class AmazingDataProcessProxy:
         elif probe_errors:
             payload["status"] = "degraded"
             payload["errors"] = probe_errors[:2]
+        elif captured_errors:
+            payload["status"] = "degraded"
+            payload["errors"] = captured_errors[:2]
         elif logged_in_username:
             logger.warning(
                 "[Proxy] Logged in but no health probe succeeded; falling back to ok status"
@@ -1143,7 +1175,7 @@ class AmazingDataProcessProxy:
             payload["warnings"] = ["probe_not_available"]
         else:
             payload["status"] = "degraded"
-            payload["errors"] = ["probe_not_available"]
+            payload["errors"] = ["not_logged_in"]
 
         success = payload["status"] != "error"
         return ProxyResponse(

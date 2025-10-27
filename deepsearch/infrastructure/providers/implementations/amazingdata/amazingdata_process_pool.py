@@ -151,6 +151,7 @@ class ProcessHandle:
     is_test: bool = False
     last_health_status: dict[str, Any] | None = None
     last_health_check_at: float | None = None
+    health_failure_streak: int = 0
 
     def mark_used(self) -> None:
         """Refresh the last-used timestamp."""
@@ -292,6 +293,7 @@ class AmazingDataProcessPool:
         self.executor = ThreadPoolExecutor(max_workers=3)
         self._datasource_locks: Dict[str, threading.RLock] = {}
         self._locks_guard = threading.Lock()
+        self._degraded_restart_threshold = 3
         self._start_health_monitor()
 
     # ------------------------------------------------------------------ #
@@ -481,7 +483,7 @@ class AmazingDataProcessPool:
         for datasource_id in self._snapshot_ids():
             self.stop(datasource_id, force=force)
 
-    def restart(self, datasource_id: str) -> bool:
+    def restart(self, datasource_id: str, *, with_logout: bool | None = None) -> bool:
         """Restart the worker process for the specified datasource."""
         logger.info(f"[ProcessPool] Restarting process for {datasource_id}")
         with self._guard_datasource(datasource_id):
@@ -490,7 +492,8 @@ class AmazingDataProcessPool:
                 stored_config = handle.clone_config() if handle else {}
                 auto_cleanup = handle.auto_cleanup if handle else False
 
-            self.stop(datasource_id)
+            stop_with_logout = True if with_logout is None else with_logout
+            self.stop(datasource_id, with_logout=stop_with_logout)
 
             try:
                 proxy = self.get_or_create(
@@ -692,7 +695,7 @@ class AmazingDataProcessPool:
 
     def _check_process_health(self) -> None:
         """Inspect worker processes and restart unhealthy ones."""
-        unhealthy: list[str] = []
+        restart_targets: list[tuple[str, bool, int]] = []
         with self.lock:
             handles_snapshot = list(self._handles.items())
 
@@ -716,21 +719,41 @@ class AmazingDataProcessPool:
             if not isinstance(record_time, (int, float)):
                 record_time = time.time()
 
+            logged_in = bool(health.get("loggedIn"))
+            failure_streak = 0
+
             with self.lock:
                 current_handle = self._handles.get(datasource_id)
                 if current_handle:
                     current_handle.last_health_status = dict(health)
                     current_handle.last_health_check_at = record_time
+                    if status_value == "ok":
+                        current_handle.health_failure_streak = 0
+                    elif status_value in {"degraded", "error"}:
+                        current_handle.health_failure_streak += 1
+                    else:
+                        current_handle.health_failure_streak = min(
+                            current_handle.health_failure_streak + 1, self._degraded_restart_threshold
+                        )
+                    failure_streak = current_handle.health_failure_streak
 
             if previous_status != status_value:
                 _log_health_transition(datasource_id, previous_status, health)
 
             if status_value == "error":
-                unhealthy.append(datasource_id)
+                if failure_streak >= 1:
+                    restart_targets.append((datasource_id, logged_in, failure_streak))
+            elif status_value == "degraded":
+                errors = health.get("errors") or []
+                if errors and failure_streak >= self._degraded_restart_threshold:
+                    restart_targets.append((datasource_id, logged_in, failure_streak))
 
-        for datasource_id in unhealthy:
-            logger.warning(f"[ProcessPool] Unhealthy process detected: {datasource_id}")
-            self.restart(datasource_id)
+        for datasource_id, logged_in, streak in restart_targets:
+            reason_label = "logged-in failure" if logged_in else "pre-login failure"
+            logger.warning(
+                f"[ProcessPool] Restarting unhealthy process {datasource_id} after {reason_label} streak (count={streak})"
+            )
+            self.restart(datasource_id, with_logout=logged_in)
 
 
 _global_pool: Optional[AmazingDataProcessPool] = None

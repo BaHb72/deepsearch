@@ -67,8 +67,8 @@ export default defineConfig({
             '/api': {
                 target: 'http://localhost:8000',
                 changeOrigin: true,
-                timeout: 10000,
-                proxyTimeout: 10000,
+                timeout: 30000,
+                proxyTimeout: 30000,
                 configure: (proxy) => {
                     proxy.on('error', (err, req) => {
                         proxyLogger.error(`[PROXY_ERROR] ${req?.url ?? 'unknown'}`, err)

@@ -8,6 +8,7 @@ from typing import Any, Iterable, Sequence
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
+from starlette import status
 
 from deepsearch.webui.server import (
     ensure_market_data_runtime,
@@ -53,6 +54,22 @@ def _ensure_runtime_components(
     return app_state, reader, pipeline or None
 
 
+def _ensure_provider_ready(app_state: Any) -> None:
+    provider = getattr(app_state, "market_data_provider", None)
+    ready = False
+    if provider is not None:
+        is_connected_attr = getattr(provider, "is_connected", None)
+        if callable(is_connected_attr):
+            ready = bool(is_connected_attr())
+        else:
+            ready = bool(is_connected_attr)
+    if not ready:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="amazingdata-unavailable",
+        )
+
+
 @router.get("/strength")
 async def get_market_strength(
         request: Request,
@@ -65,6 +82,7 @@ async def get_market_strength(
     settings = getattr(request.app.state, "settings", None)
     await ensure_market_data_runtime(request.app.state.app_state, settings)
     app_state, reader, pipeline = _ensure_runtime_components(request)
+    _ensure_provider_ready(app_state)
     service = getattr(app_state, "market_data_service")
 
     window_candidates: Sequence[str]
@@ -105,6 +123,7 @@ async def get_order_imbalance(
     settings = getattr(request.app.state, "settings", None)
     await ensure_market_data_runtime(request.app.state.app_state, settings)
     app_state, reader, _ = _ensure_runtime_components(request)
+    _ensure_provider_ready(app_state)
     service = getattr(app_state, "market_data_service")
 
     default_window = getattr(getattr(service, "default_order_window", None), "name", None)
@@ -136,6 +155,7 @@ async def get_auction_quality(
     settings = getattr(request.app.state, "settings", None)
     await ensure_market_data_runtime(request.app.state.app_state, settings)
     app_state, reader, pipeline = _ensure_runtime_components(request)
+    _ensure_provider_ready(app_state)
     service = getattr(app_state, "market_data_service")
 
     board_list = _unique(_parse_csv(boards))
