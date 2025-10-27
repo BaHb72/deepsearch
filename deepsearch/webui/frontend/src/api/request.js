@@ -3,13 +3,46 @@ import messageManager from '@/utils/messageManager'
 import {logApiError} from '@/utils/errorTracker'
 import backendStatus from '@/utils/backendStatus'
 import {clearPortCache} from '@/utils/portDetector'
-import { debugAxiosInstance } from '@/utils/debugApi'
+import {debugAxiosInstance} from '@/utils/debugApi'
 
 // 调试日志工具
 const debugLog = (stage, message, data = null) => {
     const timestamp = new Date().toISOString()
     const logEntry = `[request.js ${timestamp}] ${stage}: ${message}`
     console.log('%c' + logEntry, 'color: #e6a23c; font-weight: bold;', data)
+}
+
+const describeBackendIssue = () => {
+    let status = null
+    try {
+        status = backendStatus.getLastStatus ? backendStatus.getLastStatus() : null
+    } catch (err) {
+        status = backendStatus.lastStatus || null
+    }
+
+    if (!status || typeof status !== 'object') {
+        return '后端服务不可用'
+    }
+
+    if (status.ready === true) {
+        return '后端服务不可用'
+    }
+
+    const market = status.market_data || {}
+    if (market.provider && market.provider.connected === false) {
+        return '后端服务不可用：数据源登录中或连接失败'
+    }
+    if (market.boards && market.boards.ready === false) {
+        return '后端服务不可用：板块成分尚未加载'
+    }
+    const runtime = market.runtime || {}
+    if (runtime.runner && runtime.runner !== 'active') {
+        return '后端服务不可用：实时刷新任务未启动'
+    }
+    if (market.cache && market.cache.available === false) {
+        return '后端服务不可用：缓存未就绪'
+    }
+    return '后端服务初始化中'
 }
 
 // 创建 axios 实例（初始不设置baseURL，由动态端口决定）
@@ -88,7 +121,7 @@ request.interceptors.request.use(
                 backendAvailable: false
             })
 
-            const error = new Error('后端服务不可用')
+            const error = new Error(describeBackendIssue())
             error.code = 'BACKEND_UNAVAILABLE'
             error.config = config
             return Promise.reject(error)
@@ -254,7 +287,7 @@ request.interceptors.response.use(
             }
         } else if (error.code === 'BACKEND_UNAVAILABLE') {
             // 后端不可用错误
-            errorMessage = '后端服务不可用'
+            errorMessage = describeBackendIssue()
             showError = false // 不显示错误，因为用户已经知道
         }
 

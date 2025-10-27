@@ -70,3 +70,26 @@ class BoardUniverse:
         """Return available board identifiers."""
 
         return tuple(sorted(self._boards.keys()))
+
+    def load_snapshot(self, snapshot: Mapping[str, Sequence[str]]) -> None:
+        """Restore board membership from a cached snapshot."""
+
+        restored: dict[str, tuple[str, ...]] = {}
+        for board, codes in snapshot.items():
+            if not board:
+                continue
+            normalized_codes: list[str] = []
+            for code in codes:
+                if not code:
+                    continue
+                normalized = str(code).upper().strip()
+                if normalized:
+                    normalized_codes.append(normalized)
+            if normalized_codes:
+                restored[str(board)] = tuple(sorted(set(normalized_codes)))
+        self._boards = restored
+
+    def snapshot(self) -> dict[str, list[str]]:
+        """Return a serializable snapshot of current board mapping."""
+
+        return {board: list(codes) for board, codes in self._boards.items()}

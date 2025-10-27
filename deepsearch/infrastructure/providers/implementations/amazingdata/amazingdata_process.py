@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, TypeVar
 
@@ -116,6 +116,10 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         self._datasource_id = self._build_datasource_id()
         self._proxy_config = self._build_proxy_config()
         self._connected: bool = False
+        self._connected_since: datetime | None = None
+        self._last_disconnect_at: datetime | None = None
+        self._last_error: str | None = None
+        self._last_health_status: Dict[str, Any] | None = None
 
     def _build_datasource_id(self) -> str:
         username = getattr(self.config, "username", "") or "anonymous"
@@ -141,6 +145,41 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             timeout_value = 10.0
         proxy_config["startup_timeout"] = max(timeout_value, 5.0)
         return proxy_config
+
+    def _mark_connected(self, value: bool, *, error: str | None = None) -> None:
+        previous_state = self._connected
+        self._connected = value
+        now = datetime.now(timezone.utc)
+        if value:
+            if not previous_state:
+                self._connected_since = now
+            if error:
+                self._last_error = error
+            else:
+                self._last_error = None
+        else:
+            if previous_state:
+                self._last_disconnect_at = now
+            if error:
+                self._last_error = error
+
+    def update_health_status(self, payload: Dict[str, Any] | None) -> None:
+        self._last_health_status = dict(payload) if payload else None
+
+    def connection_status(self) -> Dict[str, Any]:
+        return {
+            "connected": self.is_connected(),
+            "connected_since": self._format_dt(self._connected_since),
+            "last_disconnect_at": self._format_dt(self._last_disconnect_at),
+            "last_error": self._last_error,
+            "health": self._last_health_status or {},
+        }
+
+    @staticmethod
+    def _format_dt(value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     async def _ensure_adapter(self) -> AmazingDataProcessAdapter:
         if self._adapter is not None:
@@ -192,11 +231,11 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             if not response.success:
                 error_message = response.error or response.error_type or "login_failed"
                 raise DataProviderError(f"AmazingData 登录失败: {error_message}")
-            self._connected = True
+            self._mark_connected(True)
         except Exception as exc:
             if error_message is None:
                 error_message = str(exc)
-            self._connected = False
+            self._mark_connected(False, error=error_message)
             raise
         finally:
             if pool:
@@ -211,7 +250,7 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         if reason:
             logger.warning(f"AmazingData process provider will reset connection due to: {reason}")
         self._initialized = False
-        self._connected = False
+        self._mark_connected(False, error=reason)
         if drop_adapter:
             self._adapter = None
 
@@ -271,9 +310,11 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                 self._reset_connection_state(drop_adapter=drop_adapter, reason=message)
                 last_error = error
                 continue
+            self._mark_connected(False, error=message)
             raise error
 
         assert last_error is not None
+        self._mark_connected(False, error=str(last_error))
         raise last_error
 
     async def initialize(self) -> bool:
@@ -592,4 +633,4 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         self._adapter = None
         self._pool = None
         self._initialized = False
-        self._connected = False
+        self._mark_connected(False)

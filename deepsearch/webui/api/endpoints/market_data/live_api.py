@@ -97,18 +97,36 @@ async def get_market_strength(
         raise HTTPException(status_code=400, detail="缺少有效的窗口参数")
 
     board_filter = _unique(_parse_csv(boards))
-    entries = await reader.fetch_strength(window_candidates, boards=board_filter or None, limit=limit)
-    if not entries:
+    strength_result = await reader.fetch_strength(
+        window_candidates,
+        boards=board_filter or None,
+        limit=limit,
+    )
+    if not strength_result.items:
         await refresh_market_data_once(app_state)
-        entries = await reader.fetch_strength(window_candidates, boards=board_filter or None, limit=limit)
+        strength_result = await reader.fetch_strength(
+            window_candidates,
+            boards=board_filter or None,
+            limit=limit,
+        )
+
+    cache_info = {
+        "cachedAt": strength_result.cached_at,
+        "expiresAt": strength_result.expires_at,
+    }
+    cache_info = {k: v for k, v in cache_info.items() if v}
 
     payload = {
         "windows": list(window_candidates),
         "boards": board_filter or list(getattr(pipeline, "boards", ())),
-        "items": entries,
+        "items": strength_result.items,
+        "asOf": strength_result.as_of,
+        "stale": strength_result.stale,
         "retrieved_at": _iso_now(),
         "data_source": "amazingdata",
     }
+    if cache_info:
+        payload["cache"] = cache_info
     return JSONResponse(payload)
 
 
@@ -131,17 +149,27 @@ async def get_order_imbalance(
     if not window_name:
         raise HTTPException(status_code=400, detail="缺少窗口参数")
 
-    entries = await reader.fetch_order_imbalance(window_name, limit=limit)
-    if not entries:
+    imbalance_result = await reader.fetch_order_imbalance(window_name, limit=limit)
+    if not imbalance_result.items:
         await refresh_market_data_once(app_state)
-        entries = await reader.fetch_order_imbalance(window_name, limit=limit)
+        imbalance_result = await reader.fetch_order_imbalance(window_name, limit=limit)
+
+    cache_info = {
+        "cachedAt": imbalance_result.cached_at,
+        "expiresAt": imbalance_result.expires_at,
+    }
+    cache_info = {k: v for k, v in cache_info.items() if v}
 
     payload = {
         "window": window_name,
-        "items": entries,
+        "items": imbalance_result.items,
+        "asOf": imbalance_result.as_of,
+        "stale": imbalance_result.stale,
         "retrieved_at": _iso_now(),
         "data_source": "amazingdata",
     }
+    if cache_info:
+        payload["cache"] = cache_info
     return JSONResponse(payload)
 
 
@@ -172,15 +200,25 @@ async def get_auction_quality(
     if not board_list:
         logger.debug("未解析到有效板块，返回空集合")
 
-    entries = await reader.fetch_auction_quality(board_list)
-    if not entries:
+    auction_result = await reader.fetch_auction_quality(board_list)
+    if not auction_result.items:
         await refresh_market_data_once(app_state)
-        entries = await reader.fetch_auction_quality(board_list)
+        auction_result = await reader.fetch_auction_quality(board_list)
+
+    cache_info = {
+        "cachedAt": auction_result.cached_at,
+        "expiresAt": auction_result.expires_at,
+    }
+    cache_info = {k: v for k, v in cache_info.items() if v}
 
     payload = {
         "boards": board_list,
-        "items": entries,
+        "items": auction_result.items,
+        "asOf": auction_result.as_of,
+        "stale": auction_result.stale,
         "retrieved_at": _iso_now(),
         "data_source": "amazingdata",
     }
+    if cache_info:
+        payload["cache"] = cache_info
     return JSONResponse(payload)

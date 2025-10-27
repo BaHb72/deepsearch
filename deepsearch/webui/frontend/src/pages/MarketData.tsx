@@ -36,18 +36,30 @@ type StrengthState = {
     windows: string[];
     boards: string[];
     retrievedAt: string;
+    asOf?: string | null;
+    stale?: boolean;
+    cache?: { cachedAt?: string; expiresAt?: string };
+    dataSource?: string;
 };
 
 type ImbalanceState = {
     window: string;
     items: OrderImbalanceItem[];
     retrievedAt: string;
+    asOf?: string | null;
+    stale?: boolean;
+    cache?: { cachedAt?: string; expiresAt?: string };
+    dataSource?: string;
 };
 
 type AuctionState = {
     boards: string[];
     items: AuctionQualityItem[];
     retrievedAt: string;
+    asOf?: string | null;
+    stale?: boolean;
+    cache?: { cachedAt?: string; expiresAt?: string };
+    dataSource?: string;
 };
 
 const { Title } = Typography
@@ -105,16 +117,28 @@ const MarketData = () => {
         windows: [],
         boards: [],
         retrievedAt: '',
+        asOf: null,
+        stale: false,
+        cache: undefined,
+        dataSource: 'amazingdata',
     })
     const [imbalanceState, setImbalanceState] = useState<ImbalanceState>({
         window: '',
         items: [],
         retrievedAt: '',
+        asOf: null,
+        stale: false,
+        cache: undefined,
+        dataSource: 'amazingdata',
     })
     const [auctionState, setAuctionState] = useState<AuctionState>({
         boards: [],
         items: [],
         retrievedAt: '',
+        asOf: null,
+        stale: false,
+        cache: undefined,
+        dataSource: 'amazingdata',
     })
 
   // Auto refresh
@@ -325,6 +349,10 @@ const MarketData = () => {
                 windows: strengthPayload.windows ?? [],
                 boards: strengthPayload.boards ?? [],
                 retrievedAt: strengthPayload.retrieved_at ?? '',
+                asOf: strengthPayload.asOf ?? (strengthPayload as any).as_of ?? null,
+                stale: strengthPayload.stale ?? false,
+                cache: strengthPayload.cache ?? undefined,
+                dataSource: strengthPayload.data_source ?? 'amazingdata',
             })
 
             const imbalancePayload = imbalanceRes.data ?? {window: '', items: [], retrieved_at: ''}
@@ -332,6 +360,10 @@ const MarketData = () => {
                 window: imbalancePayload.window ?? '',
                 items: imbalancePayload.items ?? [],
                 retrievedAt: imbalancePayload.retrieved_at ?? '',
+                asOf: imbalancePayload.asOf ?? (imbalancePayload as any).as_of ?? null,
+                stale: imbalancePayload.stale ?? false,
+                cache: imbalancePayload.cache ?? undefined,
+                dataSource: imbalancePayload.data_source ?? 'amazingdata',
             })
 
             const auctionPayload = auctionRes.data ?? {boards: [], items: [], retrieved_at: ''}
@@ -339,6 +371,10 @@ const MarketData = () => {
                 boards: auctionPayload.boards ?? [],
                 items: auctionPayload.items ?? [],
                 retrievedAt: auctionPayload.retrieved_at ?? '',
+                asOf: auctionPayload.asOf ?? (auctionPayload as any).as_of ?? null,
+                stale: auctionPayload.stale ?? false,
+                cache: auctionPayload.cache ?? undefined,
+                dataSource: auctionPayload.data_source ?? 'amazingdata',
             })
         } catch (error) {
             // eslint-disable-next-line no-console
@@ -645,6 +681,14 @@ const MarketData = () => {
                                       {strengthState.retrievedAt && (
                                           <Tag>{formatTimestamp(strengthState.retrievedAt)}</Tag>
                                       )}
+                                      {strengthState.asOf && (
+                                          <Tag color={strengthState.stale ? 'orange' : 'blue'}>
+                                              AsOf {formatTimestamp(strengthState.asOf)}
+                                          </Tag>
+                                      )}
+                                      {strengthState.stale && (
+                                          <Tag color="red">数据暂未刷新</Tag>
+                                      )}
                                       <Button
                                           type="link"
                                           size="small"
@@ -675,6 +719,14 @@ const MarketData = () => {
                                       {imbalanceState.retrievedAt && (
                                           <Tag>{formatTimestamp(imbalanceState.retrievedAt)}</Tag>
                                       )}
+                                      {imbalanceState.asOf && (
+                                          <Tag color={imbalanceState.stale ? 'orange' : 'blue'}>
+                                              AsOf {formatTimestamp(imbalanceState.asOf)}
+                                          </Tag>
+                                      )}
+                                      {imbalanceState.stale && (
+                                          <Tag color="red">排名可能滞后</Tag>
+                                      )}
                                   </Space>
                               )}
                           >
@@ -695,6 +747,14 @@ const MarketData = () => {
                                   <Space size="small">
                                       {auctionState.retrievedAt && (
                                           <Tag>{formatTimestamp(auctionState.retrievedAt)}</Tag>
+                                      )}
+                                      {auctionState.asOf && (
+                                          <Tag color={auctionState.stale ? 'orange' : 'blue'}>
+                                              AsOf {formatTimestamp(auctionState.asOf)}
+                                          </Tag>
+                                      )}
+                                      {auctionState.stale && (
+                                          <Tag color="red">数据延迟</Tag>
                                       )}
                                   </Space>
                               )}

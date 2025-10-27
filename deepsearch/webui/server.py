@@ -569,12 +569,25 @@ async def ensure_market_data_runtime(app_state: AppState, settings: Settings | N
         app_state.market_data_cache_writer = cache_writer
         app_state.market_data_pipeline = pipeline
         app_state.market_data_runner = runner
-        app_state.market_data_reader = MarketDataCacheReader(cache_writer)
+        reader = MarketDataCacheReader(cache_writer)
+        app_state.market_data_reader = reader
         app_state.market_data_provider = provider
 
         try:
+            cached_boards, _ = await reader.fetch_board_universe()
+            if cached_boards:
+                service.board_universe.load_snapshot(cached_boards)
+                logger.debug("预热板块映射: %s 个板块", len(cached_boards))
+        except Exception as exc:
+            logger.debug("加载缓存板块映射失败: %s", exc)
+
+        try:
             await service.refresh_board_universe()
-        except Exception as exc:  # pragma: no cover - 运行期警告
+            try:
+                await cache_writer.write_board_universe(service.board_universe.snapshot())
+            except Exception as cache_exc:
+                logger.debug("缓存板块映射失败: %s", cache_exc)
+        except Exception as exc:  # pragma: no cover - 启动阶段调试
             logger.debug("刷新板块成分失败: %s", exc)
 
         if getattr(realtime_cfg, "enabled", False):
@@ -592,7 +605,7 @@ async def ensure_market_data_runtime(app_state: AppState, settings: Settings | N
 
 
 async def refresh_market_data_once(app_state: AppState) -> None:
-    """在后台任务未运行时执行一次实时刷新。"""
+    """在后台任务停摆时执行一次实时刷新。"""
 
     pipeline = getattr(app_state, "market_data_pipeline", None)
     if pipeline is None:
@@ -612,10 +625,11 @@ async def refresh_market_data_once(app_state: AppState) -> None:
 
     async with lock:
         try:
-            await pipeline.run_once()
+            await asyncio.wait_for(pipeline.run_once(), timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("market data refresh timed out; serving stale cache")
         except Exception as exc:
             logger.error("市场数据实时刷新失败: {}", exc)
-
 
 async def shutdown_market_data_runtime(app_state: AppState) -> None:
     """关闭市场数据实时运行态，释放资源。"""

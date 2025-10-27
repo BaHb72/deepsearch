@@ -18,3 +18,19 @@ def test_board_universe_update_from_records() -> None:
     assert universe.resolve_codes("科创板") == ("688001.SH",)
     assert universe.resolve_codes("成长") == ("300001.SZ",)
     assert universe.resolve_codes("未知") == ()
+
+
+def test_board_universe_snapshot_roundtrip() -> None:
+    universe = BoardUniverse()
+    universe.update_from_records([
+        {"symbol": "000001.SZ", "board": "����"},
+        {"symbol": "000002.SZ", "board": "����"},
+    ])
+
+    snapshot = universe.snapshot()
+
+    restored = BoardUniverse()
+    restored.load_snapshot(snapshot)
+
+    assert restored.resolve_codes("����") == ("000001.SZ", "000002.SZ")
+    assert restored.boards() == ("����",)

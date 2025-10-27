@@ -19,7 +19,7 @@ async def test_cache_writer_stores_data_in_memory():
     writer = MarketDataCacheWriter()
     window = WindowSpec(name="1m", duration=timedelta(minutes=1))
     capital_entry = CapitalPulseEntry(
-        board="主板",
+        board="����",
         window=window,
         amount_total=Decimal("1000000"),
         speed_per_min=Decimal("250000"),
@@ -28,7 +28,7 @@ async def test_cache_writer_stores_data_in_memory():
         data_source="amazingdata",
     )
     auction_entry = AuctionQualityEntry(
-        board="主板",
+        board="����",
         amount_acc=Decimal("1000000"),
         volume_acc=Decimal("500000"),
         speed_per_min=Decimal("200000"),
@@ -38,7 +38,7 @@ async def test_cache_writer_stores_data_in_memory():
     )
     imbalance_entry = OrderImbalanceEntry(
         code="000001.SZ",
-        name="示例",
+        name="ʾ��",
         obi=Decimal("0.7"),
         eis=Decimal("0.3"),
         ntm=Decimal("120"),
@@ -51,6 +51,21 @@ async def test_cache_writer_stores_data_in_memory():
     await writer.write_order_imbalance([imbalance_entry], window=window, limit=10)
 
     cached = writer.dump_memory_cache()
-    assert "market:strength:主板:1m" in cached
-    assert "market:auction:主板" in cached
-    assert "market:order-imbalance:1m" in cached
+    strength_entry = cached[f"market:strength:{capital_entry.board}:1m"]
+    assert strength_entry["payload"]["board"] == capital_entry.board
+    assert strength_entry["payload"]["as_of"] == capital_entry.ts.isoformat()
+
+    window_bucket = cached["market:strength:1m"]
+    assert window_bucket["payload"]["as_of"] == capital_entry.ts.isoformat()
+
+    auction_entry_key = f"market:auction:{auction_entry.board}"
+    auction_payload = cached[auction_entry_key]
+    assert auction_payload["payload"]["as_of"] == auction_entry.ts.isoformat()
+
+    imbalance_payload = cached["market:order-imbalance:1m"]
+    assert imbalance_payload["payload"]["entries"][0]["code"] == "000001.SZ"
+    assert imbalance_payload["payload"]["as_of"] == imbalance_entry.ts.isoformat()
+
+    await writer.write_board_universe({capital_entry.board: ["000001.SZ", "000002.SZ"]})
+    boards_cache = writer.dump_memory_cache()["market:boards"]
+    assert boards_cache["payload"]["boards"][capital_entry.board] == ["000001.SZ", "000002.SZ"]

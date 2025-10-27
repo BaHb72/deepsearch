@@ -89,8 +89,17 @@ async def test_pipeline_run_once_updates_cache():
     await pipeline.run_once()
 
     memory = writer.dump_memory_cache()
-    assert "market:strength:主板:1m" in memory
-    assert "market:order-imbalance:1m" in memory
-    assert "market:auction:主板" in memory
+    board_name = pipeline.boards[0]
+    strength_key = f"market:strength:{board_name}:1m"
+    strength_payload = memory[strength_key]
+    assert strength_payload["payload"]["as_of"] is not None
+
+    order_payload = memory["market:order-imbalance:1m"]
+    assert order_payload["payload"]["as_of"] is not None
+
+    auction_key = f"market:auction:{board_name}"
+    auction_payload = memory[auction_key]
+    assert auction_payload["payload"]["as_of"] is not None
+
     assert service.ingest_called
     assert service.ensure_calls

@@ -16,6 +16,9 @@ export interface StrengthResponse {
     boards: string[];
     items: StrengthItem[];
     retrieved_at: string;
+    asOf?: string;
+    stale?: boolean;
+    cache?: { cachedAt?: string; expiresAt?: string };
     data_source?: string;
 }
 
@@ -33,6 +36,9 @@ export interface OrderImbalanceResponse {
     window: string;
     items: OrderImbalanceItem[];
     retrieved_at: string;
+    asOf?: string;
+    stale?: boolean;
+    cache?: { cachedAt?: string; expiresAt?: string };
     data_source?: string;
 }
 
@@ -50,6 +56,9 @@ export interface AuctionQualityResponse {
     boards: string[];
     items: AuctionQualityItem[];
     retrieved_at: string;
+    asOf?: string;
+    stale?: boolean;
+    cache?: { cachedAt?: string; expiresAt?: string };
     data_source?: string;
 }
 
