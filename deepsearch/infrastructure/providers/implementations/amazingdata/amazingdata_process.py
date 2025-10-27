@@ -433,19 +433,19 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         if not records:
             if branch_used:
                 logger.warning(
-                    "AmazingData 股票代码表为空 (branch=%s, security_type=%s)",
+                    "AmazingData 股票代码表为空 (branch={}, security_type={})",
                     branch_used,
                     normalized_security_type,
                 )
             else:
                 logger.warning(
-                    "AmazingData 股票代码表为空 (branch=unknown, security_type=%s)",
+                    "AmazingData 股票代码表为空 (branch=unknown, security_type={})",
                     normalized_security_type,
                 )
             return None
 
         logger.info(
-            "Using AmazingData.fetch_code_list (branch=%s, security_type=%s, count=%s)",
+            "Using AmazingData.fetch_code_list (branch={}, security_type={}, count={})",
             branch_used or "unknown",
             normalized_security_type,
             len(records),
@@ -522,96 +522,128 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
 
     async def get_realtime_quote(
         self,
-        symbol: str,
+            symbols: Sequence[str] | str,
         **kwargs: Any,
     ) -> Optional[Dict[str, Any]]:
         today = int(datetime.now().strftime("%Y%m%d"))
+
+        if isinstance(symbols, str):
+            symbol_list = [symbols]
+            single_query = True
+        else:
+            symbol_list = [str(item).strip() for item in symbols if str(item).strip()]
+            single_query = False
+
+        if not symbol_list:
+            return {} if not single_query else None
+
+        normalized_targets = [code.upper() for code in symbol_list]
+
         command = ProcessCommand[Any](
             method="MarketData.query_snapshot",
-            args=([symbol],),
+            args=(normalized_targets,),
             kwargs={"begin_date": today, "end_date": today},
             alt_methods=("MarketData.get_snapshot",),
-            alt_args=(([symbol],),),
+            alt_args=(normalized_targets,),
             kwargs_patches=({"__remove__": ("begin_date", "end_date")},),
         )
         raw_result = await self._execute(command)
         if not raw_result:
-            return None
+            return {} if not single_query else None
 
-        def _extract_row(payload: Any) -> Dict[str, Any] | None:
-            if isinstance(payload, pd.DataFrame):
-                if payload.empty:
-                    return None
-                frame = payload.copy()
-                if frame.index.name and frame.index.name not in frame.columns:
-                    frame = frame.reset_index()
-                else:
-                    frame = frame.reset_index(drop=True)
-                return dict(frame.iloc[-1])
-            if isinstance(payload, Mapping):
-                return dict(payload)
-            if isinstance(payload, Sequence) and payload and isinstance(payload[-1], Mapping):
-                return dict(payload[-1])
-            return None
+        def _collect_rows(payload: Any) -> list[dict[str, Any]]:
+            rows: list[dict[str, Any]] = []
+            stack: list[Any] = [payload]
+            while stack:
+                current = stack.pop()
+                if current is None:
+                    continue
+                if isinstance(current, pd.DataFrame):
+                    frame = current.copy()
+                    if frame.index.name and frame.index.name not in frame.columns:
+                        frame = frame.reset_index()
+                    else:
+                        frame = frame.reset_index(drop=True)
+                    rows.extend(frame.to_dict("records"))
+                    continue
+                if isinstance(current, Mapping):
+                    lowered_keys = {str(key).lower() for key in current.keys()}
+                    if {"code", "symbol"} & lowered_keys or {"price", "last", "close"} & lowered_keys:
+                        rows.append(dict(current))
+                        continue
+                    stack.extend(current.values())
+                    continue
+                if isinstance(current, Sequence) and not isinstance(current, (str, bytes, bytearray)):
+                    stack.extend(current)
+            return rows
 
-        payload = None
-        if isinstance(raw_result, Mapping):
-            payload = raw_result.get(symbol) or raw_result.get(symbol.upper())
-        elif isinstance(raw_result, Sequence):
-            for entry in raw_result:
-                if isinstance(entry, Mapping):
-                    code = entry.get("code") or entry.get("symbol")
-                    if code and code == symbol:
-                        payload = entry
-                        break
-            if payload is None and raw_result:
-                payload = raw_result[0]
+        rows = _collect_rows(raw_result)
+        if not rows:
+            return {} if not single_query else None
 
-        row = _extract_row(payload)
-        if row is None:
-            return None
+        def _format_quote(symbol_code: str, row: Mapping[str, Any]) -> Dict[str, Any]:
+            name = _coalesce(row.get("name"), row.get("SECURITY_NAME"), row.get("security_name"), "")
+            last_value = _coalesce(row.get("last"), row.get("close"), row.get("last_price"), row.get("price"))
+            open_value = _coalesce(row.get("open"), row.get("open_price"))
+            high_value = row.get("high")
+            low_value = row.get("low")
+            prev_close = _coalesce(row.get("prev_close"), row.get("pre_close"))
+            volume_value = row.get("volume")
+            amount_value = row.get("amount")
+            bid_price = _coalesce(row.get("bid_price1"), row.get("bid1"))
+            ask_price = _coalesce(row.get("ask_price1"), row.get("ask1"))
+            bid_volume = _coalesce(row.get("bid_volume1"), row.get("bid1_volume"))
+            ask_volume = _coalesce(row.get("ask_volume1"), row.get("ask1_volume"))
+            change_value = _coalesce(row.get("change"), row.get("price_change"))
+            change_percent = _coalesce(row.get("change_percent"), row.get("chg"))
+            trade_time_raw = _coalesce(row.get("trade_time"), row.get("time"))
+            if isinstance(trade_time_raw, datetime):
+                trade_time = trade_time_raw.isoformat()
+            else:
+                trade_time = str(trade_time_raw or "")
+            status_value = _coalesce(row.get("status"), row.get("trading_phase_code"), "")
 
-        name = _coalesce(row.get("name"), row.get("SECURITY_NAME"), row.get("security_name"), "")
-        last_value = _coalesce(row.get("last"), row.get("close"), row.get("last_price"), row.get("price"))
-        open_value = _coalesce(row.get("open"), row.get("open_price"))
-        high_value = row.get("high")
-        low_value = row.get("low")
-        prev_close = _coalesce(row.get("prev_close"), row.get("pre_close"))
-        volume_value = row.get("volume")
-        amount_value = row.get("amount")
-        bid_price = _coalesce(row.get("bid_price1"), row.get("bid1"))
-        ask_price = _coalesce(row.get("ask_price1"), row.get("ask1"))
-        bid_volume = _coalesce(row.get("bid_volume1"), row.get("bid1_volume"))
-        ask_volume = _coalesce(row.get("ask_volume1"), row.get("ask1_volume"))
-        change_value = _coalesce(row.get("change"), row.get("price_change"))
-        change_percent = _coalesce(row.get("change_percent"), row.get("chg"))
-        trade_time_raw = _coalesce(row.get("trade_time"), row.get("time"))
-        if isinstance(trade_time_raw, datetime):
-            trade_time = trade_time_raw.isoformat()
-        else:
-            trade_time = str(trade_time_raw or "")
-        status_value = _coalesce(row.get("status"), row.get("trading_phase_code"), "")
+            return {
+                "code": symbol_code,
+                "symbol": symbol_code,
+                "name": str(name),
+                "last": _ensure_float(last_value),
+                "open": _ensure_float(open_value),
+                "high": _ensure_float(high_value),
+                "low": _ensure_float(low_value),
+                "close": _ensure_float(prev_close),
+                "volume": _ensure_float(volume_value),
+                "amount": _ensure_float(amount_value),
+                "bid1": _ensure_float(bid_price),
+                "ask1": _ensure_float(ask_price),
+                "bid1_volume": _ensure_int(bid_volume),
+                "ask1_volume": _ensure_int(ask_volume),
+                "change": _ensure_float(change_value),
+                "change_percent": _ensure_float(change_percent),
+                "time": trade_time,
+                "status": str(status_value or ""),
+            }
 
-        return {
-            "code": symbol,
-            "symbol": symbol,
-            "name": str(name),
-            "last": _ensure_float(last_value),
-            "open": _ensure_float(open_value),
-            "high": _ensure_float(high_value),
-            "low": _ensure_float(low_value),
-            "close": _ensure_float(prev_close),
-            "volume": _ensure_float(volume_value),
-            "amount": _ensure_float(amount_value),
-            "bid1": _ensure_float(bid_price),
-            "ask1": _ensure_float(ask_price),
-            "bid1_volume": _ensure_int(bid_volume),
-            "ask1_volume": _ensure_int(ask_volume),
-            "change": _ensure_float(change_value),
-            "change_percent": _ensure_float(change_percent),
-            "time": trade_time,
-            "status": str(status_value or ""),
-        }
+        formatted: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            code_value = _coalesce(row.get("code"), row.get("symbol"))
+            if not code_value:
+                continue
+            code_upper = str(code_value).upper()
+            formatted[code_upper] = _format_quote(code_upper, row)
+
+        if single_query:
+            target_code = normalized_targets[0]
+            return formatted.get(target_code)
+
+        ordered: Dict[str, Dict[str, Any]] = {}
+        for code in normalized_targets:
+            if code in formatted:
+                ordered[code] = formatted[code]
+        for code, payload in formatted.items():
+            if code not in ordered:
+                ordered[code] = payload
+        return ordered
 
     async def subscribe(
         self,
