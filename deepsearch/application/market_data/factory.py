@@ -5,7 +5,12 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Optional, Sequence, Tuple
 
-import redis as aioredis
+try:
+    import redis as aioredis
+except Exception:  # pragma: no cover - optional dependency
+    aioredis = None  # type: ignore[assignment]
+
+from loguru import logger
 
 from deepsearch.config.models.market_data import MarketRealtimeConfig, MarketWindowConfig
 from deepsearch.domain.market_data import (
@@ -189,11 +194,25 @@ def create_realtime_streaming_pipeline(
     redis_url_effective = redis_url or (redis_conf.url if redis_conf and redis_conf.url else None)
     redis_client = None
     if redis_url_effective:
-        redis_client = aioredis.from_url(
-            redis_url_effective,
-            encoding="utf-8",
-            decode_responses=False,
-        )
+        if aioredis is None:
+            logger.warning("Redis 依赖未安装，实时行情将退回内存缓存")
+        else:
+            try:
+                redis_client = aioredis.from_url(
+                    redis_url_effective,
+                    encoding="utf-8",
+                    decode_responses=False,
+                    socket_connect_timeout=1.0,
+                )
+                try:
+                    redis_client.ping()
+                    logger.info("Redis 缓存连接建立成功: %s", redis_url_effective)
+                except Exception as ping_exc:  # pragma: no cover - 防御性日志
+                    logger.warning("Redis ping 失败，将使用内存缓存: %s", ping_exc)
+                    redis_client = None
+            except Exception as exc:  # pragma: no cover - 防御性日志
+                logger.warning("初始化 Redis 客户端失败，将使用内存缓存: %s", exc)
+                redis_client = None
 
     cache_writer = MarketDataCacheWriter(
         redis=redis_client,

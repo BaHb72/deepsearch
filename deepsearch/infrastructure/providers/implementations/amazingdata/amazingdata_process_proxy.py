@@ -21,7 +21,7 @@ import traceback
 from dataclasses import dataclass
 from enum import Enum
 from multiprocessing import connection
-from multiprocessing.managers import SyncManager
+from multiprocessing.context import BaseContext
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional, Protocol, Sequence, TypedDict, cast
 
@@ -110,27 +110,6 @@ class ProxyRequest:
             kwargs_patches=tuple(dict(patch) for patch in payload.get("kwargs_patches", ())),
         )
 
-    def to_payload(self) -> ProxyRequestPayload:
-        return {
-            "request_id": self.request_id,
-            "request_type": self.request_type,
-            "method": self.method,
-            "args": self.args,
-            "kwargs": dict(self.kwargs),
-            "timeout": self.timeout,
-        }
-
-    @classmethod
-    def from_payload(cls, payload: ProxyRequestPayload) -> "ProxyRequest":
-        return cls(
-            request_id=payload["request_id"],
-            request_type=payload["request_type"],
-            method=payload["method"],
-            args=tuple(payload["args"]),
-            kwargs=dict(payload["kwargs"]),
-            timeout=payload["timeout"],
-        )
-
 @dataclass
 class ProxyResponse:
     """代理响应数据结构"""
@@ -188,7 +167,7 @@ class AmazingDataProcessProxy:
         self.worker_env = dict(worker_env) if worker_env else {}
         self.startup_timeout = startup_timeout
 
-        self.manager: Optional[SyncManager] = None
+        self._mp_context: BaseContext = mp.get_context("spawn")
         self.request_queue: Optional[WorkerQueue] = None
         self.response_queue: Optional[WorkerQueue] = None
         self._queue_lock = threading.Lock()
@@ -228,20 +207,27 @@ class AmazingDataProcessProxy:
         with self._queue_lock:
             if force_reset:
                 self._reset_local_queues_locked()
-            if self.manager is None:
-                manager = mp.Manager()
-                self.manager = cast(SyncManager, manager)
-                self.request_queue = cast(WorkerQueue, manager.Queue())
-                self.response_queue = cast(WorkerQueue, manager.Queue())
+            if self.request_queue is None or self.response_queue is None:
+                ctx = self._mp_context
+                self.request_queue = cast(WorkerQueue, ctx.Queue())
+                self.response_queue = cast(WorkerQueue, ctx.Queue())
 
     def _reset_local_queues_locked(self) -> None:
-        if self.manager is not None:
-            try:
-                self.manager.shutdown()
-            except Exception as exc:  # pragma: no cover - 调试信息
-                logger.debug(f"Manager shutdown raised: {exc}")
-            finally:
-                self.manager = None
+        for queue_obj in (self.request_queue, self.response_queue):
+            if queue_obj is None:
+                continue
+            close_method = getattr(queue_obj, 'close', None)
+            if callable(close_method):
+                try:
+                    close_method()  # type: ignore[misc]
+                except Exception as exc:  # pragma: no cover - ������Ϣ
+                    logger.debug(f"Queue close raised: {exc}")
+            join_method = getattr(queue_obj, 'join_thread', None)
+            if callable(join_method):
+                try:
+                    join_method()  # type: ignore[misc]
+                except Exception as exc:  # pragma: no cover - ������Ϣ
+                    logger.debug(f"Queue join_thread raised: {exc}")
         self.request_queue = None
         self.response_queue = None
 
@@ -276,7 +262,7 @@ class AmazingDataProcessProxy:
                 return False
 
             logger.info("Starting AmazingData worker process (local)...")
-            process = mp.Process(
+            process = self._mp_context.Process(
                 target=self._worker_loop,
                 args=(request_queue, response_queue),
                 daemon=True,
@@ -292,7 +278,7 @@ class AmazingDataProcessProxy:
 
             logger.error("Worker process failed to start (local mode)")
             return False
-        except Exception as exc:  # pragma: no cover - 防御性日志
+        except Exception as exc:  # pragma: no cover - ��������־
             logger.error(f"Error starting local worker process: {exc}")
             return False
 
@@ -444,10 +430,11 @@ class AmazingDataProcessProxy:
 
     def _stop_local_worker(self, timeout: float, force: bool, with_logout: bool) -> bool:
         process_obj = self.worker_process
-        if not isinstance(process_obj, mp.Process):
+        if process_obj is None or not hasattr(process_obj, 'is_alive'):
             self.is_running = False
             self._reset_local_queues()
             return True
+        local_process = cast(mp.Process, process_obj)
         logger.info(
             "Stopping AmazingData worker process (local mode, with_logout=%s)...", with_logout
         )
@@ -464,8 +451,8 @@ class AmazingDataProcessProxy:
                     kwargs={},
                 )
                 self.request_queue.put(pickle.dumps(logout_request.to_payload()))
-                process_obj.join(timeout=2.0)
-                if not process_obj.is_alive():
+                local_process.join(timeout=2.0)
+                if not local_process.is_alive():
                     self.is_running = False
                     return True
 
@@ -480,21 +467,21 @@ class AmazingDataProcessProxy:
                 self.request_queue.put(pickle.dumps(shutdown_request.to_payload()))
 
             remaining_timeout = max(1.0, timeout - (2.0 if with_logout else 0))
-            process_obj.join(timeout=remaining_timeout)
+            local_process.join(timeout=remaining_timeout)
 
-            if process_obj.is_alive():
+            if local_process.is_alive():
                 logger.warning("Worker process not responding, terminating...")
-                process_obj.terminate()
-                process_obj.join(timeout=2.0)
-                if process_obj.is_alive() and force:
+                local_process.terminate()
+                local_process.join(timeout=2.0)
+                if local_process.is_alive() and force:
                     logger.error("Force killing worker process")
-                    process_obj.kill()
+                    local_process.kill()
 
             self.is_running = False
             self.last_login_username = None
             self._reset_local_queues()
             return True
-        except Exception as exc:  # pragma: no cover - 防御性日志
+        except Exception as exc:  # pragma: no cover - ��������־
             logger.error(f"Error stopping worker process: {exc}")
             return False
 
@@ -808,10 +795,12 @@ class AmazingDataProcessProxy:
             return False
         if self.python_executable:
             return cast(subprocess.Popen[bytes], process).poll() is None
-        return cast(mp.Process, process).is_alive()
+        if hasattr(process, 'is_alive'):
+            return cast(mp.Process, process).is_alive()
+        return False
 
     def is_worker_alive(self) -> bool:
-        """对外公开的 worker 存活检查"""
+        """���⹫���� worker �����"""
         return self._is_worker_alive()
 
     def _terminate_worker(self) -> None:
@@ -837,9 +826,11 @@ class AmazingDataProcessProxy:
                 external_process = cast(subprocess.Popen[bytes], process)
                 external_process.wait(timeout=timeout)
                 return external_process.poll() is not None
-            local_process = cast(mp.Process, process)
-            local_process.join(timeout=timeout)
-            return not local_process.is_alive()
+            if hasattr(process, 'join'):
+                local_process = cast(mp.Process, process)
+                local_process.join(timeout=timeout)
+                return not local_process.is_alive()
+            return True
         except subprocess.TimeoutExpired:
             return False
 
@@ -892,9 +883,15 @@ class AmazingDataProcessProxy:
         login_errors: list[str] = []
 
         while True:
+            request: ProxyRequest | None = None
+            payload_request_id: Optional[str] = None
             try:
                 request_data = request_queue.get(timeout=1)
+                if request_data is None:
+                    logger.debug("Received empty request payload")
+                    continue
                 payload = cast(ProxyRequestPayload, pickle.loads(request_data))
+                payload_request_id = payload.get("request_id")
                 request = ProxyRequest.from_payload(payload)
 
                 if request.request_type == RequestType.SHUTDOWN:
@@ -1035,18 +1032,38 @@ class AmazingDataProcessProxy:
                         if target is None:
                             last_error = f"Method {method_path} not found"
                             continue
+                        enforced_kwargs = dict(call_kwargs)
+                        if request.request_type in {RequestType.GET_DATA, RequestType.SUBSCRIBE,
+                                                    RequestType.UNSUBSCRIBE}:
+                            enforced_kwargs.setdefault('is_local', False)
                         try:
-                            result = target(*tuple(call_args), **call_kwargs)
+                            result = target(*tuple(call_args), **enforced_kwargs)
                             response = ProxyResponse(
                                 request_id=request.request_id,
                                 success=True,
                                 result=result,
                             )
                             break
-                        except (AttributeError, TypeError) as exc:  # pragma: no cover - 调整fallback日志
+                        except (AttributeError, TypeError) as exc:  # pragma: no cover - ����fallback��־
+                            message = str(exc)
+                            message_lower = message.lower()
+                            if 'is_local' in enforced_kwargs and 'is_local' in message_lower and 'unexpected' in message_lower:
+                                fallback_kwargs = dict(enforced_kwargs)
+                                fallback_kwargs.pop('is_local', None)
+                                try:
+                                    result = target(*tuple(call_args), **fallback_kwargs)
+                                    response = ProxyResponse(
+                                        request_id=request.request_id,
+                                        success=True,
+                                        result=result,
+                                    )
+                                    break
+                                except Exception as inner_exc:  # pragma: no cover - ��¼��ʵ�쳣
+                                    last_error = f"{method_path}: {inner_exc}"
+                                    continue
                             last_error = f"{method_path}: {exc}"
                             continue
-                        except Exception as exc:  # pragma: no cover - 记录真实异常
+                        except Exception as exc:  # pragma: no cover - ��¼��ʵ�쳣
                             response = ProxyResponse(
                                 request_id=request.request_id,
                                 success=False,
@@ -1054,6 +1071,7 @@ class AmazingDataProcessProxy:
                                 error_type=type(exc).__name__,
                             )
                             break
+
 
                     if response is None:
                         response = ProxyResponse(
@@ -1068,31 +1086,37 @@ class AmazingDataProcessProxy:
 
             except queue.Empty:
                 continue
-            except EOFError:
-                logger.info("Request queue closed, terminating worker")
+            except (FileNotFoundError, EOFError, OSError) as exc:
+                logger.info("Request queue closed, terminating worker: %s", exc)
                 break
             except SystemExit as exc:
                 logger.critical(f"SDK called SystemExit: {exc}")
-                response = ProxyResponse(
-                    request_id=request.request_id,
-                    success=False,
-                    error=f"SDK attempted to exit with code: {exc.code}",
-                    error_type="SystemExit",
-                )
-                response.timestamp = time.time()
-                response_queue.put(pickle.dumps(response.to_payload()))
+                request_id = request.request_id if request else payload_request_id
+                if request_id:
+                    response = ProxyResponse(
+                        request_id=request_id,
+                        success=False,
+                        error=f"SDK attempted to exit with code: {exc.code}",
+                        error_type="SystemExit",
+                    )
+                    response.timestamp = time.time()
+                    response_queue.put(pickle.dumps(response.to_payload()))
                 break
             except Exception as exc:
                 logger.error(f"Worker loop error: {exc}")
                 logger.error(traceback.format_exc())
-                response = ProxyResponse(
-                    request_id=request.request_id,
-                    success=False,
-                    error=str(exc),
-                    error_type=type(exc).__name__,
-                )
-                response.timestamp = time.time()
-                response_queue.put(pickle.dumps(response.to_payload()))
+                request_id = request.request_id if request else payload_request_id
+                if request_id:
+                    response = ProxyResponse(
+                        request_id=request_id,
+                        success=False,
+                        error=str(exc),
+                        error_type=type(exc).__name__,
+                    )
+                    response.timestamp = time.time()
+                    response_queue.put(pickle.dumps(response.to_payload()))
+                else:
+                    logger.error("Unable to emit response because request_id is missing")
 
         logger.info("Worker process exiting")
 

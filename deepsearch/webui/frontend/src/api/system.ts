@@ -10,6 +10,35 @@ type ApiEnvelope<T> = {
   data: T;
 };
 
+export interface ProviderStatusDetails {
+    connected: boolean;
+    available?: boolean;
+    details?: Record<string, any>;
+}
+
+export interface BoardStatus {
+    ready: boolean;
+    count: number;
+    sample?: string[];
+}
+
+export interface RuntimeStatus {
+    pipeline: string;
+    runner: string;
+}
+
+export interface CacheStatus {
+    available: boolean;
+}
+
+export interface MarketDataStatus {
+    ready: boolean;
+    provider: ProviderStatusDetails;
+    boards: BoardStatus;
+    runtime: RuntimeStatus;
+    cache: CacheStatus;
+}
+
 function unwrapResponse<T>(response: unknown): T | null {
   if (response == null) {
     return null;
@@ -42,6 +71,8 @@ export interface SystemInfo {
   timestamp: number;
   status?: 'running' | 'stopped' | string;
   updated_at?: string;
+    ready?: boolean;
+    market_data?: MarketDataStatus;
   engine?: {
     running: boolean;
     uptime: number;

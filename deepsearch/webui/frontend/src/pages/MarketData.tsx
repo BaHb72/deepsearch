@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react'
+import React, {useCallback, useEffect, useRef, useState} from 'react'
 import {
     Badge,
     Button,
@@ -36,22 +36,90 @@ type StrengthState = {
     windows: string[];
     boards: string[];
     retrievedAt: string;
+    asOf?: string | null;
+    stale?: boolean;
+    cache?: { cachedAt?: string; expiresAt?: string };
+    dataSource?: string;
+    lastSuccessAt?: number;
 };
 
 type ImbalanceState = {
     window: string;
     items: OrderImbalanceItem[];
     retrievedAt: string;
+    asOf?: string | null;
+    stale?: boolean;
+    cache?: { cachedAt?: string; expiresAt?: string };
+    dataSource?: string;
+    lastSuccessAt?: number;
 };
 
 type AuctionState = {
     boards: string[];
     items: AuctionQualityItem[];
     retrievedAt: string;
+    asOf?: string | null;
+    stale?: boolean;
+    cache?: { cachedAt?: string; expiresAt?: string };
+    dataSource?: string;
+    lastSuccessAt?: number;
 };
 
 const { Title } = Typography
 const { Search } = Input
+
+const FALLBACK_THRESHOLD_MS = 10_000
+
+const STRENGTH_PLACEHOLDER: StrengthState = {
+    items: [
+        {
+            board: '暂无数据',
+            window: '--',
+            data_source: 'mock',
+        },
+    ],
+    windows: [],
+    boards: [],
+    retrievedAt: '',
+    asOf: null,
+    stale: true,
+    cache: undefined,
+    dataSource: 'mock',
+    lastSuccessAt: 0,
+}
+
+const IMBALANCE_PLACEHOLDER: ImbalanceState = {
+    window: '--',
+    items: [
+        {
+            code: '--',
+            name: '暂无数据',
+            data_source: 'mock',
+        },
+    ],
+    retrievedAt: '',
+    asOf: null,
+    stale: true,
+    cache: undefined,
+    dataSource: 'mock',
+    lastSuccessAt: 0,
+}
+
+const AUCTION_PLACEHOLDER: AuctionState = {
+    boards: [],
+    items: [
+        {
+            board: '暂无数据',
+            data_source: 'mock',
+        },
+    ],
+    retrievedAt: '',
+    asOf: null,
+    stale: true,
+    cache: undefined,
+    dataSource: 'mock',
+    lastSuccessAt: 0,
+}
 
 const MarketData = () => {
   const [loading, setLoading] = useState(false)
@@ -105,17 +173,33 @@ const MarketData = () => {
         windows: [],
         boards: [],
         retrievedAt: '',
+        asOf: null,
+        stale: false,
+        cache: undefined,
+        dataSource: 'amazingdata',
+        lastSuccessAt: 0,
     })
     const [imbalanceState, setImbalanceState] = useState<ImbalanceState>({
         window: '',
         items: [],
         retrievedAt: '',
+        asOf: null,
+        stale: false,
+        cache: undefined,
+        dataSource: 'amazingdata',
+        lastSuccessAt: 0,
     })
     const [auctionState, setAuctionState] = useState<AuctionState>({
         boards: [],
         items: [],
         retrievedAt: '',
+        asOf: null,
+        stale: false,
+        cache: undefined,
+        dataSource: 'amazingdata',
+        lastSuccessAt: 0,
     })
+    const insightRequestRef = useRef(false)
 
   // Auto refresh
   useEffect(() => {
@@ -298,11 +382,6 @@ const MarketData = () => {
         return value.toFixed(digits)
     }
 
-    const formatPercentRatio = (value?: number, digits = 2) => {
-        if (typeof value !== 'number' || Number.isNaN(value)) return '--'
-        return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(digits)}%`
-    }
-
     const formatTimestamp = (value?: string) => {
         if (!value) return '--'
         const date = new Date(value)
@@ -311,44 +390,229 @@ const MarketData = () => {
     }
 
     const fetchMarketInsights = useCallback(async () => {
+        if (insightRequestRef.current) {
+            return
+        }
+        insightRequestRef.current = true
         setInsightLoading(true)
         try {
-            const [strengthRes, imbalanceRes, auctionRes] = await Promise.all([
+            const results = await Promise.allSettled([
                 marketDataLiveApi.getStrength(),
                 marketDataLiveApi.getOrderImbalance({limit: 30}),
                 marketDataLiveApi.getAuctionQuality(),
             ])
 
-            const strengthPayload = strengthRes.data ?? {items: [], windows: [], boards: [], retrieved_at: ''}
-            setStrengthState({
-                items: strengthPayload.items ?? [],
-                windows: strengthPayload.windows ?? [],
-                boards: strengthPayload.boards ?? [],
-                retrievedAt: strengthPayload.retrieved_at ?? '',
+            const now = Date.now()
+            const fallbackIso = new Date(now).toISOString()
+            let hasFailure = false
+            let usedPlaceholder = false
+            let reusedPrevious = false
+            const [strengthResult, imbalanceResult, auctionResult] = results
+
+            setStrengthState((prev) => {
+                const success =
+                    strengthResult.status === 'fulfilled' &&
+                    strengthResult.value?.data &&
+                    Array.isArray(strengthResult.value.data.items) &&
+                    strengthResult.value.data.items.length > 0
+
+                if (success) {
+                    const payload = strengthResult.value.data
+                    return {
+                        items: payload.items ?? [],
+                        windows: payload.windows ?? prev.windows,
+                        boards: payload.boards ?? prev.boards,
+                        retrievedAt: payload.retrieved_at ?? fallbackIso,
+                        asOf: payload.asOf ?? (payload as any).as_of ?? null,
+                        stale: payload.stale ?? false,
+                        cache: payload.cache ?? undefined,
+                        dataSource: payload.data_source ?? 'amazingdata',
+                        lastSuccessAt: now,
+                    }
+                }
+
+                hasFailure = true
+                const hasRecentData =
+                    prev.items.length > 0 && prev.lastSuccessAt && now - prev.lastSuccessAt <= FALLBACK_THRESHOLD_MS
+
+                if (hasRecentData) {
+                    reusedPrevious = true
+                    return {
+                        ...prev,
+                        stale: true,
+                        retrievedAt: fallbackIso,
+                    }
+                }
+
+                usedPlaceholder = true
+                return {
+                    ...STRENGTH_PLACEHOLDER,
+                    retrievedAt: fallbackIso,
+                    lastSuccessAt: prev.lastSuccessAt,
+                }
             })
 
-            const imbalancePayload = imbalanceRes.data ?? {window: '', items: [], retrieved_at: ''}
-            setImbalanceState({
-                window: imbalancePayload.window ?? '',
-                items: imbalancePayload.items ?? [],
-                retrievedAt: imbalancePayload.retrieved_at ?? '',
+            setImbalanceState((prev) => {
+                const success =
+                    imbalanceResult.status === 'fulfilled' &&
+                    imbalanceResult.value?.data &&
+                    Array.isArray(imbalanceResult.value.data.items) &&
+                    imbalanceResult.value.data.items.length > 0
+
+                if (success) {
+                    const payload = imbalanceResult.value.data
+                    return {
+                        window: (payload.window ?? prev.window ?? '').trim(),
+                        items: payload.items ?? [],
+                        retrievedAt: payload.retrieved_at ?? fallbackIso,
+                        asOf: payload.asOf ?? (payload as any).as_of ?? null,
+                        stale: payload.stale ?? false,
+                        cache: payload.cache ?? undefined,
+                        dataSource: payload.data_source ?? 'amazingdata',
+                        lastSuccessAt: now,
+                    }
+                }
+
+                hasFailure = true
+                const hasRecentData =
+                    prev.items.length > 0 && prev.lastSuccessAt && now - prev.lastSuccessAt <= FALLBACK_THRESHOLD_MS
+
+                if (hasRecentData) {
+                    reusedPrevious = true
+                    return {
+                        ...prev,
+                        stale: true,
+                        retrievedAt: fallbackIso,
+                    }
+                }
+
+                usedPlaceholder = true
+                return {
+                    ...IMBALANCE_PLACEHOLDER,
+                    window: prev.window || IMBALANCE_PLACEHOLDER.window,
+                    retrievedAt: fallbackIso,
+                    lastSuccessAt: prev.lastSuccessAt,
+                }
             })
 
-            const auctionPayload = auctionRes.data ?? {boards: [], items: [], retrieved_at: ''}
-            setAuctionState({
-                boards: auctionPayload.boards ?? [],
-                items: auctionPayload.items ?? [],
-                retrievedAt: auctionPayload.retrieved_at ?? '',
+            setAuctionState((prev) => {
+                const success =
+                    auctionResult.status === 'fulfilled' &&
+                    auctionResult.value?.data &&
+                    Array.isArray(auctionResult.value.data.items) &&
+                    auctionResult.value.data.items.length > 0
+
+                if (success) {
+                    const payload = auctionResult.value.data
+                    return {
+                        boards: payload.boards ?? prev.boards,
+                        items: payload.items ?? [],
+                        retrievedAt: payload.retrieved_at ?? fallbackIso,
+                        asOf: payload.asOf ?? (payload as any).as_of ?? null,
+                        stale: payload.stale ?? false,
+                        cache: payload.cache ?? undefined,
+                        dataSource: payload.data_source ?? 'amazingdata',
+                        lastSuccessAt: now,
+                    }
+                }
+
+                hasFailure = true
+                const hasRecentData =
+                    prev.items.length > 0 && prev.lastSuccessAt && now - prev.lastSuccessAt <= FALLBACK_THRESHOLD_MS
+
+                if (hasRecentData) {
+                    reusedPrevious = true
+                    return {
+                        ...prev,
+                        stale: true,
+                        retrievedAt: fallbackIso,
+                    }
+                }
+
+                usedPlaceholder = true
+                return {
+                    ...AUCTION_PLACEHOLDER,
+                    boards: prev.boards.length ? prev.boards : AUCTION_PLACEHOLDER.boards,
+                    retrievedAt: fallbackIso,
+                    lastSuccessAt: prev.lastSuccessAt,
+                }
             })
+
+            if (usedPlaceholder) {
+                message.warning({
+                    key: 'market-insight-fallback',
+                    content: '实时指标暂不可用，已展示占位数据',
+                })
+            } else if (reusedPrevious) {
+                message.info({
+                    key: 'market-insight-fallback',
+                    content: '实时指标更新失败，已保留上一版数据',
+                })
+            } else if (hasFailure) {
+                message.warning({
+                    key: 'market-insight-fallback',
+                    content: '实时指标部分数据加载失败',
+                })
+            } else {
+                message.destroy('market-insight-fallback')
+            }
         } catch (error) {
-            // eslint-disable-next-line no-console
             console.warn('Failed to load realtime market insights', error)
-            message.warning('实时行情指标获取失败，请稍后再试')
+            const now = Date.now()
+            const fallbackIso = new Date(now).toISOString()
+            setStrengthState((prev) => {
+                if (prev.items.length > 0 && prev.lastSuccessAt && now - prev.lastSuccessAt <= FALLBACK_THRESHOLD_MS) {
+                    return {
+                        ...prev,
+                        stale: true,
+                        retrievedAt: fallbackIso,
+                    }
+                }
+                return {
+                    ...STRENGTH_PLACEHOLDER,
+                    retrievedAt: fallbackIso,
+                    lastSuccessAt: prev.lastSuccessAt,
+                }
+            })
+            setImbalanceState((prev) => {
+                if (prev.items.length > 0 && prev.lastSuccessAt && now - prev.lastSuccessAt <= FALLBACK_THRESHOLD_MS) {
+                    return {
+                        ...prev,
+                        stale: true,
+                        retrievedAt: fallbackIso,
+                    }
+                }
+                return {
+                    ...IMBALANCE_PLACEHOLDER,
+                    window: prev.window || IMBALANCE_PLACEHOLDER.window,
+                    retrievedAt: fallbackIso,
+                    lastSuccessAt: prev.lastSuccessAt,
+                }
+            })
+            setAuctionState((prev) => {
+                if (prev.items.length > 0 && prev.lastSuccessAt && now - prev.lastSuccessAt <= FALLBACK_THRESHOLD_MS) {
+                    return {
+                        ...prev,
+                        stale: true,
+                        retrievedAt: fallbackIso,
+                    }
+                }
+                return {
+                    ...AUCTION_PLACEHOLDER,
+                    boards: prev.boards.length ? prev.boards : AUCTION_PLACEHOLDER.boards,
+                    retrievedAt: fallbackIso,
+                    lastSuccessAt: prev.lastSuccessAt,
+                }
+            })
+            message.error({
+                key: 'market-insight-fallback',
+                content: '实时指标加载失败，已展示占位数据',
+            })
         } finally {
+            insightRequestRef.current = false
             setInsightLoading(false)
         }
     }, [])
-
     const handleInsightRefresh = () => {
         fetchMarketInsights()
     }
@@ -645,6 +909,14 @@ const MarketData = () => {
                                       {strengthState.retrievedAt && (
                                           <Tag>{formatTimestamp(strengthState.retrievedAt)}</Tag>
                                       )}
+                                      {strengthState.asOf && (
+                                          <Tag color={strengthState.stale ? 'orange' : 'blue'}>
+                                              AsOf {formatTimestamp(strengthState.asOf)}
+                                          </Tag>
+                                      )}
+                                      {strengthState.stale && (
+                                          <Tag color="red">数据暂未刷新</Tag>
+                                      )}
                                       <Button
                                           type="link"
                                           size="small"
@@ -675,6 +947,14 @@ const MarketData = () => {
                                       {imbalanceState.retrievedAt && (
                                           <Tag>{formatTimestamp(imbalanceState.retrievedAt)}</Tag>
                                       )}
+                                      {imbalanceState.asOf && (
+                                          <Tag color={imbalanceState.stale ? 'orange' : 'blue'}>
+                                              AsOf {formatTimestamp(imbalanceState.asOf)}
+                                          </Tag>
+                                      )}
+                                      {imbalanceState.stale && (
+                                          <Tag color="red">排名可能滞后</Tag>
+                                      )}
                                   </Space>
                               )}
                           >
@@ -695,6 +975,14 @@ const MarketData = () => {
                                   <Space size="small">
                                       {auctionState.retrievedAt && (
                                           <Tag>{formatTimestamp(auctionState.retrievedAt)}</Tag>
+                                      )}
+                                      {auctionState.asOf && (
+                                          <Tag color={auctionState.stale ? 'orange' : 'blue'}>
+                                              AsOf {formatTimestamp(auctionState.asOf)}
+                                          </Tag>
+                                      )}
+                                      {auctionState.stale && (
+                                          <Tag color="red">数据延迟</Tag>
                                       )}
                                   </Space>
                               )}

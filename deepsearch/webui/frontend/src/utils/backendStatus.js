@@ -92,7 +92,7 @@ class BackendStatusManager {
      */
     handleFailure(errorType = 'unknown') {
         // 只有真正的服务器错误才累计失败次数
-        if (errorType === 'server_error' || errorType === 'connection_failed') {
+        if (errorType === 'server_error' || errorType === 'connection_failed' || errorType === 'not_ready') {
             this.consecutiveFailures++
             backendLogger.debug(`[BackendStatus] 服务器错误累计: ${this.consecutiveFailures}/${this.maxConsecutiveFailures}`)
 
@@ -145,7 +145,8 @@ class BackendStatusManager {
     recordStatusHistory(available) {
         this.statusHistory.push({
             timestamp: Date.now(),
-            available
+            available,
+            status: this.lastStatus ? {...this.lastStatus} : null
         })
         
         // 限制历史记录长度
@@ -327,6 +328,13 @@ class BackendStatusManager {
     /**
      * 启动定期检查
      */
+    /**
+     * 获取后端最近一次状态详情
+     */
+    getLastStatus() {
+        return this.lastStatus
+    }
+
     startPeriodicCheck() {
         // 初始检查
         setTimeout(() => this.checkStatus(), 1000) // 延迟1秒后首次检查
@@ -355,4 +363,3 @@ if (typeof window !== 'undefined') {
 }
 
 export default backendStatus
-

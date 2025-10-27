@@ -60,11 +60,20 @@ async def test_cache_reader_aggregates_from_writer():
     await writer.write_auction_quality(auction_entries)
 
     strength = await reader.fetch_strength(["1m"])
-    assert strength and strength[0]["board"] == "主板"
-    assert strength[0]["window"] == "1m"
+    board_name = strength_entries[0].board
+    assert strength.items and strength.items[0]["board"] == board_name
+    assert strength.items[0]["window"] == "1m"
+    assert strength.as_of is not None
+    assert strength.stale is False
 
     imbalance = await reader.fetch_order_imbalance("1m")
-    assert imbalance and imbalance[0]["code"] == "000001.SZ"
+    assert imbalance.items and imbalance.items[0]["code"] == "000001.SZ"
+    assert imbalance.as_of is not None
 
-    auction = await reader.fetch_auction_quality(["主板"])
-    assert auction and auction[0]["board"] == "主板"
+    auction = await reader.fetch_auction_quality([board_name])
+    assert auction.items and auction.items[0]["board"] == board_name
+    assert auction.as_of is not None
+    await writer.write_board_universe({board_name: ["000001.SZ"]})
+    snapshot, meta = await reader.fetch_board_universe()
+    assert snapshot.get(board_name) == ("000001.SZ",)
+    assert meta is not None

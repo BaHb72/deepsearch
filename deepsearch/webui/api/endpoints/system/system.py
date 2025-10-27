@@ -8,9 +8,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 
+from deepsearch.core.managers.component_manager import ComponentManager, ComponentStatus, ComponentType
 from deepsearch.core.runtime.engine import MainEngine
 from deepsearch.core.utils.exceptions import ComponentError
-from deepsearch.core.managers.component_manager import ComponentManager, ComponentStatus, ComponentType
 from deepsearch.debug.diagnostics import diagnostic_logger, log_diagnostic
 from deepsearch.webui.api.services.system_data_service import (
     ComponentNotFoundError,
@@ -18,7 +18,6 @@ from deepsearch.webui.api.services.system_data_service import (
     get_system_data_service,
 )
 from deepsearch.webui.auth import require_auth
-
 from .modules import router as modules_router
 
 system_data_service = get_system_data_service()
@@ -62,21 +61,83 @@ log_diagnostic(
 
 
 def get_standalone_manager(request: Request) -> Optional[Any]:
-    """获取独立模式管理器（如果存在）"""
-    if hasattr(request.app.state, "manager"):
-        return request.app.state.manager
-    return None
+    """获取独立模式下的组件管理器（若存在）"""
+
+
+def _resolve_provider_connected(provider: Any) -> bool:
+    if provider is None:
+        return False
+    is_connected_attr = getattr(provider, "is_connected", None)
+    if callable(is_connected_attr):
+        try:
+            return bool(is_connected_attr())
+        except Exception:
+            return False
+    return bool(is_connected_attr)
+
+
+def _collect_market_data_status(app_state: Any) -> Dict[str, Any]:
+    provider = getattr(app_state, "market_data_provider", None)
+    pipeline = getattr(app_state, "market_data_pipeline", None)
+    runner = getattr(app_state, "market_data_runner", None)
+    reader = getattr(app_state, "market_data_reader", None)
+    service = getattr(app_state, "market_data_service", None)
+
+    provider_connected = _resolve_provider_connected(provider)
+    runner_task = getattr(runner, "_task", None)
+    runner_active = bool(runner_task and not runner_task.done())
+    cache_ready = reader is not None
+
+    provider_details: Dict[str, Any] | None = None
+    if provider is not None and hasattr(provider, "connection_status"):
+        try:
+            status_payload = provider.connection_status()  # type: ignore[attr-defined]
+            if isinstance(status_payload, dict):
+                provider_details = status_payload
+        except Exception as exc:  # pragma: no cover - diagnostics only
+            logger.debug("��ȡ�ṩ������״̬ʧ��: %s", exc)
+
+    boards_ready = False
+    boards_count = 0
+    board_names: List[str] = []
+    if service and hasattr(service, "board_universe"):
+        try:
+            universe = service.board_universe
+            board_names = list(universe.boards())
+            boards_count = len(board_names)
+            boards_ready = boards_count > 0
+        except Exception as exc:
+            logger.debug("获取板块映射失败: %s", exc)
+
+    ready = provider_connected and boards_ready and (runner_active or cache_ready)
+
+    return {
+        "ready": ready,
+        "provider": {
+            "connected": provider_connected,
+            "available": provider is not None,
+            "details": provider_details or {},
+        },
+        "boards": {
+            "ready": boards_ready,
+            "count": boards_count,
+            "sample": board_names[:10],
+        },
+        "runtime": {
+            "pipeline": "initialized" if pipeline else "absent",
+            "runner": "active" if runner_active else "idle",
+        },
+        "cache": {
+            "available": cache_ready,
+        },
+    }
 
 
 @router.get("/status")
 @diagnostic_logger.diagnostic_method
-async def get_system_status() -> Dict[str, Any]:
-    """
-    获取系统整体状态。
+async def get_system_status(request: Request) -> Dict[str, Any]:
+    """获取系统运行状态。"""
 
-    Returns:
-        统一结构的系统状态数据。
-    """
     log_diagnostic(
         "API_REQUEST", "/api/system/status", {"method": "GET", "endpoint": "get_system_status"}
     )
@@ -87,8 +148,23 @@ async def get_system_status() -> Dict[str, Any]:
         logger.error(f"获取系统状态失败: {exc}")
         raise HTTPException(status_code=500, detail=f"获取系统状态失败: {exc}")
 
-    return _ok(overview)
+    app_state = getattr(request.app.state, "app_state", None)
+    if app_state is not None:
+        market_status = _collect_market_data_status(app_state)
+    else:
+        market_status = {
+            "ready": False,
+            "provider": {"connected": False, "available": False},
+            "boards": {"ready": False, "count": 0, "sample": []},
+            "runtime": {"pipeline": "absent", "runner": "idle"},
+            "cache": {"available": False},
+            "error": "app_state_unavailable",
+        }
 
+    overview["market_data"] = market_status
+    overview["ready"] = bool(market_status.get("ready"))
+
+    return _ok(overview)
 
 @router.get("/metrics")
 async def get_system_metrics() -> Dict[str, Any]:
