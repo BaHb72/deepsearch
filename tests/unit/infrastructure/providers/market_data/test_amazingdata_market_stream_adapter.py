@@ -55,6 +55,25 @@ class FakeAmazingDataProvider:
         await self._callback(payload)
 
 
+class PollingOnlyProvider:
+    """仅支持轮询的 Provider，用于验证降级逻辑。"""
+
+    def __init__(self) -> None:
+        self.config = SimpleNamespace(subscription_enabled=False)
+        self._connected = False
+        self.quotes: Dict[str, Dict[str, Any]] = {}
+
+    async def initialize(self) -> bool:
+        self._connected = True
+        return True
+
+    def is_connected(self) -> bool:
+        return self._connected
+
+    async def get_realtime_quote(self, symbols: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+        return {symbol: self.quotes.get(symbol, {}) for symbol in symbols}
+
+
 def build_stream_payload(symbol: str, price: float, ts: datetime) -> Dict[str, Any]:
     return {
         "timestamp": ts,
@@ -141,3 +160,32 @@ async def test_fetch_latest_uses_provider_snapshot() -> None:
     assert snap.code == symbol
     assert snap.last == Decimal("10.6")
     assert snap.exchange == "SZSE"
+
+
+@pytest.mark.asyncio
+async def test_subscribe_falls_back_to_polling_when_unavailable() -> None:
+    provider = PollingOnlyProvider()
+    adapter = AmazingDataMarketStreamAdapter(provider, retention=timedelta(minutes=1))
+
+    symbol = "600000.SH"
+    provider.quotes[symbol] = {
+        "symbol": symbol,
+        "name": "轮询模式",
+        "last": 12.3,
+        "open": 12.0,
+        "high": 12.6,
+        "low": 11.8,
+        "prev_close": 11.5,
+        "amount": 1_500_000,
+        "volume": 80_000,
+        "time": "2025-01-08 10:03:00",
+    }
+
+    await adapter.subscribe([symbol])
+    assert symbol in await adapter.list_subscriptions()
+
+    snapshots = await adapter.fetch_latest([symbol])
+    assert snapshots and snapshots[0].code == symbol
+
+    await adapter.unsubscribe([symbol])
+    assert symbol not in await adapter.list_subscriptions()

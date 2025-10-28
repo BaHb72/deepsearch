@@ -146,14 +146,6 @@ wheels = [
 ]
 
 [[package]]
-name = "amazingdata"
-version = "1.0.17"
-source = { url = "https://bahbai.com/packages/AmazingData-1.0.17-cp313-none-any.whl" }
-wheels = [
-    { url = "https://bahbai.com/packages/AmazingData-1.0.17-cp313-none-any.whl", hash = "sha256:80db6abfc77d2279da4d922734f778f7493a9de0a577289595e63163444d101a" },
-]
-
-[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -756,7 +748,6 @@ dependencies = [
     { name = "aiohttp" },
     { name = "aioredis" },
     { name = "akshare" },
-    { name = "amazingdata" },
     { name = "anyio" },
     { name = "asyncpg" },
     { name = "backtrader" },
@@ -793,7 +784,6 @@ dependencies = [
     { name = "sqlalchemy" },
     { name = "ta-lib" },
     { name = "tabulate" },
-    { name = "tgw" },
     { name = "twisted" },
     { name = "types-pywin32" },
     { name = "uvicorn", extra = ["standard"] },
@@ -834,7 +824,6 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.13.0" },
     { name = "aioredis", specifier = ">=2.0.1" },
     { name = "akshare", specifier = "==1.17.65" },
-    { name = "amazingdata", url = "https://bahbai.com/packages/AmazingData-1.0.17-cp313-none-any.whl" },
     { name = "anyio", specifier = ">=4.11.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "backtrader", specifier = ">=1.9.78.123" },
@@ -882,7 +871,6 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0.44" },
     { name = "ta-lib", specifier = ">=0.6.7" },
     { name = "tabulate", specifier = ">=0.9.0" },
-    { name = "tgw", url = "https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl" },
     { name = "twisted", specifier = ">=25.5.0" },
     { name = "types-pywin32", specifier = ">=311.0.0.20251008" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12" },
@@ -3398,20 +3386,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/8a/11/965c6fd8e5cc254f1
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/9e/2064975477fdc887e47ad42157e214526dcad8f317a948dee17e1659a62f/terminado-0.18.1-py3-none-any.whl", hash = "sha256:a4468e1b37bb318f8a86514f65814e1afc977cf29b3992a4500d9dd305dcceb0", size = 14154, upload-time = "2024-03-12T14:34:36.569Z" },
 ]
-
-[[package]]
-name = "tgw"
-version = "1.0.8.1"
-source = { url = "https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl" }
-dependencies = [
-    { name = "pandas" },
-]
-wheels = [
-    { url = "https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl", hash = "sha256:555c66c38fa138bf235ab0f711457755f97dae83720b7a52c6f97cfeb261a1b5" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "pandas" }]
 
 [[package]]
 name = "tinycss2"

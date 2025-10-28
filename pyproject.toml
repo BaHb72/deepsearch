@@ -40,8 +40,6 @@ dependencies = [
     "httpx>=0.28.1",
     "python-jose[cryptography]>=3.5.0",
     # ==== 数据获取依赖 ====
-    "amazingdata==1.0.17",
-    "tgw==1.0.8.1",
     "akshare==1.17.65",
     "aiohttp>=3.13.0",
     "numpy>=1.24.0",
@@ -82,6 +80,7 @@ dev = [
     "ipython>=9.6.0",
 ]
 
+
 [project.urls]
 Homepage = "https://github.com/BaHb/deepsearch"
 Repository = "https://github.com/BaHb/deepsearch.git"
@@ -117,11 +116,6 @@ python_functions = ["test_*"]
 [tool.uv]
 python-preference = "only-system"
 compile-bytecode = true
-
-[tool.uv.sources]
-amazingdata = { url = "https://bahbai.com/packages/AmazingData-1.0.17-cp313-none-any.whl" }
-tgw = { url = "https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl" }
-
 [tool.uv.pip]
 index-url = "https://pypi.org/simple"
 

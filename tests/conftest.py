@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi.testclient import TestClient
 
+os.environ.setdefault("DEEPSEARCH_AMAZINGDATA_STUB", "tests.stubs.amazingdata_stub")
 from deepsearch.webui.server import app
 
 os.environ.setdefault("DEEPSEARCH_TEST_MODE", "true")

@@ -20,7 +20,10 @@ def _load_stub(stub_path: str) -> tuple[Optional[ModuleType], bool, Optional[Exc
     except Exception as exc:  # pragma: no cover - stub load failure only for diagnostics
         logger.warning(f"Failed to load AmazingData stub: {exc}")
         return None, False, exc
-    logger.info(f"Loaded AmazingData stub module: {stub_path}")
+    if getattr(module, "__deepsearch_stub__", False):
+        logger.info(f"Loaded AmazingData stub module: {stub_path}")
+        return module, False, None
+    logger.info(f"Loaded AmazingData compatibility shim: {stub_path}")
     return module, True, None
 
 
@@ -30,6 +33,9 @@ def _load_sdk() -> tuple[Optional[ModuleType], bool, Optional[Exception]]:
     except Exception as exc:  # pragma: no cover - executed when AmazingData is missing
         logger.warning(f"AmazingData SDK import failed, falling back to degraded mode: {exc}")
         return None, False, exc
+    if getattr(_ad, "__deepsearch_stub__", False):
+        logger.warning("AmazingData stub module detected during SDK import; falling back to degraded mode")
+        return _ad, False, None
     return _ad, True, None
 
 

@@ -6,7 +6,7 @@ import asyncio
 from collections import deque
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Deque, Mapping, MutableMapping, Sequence
+from typing import Any, Deque, Mapping, MutableMapping, Optional, Sequence
 
 from loguru import logger
 
@@ -102,6 +102,8 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
         self._lock = asyncio.Lock()
         self._init_lock = asyncio.Lock()
         self._initialized = False
+        self._poll_only: bool = False
+        self._poll_reason: Optional[str] = None
 
     async def subscribe(self, codes: Sequence[str]) -> None:
         unique = [code.strip() for code in codes if code and code.strip()]
@@ -112,11 +114,34 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
             new_codes = [code for code in unique if code not in self._active_codes]
             if not new_codes:
                 return
-        success = await self._provider.subscribe_stock_snapshot(
-            new_codes, self._handle_stream_payload
-        )
-        if not success:
-            raise RuntimeError(f"AmazingData subscribe failed: {', '.join(new_codes)}")
+        if self._poll_only:
+            logger.info(
+                "AmazingDataMarketStreamAdapter 已启用轮询模式，跳过订阅调用: %s",
+                ", ".join(new_codes),
+            )
+        else:
+            subscribe_callable = getattr(
+                self._provider, "subscribe_stock_snapshot", None
+            )
+            if not callable(subscribe_callable):
+                self._activate_poll_only(
+                    "subscribe_stock_snapshot not implemented on provider"
+                )
+            else:
+                try:
+                    success = await subscribe_callable(
+                        new_codes, self._handle_stream_payload
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    if self._is_subscription_unsupported(exc):
+                        self._activate_poll_only(str(exc))
+                    else:
+                        raise
+                else:
+                    if not success:
+                        self._activate_poll_only(
+                            "provider returned False when subscribing"
+                        )
         async with self._lock:
             self._active_codes.update(new_codes)
 
@@ -125,9 +150,24 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
         if not targets:
             return
         await self._ensure_ready()
-        success = await self._provider.unsubscribe_quote(list(targets))
-        if not success:
-            logger.warning("AmazingData unsubscribe failed: {}", targets)
+        if not self._poll_only:
+            unsubscribe_callable = getattr(self._provider, "unsubscribe_quote", None)
+            if callable(unsubscribe_callable):
+                try:
+                    success = await unsubscribe_callable(list(targets))
+                except Exception as exc:  # noqa: BLE001
+                    if self._is_subscription_unsupported(exc):
+                        self._activate_poll_only(str(exc))
+                    else:
+                        logger.warning("AmazingData unsubscribe failed: {}", exc)
+                        success = False
+                else:
+                    if not success:
+                        logger.warning("AmazingData unsubscribe failed: {}", targets)
+            else:
+                self._activate_poll_only(
+                    "unsubscribe_quote not implemented on provider"
+                )
         async with self._lock:
             for code in targets:
                 self._active_codes.discard(code)
@@ -178,7 +218,7 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
             if self._initialized and self._provider.is_connected():
                 return
             if not getattr(self._provider.config, "subscription_enabled", True):
-                raise RuntimeError("AmazingData subscription disabled in config")
+                self._activate_poll_only("subscription disabled by configuration")
             initialized = await self._provider.initialize()
             if not initialized or not self._provider.is_connected():
                 raise RuntimeError("Failed to initialize AmazingData data source")
@@ -200,6 +240,32 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
             cutoff = snapshot.ts - self._retention
             while bucket and bucket[0].ts < cutoff:
                 bucket.popleft()
+
+    def _activate_poll_only(self, reason: str | None = None) -> None:
+        if not self._poll_only:
+            message = reason or "AmazingData subscription unavailable, falling back to polling"
+            logger.warning(
+                "AmazingDataMarketStreamAdapter 启用轮询模式: {}",
+                message,
+            )
+        self._poll_only = True
+        if reason:
+            self._poll_reason = reason
+
+    @staticmethod
+    def _is_subscription_unsupported(exc: Exception) -> bool:
+        message = str(exc)
+        lowered = message.lower()
+        return any(
+            keyword in lowered
+            for keyword in (
+                "未开放",
+                "not implemented",
+                "not available",
+                "not supported",
+                "暂未开放",
+            )
+        )
 
     def _snapshot_from_stream_payload(
             self,
