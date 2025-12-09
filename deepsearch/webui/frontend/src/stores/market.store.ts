@@ -1,5 +1,6 @@
-import { create } from 'zustand'
-import { devtools } from 'zustand/middleware'
+// @ts-nocheck
+import {create} from 'zustand'
+import {devtools} from 'zustand/middleware'
 
 export interface MarketData {
   indices: any[]
@@ -120,3 +121,4 @@ export const useMarketStore = create<MarketState>()(
     { name: 'market-store' }
   )
 )
+

@@ -8,33 +8,29 @@
 from __future__ import annotations
 
 import copy
-import os
 import time
 from collections import Counter
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-import yaml
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
-from deepsearch.constants import YAML_ENCODING
-from deepsearch.config.loader import ensure_env_config_file
+from deepsearch.application.services.data_sources import (
+    DataSourceConfigService,
+    deep_merge_dict,
+    prune_empty,
+)
 from deepsearch.infrastructure.cache.cache_manager import CacheManager
 from deepsearch.observability.monitoring.data_source_monitor import (
     AccessRecord,
-    DataAccessType,
     DataSourceMonitor,
-)
-from deepsearch.observability.monitoring.data_source_monitor import (
     DataSourceType as MonitorDataSourceType,
-)
-from deepsearch.observability.monitoring.data_source_monitor import (
     get_monitor,
 )
+from deepsearch.ports.data_sources import DataAccessType
 from deepsearch.utils.data_sources import (
     DataSourceConfig,
     DataSourceLifecycleStatus,
@@ -50,6 +46,7 @@ router = APIRouter(prefix="/api/data-sources", tags=["DataSource Management"])
 # 复用单实例缓存管理器，主要用于刷新与统计
 cache_manager = CacheManager(l1_max_size=10_000, l1_ttl=300)
 DEFAULT_TEST_SYMBOL = "000001"
+_config_service = DataSourceConfigService()
 
 PLACEHOLDER_SOURCES = {"default", "custom"}
 PROXY_SOURCE_MAP = {
@@ -65,6 +62,8 @@ PROXY_SOURCE_MAP = {
     },
 }
 
+SELF_TEST_FAILURE_DECAY_SECONDS = 300  # 5min 内重复失败才累计
+SELF_TEST_FAILURE_THRESHOLD = 3  # 连续失败 3 次才认定为不可用
 
 class SwitchRequest(BaseModel):
     """主数据源切换请求"""
@@ -76,19 +75,6 @@ class CacheRefreshRequest(BaseModel):
     """缓存刷新请求"""
 
     source: Optional[str] = Field(None, description="需要刷新的数据源，可为空表示全部")
-
-
-SENSITIVE_KEY_MARKERS = (
-    "password",
-    "secret",
-    "token",
-    "access_token",
-    "refresh_token",
-    "apikey",
-    "api_key",
-    "secret_key",
-    "private_key",
-)
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -125,270 +111,6 @@ class DataSourceTestRequest(BaseModel):
     )
 
 
-# ---------------------------------------------------------------------------
-# 配置持久化辅助
-# ---------------------------------------------------------------------------
-
-
-def _is_sensitive_key(key: str) -> bool:
-    lowered = str(key).lower()
-    return any(marker in lowered for marker in SENSITIVE_KEY_MARKERS)
-
-
-def _resolve_settings_path(manager: DataSourceManager) -> Path:
-    config_obj = getattr(manager, "config", None)
-    base_dir_override = getattr(config_obj, "config_dir", None)
-
-    env_value: Optional[str] = None
-    if config_obj is not None:
-        app_section = getattr(config_obj, "app", None)
-        env_value = getattr(app_section, "env", None) if app_section else None
-        if not env_value:
-            env_value = getattr(config_obj, "env", None)
-
-    if not env_value:
-        env_value = os.getenv("APP__ENV", "prod")
-
-    candidate_dirs: list[Path] = []
-    if base_dir_override:
-        candidate_dirs.append(Path(base_dir_override))
-
-    loader_dir = Path(ensure_env_config_file.__code__.co_filename).resolve().parent
-    if loader_dir not in candidate_dirs:
-        candidate_dirs.append(loader_dir)
-
-    repo_config_dir = Path(__file__).resolve().parents[5] / "config"
-    if repo_config_dir not in candidate_dirs:
-        candidate_dirs.append(repo_config_dir)
-
-    workspace_config_dir = Path.cwd() / "config"
-    if workspace_config_dir not in candidate_dirs:
-        candidate_dirs.append(workspace_config_dir)
-
-    for directory in candidate_dirs:
-        candidate = directory / f"settings.{env_value}.yaml"
-        if candidate.exists():
-            return candidate
-
-    try:
-        return ensure_env_config_file(env_value, config_dir=loader_dir)
-    except Exception:
-        target = candidate_dirs[0] / f"settings.{env_value}.yaml"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        return target
-
-
-def _deep_merge_dict(
-    base: Optional[Dict[str, Any]], updates: Optional[Dict[str, Any]]
-) -> Dict[str, Any]:
-    result: Dict[str, Any] = copy.deepcopy(base) if isinstance(base, dict) else {}
-    if not isinstance(updates, dict):
-        return result
-
-    for key, value in updates.items():
-        if isinstance(value, dict):
-            existing = result.get(key)
-            nested_base = existing if isinstance(existing, dict) else {}
-            result[key] = _deep_merge_dict(nested_base, value)
-        elif value is None:
-            result.pop(key, None)
-        elif isinstance(value, str) and value == "":
-            result.pop(key, None)
-        else:
-            result[key] = value
-
-    return result
-
-
-def _prune_empty(value: Any) -> Any:
-    if isinstance(value, dict):
-        cleaned: Dict[str, Any] = {}
-        for key, sub_value in value.items():
-            cleaned_value = _prune_empty(sub_value)
-            if cleaned_value in (None, ""):
-                continue
-            if isinstance(cleaned_value, dict) and not cleaned_value:
-                continue
-            if isinstance(cleaned_value, list) and not cleaned_value:
-                continue
-            cleaned[key] = cleaned_value
-        return cleaned
-    if isinstance(value, list):
-        cleaned_list = []
-        for item in value:
-            cleaned_item = _prune_empty(item)
-            if cleaned_item in (None, ""):
-                continue
-            if isinstance(cleaned_item, dict) and not cleaned_item:
-                continue
-            if isinstance(cleaned_item, list) and not cleaned_item:
-                continue
-            cleaned_list.append(cleaned_item)
-        return cleaned_list
-    return value
-
-
-def _strip_sensitive_keys(payload: Dict[str, Any]) -> Dict[str, Any]:
-    result: Dict[str, Any] = {}
-    for key, value in payload.items():
-        if isinstance(value, dict):
-            nested = _strip_sensitive_keys(value)
-            if nested or not _is_sensitive_key(key):
-                result[key] = nested
-        elif _is_sensitive_key(key):
-            continue
-        else:
-            result[key] = value
-    return result
-
-
-def _merge_provider_config_for_persistence(
-    config: DataSourceConfig,
-    update_payload: Optional[Dict[str, Any]],
-    existing_entry: Optional[Dict[str, Any]],
-    remember_flag: Optional[bool],
-) -> Tuple[Dict[str, Any], bool]:
-    existing_config_section = (
-        existing_entry.get("config") if isinstance(existing_entry, dict) else {}
-    )
-    new_config_section = (
-        copy.deepcopy(update_payload)
-        if isinstance(update_payload, dict)
-        else copy.deepcopy(config.config)
-    )
-    merged_config = _deep_merge_dict(existing_config_section, new_config_section)
-    merged_config = _prune_empty(merged_config)
-    merged_config["implementation_mode"] = "process"
-
-    if remember_flag is False:
-        persisted_config = _strip_sensitive_keys(merged_config)
-        has_saved = False
-    else:
-        persisted_config = merged_config
-        has_saved = DataSourceManager._infer_saved_credential_from_config(persisted_config)
-
-    return persisted_config, has_saved
-
-
-def _update_runtime_data_sources(
-    manager: DataSourceManager, provider_key: str, provider_entry: Dict[str, Any]
-) -> None:
-    try:
-        config_obj = getattr(manager, "config", None)
-        if config_obj is None:
-            return
-
-        current_section = getattr(config_obj, "data_sources", None)
-        if current_section is None:
-            setattr(
-                config_obj,
-                "data_sources",
-                {"providers": {provider_key: copy.deepcopy(provider_entry)}},
-            )
-            return
-
-        if isinstance(current_section, dict):
-            providers_dict = current_section.setdefault("providers", {})
-            providers_dict[provider_key] = copy.deepcopy(provider_entry)
-            return
-
-        providers_value = getattr(current_section, "providers", None)
-        if isinstance(providers_value, dict):
-            providers_value[provider_key] = copy.deepcopy(provider_entry)
-        else:
-            setattr(
-                current_section,
-                "providers",
-                {provider_key: copy.deepcopy(provider_entry)},
-            )
-    except Exception as exc:  # pragma: no cover - 防御性处理
-        logger.debug(f"更新运行时数据源配置失败: {exc}")
-
-
-def _persist_data_source_config(
-    manager: DataSourceManager,
-    source_type: DataSourceType,
-    config: DataSourceConfig,
-    remember_flag: Optional[bool],
-    update_payload: Dict[str, Any],
-) -> bool:
-    settings_path = _resolve_settings_path(manager)
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-
-    existing_content = ""
-    existing_data: Dict[str, Any] = {}
-    if settings_path.exists():
-        existing_content = settings_path.read_text(encoding=YAML_ENCODING)
-        try:
-            existing_data = yaml.safe_load(existing_content) or {}
-        except Exception as exc:  # pragma: no cover - 解析失败时重建
-            logger.warning(f"解析现有配置失败，将重新生成: {exc}")
-            existing_data = {}
-
-    data_sources_section = existing_data.setdefault("data_sources", {})
-    providers_section = data_sources_section.setdefault("providers", {})
-    provider_key = source_type.value
-    existing_entry = providers_section.get(provider_key, {})
-
-    persisted_config, has_saved = _merge_provider_config_for_persistence(
-        config,
-        update_payload.get("config") if update_payload else None,
-        existing_entry if isinstance(existing_entry, dict) else {},
-        remember_flag,
-    )
-
-    provider_entry: Dict[str, Any]
-    if isinstance(existing_entry, dict):
-        provider_entry = copy.deepcopy(existing_entry)
-    else:
-        provider_entry = {}
-
-    provider_entry.update(
-        {
-            "enabled": bool(config.enabled),
-            "priority": int(config.priority),
-            "timeout": float(config.timeout),
-            "retry_count": int(config.retry_count),
-            "fallback_enabled": bool(config.fallback_enabled),
-            "fallback_sources": [
-                item.value if isinstance(item, DataSourceType) else str(item)
-                for item in (config.fallback_sources or [])
-            ],
-        }
-    )
-    provider_entry["config"] = sanitize_for_json(persisted_config)
-    provider_entry["has_saved_credential"] = bool(has_saved)
-
-    provider_name = getattr(config, "provider_name", None)
-    if provider_name:
-        provider_entry["provider_name"] = provider_name
-    elif not provider_entry.get("provider_name"):
-        provider_entry.pop("provider_name", None)
-
-    providers_section[provider_key] = provider_entry
-    data_sources_section["providers"] = providers_section
-
-    _update_runtime_data_sources(manager, provider_key, provider_entry)
-
-    cleaned_data = _prune_empty(existing_data)
-
-    if existing_content:
-        backup_path = settings_path.with_suffix(settings_path.suffix + ".bak")
-        backup_path.write_text(existing_content, encoding=YAML_ENCODING)
-
-    with settings_path.open("w", encoding=YAML_ENCODING) as fh:
-        yaml.safe_dump(
-            cleaned_data,
-            fh,
-            default_flow_style=False,
-            allow_unicode=True,
-            sort_keys=False,
-        )
-
-    return bool(has_saved)
-
-
-
 def _flatten_amazingdata_credentials(payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
     if not isinstance(payload, dict):
@@ -406,6 +128,65 @@ def _flatten_amazingdata_credentials(payload: Optional[Dict[str, Any]]) -> Dict[
     if isinstance(connection_section, dict):
         _collect(connection_section)
     return result
+
+
+def _resolve_amazingdata_username(manager: Optional[DataSourceManager]) -> Optional[str]:
+    """尝试从运行态或配置中提取 AmazingData 用户名。"""
+    if manager is None:
+        return None
+
+    def _extract_from_mapping(candidate: Optional[Dict[str, Any]]) -> Optional[str]:
+        if not isinstance(candidate, dict):
+            return None
+        username = _flatten_amazingdata_credentials(candidate).get("username")
+        if isinstance(username, str):
+            username = username.strip()
+            if username:
+                return username
+        return None
+
+    try:
+        registry_config = manager.registry.get_config(DataSourceType.AMAZINGDATA)
+    except Exception:
+        registry_config = None
+    else:
+        if registry_config and isinstance(registry_config.config, dict):
+            username = _extract_from_mapping(registry_config.config)
+            if username:
+                return username
+
+    config_section = getattr(getattr(manager, "config", None), "amazingdata", None)
+    if config_section is not None:
+        raw_config: Dict[str, Any] = {}
+        for attr in ("username", "password", "host", "port"):
+            if hasattr(config_section, attr):
+                raw_config[attr] = getattr(config_section, attr)
+        connection_attr = getattr(config_section, "connection", None)
+        if connection_attr is not None:
+            if isinstance(connection_attr, dict):
+                raw_config["connection"] = connection_attr
+            elif hasattr(connection_attr, "model_dump"):
+                raw_config["connection"] = connection_attr.model_dump()
+            else:
+                raw_config["connection"] = {
+                    key: getattr(connection_attr, key)
+                    for key in ("username", "password", "host", "port")
+                    if hasattr(connection_attr, key)
+                }
+        username = _extract_from_mapping(raw_config)
+        if username:
+            return username
+
+    providers = getattr(manager, "providers", {})
+    provider = None
+    if isinstance(providers, dict):
+        provider = providers.get(DataSourceType.AMAZINGDATA)
+    if provider:
+        username = _extract_from_mapping(_get_provider_credentials(provider))
+        if username:
+            return username
+
+    return None
 
 
 def _normalize_amazingdata_credentials(raw: Dict[str, Any]) -> Dict[str, str]:
@@ -528,11 +309,12 @@ async def _test_amazingdata_login(config: DataSourceConfig) -> Tuple[bool, float
             host=provider_config.host,
             port=provider_config.port,
         )
-        latency_ms = result.get("latency_ms")
-        if latency_ms is None:
+        latency_raw = result.get("latency_ms")
+        latency_ms: float
+        if latency_raw is None:
             latency_ms = (time.perf_counter() - start_time) * 1000
         else:
-            latency_ms = float(latency_ms)
+            latency_ms = float(latency_raw)
         success = bool(result.get("success"))
         error_detail = result.get("error")
         if success:
@@ -722,13 +504,22 @@ def _assemble_sources_payload(
     sources: Dict[str, Dict[str, Any]],
     metrics_map: Dict[str, Any],
     proxy_map: Dict[str, List[Tuple[str, Dict[str, Any], Any, Dict[str, Any]]]],
+        manager: Optional[DataSourceManager] = None,
 ) -> List[Dict[str, Any]]:
     """构建前端所需的数据源列表。"""
 
     payload: List[Dict[str, Any]] = []
+    resolved_amazing_username: Optional[str] = None
     for source_name, info in sources.items():
         config_info = dict(info.get("config", {}) or {})
         config_info.setdefault("enabled", info.get("available", False))
+        if source_name == DataSourceType.AMAZINGDATA.value:
+            username_value = config_info.get("username")
+            if not isinstance(username_value, str) or not username_value.strip():
+                if resolved_amazing_username is None:
+                    resolved_amazing_username = _resolve_amazingdata_username(manager)
+                if resolved_amazing_username:
+                    config_info["username"] = resolved_amazing_username
         metrics_payload = _build_metrics_payload(metrics_map.get(source_name))
         proxies = [
             _build_proxy_payload(proxy_name, proxy_info, proxy_metrics, proxy_meta)
@@ -988,7 +779,7 @@ async def list_data_sources():
     report = manager.get_status_report()
     monitor = _monitor()
     sources, metrics_map, proxy_map = _extract_sources_context(report, monitor)
-    sources_payload = _assemble_sources_payload(sources, metrics_map, proxy_map)
+    sources_payload = _assemble_sources_payload(sources, metrics_map, proxy_map, manager)
     return APIResponse.success(sources_payload, "获取数据源列表成功")
 
 
@@ -1002,7 +793,7 @@ async def get_data_source_monitor():
 
     sources, metrics_map, proxy_map = _extract_sources_context(report, monitor)
     normalized_report = _assemble_normalized_report(report, sources, proxy_map, metrics_map)
-    sources_payload = _assemble_sources_payload(sources, metrics_map, proxy_map)
+    sources_payload = _assemble_sources_payload(sources, metrics_map, proxy_map, manager)
     response = {
         "overview": _build_overview(sources_payload, normalized_report, monitor),
         "sources": sources_payload,
@@ -1094,7 +885,7 @@ async def test_data_source(
         if isinstance(payload, DataSourceTestRequest):
             payload_data = payload.model_dump(exclude_unset=True)
         elif payload is not None:
-            logger.debug("Ignoring unexpected AmazingData test payload type: %s", type(payload))
+            logger.debug("Ignoring unexpected AmazingData test payload type: {}", type(payload))
 
         timeout_value = payload_data.get("timeout")
         if timeout_value is not None:
@@ -1110,42 +901,50 @@ async def test_data_source(
             test_config.fallback_sources = list(fallback_sources_value)
         config_override = payload_data.get("config")
         if config_override is not None:
-            test_config.config = _deep_merge_dict(test_config.config, config_override)
+            test_config.config = deep_merge_dict(test_config.config, config_override)
 
         success, latency_ms, error_detail = await _test_amazingdata_login(test_config)
         update_datasource_status_after_test(source_type.value, success, int(latency_ms))
 
-        payload = {
+        response_payload = {
             "success": success,
             "source": source_type.value,
             "latency_ms": latency_ms,
             "data": None if not success else {"action": "login"},
         }
         if error_detail:
-            payload["error"] = error_detail
+            response_payload["error"] = error_detail
 
         message = "登录成功" if success else (error_detail or "登录失败")
         if success:
-            return APIResponse.success(payload, message)
+            return APIResponse.success(response_payload, message)
         return JSONResponse(
             status_code=500,
             content=APIResponse.error(
                 code=ErrorCodes.DATASOURCE_TEST_FAILED,
                 message=message,
-                data=payload,
+                data=response_payload,
                 status_code=500,
             ),
         )
 
     test_symbol = symbol or DEFAULT_TEST_SYMBOL
     start = time.perf_counter()
-    result = await manager.get_data(
-        data_type="realtime_quote",
-        symbol=test_symbol,
-        preferred_source=source_type,
-    )
+    result: Any = None
+    error_detail: str | None = None
+
+    try:
+        result = await manager.get_data(
+            data_type="realtime_quote",
+            symbol=test_symbol,
+            preferred_source=source_type,
+        )
+    except Exception as exc:  # pragma: no cover - �Լ����ѹ���
+        error_detail = str(exc)
+        logger.warning("数据源 %s 自检 get_data 失败: %s", source_type.value, exc)
+
     latency_ms = (time.perf_counter() - start) * 1000
-    success = bool(result)
+    success = bool(result) and error_detail is None
 
     monitor = _monitor()
     monitor_type = _to_monitor_type(source_type)
@@ -1159,10 +958,10 @@ async def test_data_source(
                 success=success,
                 latency_ms=latency_ms,
                 data_size=len(str(result)) if result else 0,
-                error_message=None if success else "self_test_failed",
+                error_message=error_detail or ("self_test_failed" if not success else None),
             )
-        except Exception as exc:  # pragma: no cover - 监控异常时不阻塞
-            logger.debug(f"记录自检结果失败: {exc}")
+        except Exception as exc:  # pragma: no cover - ����쳣ʱ������
+            logger.debug(f"��¼�Լ���ʧ��: {exc}")
 
     payload = {
         "success": success,
@@ -1170,17 +969,22 @@ async def test_data_source(
         "latency_ms": latency_ms,
         "data": sanitize_for_json(result) if result else None,
     }
-    message = "自检成功" if success else "自检失败"
+    if error_detail:
+        payload["error"] = error_detail
+
+    message = "�Լ�ɹ�" if success else (error_detail or "�Լ�ʧ��")
+
+    response_payload = payload
 
     if success:
-        return APIResponse.success(payload, message)
+        return APIResponse.success(response_payload, message)
 
     return JSONResponse(
         status_code=500,
         content=APIResponse.error(
             code=ErrorCodes.DATASOURCE_TEST_FAILED,
             message=message,
-            data=payload,
+            data=response_payload,
             status_code=500,
         ),
     )
@@ -1231,17 +1035,7 @@ async def get_data_source_config(source: str):
             status_code=404,
         )
 
-    payload = sanitize_for_json(
-        {
-            "enabled": config.enabled,
-            "priority": config.priority,
-            "timeout": config.timeout,
-            "retry_count": config.retry_count,
-            "fallback_enabled": config.fallback_enabled,
-            "fallback_sources": config.fallback_sources,
-            "config": config.config,
-        }
-    )
+    payload = sanitize_for_json(_config_service.serialize_provider_config(config))
     return APIResponse.success(payload, "获取数据源配置成功")
 
 
@@ -1300,14 +1094,15 @@ async def update_data_source_config(request: Request, source: str, payload: Conf
         config.fallback_enabled = bool(update_data["fallback_enabled"])
     if "fallback_sources" in update_data:
         config.fallback_sources = list(update_data["fallback_sources"] or [])
-    persist_payload: Dict[str, Any] = update_data
+    persist_payload: Dict[str, Any] = dict(update_data)
+    akshare_type = getattr(DataSourceType, "AKSHARE", None)
     if "config" in update_data and update_data["config"] is not None:
         incoming_config = dict(update_data["config"])
         existing_config = config.config if isinstance(config.config, dict) else {}
-        merged_config = _deep_merge_dict(existing_config, incoming_config)
-        merged_config = _prune_empty(merged_config)
+        merged_config = deep_merge_dict(existing_config, incoming_config)
+        merged_config = prune_empty(merged_config)
         config.config = merged_config
-        if source_type == DataSourceType.AKSHARE:
+        if akshare_type and source_type == akshare_type:
             proxy_cfg = merged_config.get("proxy") if isinstance(merged_config, dict) else None
             if isinstance(proxy_cfg, dict):
                 proxy_enabled = proxy_cfg.get("enabled")
@@ -1319,7 +1114,6 @@ async def update_data_source_config(request: Request, source: str, payload: Conf
                     if merged_config.get("mode") == "proxy":
                         merged_config["mode"] = "direct"
                     merged_config.setdefault("mode", "direct")
-        persist_payload = dict(update_data)
         persist_payload["config"] = copy.deepcopy(config.config)
 
     if isinstance(config.config, dict):
@@ -1332,15 +1126,15 @@ async def update_data_source_config(request: Request, source: str, payload: Conf
 
     persisted_has_saved: Optional[bool] = None
     try:
-        persisted_has_saved = _persist_data_source_config(
-            manager,
-            source_type,
-            config,
-            remember_flag,
-            persist_payload,
+        persisted_has_saved = _config_service.persist_provider_config(
+            manager=manager,
+            source_type=source_type,
+            config=config,
+            remember_flag=remember_flag,
+            update_payload=persist_payload,
         )
-    except Exception as exc:  # pragma: no cover - 写入失败时不阻塞 API
-        logger.error(f"写入数据源配置失败: {exc}")
+    except Exception as exc:  # pragma: no cover - д��ʧ��ʱ������ API
+        logger.error(f"д������Դ����ʧ��: {exc}")
 
     if persisted_has_saved is not None:
         config.has_saved_credential = persisted_has_saved
@@ -1469,7 +1263,7 @@ def update_datasource_status_after_test(datasource_type: str, success: bool, lat
     manager = _manager()
     source_type = _resolve_source(manager, datasource_type)
     if source_type is None:
-        logger.warning(f"update_datasource_status_after_test: 未知数据源 {datasource_type}")
+        logger.warning(f"update_datasource_status_after_test: δ֪����Դ {datasource_type}")
         return
 
     monitor = _monitor()
@@ -1487,13 +1281,43 @@ def update_datasource_status_after_test(datasource_type: str, success: bool, lat
             error_message=None if success else "self_test_failed",
         )
 
-    manager._transition_status(
+    entry = manager._source_status.get(source_type, {})
+    now_ts = time.time()
+
+    if success:
+        updated = manager._transition_status(
+            source_type,
+            DataSourceLifecycleStatus.ACTIVE,
+            available=True,
+            reason="self_test_passed",
+            last_test_time=now_ts,
+        )
+        updated.pop("self_test_fail_count", None)
+        updated.pop("self_test_last_fail_ts", None)
+        return
+
+    last_fail_ts = float(entry.get("self_test_last_fail_ts") or 0.0)
+    failure_count = int(entry.get("self_test_fail_count") or 0)
+    if now_ts - last_fail_ts > SELF_TEST_FAILURE_DECAY_SECONDS:
+        failure_count = 0
+    failure_count += 1
+    reached_threshold = failure_count >= SELF_TEST_FAILURE_THRESHOLD
+    current_status = entry.get("status") or DataSourceLifecycleStatus.PENDING_TEST.value
+    prior_available = bool(entry.get("available", True))
+    target_status = DataSourceLifecycleStatus.ERROR if reached_threshold else current_status
+    target_reason = "self_test_failed" if reached_threshold else "self_test_warning"
+    target_available = False if reached_threshold else prior_available
+
+    updated = manager._transition_status(
         source_type,
-        DataSourceLifecycleStatus.ACTIVE if success else DataSourceLifecycleStatus.ERROR,
-        available=success,
-        reason="self_test_passed" if success else "self_test_failed",
-        last_test_time=time.time(),
+        target_status,
+        available=target_available,
+        reason=target_reason,
+        last_test_time=now_ts,
     )
+    updated["self_test_fail_count"] = failure_count
+    updated["self_test_last_fail_ts"] = now_ts
+
 
 
 # ---------------------------------------------------------------------------

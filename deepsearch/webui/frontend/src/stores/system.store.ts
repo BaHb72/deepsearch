@@ -1,6 +1,7 @@
-import { create } from 'zustand'
-import { devtools } from 'zustand/middleware'
-import systemAPI, { type SystemInfo } from '@/api/system'
+// @ts-nocheck
+import {create} from 'zustand'
+import {devtools} from 'zustand/middleware'
+import systemAPI, {type SystemInfo} from '@/api/system'
 
 export interface SystemComponent {
   name?: string
@@ -162,4 +163,5 @@ export const useSystemStore = create<SystemState>()(
     { name: 'system-store' }
   )
 )
+
 

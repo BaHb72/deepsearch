@@ -3,8 +3,26 @@
  * 管理所有的请求和响应拦截器
  */
 
-import { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
-import { RequestInterceptor, ResponseInterceptor, ErrorInterceptor } from './types'
+import axios, {AxiosInstance, AxiosResponse, InternalAxiosRequestConfig} from 'axios'
+import {ErrorInterceptor, RequestInterceptor, ResponseInterceptor} from './types'
+
+function setHeader(
+    config: InternalAxiosRequestConfig,
+    key: string,
+    value: string
+): InternalAxiosRequestConfig {
+    if (config.headers) {
+        if (typeof (config.headers as any).set === 'function') {
+            ;(config.headers as any).set(key, value)
+            return config
+        }
+        ;(config.headers as Record<string, string>)[key] = value
+        return config
+    }
+
+    config.headers = {[key]: value} as typeof config.headers
+    return config
+}
 
 /**
  * 拦截器管理器
@@ -36,13 +54,10 @@ export class RequestInterceptorManager {
     
     // 添加认证拦截器
     this.addRequestInterceptor('auth', (config) => {
-      // TODO: 从状态管理获取 token
+        // 从本地缓存读取 token，后续可接入状态管理仓库
       const token = localStorage.getItem('auth_token')
       if (token) {
-        config.headers = {
-          ...config.headers,
-          Authorization: `Bearer ${token}`
-        }
+          return setHeader(config, 'Authorization', `Bearer ${token}`)
       }
       return config
     })
@@ -50,11 +65,7 @@ export class RequestInterceptorManager {
     // 添加追踪拦截器
     this.addRequestInterceptor('trace', (config) => {
       // 添加追踪头
-      config.headers = {
-        ...config.headers,
-        'X-Trace-ID': this.generateTraceId()
-      }
-      return config
+        return setHeader(config, 'X-Trace-ID', this.generateTraceId())
     })
   }
   
@@ -116,8 +127,8 @@ export class RequestInterceptorManager {
     
     // 重新添加请求拦截器
     this.axiosInstance.interceptors.request.use(
-      async (config: AxiosRequestConfig) => {
-        let currentConfig = config
+        async (config) => {
+            let currentConfig = config as InternalAxiosRequestConfig
         
         // 按顺序执行所有请求拦截器
         for (const interceptor of this.requestInterceptors.values()) {
@@ -126,11 +137,11 @@ export class RequestInterceptorManager {
         
         return currentConfig
       },
-      (error) => {
+        async (error) => {
         // 执行错误拦截器
-        let currentError = error
+            let currentError: unknown = error
         for (const interceptor of this.errorInterceptors.values()) {
-          currentError = interceptor(currentError)
+            currentError = await interceptor(currentError)
         }
         return Promise.reject(currentError)
       }
@@ -148,11 +159,11 @@ export class RequestInterceptorManager {
         
         return currentResponse
       },
-      (error) => {
+        async (error) => {
         // 执行错误拦截器
-        let currentError = error
+            let currentError: unknown = error
         for (const interceptor of this.errorInterceptors.values()) {
-          currentError = interceptor(currentError)
+            currentError = await interceptor(currentError)
         }
         return Promise.reject(currentError)
       }
@@ -163,7 +174,7 @@ export class RequestInterceptorManager {
    * 生成追踪 ID
    */
   private generateTraceId(): string {
-    return `trace_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      return `trace_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
   }
   
   /**
@@ -188,16 +199,9 @@ export class RequestInterceptorManager {
   }
 }
 
-// axios 拦截器扩展
-declare module 'axios' {
-  interface AxiosInterceptorManager<V> {
-    clear(): void
-  }
-}
-
-// 实现 clear 方法
-if (!('clear' in axios.AxiosInterceptorManager.prototype)) {
-  (axios.AxiosInterceptorManager.prototype as any).clear = function() {
+const interceptorManagerProto = (axios as any).AxiosInterceptorManager?.prototype
+if (interceptorManagerProto && typeof interceptorManagerProto.clear !== 'function') {
+    interceptorManagerProto.clear = function () {
     this.handlers = []
   }
 }

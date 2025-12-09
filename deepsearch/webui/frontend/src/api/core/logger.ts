@@ -3,13 +3,7 @@
  * 记录和管理所有 API 请求的日志
  */
 
-import { 
-  RequestLog, 
-  LogFilter, 
-  HttpMethod, 
-  ApiCategory,
-  ApiError 
-} from './types'
+import {ApiCategory, ApiError, HttpMethod, LogFilter, RequestLog} from './types'
 
 // 循环缓冲区，用于限制日志大小
 class CircularBuffer<T> {
@@ -89,6 +83,7 @@ export class ApiLogger {
     url: string
     data?: any
     params?: any
+      category?: ApiCategory
   }): void {
     const log: Partial<RequestLog> = {
       id: params.requestId,
@@ -98,6 +93,7 @@ export class ApiLogger {
       fullUrl: this.getFullUrl(params.url),
       params: params.params,
       data: params.data,
+        category: params.category ?? ApiCategory.SYSTEM,
       trace: [
         `Request started at ${new Date().toISOString()}`,
         `Method: ${params.method}`,
@@ -108,7 +104,7 @@ export class ApiLogger {
     this.addLog(log as RequestLog)
     
     if (this.logLevel === 'debug') {
-      console.group(`📤 API Request [${params.requestId}]`)
+        console.group(`[API Request ${params.requestId}]`)
       console.log('Method:', params.method)
       console.log('URL:', params.url)
       if (params.params) console.log('Params:', params.params)
@@ -142,7 +138,7 @@ export class ApiLogger {
     }
     
     if (this.logLevel === 'debug') {
-      console.group(`📥 API Response [${params.requestId}]`)
+        console.group(`[API Response ${params.requestId}]`)
       console.log('Status:', params.status)
       console.log('Duration:', params.duration + 'ms')
       console.log('Data:', params.data)
@@ -188,7 +184,7 @@ export class ApiLogger {
    */
   public logDedupe(requestId: string, dedupeKey: string): void {
     if (this.logLevel === 'debug') {
-      console.log(`🔄 Request deduped [${requestId}] with key: ${dedupeKey}`)
+        console.log(`Deduplicated request [${requestId}] with key: ${dedupeKey}`)
     }
   }
   
@@ -206,7 +202,7 @@ export class ApiLogger {
     }
     
     if (this.logLevel === 'info' || this.logLevel === 'debug') {
-      console.log(`🔁 Retrying request [${requestId}], ${remainingRetries} attempts left`)
+        console.log(`Retrying request [${requestId}], ${remainingRetries} attempts left`)
     }
   }
   
@@ -352,7 +348,7 @@ export class ApiLogger {
     
     // URL 过滤
     if (filter.url) {
-      logs = logs.filter(log => log.url.includes(filter.url))
+        logs = logs.filter(log => log.url.includes(filter.url!))
     }
     
     // 错误过滤

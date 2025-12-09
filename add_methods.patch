@@ -1,0 +1,53 @@
+*** Begin Patch
+*** Update File: deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process.py
+@@
+     async def unsubscribe_quote(
+             self,
+             symbols: Sequence[str],
+             **_: Any,
+     ) -> bool:
+@@
+         logger.info(
+             "AmazingData 进程模式取消订阅 snapshot codes={} 剩余={}",
+             len(normalized_codes),
+             len(self._subscription_registry),
+         )
+         return True
++
++    async def snapshot_subscriptions(self) -> Mapping[str, SubscriptionInfo]:
++        async with self._subscription_lock:
++            return self._subscription_registry.snapshot()
++
++    async def drain_subscriptions(self) -> Mapping[str, SubscriptionInfo]:
++        should_stop = False
++        async with self._subscription_lock:
++            snapshot = self._subscription_registry.drain()
++            self._subscription_callbacks.clear()
++            should_stop = bool(self._subscription_task and not self._subscription_task.done())
++        if should_stop:
++            await self._stop_subscription_loop()
++        return snapshot
++
++    async def restore_subscriptions(self, snapshot: Mapping[str, SubscriptionInfo]) -> None:
++        if not snapshot:
++            return
++        should_start = False
++        async with self._subscription_lock:
++            self._subscription_callbacks.clear()
++            self._subscription_registry.clear()
++            self._subscription_registry.restore(snapshot)
++            for code, info in snapshot.items():
++                bucket = self._subscription_callbacks.setdefault(code, set())
++                for cb in info.callbacks:
++                    bucket.add(cb)
++            should_start = self._subscription_task is None or self._subscription_task.done()
++        if should_start:
++            self._start_subscription_loop()
++        payload_map = {
++            code: tuple(info.callbacks)
++            for code, info in snapshot.items()
++            if info.callbacks
++        }
++        if payload_map:
++            await self._dispatch_subscription_payloads(list(payload_map.keys()), payload_map)
+*** End Patch

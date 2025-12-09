@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from deepsearch.config import get_config
+from helpers import fetch_code_list
 
 
 def test_simple():
@@ -62,9 +63,11 @@ def test_simple():
 
                     # 测试获取股票列表
                     print("\n测试获取股票列表...")
-                    stock_list = ad.BaseData.get_stock_list()
-                    if stock_list is not None:
+                    stock_list = fetch_code_list(ad)
+                    if not stock_list.empty:
                         print(f"[OK] 获取股票列表成功，共{len(stock_list)}只股票")
+                    else:
+                        print("[WARNING] 股票列表为空")
 
                     # 登出
                     ad.logout()

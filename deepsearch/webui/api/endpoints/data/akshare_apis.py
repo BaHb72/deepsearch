@@ -116,6 +116,7 @@ async def list_apis_by_category():
             "options": "期权数据",
             "forex": "外汇数据",
             "crypto": "加密货币",
+            "fundamental": "基本面信息",
             "macro": "宏观经济",
             "article": "新闻资讯",
             "index": "指数数据",

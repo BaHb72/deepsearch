@@ -15,35 +15,35 @@ export type DataSourceLifecycleStatus =
   | 'offline'
 
 export interface LoginThrottleInfo {
-    inProgress?: boolean
-    nextAllowedAt?: string | null
-    waitSeconds?: number | null
-    backoffLevel?: number
-    failureStreak?: number
+  inProgress?: boolean
+  nextAllowedAt?: string | null
+  waitSeconds?: number | null
+  backoffLevel?: number
+  failureStreak?: number
 }
 
 export interface DataSourceHealthStatus {
-    status?: string
-    loggedIn?: boolean
-    logged_in?: boolean
-    usernameHint?: string | null
-    username_hint?: string | null
-    pid?: number | null
-    latencyMs?: number | null
-    latency_ms?: number | null
-    latency?: number | null
-    timestamp?: string | number | null
-    checkedAt?: string | number | null
-    checked_at?: string | number | null
-    probe?: Record<string, unknown> | null
-    probeName?: string | null
-    probeSummary?: string | null
-    errors?: unknown
-    error?: string | null
-    error_type?: string | null
-    reason?: string | null
+  status?: string
+  loggedIn?: boolean
+  logged_in?: boolean
+  usernameHint?: string | null
+  username_hint?: string | null
+  pid?: number | null
+  latencyMs?: number | null
+  latency_ms?: number | null
+  latency?: number | null
+  timestamp?: string | number | null
+  checkedAt?: string | number | null
+  checked_at?: string | number | null
+  probe?: Record<string, unknown> | null
+  probeName?: string | null
+  probeSummary?: string | null
+  errors?: unknown
+  error?: string | null
+  error_type?: string | null
+  reason?: string | null
 
-    [key: string]: unknown
+  [key: string]: unknown
 }
 
 export interface DataSource {
@@ -71,16 +71,16 @@ export interface DataSource {
   errors?: number
   latency?: number | null
   lastCheck?: string | null
-    loginThrottle?: LoginThrottleInfo
-    pendingLogin?: boolean
-    lastLoginStartedAt?: string | null
-    lastLoginCompletedAt?: string | null
-    lastLoginSuccessAt?: string | null
-    lastLoginErrorAt?: string | null
-    lastLoginErrorReason?: string | null
-    lastHealthStatus?: DataSourceHealthStatus | null
-    last_health_status?: DataSourceHealthStatus | null
-    healthStatus?: DataSourceHealthStatus | null
+  loginThrottle?: LoginThrottleInfo
+  pendingLogin?: boolean
+  lastLoginStartedAt?: string | null
+  lastLoginCompletedAt?: string | null
+  lastLoginSuccessAt?: string | null
+  lastLoginErrorAt?: string | null
+  lastLoginErrorReason?: string | null
+  lastHealthStatus?: DataSourceHealthStatus | null
+  last_health_status?: DataSourceHealthStatus | null
+  healthStatus?: DataSourceHealthStatus | null
 }
 
 export interface DataSourceStatus {
@@ -97,16 +97,16 @@ export interface DataSourceStatus {
   reason?: string
   last_transition?: string
   lastTransition?: string
-    loginThrottle?: LoginThrottleInfo
-    pendingLogin?: boolean
-    lastLoginStartedAt?: string | null
-    lastLoginCompletedAt?: string | null
-    lastLoginSuccessAt?: string | null
-    lastLoginErrorAt?: string | null
-    lastLoginErrorReason?: string | null
-    lastHealthStatus?: DataSourceHealthStatus | null
-    last_health_status?: DataSourceHealthStatus | null
-    healthStatus?: DataSourceHealthStatus | null
+  loginThrottle?: LoginThrottleInfo
+  pendingLogin?: boolean
+  lastLoginStartedAt?: string | null
+  lastLoginCompletedAt?: string | null
+  lastLoginSuccessAt?: string | null
+  lastLoginErrorAt?: string | null
+  lastLoginErrorReason?: string | null
+  lastHealthStatus?: DataSourceHealthStatus | null
+  last_health_status?: DataSourceHealthStatus | null
+  healthStatus?: DataSourceHealthStatus | null
   [key: string]: any
 }
 
@@ -174,17 +174,17 @@ function unwrapResponse<T>(payload: T | ApiEnvelope<T> | null | undefined): T {
 
 async function get<T>(url: string, config?: Record<string, unknown>): Promise<T> {
   const response = await request.get<T | ApiEnvelope<T>>(url, config)
-  return unwrapResponse<T>(response)
+  return unwrapResponse<T>(response as unknown as T | ApiEnvelope<T>)
 }
 
 async function post<T>(url: string, data?: unknown, config?: Record<string, unknown>): Promise<T> {
   const response = await request.post<T | ApiEnvelope<T>>(url, data, config)
-  return unwrapResponse<T>(response)
+  return unwrapResponse<T>(response as unknown as T | ApiEnvelope<T>)
 }
 
 async function put<T>(url: string, data?: unknown, config?: Record<string, unknown>): Promise<T> {
   const response = await request.put<T | ApiEnvelope<T>>(url, data, config)
-  return unwrapResponse<T>(response)
+  return unwrapResponse<T>(response as unknown as T | ApiEnvelope<T>)
 }
 
 export const dataSourceAPI = {
@@ -282,6 +282,41 @@ export const dataSourceAPI = {
   async getDataSourceErrors(params?: { source?: string; level?: string; limit?: number }): Promise<{ records: unknown[] }> {
     return get<{ records: unknown[] }>('/data-sources/errors', { params })
   },
+
+  /**
+   * 获取后台取数作业列表
+   */
+  async listIngestionJobs(params?: { job_type?: string; limit?: number }): Promise<{ jobs: IngestionJob[] }> {
+    return get<{ jobs: IngestionJob[] }>('/data-sources/jobs/', { params })
+  },
+
+  /**
+   * 触发预取作业
+   */
+  async triggerPrefetchJob(force: boolean = false): Promise<IngestionJob> {
+    return post<IngestionJob>('/data-sources/jobs/prefetch-stock-basics', { force })
+  },
+
+  /**
+   * 取消作业
+   */
+  async cancelJob(jobId: string): Promise<{ success: boolean }> {
+    return post<{ success: boolean }>(`/data-sources/jobs/${jobId}/cancel`)
+  },
+}
+
+export interface IngestionJob {
+  jobId: string
+  jobType: string
+  dataSource: string
+  accessType: string
+  status: string
+  queuedAt?: string | null
+  startedAt?: string | null
+  completedAt?: string | null
+  expiresAt?: string | null
+  recordCount?: number | null
+  errorMessage?: string | null
 }
 
 export default dataSourceAPI

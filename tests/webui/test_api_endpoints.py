@@ -16,6 +16,8 @@ from httpx import ASGITransport, AsyncClient
 
 from deepsearch.config import get_config, reload_config
 from deepsearch.constants import YAML_ENCODING
+from deepsearch.domain.market_data import StockListRecord
+from deepsearch.infrastructure.providers.managers.data_source_manager import StockListFetchResult
 from deepsearch.webui.api.services.system_data_service import ComponentNotFoundError
 from deepsearch.webui.server import app
 
@@ -221,10 +223,18 @@ class TestDataEndpoints:
         with patch("deepsearch.webui.api.endpoints.data.data.get_data_service") as mock:
             service = Mock()
             service.get_stock_list = AsyncMock(
-                return_value=[
-                    {"symbol": "000001", "name": "平安银行"},
-                    {"symbol": "000002", "name": "万科A"},
-                ]
+                return_value=StockListFetchResult(
+                    source="test",
+                    records=(
+                        StockListRecord(symbol="000001", name="平安银行"),
+                        StockListRecord(symbol="000002", name="万科A"),
+                    ),
+                    legacy=(
+                        {"symbol": "000001", "name": "平安银行"},
+                        {"symbol": "000002", "name": "万科A"},
+                    ),
+                    mismatch=0,
+                )
             )
             service.get_kline_data = AsyncMock(
                 return_value=[

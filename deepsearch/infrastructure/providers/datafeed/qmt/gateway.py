@@ -14,11 +14,10 @@ from loguru import logger
 from deepsearch.event.engine.engine import EventEngine
 from deepsearch.event.schema import Event
 from deepsearch.infrastructure.providers.datafeed.qmt.models import OrderBook, TickData, TradeData
+from deepsearch.infrastructure.providers.interfaces.payloads import ReceiverStats
 from deepsearch.messaging.bus import MessageBus
-
 from deepsearch.messaging.types import MessageEnvelope
 from .receiver import QMTReceiver
-from deepsearch.infrastructure.providers.interfaces.payloads import ReceiverStats
 
 # 定义QMT相关事件类型
 EVENT_QMT_TICK = "EVENT_QMT_TICK"
@@ -175,7 +174,7 @@ class QMTGateway:
         try:
             data = cast(Dict[str, Any], msg.get("data", {}))
             if not isinstance(data, dict):
-                logger.debug("跳过无效Tick数据: %s", type(data).__name__)
+                logger.debug("跳过无效Tick数据: {}", type(data).__name__)
                 return
 
             # 创建TickData对象
@@ -222,7 +221,7 @@ class QMTGateway:
         try:
             data = cast(Dict[str, Any], msg.get("data", {}))
             if not isinstance(data, dict):
-                logger.debug("跳过无效LEVEL2数据: %s", type(data).__name__)
+                logger.debug("跳过无效LEVEL2数据: {}", type(data).__name__)
                 return
             symbol = data.get("symbol", "")
 
@@ -287,7 +286,7 @@ class QMTGateway:
         try:
             data = cast(Dict[str, Any], msg.get("data", {}))
             if not isinstance(data, dict):
-                logger.debug("跳过无效逐笔数据: %s", type(data).__name__)
+                logger.debug("跳过无效逐笔数据: {}", type(data).__name__)
                 return
 
             # 创建TradeData对象
@@ -322,7 +321,7 @@ class QMTGateway:
         batch_data = cast(List[Dict[str, Any]], msg.get("data", []))
 
         if not isinstance(batch_data, list):
-            logger.debug("批量数据格式错误: %s", type(batch_data).__name__)
+            logger.debug("批量数据格式错误: {}", type(batch_data).__name__)
             return
 
         for item in batch_data:

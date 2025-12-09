@@ -17,7 +17,7 @@ from deepsearch.core.utils.async_timeout import timeout_decorator
 
 # 导入监控装饰器
 from deepsearch.infrastructure.providers.unified_proxy import async_monitor_access
-from deepsearch.observability.monitoring.data_source_monitor import DataAccessType, DataSourceType
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
 from ._deps import AkshareModule, PandasModule, load_akshare, load_pandas
 
@@ -421,7 +421,7 @@ class AKShareDirectProvider:
         module="akshare_direct",
     )
     @timeout_decorator(
-        seconds=10.0, default={"error": "timeout"}  # 使用固定超时值或从TimeoutManager获取
+        seconds=30.0, default={"error": "timeout"}  # 使用固定超时值或从TimeoutManager获取
     )
     async def get_realtime_quote(self, symbol: str) -> Dict[str, Any]:
         """
@@ -533,6 +533,99 @@ class AKShareDirectProvider:
         except Exception as e:
             logger.error(f"AKShare获取实时行情失败: {e}")
             return {"error": str(e)}
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.REALTIME_QUOTE,
+        module="akshare_direct",
+    )
+    @timeout_decorator(
+        seconds=45.0, default=[]  # 批量获取使用更长超时
+    )
+    async def get_realtime_quotes(self, symbols: List[str]) -> Optional[List[Dict[str, Any]]]:
+        """
+        批量获取实时行情
+
+        Args:
+            symbols: 股票代码列表
+
+        Returns:
+            实时行情数据列表
+        """
+        if self._akshare is None or not self.initialized:
+            return []
+
+        try:
+            # 在线程池中执行阻塞的AKShare调用
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor, self._fetch_realtime_quotes_sync, symbols
+            )
+            return result
+        except Exception as e:
+            logger.error(f"批量获取实时行情失败: {e}")
+            return []
+
+    def _fetch_realtime_quotes_sync(self, symbols: List[str]) -> List[Dict[str, Any]]:
+        """同步批量获取实时行情"""
+        module = self._akshare
+        if module is None:
+            return []
+        
+        try:
+            logger.info(f"[AKShare] 开始批量获取 {len(symbols)} 只股票的实时行情")
+            
+            # 直接使用全市场查询
+            df = module.stock_zh_a_spot_em()
+            
+            if df is None or df.empty:
+                return []
+
+            result = []
+            # 创建代码索引以加速查找
+            df_indexed = df.set_index("代码")
+            
+            for symbol in symbols:
+                if symbol in df_indexed.index:
+                    row = df_indexed.loc[symbol]
+                    # 如果有重复代码，loc可能返回DataFrame，取第一行
+                    if isinstance(row, pd.DataFrame):
+                        row = row.iloc[0]
+                        
+                    result.append({
+                        "symbol": symbol,
+                        "name": row.get("名称", ""),
+                        "current": self._safe_float(row.get("最新价", 0)),
+                        "prev_close": self._safe_float(row.get("昨收", 0)),
+                        "open": self._safe_float(row.get("今开", 0)),
+                        "high": self._safe_float(row.get("最高", 0)),
+                        "low": self._safe_float(row.get("最低", 0)),
+                        "volume": self._safe_float(row.get("成交量", 0)),
+                        "amount": self._safe_float(row.get("成交额", 0)),
+                        "change": self._safe_float(row.get("涨跌额", 0)),
+                        "change_pct": self._safe_float(row.get("涨跌幅", 0)),
+                        "timestamp": datetime.now().isoformat(),
+                        "amplitude": self._safe_float(row.get("振幅", 0)),
+                        "turnover_rate": self._safe_float(row.get("换手率", 0)),
+                        "pe_ratio": self._safe_float(row.get("市盈率-动态", 0)),
+                        "pb_ratio": self._safe_float(row.get("市净率", 0)),
+                        "market_cap": self._safe_float(row.get("总市值", 0)),
+                        "float_market_cap": self._safe_float(row.get("流通市值", 0)),
+                        "source": "akshare_direct_batch",
+                    })
+                else:
+                    # 未找到的股票返回错误信息或空数据
+                    result.append({
+                        "symbol": symbol,
+                        "error": "Not found",
+                        "source": "akshare_direct_batch"
+                    })
+            
+            return result
+
+        except Exception as e:
+            logger.error(f"AKShare批量获取实时行情失败: {e}")
+            return []
 
     @async_monitor_access(
         source=DataSourceType.AKSHARE,

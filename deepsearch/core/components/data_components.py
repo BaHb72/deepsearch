@@ -13,8 +13,9 @@ import platform
 import re
 from contextlib import suppress
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
+import redis.exceptions as redis_exceptions
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -31,6 +32,15 @@ from deepsearch.core.utils.timeout_config import TimeoutCategory, get_timeout_ma
 from deepsearch.infrastructure.persistence.runtime_state.database_status_store import (
     get_database_status_store,
 )
+
+if TYPE_CHECKING:
+    from redis.exceptions import RedisError as RedisConnectionError
+else:
+    _connection_cls = getattr(redis_exceptions, "ConnectionError", None)
+    if isinstance(_connection_cls, type) and issubclass(_connection_cls, BaseException):
+        RedisConnectionError = _connection_cls  # type: ignore[assignment]
+    else:
+        RedisConnectionError = redis_exceptions.RedisError  # type: ignore[assignment]
 
 LOCAL_HOST_CANDIDATES = {"localhost", "127.0.0.1", "::1"}
 
@@ -77,8 +87,6 @@ def _resolve_windows_host_ip(logger: Any) -> Optional[str]:
 
 
 def _is_connection_related_error(error: Exception) -> bool:
-    from redis.exceptions import ConnectionError as RedisConnectionError
-
     if isinstance(error, (RedisConnectionError, asyncio.TimeoutError, OSError)):
         return True
 
@@ -481,7 +489,7 @@ class DatabaseComponent(AsyncComponent[Any]):
 
         async def _test_connection() -> None:
             async with engine.begin() as conn:
-                await conn.execute(text("SELECT 1"))
+                await conn.exec_driver_sql("SELECT 1")
             self._logger.info("数据库连接成功 (%s:%s)", host, main_config.port)
 
         test_task = asyncio.create_task(_test_connection())
@@ -732,7 +740,6 @@ class CacheComponent(AsyncComponent[Any]):
     ) -> None:
         """根据给定参数建立 Redis 连接并执行连通性探测。"""
         import asyncio
-        from redis.exceptions import ConnectionError as RedisConnectionError
 
         pool = aioredis.ConnectionPool(**pool_kwargs)
         client = aioredis.Redis(connection_pool=pool)
@@ -779,7 +786,6 @@ class CacheComponent(AsyncComponent[Any]):
         if errno_value == 22:
             return True
 
-        from redis.exceptions import ConnectionError as RedisConnectionError
 
         if isinstance(error, RedisConnectionError):
             cause = getattr(error, "__cause__", None)

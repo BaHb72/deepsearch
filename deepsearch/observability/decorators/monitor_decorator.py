@@ -13,10 +13,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, cast
 
 from loguru import logger
 
-from deepsearch.observability.monitoring.data_source_monitor import (
-    DataAccessType,
-    DataSourceType,
-)
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 from deepsearch.observability.monitoring.decorators import (
     MonitorMetadata,
     SymbolExtractor,

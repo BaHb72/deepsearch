@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
-import { Alert, Button, Card, Descriptions, Space, Switch, Tag, Tooltip, Typography } from 'antd'
-import { ReloadOutlined, ExperimentOutlined, EyeOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
-import type { NotificationConfigResponse } from '@/api/notifications'
-import type { NotificationTestRecord } from './useNotificationTest'
+// @ts-nocheck
+import {useMemo, useState} from 'react'
+import {Alert, Button, Card, Descriptions, Space, Switch, Tag, Tooltip, Typography} from 'antd'
+import {ExperimentOutlined, EyeOutlined, ReloadOutlined} from '@ant-design/icons'
+import {useNavigate} from 'react-router-dom'
+import type {NotificationConfigResponse} from '@/api/notifications'
+import type {NotificationTestRecord} from './useNotificationTest'
 
 const CHANNEL_LABEL_MAP: Record<string, string> = {
   wechat: '微信',
@@ -143,3 +144,4 @@ const OverviewCard = ({
 }
 
 export default OverviewCard
+

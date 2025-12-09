@@ -8,6 +8,13 @@ from .amazingdata_process import (
     ProcessCommand,
     ProcessCommandType,
 )
+from .data_sources import (
+    DataAccessType,
+    DataSourceRuntimeSnapshot,
+    DataSourceType,
+    ProviderConfigSnapshot,
+    ProviderConfigUpdate,
+)
 
 __all__ = [
     "AmazingDataLoginRequest",
@@ -16,4 +23,9 @@ __all__ = [
     "ProcessCallResult",
     "ProcessCommand",
     "ProcessCommandType",
+    "DataSourceType",
+    "DataAccessType",
+    "ProviderConfigSnapshot",
+    "ProviderConfigUpdate",
+    "DataSourceRuntimeSnapshot",
 ]

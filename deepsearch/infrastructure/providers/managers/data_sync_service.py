@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import inspect
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -32,6 +33,27 @@ class DataSyncService:
     def set_analytics_db(self, analytics_db):
         """设置DuckDB分析数据库实例"""
         self._analytics_db = analytics_db
+
+    def set_database_component(self, database_component) -> None:
+        """设置 PostgreSQL 数据源组件"""
+        self._database_component = database_component
+
+
+    @staticmethod
+    def _coerce_dataframe(payload: Any) -> pd.DataFrame:
+        """将任意负载转换为 DataFrame，用于统一写入 DuckDB。"""
+        if payload is None:
+            return pd.DataFrame()
+        if isinstance(payload, pd.DataFrame):
+            return payload.copy()
+        if isinstance(payload, list):
+            return pd.DataFrame(payload)
+        if isinstance(payload, dict):
+            return pd.DataFrame([payload])
+        try:
+            return pd.DataFrame(payload)
+        except Exception:  # pragma: no cover - 容错
+            return pd.DataFrame()
 
     async def start(self):
         """启动定时同步服务"""
@@ -100,136 +122,136 @@ class DataSyncService:
             logger.warning("DuckDB未初始化，跳过同步")
             return
 
-        try:
-            # 获取最后同步时间
-            last_sync = self._last_sync_time.get("kline_history")
+        if not self._database_component:
+            logger.warning("未配置 PostgreSQL 数据源，无法同步 K 线数据")
+            return
 
-            # 如果没有指定时间范围，使用增量同步
+        fetcher = getattr(self._database_component, "fetch_kline_history", None)
+        if fetcher is None:
+            logger.warning("数据库组件未实现 fetch_kline_history，跳过 K 线同步")
+            return
+
+        try:
+            last_sync = self._last_sync_time.get("kline_history")
             if not start_date and last_sync:
                 start_date = last_sync.strftime("%Y-%m-%d")
-
             if not end_date:
                 end_date = datetime.now().strftime("%Y-%m-%d")
 
-            # 构建查询条件
-            conditions = []
-            params = []
-
+            fetch_kwargs: Dict[str, Any] = {}
             if start_date:
-                conditions.append("time >= %s")
-                params.append(start_date)
-
+                fetch_kwargs["start_date"] = start_date
             if end_date:
-                conditions.append("time <= %s")
-                params.append(end_date)
-
+                fetch_kwargs["end_date"] = end_date
             if symbols:
-                placeholders = ",".join(["%s"] * len(symbols))
-                conditions.append(f"symbol IN ({placeholders})")
-                params.extend(symbols)
+                fetch_kwargs["symbols"] = symbols
 
-            " AND ".join(conditions) if conditions else "1=1"
+            result = fetcher(**fetch_kwargs)
+            if inspect.iscoroutine(result):
+                result = await result
 
-            # 从PostgreSQL读取数据 (这里使用模拟数据，实际应该从database_component获取)
-            # 在实际实现中，应该使用 self._database_component 获取数据
+        except TypeError as exc:
+            logger.error(f"fetch_kline_history 参数不兼容: {exc}")
+            return
+        except Exception as exc:
+            logger.error(f"拉取 K 线数据失败: {exc}")
+            return
 
-            # 创建模拟数据用于测试
-            import numpy as np
+        df = self._coerce_dataframe(result)
 
-            dates = pd.date_range(
-                start=start_date or "2024-01-01", end=end_date or datetime.now(), freq="D"
+        if df.empty:
+            logger.info("没有新的K线数据需要同步")
+            return
+
+        try:
+            await self._analytics_db.import_from_dataframe(
+                df, "kline_history", if_exists="replace"
             )
-
-            sample_data = []
-            for symbol in symbols or ["000001", "000002", "600000"]:
-                for date in dates:
-                    base_price = 10 + np.random.rand() * 50
-                    sample_data.append(
-                        {
-                            "symbol": symbol,
-                            "time": date,
-                            "open": base_price + np.random.randn(),
-                            "high": base_price + abs(np.random.randn()) * 2,
-                            "low": base_price - abs(np.random.randn()) * 2,
-                            "close": base_price + np.random.randn(),
-                            "volume": int(1000000 * (1 + np.random.rand())),
-                            "amount": int(10000000 * (1 + np.random.rand())),
-                        }
-                    )
-
-            df = pd.DataFrame(sample_data)
-
-            if not df.empty:
+            self._last_sync_time["kline_history"] = datetime.now()
+            logger.info("同步了 {} 条K线数据", len(df))
+        except Exception as import_error:
+            if "Duplicate key" in str(import_error):
+                logger.warning(f"跳过重复的K线数据: {import_error}")
                 try:
-                    # 导入到DuckDB，使用replace避免重复键冲突
+                    for _, row in df.iterrows():
+                        self._analytics_db.conn.execute(
+                            "DELETE FROM kline_history WHERE symbol = ? AND time = ?",
+                            (row.get("symbol"), row.get("time")),
+                        )
                     await self._analytics_db.import_from_dataframe(
-                        df, "kline_history", if_exists="replace"
+                        df, "kline_history", if_exists="append"
                     )
-
-                    # 更新最后同步时间
-                    self._last_sync_time["kline_history"] = datetime.now()
-
-                    logger.info(f"同步了 {len(df)} 条K线数据")
-                except Exception as import_error:
-                    if "Duplicate key" in str(import_error):
-                        logger.warning(f"跳过重复的K线数据: {import_error}")
-                        # 尝试使用upsert逻辑（先删除再插入）
-                        try:
-                            for _, row in df.iterrows():
-                                self._analytics_db.conn.execute(
-                                    "DELETE FROM kline_history WHERE symbol = ? AND time = ?",
-                                    (row["symbol"], row["time"]),
-                                )
-                            await self._analytics_db.import_from_dataframe(
-                                df, "kline_history", if_exists="append"
-                            )
-                            logger.info(f"使用upsert方式同步了 {len(df)} 条K线数据")
-                        except Exception as upsert_error:
-                            logger.error(f"Upsert失败: {upsert_error}")
-                    else:
-                        raise import_error
+                    logger.info("使用 upsert 方式同步了 {} 条K线数据", len(df))
+                except Exception as upsert_error:
+                    logger.error(f"Upsert失败: {upsert_error}")
             else:
-                logger.info("没有新的K线数据需要同步")
-
-        except Exception as e:
-            logger.error(f"同步K线历史数据失败: {e}")
+                logger.error(f"写入 K 线数据失败: {import_error}")
+                raise
 
     async def sync_stock_info(self):
         """同步股票信息"""
+        if not self._analytics_db:
+            logger.warning("DuckDB未初始化，跳过股票信息同步")
+            return
+
+        if not self._database_component:
+            logger.warning("未配置 PostgreSQL 数据源，无法同步股票信息")
+            return
+
+        fetcher = None
+        for attr in ("fetch_stock_info", "fetch_all_stock_info", "get_stock_info"):
+            candidate = getattr(self._database_component, attr, None)
+            if callable(candidate):
+                fetcher = candidate
+                break
+
+        if fetcher is None:
+            logger.warning("数据库组件未实现股票信息拉取接口，跳过同步")
+            return
+
         try:
-            # 这里应该从database_component获取股票信息
-            # 暂时使用模拟数据
+            result = fetcher()
+            if inspect.iscoroutine(result):
+                result = await result
+        except Exception as exc:
+            logger.error(f"拉取股票信息失败: {exc}")
+            return
 
-            stock_info = pd.DataFrame(
-                [
-                    {"symbol": "000001", "name": "平安银行", "market": "SZ", "sector": "金融"},
-                    {"symbol": "000002", "name": "万科A", "market": "SZ", "sector": "房地产"},
-                    {"symbol": "600000", "name": "浦发银行", "market": "SH", "sector": "金融"},
-                ]
-            )
+        stock_info = self._coerce_dataframe(result)
+        if stock_info.empty:
+            logger.info("无股票信息更新，跳过写入")
+            return
 
-            # 创建股票信息表（如果不存在）
-            if self._analytics_db and hasattr(self._analytics_db, "conn"):
-                self._analytics_db.conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS stock_info (
-                        symbol VARCHAR PRIMARY KEY,
-                        name VARCHAR,
-                        market VARCHAR,
-                        sector VARCHAR
-                    )
+        required_columns = {"symbol", "name"}
+        missing = required_columns - set(stock_info.columns)
+        if missing:
+            logger.error("股票信息缺少必要字段: {}", ", ".join(sorted(missing)))
+            return
+
+        try:
+            self._analytics_db.conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS stock_info
+                (
+                    symbol
+                    VARCHAR
+                    PRIMARY
+                    KEY,
+                    name
+                    VARCHAR,
+                    market
+                    VARCHAR,
+                    sector
+                    VARCHAR
                 )
-
-                # 导入数据
-                await self._analytics_db.import_from_dataframe(
-                    stock_info, "stock_info", if_exists="replace"
-                )
-
-                logger.info(f"同步了 {len(stock_info)} 条股票信息")
-
-        except Exception as e:
-            logger.error(f"同步股票信息失败: {e}")
+                """
+            )
+            await self._analytics_db.import_from_dataframe(
+                stock_info, "stock_info", if_exists="replace"
+            )
+            logger.info("同步了 {} 条股票信息", len(stock_info))
+        except Exception as exc:
+            logger.error(f"同步股票信息失败: {exc}")
 
     async def sync_realtime_snapshot(self):
         """同步实时数据快照"""
@@ -318,8 +340,7 @@ def get_sync_service(database_component=None) -> DataSyncService:
     global _sync_service_instance
     if _sync_service_instance is None:
         _sync_service_instance = DataSyncService(database_component)
-    elif database_component and not _sync_service_instance._database_component:
-        # 如果提供了database_component且当前实例没有设置，则设置它
-        _sync_service_instance._database_component = database_component
+    elif database_component is not None:
+        _sync_service_instance.set_database_component(database_component)
 
     return _sync_service_instance

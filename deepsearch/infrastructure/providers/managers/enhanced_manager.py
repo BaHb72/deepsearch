@@ -13,10 +13,6 @@ from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequ
 import pandas as pd
 from loguru import logger
 
-from ..implementations.akshare.akshare import AkShareProxyProvider
-from ..implementations.amazingdata.amazingdata import AmazingDataConfig
-from ..implementations.amazingdata.amazingdata_optimized import OptimizedAmazingDataProvider
-from ..implementations.amazingdata.amazingdata_process import ProcessIsolatedAmazingDataProvider
 from deepsearch.infrastructure.providers.interfaces.base import (
     DataProvider,
     DataProviderError
@@ -25,12 +21,16 @@ from deepsearch.infrastructure.providers.interfaces.capabilities import (
     DataCapability
 )
 from deepsearch.infrastructure.providers.interfaces.payloads import QuotePayloadMap
-from ..implementations.qmt.unified_qmt_provider import UnifiedQMTProvider, QMTMode, SmartCacheManager
-from deepsearch.utils.patterns.request_batcher import MultiKeyBatcher
 from deepsearch.utils.data_sources import (
     DataSourceType as RegistryDataSourceType,
     get_data_source_manager,
 )
+from deepsearch.utils.patterns.request_batcher import MultiKeyBatcher
+from ..implementations.akshare.akshare_adapter import AkShareAdapter
+from ..implementations.amazingdata.amazingdata import AmazingDataConfig
+from ..implementations.amazingdata.amazingdata_optimized import OptimizedAmazingDataProvider
+from ..implementations.amazingdata.amazingdata_process import ProcessIsolatedAmazingDataProvider
+from ..implementations.qmt.unified_qmt_provider import UnifiedQMTProvider, QMTMode, SmartCacheManager
 
 
 class DataSourcePriority(Enum):
@@ -60,7 +60,7 @@ class EnhancedDataProviderManager:
         # 数据提供者实例
         self._amazingdata_provider: Optional[DataProvider] = None
         self._qmt_provider: Optional[UnifiedQMTProvider] = None
-        self._akshare_provider: Optional[AkShareProxyProvider] = None
+        self._akshare_provider: Optional[DataProvider] = None
 
         # 全局缓存管理器
         self.global_cache = SmartCacheManager(max_memory_size=2000)
@@ -146,7 +146,7 @@ class EnhancedDataProviderManager:
                 self.provider_health["akshare"] = {"status": "disabled", "reason": "disabled_by_config"}
                 raise DataProviderError("无法初始化任何数据源")
             try:
-                self._akshare_provider = AkShareProxyProvider()
+                self._akshare_provider = AkShareAdapter(use_proxy=True)
                 await asyncio.wait_for(self._akshare_provider.initialize(), timeout=15.0)
                 provider = cast(DataProvider, self._akshare_provider)
                 self._providers["akshare"] = provider
@@ -299,7 +299,8 @@ class EnhancedDataProviderManager:
                 self._akshare_provider = None
                 return
 
-            self._akshare_provider = AkShareProxyProvider()
+            # 使用 AkShare 适配器：优先代理，失败自动回退至直连
+            self._akshare_provider = AkShareAdapter(use_proxy=True)
 
             # 添加超时控制（AkShare通常初始化较快）
             try:
@@ -755,7 +756,7 @@ class EnhancedDataProviderManager:
             ]
 
         # AkShare支持基础能力
-        if isinstance(provider, AkShareProxyProvider):
+        if isinstance(provider, AkShareAdapter):
             return capability in [
                 DataCapability.KLINE_DATA,
                 DataCapability.REALTIME_QUOTES,

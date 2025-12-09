@@ -9,6 +9,16 @@ from .app import AppConfig, AppEnvironment
 from .bus import BusInstanceConfig, MessageBusConfig, RouteConfig
 from .cache import RedisConfig
 from .cloudflare_workers import CloudflareWorkersConfig
+from .data_sources import (
+    CircuitBreakerConfig,
+    DataSourceProviderConfig,
+    DataSourcesConfig,
+    FailoverConfig,
+    RealtimeAdapterHealthConfig,
+    RealtimeAdapterSpec,
+    RealtimeAlertPolicy,
+    RealtimeDataSourceConfig,
+)
 from .database import (
     CacheDatabaseConfig,
     CacheDatabaseWSLConfig,
@@ -16,11 +26,21 @@ from .database import (
     MainDatabaseConfig,
 )
 from .database_connections import DatabaseConnectionConfigModel
+from .datafeed import CloudflareConfig, DataFeedConfig
 from .debug import DebugConfig
 from .health import HealthCheckConfig
-from .log import LogConfig, LogLevel
+from .log import LogArchiveConfig, LogConfig, LogLevel, ModuleLogConfig
+from .market_data import (
+    MarketDataConfig,
+    MarketModuleConfig,
+    MarketModuleFallbackConfig,
+    MarketRealtimeConfig,
+    MarketRedisConfig,
+    MarketWindowConfig,
+)
 from .monitoring import MonitoringConfig
 from .notifications import NotificationBaseUrls, NotificationCategoryConfig, NotificationsConfig
+from .prefetch import DataSourcePrefetchConfig
 from .performance import PerformanceConfig
 from .qmt import QmtConfig
 from .runtime import RuntimeConfig, RuntimeModeSetting
@@ -31,47 +51,67 @@ from .zeromq import ZeroMQConfig
 __all__ = [
     # AmazingData
     "AmazingDataConfig",
-    # 应用
+    # Application settings
     "AppConfig",
     "AppEnvironment",
-    # 总线
+    # Messaging
     "BusInstanceConfig",
     "MessageBusConfig",
     "RouteConfig",
-    # 数据库
+    # Database
     "DatabaseConfig",
     "MainDatabaseConfig",
     "CacheDatabaseConfig",
     "CacheDatabaseWSLConfig",
     "DatabaseConnectionConfigModel",
-    # 调试
+    # Data feed (legacy)
+    "DataFeedConfig",
+    "CloudflareConfig",
+    # Debug & logging
     "DebugConfig",
-    # 日志
+    "LogArchiveConfig",
     "LogConfig",
     "LogLevel",
-    # 监控
+    "ModuleLogConfig",
+    # Monitoring & market data
     "MonitoringConfig",
-    # 性能
+    "MarketDataConfig",
+    "MarketModuleConfig",
+    "MarketModuleFallbackConfig",
+    "MarketRealtimeConfig",
+    "MarketRedisConfig",
+    "MarketWindowConfig",
+    # Performance tuning
     "PerformanceConfig",
-    # 运行时
+    # Runtime
     "RuntimeConfig",
     "RuntimeModeSetting",
     # QMT
     "QmtConfig",
     # Redis
     "RedisConfig",
-    # 安全
+    # Security
     "SecurityConfig",
     # WebUI
     "WebUIConfig",
     # ZeroMQ
     "ZeroMQConfig",
-    # 健康检查
+    # Data sources
+    "DataSourcesConfig",
+    "DataSourceProviderConfig",
+    "CircuitBreakerConfig",
+    "FailoverConfig",
+    "RealtimeAdapterHealthConfig",
+    "RealtimeAdapterSpec",
+    "RealtimeAlertPolicy",
+    "RealtimeDataSourceConfig",
+    # Health & notifications
     "HealthCheckConfig",
-    # Cloudflare Workers
     "CloudflareWorkersConfig",
     "NotificationsConfig",
     "NotificationCategoryConfig",
     "NotificationBaseUrls",
+    # Data source schedulers
+    "DataSourcePrefetchConfig",
 ]
 

@@ -7,11 +7,12 @@
 import asyncio
 import inspect
 import os
+import sys
 import threading
 from contextlib import closing, suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Final, List, Mapping, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, Final, List, Mapping, Optional, Tuple, cast
 
 import duckdb
 from fastapi import APIRouter, FastAPI, HTTPException
@@ -70,6 +71,9 @@ except ImportError:
 
 # 创建路由
 router = APIRouter(tags=["Database Management"])
+
+PSYCOPG_ASYNC_AVAILABLE: Final[bool] = "psycopg" in globals()
+IS_WINDOWS: Final[bool] = sys.platform == "win32"
 
 _MONITOR_INTERVAL_SECONDS = 15.0
 _monitor_task: Optional[asyncio.Task] = None
@@ -133,14 +137,18 @@ def _is_proactor_event_loop(loop: asyncio.AbstractEventLoop) -> bool:
 def _fetch_postgresql_version_sync(conn_params: Mapping[str, Any]) -> str:
     """在同步上下文中执行 PostgreSQL 版本查询。"""
 
+    connect_fn: Callable[..., Any]
     if "psycopg" in globals():
-        connect_fn = psycopg.connect  # type: ignore[attr-defined]
+        connect_attr = getattr(psycopg, "connect", None)
+        if connect_attr is None:
+            raise RuntimeError("psycopg.connect is unavailable")
+        connect_fn = cast(Callable[..., Any], connect_attr)
     else:
         import psycopg2  # noqa: F401
 
-        connect_fn = psycopg2.connect  # type: ignore[attr-defined]
+        connect_fn = cast(Callable[..., Any], psycopg2.connect)
 
-    with closing(connect_fn(**conn_params)) as conn:  # type: ignore[arg-type]
+    with closing(cast(Any, connect_fn)(**conn_params)) as conn:
         with closing(conn.cursor()) as cur:
             cur.execute("SELECT version()")
             version_row = cur.fetchone()
@@ -1371,16 +1379,20 @@ async def _execute_connection_test(request: TestConnectionRequest) -> Dict[str, 
                 conn_params = _build_postgresql_conn_params(request)
                 try:
                     version_info: Optional[str] = None
-                    if "psycopg" in globals():
+                    if PSYCOPG_ASYNC_AVAILABLE:
                         use_thread = False
-                        try:
-                            loop = asyncio.get_running_loop()
-                            use_thread = _is_proactor_event_loop(loop)
-                        except RuntimeError:
-                            use_thread = False
+                        if IS_WINDOWS:
+                            try:
+                                loop = asyncio.get_running_loop()
+                            except RuntimeError:
+                                use_thread = False
+                            else:
+                                use_thread = _is_proactor_event_loop(loop)
 
                         if use_thread:
-                            logger.debug("检测到 ProactorEventLoop，使用同步连接测试 PostgreSQL")
+                            logger.debug(
+                                "检测到 ProactorEventLoop，转用线程池执行同步 PostgreSQL 连接测试"
+                            )
                             version_info = await asyncio.to_thread(
                                 _fetch_postgresql_version_sync, conn_params
                             )

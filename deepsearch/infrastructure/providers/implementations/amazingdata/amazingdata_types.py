@@ -10,6 +10,53 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Mapping, Sequence, TypedDict, TypeAlias, Union
 
 
+class AmazingDataStreamQuote(TypedDict, total=False):
+    """Typed representation of AmazingData realtime quote payloads."""
+
+    code: str
+    symbol: str
+    name: str
+    exchange: str
+    time: Union[str, int, float, datetime]
+    price: Union[str, int, float]
+    last: Union[str, int, float]
+    last_price: Union[str, int, float]
+    open: Union[str, int, float]
+    high: Union[str, int, float]
+    low: Union[str, int, float]
+    pre_close: Union[str, int, float]
+    prev_close: Union[str, int, float]
+    amount: Union[str, int, float]
+    volume: Union[str, int, float]
+    num_trades: Union[str, int, float]
+    trade_num: Union[str, int, float]
+    bid: Sequence[Any]
+    bid_prices: Sequence[Any]
+    ask: Sequence[Any]
+    ask_prices: Sequence[Any]
+    bid_volume: Sequence[Any]
+    bid_volumes: Sequence[Any]
+    ask_volume: Sequence[Any]
+    ask_volumes: Sequence[Any]
+    high_limit: Union[str, int, float]
+    upper_limit: Union[str, int, float]
+    low_limit: Union[str, int, float]
+    lower_limit: Union[str, int, float]
+    trading_phase: str
+    status: str
+
+
+class AmazingDataStreamPayload(TypedDict, total=False):
+    """Envelope emitted by AmazingData streaming handlers."""
+
+    timestamp: datetime
+    period: str
+    data: AmazingDataStreamQuote
+
+
+RealtimeQuoteMap: TypeAlias = Mapping[str, AmazingDataStreamQuote]
+
+
 
 class AmazingDataPeriod(Enum):
     """AmazingData 数据周期"""

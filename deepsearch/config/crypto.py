@@ -8,13 +8,18 @@
 import base64
 import binascii
 from pathlib import Path
-from typing import Optional, cast
+from typing import Optional, TYPE_CHECKING, cast
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from deepsearch.observability import logger
+
+if TYPE_CHECKING:
+    from loguru import Logger
+
+module_logger = cast("Logger", logger)
 
 
 class PasswordCrypto:
@@ -93,11 +98,11 @@ class PasswordCrypto:
             return decrypted_bytes.decode()
         except (ValueError, binascii.Error) as e:
             # Base64 解码失败，可能是明文密码
-            logger.debug(f"密码解码失败，可能是明文: {type(e).__name__}")
+            module_logger.debug(f"密码解码失败，可能是明文: {type(e).__name__}")
             return encrypted_password
         except Exception as e:
             # 其他解密错误，如 InvalidToken
-            logger.warning(f"密码解密失败: {type(e).__name__}")
+            module_logger.warning(f"密码解密失败: {type(e).__name__}")
             return encrypted_password
 
 

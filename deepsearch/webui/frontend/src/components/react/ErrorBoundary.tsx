@@ -45,7 +45,7 @@ class ErrorBoundary extends React.Component {
             </Button>
           ]}
         >
-          {process.env.NODE_ENV === 'development' && (
+            {import.meta.env.DEV && (
             <div className="error-details" style={{ 
               textAlign: 'left', 
               background: '#f5f5f5', 

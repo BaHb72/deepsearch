@@ -4,6 +4,7 @@ DeepSearchDataFeed - Backtrader 数据适配器
 将 DeepSearch 的数据源适配为 Backtrader 可用的数据格式
 """
 
+import os
 from datetime import datetime
 from typing import Any, Dict, TYPE_CHECKING, cast
 
@@ -25,6 +26,12 @@ if TYPE_CHECKING:
     from backtrader.feeds import PandasData as BacktraderPandasData
 else:
     BacktraderPandasData = Any
+
+
+def _allow_mock_data() -> bool:
+    """Return True only during automated tests to allow mock data generation."""
+    return bool(os.getenv("PYTEST_CURRENT_TEST"))
+
 
 
 class DeepSearchDataFeed:
@@ -75,6 +82,9 @@ class DeepSearchDataFeed:
         if self.data_provider:
             raw_df = await self._fetch_from_provider(symbol, start_date, end_date, timeframe, adjust)
         else:
+            if not _allow_mock_data():
+                raise RuntimeError(
+                    "DeepSearchDataFeed requires a data_provider; mock data is only permitted during automated tests.")
             raw_df = self._generate_mock_data(symbol, start_date, end_date, timeframe)
 
         df = self._standardize_dataframe(self._ensure_dataframe(raw_df))
@@ -145,8 +155,7 @@ class DeepSearchDataFeed:
     def _generate_mock_data(
         self, symbol: str, start_date: datetime, end_date: datetime, timeframe: str
     ) -> pd.DataFrame:
-        """生成模拟数据（用于测试）"""
-        # 生成日期范围
+        """Generate deterministic mock data for tests only."""
         dates = pd.date_range(start=start_date, end=end_date, freq="D")
 
         # 生成随机价格数据

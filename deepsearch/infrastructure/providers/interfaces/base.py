@@ -7,22 +7,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol
+
+from deepsearch.ports.data_sources import DataSourceType
 
 from .payloads import DataPayload
 
-
-class DataSourceType(Enum):
-    """数据源类型枚举"""
-
-    AMAZINGDATA = "amazingdata"
-    CLOUDFLARE = "cloudflare"
-    AKSHARE = "akshare"
-    QMT = "qmt"
-    DATABASE = "database"
-    DEFAULT = "default"
-    CUSTOM = "custom"
 
 
 @dataclass

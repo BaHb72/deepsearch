@@ -17,7 +17,7 @@ from typing import Any, Deque, Dict, List, Optional, Tuple, TypedDict, DefaultDi
 import numpy as np
 from loguru import logger
 
-from deepsearch.observability.monitoring.data_source_monitor import DataSourceType
+from deepsearch.ports.data_sources import DataSourceType
 from deepsearch.observability.logging.monitoring_logger import MonitoringRecord, OperationType
 
 

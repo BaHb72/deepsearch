@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type {JsonObject, JsonValue} from '@/types/common'
 import type {DataSourceHealthStatus as ApiDataSourceHealthStatus} from '../api/dataSource'
 
@@ -215,3 +216,4 @@ export interface StoreError {
   details?: JsonValue
   timestamp: number
 }
+

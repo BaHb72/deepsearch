@@ -293,6 +293,57 @@ class AkShareAPIMapping:
             "cache_ttl": 10,
             "category": "realtime",
         },
+        # ͬ�бȽ�
+        "stock_zh_growth_comparison_em": {
+            "description": "东方财富-同业比较-成长性对比",
+            "params": ["symbol"],
+            "param_defaults": {"symbol": "SZ000895"},
+            "cache_ttl": 3600,
+            "category": "fundamental",
+        },
+        "stock_zh_valuation_comparison_em": {
+            "description": "东方财富-同业比较-估值对比",
+            "params": ["symbol"],
+            "param_defaults": {"symbol": "SZ000895"},
+            "cache_ttl": 3600,
+            "category": "fundamental",
+        },
+        "stock_zh_dupont_comparison_em": {
+            "description": "东方财富-同业比较-杜邦分析对比",
+            "params": ["symbol"],
+            "param_defaults": {"symbol": "SZ000895"},
+            "cache_ttl": 3600,
+            "category": "fundamental",
+        },
+        "stock_zh_scale_comparison_em": {
+            "description": "东方财富-同业比较-公司规模对比",
+            "params": ["symbol"],
+            "param_defaults": {"symbol": "SZ000895"},
+            "cache_ttl": 3600,
+            "category": "fundamental",
+        },
+        # 港股行业对比
+        "stock_hk_growth_comparison_em": {
+            "description": "东方财富-行业对比-成长性对比",
+            "params": ["symbol"],
+            "param_defaults": {"symbol": "03900"},
+            "cache_ttl": 3600,
+            "category": "fundamental",
+        },
+        "stock_hk_valuation_comparison_em": {
+            "description": "东方财富-行业对比-估值对比",
+            "params": ["symbol"],
+            "param_defaults": {"symbol": "03900"},
+            "cache_ttl": 3600,
+            "category": "fundamental",
+        },
+        "stock_hk_scale_comparison_em": {
+            "description": "东方财富-行业对比-规模对比",
+            "params": ["symbol"],
+            "param_defaults": {"symbol": "03900"},
+            "cache_ttl": 3600,
+            "category": "fundamental",
+        },
     }
 
     _CATALOG_LOADED = False
@@ -308,6 +359,7 @@ class AkShareAPIMapping:
         "/eastmoney/test": "_health_check",
         "fund_em_hk_rank": "fund_hk_rank_em",
         "stock_zh_a_tick_163": "stock_zh_a_tick_tx_js",
+        "stock_zh_a_tick_tx": "stock_zh_a_tick_tx_js",
     }
 
     @classmethod
@@ -589,3 +641,4 @@ class AkShareAPIMapping:
         """
         deprecated_prefixes = ["/eastmoney/", "/east_money/", "/em/"]
         return any(path.startswith(prefix) for prefix in deprecated_prefixes)
+

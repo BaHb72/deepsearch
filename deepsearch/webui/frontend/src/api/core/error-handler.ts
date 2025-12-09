@@ -3,7 +3,8 @@
  * 处理和标准化所有 API 错误
  */
 
-import { ApiError, ApiErrorCode } from './types'
+import {ApiError, ApiErrorCode} from './types'
+import messageManager from '@/utils/messageManager'
 
 /**
  * 错误处理器类
@@ -20,29 +21,36 @@ export class ErrorHandler {
    */
   private setupDefaultHandlers(): void {
     // 未授权错误
-    this.errorHandlers.set(ApiErrorCode.UNAUTHORIZED, (error) => {
-      console.error('未授权访问，请登录')
-      // TODO: 跳转到登录页
+      this.errorHandlers.set(ApiErrorCode.UNAUTHORIZED, (_error) => {
+          console.error('未授权访问，需要登录')
+          messageManager.error('登录状态已过期，请重新登录')
+          if (typeof window !== 'undefined') {
+              const current = `${window.location.pathname}${window.location.search}${window.location.hash}`
+              if (!window.location.pathname.includes('/login')) {
+                  const redirect = encodeURIComponent(current)
+                  window.location.href = `/login?redirect=${redirect}`
+              }
+          }
     })
     
     // 权限不足
-    this.errorHandlers.set(ApiErrorCode.FORBIDDEN, (error) => {
+      this.errorHandlers.set(ApiErrorCode.FORBIDDEN, (_error) => {
       console.error('权限不足')
-      // TODO: 显示权限提示
+          messageManager.warning('暂无访问该资源的权限，请联系管理员')
     })
     
     // 请求限流
-    this.errorHandlers.set(ApiErrorCode.RATE_LIMITED, (error) => {
+      this.errorHandlers.set(ApiErrorCode.RATE_LIMITED, (_error) => {
       console.warn('请求过于频繁，请稍后再试')
     })
     
     // 服务不可用
-    this.errorHandlers.set(ApiErrorCode.SERVICE_UNAVAILABLE, (error) => {
+      this.errorHandlers.set(ApiErrorCode.SERVICE_UNAVAILABLE, (_error) => {
       console.error('服务暂时不可用，请稍后再试')
     })
     
     // 网关超时
-    this.errorHandlers.set(ApiErrorCode.GATEWAY_TIMEOUT, (error) => {
+      this.errorHandlers.set(ApiErrorCode.GATEWAY_TIMEOUT, (_error) => {
       console.error('请求超时，请检查网络连接')
     })
   }

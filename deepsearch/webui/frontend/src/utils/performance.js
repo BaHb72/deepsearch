@@ -370,6 +370,6 @@ export const performanceMonitor = new PerformanceMonitor()
 export const globalCache = new CacheManager()
 
 // 自动开始监控
-if (process.env.NODE_ENV === 'development') {
+if (import.meta.env.DEV) {
   performanceMonitor.startObserving()
 }

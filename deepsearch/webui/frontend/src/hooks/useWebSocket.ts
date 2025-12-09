@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { WebSocketClient } from '@/services/websocket/WebSocketClient'
-import { WSMessage, WSMessageType } from '@/types'
+import {useCallback, useEffect, useRef, useState} from 'react'
+import {WebSocketClient} from '@/services/websocket/WebSocketClient'
+import {ComponentStatus, Notification, SystemStatus, WSMessage, WSMessageType,} from '@/types'
+
+type EventHandler = (...args: unknown[]) => void
 
 export interface UseWebSocketOptions {
   url: string
@@ -12,7 +14,7 @@ export interface UseWebSocketOptions {
   onOpen?: () => void
   onClose?: (event: CloseEvent) => void
   onError?: (error: Error) => void
-  onMessage?: (message: WSMessage) => void
+    onMessage?: (message: WSMessage<unknown>) => void
   debug?: boolean
 }
 
@@ -23,11 +25,11 @@ export interface UseWebSocketReturn {
   error: Error | null
   connect: () => Promise<void>
   disconnect: () => void
-  send: (message: WSMessage) => void
+    send: (message: WSMessage<unknown>) => void
   subscribe: (topics: string | string[]) => void
   unsubscribe: (topics: string | string[]) => void
-  on: (event: string, handler: (...args: any[]) => void) => void
-  off: (event: string, handler: (...args: any[]) => void) => void
+    on: (event: string, handler: EventHandler) => void
+    off: (event: string, handler: EventHandler) => void
 }
 
 export const useWebSocket = (options: UseWebSocketOptions): UseWebSocketReturn => {
@@ -48,141 +50,149 @@ export const useWebSocket = (options: UseWebSocketOptions): UseWebSocketReturn =
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-  
+
   const clientRef = useRef<WebSocketClient | null>(null)
   const mountedRef = useRef(true)
 
-  // 初始化 WebSocket 客户端
-  useEffect(() => {
-    if (!clientRef.current) {
-      clientRef.current = new WebSocketClient({
-        url,
-        reconnect,
-        reconnectInterval,
-        reconnectAttempts,
-        heartbeatInterval,
+    const initialiseClient = useCallback(() => {
+        if (clientRef.current) {
+            return clientRef.current
+        }
+
+        const client = new WebSocketClient({
+            url,
+            reconnect,
+            reconnectInterval,
+            reconnectAttempts,
+            heartbeatInterval,
+            debug,
+        })
+
+        client.on('open', () => {
+            if (!mountedRef.current) {
+                return
+            }
+            setConnected(true)
+            setConnecting(false)
+            setError(null)
+            onOpen?.()
+        })
+
+        client.on('close', (event: CloseEvent) => {
+            if (!mountedRef.current) {
+                return
+            }
+            setConnected(false)
+            setConnecting(false)
+            onClose?.(event)
+        })
+
+        client.on('error', (err: Error) => {
+            if (!mountedRef.current) {
+                return
+            }
+            setError(err)
+            setConnecting(false)
+            onError?.(err)
+        })
+
+        client.on('message', (message: WSMessage<unknown>) => {
+            if (!mountedRef.current) {
+                return
+            }
+            onMessage?.(message)
+        })
+
+        client.on('reconnect_failed', () => {
+            if (!mountedRef.current) {
+                return
+            }
+            setError(new Error('WebSocket reconnect attempts exhausted'))
+        })
+
+        clientRef.current = client
+        return client
+    }, [
         debug,
-      })
+        heartbeatInterval,
+        onClose,
+        onError,
+        onMessage,
+        onOpen,
+        reconnect,
+        reconnectAttempts,
+        reconnectInterval,
+        url,
+    ])
 
-      // 绑定事件
-      clientRef.current.on('open', () => {
-        if (mountedRef.current) {
-          setConnected(true)
-          setConnecting(false)
-          setError(null)
-          onOpen?.()
-        }
-      })
-
-      clientRef.current.on('close', (event: CloseEvent) => {
-        if (mountedRef.current) {
-          setConnected(false)
-          setConnecting(false)
-          onClose?.(event)
-        }
-      })
-
-      clientRef.current.on('error', (err: Error) => {
-        if (mountedRef.current) {
-          setError(err)
-          setConnecting(false)
-          onError?.(err)
-        }
-      })
-
-      clientRef.current.on('message', (msg: WSMessage) => {
-        if (mountedRef.current) {
-          onMessage?.(msg)
-        }
-      })
-
-      clientRef.current.on('reconnect_failed', () => {
-        if (mountedRef.current) {
-          setError(new Error('Failed to reconnect after maximum attempts'))
-        }
-      })
-    }
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [url, reconnect, reconnectInterval, reconnectAttempts, heartbeatInterval, debug])
-
-  // 自动连接
-  useEffect(() => {
-    if (autoConnect && clientRef.current) {
-      connect()
-    }
-
-    return () => {
-      if (clientRef.current) {
-        clientRef.current.disconnect()
-        clientRef.current.removeAllListeners()
-        clientRef.current = null
-      }
-    }
-  }, [autoConnect])
-
-  // 连接
   const connect = useCallback(async () => {
-    if (!clientRef.current || connecting || connected) return
+      const client = initialiseClient()
+      if (!client || connecting || connected) {
+          return
+      }
 
     setConnecting(true)
-    setError(null)
-
     try {
-      await clientRef.current.connect()
+        await client.connect()
     } catch (err) {
-      if (mountedRef.current) {
-        setError(err as Error)
+        const connectionError = err instanceof Error ? err : new Error(String(err))
+        setError(connectionError)
         setConnecting(false)
-      }
+        onError?.(connectionError)
     }
-  }, [connecting, connected])
+  }, [connected, connecting, initialiseClient, onError])
 
-  // 断开连接
   const disconnect = useCallback(() => {
-    if (clientRef.current) {
+      if (!clientRef.current) {
+          return
+      }
+
       clientRef.current.disconnect()
+      clientRef.current.removeAllListeners()
+      clientRef.current = null
       setConnected(false)
       setConnecting(false)
-    }
   }, [])
 
-  // 发送消息
-  const send = useCallback((message: WSMessage) => {
-    if (clientRef.current) {
-      clientRef.current.send(message)
-    }
+    const send = useCallback((message: WSMessage<unknown>) => {
+        clientRef.current?.send(message)
   }, [])
 
-  // 订阅
   const subscribe = useCallback((topics: string | string[]) => {
-    if (clientRef.current) {
+      if (!clientRef.current) {
+          return
+      }
       clientRef.current.subscribe(topics)
-    }
   }, [])
 
-  // 取消订阅
   const unsubscribe = useCallback((topics: string | string[]) => {
-    if (clientRef.current) {
+      if (!clientRef.current) {
+          return
+      }
       clientRef.current.unsubscribe(topics)
-    }
   }, [])
 
-  // 监听事件
-  const on = useCallback((event: string, handler: (...args: any[]) => void) => {
-    if (clientRef.current) {
-      clientRef.current.on(event, handler)
-    }
+    const on = useCallback((event: string, handler: EventHandler) => {
+        clientRef.current?.on(event, handler)
   }, [])
 
-  // 取消监听
-  const off = useCallback((event: string, handler: (...args: any[]) => void) => {
-    if (clientRef.current) {
-      clientRef.current.off(event, handler)
-    }
+    const off = useCallback((event: string, handler: EventHandler) => {
+        clientRef.current?.off(event, handler)
   }, [])
+
+    useEffect(() => {
+        initialiseClient()
+        return () => {
+            mountedRef.current = false
+            disconnect()
+        }
+    }, [initialiseClient, disconnect])
+
+    useEffect(() => {
+        if (autoConnect) {
+            void connect()
+        }
+    }, [autoConnect, connect])
 
   return {
     client: clientRef.current,
@@ -199,108 +209,139 @@ export const useWebSocket = (options: UseWebSocketOptions): UseWebSocketReturn =
   }
 }
 
-// 实时行情 Hook
-export const useMarketData = (symbols: string[]) => {
-  const [quotes, setQuotes] = useState<Record<string, any>>({})
-  const [trades, setTrades] = useState<Record<string, any[]>>({})
-  const [orderbooks, setOrderbooks] = useState<Record<string, any>>({})
+type QuotePayload = Record<string, unknown> & { symbol?: string }
+type TradePayload = Record<string, unknown> & { symbol?: string }
+type OrderBookPayload = Record<string, unknown> & { symbol?: string }
 
-  const ws = useWebSocket({
-    url: process.env.REACT_APP_WS_URL || 'ws://localhost:8000/ws',
+interface MarketDataState {
+    quotes: Record<string, QuotePayload>
+    trades: Record<string, TradePayload[]>
+    orderbooks: Record<string, OrderBookPayload>
+}
+
+const DEFAULT_WS_URL = (import.meta.env.VITE_WS_URL || '').trim() || 'ws://localhost:8000/ws'
+
+export const useMarketData = (symbols: string[]): MarketDataState & UseWebSocketReturn => {
+    const [quotes, setQuotes] = useState<Record<string, QuotePayload>>({})
+    const [trades, setTrades] = useState<Record<string, TradePayload[]>>({})
+    const [orderbooks, setOrderbooks] = useState<Record<string, OrderBookPayload>>({})
+
+    const websocket = useWebSocket({
+        url: DEFAULT_WS_URL,
     onMessage: (message) => {
+        const payload = message.data as Record<string, unknown>
+        const symbol = (payload?.symbol as string | undefined) ?? ''
+        if (!symbol) {
+            return
+        }
+
       switch (message.type) {
         case WSMessageType.QUOTE:
-          setQuotes(prev => ({
+            setQuotes((prev) => ({
             ...prev,
-            [message.data.symbol]: message.data,
+                [symbol]: payload,
           }))
           break
-        
         case WSMessageType.TRADE:
-          setTrades(prev => ({
+            setTrades((prev) => ({
             ...prev,
-            [message.data.symbol]: [
-              message.data,
-              ...(prev[message.data.symbol] || []).slice(0, 99),
-            ],
+                [symbol]: [payload, ...(prev[symbol] ?? []).slice(0, 99)],
           }))
           break
-        
         case WSMessageType.ORDERBOOK:
-          setOrderbooks(prev => ({
+            setOrderbooks((prev) => ({
             ...prev,
-            [message.data.symbol]: message.data,
+                [symbol]: payload,
           }))
+            break
+          default:
           break
       }
     },
   })
 
+    const {connected, subscribe, unsubscribe, ...rest} = websocket
+
   useEffect(() => {
-    if (ws.connected && symbols.length > 0) {
-      ws.subscribe(symbols.map(s => `quote:${s}`))
-      ws.subscribe(symbols.map(s => `trade:${s}`))
-      ws.subscribe(symbols.map(s => `orderbook:${s}`))
+      if (!connected || symbols.length === 0) {
+          return
     }
 
+      const quoteTopics = symbols.map((symbol) => `quote:${symbol}`)
+      const tradeTopics = symbols.map((symbol) => `trade:${symbol}`)
+      const orderbookTopics = symbols.map((symbol) => `orderbook:${symbol}`)
+      const topics = [...quoteTopics, ...tradeTopics, ...orderbookTopics]
+
+      subscribe(topics)
+
     return () => {
-      if (ws.connected && symbols.length > 0) {
-        ws.unsubscribe(symbols.map(s => `quote:${s}`))
-        ws.unsubscribe(symbols.map(s => `trade:${s}`))
-        ws.unsubscribe(symbols.map(s => `orderbook:${s}`))
-      }
+        unsubscribe(topics)
     }
-  }, [ws.connected, symbols])
+  }, [connected, subscribe, unsubscribe, symbols])
 
   return {
     quotes,
     trades,
     orderbooks,
-    ...ws,
+      connected,
+      subscribe,
+      unsubscribe,
+      ...rest,
   }
 }
 
-// 系统状态 Hook
-export const useSystemWebSocket = () => {
-  const [systemStatus, setSystemStatus] = useState<any>(null)
-  const [components, setComponents] = useState<any[]>([])
-  const [alerts, setAlerts] = useState<any[]>([])
+interface SystemWebSocketState {
+    systemStatus: SystemStatus | null
+    components: ComponentStatus[]
+    alerts: Notification[]
+}
 
-  const ws = useWebSocket({
-    url: process.env.REACT_APP_WS_URL || 'ws://localhost:8000/ws',
+export const useSystemWebSocket = (): SystemWebSocketState & UseWebSocketReturn => {
+    const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null)
+    const [components, setComponents] = useState<ComponentStatus[]>([])
+    const [alerts, setAlerts] = useState<Notification[]>([])
+
+    const websocket = useWebSocket({
+        url: DEFAULT_WS_URL,
     onMessage: (message) => {
       switch (message.type) {
         case WSMessageType.SYSTEM_STATUS:
-          setSystemStatus(message.data)
+            setSystemStatus(message.data as SystemStatus)
           break
-        
         case WSMessageType.COMPONENT_UPDATE:
-          setComponents(message.data)
+            setComponents(message.data as ComponentStatus[])
           break
-        
         case WSMessageType.ALERT:
-          setAlerts(prev => [message.data, ...prev].slice(0, 50))
+            setAlerts((prev) => [message.data as Notification, ...prev].slice(0, 50))
+            break
+          default:
           break
       }
     },
   })
 
+    const {connected, subscribe, unsubscribe, ...rest} = websocket
+
   useEffect(() => {
-    if (ws.connected) {
-      ws.subscribe(['system:status', 'system:components', 'system:alerts'])
+      if (!connected) {
+          return
     }
 
+      const topics = ['system:status', 'system:components', 'system:alerts']
+      subscribe(topics)
+
     return () => {
-      if (ws.connected) {
-        ws.unsubscribe(['system:status', 'system:components', 'system:alerts'])
-      }
+        unsubscribe(topics)
     }
-  }, [ws.connected])
+  }, [connected, subscribe, unsubscribe])
 
   return {
     systemStatus,
     components,
     alerts,
-    ...ws,
+      connected,
+      subscribe,
+      unsubscribe,
+      ...rest,
   }
 }

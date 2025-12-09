@@ -5,8 +5,8 @@ function readConfiguredLevel() {
     if (typeof import.meta !== 'undefined' && import.meta && import.meta.env && import.meta.env.VITE_LOG_LEVEL) {
         envLogLevel = import.meta.env.VITE_LOG_LEVEL
     }
-    if (!envLogLevel && typeof process !== 'undefined' && process && process.env && process.env.VITE_LOG_LEVEL) {
-        envLogLevel = process.env.VITE_LOG_LEVEL
+    if (!envLogLevel && typeof globalThis !== 'undefined' && globalThis.process?.env?.VITE_LOG_LEVEL) {
+        envLogLevel = globalThis.process.env.VITE_LOG_LEVEL
     }
     if (envLogLevel) {
         return String(envLogLevel).toLowerCase()

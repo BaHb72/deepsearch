@@ -12,6 +12,17 @@ log:
   rotation: 00:00
   retention_days: 7
   enable_json: false
+  archive:
+    enabled: true
+    format: zip
+    archive_after_days: 7
+    purge_after_days: 60
+  modules:
+    enabled: false
+    directory: modules
+    max_depth: 2
+    rotation: 00:00
+    retention_days: 7
 database:
   main:
     enabled: true
@@ -91,30 +102,28 @@ data_sources:
     timeout: 5
     retry_count: 3
     backoff_factor: 2
-    providers:
-      amazingdata:
-        enabled: false
-        priority: 1
-        fallback_sources:
-        - akshare
-        has_saved_credential: false
-        config:
-          implementation_mode: process
-          username: your_amazingdata_username
-          password: your_amazingdata_password
+  providers:
+    amazingdata:
+      enabled: false
+      priority: 1
+      fallback_sources:
+      - akshare
+      has_saved_credential: true
+      config:
+        implementation_mode: process
+        connection:
+          username: 212200038719
+          password: 212200038719@2025
           host: 101.230.159.234
           port: 8600
-          timeout: 10
+          timeout: 5000
           heartbeat_interval: 60
           auto_reconnect: true
           reconnect_interval: 10
           max_retries: 3
           network_provider: telecom
+          python_interpreter_path: C:/Python313/python.exe
           tgw_log_path: C:/Galaxy/gateway/logs
-          python_interpreter_path: runtime/interpreters/py39/Scripts/python.exe
-        local:
-          path: D:/AmazingData/cache
-          use_local: false
         subscription:
           enabled: true
           batch_size: 100
@@ -131,43 +140,20 @@ data_sources:
           log_slow_requests: true
           slow_request_threshold: 1000
           timeout: 5000
-    akshare:
-      enabled: true
-      priority: 3
-      config:
-        mode: proxy
-        timeout: 30
-        proxy:
-          worker_url: https://your-cloudflare-worker.example.com
-          timeout: 30
-          retry_count: 3
-          fallback_to_direct: true
-          cache:
-            enabled: true
-            ttl: 300
-  providers:
-    amazingdata:
-      enabled: false
-      priority: 1
+        username: demo_user
+        password: demo_password
+        host: 1.2.3.4
+        port: 8600
+        timeout: 5000
       timeout: 10.0
       retry_count: 3
-      fallback_enabled: true
-      fallback_sources:
-      - akshare
-      config:
-        host: 1.2.3.4
-        timeout: 5000
-        implementation_mode: process
-      has_saved_credential: false
+      fallback_enabled: false
       provider_name: amazingdata
     akshare:
       enabled: true
       priority: 2
-      timeout: 30.0
-      retry_count: 3
-      fallback_enabled: false
       config:
-        mode: proxy
+        mode: direct
         timeout: 30
         proxy:
           enabled: true
@@ -178,6 +164,132 @@ data_sources:
           cache:
             enabled: true
             ttl: 300
+  realtime:
+    health_check_interval: 120
+    alert_policy:
+      enabled: true
+      failure_threshold: 3
+      window_seconds: 300
+      channels:
+      - ops-bot
+    adapters:
+    - name: amazingdata
+      driver: amazingdata
+      priority: 1
+      enabled: true
+      health:
+        probe_timeout_seconds: 5
+        failure_threshold: 3
+        cool_down_seconds: 30
+    - name: cloudflare
+      driver: akshare_polling
+      priority: 2
+      enabled: true
+      options:
+        use_proxy: true
+        batch_size: 50
+    - name: akshare
+      driver: akshare_polling
+      priority: 3
+      enabled: true
+      options:
+        use_proxy: false
+        batch_size: 50
+data_source_prefetch:
+  enabled: true
+  interval_seconds: 300
+  job_type: prefetch_stock_basics
+  max_job_age_minutes: 45
+
+
+market_data:
+  realtime:
+    enabled: true
+    boards:
+    - 主板
+    - 创业板
+    - 科创板
+    - 北证
+    include_markets:
+    - SH_MAIN
+    - SZ_MAIN
+    - STAR
+    - SZ_GEM
+    - BSE
+    - INDEX
+    - ETF
+    interval_seconds: 1.0
+    request_timeout_seconds: 3.0
+    initial_step_timeout_seconds: 12.0
+    off_day_interval_seconds: 60.0
+    no_trade_interval_seconds: 5.0
+    auction_interval_seconds: 1.0
+    continuous_interval_seconds: 1.0
+    off_day_timeout_seconds: 0.5
+    no_trade_timeout_seconds: 1.0
+    auction_timeout_seconds: 2.0
+    continuous_timeout_seconds: 3.5
+    capital_windows:
+    - name: 1m
+      duration_seconds: 60
+    - name: 5m
+      duration_seconds: 300
+    order_window:
+      name: 1m
+      duration_seconds: 60
+    capital_limit: 50
+    order_limit: 100
+    redis:
+      url: redis://localhost:6379/6
+      strength_ttl: 180
+      imbalance_ttl: 180
+      auction_ttl: 180
+      max_strength_entries: 50
+  modules:
+    strength:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - off_day
+            - no_trade
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+            - SESSION_EXPIRED
+          cache_ttl_seconds: 90
+          min_interval_seconds: 15
+    board_overview:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - off_day
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+          cache_ttl_seconds: 120
+          min_interval_seconds: 30
+    order_imbalance:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - off_day
+            - no_trade
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+          cache_ttl_seconds: 60
+          min_interval_seconds: 15
+    auction_quality:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - auction
+            - off_day
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+          cache_ttl_seconds: 45
+          min_interval_seconds: 10
 notifications:
   enabled: true
   wechat_token: unit-test-token

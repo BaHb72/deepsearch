@@ -3,26 +3,28 @@
  * 所有 API 请求的单一入口
  */
 
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
-import { 
-  ApiConfig, 
-  ApiResponse, 
-  ApiError,
-  HttpMethod,
-  ApiErrorCode,
-  RequestLog,
-  ApiCategory
+import axios, {AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig,} from 'axios'
+import {
+    ApiCategory,
+    ApiConfig,
+    ApiResponse,
+    ErrorInterceptor,
+    HttpMethod,
+    RequestInterceptor,
+    RequestLog,
+    RequestMetadata,
+    RequestMetadataInput,
+    ResponseInterceptor,
 } from './types'
-import { ApiLogger } from './logger'
-import { ApiMonitor } from './monitor'
-import { ErrorHandler } from './error-handler'
-import { RequestInterceptorManager } from './interceptors'
+import {ApiLogger} from './logger'
+import {ApiMonitor} from './monitor'
+import {ErrorHandler} from './error-handler'
+import {RequestInterceptorManager} from './interceptors'
 
 // 请求去重映射
-interface PendingRequest {
-  promise: Promise<any>
+interface PendingRequest<T = any> {
+    promise: Promise<ApiResponse<T>>
   timestamp: number
-  config: ApiConfig
 }
 
 /**
@@ -34,7 +36,7 @@ export class ApiClient {
   private logger: ApiLogger
   private monitor: ApiMonitor
   private errorHandler: ErrorHandler
-  private interceptorManager: RequestInterceptorManager
+    private readonly interceptorManager: RequestInterceptorManager
   
   // 请求管理
   private pendingRequests: Map<string, PendingRequest> = new Map()
@@ -94,161 +96,126 @@ export class ApiClient {
   }
   
   /**
-   * 设置拦截器
-   */
-  private setupInterceptors(): void {
-    // 请求拦截器
-    this.axiosInstance.interceptors.request.use(
-      (config) => {
-        // 添加请求 ID
-        const requestId = this.generateRequestId()
-        config.headers['X-Request-ID'] = requestId
-        config.metadata = { ...config.metadata, requestId }
-        
-        // 记录请求开始
-        this.logger.logRequestStart({
-          requestId,
-          method: config.method?.toUpperCase() as HttpMethod,
-          url: config.url || '',
-          data: config.data,
-          params: config.params
-        })
-        
-        return config
-      },
-      (error) => {
-        this.logger.logError(error)
-        return Promise.reject(error)
-      }
-    )
-    
-    // 响应拦截器
-    this.axiosInstance.interceptors.response.use(
-      (response) => {
-        const requestId = response.config.headers?.['X-Request-ID'] as string
-        
-        // 记录响应
-        this.logger.logResponseSuccess({
-          requestId,
-          status: response.status,
-          data: response.data,
-          duration: Date.now() - (response.config.metadata?.startTime || Date.now())
-        })
-        
-        return response
-      },
-      (error) => {
-        const requestId = error.config?.headers?.['X-Request-ID'] as string
-        
-        // 记录错误
-        this.logger.logResponseError({
-          requestId,
-          error,
-          duration: Date.now() - (error.config?.metadata?.startTime || Date.now())
-        })
-        
-        return Promise.reject(error)
-      }
-    )
-  }
-  
-  /**
    * 发起请求（主要方法）
    */
   public async request<T = any>(config: ApiConfig): Promise<ApiResponse<T>> {
     const startTime = Date.now()
-    const requestId = this.generateRequestId()
-    
+      const requestId = config.requestId ?? this.generateRequestId()
+      const dedupeEnabled = config.dedupe !== false
+      const dedupeKey = dedupeEnabled ? this.getDedupeKey(config) : null
+      const method = config.method ?? HttpMethod.GET
+      const metadataOverrides: Partial<RequestMetadata> = {
+          requestId,
+          startTime,
+          category: config.category ?? ApiCategory.SYSTEM,
+          retryCount: config.metadata?.retryCount ?? 0,
+      }
+      if (dedupeKey) {
+          metadataOverrides.dedupeKey = dedupeKey
+      }
+      const metadata = this.mergeMetadata(config.metadata, metadataOverrides)
+      let success = false
+
     try {
-      // 检查去重
-      if (config.dedupe !== false) {
-        const dedupeKey = this.getDedupeKey(config)
+        if (dedupeEnabled && dedupeKey) {
         const pending = this.checkPendingRequest(dedupeKey)
         if (pending) {
           this.logger.logDedupe(requestId, dedupeKey)
           return pending.promise
         }
       }
-      
-      // 准备 axios 配置
+
       const axiosConfig: AxiosRequestConfig = {
         url: config.url,
-        method: config.method || HttpMethod.GET,
+          method,
         params: config.params,
         data: config.data,
         headers: {
-          ...config.headers,
-          'X-Request-ID': requestId
-        },
+            ...(config.headers ?? {}),
+            'X-Request-ID': metadata.requestId,
+        } as AxiosRequestConfig['headers'],
         timeout: config.timeout,
-        metadata: {
-          requestId,
-          startTime,
-          category: config.category,
-          ...config.metadata
-        }
+          metadata,
       }
-      
-      // 创建请求 promise
+
       const requestPromise = this.executeRequest<T>(axiosConfig, config)
-      
-      // 如果需要去重，添加到待处理映射
-      if (config.dedupe !== false) {
-        const dedupeKey = this.getDedupeKey(config)
-        this.addPendingRequest(dedupeKey, requestPromise, config)
+
+        if (dedupeEnabled && dedupeKey) {
+            this.addPendingRequest(dedupeKey, requestPromise)
       }
-      
-      return await requestPromise
-      
+
+        const result = await requestPromise
+        success = true
+        return result
     } catch (error) {
-      // 处理错误
       const apiError = this.errorHandler.handle(error, requestId)
-      
-      // 检查是否需要重试
-      if (config.retries && config.retries > 0) {
-        this.logger.logRetry(requestId, config.retries)
-        return this.retryRequest<T>(config, config.retries - 1)
+
+        const retries = config.retries ?? 0
+        if (retries > 0) {
+            this.logger.logRetry(requestId, retries)
+            return this.retryRequest<T>(config, retries - 1)
       }
-      
+
       throw apiError
     } finally {
-      // 清理去重映射
-      if (config.dedupe !== false) {
-        const dedupeKey = this.getDedupeKey(config)
+        if (dedupeEnabled && dedupeKey) {
         this.removePendingRequest(dedupeKey)
       }
-      
-      // 更新监控指标
+
       this.monitor.recordRequest({
         requestId,
         duration: Date.now() - startTime,
-        category: config.category || ApiCategory.SYSTEM,
-        success: true
+          category: config.category ?? ApiCategory.SYSTEM,
+          success,
+          method,
+          url: config.url,
       })
     }
   }
-  
+
   /**
-   * 执行实际请求
+   * 获取日志
    */
-  private async executeRequest<T>(
-    axiosConfig: AxiosRequestConfig,
-    apiConfig: ApiConfig
-  ): Promise<ApiResponse<T>> {
-    const response: AxiosResponse<T> = await this.axiosInstance.request<T>(axiosConfig)
-    
-    return {
-      data: response.data,
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers as Record<string, string>,
-      requestId: axiosConfig.metadata?.requestId,
-      timestamp: Date.now(),
-      duration: Date.now() - axiosConfig.metadata?.startTime,
-      cached: false,
-      retryCount: apiConfig.metadata?.retryCount || 0
-    }
+  public useRequestInterceptor(name: string, interceptor: RequestInterceptor): void {
+      this.interceptorManager.addRequestInterceptor(name, interceptor)
   }
+
+    public useResponseInterceptor(name: string, interceptor: ResponseInterceptor): void {
+        this.interceptorManager.addResponseInterceptor(name, interceptor)
+    }
+
+    public useErrorInterceptor(name: string, interceptor: ErrorInterceptor): void {
+        this.interceptorManager.addErrorInterceptor(name, interceptor)
+    }
+
+    /**
+     * 清除缓存
+     */
+    public clearCache(): void {
+        this.pendingRequests.clear()
+        this.monitor.reset()
+        this.logger.clearLogs()
+        if (import.meta.env.DEV) {
+            console.debug('[ApiClient] 请求缓存已清空')
+        }
+    }
+
+    /**
+     * 设置拦截器
+     */
+    private setHeader(config: InternalAxiosRequestConfig, key: string, value: string): void {
+        if (config.headers && typeof (config.headers as any).set === 'function') {
+            (config.headers as any).set(key, value)
+            return
+        }
+
+        const headers =
+            config.headers && typeof config.headers === 'object'
+                ? {...(config.headers as Record<string, string>)}
+                : {}
+        headers[key] = value
+        config.headers = headers as typeof config.headers
+    }
   
   /**
    * 重试请求
@@ -304,21 +271,48 @@ export class ApiClient {
     }
     return null
   }
-  
-  /**
-   * 添加待处理请求
-   */
-  private addPendingRequest(
-    key: string, 
-    promise: Promise<any>, 
-    config: ApiConfig
-  ): void {
-    this.pendingRequests.set(key, {
-      promise,
-      timestamp: Date.now(),
-      config
-    })
-  }
+
+    private getHeader(config: InternalAxiosRequestConfig, key: string): string | undefined {
+        if (!config.headers) {
+            return undefined
+        }
+
+        if (typeof (config.headers as any).get === 'function') {
+            return (config.headers as any).get(key)
+        }
+
+        return (config.headers as Record<string, string | undefined>)[key] as string | undefined
+    }
+
+    private mergeMetadata(
+        base: RequestMetadataInput | undefined,
+        overrides: Partial<RequestMetadata>
+    ): RequestMetadata {
+        const result: Record<string, RequestMetadata[keyof RequestMetadata]> = {}
+
+        if (base) {
+            for (const [key, value] of Object.entries(base)) {
+                if (value !== undefined) {
+                    result[key] = value as RequestMetadata[keyof RequestMetadata]
+                }
+            }
+        }
+
+        for (const [key, value] of Object.entries(overrides)) {
+            if (value !== undefined) {
+                result[key] = value as RequestMetadata[keyof RequestMetadata]
+            }
+        }
+
+        const requestId =
+            (overrides.requestId ?? base?.requestId) ?? this.generateRequestId()
+        const startTime = overrides.startTime ?? base?.startTime ?? Date.now()
+
+        result.requestId = requestId
+        result.startTime = startTime
+
+        return result as RequestMetadata
+    }
   
   /**
    * 移除待处理请求
@@ -377,10 +371,108 @@ export class ApiClient {
   }
   
   // ========== 管理方法 ==========
-  
-  /**
-   * 获取日志
-   */
+
+    private ensureRequestMetadata(config: InternalAxiosRequestConfig): RequestMetadata {
+        const existingHeader = this.getHeader(config, 'X-Request-ID')
+        const metadata = this.mergeMetadata(config.metadata, {
+            requestId: existingHeader ?? config.metadata?.requestId,
+            startTime: config.metadata?.startTime,
+        })
+
+        this.setHeader(config, 'X-Request-ID', metadata.requestId)
+        config.metadata = metadata
+
+        return metadata
+    }
+
+    private setupInterceptors(): void {
+        this.axiosInstance.interceptors.request.use(
+            (config) => {
+                const requestConfig = config as InternalAxiosRequestConfig
+                const metadata = this.ensureRequestMetadata(requestConfig)
+                const requestId = metadata.requestId
+                const method = (requestConfig.method ?? HttpMethod.GET)
+                    .toString()
+                    .toUpperCase() as HttpMethod
+
+                this.logger.logRequestStart({
+                    requestId,
+                    method,
+                    url: requestConfig.url ?? '',
+                    data: requestConfig.data,
+                    params: requestConfig.params,
+                    category: metadata.category ?? ApiCategory.SYSTEM
+                })
+
+                return requestConfig
+            },
+            (error) => {
+                this.logger.logError(error)
+                return Promise.reject(error)
+            }
+        )
+
+        this.axiosInstance.interceptors.response.use(
+            (response) => {
+                const requestConfig = response.config as InternalAxiosRequestConfig
+                const metadata = requestConfig.metadata
+                const headerRequestId = this.getHeader(requestConfig, 'X-Request-ID')
+                const requestId = headerRequestId ?? metadata?.requestId ?? 'unknown'
+                const startTime = metadata?.startTime ?? Date.now()
+
+                this.logger.logResponseSuccess({
+                    requestId,
+                    status: response.status,
+                    data: response.data,
+                    duration: Date.now() - startTime
+                })
+
+                return response
+            },
+            (error) => {
+                const requestConfig = error?.config as InternalAxiosRequestConfig | undefined
+                const metadata = requestConfig?.metadata
+                const headerRequestId = requestConfig ? this.getHeader(requestConfig, 'X-Request-ID') : undefined
+                const requestId = headerRequestId ?? metadata?.requestId ?? 'unknown'
+                const startTime = metadata?.startTime ?? Date.now()
+
+                this.logger.logResponseError({
+                    requestId,
+                    error,
+                    duration: Date.now() - startTime
+                })
+
+                return Promise.reject(error)
+            }
+        )
+    }
+
+    private async executeRequest<T>(
+        axiosConfig: AxiosRequestConfig,
+        apiConfig: ApiConfig
+    ): Promise<ApiResponse<T>> {
+        const response: AxiosResponse<T> = await this.axiosInstance.request<T>(axiosConfig)
+        const metadata = this.mergeMetadata(axiosConfig.metadata, {
+            requestId: axiosConfig.metadata?.requestId ?? apiConfig.metadata?.requestId,
+            startTime: axiosConfig.metadata?.startTime ?? Date.now(),
+            retryCount: axiosConfig.metadata?.retryCount ?? apiConfig.metadata?.retryCount,
+        })
+        axiosConfig.metadata = metadata
+        const startTime = metadata.startTime
+
+        return {
+            data: response.data,
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers as Record<string, string>,
+            requestId: metadata.requestId,
+            timestamp: Date.now(),
+            duration: Date.now() - startTime,
+            cached: false,
+            retryCount: metadata.retryCount ?? 0,
+        }
+    }
+
   public getLogs(): RequestLog[] {
     return this.logger.getAllLogs()
   }
@@ -391,13 +483,16 @@ export class ApiClient {
   public getMetrics() {
     return this.monitor.getMetrics()
   }
-  
-  /**
-   * 清除缓存
-   */
-  public clearCache(): void {
-    // TODO: 实现缓存清除
-  }
+
+    private addPendingRequest<T>(
+        key: string,
+        promise: Promise<ApiResponse<T>>
+    ): void {
+        this.pendingRequests.set(key, {
+            promise,
+            timestamp: Date.now()
+        })
+    }
   
   /**
    * 取消所有待处理请求

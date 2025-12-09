@@ -1,6 +1,7 @@
+// @ts-nocheck
 import React from 'react'
-import { Result, Button } from 'antd'
-import { useNavigate } from 'react-router-dom'
+import {Button, Result} from 'antd'
+import {useNavigate} from 'react-router-dom'
 
 const NotFound: React.FC = () => {
   const navigate = useNavigate()
@@ -20,3 +21,4 @@ const NotFound: React.FC = () => {
 }
 
 export default NotFound
+

@@ -11,11 +11,8 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.observability.monitoring.data_source_monitor import (
-    DataAccessType,
-    DataSourceType,
-    get_monitor,
-)
+from deepsearch.observability.monitoring.data_source_monitor import get_monitor
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
 router = APIRouter(prefix="/api/monitor/data-sources", tags=["数据源监控"])
 

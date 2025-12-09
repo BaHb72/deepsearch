@@ -26,12 +26,8 @@ from typing import (
     ParamSpec,
 )
 
-from deepsearch.observability.monitoring.data_source_monitor import (
-    DataAccessType,
-    DataSourceMonitor,
-    DataSourceType,
-    get_monitor,
-)
+from deepsearch.observability.monitoring.data_source_monitor import DataSourceMonitor, get_monitor
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
 P = ParamSpec("P")
 T = TypeVar("T")

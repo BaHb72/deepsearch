@@ -11,7 +11,6 @@ from typing import Dict, List, Optional, Tuple, TypedDict, Literal
 import aiohttp
 from loguru import logger
 
-
 AnonymityLevel = Literal["transparent", "anonymous", "elite", "unknown"]
 
 
@@ -93,24 +92,24 @@ class ProxyValidator:
                     result["anonymity_level"] = anonymity
 
                     logger.debug(
-                        "代理验证成功: %s, 响应时间: %.2fs, 匿名级别: %s",
+                        "代理验证成功: {}, 响应时间: {:.2f}s, 匿名级别: {}",
                         proxy_url,
                         response_time,
                         anonymity,
                     )
                 else:
                     result["error"] = f"HTTP {response.status}"
-                    logger.debug("代理验证失败: %s, 状态码: %s", proxy_url, response.status)
+                    logger.debug("代理验证失败: {}, 状态码: {}", proxy_url, response.status)
 
         except asyncio.TimeoutError:
             result["error"] = "Timeout"
-            logger.debug("代理验证超时: %s", proxy_url)
+            logger.debug("代理验证超时: {}", proxy_url)
         except aiohttp.ClientError as exc:
             result["error"] = str(exc)
-            logger.debug("代理验证请求失败: %s, %s", proxy_url, exc)
+            logger.debug("代理验证请求失败: {}, {}", proxy_url, exc)
         except Exception as exc:
             result["error"] = str(exc)
-            logger.error("代理验证异常: %s, %s", proxy_url, exc)
+            logger.error("代理验证异常: {}, {}", proxy_url, exc)
 
         return result["valid"], result
 
@@ -144,7 +143,7 @@ class ProxyValidator:
             return "anonymous"
 
         except Exception as exc:
-            logger.debug("匿名性检测失败: %s", exc)
+            logger.debug("匿名性检测失败: {}", exc)
             return "unknown"
 
     async def batch_validate(
@@ -166,7 +165,7 @@ class ProxyValidator:
 
         valid_count = sum(1 for item in results.values() if item.get("valid"))
         logger.info(
-            "代理批量验证: 总数=%s, 有效=%s, 无效=%s",
+            "代理批量验证: 总数={}, 有效={}, 无效={}",
             len(proxy_urls),
             valid_count,
             len(proxy_urls) - valid_count,
@@ -190,7 +189,7 @@ class ProxyValidator:
                         if response.status == 200:
                             timings.append(time.time() - start)
                 except Exception as exc:
-                    logger.debug("代理测速请求失败: %s", exc)
+                    logger.debug("代理测速请求失败: {}", exc)
 
             if timings:
                 results[url] = SpeedTestResult(

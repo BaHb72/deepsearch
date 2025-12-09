@@ -157,7 +157,7 @@ class DatabaseService(DatabaseServiceProtocol):
                 ("market_tick", "time"),
                 ("market_1min", "time"),
                 ("market_5min", "time"),
-                ("market_snapshot", "time"),
+                ("market_snapshots", "ingested_at"),
             ]
 
             for table_name, time_column in hypertables:
@@ -360,12 +360,15 @@ async def get_connection():
     """获取数据库连接（兼容性函数）"""
     global _database_service
     if _database_service is None:
-        from deepsearch.core.managers.component_manager import ComponentManager
+        from deepsearch.core.runtime.context import get_context
+        from deepsearch.core.components.data_components import DatabaseComponent
 
-        cm = ComponentManager()
-        if "database" in cm._components:
-            db_component = cm._components["database"]
-            _database_service = DatabaseService(db_component)
+        try:
+            component = get_context().get_component("database")
+            if isinstance(component, DatabaseComponent):
+                _database_service = DatabaseService(component)
+        except Exception:
+            pass
 
     if _database_service:
         return _database_service.db

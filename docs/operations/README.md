@@ -1,13 +1,11 @@
 # 运维文档索引
 
-> 更新时间：2025-10-04
+> 更新时间：2025-11-16
 
 ## 目录结构
-- `monitoring/`：监控与指标采集方案，例如 [数据源监控手册](./monitoring/data_source_monitoring.md)。
-- `runbooks/`：常见问题处理手册，目前收录 [前端超时应急方案](./runbooks/frontend_timeout_solution.md) 与 [Redis 启动排查](./runbooks/redis_startup.md)。
-- 根目录文档：
-  - [资源管理改进记录](./resource_management_improvements.md)
-  - [发布前检查清单（2025-10-02）](./pre_submission_status_20251002.md)
+- `runbooks/`
+  ：常见问题处理手册，目前收录 [实时数据源故障切换 Runbook](./runbooks/realtime_source_failover.md)、[前端超时应急方案](./runbooks/frontend_timeout_solution.md)、[Redis 启动排查](./runbooks/redis_startup.md)、[实时看板断流/数据缺失处理指南](./runbooks/realtime_board_subscription.md)
+  以及 [AmazingData 进程崩溃与日志排查指南](./runbooks/amazingdata_process_troubleshooting.md)。
 
 ## 使用建议
 1. 发布前先执行发布清单，确认监控、日志、通知通道正常。

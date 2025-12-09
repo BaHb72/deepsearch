@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--python-interpreter",
-        help="可选，指定 AmazingData SDK 所需的 Python 解释器路径（例如 3.9）",
+        help="可选，指定 AmazingData SDK 所需的 Python 解释器路径（例如 3.13）",
     )
     parser.add_argument(
         "--worker-env",

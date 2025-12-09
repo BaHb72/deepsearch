@@ -10,6 +10,7 @@ import sys
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from helpers import fetch_code_list
 
 def test_amazingdata():
     print("\n" + "=" * 60)
@@ -60,14 +61,13 @@ def test_amazingdata():
     # 2. 测试获取股票列表
     print("\n[测试2] 获取股票列表...")
     try:
-        stock_list = ad.BaseData.get_stock_list()
-        if stock_list is not None and len(stock_list) > 0:
+        stock_list = fetch_code_list(ad)
+        if not stock_list.empty:
             print(f"[SUCCESS] 获取{len(stock_list)}只股票")
-            # 显示前3只股票
             print("示例股票：")
-            for i in range(min(3, len(stock_list))):
-                stock = stock_list.iloc[i] if hasattr(stock_list, "iloc") else stock_list[i]
-                print(f"  {i+1}. {stock}")
+            preview = stock_list.head(3)
+            for idx, row in preview.iterrows():
+                print(f"  {idx + 1}. {row.to_dict()}")
         else:
             print("[WARNING] 股票列表为空")
     except Exception as e:

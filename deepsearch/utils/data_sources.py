@@ -1,5 +1,5 @@
 # mypy: ignore-errors
-"""数据源管理相关的辅助函数，确保在测试环境中仍能加载真实实现。"""
+"""数据源工具函数，保证测试环境也能加载真实实现。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, Callable, cast
+
+from deepsearch.ports.data_sources import DataSourceType as PortDataSourceType
 
 _MODULE_NAME = "deepsearch.infrastructure.providers.managers.data_source_manager"
 
@@ -27,7 +29,13 @@ def _is_stub_module(module: ModuleType | None) -> bool:
 def _load_real_module() -> ModuleType:
     module: ModuleType | None = sys.modules.get(_MODULE_NAME)
     if module is None or _is_stub_module(module):
-        module_path = Path(__file__).resolve().parent.parent / "infrastructure" / "providers" / "managers" / "data_source_manager.py"
+        module_path = (
+            Path(__file__).resolve().parent.parent
+            / "infrastructure"
+            / "providers"
+            / "managers"
+            / "data_source_manager.py"
+        )
         spec = importlib.util.spec_from_file_location(_MODULE_NAME, module_path)
         if spec is None or spec.loader is None:
             raise ImportError(f"无法加载数据源管理模块: {_MODULE_NAME}")
@@ -69,13 +77,11 @@ if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
         DataSourceConfig as _DataSourceConfig,
         DataSourceLifecycleStatus as _DataSourceLifecycleStatus,
         DataSourceManager as _DataSourceManager,
-        DataSourceType as _DataSourceType,
     )
 
     DataSourceConfig = _DataSourceConfig
     DataSourceLifecycleStatus = _DataSourceLifecycleStatus
     DataSourceManager = _DataSourceManager
-    DataSourceType = _DataSourceType
 else:
     # 重新导出模型与类型，供运行时调用方直接使用。
     _module = _load_real_module()
@@ -83,7 +89,8 @@ else:
     DataSourceConfig = getattr(_module, "DataSourceConfig")
     DataSourceLifecycleStatus = getattr(_module, "DataSourceLifecycleStatus")
     DataSourceManager = getattr(_module, "DataSourceManager")
-    DataSourceType = getattr(_module, "DataSourceType")
+
+DataSourceType = PortDataSourceType
 
 __all__ = [
     "DataSourceConfig",

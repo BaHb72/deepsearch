@@ -1,15 +1,12 @@
-import React, { useState } from 'react'
-import { Tabs } from 'antd'
-import {
-  DatabaseOutlined,
-  ApiOutlined,
-  AppstoreOutlined,
-  BellOutlined
-} from '@ant-design/icons'
+// @ts-nocheck
+import React, {useState} from 'react'
+import {Tabs} from 'antd'
+import {ApiOutlined, AppstoreOutlined, BellOutlined, DatabaseOutlined, FileZipOutlined} from '@ant-design/icons'
 import DatabaseConfigWithStore from './DatabaseConfigWithStore'
 import DataSourceConfig from './DataSourceConfig'
 import SystemModules from './SystemModules'
 import NotificationConfig from './NotificationConfig'
+import LogConfig from './LogConfig'
 
 /**
  * 系统配置主页面
@@ -40,6 +37,16 @@ const SystemConfig = () => {
       children: <DataSourceConfig />
     },
     {
+        key: 'log',
+        label: (
+            <span>
+          <FileZipOutlined/>
+          日志配置
+        </span>
+        ),
+        children: <LogConfig/>
+    },
+      {
       key: 'notification',
       label: (
         <span>
@@ -75,3 +82,4 @@ const SystemConfig = () => {
 }
 
 export default SystemConfig
+

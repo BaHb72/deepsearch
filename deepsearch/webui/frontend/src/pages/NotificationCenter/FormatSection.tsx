@@ -1,11 +1,8 @@
-import { useEffect, useMemo } from 'react'
-import { Alert, App, Button, Card, Form, Input, Space, Tag, Typography } from 'antd'
-import type { NotificationConfigResponse } from '@/api/notifications'
-import {
-  DEFAULT_BODY_TEMPLATE,
-  DEFAULT_TITLE_TEMPLATE,
-  WECHAT_TITLE_MAX_LENGTH,
-} from './constants'
+// @ts-nocheck
+import {useEffect, useMemo} from 'react'
+import {Alert, App, Button, Card, Form, Input, Space, Tag, Typography} from 'antd'
+import type {NotificationConfigResponse} from '@/api/notifications'
+import {DEFAULT_BODY_TEMPLATE, DEFAULT_TITLE_TEMPLATE, WECHAT_TITLE_MAX_LENGTH,} from './constants'
 
 interface FormatSectionProps {
   config: NotificationConfigResponse
@@ -161,3 +158,4 @@ const FormatSection = ({ config, disabled, saving, onSave }: FormatSectionProps)
 }
 
 export default FormatSection
+

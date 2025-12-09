@@ -1,8 +1,7 @@
 import logger from '@/utils/logger'
+import {getCLS, getFCP, getFID, getLCP, getTTFB, Metric} from 'web-vitals'
 
 const performanceLogger = logger.child('utils:performance')
-
-import { getCLS, getFCP, getFID, getLCP, getTTFB, Metric } from 'web-vitals'
 
 interface PerformanceMemoryInfo {
   usedJSHeapSize: number
@@ -229,7 +228,7 @@ class PerformanceMonitor {
         this.setCustomMetric('jsHeapUsed', memory.usedJSHeapSize)
         this.setCustomMetric('jsHeapTotal', memory.totalJSHeapSize)
         this.setCustomMetric('jsHeapLimit', memory.jsHeapSizeLimit)
-      }, 10000) // ÿ10�����һ��
+      }, 10000) // 每 10 秒采样一次
     }
   }
 

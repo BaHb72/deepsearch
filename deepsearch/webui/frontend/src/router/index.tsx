@@ -4,16 +4,16 @@ import { Spin } from 'antd'
 import MainLayout from '@/layouts/MainLayout'
 import ErrorBoundary from '@/components/common/ErrorBoundary'
 
-const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const Dashboard = lazy(() => import('@/pages/dashboard'))
 const EventSystem = lazy(() => import('@/pages/EventSystem'))
-const MarketData = lazy(() => import('@/pages/MarketData'))
-const LogCenter = lazy(() => import('@/pages/LogCenter'))
+const MarketData = lazy(() => import('@/pages/market'))
+const LogCenter = lazy(() => import('@/pages/System/LogCenter'))
 const SystemConfig = lazy(() => import('@/pages/SystemConfig'))
-const DataSourceMonitor = lazy(() => import('@/pages/DataSourceMonitor'))
-const CacheSystem = lazy(() => import('@/pages/CacheSystem'))
-const PerformanceAnalytics = lazy(() => import('@/pages/PerformanceAnalytics'))
-const AlertManager = lazy(() => import('@/pages/AlertManager'))
-const ComponentManager = lazy(() => import('@/pages/ComponentManager'))
+const DataSourceMonitor = lazy(() => import('@/pages/Monitor/DataSourceMonitor'))
+const CacheSystem = lazy(() => import('@/pages/Monitor/CacheSystem'))
+const PerformanceAnalytics = lazy(() => import('@/pages/Monitor/PerformanceAnalytics'))
+const AlertManager = lazy(() => import('@/pages/Monitor/AlertManager'))
+const ComponentManager = lazy(() => import('@/pages/Monitor/ComponentManager'))
 const NotFound = lazy(() => import('@/pages/NotFound'))
 
 const PageLoading: React.FC = () => (

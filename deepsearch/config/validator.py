@@ -56,20 +56,32 @@ class ConfigValidator:
 
         return self.results
 
+    @staticmethod
+    def _as_dict(value: Any) -> Dict[str, Any]:
+        """兼容 Pydantic BaseModel 的通用 dict 提取。"""
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            return dict(value)
+        if hasattr(value, "model_dump"):
+            try:
+                dumped = value.model_dump()
+            except Exception:
+                return {}
+            if isinstance(dumped, dict):
+                return dict(dumped)
+            return {}
+        if hasattr(value, "__dict__"):
+            return dict(getattr(value, "__dict__", {}))
+        return {}
+
     def _validate_data_sources(self) -> None:
         """验证数据源配置"""
-        data_sources = getattr(self.config, "data_sources", None)
+        data_sources = self._as_dict(getattr(self.config, "data_sources", None))
         validated_amazing_configs: Set[int] = set()
 
         if data_sources and data_sources.get("providers"):
-            providers_raw = data_sources.get("providers")
-            providers: Dict[str, Any]
-            if hasattr(providers_raw, "model_dump"):
-                providers = cast(Dict[str, Any], providers_raw.model_dump())
-            elif isinstance(providers_raw, dict):
-                providers = dict(providers_raw)
-            else:
-                providers = dict(getattr(providers_raw, "__dict__", {}))
+            providers = self._as_dict(data_sources.get("providers"))
 
             enabled_count = 0
 

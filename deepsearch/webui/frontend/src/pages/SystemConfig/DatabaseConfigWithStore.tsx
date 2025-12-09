@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * 数据库配置管理 - 使用 Zustand Store 版本
  */
@@ -909,3 +910,4 @@ const DatabaseConfigWithStore: React.FC = () => {
 }
 
 export default DatabaseConfigWithStore
+

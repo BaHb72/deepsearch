@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1" name="viewport"/>
+    <title>概念板块 · 方案A · 样式预览（单位切换）</title>
+    <style>
+        :root {
+            --bg: #0f1115;
+            --panel: #151923;
+            --panel2: #121621;
+            --text: #e8ecf1;
+            --muted: #98a2b3;
+            --chip: #222839;
+            --gap: 12px;
+            --radius: 10px;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text)
+        }
+
+        .container {
+            padding: 16px;
+            display: grid;
+            grid-template-rows:auto 1fr;
+            row-gap: var(--gap);
+            height: 100vh
+        }
+
+        .status {
+            background: linear-gradient(180deg, #151a24 0%, #10131b 100%);
+            border: 1px solid #1f2636;
+            border-radius: var(--radius);
+            padding: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center
+        }
+
+        .title {
+            font-weight: 600;
+            margin-right: 8px
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            background: var(--chip);
+            border: 1px solid #2a3347;
+            color: var(--muted)
+        }
+
+        .badge.accent {
+            color: #bfdbfe;
+            border-color: #1d4ed8;
+            background: #0b1533
+        }
+
+        .badge.stale {
+            color: #fde68a;
+            border-color: #7c5b00;
+            background: #2a2105
+        }
+
+        .sp {
+            flex: 1
+        }
+
+        .btn {
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid #2a3347;
+            background: #111827;
+            color: var(--text);
+            cursor: pointer
+        }
+
+        .btn:hover {
+            filter: brightness(1.15)
+        }
+
+        .main {
+            display: grid;
+            grid-template-columns:2.1fr 1.4fr;
+            gap: var(--gap);
+            min-height: 0
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid #1f2636;
+            border-radius: var(--radius);
+            padding: 12px;
+            min-height: 0
+        }
+
+        h3 {
+            margin: 0 0 10px;
+            font-size: 15px;
+            color: #cbd5e1;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .sub {
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        /* 顶部小卡 + 迷你图 */
+        .kpis {
+            display: grid;
+            grid-template-columns:repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 8px
+        }
+
+        .kpi {
+            background: var(--panel2);
+            border: 1px solid #1f2636;
+            border-radius: 8px;
+            padding: 8px
+        }
+
+        .kpi-title {
+            color: #9fb0c4;
+            font-size: 12px;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .kpi canvas {
+            width: 100%;
+            height: 40px
+        }
+
+        .heat {
+            display: grid;
+            grid-template-columns:repeat(6, 1fr);
+            gap: 8px
+        }
+
+        .tile {
+            border-radius: 8px;
+            padding: 8px;
+            min-height: 64px;
+            position: relative;
+            border: 1px solid #263049;
+            background: #0e1220
+        }
+
+        .tile strong {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 4px
+        }
+
+        .tile small {
+            color: var(--muted);
+            font-size: 11px
+        }
+
+        .metric {
+            position: absolute;
+            right: 8px;
+            bottom: 8px;
+            font-weight: 600
+        }
+
+        .scale-0 {
+            background: #0f172a
+        }
+
+        .scale-1 {
+            background: #0b1a2e
+        }
+
+        .scale-2 {
+            background: #0b223e
+        }
+
+        .scale-3 {
+            background: #0b2a4e
+        }
+
+        .scale-4 {
+            background: #0b335f
+        }
+
+        .scale-5 {
+            background: #0b3b6f
+        }
+
+        .scale-6 {
+            background: #0b437f
+        }
+
+        .scale-7 {
+            background: #0b538f
+        }
+
+        .scale-8 {
+            background: #0b5b9f
+        }
+
+        .scale-9 {
+            background: #0b63af
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse
+        }
+
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid #1f2636;
+            font-size: 13px;
+            text-align: left
+        }
+
+        th {
+            color: #9fb0c4;
+            font-weight: 500
+        }
+
+        .tag {
+            padding: 2px 6px;
+            font-size: 11px;
+            border-radius: 6px;
+            background: #1b2435;
+            border: 1px solid #2a3347;
+            color: #cbd5e1
+        }
+
+        .tag.single {
+            background: #2a0f2a;
+            border-color: #5b184c;
+            color: #f5c2e7
+        }
+
+        .tag.multi {
+            background: #082a1b;
+            border-color: #0d5131;
+            color: #b2f5ea
+        }
+
+        .grid2 {
+            display: grid;
+            grid-template-columns:1.2fr 1fr;
+            gap: var(--gap)
+        }
+
+        .list {
+            display: grid;
+            gap: 8px
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns:1fr 90px 90px 90px;
+            gap: 8px;
+            align-items: center;
+            padding: 8px;
+            border: 1px solid #1f2636;
+            background: var(--panel2);
+            border-radius: 8px
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace
+        }
+
+        .bar {
+            height: 10px;
+            border-radius: 999px;
+            background: #1f2937;
+            overflow: hidden
+        }
+
+        .bar > span {
+            display: block;
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #06b6d4)
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="status">
+        <div class="title">概念板块 · 实时（方案A）</div>
+        <span class="badge accent" id="phase">连续竞价</span>
+        <span class="badge" id="asOf">asOf: 14:57:00</span>
+        <span class="badge" id="retrievedAt">更新: 14:57:03</span>
+        <span class="badge" id="source">数据源: amazingdata</span>
+        <span class="badge" id="unit">单位: 万</span>
+        <span class="badge stale" id="stale" style="display:none">陈旧</span>
+        <div class="sp"></div>
+        <button class="btn" onclick="toggleUnit()">切换单位（原值/万）</button>
+        <button class="btn" onclick="toggleStale()">切换陈旧标识</button>
+    </div>
+
+    <div class="main">
+        <div class="panel">
+            <h3>板块热力（按资金速度） <span class="sub">window=1m</span></h3>
+            <div class="kpis">
+                <div class="kpi">
+                    <div class="kpi-title">人工智能 · 资金速度（近10min）</div>
+                    <canvas height="40" id="spark-ai" width="300"></canvas>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-title">机器人 · 成交量柱（近10min）</div>
+                    <canvas height="40" id="bar-robot" width="300"></canvas>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-title">新能源车 · 净流入趋势（近10min）</div>
+                    <canvas height="40" id="spark-nev" width="300"></canvas>
+                </div>
+            </div>
+            <div class="heat" id="heat"></div>
+            <div style="height:12px"></div>
+            <div class="grid2">
+                <div class="panel">
+                    <h3>板块详情 · 人工智能 <span class="tag multi">多核</span></h3>
+                    <div class="sub" style="margin:6px 0 12px">Top5 贡献（按资金速度）</div>
+                    <div class="list" id="drivers"></div>
+                </div>
+                <div class="panel">
+                    <h3>试盘列表 · 人工智能 <span class="sub">近1分钟</span></h3>
+                    <div class="list" id="probing"></div>
+                </div>
+            </div>
+        </div>
+        <div class="panel">
+            <h3>板块榜单（速度/净流入/加速度/试盘占比）</h3>
+            <table id="rank">
+                <thead>
+                <tr>
+                    <th>板块</th>
+                    <th class="mono">速度</th>
+                    <th class="mono">净流入</th>
+                    <th class="mono">加速度</th>
+                    <th>试盘占比</th>
+                    <th>驱动</th>
+                </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 单位模式：'wan'（默认，展示值÷1e4，单位“万”）或 'raw'（原值，千分位）
+    let unitMode = 'wan';
+    const fmtVal = n => unitMode === 'wan' ? (n / 1e4).toFixed(2) + '万' : Number(n).toLocaleString('zh-CN');
+
+    const overview = [
+        {
+            board: '人工智能',
+            inflow_speed: 6.5e7,
+            inflow_net: 1.23e9,
+            inflow_accel: 2.1e6,
+            probing_ratio: .07,
+            breadth_up_ratio: .58,
+            classification: 'multi_core'
+        },
+        {
+            board: '机器人',
+            inflow_speed: 4.2e7,
+            inflow_net: 5.8e8,
+            inflow_accel: 1.3e6,
+            probing_ratio: .05,
+            breadth_up_ratio: .51,
+            classification: 'mixed'
+        },
+        {
+            board: '华为概念',
+            inflow_speed: 2.9e7,
+            inflow_net: 1.9e8,
+            inflow_accel: 0.8e6,
+            probing_ratio: .03,
+            breadth_up_ratio: .48,
+            classification: 'single_core'
+        },
+        {
+            board: '低空经济',
+            inflow_speed: 3.6e7,
+            inflow_net: 3.1e8,
+            inflow_accel: 1.0e6,
+            probing_ratio: .06,
+            breadth_up_ratio: .62,
+            classification: 'multi_core'
+        },
+        {
+            board: '光刻胶',
+            inflow_speed: 1.9e7,
+            inflow_net: 1.2e8,
+            inflow_accel: 0.4e6,
+            probing_ratio: .02,
+            breadth_up_ratio: .41,
+            classification: 'mixed'
+        },
+        {
+            board: '新能源车',
+            inflow_speed: 5.1e7,
+            inflow_net: 8.1e8,
+            inflow_accel: 1.7e6,
+            probing_ratio: .08,
+            breadth_up_ratio: .68,
+            classification: 'multi_core'
+        },
+        {
+            board: 'AI算力',
+            inflow_speed: 1.2e7,
+            inflow_net: 4.1e7,
+            inflow_accel: 0.2e6,
+            probing_ratio: .01,
+            breadth_up_ratio: .36,
+            classification: 'single_core'
+        },
+        {
+            board: '信创',
+            inflow_speed: 3.3e7,
+            inflow_net: 2.4e8,
+            inflow_accel: 0.9e6,
+            probing_ratio: .04,
+            breadth_up_ratio: .53,
+            classification: 'mixed'
+        }
+    ];
+
+    const drivers = [
+        {code: '600000.SH', name: '浦发银行', contrib_pct: 0.18, speed: 4.1e6, accel: 1.2e5},
+        {code: '600519.SH', name: '贵州茅台', contrib_pct: 0.12, speed: 2.1e6, accel: 0.6e5},
+        {code: '600036.SH', name: '招商银行', contrib_pct: 0.10, speed: 1.9e6, accel: 0.5e5},
+        {code: '601318.SH', name: '中国平安', contrib_pct: 0.08, speed: 1.3e6, accel: 0.3e5},
+        {code: '601688.SH', name: '华泰证券', contrib_pct: 0.06, speed: 0.8e6, accel: 0.2e5}
+    ];
+
+    const probing = [
+        {code: '000001.SZ', name: '平安银行', obi: 0.68, speed: 3.2e6, accel: 0.8e5, reason: ['OBI≥0.6', 'speed≥3e6']},
+        {code: '600016.SH', name: '民生银行', obi: 0.61, speed: 2.7e6, accel: 0.6e5, reason: ['OBI≥0.6']}
+    ];
+
+    function renderHeat() {
+        const root = document.getElementById('heat');
+        root.innerHTML = '';
+        const max = Math.max(...overview.map(o => o.inflow_speed));
+        overview.forEach(o => {
+            const pct = max ? o.inflow_speed / max : 0;
+            const scale = Math.min(9, Math.max(0, Math.round(pct * 9)));
+            const el = document.createElement('div');
+            el.className = `tile scale-${scale}`;
+            el.innerHTML = `<strong>${o.board}</strong>
+                        <small>净流入 ${fmtVal(o.inflow_net)} · 试盘 ${(o.probing_ratio * 100).toFixed(1)}%</small>
+                        <div class="metric mono">${fmtVal(o.inflow_speed)}</div>`;
+            root.appendChild(el);
+        });
+    }
+
+    function renderRank() {
+        const tbody = document.querySelector('#rank tbody');
+        tbody.innerHTML = '';
+        overview.slice().sort((a, b) => b.inflow_speed - a.inflow_speed).forEach(o => {
+            const tr = document.createElement('tr');
+            const tag = o.classification === 'single_core' ? '<span class="tag single">单核</span>' : (o.classification === 'multi_core' ? '<span class="tag multi">多核</span>' : '<span class="tag">混合</span>');
+            tr.innerHTML = `<td>${o.board}</td>
+                        <td class="mono">${fmtVal(o.inflow_speed)}</td>
+                        <td class="mono">${fmtVal(o.inflow_net)}</td>
+                        <td class="mono">${fmtVal(o.inflow_accel)}</td>
+                        <td>${(o.probing_ratio * 100).toFixed(1)}%</td>
+                        <td>${tag}</td>`;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderDrivers() {
+        const root = document.getElementById('drivers');
+        root.innerHTML = '';
+        drivers.forEach(d => {
+            const row = document.createElement('div');
+            row.className = 'row';
+            row.innerHTML = `<div><strong>${d.name}</strong> <span class="sub mono">${d.code}</span></div>
+                         <div class="mono">${(d.contrib_pct * 100).toFixed(1)}%</div>
+                         <div class="mono">${fmtVal(d.speed)}</div>
+                         <div class="mono">${fmtVal(d.accel)}</div>`;
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            const inner = document.createElement('span');
+            inner.style.width = Math.min(100, d.contrib_pct * 100) + '%';
+            bar.appendChild(inner);
+            row.appendChild(bar);
+            root.appendChild(row);
+        });
+    }
+
+    function renderProbing() {
+        const root = document.getElementById('probing');
+        root.innerHTML = '';
+        probing.forEach(p => {
+            const row = document.createElement('div');
+            row.className = 'row';
+            row.innerHTML = `<div><strong>${p.name}</strong> <span class="sub mono">${p.code}</span></div>
+                         <div class="mono">OBI ${(p.obi * 100).toFixed(0)}%</div>
+                         <div class="mono">速 ${fmtVal(p.speed)}</div>
+                         <div class="mono">加 ${fmtVal(p.accel)}</div>`;
+            root.appendChild(row);
+        });
+    }
+
+    function toggleStale() {
+        const el = document.getElementById('stale');
+        el.style.display = el.style.display === 'none' ? 'inline-block' : 'none';
+    }
+
+    function toggleUnit() {
+        unitMode = unitMode === 'wan' ? 'raw' : 'wan';
+        document.getElementById('unit').textContent = '单位: ' + (unitMode === 'wan' ? '万' : '原值');
+        renderHeat();
+        renderRank();
+        renderDrivers();
+        renderProbing();
+    }
+
+    // 迷你图绘制
+    function drawSparkline(canvas, data, color) {
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        const min = Math.min(...data), max = Math.max(...data);
+        const pad = 4, span = Math.max(1e-9, max - min);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        data.forEach((v, i) => {
+            const x = pad + (w - 2 * pad) * (i / (data.length - 1));
+            const y = h - pad - (h - 2 * pad) * ((v - min) / span);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+    }
+
+    function drawBars(canvas, data, color) {
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        const min = 0, max = Math.max(...data, 1);
+        const pad = 4;
+        const bw = (w - 2 * pad) / data.length * 0.7;
+        const step = (w - 2 * pad) / data.length;
+        ctx.fillStyle = color;
+        data.forEach((v, i) => {
+            const x = pad + i * step + (step - bw) / 2;
+            const barH = (h - 2 * pad) * (v / max);
+            ctx.fillRect(x, h - pad - barH, bw, barH);
+        });
+    }
+
+    // 简单模拟序列
+    const seqAI = [3.2, 3.8, 4.1, 3.9, 4.5, 5.0, 4.7, 5.4, 5.1, 5.6]; // 资金速度
+    const seqRobot = [8, 10, 7, 12, 15, 13, 11, 16, 18, 14]; // 成交量(标准化)
+    const seqNEV = [1.1, 1.3, 1.2, 1.6, 1.9, 1.7, 2.0, 2.2, 2.1, 2.4]; // 净流入(标准化)
+
+    renderHeat();
+    renderRank();
+    renderDrivers();
+    renderProbing();
+    // 渲染迷你图
+    drawSparkline(document.getElementById('spark-ai'), seqAI, '#3b82f6');
+    drawBars(document.getElementById('bar-robot'), seqRobot, '#f59e0b');
+    drawSparkline(document.getElementById('spark-nev'), seqNEV, '#10b981');
+</script>
+</body>
+</html>

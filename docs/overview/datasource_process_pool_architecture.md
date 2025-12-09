@@ -8,15 +8,15 @@
 
 ## 1. 组件总览
 
-| 组件 | 位置 | 作用 |
-| ---- | ---- | ---- |
-| Port 协议 | `deepsearch/ports/amazingdata_process.py` | 定义跨进程命令、登录/登出请求、健康检查接口 |
-| Adapter | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process_adapter.py` | 将 `AmazingDataProcessPort` 适配为领域层可消费的异步接口 |
-| Provider | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process.py` | `ProcessIsolatedAmazingDataProvider`，按需获取进程池代理并执行命令 |
-| ProcessPool | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process_pool.py` | 管理子进程生命周期、复用策略、后台清理与指标 |
-| ProcessProxy | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process_proxy.py` | 负责 IPC（Windows Named Pipe / multiprocessing Pipe）通信与命令调度 |
-| Worker 镜像 | `deepsearch/infrastructure/providers/implementations/amazingdata/py39_worker.py` | 在指定 Python 版本内运行真实 SDK，暴露 RPC 接口 |
-| 安全封装 | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_safe_wrapper.py` | 登录防抖、熔断、重试、降级，始终包裹 Provider |
+| 组件           | 位置                                                                                               | 作用                                                       |
+|--------------|--------------------------------------------------------------------------------------------------|----------------------------------------------------------|
+| Port 协议      | `deepsearch/ports/amazingdata_process.py`                                                        | 定义跨进程命令、登录/登出请求、健康检查接口                                   |
+| Adapter      | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process_adapter.py` | 将 `AmazingDataProcessPort` 适配为领域层可消费的异步接口                |
+| Provider     | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process.py`         | `ProcessIsolatedAmazingDataProvider`，按需获取进程池代理并执行命令      |
+| ProcessPool  | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process_pool.py`    | 管理子进程生命周期、复用策略、后台清理与指标                                   |
+| ProcessProxy | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_process_proxy.py`   | 负责 IPC（Windows Named Pipe / multiprocessing Pipe）通信与命令调度 |
+| Worker 模块    | `deepsearch/infrastructure/providers/implementations/amazingdata/external_worker.py`             | 在外部 Python 3.13 环境内运行真实 SDK，暴露 RPC 接口                    |
+| 安全封装         | `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_safe_wrapper.py`    | 登录防抖、熔断、重试、降级，始终包裹 Provider                              |
 
 ## 2. 目录结构
 
@@ -29,7 +29,7 @@ deepsearch/infrastructure/providers/implementations/amazingdata/
 ├── amazingdata_process_proxy.py       # IPC 代理
 ├── amazingdata_safe_wrapper.py        # 熔断 + 降级
 ├── amazingdata_extended.py            # 工厂出入口（统一封装）
-├── py39_worker.py                     # 子进程执行体
+├── external_worker.py                 # 子进程执行体
 └── _sdk_loader.py                     # SDK 动态加载与版本探测
 
 deepsearch/ports/amazingdata_process.py # Port 协议与命令定义
@@ -39,7 +39,7 @@ deepsearch/ports/amazingdata_process.py # Port 协议与命令定义
 
 1. `AmazingDataSafeWrapper` 根据配置决定使用优化实现或 `ProcessIsolatedAmazingDataProvider`。
 2. `ProcessIsolatedAmazingDataProvider` 通过 `get_global_pool()` 获取 `AmazingDataProcessPool`，计算 `datasource_id` 并请求代理。
-3. `AmazingDataProcessPool.get_or_create()` 按账号/主机复用子进程，必要时拉起 `py39_worker.py`。
+3. `AmazingDataProcessPool.get_or_create()` 按账号/主机复用子进程，必要时拉起 `external_worker.py`。
 4. 代理层将请求封装为 `ProcessCommand`（Port 定义），由 `AmazingDataProcessAdapter` 异步发送至子进程。
 5. 子进程执行真实 SDK 方法，返回 `ProcessCallResult`，包含结果、错误类型、元数据。
 6. Provider 将结果转换为领域模型（列表/字典），失败时抛出 `DataProviderError`，由 SafeWrapper 统计并触发熔断策略。
@@ -68,13 +68,14 @@ data_sources:
             enabled: true            # 开启进程隔离
             max_processes: 4         # 子进程数量上限
             idle_ttl: 300s           # 空闲回收阈值
-            python_interpreter_path: "C:/Python39/python.exe"
+            python_interpreter_path: "C:/Python313/python.exe"
             worker_env:
               AMAZINGDATA_MODE: legacy
             startup_timeout: 30s
 ```
 
-- **python_interpreter_path**：未设置时继承系统默认 Python，可通过环境变量或配置显式指定。
+- **python_interpreter_path**：未设置时继承系统默认 Python 3.13，可通过环境变量（`DEEPSEARCH_AMAZINGDATA_EXTERNAL_PYTHON`
+  ）或配置显式指定。
 - **worker_env**：以字典形式传入，确保在 Port 层使用 `MappingProxyType` 包装后仍可序列化。
 - **startup_timeout**：对应 Provider 构建 `ProcessCommand` 时的超时时间，避免子进程挂起。
 - 启用前请根据 `docs/operations/runbooks/redis_startup.md` 的模板建立本地巡检脚本，确认依赖已安装。
@@ -113,7 +114,7 @@ data_sources:
 
 - 监控线程每 30 秒轮询 `AmazingDataProcessProxy.health_check()`，根据 `ok`/`degraded`/`error` 三种状态更新进程元数据，仅当状态变为
   `error` 时才触发自动重启。
-- Worker 内置轻量探针，优先调用 SDK 自带的 `health_check`，若缺失则回退到 `get_version` 及 `query_api`
-  系列方法，并仅返回延迟、探针名称、错误摘要等脱敏信息。
+- Worker 探针优先调用 SDK 自带的 `health_check`，如缺失则回退至 `get_version`
+  以及 `BaseData.get_calendar` / `BaseData.get_code_list` 等轻量接口，用于确认连通性并记录摘要/时延。
 - 状态为 `degraded` 时记录警告但保持进程存活，便于排查网络或登录异常；恢复到 `ok` 会自动写入恢复日志。
 - `AmazingDataSafeWrapper.get_stats()` 暴露 `last_health_status` 字段，监控中心与前端面板可直接读取并展示健康详情。

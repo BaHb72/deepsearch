@@ -16,7 +16,7 @@ export const API_CODE = {
 // 创建 axios 实例
 const createRequest = (config = {}) => {
   const instance = axios.create({
-    baseURL: process.env.REACT_APP_API_BASE_URL || '/api',
+      baseURL: (import.meta.env.VITE_API_BASE_URL || '').trim() || '/api',
     timeout: config.timeout || 30000,
     headers: {
       'Content-Type': 'application/json',
@@ -185,7 +185,7 @@ export const request = createRequest()
 
 // WebSocket 实例
 export const wsRequest = createRequest({
-  baseURL: process.env.REACT_APP_WS_BASE_URL || 'ws://localhost:8000',
+    baseURL: (import.meta.env.VITE_WS_URL || '').trim() || 'ws://localhost:8000',
 })
 
 // 文件上传实例

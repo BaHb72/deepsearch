@@ -33,12 +33,8 @@ from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapa
 from deepsearch.infrastructure.providers.interfaces.runtime import CacheStats
 from deepsearch.observability import get_logger
 from deepsearch.observability.decorators.decorators import monitor_data_source
-from deepsearch.observability.monitoring.data_source_monitor import (
-    DataAccessType,
-)
-from deepsearch.observability.monitoring.data_source_monitor import (
-    DataSourceType as MonitorDataSourceType,
-)
+from deepsearch.ports.data_sources import DataAccessType
+from deepsearch.ports.data_sources import DataSourceType as MonitorDataSourceType
 
 logger = get_logger(__name__)
 

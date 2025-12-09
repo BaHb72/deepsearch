@@ -17,7 +17,8 @@ from deepsearch.infrastructure.providers.interfaces.base import (
     DataSourceType as ProviderDataSourceType,
 )
 
-from ..monitoring.data_source_monitor import DataAccessType, DataSourceType, get_monitor
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
+from ..monitoring.data_source_monitor import get_monitor
 from ..monitoring.decorators import SymbolExtractor, monitor_access
 
 P = ParamSpec("P")

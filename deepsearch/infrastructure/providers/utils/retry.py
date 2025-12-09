@@ -211,7 +211,7 @@ def with_retry(
                     if attempt < retry_config.max_attempts - 1:
                         delay = retry_config.calculate_delay(attempt)
                         logger.warning(
-                            "同步调用失败 (%s/%s): %s，等待 %.2fs 后重试",
+                            "同步调用失败 ({}/{}): {}，等待 {:.2f}s 后重试",
                             attempt + 1,
                             retry_config.max_attempts,
                             exc,
@@ -219,7 +219,7 @@ def with_retry(
                         )
                         time.sleep(delay)
                     else:
-                        logger.error("达到最大同步重试次数 (%s): %s", retry_config.max_attempts, exc)
+                        logger.error("达到最大同步重试次数 ({}): {}", retry_config.max_attempts, exc)
 
             if last_exception is not None:
                 raise last_exception
@@ -238,7 +238,7 @@ def with_retry(
                     if attempt < retry_config.max_attempts - 1:
                         delay = retry_config.calculate_delay(attempt)
                         logger.warning(
-                            "异步调用失败 (%s/%s): %s，等待 %.2fs 后重试",
+                            "异步调用失败 ({}/{}): {}，等待 {:.2f}s 后重试",
                             attempt + 1,
                             retry_config.max_attempts,
                             exc,
@@ -246,7 +246,7 @@ def with_retry(
                         )
                         await asyncio.sleep(delay)
                     else:
-                        logger.error("达到最大异步重试次数 (%s): %s", retry_config.max_attempts, exc)
+                        logger.error("达到最大异步重试次数 ({}): {}", retry_config.max_attempts, exc)
 
             if last_exception is not None:
                 raise last_exception
@@ -296,7 +296,7 @@ class SmartRetry:
                 if attempt < self.retry_config.max_attempts - 1:
                     delay = self.retry_config.calculate_delay(attempt)
                     logger.warning(
-                        "智能重试失败 (%s/%s): %s，等待 %.2fs 后继续",
+                        "智能重试失败 ({}/{}): {}，等待 {:.2f}s 后继续",
                         attempt + 1,
                         self.retry_config.max_attempts,
                         exc,

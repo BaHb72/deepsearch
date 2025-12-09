@@ -1,28 +1,19 @@
-import React, { useState, useEffect } from 'react'
-import { 
-  Card, 
-  Row, 
-  Col, 
-  Statistic, 
-  Progress, 
-  Table,
-  Tag,
-  Space,
-  Button,
-  Timeline,
-  message
-} from 'antd'
+// @ts-nocheck
+import React, {useCallback, useEffect, useState} from 'react'
+import {Button, Card, Col, message, Progress, Row, Space, Statistic, Table, Tag, Timeline} from 'antd'
 import {
-  ThunderboltOutlined,
-  SyncOutlined,
-  ClockCircleOutlined,
-  DatabaseOutlined,
-  ReloadOutlined,
-  ApiOutlined,
-  SendOutlined,
-  InboxOutlined
+    ApiOutlined,
+    ClockCircleOutlined,
+    DatabaseOutlined,
+    InboxOutlined,
+    ReloadOutlined,
+    SendOutlined,
+    SyncOutlined,
+    ThunderboltOutlined
 } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
+
+import {type EventSystemOverviewResponse, monitorAPI} from '@/api/monitor'
 
 // 事件流量监控卡片
 const EventFlowCard = ({ metrics, loading }) => {
@@ -325,75 +316,60 @@ const EventStream = ({ events, loading }) => {
 const EventSystem = () => {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [eventMetrics, setEventMetrics] = useState({})
-  const [eventTypes, setEventTypes] = useState([])
-  const [latencyData, setLatencyData] = useState({})
-  const [messageBuses, setMessageBuses] = useState([])
-  const [eventHandlers, setEventHandlers] = useState([])
-  const [eventStream, setEventStream] = useState([])
+    const [eventMetrics, setEventMetrics] =
+        useState<EventSystemOverviewResponse['eventMetrics'] | null>(null)
+    const [eventTypes, setEventTypes] = useState<EventSystemOverviewResponse['eventTypes']>([])
+    const [latencyData, setLatencyData] =
+        useState<EventSystemOverviewResponse['latencyDistribution']>({
+            categories: [],
+            values: [],
+        })
+    const [messageBuses, setMessageBuses] =
+        useState<EventSystemOverviewResponse['messageBuses']>([])
+    const [eventHandlers, setEventHandlers] =
+        useState<EventSystemOverviewResponse['eventHandlers']>([])
+    const [eventStream, setEventStream] =
+        useState<EventSystemOverviewResponse['eventStream']>([])
 
-  useEffect(() => {
-    const loadData = () => {
-      // 模拟事件流量数据
-      setEventMetrics({
-        produceRate: Math.floor(Math.random() * 1000) + 500,
-        consumeRate: Math.floor(Math.random() * 1000) + 450,
-        queueDepth: Math.floor(Math.random() * 5000),
-        queueUsage: Math.floor(Math.random() * 100)
-      })
+    const fetchOverview = useCallback(
+        async (options: { showSuccess?: boolean } = {}) => {
+            try {
+                const data = await monitorAPI.getEventSystemOverview()
+                setEventMetrics(data.eventMetrics ?? null)
+                setEventTypes(data.eventTypes ?? [])
+                setLatencyData(data.latencyDistribution ?? {categories: [], values: []})
+                setMessageBuses(data.messageBuses ?? [])
+                setEventHandlers(data.eventHandlers ?? [])
+                setEventStream(data.eventStream ?? [])
 
-      // 模拟事件类型分布
-      setEventTypes([
-        { value: 3500, name: '市场数据' },
-        { value: 2100, name: '交易信号' },
-        { value: 1800, name: '系统监控' },
-        { value: 1200, name: '风控告警' },
-        { value: 800, name: '其他' }
-      ])
+                if (options.showSuccess) {
+                    message.success('数据刷新成功')
+                }
+                return true
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error)
+                message.error(`获取事件系统数据失败：${errorMessage}`)
+                return false
+            } finally {
+                setLoading(false)
+            }
+        },
+        []
+    )
 
-      // 模拟延迟分布
-      setLatencyData({
-        categories: ['<10ms', '10-50ms', '50-100ms', '100-500ms', '>500ms'],
-        values: [4500, 3200, 1500, 600, 200]
-      })
+    useEffect(() => {
+        fetchOverview()
+        const interval = setInterval(() => {
+            fetchOverview()
+        }, 5000)
 
-      // 模拟消息总线状态
-      setMessageBuses([
-        { type: 'ZeroMQ', status: 'connected', throughput: 8500, connections: 12, bufferUsage: 45 },
-        { type: 'Redis', status: 'connected', throughput: 6200, connections: 8, bufferUsage: 62 }
-      ])
-
-      // 模拟事件处理器
-      setEventHandlers([
-        { name: 'MarketDataHandler', processed: 45000, successRate: 99.5, avgTime: 12, status: 'active' },
-        { name: 'TradeSignalHandler', processed: 12000, successRate: 98.2, avgTime: 25, status: 'active' },
-        { name: 'RiskHandler', processed: 8500, successRate: 99.8, avgTime: 18, status: 'active' },
-        { name: 'MonitorHandler', processed: 35000, successRate: 99.9, avgTime: 8, status: 'active' },
-      ])
-
-      // 模拟实时事件流
-      const newEvents = Array.from({ length: 10 }, (_, i) => ({
-        time: new Date(Date.now() - i * 60000),
-        eventType: ['MARKET_DATA', 'TRADE_SIGNAL', 'RISK_ALERT', 'SYSTEM_MONITOR'][Math.floor(Math.random() * 4)],
-        type: ['info', 'warning', 'error'][Math.floor(Math.random() * 3)],
-        message: `事件消息示例 ${i + 1}`
-      }))
-      setEventStream(newEvents)
-
-      setLoading(false)
-    }
-
-    loadData()
-    const interval = setInterval(loadData, 5000) // 5秒刷新
     return () => clearInterval(interval)
-  }, [])
+    }, [fetchOverview])
 
   const refreshAll = async () => {
     setRefreshing(true)
-    setTimeout(() => {
+      await fetchOverview({showSuccess: true})
       setRefreshing(false)
-      message.success('数据刷新成功')
-    }, 1000)
   }
 
   return (
@@ -453,3 +429,4 @@ const EventSystem = () => {
 }
 
 export default EventSystem
+

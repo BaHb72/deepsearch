@@ -3,6 +3,7 @@
 统一管理所有数据提供者的注册、配置和实例化
 """
 
+import copy
 import importlib
 import inspect
 import os
@@ -11,6 +12,9 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
+
+from deepsearch.infrastructure.providers.interfaces.base import DataProvider
+
 
 class ProviderType(Enum):
     """数据提供者类型"""
@@ -277,17 +281,44 @@ class DataProviderRegistry:
                 raw_config = dict(resolved_config or {})
 
                 def _extract_connection_payload(data: Dict[str, Any]) -> Dict[str, Any]:
-                    if isinstance(data, dict) and "connection" in data:
-                        connection_cfg = data["connection"] or {}
-                        if not isinstance(connection_cfg, dict):
-                            raise ValueError(
-                                "AmazingDataProvider registration config connection field must be a dict"
-                            )
-                        flattened = dict(connection_cfg)
-                        extras = {k: v for k, v in data.items() if k != "connection"}
-                        flattened.update(extras)
-                        return flattened
-                    return data
+                    if not isinstance(data, dict) or "connection" not in data:
+                        return data
+
+                    connection_cfg = data["connection"] or {}
+                    if not isinstance(connection_cfg, dict):
+                        raise ValueError(
+                            "AmazingDataProvider registration config connection field must be a dict"
+                        )
+
+                    flattened: Dict[str, Any] = dict(connection_cfg)
+                    extras = {k: v for k, v in data.items() if k != "connection"}
+
+                    subscription_cfg = extras.pop("subscription", None)
+                    cache_cfg = extras.pop("cache", None)
+
+                    flattened.update(extras)
+
+                    if isinstance(subscription_cfg, dict):
+                        if "subscription_enabled" not in flattened:
+                            flattened["subscription_enabled"] = subscription_cfg.get("enabled", True)
+                        if (
+                                "subscription_batch_size" not in flattened
+                                and subscription_cfg.get("batch_size") is not None
+                        ):
+                            flattened["subscription_batch_size"] = subscription_cfg.get("batch_size")
+                        if (
+                                "max_subscriptions" not in flattened
+                                and subscription_cfg.get("max_symbols") is not None
+                        ):
+                            flattened["max_subscriptions"] = subscription_cfg.get("max_symbols")
+
+                    if isinstance(cache_cfg, dict):
+                        if "cache_enabled" not in flattened:
+                            flattened["cache_enabled"] = cache_cfg.get("enabled", True)
+                        if "cache_ttl" not in flattened and cache_cfg.get("ttl") is not None:
+                            flattened["cache_ttl"] = cache_cfg.get("ttl")
+
+                    return flattened
 
                 def _sanitize_payload(data: Dict[str, Any]) -> None:
                     for key in ("name", "provider_name", "type"):
@@ -306,6 +337,36 @@ class DataProviderRegistry:
                             value = data.pop(alias)
                             if target and target not in data:
                                 data[target] = value
+
+                def _is_masked_credential(value: Any) -> bool:
+                    if not isinstance(value, str):
+                        return True
+                    stripped = value.strip()
+                    if not stripped:
+                        return True
+                    return all(ch == "*" for ch in stripped)
+
+                def _patch_missing_credentials(target: Dict[str, Any]) -> None:
+                    username_missing = _is_masked_credential(target.get("username"))
+                    password_missing = _is_masked_credential(target.get("password"))
+                    if not username_missing and not password_missing:
+                        return
+                    fallback_config = self._resolve_provider_config_from_settings(name)
+                    if not fallback_config:
+                        logger.warning(
+                            "AmazingData 配置缺少有效凭证且未找到 settings fallback，当前用户名长度={}",
+                            len(target.get("username") or ""),
+                        )
+                        return
+                    fallback_payload = _extract_connection_payload(dict(fallback_config))
+                    if username_missing:
+                        fallback_username = fallback_payload.get("username")
+                        if isinstance(fallback_username, str) and fallback_username.strip():
+                            target["username"] = fallback_username
+                    if password_missing:
+                        fallback_password = fallback_payload.get("password")
+                        if isinstance(fallback_password, str) and fallback_password:
+                            target["password"] = fallback_password
 
                 def _validate_connection(source: str, data: Dict[str, Any]) -> None:
                     candidate = SettingsAmazingDataConnectionConfig.model_validate(data)
@@ -331,11 +392,18 @@ class DataProviderRegistry:
                         )
                     return None
 
+                structured_config: Dict[str, Any] = {}
                 if raw_config:
                     flattened_config = _extract_connection_payload(raw_config)
                     _validate_connection("AmazingDataProvider registry config", flattened_config)
                     payload = dict(flattened_config)
                     _sanitize_payload(payload)
+                    _patch_missing_credentials(payload)
+                    config_candidate = raw_config.get("config")
+                    if isinstance(config_candidate, dict):
+                        structured_config = config_candidate
+                    else:
+                        structured_config = raw_config
                     mode = _normalize_mode(payload.pop("implementation_mode", None))
                 else:
                     fallback_config = self._resolve_provider_config_from_settings(name)
@@ -345,6 +413,12 @@ class DataProviderRegistry:
                         _validate_connection("AmazingDataProvider settings config", flattened_config)
                         payload = dict(flattened_config)
                         _sanitize_payload(payload)
+                        _patch_missing_credentials(payload)
+                        config_candidate = raw_config.get("config")
+                        if isinstance(config_candidate, dict):
+                            structured_config = config_candidate
+                        else:
+                            structured_config = raw_config
                         mode = _normalize_mode(payload.pop("implementation_mode", None))
                     else:
                         app_config = get_config()
@@ -356,7 +430,35 @@ class DataProviderRegistry:
                         payload = dict(amazingdata_settings.connection.model_dump())
                         _sanitize_payload(payload)
                         _validate_connection(f"{config_hint} amazingdata.connection", payload)
+                        structured_config = dict(amazingdata_settings.model_dump())
                         mode = _normalize_mode(getattr(amazingdata_settings, "implementation_mode", None))
+
+                payload["config"] = copy.deepcopy(structured_config or {})
+
+                allowed_payload_keys = {
+                    "username",
+                    "password",
+                    "host",
+                    "port",
+                    "enabled",
+                    "priority",
+                    "timeout",
+                    "retry_count",
+                    "heartbeat_interval",
+                    "auto_reconnect",
+                    "reconnect_interval",
+                    "subscription_enabled",
+                    "subscription_batch_size",
+                    "max_subscriptions",
+                    "cache_enabled",
+                    "cache_ttl",
+                    "worker_env",
+                    "tgw_log_path",
+                    "max_retries",
+                    "api_mode",
+                    "config",
+                }
+                payload = {key: value for key, value in payload.items() if key in allowed_payload_keys}
 
                 desired_mode = mode or "process"
 
@@ -371,6 +473,7 @@ class DataProviderRegistry:
                         return cached_instance
                     del self._instances[name]
 
+                provider_cls: type[DataProvider]
                 if desired_mode == "process":
                     provider_cls = ProcessIsolatedAmazingDataProvider
                 else:

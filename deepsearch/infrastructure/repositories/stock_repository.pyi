@@ -1,12 +1,71 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Optional
+from typing import Optional, Protocol, TypeVar, Generic
 
 import asyncpg
 
-from domain.entities.stock import Stock
-from domain.interfaces.repository import IStockRepository, PageRequest, PageResult
+from deepsearch.domain.entities import Stock
+
+_T = TypeVar("_T")
+
+
+class PageRequest:
+    page: int
+    size: int
+    offset: int
+
+
+class PageResult(Generic[_T]):
+    items: list[_T]
+    total: int
+    page: int
+    size: int
+
+
+class IStockRepository(Protocol):
+    async def get_by_id(self, id: str) -> Optional[Stock]:
+        ...
+
+    async def get_by_symbol(self, symbol: str) -> Optional[Stock]:
+        ...
+
+    async def get_all(self) -> list[Stock]:
+        ...
+
+    async def save(self, entity: Stock) -> None:
+        ...
+
+    async def add(self, entity: Stock) -> None:
+        ...
+
+    async def update(self, entity: Stock) -> None:
+        ...
+
+    async def delete(self, id: str) -> None:
+        ...
+
+    async def exists(self, id: str) -> bool:
+        ...
+
+    async def get_by_market(self, market: str, page_request: PageRequest) -> PageResult[Stock]:
+        ...
+
+    async def search(self, keyword: str, page_request: PageRequest) -> PageResult[Stock]:
+        ...
+
+    async def get_top_gainers(self, limit: int = ..., market: Optional[str] = ...) -> list[Stock]:
+        ...
+
+    async def get_top_losers(self, limit: int = ..., market: Optional[str] = ...) -> list[Stock]:
+        ...
+
+    async def get_by_volume_threshold(
+            self,
+            threshold: int,
+            page_request: PageRequest,
+    ) -> PageResult[Stock]:
+        ...
 
 
 class PostgreSQLStockRepository(IStockRepository):

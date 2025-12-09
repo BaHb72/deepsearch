@@ -13,9 +13,8 @@ from typing import Any, Awaitable, Callable, Dict, Optional, TypeVar, Union, cas
 
 from loguru import logger
 
-from deepsearch.infrastructure.providers.interfaces.base import DataSourceType as ProviderDataSourceType
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType as ProviderDataSourceType
 from deepsearch.observability.analyzers.error_analyzer import get_error_analyzer
-from deepsearch.observability.metrics.collectors.metrics_collector import get_metrics_collector
 from deepsearch.observability.decorators.enhanced_decorators import (
     monitor_batch_process,
     monitor_cache_operation,
@@ -31,8 +30,8 @@ from deepsearch.observability.logging.monitoring_logger import (
     OperationType,
     get_monitor_logger,
 )
+from deepsearch.observability.metrics.collectors.metrics_collector import get_metrics_collector
 from deepsearch.observability.monitoring.data_source_monitor import (
-    DataAccessType,
     DataSourceMonitor,
     DataSourceType as MonitorDataSourceType,
     get_monitor,
@@ -83,7 +82,7 @@ class MonitoringIntegration:
         try:
             return MonitorDataSourceType(candidate)
         except ValueError:
-            logger.warning("未识别的数据源类型 %s，回退为 CUSTOM", candidate)
+            logger.warning("未识别的数据源类型 {}，回退为 CUSTOM", candidate)
             return MonitorDataSourceType.CUSTOM
 
     def _extract_provider_source_type(

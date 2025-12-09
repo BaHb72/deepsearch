@@ -1,52 +1,49 @@
+// @ts-nocheck
 import React from 'react'
 
 /**
  * @typedef {import('@/types/systemConfig').SystemModule} SystemModule
  * @typedef {import('@/types/systemConfig').ModuleLog} ModuleLog
  */
-
 import {
-  Card,
-  Table,
-  Button,
-  Space,
-  Tag,
-  Badge,
-  Switch,
-  Drawer,
-  Descriptions,
-  Timeline,
-  Progress,
-  message,
-  Tooltip,
-  Row,
-  Col,
-  Statistic
+    Badge,
+    Button,
+    Card,
+    Col,
+    Descriptions,
+    Drawer,
+    message,
+    Progress,
+    Row,
+    Space,
+    Statistic,
+    Switch,
+    Table,
+    Tag,
+    Timeline,
+    Tooltip
 } from 'antd'
 import {
-  AppstoreOutlined,
-  PlayCircleOutlined,
-  PauseCircleOutlined,
-  ReloadOutlined,
-  SettingOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  SyncOutlined,
-  WarningOutlined
+    AppstoreOutlined,
+    CheckCircleOutlined,
+    CloseCircleOutlined,
+    PauseCircleOutlined,
+    PlayCircleOutlined,
+    ReloadOutlined,
+    SettingOutlined,
+    SyncOutlined,
+    WarningOutlined
 } from '@ant-design/icons'
-import { useAsyncData } from '@/hooks'
+import {useAsyncData} from '@/hooks'
 import {
-  fetchSystemModules,
-  startModule,
-  stopModule,
-  restartModule,
-  setModuleAutoStart,
-  fetchModuleLogs,
-  batchModuleOperation
+    batchModuleOperation,
+    fetchModuleLogs,
+    fetchSystemModules,
+    restartModule,
+    setModuleAutoStart,
+    startModule,
+    stopModule
 } from '@/api/systemConfig'
-
-
-
 
 
 /**

@@ -15,6 +15,17 @@ log:
   rotation: 00:00
   retention_days: 7
   enable_json: false
+  archive:
+    enabled: true
+    format: zip
+    archive_after_days: 7
+    purge_after_days: 30
+  modules:
+    enabled: false
+    directory: modules
+    max_depth: 2
+    rotation: 00:00
+    retention_days: 7
 database:
   main:
     enabled: true
@@ -140,6 +151,116 @@ data_sources:
         timeout: 30
         proxy:
           enabled: false
+  realtime:
+    health_check_interval: 120
+    alert_policy:
+      enabled: true
+      failure_threshold: 3
+      window_seconds: 300
+      channels: []
+    adapters:
+      - name: amazingdata
+        driver: amazingdata
+        priority: 1
+        enabled: true
+        health:
+          probe_timeout_seconds: 5
+          failure_threshold: 3
+          cool_down_seconds: 30
+      - name: cloudflare
+        driver: akshare_polling
+        priority: 2
+        enabled: true
+        options:
+          use_proxy: true
+          batch_size: 50
+      - name: akshare
+        driver: akshare_polling
+        priority: 3
+        enabled: true
+        options:
+          use_proxy: false
+          batch_size: 50
+
+data_source_prefetch:
+  enabled: false
+  interval_seconds: 300
+  job_type: prefetch_stock_basics
+  max_job_age_minutes: 45
+
+
+market_data:
+  realtime:
+    enabled: false
+    boards: []
+    include_markets: []
+    interval_seconds: 1.0
+    request_timeout_seconds: 3.0
+    capital_windows: []
+    order_window: null
+    auction_window: null
+    capital_limit: 50
+    order_limit: 100
+    initial_step_timeout_seconds: 12.0
+    off_day_interval_seconds: 120.0
+    no_trade_interval_seconds: 45.0
+    auction_interval_seconds: 5.0
+    continuous_interval_seconds: 1.0
+    off_day_timeout_seconds: 5.0
+    no_trade_timeout_seconds: 5.0
+    auction_timeout_seconds: 3.0
+    continuous_timeout_seconds: 3.0
+    redis:
+      url: redis://localhost:6379/6
+      strength_ttl: 180
+      imbalance_ttl: 180
+      auction_ttl: 180
+      max_strength_entries: 50
+  modules:
+    strength:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - off_day
+            - no_trade
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+            - SESSION_EXPIRED
+          cache_ttl_seconds: 90
+          min_interval_seconds: 15
+    board_overview:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - off_day
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+          cache_ttl_seconds: 120
+          min_interval_seconds: 30
+    order_imbalance:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - off_day
+            - no_trade
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+          cache_ttl_seconds: 60
+          min_interval_seconds: 15
+    auction_quality:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - auction
+            - off_day
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+          cache_ttl_seconds: 45
+          min_interval_seconds: 10
 
 notifications:
   enabled: false

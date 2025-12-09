@@ -72,7 +72,7 @@ class ErrorBoundary extends Component<Props, State> {
     }
 
     // 开发环境打印详细错误
-    if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
       console.group('🚨 ErrorBoundary Caught Error')
       console.error('Error:', error)
       console.error('Error Info:', errorInfo)
@@ -170,7 +170,7 @@ URL: ${window.location.href}
       <Collapse 
         ghost 
         className="error-details-collapse"
-        defaultActiveKey={process.env.NODE_ENV === 'development' ? ['1'] : []}
+        defaultActiveKey={import.meta.env.DEV ? ['1'] : []}
       >
         <Panel 
           header="错误详情" 

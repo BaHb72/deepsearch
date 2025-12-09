@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, NotRequired, TypedDict, cast
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, status
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -261,24 +261,14 @@ async def toggle_proxy() -> MessageResponse:
 
 @router.get("/test")
 async def test_connection() -> WorkerTestResponse:
-    """测试 Workers 连接"""
-    try:
-        # 简化实现，返回模拟结果
-        return {
-            "success": True,
-            "data": {
-                "success": True,
-                "response_time": 150.5,
-                "status_code": 200,
-                "message": "连接成功",
-                "workers_version": "1.0.0",
-                "error": None,
-                "timestamp": "2025-08-11T10:00:00",
-            },
-        }
-    except Exception as e:
-        logger.error(f"测试连接失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": "WORKER_TEST_UNAVAILABLE",
+            "message": "Workers 连接测试尚未实现，请接入真实探测逻辑后重试。",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        },
+    )
 
 
 @router.post("/clear-cache")

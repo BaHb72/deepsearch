@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { message } from 'antd'
+import {useCallback, useEffect, useRef, useState} from 'react'
+import {message} from 'antd'
 import backendStatus from '@/utils/backendStatus'
 
-/**
- * 异步数据状态
- */
+type AsyncFunction<Args extends unknown[], T> = (...args: Args) => Promise<T>
+
 export interface AsyncDataState<T> {
   data: T | null
   loading: boolean
@@ -12,233 +11,195 @@ export interface AsyncDataState<T> {
   initialized: boolean
 }
 
-/**
- * 异步数据 Hook 选项
- */
-export interface UseAsyncDataOptions {
-  /** 是否立即执行 */
+export interface UseAsyncDataOptions<T> {
   immediate?: boolean
-  /** 成功回调 */
-  onSuccess?: (data: any) => void
-  /** 失败回调 */
+    onSuccess?: (data: T) => void
   onError?: (error: Error) => void
-  /** 是否显示错误消息 */
   showError?: boolean
-  /** 是否显示成功消息 */
   showSuccess?: boolean | string
-  /** 成功消息文本 */
   successMessage?: string
-  /** 轮询间隔（毫秒） */
   pollingInterval?: number
-  /** 重试次数 */
   retryCount?: number
-  /** 重试延迟（毫秒） */
   retryDelay?: number
 }
 
-/**
- * 异步数据 Hook 返回值
- */
-export interface UseAsyncDataReturn<T> {
+export interface UseAsyncDataReturn<T, Args extends unknown[]> {
   data: T | null
   loading: boolean
   error: Error | null
   initialized: boolean
-  execute: (...args: any[]) => Promise<T | null>
+    execute: (...args: Args) => Promise<T | null>
   refresh: () => Promise<T | null>
   reset: () => void
   setData: (data: T | null) => void
 }
 
-/**
- * 通用的异步数据获取 Hook
- * 处理加载状态、错误处理、重试、轮询等常见场景
- * 
- * @example
- * ```tsx
- * // 基础用法
- * const { data, loading, error, refresh } = useAsyncData(
- *   fetchUserData,
- *   { immediate: true }
- * )
- * 
- * // 带参数的异步函数
- * const { data, execute } = useAsyncData(
- *   (id: string) => fetchUserById(id),
- *   { immediate: false }
- * )
- * await execute('user-123')
- * 
- * // 轮询数据
- * const { data } = useAsyncData(
- *   fetchSystemStatus,
- *   { pollingInterval: 5000 }
- * )
- * ```
- */
-export const useAsyncData = <T = any>(
-  asyncFunction: (...args: any[]) => Promise<T>,
-  options: UseAsyncDataOptions = {}
-): UseAsyncDataReturn<T> => {
+const DEFAULT_SUCCESS_MESSAGE = '操作成功'
+const DEFAULT_ERROR_MESSAGE = '请求失败，请稍后重试'
+
+const BACKEND_ERROR_SIGNATURES = ['服务不可用', 'BACKEND_UNAVAILABLE', 'ECONNREFUSED']
+
+const sleep = (duration: number) =>
+    new Promise<void>((resolve) => {
+        setTimeout(resolve, duration)
+    })
+
+function shouldRetry(error: Error, attempt: number, retryCount: number): boolean {
+    if (attempt >= retryCount) {
+        return false
+    }
+    return !error.message.includes('AbortError')
+}
+
+function isBackendUnavailable(error: Error | null): boolean {
+    if (!error) {
+        return false
+    }
+    return BACKEND_ERROR_SIGNATURES.some((keyword) => error.message.includes(keyword))
+}
+
+export function useAsyncData<T, Args extends unknown[] = []>(
+    asyncFunction: AsyncFunction<Args, T>,
+    options: UseAsyncDataOptions<T> = {}
+): UseAsyncDataReturn<T, Args> {
   const {
     immediate = true,
     onSuccess,
     onError,
     showError = true,
     showSuccess = false,
-    successMessage = '操作成功',
+      successMessage = DEFAULT_SUCCESS_MESSAGE,
     pollingInterval,
     retryCount = 0,
-    retryDelay = 1000
+      retryDelay = 1000,
   } = options
 
   const [state, setState] = useState<AsyncDataState<T>>({
     data: null,
     loading: false,
     error: null,
-    initialized: false
+      initialized: false,
   })
 
   const mountedRef = useRef(true)
-  const pollingTimerRef = useRef<NodeJS.Timeout>()
-  const retryCountRef = useRef(0)
-  const lastArgsRef = useRef<any[]>([])
-  const abortControllerRef = useRef<AbortController>()
+    const pollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const lastArgsRef = useRef<Args>([] as unknown as Args)
+    const abortControllerRef = useRef<AbortController | null>(null)
 
-  /**
-   * 执行异步函数
-   */
-  const execute = useCallback(async (...args: any[]): Promise<T | null> => {
-    // 保存参数供 refresh 使用
-    lastArgsRef.current = args
+    const execute = useCallback(
+        async (...args: Args): Promise<T | null> => {
+            lastArgsRef.current = args
 
-    // 取消之前的请求
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort()
+            }
 
-    // 创建新的 AbortController
-    abortControllerRef.current = new AbortController()
-    const currentController = abortControllerRef.current
+            const controller = new AbortController()
+            abortControllerRef.current = controller
 
-    // 设置加载状态
-    setState(prev => ({ ...prev, loading: true, error: null }))
+            setState((prev) => ({
+                ...prev,
+                loading: true,
+                error: null,
+            }))
 
-    try {
-      const result = await asyncFunction(...args)
+            let attempt = 0
 
-      // 检查请求是否被取消
-      if (currentController.signal.aborted) {
-        return null
-      }
+            while (attempt <= retryCount) {
+                try {
+                    const result = await asyncFunction(...args)
 
-      // 更新状态 - 移除 mountedRef 检查，让状态总是更新
-      setState({
-        data: result,
-        loading: false,
-        error: null,
-        initialized: true
-      })
+                    if (!mountedRef.current || controller.signal.aborted) {
+                        return null
+                    }
 
-      // 成功回调
-      onSuccess?.(result)
+                    setState({
+                        data: result,
+                        loading: false,
+                        error: null,
+                        initialized: true,
+                    })
 
-      // 显示成功消息
-      if (showSuccess) {
-        const msg = typeof showSuccess === 'string' ? showSuccess : successMessage
-        message.success(msg)
-      }
+                    if (showSuccess) {
+                        const content = typeof showSuccess === 'string' ? showSuccess : successMessage
+                        message.success(content)
+                    }
 
-      // 重置重试计数
-      retryCountRef.current = 0
+                    onSuccess?.(result)
+                    return result
+                } catch (err) {
+                    const error = err instanceof Error ? err : new Error(String(err))
 
-      return result
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err))
+                    if (!mountedRef.current || controller.signal.aborted) {
+                        return null
+                    }
 
-      // 检查请求是否被取消
-      if (currentController.signal.aborted) {
-        return null
-      }
+                    attempt += 1
 
-      // 更新错误状态
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        error,
-        initialized: true
-      }))
+                    if (shouldRetry(error, attempt, retryCount)) {
+                        if (retryDelay > 0) {
+                            await sleep(retryDelay)
+                        }
+                        continue
+                    }
 
-      // 错误回调
-      onError?.(error)
+                    setState({
+                        data: null,
+                        loading: false,
+                        error,
+                        initialized: true,
+                    })
 
-      // 显示错误消息
-      if (showError) {
-        // 特殊处理503错误
-        if (error.message?.includes('503') || error.message?.includes('系统未初始化')) {
-          message.error('后端服务未就绪，请确保后端已正确启动。运行: python -m deepsearch run --no-frontend')
-        } else {
-          message.error(error.message || '请求失败')
-        }
-      }
+                    if (showError) {
+                        message.error(error.message || DEFAULT_ERROR_MESSAGE)
+                    }
 
-      // 重试逻辑
-      if (retryCountRef.current < retryCount) {
-        retryCountRef.current++
-        console.log(`重试第 ${retryCountRef.current} 次...`)
-        
-        // 延迟后重试
-        await new Promise(resolve => setTimeout(resolve, retryDelay))
-        
-        if (mountedRef.current) {
-          return execute(...args)
+                    onError?.(error)
+                    return null
         }
       }
 
       return null
-    }
-  }, [asyncFunction, onSuccess, onError, showError, showSuccess, successMessage, retryCount, retryDelay])
+        },
+        [
+            asyncFunction,
+            onError,
+            onSuccess,
+            retryCount,
+            retryDelay,
+            showError,
+            showSuccess,
+            successMessage,
+        ]
+    )
 
-  /**
-   * 刷新数据（使用上次的参数）
-   */
-  const refresh = useCallback(() => {
+    const refresh = useCallback(async (): Promise<T | null> => {
     return execute(...lastArgsRef.current)
   }, [execute])
 
-  /**
-   * 重置状态
-   */
   const reset = useCallback(() => {
     setState({
       data: null,
       loading: false,
       error: null,
-      initialized: false
+        initialized: false,
     })
-    retryCountRef.current = 0
   }, [])
 
-  /**
-   * 手动设置数据
-   */
   const setData = useCallback((data: T | null) => {
-    setState(prev => ({ ...prev, data }))
+      setState((prev) => ({...prev, data}))
   }, [])
 
-  // 立即执行
   useEffect(() => {
     if (immediate && !state.initialized) {
-      execute()
+        void execute(...lastArgsRef.current)
     }
-     
-  }, []) // 空依赖数组，只在组件挂载时执行一次
+  }, [immediate, state.initialized, execute])
 
-  // 轮询
   useEffect(() => {
     if (pollingInterval && state.initialized && !state.error) {
       pollingTimerRef.current = setInterval(() => {
-        refresh()
+          void refresh()
       }, pollingInterval)
 
       return () => {
@@ -247,44 +208,31 @@ export const useAsyncData = <T = any>(
         }
       }
     }
+
+      return undefined
   }, [pollingInterval, state.initialized, state.error, refresh])
 
-  // 监听后端状态变化
   useEffect(() => {
     const handleBackendStatusChange = (available: boolean) => {
-      // 后端恢复且之前是因为后端不可用失败，自动重试
-      if (available && state.error) {
-        // 检查错误是否是后端不可用
-        const errorMessage = state.error.message || ''
-        const isBackendError = errorMessage.includes('后端服务不可用') ||
-                              errorMessage.includes('BACKEND_UNAVAILABLE') ||
-                              (state.error as any).code === 'BACKEND_UNAVAILABLE'
-
-        if (isBackendError) {
-          console.log('[useAsyncData] 后端已恢复，自动重试...')
-          refresh()
-        }
+        if (available && isBackendUnavailable(state.error)) {
+            void refresh()
       }
     }
 
-    // 添加监听器
     backendStatus.addListener(handleBackendStatusChange)
-
-    // 清理监听器
     return () => {
       backendStatus.removeListener(handleBackendStatusChange)
     }
   }, [state.error, refresh])
 
-  // 清理
   useEffect(() => {
     return () => {
       mountedRef.current = false
-      // 取消正在进行的请求
+
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
-      // 清理轮询定时器
+
       if (pollingTimerRef.current) {
         clearInterval(pollingTimerRef.current)
       }
@@ -299,45 +247,36 @@ export const useAsyncData = <T = any>(
     execute,
     refresh,
     reset,
-    setData
+      setData,
   }
 }
 
-/**
- * 带缓存的异步数据 Hook
- * 在指定时间内返回缓存数据，避免重复请求
- */
-export const useCachedAsyncData = <T = any>(
+export function useCachedAsyncData<T, Args extends unknown[] = []>(
   key: string,
-  asyncFunction: (...args: any[]) => Promise<T>,
-  options: UseAsyncDataOptions & { cacheTime?: number } = {}
-): UseAsyncDataReturn<T> => {
-  const { cacheTime = 5 * 60 * 1000, ...restOptions } = options // 默认缓存 5 分钟
-  
-  const cacheRef = useRef<{ data: T | null; timestamp: number }>()
-  
-  const wrappedFunction = useCallback(async (...args: any[]) => {
-    // 检查缓存
-    if (cacheRef.current) {
-      const { data, timestamp } = cacheRef.current
-      if (Date.now() - timestamp < cacheTime) {
-        console.log(`使用缓存数据: ${key}`)
-        return data as T
-      }
-    }
-    
-    // 获取新数据
-    const result = await asyncFunction(...args)
-    
-    // 更新缓存
-    cacheRef.current = {
-      data: result,
-      timestamp: Date.now()
-    }
-    
-    return result
-  }, [asyncFunction, cacheTime, key])
-  
+  asyncFunction: AsyncFunction<Args, T>,
+  options: UseAsyncDataOptions<T> & { cacheTime?: number } = {}
+): UseAsyncDataReturn<T, Args> {
+    const {cacheTime = 5 * 60 * 1000, ...restOptions} = options
+
+    const cacheRef = useRef<{ data: T; timestamp: number } | null>(null)
+
+    const wrappedFunction = useCallback(
+        async (...args: Args): Promise<T> => {
+            if (cacheRef.current && Date.now() - cacheRef.current.timestamp < cacheTime) {
+                console.debug(`[useCachedAsyncData] 使用缓存数据: ${key}`)
+                return cacheRef.current.data
+            }
+
+            const result = await asyncFunction(...args)
+            cacheRef.current = {
+                data: result,
+                timestamp: Date.now(),
+            }
+            return result
+        },
+        [asyncFunction, cacheTime, key]
+    )
+
   return useAsyncData(wrappedFunction, restOptions)
 }
 

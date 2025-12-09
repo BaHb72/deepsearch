@@ -1,0 +1,1195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1" name="viewport"/>
+    <title>概念板块 · TradingView 风格预览</title>
+    <link href="https://unpkg.com/antd@5.19.2/dist/reset.css" rel="stylesheet"/>
+    <link href="https://unpkg.com/antd@5.19.2/dist/antd.min.css" rel="stylesheet"/>
+    <style>
+        body {
+            background: #0e1116;
+            color: #edf1f7;
+            font-family: "Roboto", "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+
+        .page {
+            max-width: 1240px;
+            margin: 24px auto;
+            padding: 0 20px;
+        }
+
+        .glass {
+            background: rgba(18, 22, 31, 0.72);
+            border: 1px solid rgba(65, 72, 87, 0.55);
+            border-radius: 14px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(16px);
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 18px;
+            border-bottom: 1px solid rgba(90, 104, 129, 0.3);
+        }
+
+        .header-title h2 {
+            margin: 0;
+            font-weight: 600;
+            font-size: 20px;
+            letter-spacing: .3px;
+        }
+
+        .header-title .sub {
+            margin-top: 4px;
+            color: #7d879b;
+            font-size: 12px;
+        }
+
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .badge {
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: #151a24;
+            border: 1px solid rgba(100, 108, 131, 0.4);
+            font-size: 12px;
+            color: #a7b4ce;
+        }
+
+        .badge.on {
+            border-color: #3b82f6;
+            color: #cfe1ff;
+            background: linear-gradient(135deg, #1a2a44, #132038);
+        }
+
+        .tv-btn {
+            height: 32px;
+            padding: 0 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(86, 96, 121, 0.5);
+            background: #131823;
+            color: #d6deee;
+            cursor: pointer;
+            transition: all .2s ease;
+        }
+
+        .tv-btn:hover {
+            border-color: #3b82f6;
+            color: #eef5ff;
+        }
+
+        .tv-btn.active {
+            background: #1e2a3f;
+            border-color: #3b82f6;
+            color: #e8f1ff;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns:repeat(3, 1fr);
+            gap: 14px;
+            padding: 16px 18px;
+        }
+
+        .kpi-card {
+            background: linear-gradient(160deg, rgba(21, 28, 41, 0.9), rgba(12, 17, 27, 0.85));
+            border: 1px solid rgba(72, 82, 105, 0.3);
+            border-radius: 12px;
+            padding: 14px 16px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kpi-card h4 {
+            margin: 0;
+            font-size: 13px;
+            color: #8894a8;
+            font-weight: 500;
+            letter-spacing: .2px;
+        }
+
+        .kpi-value {
+            font-size: 24px;
+            font-weight: 600;
+            margin-top: 6px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .kpi-change {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: #173126;
+            color: #8ff0ba;
+        }
+
+        .spark {
+            margin-top: 10px;
+            height: 48px;
+            position: relative;
+        }
+
+        .spark svg {
+            position: absolute;
+            inset: 0;
+        }
+
+        .spark-bg {
+            stroke: rgba(59, 130, 246, 0.18);
+            stroke-width: 1;
+            fill: none;
+            stroke-dasharray: 3 4;
+        }
+
+        .spark-line {
+            fill: none;
+            stroke-width: 2;
+            stroke-linejoin: round;
+            stroke-linecap: round;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns:1.65fr 1fr;
+            gap: 16px;
+            padding: 0 18px 18px;
+        }
+
+        .watchlist {
+            background: linear-gradient(160deg, rgba(16, 21, 31, 0.95), rgba(13, 17, 25, 0.93));
+            border-radius: 12px;
+            border: 1px solid rgba(80, 89, 109, 0.35);
+            padding: 16px;
+        }
+
+        .watch-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .watch-header h3 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .watch-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 8px;
+        }
+
+        .watch-table thead th {
+            text-align: left;
+            font-size: 12px;
+            font-weight: 500;
+            color: #708099;
+            padding: 0 10px;
+        }
+
+        .watch-table tbody tr {
+            background: rgba(18, 24, 36, 0.78);
+            border-radius: 10px;
+            box-shadow: 0 6px 18px rgba(5, 8, 14, 0.35);
+            cursor: pointer;
+            transition: transform .15s ease;
+        }
+
+        .watch-table tbody tr:hover {
+            transform: translateY(-3px);
+        }
+
+        .watch-table td {
+            padding: 12px 10px;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(56, 66, 86, 0.15);
+        }
+
+        .watch-table td:last-child {
+            border-bottom: none;
+        }
+
+        .series-bar {
+            position: relative;
+            height: 6px;
+            border-radius: 999px;
+            background: #192136;
+            overflow: hidden;
+            margin-top: 6px;
+        }
+
+        .series-bar span {
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
+        }
+
+        .tag {
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            background: rgba(59, 130, 246, 0.12);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #9dc6ff;
+        }
+
+        .tag.single {
+            background: rgba(217, 70, 239, 0.15);
+            border-color: rgba(217, 70, 239, 0.35);
+            color: #f5c2ff;
+        }
+
+        .tag.multi {
+            background: rgba(34, 197, 94, 0.18);
+            border-color: rgba(34, 197, 94, 0.3);
+            color: #bff7d8;
+        }
+
+        .detail-card {
+            background: linear-gradient(160deg, rgba(16, 20, 30, 0.95), rgba(13, 17, 26, 0.92));
+            border-radius: 12px;
+            border: 1px solid rgba(78, 88, 110, 0.32);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .detail-card h3 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .driver-list, .probing-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .driver-item, .probing-item {
+            background: rgba(20, 27, 40, 0.85);
+            border: 1px solid rgba(82, 92, 115, 0.25);
+            border-radius: 10px;
+            padding: 10px;
+            display: grid;
+            grid-template-columns:1fr 80px 90px 90px;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .driver-item .bar {
+            grid-column: 1 / -1;
+            height: 6px;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.15);
+            overflow: hidden;
+        }
+
+        .driver-item .bar span {
+            display: block;
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #34d399);
+        }
+
+        .name {
+            font-weight: 600;
+        }
+
+        .code {
+            color: #6f7f96;
+            font-size: 12px;
+            margin-left: 6px;
+        }
+
+        .indicator {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .source-card {
+            background: linear-gradient(160deg, rgba(15, 19, 29, 0.95), rgba(12, 16, 26, 0.9));
+            border-radius: 12px;
+            border: 1px solid rgba(80, 89, 112, 0.32);
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .source-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #93a0b8;
+        }
+
+        .source-head strong {
+            font-size: 13px;
+            color: #cdd8f2;
+            letter-spacing: .2px;
+        }
+
+        .source-grid {
+            display: grid;
+            gap: 8px;
+        }
+
+        .source-row {
+            border-radius: 10px;
+            border: 1px solid rgba(86, 96, 121, 0.28);
+            background: rgba(18, 24, 36, 0.78);
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .source-row.primary {
+            border-color: rgba(59, 130, 246, 0.45);
+            background: rgba(21, 30, 48, 0.85);
+        }
+
+        .source-row.fallback {
+            border-color: rgba(234, 179, 8, 0.35);
+            background: rgba(39, 32, 16, 0.78);
+        }
+
+        .source-topline {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #7d8aa5;
+        }
+
+        .source-topline .value {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+            color: #d1dcfb;
+        }
+
+        .source-meta {
+            font-size: 11px;
+            color: #6c7a95;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            display: inline-block;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.45);
+        }
+
+        .status-dot.online {
+            background: #34d399;
+            box-shadow: 0 0 10px rgba(52, 211, 153, 0.6);
+        }
+
+        .status-dot.standby {
+            background: #facc15;
+            box-shadow: 0 0 10px rgba(250, 204, 21, 0.5);
+        }
+
+        .status-dot.offline {
+            background: #f87171;
+            box-shadow: 0 0 10px rgba(248, 113, 113, 0.5);
+        }
+
+        .source-whitelist {
+            font-size: 11px;
+            color: #8190ad;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px dashed rgba(99, 112, 140, 0.45);
+            background: rgba(17, 23, 35, 0.85);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .source-whitelist span {
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(86, 103, 133, 0.4);
+            background: rgba(40, 51, 75, 0.6);
+            color: #a7b9df;
+        }
+
+        .board-head {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .board-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .board-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 11px;
+            color: #6e7b95;
+        }
+
+        .board-meta .provider {
+            color: #55627a;
+        }
+
+        .source-chip {
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            background: rgba(28, 44, 72, 0.78);
+            color: #cfe1ff;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+
+        .source-chip.standby {
+            border-color: rgba(234, 179, 8, 0.4);
+            background: rgba(63, 53, 15, 0.65);
+            color: #fde68a;
+        }
+
+        .source-chip.offline {
+            border-color: rgba(248, 113, 113, 0.45);
+            background: rgba(69, 22, 25, 0.65);
+            color: #fecaca;
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+    <div class="glass">
+        <div class="header">
+            <div class="header-title">
+                <h2>概念板块 · 实时（方案A）</h2>
+                <div class="sub" id="headerSub">阶段：连续竞价 · asOf 14:57:00 · 更新 14:57:03 · 数据源 AMAZINGDATA</div>
+            </div>
+            <div class="toolbar">
+                <span class="badge on">窗口：1m</span>
+                <span class="badge" id="unitBadge">单位：万</span>
+                <span class="badge" id="sourceStatusBadge">主源：AmazingData</span>
+                <button class="tv-btn active" data-phase="continuous" onclick="setPhase('continuous')">连续竞价</button>
+                <button class="tv-btn" data-phase="no_trade" onclick="setPhase('no_trade')">盘中休市</button>
+                <button class="tv-btn" data-phase="off_day" onclick="setPhase('off_day')">非交易日</button>
+                <button class="tv-btn" id="switchSourceBtn">模拟切换数据源</button>
+            </div>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-card" id="kpi-ai">
+                <h4>人工智能 · 资金速度趋势</h4>
+                <div class="kpi-value"><span class="indicator" data-metric="speed">1230.00</span><span
+                        class="kpi-change">+3.5%</span></div>
+                <div class="spark">
+                    <svg viewBox="0 0 100 30">
+                        <path class="spark-bg" d="M0 24 H100"/>
+                        <polyline class="spark-line" id="line-ai" points="" stroke="#3b82f6"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="kpi-card" id="kpi-robot">
+                <h4>机器人 · 成交量柱</h4>
+                <div class="kpi-value"><span class="indicator" data-metric="volume">980.00</span><span
+                        class="kpi-change" style="background:#352a12;color:#facc15;">+1.8%</span></div>
+                <div class="spark">
+                    <svg id="bars-robot" viewBox="0 0 100 30"></svg>
+                </div>
+            </div>
+            <div class="kpi-card" id="kpi-nev">
+                <h4>新能源车 · 净流入趋势</h4>
+                <div class="kpi-value"><span class="indicator" data-metric="net">2150.00</span><span class="kpi-change"
+                                                                                                     style="background:#17293a;color:#60a5fa;">+2.1%</span>
+                </div>
+                <div class="spark">
+                    <svg viewBox="0 0 100 30">
+                        <path class="spark-bg" d="M0 24 H100"/>
+                        <polyline class="spark-line" id="line-nev" points="" stroke="#10b981"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="content">
+            <div aria-label="概念板块榜单" class="watchlist">
+                <div class="watch-header">
+                    <h3>概念板块榜单</h3>
+                    <div class="badge" style="background:#172032;border-color:#2a3a55;">展示单位：<span
+                            id="unitText">万</span></div>
+                </div>
+                <table class="watch-table">
+                    <thead>
+                    <tr>
+                        <th>板块</th>
+                        <th>速度</th>
+                        <th>净流入</th>
+                        <th>加速度</th>
+                        <th>试盘占比</th>
+                        <th>数据源</th>
+                    </tr>
+                    </thead>
+                    <tbody id="boardTable"></tbody>
+                </table>
+            </div>
+
+            <div aria-label="板块详情" class="detail-card">
+                <div aria-label="BoardUniverse Port 状态" class="source-card">
+                    <div class="source-head">
+                        <strong>BoardUniverse Port</strong>
+                        <span>刷新周期：<span id="sourceRefresh">900 秒</span></span>
+                    </div>
+                    <div class="source-grid" id="sourceGrid"></div>
+                    <div class="source-whitelist" id="sourceWhitelist"></div>
+                </div>
+                <h3>人工智能 · 驱动构成</h3>
+                <div class="driver-list" id="driverList"></div>
+                <h3>试盘列表</h3>
+                <div class="probing-list" id="probingList"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 模拟数据：BoardUniverse 数据源配置与快照
+    const sourceConfig = {
+        refreshSeconds: 900,
+        whitelist: ['AI算力', 'AIGC应用', '机器人', '低空经济', '新能源车'],
+        active: 'amazingdata',
+        sources: [
+            {
+                key: 'amazingdata',
+                role: 'primary',
+                label: 'AmazingData',
+                adapter: 'AmazingDataBoardUniverseAdapter',
+                status: 'online',
+                statusText: '实时推送 · 缓存写入中',
+                lastUpdate: '14:57:03',
+                latency: 260,
+                coverage: '概念 368 / 股票 2510'
+            },
+            {
+                key: 'akshare',
+                role: 'fallback',
+                label: 'AkShare',
+                adapter: 'AkShareBoardUniverseAdapter',
+                status: 'standby',
+                statusText: '热备 · 最近拉取 14:56:12',
+                lastUpdate: '14:56:12',
+                latency: 640,
+                coverage: '概念 342 / 股票 2386'
+            }
+        ]
+    };
+
+    const adapterMeta = {
+        amazingdata: {label: 'AmazingData', adapter: 'AmazingDataBoardUniverseAdapter'},
+        akshare: {label: 'AkShare', adapter: 'AkShareBoardUniverseAdapter'}
+    };
+
+    const boardSnapshots = {
+        amazingdata: [
+            {
+                board: 'AI算力',
+                classification: 'multi_core',
+                source: 'amazingdata',
+                inflow_speed: 7.4e7,
+                inflow_net: 1.52e9,
+                inflow_accel: 2.5e6,
+                probing_ratio: .09
+            },
+            {
+                board: 'AIGC应用',
+                classification: 'multi_core',
+                source: 'amazingdata',
+                inflow_speed: 5.8e7,
+                inflow_net: 1.05e9,
+                inflow_accel: 1.9e6,
+                probing_ratio: .06
+            },
+            {
+                board: '机器人',
+                classification: 'mixed',
+                source: 'amazingdata',
+                inflow_speed: 4.6e7,
+                inflow_net: 6.1e8,
+                inflow_accel: 1.4e6,
+                probing_ratio: .05
+            },
+            {
+                board: '低空经济',
+                classification: 'multi_core',
+                source: 'amazingdata',
+                inflow_speed: 3.9e7,
+                inflow_net: 3.4e8,
+                inflow_accel: 1.1e6,
+                probing_ratio: .06
+            },
+            {
+                board: '算力基础设施',
+                classification: 'multi_core',
+                source: 'amazingdata',
+                inflow_speed: 4.8e7,
+                inflow_net: 9.4e8,
+                inflow_accel: 1.6e6,
+                probing_ratio: .07
+            },
+            {
+                board: '新能源车',
+                classification: 'multi_core',
+                source: 'amazingdata',
+                inflow_speed: 5.3e7,
+                inflow_net: 8.7e8,
+                inflow_accel: 1.8e6,
+                probing_ratio: .08
+            },
+            {
+                board: '光伏储能',
+                classification: 'mixed',
+                source: 'amazingdata',
+                inflow_speed: 2.6e7,
+                inflow_net: 2.2e8,
+                inflow_accel: 0.7e6,
+                probing_ratio: .03
+            },
+            {
+                board: '芯片设计',
+                classification: 'single_core',
+                source: 'amazingdata',
+                inflow_speed: 3.1e7,
+                inflow_net: 4.5e8,
+                inflow_accel: 0.95e6,
+                probing_ratio: .04
+            },
+            {
+                board: 'CPO互联',
+                classification: 'single_core',
+                source: 'amazingdata',
+                inflow_speed: 2.2e7,
+                inflow_net: 1.6e8,
+                inflow_accel: 0.65e6,
+                probing_ratio: .03
+            },
+            {
+                board: '工业自动化',
+                classification: 'multi_core',
+                source: 'amazingdata',
+                inflow_speed: 3.7e7,
+                inflow_net: 3.0e8,
+                inflow_accel: 1.05e6,
+                probing_ratio: .05
+            },
+            {
+                board: '华为产业链',
+                classification: 'mixed',
+                source: 'amazingdata',
+                inflow_speed: 2.9e7,
+                inflow_net: 1.9e8,
+                inflow_accel: 0.8e6,
+                probing_ratio: .03
+            },
+            {
+                board: '中药现代化',
+                classification: 'mixed',
+                source: 'amazingdata',
+                inflow_speed: 1.7e7,
+                inflow_net: 1.1e8,
+                inflow_accel: 0.35e6,
+                probing_ratio: .02
+            }
+        ],
+        akshare: [
+            {
+                board: 'AI算力',
+                classification: 'multi_core',
+                source: 'akshare',
+                inflow_speed: 6.6e7,
+                inflow_net: 1.21e9,
+                inflow_accel: 2.2e6,
+                probing_ratio: .08
+            },
+            {
+                board: 'AIGC应用',
+                classification: 'multi_core',
+                source: 'akshare',
+                inflow_speed: 4.9e7,
+                inflow_net: 8.8e8,
+                inflow_accel: 1.5e6,
+                probing_ratio: .05
+            },
+            {
+                board: '机器人',
+                classification: 'mixed',
+                source: 'akshare',
+                inflow_speed: 5.2e7,
+                inflow_net: 5.7e8,
+                inflow_accel: 1.2e6,
+                probing_ratio: .05
+            },
+            {
+                board: '低空经济',
+                classification: 'multi_core',
+                source: 'akshare',
+                inflow_speed: 3.2e7,
+                inflow_net: 2.9e8,
+                inflow_accel: 0.9e6,
+                probing_ratio: .04
+            },
+            {
+                board: '算力基础设施',
+                classification: 'multi_core',
+                source: 'akshare',
+                inflow_speed: 4.0e7,
+                inflow_net: 7.1e8,
+                inflow_accel: 1.3e6,
+                probing_ratio: .06
+            },
+            {
+                board: '新能源车',
+                classification: 'multi_core',
+                source: 'akshare',
+                inflow_speed: 4.4e7,
+                inflow_net: 7.4e8,
+                inflow_accel: 1.5e6,
+                probing_ratio: .07
+            },
+            {
+                board: '光伏储能',
+                classification: 'mixed',
+                source: 'akshare',
+                inflow_speed: 3.1e7,
+                inflow_net: 2.6e8,
+                inflow_accel: 0.82e6,
+                probing_ratio: .04
+            },
+            {
+                board: '芯片设计',
+                classification: 'single_core',
+                source: 'akshare',
+                inflow_speed: 2.4e7,
+                inflow_net: 3.6e8,
+                inflow_accel: 0.7e6,
+                probing_ratio: .03
+            },
+            {
+                board: 'CPO互联',
+                classification: 'single_core',
+                source: 'akshare',
+                inflow_speed: 1.9e7,
+                inflow_net: 1.2e8,
+                inflow_accel: 0.55e6,
+                probing_ratio: .03
+            },
+            {
+                board: '工业自动化',
+                classification: 'multi_core',
+                source: 'akshare',
+                inflow_speed: 3.1e7,
+                inflow_net: 2.4e8,
+                inflow_accel: 0.92e6,
+                probing_ratio: .04
+            },
+            {
+                board: '华为产业链',
+                classification: 'mixed',
+                source: 'akshare',
+                inflow_speed: 2.5e7,
+                inflow_net: 1.5e8,
+                inflow_accel: 0.65e6,
+                probing_ratio: .03
+            },
+            {
+                board: '中药现代化',
+                classification: 'mixed',
+                source: 'akshare',
+                inflow_speed: 1.3e7,
+                inflow_net: 0.9e8,
+                inflow_accel: 0.28e6,
+                probing_ratio: .02
+            }
+        ]
+    };
+
+    const driverSnapshots = {
+        amazingdata: [
+            {code: '688041.SH', name: '华丰科技', contrib_pct: 0.20, speed: 5.4e6, accel: 1.5e5},
+            {code: '603019.SH', name: '中科曙光', contrib_pct: 0.16, speed: 4.6e6, accel: 1.1e5},
+            {code: '002439.SZ', name: '启明星辰', contrib_pct: 0.12, speed: 3.2e6, accel: 0.8e5},
+            {code: '300308.SZ', name: '中际旭创', contrib_pct: 0.11, speed: 2.9e6, accel: 0.7e5},
+            {code: '603986.SH', name: '兆易创新', contrib_pct: 0.09, speed: 2.4e6, accel: 0.6e5},
+            {code: '300496.SZ', name: '中科创达', contrib_pct: 0.08, speed: 2.2e6, accel: 0.55e5}
+        ],
+        akshare: [
+            {code: '688041.SH', name: '华丰科技', contrib_pct: 0.18, speed: 4.9e6, accel: 1.2e5},
+            {code: '688256.SH', name: '寒武纪-U', contrib_pct: 0.15, speed: 4.1e6, accel: 0.95e5},
+            {code: '300999.SZ', name: '金龙鱼', contrib_pct: 0.11, speed: 3.0e6, accel: 0.7e5},
+            {code: '603019.SH', name: '中科曙光', contrib_pct: 0.10, speed: 2.7e6, accel: 0.6e5},
+            {code: '688111.SH', name: '金山办公', contrib_pct: 0.09, speed: 2.4e6, accel: 0.55e5},
+            {code: '002439.SZ', name: '启明星辰', contrib_pct: 0.08, speed: 2.2e6, accel: 0.5e5}
+        ]
+    };
+
+    const probingSnapshots = {
+        amazingdata: [
+            {
+                code: '603986.SH',
+                name: '兆易创新',
+                obi: 0.72,
+                speed: 3.6e6,
+                accel: 0.95e5,
+                reason: ['OBI≥0.7', '速度≥300万']
+            },
+            {code: '300474.SZ', name: '景嘉微', obi: 0.65, speed: 3.1e6, accel: 0.7e5, reason: ['速度≥300万']},
+            {
+                code: '688316.SH',
+                name: '青云科技-U',
+                obi: 0.58,
+                speed: 2.4e6,
+                accel: 0.6e5,
+                reason: ['OBI≥0.55', '加速度≥0.6e5']
+            },
+            {
+                code: '688111.SH',
+                name: '金山办公',
+                obi: 0.53,
+                speed: 2.1e6,
+                accel: 0.55e5,
+                reason: ['趋势线连续四根放量']
+            }
+        ],
+        akshare: [
+            {
+                code: '688111.SH',
+                name: '金山办公',
+                obi: 0.68,
+                speed: 3.1e6,
+                accel: 0.8e5,
+                reason: ['OBI≥0.65', '速度≥300万']
+            },
+            {code: '300308.SZ', name: '中际旭创', obi: 0.61, speed: 2.7e6, accel: 0.65e5, reason: ['加速度≥0.6e5']},
+            {code: '688041.SH', name: '华丰科技', obi: 0.56, speed: 2.3e6, accel: 0.58e5, reason: ['OBI≥0.55']},
+            {code: '300474.SZ', name: '景嘉微', obi: 0.52, speed: 2.0e6, accel: 0.5e5, reason: ['趋势转强']}
+        ]
+    };
+
+    const sparkSnapshots = {
+        amazingdata: {
+            ai: [48, 52, 55, 60, 64, 69, 72, 78, 76, 83],
+            nev: [34, 36, 38, 42, 46, 50, 54, 58, 61, 66],
+            robot: [9, 11, 13, 15, 18, 21, 19, 23, 26, 22]
+        },
+        akshare: {
+            ai: [42, 45, 49, 52, 55, 59, 62, 65, 67, 70],
+            nev: [30, 32, 35, 38, 41, 45, 47, 49, 51, 54],
+            robot: [8, 9, 11, 13, 15, 16, 17, 18, 19, 18]
+        }
+    };
+
+    const cloneList = (list) => list.map(item => JSON.parse(JSON.stringify(item)));
+    let boardData = cloneList(boardSnapshots[sourceConfig.active]);
+    let drivers = cloneList(driverSnapshots[sourceConfig.active]);
+    let probing = cloneList(probingSnapshots[sourceConfig.active]);
+    let unit = 'wan';
+    let currentPhase = 'continuous';
+
+    const fmtUnit = (n) => {
+        if (unit === 'wan') return (n / 1e4).toFixed(2);
+        if (unit === 'yi') return (n / 1e8).toFixed(2);
+        return Number(n).toLocaleString('zh-CN');
+    };
+    const unitLabel = () => unit === 'wan' ? '万' : (unit === 'yi' ? '亿' : '原值');
+    const formatTime = (date) => date.toTimeString().slice(0, 8);
+
+    function renderBoardTable() {
+        const tbody = document.getElementById('boardTable');
+        tbody.innerHTML = '';
+        if (!boardData.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:18px 10px;color:#6e7b95;">暂未获得板块快照</td></tr>';
+            return;
+        }
+        const maxSpeed = Math.max(...boardData.map(d => d.inflow_speed));
+        const maxNet = Math.max(...boardData.map(d => d.inflow_net));
+        const maxAccel = Math.max(...boardData.map(d => d.inflow_accel));
+        const sorted = boardData.slice().sort((a, b) => b.inflow_speed - a.inflow_speed);
+        sorted.forEach(d => {
+            const tr = document.createElement('tr');
+            const tag = d.classification === 'single_core' ? '<span class="tag single">单核</span>' : (d.classification === 'multi_core' ? '<span class="tag multi">多核</span>' : '<span class="tag">混合</span>');
+            const meta = adapterMeta[d.source] || {label: '未知', adapter: '待定'};
+            const chipClass = d.source === sourceConfig.active ? 'source-chip' : 'source-chip standby';
+            const roleLabel = d.source === sourceConfig.active ? '主源缓存' : '备用快照';
+            tr.innerHTML = `
+          <td>
+            <div class="board-head">
+              <div class="board-title">
+                <div class="board-name">${d.board}</div>
+              </div>
+              <div class="board-meta">
+                ${tag}
+                <span class="provider">${meta.adapter}</span>
+                <span>${roleLabel}</span>
+              </div>
+            </div>
+            <div class="series-bar"><span style="width:${(d.inflow_speed / maxSpeed) * 100}%"></span></div>
+          </td>
+          <td>
+            <div class="indicator">${fmtUnit(d.inflow_speed)} ${unitLabel()}</div>
+            <div class="muted" style="font-size:11px">速度</div>
+          </td>
+          <td>
+            <div class="indicator">${fmtUnit(d.inflow_net)} ${unitLabel()}</div>
+            <div class="series-bar"><span style="background:linear-gradient(90deg,#10b981,#22c55e);width:${(d.inflow_net / maxNet) * 100}%"></span></div>
+          </td>
+          <td>
+            <div class="indicator">${fmtUnit(d.inflow_accel)} ${unitLabel()}</div>
+            <div class="series-bar"><span style="background:linear-gradient(90deg,#f59e0b,#f97316);width:${(d.inflow_accel / maxAccel) * 100}%"></span></div>
+          </td>
+          <td>${(d.probing_ratio * 100).toFixed(1)}%</td>
+          <td><span class="${chipClass}">${meta.label}</span></td>`;
+            tbody.appendChild(tr);
+        });
+        document.getElementById('unitText').textContent = unitLabel();
+        document.getElementById('unitBadge').textContent = '单位：' + unitLabel();
+    }
+
+    function updateKpis() {
+        const ai = boardData.find(d => d.board === 'AI算力');
+        const robot = boardData.find(d => d.board === '机器人');
+        const nev = boardData.find(d => d.board === '新能源车');
+        if (ai) {
+            document.querySelector('#kpi-ai [data-metric="speed"]').textContent = fmtUnit(ai.inflow_speed);
+        }
+        if (robot) {
+            document.querySelector('#kpi-robot [data-metric="volume"]').textContent = fmtUnit(robot.inflow_speed);
+        }
+        if (nev) {
+            document.querySelector('#kpi-nev [data-metric="net"]').textContent = fmtUnit(nev.inflow_net);
+        }
+    }
+
+    function renderDrivers() {
+        const root = document.getElementById('driverList');
+        root.innerHTML = '';
+        drivers.forEach(d => {
+            const div = document.createElement('div');
+            div.className = 'driver-item';
+            div.innerHTML = `
+          <div><span class="name">${d.name}</span><span class="code">${d.code}</span></div>
+          <div class="indicator">贡献 ${(d.contrib_pct * 100).toFixed(1)}%</div>
+          <div class="indicator">速 ${fmtUnit(d.speed)}</div>
+          <div class="indicator">加 ${fmtUnit(d.accel)}</div>
+          <div class="bar"><span style="width:${Math.min(100, d.contrib_pct * 100)}%"></span></div>`;
+            root.appendChild(div);
+        });
+    }
+
+    function renderProbing() {
+        const root = document.getElementById('probingList');
+        root.innerHTML = '';
+        probing.forEach(p => {
+            const div = document.createElement('div');
+            div.className = 'probing-item';
+            div.innerHTML = `
+          <div><span class="name">${p.name}</span><span class="code">${p.code}</span></div>
+          <div class="indicator">OBI ${(p.obi * 100).toFixed(0)}%</div>
+          <div class="indicator">速 ${fmtUnit(p.speed)}</div>
+          <div class="indicator">加 ${fmtUnit(p.accel)}</div>
+          <div class="muted" style="grid-column:1 / -1;font-size:11px">触发：${p.reason.join('、')}</div>`;
+            root.appendChild(div);
+        });
+    }
+
+    function drawSparks() {
+        const series = sparkSnapshots[sourceConfig.active] || sparkSnapshots.amazingdata;
+        const ai = series.ai;
+        const nev = series.nev;
+        const recData = series.robot;
+        const mapPoints = (arr) => {
+            const min = Math.min(...arr), max = Math.max(...arr);
+            const span = Math.max(1e-9, max - min);
+            return arr.map((v, i) => `${(i / (arr.length - 1)) * 100},${24 - ((v - min) / span) * 20}`).join(' ');
+        };
+        document.getElementById('line-ai').setAttribute('points', mapPoints(ai));
+        document.getElementById('line-nev').setAttribute('points', mapPoints(nev));
+        const svg = document.getElementById('bars-robot');
+        svg.innerHTML = '';
+        svg.setAttribute('viewBox', '0 0 100 30');
+        const max = Math.max(...recData), bw = 6, gap = 3;
+        recData.forEach((v, i) => {
+            const h = (v / max) * 20;
+            const x = i * (bw + gap) + 2;
+            const y = 24 - h;
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', x);
+            rect.setAttribute('y', y);
+            rect.setAttribute('width', bw);
+            rect.setAttribute('height', h);
+            rect.setAttribute('rx', '1.5');
+            rect.setAttribute('fill', 'url(#grad-bar)');
+            svg.appendChild(rect);
+        });
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        const grad = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+        grad.id = 'grad-bar';
+        grad.setAttribute('x1', '0%');
+        grad.setAttribute('x2', '0%');
+        grad.setAttribute('y1', '100%');
+        grad.setAttribute('y2', '0%');
+        const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        stop1.setAttribute('offset', '0%');
+        stop1.setAttribute('stop-color', '#f97316');
+        stop1.setAttribute('stop-opacity', '0.6');
+        const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        stop2.setAttribute('offset', '100%');
+        stop2.setAttribute('stop-color', '#fb923c');
+        stop2.setAttribute('stop-opacity', '1');
+        grad.appendChild(stop1);
+        grad.appendChild(stop2);
+        defs.appendChild(grad);
+        svg.appendChild(defs);
+        updateKpis();
+    }
+
+    const phaseTexts = {
+        continuous: '阶段：连续竞价',
+        no_trade: '阶段：盘中休市 · 速度降频 · 展示上一次快照',
+        off_day: '阶段：非交易日 · 展示上一交易日收盘数据（陈旧）'
+    };
+
+    function updateHeader() {
+        const activeSource = sourceConfig.sources.find(src => src.key === sourceConfig.active);
+        const fallbackSource = sourceConfig.sources.find(src => src.key !== sourceConfig.active);
+        let message = phaseTexts[currentPhase] || phaseTexts.continuous;
+        if (currentPhase === 'continuous' && activeSource) {
+            message += ` · asOf 14:57:00 · 更新 ${activeSource.lastUpdate}`;
+        }
+        if (activeSource) {
+            message += ` · 数据源 ${activeSource.label.toUpperCase()}`;
+        }
+        if (fallbackSource) {
+            message += ` · 备用 ${fallbackSource.label}`;
+        }
+        document.getElementById('headerSub').textContent = message;
+        const badge = document.getElementById('sourceStatusBadge');
+        if (badge && activeSource) {
+            badge.textContent = `主源：${activeSource.label}`;
+        }
+    }
+
+    function renderSourceStatus() {
+        const refresh = document.getElementById('sourceRefresh');
+        if (refresh) {
+            refresh.textContent = `${sourceConfig.refreshSeconds} 秒`;
+        }
+        const grid = document.getElementById('sourceGrid');
+        grid.innerHTML = '';
+        sourceConfig.sources.forEach(src => {
+            const row = document.createElement('div');
+            row.className = `source-row ${src.role === 'primary' ? 'primary' : 'fallback'}`;
+            row.innerHTML = `
+          <div class="source-topline">
+            <span>${src.role === 'primary' ? '主数据源' : '备用数据源'} · ${src.adapter}</span>
+            <span class="value"><span class="status-dot ${src.status}"></span>${src.label}</span>
+          </div>
+          <div class="source-meta">
+            <span>${src.statusText}</span>
+            <span>最近刷新 ${src.lastUpdate}</span>
+            <span>平均延迟 ${src.latency} ms</span>
+            <span>${src.coverage}</span>
+          </div>`;
+            grid.appendChild(row);
+        });
+        const whitelist = document.getElementById('sourceWhitelist');
+        whitelist.innerHTML = sourceConfig.whitelist.map(name => `<span>${name}</span>`).join('');
+    }
+
+    function setPhase(phase) {
+        currentPhase = phase;
+        updateHeader();
+    }
+
+    function switchSource() {
+        const currentIndex = sourceConfig.sources.findIndex(src => src.key === sourceConfig.active);
+        if (currentIndex === -1) {
+            return;
+        }
+        const nextIndex = (currentIndex + 1) % sourceConfig.sources.length;
+        const now = new Date();
+        sourceConfig.sources.forEach((src, idx) => {
+            if (idx === nextIndex) {
+                src.status = 'online';
+                src.statusText = '已接管 · 缓存写入中';
+                src.lastUpdate = formatTime(now);
+            } else if (idx === currentIndex) {
+                src.status = 'standby';
+                src.statusText = '已转入待命 · 最新快照 ' + formatTime(new Date(now.getTime() - 90 * 1000));
+            } else {
+                src.status = 'standby';
+            }
+        });
+        sourceConfig.active = sourceConfig.sources[nextIndex].key;
+        boardData = cloneList(boardSnapshots[sourceConfig.active]);
+        drivers = cloneList(driverSnapshots[sourceConfig.active]);
+        probing = cloneList(probingSnapshots[sourceConfig.active]);
+        drawSparks();
+        renderBoardTable();
+        renderDrivers();
+        renderProbing();
+        updateKpis();
+        renderSourceStatus();
+        updateHeader();
+    }
+
+    document.querySelectorAll('.tv-btn[data-phase]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tv-btn[data-phase]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    document.getElementById('unitBadge').addEventListener('click', () => {
+        unit = unit === 'wan' ? 'yi' : (unit === 'yi' ? 'raw' : 'wan');
+        renderBoardTable();
+        renderDrivers();
+        renderProbing();
+        updateKpis();
+    });
+
+    document.getElementById('switchSourceBtn').addEventListener('click', () => {
+        switchSource();
+    });
+
+    renderSourceStatus();
+    drawSparks();
+    renderBoardTable();
+    renderDrivers();
+    renderProbing();
+    updateKpis();
+    updateHeader();
+</script>
+
+</body>
+</html>

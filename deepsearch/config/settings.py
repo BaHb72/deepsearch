@@ -8,7 +8,7 @@ DeepSearch 应用程序的主配置类。
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,7 +18,10 @@ from .loader import load_yaml_config
 from .models import (
     AmazingDataConfig,
     AppConfig,
+    MarketDataConfig,
     CloudflareWorkersConfig,
+    DataSourcePrefetchConfig,
+    DataSourcesConfig,
     DatabaseConfig,
     DatabaseConnectionConfigModel,
     DebugConfig,
@@ -58,8 +61,10 @@ class Settings(BaseSettings):
     cloudflare_workers: Optional[CloudflareWorkersConfig] = None  # Workers 代理配置
     notifications: Optional[NotificationsConfig] = None  # 通知推送配置
     data_providers: Optional[DataFeedConfig] = None
-    data_sources: Optional[Dict[str, Any]] = None  # 统一的数据源配置
+    data_sources: Optional[DataSourcesConfig] = None  # 统一的数据源配置
+    market_data: Optional[MarketDataConfig] = None  # 市场数据实时配置
     database_connections: Optional[List[DatabaseConnectionConfigModel]] = None  # �����������б�
+    data_source_prefetch: Optional[DataSourcePrefetchConfig] = None  # 数据源预取调度
 
     @property
     def zeromq(self) -> ZeroMQConfig:
@@ -70,19 +75,20 @@ class Settings(BaseSettings):
     def get_timeseries_config(self) -> Dict[str, Any]:
         """获取时间序列 ZeroMQ 配置。"""
         try:
-            return self.message_bus.get_bus_config("timeseries")
+            config = self.message_bus.get_bus_config("timeseries")
         except ValueError:
             # 如果未配置，返回默认配置
             buses = MessageBusConfig._create_default_buses()
             timeseries_bus = buses.get("timeseries")
             if timeseries_bus is not None:
-                return timeseries_bus.config
+                return cast(Dict[str, Any], timeseries_bus.config)
             return {}
+        return cast(Dict[str, Any], config)
 
     @property
     def log_dir(self) -> Path:
         """获取日志目录路径。"""
-        return LOG_DIR
+        return cast(Path, LOG_DIR)
 
     model_config = SettingsConfigDict(
         populate_by_name=True,
@@ -107,3 +113,4 @@ class Settings(BaseSettings):
             yaml_settings,  # 只使用 YAML 配置
             init_settings,
         )
+

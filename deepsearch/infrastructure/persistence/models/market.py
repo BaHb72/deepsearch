@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from sqlalchemy import JSON, Column, DateTime, Integer, Numeric, String
+from sqlalchemy import BigInteger, JSON, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
 
 from .base import Base
 
@@ -89,4 +89,43 @@ class Market1Min(Base):
         self.turnover = turnover
 
 
-__all__ = ["MarketTick", "Market1Min"]
+class MarketSnapshot(Base):
+    """股票列表等慢路径数据的持久化快照。"""
+
+    __tablename__ = "market_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(
+        String(64),
+        ForeignKey("ingestion_jobs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    batch_id = Column(
+        Integer,
+        ForeignKey("ingestion_batches.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    symbol = Column(String(32), nullable=False, index=True)
+    name = Column(String(64), nullable=False)
+    board = Column(String(64))
+    boards = Column(JSONType)
+    exchange = Column(String(16))
+    market = Column(String(16))
+    security_type = Column(String(32))
+    status = Column(String(32))
+    list_date = Column(String(16))
+    delist_date = Column(String(16))
+    payload = Column(JSONType, nullable=False)
+    snapshot_metadata = Column(JSONType)
+    data_source = Column(String(32), nullable=False, index=True)
+    access_type = Column(String(32), nullable=False)
+    as_of = Column(DateTime(timezone=True), nullable=True, index=True)
+    ingested_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    record_hash = Column(String(64))
+    tags = Column(JSONType)
+    notes = Column(Text)
+
+
+__all__ = ["MarketTick", "Market1Min", "MarketSnapshot"]

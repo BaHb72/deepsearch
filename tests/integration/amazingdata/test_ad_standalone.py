@@ -9,6 +9,8 @@ def test():
     print("AmazingData 独立测试")
     print("=" * 60)
 
+    from helpers import fetch_code_list
+
     # 直接导入测试
     try:
         import AmazingData as ad
@@ -31,9 +33,11 @@ def test():
         # 获取股票列表
         print("\n获取股票列表...")
         try:
-            stocks = ad.BaseData.get_stock_list()
-            if stocks is not None:
+            stocks = fetch_code_list(ad)
+            if not stocks.empty:
                 print(f"[SUCCESS] 获取{len(stocks)}只股票")
+            else:
+                print("[WARNING] 股票列表为空")
         except Exception as e:
             print(f"[ERROR] {e}")
 

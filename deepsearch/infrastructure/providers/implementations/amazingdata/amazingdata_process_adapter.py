@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from types import MappingProxyType
-from typing import Mapping, TypeVar, cast
+from typing import Callable, Mapping, TypeVar, cast
+
+import pandas as pd
 
 from deepsearch.ports.amazingdata_process import (
     AmazingDataLoginRequest,
@@ -14,7 +17,6 @@ from deepsearch.ports.amazingdata_process import (
     ProcessCommand,
     ProcessCommandType,
 )
-
 from .amazingdata_process_proxy import (
     AmazingDataProcessProxy,
     ProxyResponse,
@@ -39,6 +41,11 @@ class AmazingDataProcessAdapter(AmazingDataProcessPort):
 
     def __init__(self, proxy: AmazingDataProcessProxy) -> None:
         self._proxy = proxy
+        self._payload_validators: dict[str, Callable[[object], bool]] = {
+            "BaseData.get_code_info": self._is_code_info_payload,
+            "BaseData.get_code_list": self._is_iterable_payload,
+            "BaseData.get_hist_code_list": self._is_iterable_payload,
+        }
 
     async def ensure_started(self) -> bool:
         if self._proxy.is_running and self._proxy.is_worker_alive():
@@ -54,6 +61,9 @@ class AmazingDataProcessAdapter(AmazingDataProcessPort):
                 *tuple(command.args),
                 request_type=request_type,
                 timeout=command.timeout,
+                alt_methods=tuple(command.alt_methods),
+                alt_args=tuple(command.alt_args),
+                kwargs_patches=tuple(dict(patch) for patch in command.kwargs_patches),
                 **dict(command.kwargs),
             )
 
@@ -64,7 +74,25 @@ class AmazingDataProcessAdapter(AmazingDataProcessPort):
 
         result: TExec | None = None
         if response.success:
-            result = cast(TExec | None, response.result)
+            result_obj = cast(TExec | None, response.result)
+            if result_obj is None:
+                return ProcessCallResult(
+                    success=False,
+                    result=None,
+                    error=f"{command.method}: SDK returned None",
+                    error_type="SDKEmptyResponse",
+                    metadata=metadata,
+                )
+            validator = self._payload_validators.get(command.method)
+            if validator and not validator(result_obj):
+                return ProcessCallResult(
+                    success=False,
+                    result=None,
+                    error=f"{command.method}: unexpected payload type={type(result_obj)}",
+                    error_type="SDKUnexpectedPayload",
+                    metadata=metadata,
+                )
+            result = result_obj
 
         return ProcessCallResult(
             success=response.success,
@@ -73,6 +101,14 @@ class AmazingDataProcessAdapter(AmazingDataProcessPort):
             error_type=response.error_type,
             metadata=metadata,
         )
+
+    @staticmethod
+    def _is_code_info_payload(payload: object) -> bool:
+        if isinstance(payload, MappingABC):
+            return True
+        if isinstance(payload, pd.DataFrame):
+            return True
+        return False
 
     async def login(self, request: AmazingDataLoginRequest) -> ProcessCallResult[int]:
         if request.api_mode:
@@ -126,3 +162,11 @@ class AmazingDataProcessAdapter(AmazingDataProcessPort):
 
     def get_stats(self) -> Mapping[str, object]:
         return self._proxy.get_stats()
+
+    @staticmethod
+    def _is_iterable_payload(payload: object) -> bool:
+        if isinstance(payload, MappingABC):
+            return True
+        if isinstance(payload, SequenceABC) and not isinstance(payload, (str, bytes, bytearray)):
+            return True
+        return False

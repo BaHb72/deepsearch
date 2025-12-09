@@ -318,13 +318,63 @@ class ErrorTracker {
         // 如果是 Redis 相关错误，添加特殊标记
         if (error.response?.data?.detail) {
             const detail = error.response.data.detail
-            if (detail.includes('Redis') || detail.includes('redis') || detail.includes('健康检查')) {
-                errorInfo.category = 'redis'
+            const detailText = this.normalizeDetail(detail)
+
+            if (detailText) {
+                if (
+                    detailText.includes('Redis') ||
+                    detailText.includes('redis') ||
+                    detailText.includes('健康检查')
+                ) {
+                    errorInfo.category = 'redis'
+                }
+                errorInfo.fullError = detailText
+            } else {
                 errorInfo.fullError = detail
             }
         }
 
         this.captureError(errorInfo)
+    }
+
+    /**
+     * Normalize various detail payloads into readable text.
+     */
+    normalizeDetail(detail) {
+        if (detail === null || detail === undefined) {
+            return ''
+        }
+
+        if (typeof detail === 'string') {
+            return detail
+        }
+
+        if (Array.isArray(detail)) {
+            return detail
+                .map((item) => this.normalizeDetail(item))
+                .filter(Boolean)
+                .join('; ')
+        }
+
+        if (typeof detail === 'object') {
+            if (typeof detail.msg === 'string') {
+                return detail.msg
+            }
+
+            if (typeof detail.message === 'string') {
+                return detail.message
+            }
+
+            return Object.entries(detail)
+                .map(([key, value]) => {
+                    const valueText = this.normalizeDetail(value)
+                    return valueText ? `${key}: ${valueText}` : ''
+                })
+                .filter(Boolean)
+                .join(', ')
+        }
+
+        return String(detail)
     }
 
     /**

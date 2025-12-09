@@ -25,7 +25,7 @@ class ProcessCommandType(str, Enum):
 
 @dataclass(slots=True, frozen=True)
 class ProcessCommand(Generic[TResult]):
-    """描述一次 IPC 调用的参数与上下文。"""
+    """IPC 指令封装体。"""
 
     method: str
     args: Sequence[object] = field(default_factory=tuple)
@@ -34,6 +34,24 @@ class ProcessCommand(Generic[TResult]):
     )
     timeout: float = 30.0
     command_type: ProcessCommandType = ProcessCommandType.DATA
+    alt_methods: Sequence[str] = field(default_factory=tuple)
+    alt_args: Sequence[Sequence[object]] = field(default_factory=tuple)
+    kwargs_patches: Sequence[Mapping[str, object]] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "args", tuple(self.args))
+        object.__setattr__(self, "kwargs", MappingProxyType(dict(self.kwargs)))
+        object.__setattr__(self, "alt_methods", tuple(self.alt_methods))
+        object.__setattr__(
+            self,
+            "alt_args",
+            tuple(tuple(arg_seq) for arg_seq in self.alt_args),
+        )
+        if self.kwargs_patches:
+            patches = tuple(MappingProxyType(dict(patch)) for patch in self.kwargs_patches)
+        else:
+            patches = tuple()
+        object.__setattr__(self, "kwargs_patches", patches)
 
 
 @dataclass(slots=True)

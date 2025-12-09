@@ -15,9 +15,10 @@ export { RequestInterceptorManager } from './interceptors'
 export { ApiRegistry, apiRegistry } from './registry'
 
 // 导出便捷方法
-import { apiClient } from './client'
-import { apiRegistry } from './registry'
-import { ApiCategory, HttpMethod } from './types'
+import {apiClient, ApiClient} from './client'
+import {apiRegistry, ApiRegistry} from './registry'
+import {ApiMonitor} from './monitor'
+import {ApiCategory} from './types'
 
 /**
  * 默认导出的 API 实例
@@ -40,7 +41,7 @@ export async function initializeApi(): Promise<void> {
   console.log('🚀 Initializing API layer...')
   
   // 获取实例（会触发初始化）
-  const client = ApiClient.getInstance()
+    ApiClient.getInstance()
   const registry = ApiRegistry.getInstance()
   
   // 打印统计信息

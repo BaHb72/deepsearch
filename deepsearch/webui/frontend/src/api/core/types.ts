@@ -1,3 +1,5 @@
+import type {AxiosResponse, InternalAxiosRequestConfig} from 'axios'
+
 /**
  * API 核心类型定义
  * 统一的数据接口层类型系统
@@ -21,6 +23,20 @@ export enum ApiCategory {
   MONITOR = 'monitor',    // 监控相关
   DATA_SOURCE = 'dataSource' // 数据源管理
 }
+
+export type MetadataValue = string | number | boolean | null | undefined
+
+export type RequestMetadata = {
+  requestId: string
+  startTime: number
+  retryCount?: number
+  dedupeKey?: string
+  cacheKey?: string
+  category?: ApiCategory
+} & Record<string, MetadataValue>
+
+export type RequestMetadataInput = Partial<RequestMetadata>
+
 
 // 错误码标准化
 export enum ApiErrorCode {
@@ -58,7 +74,7 @@ export interface ApiConfig {
   // 元数据
   category?: ApiCategory
   requestId?: string
-  metadata?: Record<string, any>
+  metadata?: RequestMetadataInput
 }
 
 // API 响应接口
@@ -120,7 +136,7 @@ export interface RequestLog {
   
   // 追踪信息
   trace: string[]
-  metadata?: Record<string, any>
+  metadata?: RequestMetadata
 }
 
 // 接口端点定义
@@ -201,13 +217,17 @@ export interface HealthIssue {
 }
 
 // 请求拦截器
-export type RequestInterceptor = (config: ApiConfig) => ApiConfig | Promise<ApiConfig>
+export type RequestInterceptor = (
+    config: InternalAxiosRequestConfig
+) => InternalAxiosRequestConfig | Promise<InternalAxiosRequestConfig>
 
 // 响应拦截器
-export type ResponseInterceptor = (response: ApiResponse) => ApiResponse | Promise<ApiResponse>
+export type ResponseInterceptor = (
+    response: AxiosResponse
+) => AxiosResponse | Promise<AxiosResponse>
 
 // 错误拦截器
-export type ErrorInterceptor = (error: ApiError) => ApiError | Promise<ApiError>
+export type ErrorInterceptor = (error: unknown) => unknown | Promise<unknown>
 
 // 导出类型守卫函数
 export function isApiError(error: any): error is ApiError {

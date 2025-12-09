@@ -57,12 +57,10 @@ def get_miniqmt_provider() -> MiniQMTProvider:
     if _miniqmt_provider is None:
         # 尝试从数据管理器获取
         try:
-            from deepsearch.core.managers.component_manager import ComponentManager
-
-            manager = ComponentManager()
+            from deepsearch.core.runtime.context import get_context
 
             # 获取数据提供者管理器
-            data_manager = manager.get_component("data_provider_manager")
+            data_manager = get_context().get_component("data_provider_manager")
             if isinstance(data_manager, DataProviderManager):
                 provider_candidate = data_manager.get_provider("miniqmt")
                 if isinstance(provider_candidate, MiniQMTProvider):

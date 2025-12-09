@@ -24,11 +24,8 @@ from deepsearch.observability.metrics.collectors.metrics_collector import (
     get_metrics_collector,
 )
 from deepsearch.observability.analyzers.error_analyzer import get_error_analyzer
-from deepsearch.observability.monitoring.data_source_monitor import (
-    DataAccessType,
-    DataSourceType,
-    get_monitor,
-)
+from deepsearch.observability.monitoring.data_source_monitor import get_monitor
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
 class CircuitBreakerState(TypedDict):
     failures: int

@@ -9,20 +9,38 @@ import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Type, Union, TypedDict, NotRequired, cast, Callable, Awaitable
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    NotRequired,
+    Optional,
+    Sequence,
+    Type,
+    TypedDict,
+    Union,
+    cast,
+)
 
 from loguru import logger
 
 from deepsearch.config import get_config
+from deepsearch.domain.market_data import StockListRecord
+from deepsearch.infrastructure.providers.executor import DataSourceExecutor
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
     get_global_pool,
 )
-from deepsearch.infrastructure.providers.interfaces.base import DataSourceType, IDataSource
+from deepsearch.infrastructure.providers.interfaces.base import IDataSource
 from deepsearch.infrastructure.providers.interfaces.runtime import (
     ProviderMessageEnvelope,
     RealtimeCallback,
 )
 from deepsearch.infrastructure.providers.registry import get_registry
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
 SUPPORTED_SOURCE_TYPES = {
     DataSourceType.AMAZINGDATA,
@@ -34,6 +52,7 @@ DEFAULT_SOURCE_PRIORITY = {
     DataSourceType.AKSHARE: 30,
 }
 
+# 注意：用户名需要在前端表单中回显，因此不要加入到敏感字段过滤列表中
 _SENSITIVE_CONFIG_MARKERS = (
     "password",
     "secret",
@@ -44,7 +63,6 @@ _SENSITIVE_CONFIG_MARKERS = (
     "refresh_token",
     "apikey",
     "api_key",
-    "username",
 )
 
 
@@ -104,6 +122,134 @@ def _prune_empty(value: Any) -> Any:
             cleaned_list.append(cleaned_item)
         return cleaned_list
     return value
+
+
+@dataclass(frozen=True)
+class StockListFetchResult:
+    """封装股票列表双写结果，便于上层消费领域对象。"""
+
+    source: str
+    records: tuple[StockListRecord, ...]
+    legacy: tuple[dict[str, Any], ...]
+    mismatch: int = 0
+
+    def as_legacy(self) -> list[dict[str, Any]]:
+        """返回旧结构数据。"""
+
+        return [dict(item) for item in self.legacy]
+
+    def as_records(self) -> tuple[StockListRecord, ...]:
+        """返回领域对象视图。"""
+
+        return self.records
+
+
+def _iter_stock_payload(payload: Any) -> Iterable[Any]:
+    """将 Provider 返回的各种结构展开为统一迭代器。"""
+
+    if payload is None:
+        return ()
+
+    if hasattr(payload, "to_dict") and callable(getattr(payload, "to_dict")):
+        try:
+            as_list = payload.to_dict("records")
+            if isinstance(as_list, list):
+                return as_list
+        except Exception:  # pragma: no cover - DataFrame to_dict 失败
+            return ()
+
+    if isinstance(payload, Mapping):
+        return (dict(payload),)
+
+    if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
+        return payload
+
+    if isinstance(payload, Iterable) and not isinstance(payload, (str, bytes, bytearray)):
+        return list(payload)
+
+    return (payload,)
+
+
+def build_stock_list_result(
+        payload: Any,
+        source: str,
+        *,
+        limit: Optional[int] = None,
+) -> Optional[StockListFetchResult]:
+    """归一化股票列表响应，产出领域与旧结构并存的结果。"""
+
+    if payload is None:
+        return None
+
+    if isinstance(payload, StockListFetchResult):
+        records: Sequence[StockListRecord] = payload.records
+        legacy: Sequence[dict[str, Any]] = payload.legacy
+        if limit is not None and limit > 0:
+            records = records[:limit]
+            legacy = legacy[:limit]
+        mismatch = payload.mismatch or abs(len(records) - len(legacy))
+        return StockListFetchResult(
+            source=source,
+            records=tuple(records),
+            legacy=tuple(dict(item) for item in legacy),
+            mismatch=mismatch,
+        )
+
+    records: list[StockListRecord] = []
+    legacy_entries: list[dict[str, Any]] = []
+    mismatch_extra = 0
+
+    for entry in _iter_stock_payload(payload):
+        if isinstance(entry, StockListRecord):
+            record = entry
+            legacy_map = dict(record.as_mapping())
+            if record.boards:
+                legacy_map.setdefault("board", record.boards[0])
+            records.append(record)
+            legacy_entries.append(legacy_map)
+            continue
+
+        mapping: dict[str, Any] | None = None
+        if isinstance(entry, Mapping):
+            mapping = dict(entry)
+        elif hasattr(entry, "as_mapping") and callable(getattr(entry, "as_mapping")):
+            try:
+                mapping = dict(entry.as_mapping())
+            except Exception:  # pragma: no cover - 非预期对象
+                mapping = None
+
+        if mapping is None:
+            try:
+                mapping = dict(entry)  # type: ignore[arg-type]
+            except Exception:
+                mismatch_extra += 1
+                continue
+
+        record = StockListRecord.from_payload(mapping)
+        if record.symbol:
+            records.append(record)
+        else:
+            mismatch_extra += 1
+
+        if record.boards and "board" not in mapping:
+            mapping.setdefault("board", record.boards[0])
+        legacy_entries.append(mapping)
+
+    if not records and not legacy_entries:
+        return None
+
+    if limit is not None and limit > 0:
+        records = records[:limit]
+        legacy_entries = legacy_entries[:limit]
+
+    mismatch = abs(len(records) - len(legacy_entries)) + mismatch_extra
+
+    return StockListFetchResult(
+        source=source,
+        records=tuple(records),
+        legacy=tuple(dict(item) for item in legacy_entries),
+        mismatch=mismatch,
+    )
 
 
 class SourceStatusEntry(TypedDict, total=False):
@@ -195,7 +341,7 @@ class DataSourceRegistry:
     def set_config(self, source_type: DataSourceType, config: DataSourceConfig):
         """设置数据源配置"""
         if source_type not in SUPPORTED_SOURCE_TYPES:
-            logger.warning("忽略不受支持的数据源配置: %s" % source_type.value)
+            logger.warning("忽略不受支持的数据源配置: {}" % source_type.value)
             return
 
         self._configs[source_type] = config
@@ -224,6 +370,7 @@ class DataSourceManager:
         self.registry = DataSourceRegistry()
         self.providers: Dict[DataSourceType, IDataSource] = {}
         self.initialized = False
+        self._executor = DataSourceExecutor()
         self._provider_names: Dict[DataSourceType, str] = {}
         self._fallback_order: List[DataSourceType] = []
         self._default_source: Optional[DataSourceType] = None
@@ -489,7 +636,17 @@ class DataSourceManager:
         self._fallback_order = []
         self._default_source = None
 
-        data_sources = getattr(self.config, "data_sources", None) or {}
+        raw_data_sources = getattr(self.config, "data_sources", None)
+        if raw_data_sources:
+            if hasattr(raw_data_sources, "model_dump"):
+                data_sources = cast(Dict[str, Any], raw_data_sources.model_dump())
+            elif isinstance(raw_data_sources, dict):
+                data_sources = dict(raw_data_sources)
+            else:
+                data_sources = dict(getattr(raw_data_sources, "__dict__", {}))
+        else:
+            data_sources = {}
+
         if data_sources:
             self._load_data_sources_config(data_sources)
         else:
@@ -510,6 +667,8 @@ class DataSourceManager:
 
         if not self._default_source and self._fallback_order:
             self._default_source = self._fallback_order[0]
+
+        self._update_fallback_order_config()
 
     def _load_data_sources_config(self, data_sources: Dict[str, Any]) -> None:
         """解析 data_sources.providers 配置并注册数据源。"""
@@ -621,6 +780,151 @@ class DataSourceManager:
         akshare_normalized["config"] = akshare_config
         providers_dict["akshare"] = akshare_normalized
 
+    def _update_fallback_order_config(self) -> None:
+        """���� runtime config �е� fallback_order �� default ����"""
+        fallback_values = [item.value for item in self._fallback_order]
+        default_value = self._default_source.value if self._default_source else None
+
+        data_sources_section = getattr(self.config, "data_sources", None)
+        if isinstance(data_sources_section, dict):
+            if fallback_values:
+                data_sources_section["fallback_order"] = fallback_values
+            else:
+                data_sources_section.pop("fallback_order", None)
+            if default_value:
+                data_sources_section["default"] = default_value
+            else:
+                data_sources_section.pop("default", None)
+            return
+
+        if data_sources_section is None:
+            return
+
+        if hasattr(data_sources_section, "fallback_order"):
+            try:
+                data_sources_section.fallback_order = list(fallback_values)
+            except Exception:  # pragma: no cover - ���ͱ����쳣
+                logger.debug("�� runtime config д�� fallback_order ʱ�����쳣", exc_info=True)
+
+        if hasattr(data_sources_section, "default"):
+            try:
+                data_sources_section.default = default_value
+            except Exception:  # pragma: no cover - ���ͱ����쳣
+                logger.debug("�� runtime config д�� default ʱ�����쳣", exc_info=True)
+
+    def _update_provider_snapshot(self, source_type: DataSourceType, config: DataSourceConfig) -> None:
+        """ͬ���� runtime config �е�����Դ������� fallback ���ã�����������ͨ�� UI ����ʾ"""
+        data_sources_section = getattr(self.config, "data_sources", None)
+        fallback_sources_raw = list(config.fallback_sources or [])
+        fallback_sources_str = [item.value if isinstance(item, DataSourceType) else str(item) for item in
+                                fallback_sources_raw]
+        enabled_flag = bool(config.enabled)
+        fallback_enabled_flag = bool(fallback_sources_raw)
+
+        def _apply(entry: Any) -> None:
+            if isinstance(entry, dict):
+                entry["fallback_sources"] = fallback_sources_str
+                entry["fallback_enabled"] = fallback_enabled_flag
+                entry["enabled"] = enabled_flag
+                return
+            if hasattr(entry, "fallback_sources"):
+                try:
+                    entry.fallback_sources = list(fallback_sources_raw)
+                except Exception:
+                    entry.fallback_sources = list(fallback_sources_str)
+            if hasattr(entry, "fallback_enabled"):
+                entry.fallback_enabled = fallback_enabled_flag
+            if hasattr(entry, "enabled"):
+                entry.enabled = enabled_flag
+
+        if isinstance(data_sources_section, dict):
+            providers_section = data_sources_section.setdefault("providers", {})
+            entry = providers_section.setdefault(source_type.value, {})
+            _apply(entry)
+            return
+
+        if data_sources_section is None:
+            return
+
+        providers_attr = getattr(data_sources_section, "providers", None)
+        if providers_attr is None:
+            setattr(data_sources_section, "providers", {source_type.value: {}})
+            providers_attr = getattr(data_sources_section, "providers")
+
+        if isinstance(providers_attr, dict):
+            entry = providers_attr.setdefault(source_type.value, {})
+            _apply(entry)
+        else:
+            existing_entry = getattr(providers_attr, source_type.value, None)
+            if existing_entry is None:
+                try:
+                    setattr(providers_attr, source_type.value, {})
+                    existing_entry = getattr(providers_attr, source_type.value)
+                except Exception:
+                    logger.debug(
+                        "providers �ṹ�����ɱ� dict ���޷��Զ�ͬ���ڴ�� config ������� fallback ���ð�",
+                        exc_info=True,
+                    )
+                    return
+            _apply(existing_entry)
+
+    def _handle_akshare_disabled(self, config: DataSourceConfig) -> None:
+        """���������� AkShare ����ʱ��Ҫ�����߼�"""
+        config.fallback_sources = []
+        config.fallback_enabled = False
+
+        if isinstance(config.config, dict):
+            proxy_cfg = config.config.get("proxy")
+            if isinstance(proxy_cfg, dict):
+                proxy_cfg["enabled"] = False
+            config.config["mode"] = "direct"
+
+        removed = False
+        if DataSourceType.AKSHARE in self._fallback_order:
+            self._fallback_order = [
+                source for source in self._fallback_order if source != DataSourceType.AKSHARE
+            ]
+            removed = True
+
+        if self._default_source == DataSourceType.AKSHARE:
+            self._default_source = self._fallback_order[0] if self._fallback_order else None
+            removed = True
+
+        for other_type, other_config in list(self.registry._configs.items()):
+            if other_type == DataSourceType.AKSHARE:
+                continue
+            if DataSourceType.AKSHARE in other_config.fallback_sources:
+                other_config.fallback_sources = [
+                    source for source in other_config.fallback_sources if source != DataSourceType.AKSHARE
+                ]
+                if not other_config.fallback_sources:
+                    other_config.fallback_enabled = False
+                self._update_provider_snapshot(other_type, other_config)
+                removed = True
+
+        self._update_provider_snapshot(DataSourceType.AKSHARE, config)
+
+        if removed:
+            self._update_fallback_order_config()
+
+    def _handle_akshare_enabled(self, config: DataSourceConfig) -> None:
+        """�������� AkShare ����ʱ���� fallback ��ͬ���߼�"""
+        if DataSourceType.AKSHARE not in self._fallback_order:
+            self._fallback_order.append(DataSourceType.AKSHARE)
+
+        if not self._default_source:
+            self._default_source = self._fallback_order[0]
+
+        if config.fallback_enabled and not config.fallback_sources:
+            config.fallback_sources = [
+                source for source in self._fallback_order if source != DataSourceType.AKSHARE
+            ]
+        elif not config.fallback_enabled:
+            config.fallback_sources = []
+
+        self._update_provider_snapshot(DataSourceType.AKSHARE, config)
+        self._update_fallback_order_config()
+
     def _normalize_type_list(self, values: Any) -> List[DataSourceType]:
         result: List[DataSourceType] = []
         if not values:
@@ -632,6 +936,58 @@ class DataSourceManager:
             if source_type and source_type in SUPPORTED_SOURCE_TYPES and source_type not in result:
                 result.append(source_type)
         return result
+
+    def _coerce_float(
+            self,
+            value: Any,
+            *,
+            default: float,
+            field: str,
+            provider: str,
+    ) -> float:
+        if value is None:
+            return default
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return default
+            try:
+                return float(stripped)
+            except ValueError:
+                pass
+        logger.warning(
+            f"���Դ {provider} �ֶ� {field} ֵ {value!r} ����ת��Ϊ float����ʹ��Ĭ��ֵ {default}"
+        )
+        return default
+
+    def _coerce_int(
+            self,
+            value: Any,
+            *,
+            default: int,
+            field: str,
+            provider: str,
+    ) -> int:
+        if value is None:
+            return default
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return default
+            try:
+                return int(stripped)
+            except ValueError:
+                pass
+        logger.warning(
+            f"���Դ {provider} �ֶ� {field} ֵ {value!r} ����ת��Ϊ int����ʹ��Ĭ��ֵ {default}"
+        )
+        return default
 
     def is_provider_enabled(self, source: Union[str, DataSourceType]) -> bool:
         """判断指定数据源在当前配置中是否启用。"""
@@ -693,8 +1049,13 @@ class DataSourceManager:
         data = self._ensure_dict(normalized)
         enabled = bool(data.get("enabled", True))
         priority = int(data.get("priority", DEFAULT_SOURCE_PRIORITY.get(source_type, 100)))
-        timeout = float(data.get("timeout", 10.0))
-        retry_count = int(data.get("retry_count", 3))
+        timeout = self._coerce_float(data.get("timeout"), default=10.0, field="timeout", provider=provider_name)
+        retry_count = self._coerce_int(
+            data.get("retry_count"),
+            default=3,
+            field="retry_count",
+            provider=provider_name,
+        )
         fallback_enabled = bool(data.get("fallback_enabled", True))
         fallback_sources = self._normalize_type_list(data.get("fallback_sources"))
         if fallback_enabled and not fallback_sources and self._fallback_order:
@@ -1085,7 +1446,9 @@ class DataSourceManager:
                 if source_type is not DataSourceType.AMAZINGDATA:
                     continue
                 provider = self.providers.get(source_type)
-                datasource_id = getattr(provider, "_datasource_id", None) if provider else None
+                if provider is None:
+                    continue
+                datasource_id = getattr(provider, "_datasource_id", None)
                 if not datasource_id:
                     continue
                 pool_entry = processes.get(datasource_id)
@@ -1096,17 +1459,21 @@ class DataSourceManager:
                 if throttle_payload:
                     status_entry["loginThrottle"] = throttle_payload
                 status_entry["pendingLogin"] = bool(pool_entry.get("pending_login", False))
-                for pool_key, status_key in (
-                        ("last_login_started_at", "lastLoginStartedAt"),
-                        ("last_login_completed_at", "lastLoginCompletedAt"),
-                        ("last_login_success_at", "lastLoginSuccessAt"),
-                        ("last_login_error_at", "lastLoginErrorAt"),
-                ):
-                    value = pool_entry.get(pool_key)
-                    if value is not None:
-                        status_entry[status_key] = value
-                if pool_entry.get("last_login_error_reason") is not None:
-                    status_entry["lastLoginErrorReason"] = pool_entry.get("last_login_error_reason")
+                value_started = pool_entry.get("last_login_started_at")
+                if value_started is not None:
+                    status_entry["lastLoginStartedAt"] = value_started
+                value_completed = pool_entry.get("last_login_completed_at")
+                if value_completed is not None:
+                    status_entry["lastLoginCompletedAt"] = value_completed
+                value_success = pool_entry.get("last_login_success_at")
+                if value_success is not None:
+                    status_entry["lastLoginSuccessAt"] = value_success
+                value_error_time = pool_entry.get("last_login_error_at")
+                if value_error_time is not None:
+                    status_entry["lastLoginErrorAt"] = value_error_time
+                value_error_reason = pool_entry.get("last_login_error_reason")
+                if value_error_reason is not None:
+                    status_entry["lastLoginErrorReason"] = value_error_reason
 
         for source_type in SUPPORTED_SOURCE_TYPES:
             status = status_snapshot.get(source_type, {})
@@ -1167,37 +1534,71 @@ class DataSourceManager:
             "available_count": available_count,
         }
 
-    async def get_stock_list(self, limit: Optional[int] = None, **kwargs) -> Optional[List[Dict[str, Any]]]:
-        """
-        获取股票列表
+    async def get_stock_list(
+            self,
+            limit: Optional[int] = None,
+            **kwargs,
+    ) -> Optional[StockListFetchResult]:
+        """获取股票列表，同时返回领域结构与旧结构。"""
 
-        Args:
-            limit: 限制返回数量
-            **kwargs: 其他参数
-
-        Returns:
-            股票列表
-        """
         if not self.initialized:
             await self.initialize()
 
-        # 尝试每个可用的数据源
         for source_type in self.providers:
+            provider = self.providers.get(source_type)
+            if not provider:
+                continue
+
+            source_label = (
+                source_type.value if hasattr(source_type, "value") else str(source_type)
+            )
+
             try:
-                provider = self.providers.get(source_type)
-                if provider and hasattr(provider, "get_stock_list"):
-                    method = getattr(provider, "get_stock_list")
-                    if callable(method):
-                        bound_method = cast(
-                            Callable[..., Awaitable[Optional[List[Dict[str, Any]]]]],
-                            method,
+                payload: Optional[Any] = None
+                get_records = getattr(provider, "get_stock_list_records", None)
+                if callable(get_records):
+                    maybe_records = get_records(limit=limit, **kwargs)
+                    payload = (
+                        await maybe_records
+                        if inspect.isawaitable(maybe_records)
+                        else maybe_records
+                    )
+                    result = build_stock_list_result(payload, source_label, limit=limit)
+                    if result and (result.records or result.legacy):
+                        logger.info(
+                            "从%s获取股票列表成功 records=%d legacy=%d",
+                            source_label,
+                            len(result.records),
+                            len(result.legacy),
                         )
-                        result = await bound_method(limit=limit, **kwargs)
-                        if result:
-                            logger.info(f"从{source_type}获取股票列表成功")
-                            return result
-            except Exception as e:
-                logger.error(f"从{source_type}获取股票列表失败: {e}")
+                        if result.mismatch:
+                            logger.warning(
+                                "股票列表双写存在差异 source=%s mismatch=%d",
+                                source_label,
+                                result.mismatch,
+                            )
+                        return result
+
+                get_list = getattr(provider, "get_stock_list", None)
+                if callable(get_list):
+                    payload = await get_list(limit=limit, **kwargs)
+                    result = build_stock_list_result(payload, source_label, limit=limit)
+                    if result and (result.records or result.legacy):
+                        logger.info(
+                            "从%s获取股票列表成功 records=%d legacy=%d",
+                            source_label,
+                            len(result.records),
+                            len(result.legacy),
+                        )
+                        if result.mismatch:
+                            logger.warning(
+                                "股票列表双写存在差异 source=%s mismatch=%d",
+                                source_label,
+                                result.mismatch,
+                            )
+                        return result
+            except Exception as error:
+                logger.error(f"从{source_label}获取股票列表失败: {error}")
                 continue
 
         logger.error("所有数据源均无法获取股票列表")
@@ -1527,62 +1928,38 @@ class DataSourceManager:
 
         return self.providers.get(source_type)
 
-    async def execute_with_fallback(self, method_name: str, *args, **kwargs) -> Optional[Any]:
+    async def execute_with_fallback(
+        self,
+        method_name: str,
+        *args,
+        access_type: DataAccessType = DataAccessType.REALTIME_QUOTE,
+        monitor_context: Optional[Dict[str, Any]] = None,
+        result_validator: Optional[Callable[[Any], bool]] = None,
+        require_result: bool = False,
+        **kwargs,
+    ) -> Optional[Any]:
         """
-        执行方法，带故障转移
-
-        Args:
-            method_name: 方法名
-            *args: 位置参数
-            **kwargs: 关键字参数
-
-        Returns:
-            执行结果
+        执行方法，带故障转移并自动打点。
         """
+
         if not self.initialized:
             await self.initialize()
 
-        # 尝试每个可用的数据源
-        for source_type in self.get_available_sources():
-            try:
-                provider = self.providers.get(source_type)
-                if provider and hasattr(provider, method_name):
-                    method = getattr(provider, method_name)
-                    if callable(method):
-                        result = method(*args, **kwargs)
-                        if asyncio.iscoroutine(result):
-                            result = await result
-                        if result is not None:
-                            if isinstance(result, dict):
-                                if result.get("error"):
-                                    logger.warning(
-                                        f"通过{source_type}执行{method_name}返回错误: {result.get('error')}"
-                                    )
-                                    continue
-                                if result.get("success") is False:
-                                    logger.warning(f"通过{source_type}执行{method_name}未成功")
-                                    continue
-                                code_value = result.get("code")
-                                if isinstance(code_value, int) and code_value not in (0, None):
-                                    logger.warning(
-                                        f"通过{source_type}执行{method_name}返回异常状态码: {code_value}"
-                                    )
-                                    continue
-                                if method_name in {
-                                    "get_stock_info",
-                                    "get_realtime_quote",
-                                } and not result.get("symbol"):
-                                    logger.warning(f"通过{source_type}执行{method_name}返回空标的")
-                                    continue
-                            logger.info(f"通过{source_type}执行{method_name}成功")
-                            self._last_success_source = source_type
-                            return result
-            except Exception as e:
-                logger.error(f"通过{source_type}执行{method_name}失败: {e}")
-                continue
-
-        logger.error(f"所有数据源均无法执行{method_name}")
-        return None
+        result, source = await self._executor.execute(
+            providers=self.providers,
+            source_order=self.get_available_sources(),
+            method_name=method_name,
+            args=args,
+            kwargs=kwargs,
+            access_type=access_type,
+            monitor_symbol=(monitor_context or {}).get("symbol"),
+            monitor_module=(monitor_context or {}).get("module"),
+            validator=result_validator,
+            require_result=require_result,
+        )
+        if source:
+            self._last_success_source = source
+        return result
 
     async def health_check(self) -> Dict[str, Any]:
         """
@@ -1831,6 +2208,12 @@ class DataSourceManager:
             return True
 
         config.enabled = True
+        if source_type == DataSourceType.AKSHARE:
+            self._handle_akshare_enabled(config)
+        else:
+            self._update_provider_snapshot(source_type, config)
+            self._update_fallback_order_config()
+
         if reinitialize and self.initialized:
             self.initialized = False
 
@@ -1867,6 +2250,11 @@ class DataSourceManager:
             return True
 
         config.enabled = False
+        if source_type == DataSourceType.AKSHARE:
+            self._handle_akshare_disabled(config)
+        else:
+            self._update_provider_snapshot(source_type, config)
+            self._update_fallback_order_config()
 
         provider = self.providers.pop(source_type, None)
         if provider and hasattr(provider, "close"):

@@ -138,7 +138,7 @@ export const realtimeAPI = {
   /**
    * WebSocket连接地址
    */
-  wsUrl: process.env.NODE_ENV === 'production'
+  wsUrl: import.meta.env.PROD
     ? `wss://${window.location.host}${API_PREFIX}/realtime/ws`
     : `ws://localhost:8000${API_PREFIX}/realtime/ws`
 }

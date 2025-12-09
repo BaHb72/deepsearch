@@ -5,7 +5,7 @@
 
 import json
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Mapping, Optional
 from urllib.parse import urlparse
 
 import aiohttp
@@ -44,6 +44,20 @@ HAS_PANDAS = pd is not None
 
 class ProxyDataProvider:
     """通过代理获取真实股票数据"""
+
+    _MARKET_FILTERS: Dict[str, str] = {
+        "all": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
+        "sh": "m:1+t:2",
+        "sz": "m:0+t:6",
+        "bj": "m:0+t:81+s:2048",
+        "cy": "m:0+t:80",
+        "kc": "m:1+t:23",
+        "new": "m:0+t:6+f:8,m:1+t:2+f:8",
+    }
+    _SPOT_FIELDS = (
+        "f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,"
+        "f15,f16,f17,f18,f20,f21,f23,f62,f84,f128,f136,f140,f141,f152"
+    )
 
     def __init__(
         self,
@@ -109,7 +123,7 @@ class ProxyDataProvider:
         """初始化"""
         if self._using_placeholder_worker:
             logger.warning(
-                "Cloudflare worker URL is placeholder (%s); skip health check and mark as unavailable",
+                "Cloudflare worker URL is placeholder ({}); skip health check and mark as unavailable",
                 self.worker_url,
             )
             return False
@@ -578,6 +592,149 @@ class ProxyDataProvider:
         except Exception as e:
             logger.error(f"CloudFlare get_stock_list失败: {e}")
             return None
+
+    async def fetch_market_spot(
+        self,
+        *,
+        market: str = "all",
+        limit: int = 100,
+        sort_field: str = "f3",
+        sort_order: str = "desc",
+    ) -> Dict[str, Any]:
+        """通过 Cloudflare Worker 获取市场行情快照。"""
+
+        cache_key = f"spot:{market}:{limit}:{sort_field}:{sort_order}"
+        ttl = self._cache_ttl.get("realtime", 5)
+        cached = self._cache.get(cache_key)
+        if cached:
+            cached_time, cached_payload = cached
+            if time.time() - cached_time < ttl:
+                return cached_payload
+
+        fs = self._MARKET_FILTERS.get(market.lower(), self._MARKET_FILTERS["all"])
+        sort_flag = "1" if sort_order.lower() != "asc" else "0"
+        limit = max(1, min(limit, 400))
+        page_size = min(limit, 200)
+        url = f"{self.worker_url}/proxy"
+        target = "https://82.push2.eastmoney.com/api/qt/clist/get"
+
+        aggregated: List[Dict[str, Any]] = []
+        total_records: Optional[int] = None
+        page = 1
+
+        while len(aggregated) < limit:
+            current_page_size = min(page_size, limit - len(aggregated))
+            params = {
+                "pn": str(page),
+                "pz": str(current_page_size),
+                "po": sort_flag,
+                "np": "1",
+                "fltt": "2",
+                "invt": "2",
+                "fid": sort_field,
+                "fs": fs,
+                "fields": self._SPOT_FIELDS,
+                "_": str(int(time.time() * 1000)),
+            }
+            query_string = "&".join(f"{k}={v}" for k, v in params.items())
+            target_with_params = f"{target}?{query_string}"
+
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        url,
+                        params={"url": target_with_params},
+                        timeout=self._make_timeout(),
+                    ) as response:
+                        if response.status != 200:
+                            logger.warning("行情接口返回非200: status={}", response.status)
+                            break
+                        payload = await response.json()
+            except Exception as exc:
+                logger.error("调用 Cloudflare Worker 获取行情失败: {}", exc)
+                break
+
+            data_section = (payload or {}).get("data") or {}
+            if total_records is None:
+                total_records = data_section.get("total")
+            diff = data_section.get("diff") or []
+            if not diff:
+                break
+
+            for raw in diff:
+                normalized = self._normalize_spot_item(raw, market)
+                if normalized:
+                    aggregated.append(normalized)
+                    if len(aggregated) >= limit:
+                        break
+
+            if len(diff) < current_page_size:
+                break
+            page += 1
+
+        result = {
+            "items": aggregated,
+            "total": total_records if total_records is not None else len(aggregated),
+            "source": "cloudflare",
+        }
+        self._cache[cache_key] = (time.time(), result)
+        return result
+
+    @staticmethod
+    def _safe_number(value: Any) -> float | None:
+        if value in (None, "", "-", "--"):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _map_exchange(value: Any) -> Optional[str]:
+        mapping = {"1": "SH", "0": "SZ", "3": "BJ"}
+        if value is None:
+            return None
+        return mapping.get(str(value))
+
+    def _normalize_spot_item(
+        self,
+        payload: Mapping[str, Any],
+        market: str,
+    ) -> Optional[Dict[str, Any]]:
+        code = str(payload.get("f12") or "").strip()
+        if not code:
+            return None
+
+        entry = {
+            "symbol": code,
+            "name": payload.get("f14") or "",
+            "代码": code,
+            "名称": payload.get("f14") or "",
+            "最新价": self._safe_number(payload.get("f2")),
+            "涨跌幅": self._safe_number(payload.get("f3")),
+            "涨跌额": self._safe_number(payload.get("f4")),
+            "成交量": self._safe_number(payload.get("f5")),
+            "成交额": self._safe_number(payload.get("f6")),
+            "振幅": self._safe_number(payload.get("f7")),
+            "换手率": self._safe_number(payload.get("f8")),
+            "市盈率": self._safe_number(payload.get("f9")),
+            "量比": self._safe_number(payload.get("f10")),
+            "最高": self._safe_number(payload.get("f15")),
+            "最低": self._safe_number(payload.get("f16")),
+            "今开": self._safe_number(payload.get("f17")),
+            "昨收": self._safe_number(payload.get("f18")),
+            "总市值": self._safe_number(payload.get("f20")),
+            "流通市值": self._safe_number(payload.get("f21")),
+            "市净率": self._safe_number(payload.get("f23")),
+            "净流入": self._safe_number(payload.get("f62")),
+            "更新时间": payload.get("f84") or "",
+            "data_source": "cloudflare",
+            "market": market,
+            "exchange": self._map_exchange(payload.get("f13")),
+        }
+        return entry
+
+
 
     async def fetch_stock_list(self) -> list:
         """

@@ -1,0 +1,243 @@
+openapi: 3.0.3
+info:
+  title: DeepSearch Market Insight API (AmazingData-only, RT-first)
+  version: "v4"
+servers:
+  - url: https://api.deepsearch.local
+paths:
+  /api/market/live/strength:
+    get:
+      summary: Real-time market/board capital strength & speed
+      parameters:
+        - in: query
+          name: windows
+          schema: { type: string, example: "1,5,15" }
+        - in: query
+          name: boards
+          schema: { type: string, example: "main,chi,star" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CapitalPulseEntry"
+  /api/market/live/auction-quality:
+    get:
+      summary: Auction (9:15–9:25) quality metrics by board
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuctionOverview"
+  /api/market/live/order-imbalance:
+    get:
+      summary: Order book imbalance / impact / trade-momentum
+      parameters:
+        - in: query
+          name: window
+          schema: { type: string, example: "1m" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrderImbalanceEntry"
+  /api/market/live/limit-strength:
+    get:
+      summary: Limit-up lock strength and stability
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LimitStrengthEntry"
+  /api/market/live/etf-temp:
+    get:
+      summary: ETF premium & speed
+      parameters:
+        - in: query
+          name: metrics
+          schema: { type: string, example: "premium,speed" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ETFTempEntry"
+  /api/market/live/external-overlay:
+    get:
+      summary: (Optional) External assets overlay to A-share industries
+      parameters:
+        - in: query
+          name: assets
+          schema: { type: string, example: "AU,SC,CU" }
+        - in: query
+          name: window
+          schema: { type: string, example: "15m" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExternalOverlayEntry"
+  /api/market/margin/summary:
+    get:
+      summary: T-1 market margin summary
+      parameters:
+        - in: query
+          name: date
+          schema: { type: string, example: "20250115" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarginSummary"
+  /api/market/margin/detail:
+    get:
+      summary: T-1 margin detail by stocks
+      parameters:
+        - in: query
+          name: codes
+          schema: { type: string, example: "SH600000,SZ000001" }
+        - in: query
+          name: date
+          schema: { type: string, example: "20250115" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: "#/components/schemas/MarginDetail"
+  /api/market/supply:
+    get:
+      summary: Supply/constraints events (unlock/pledge/div/right issue)
+      parameters:
+        - in: query
+          name: start
+          schema: { type: string, example: "20250101" }
+        - in: query
+          name: end
+          schema: { type: string, example: "20250331" }
+      responses:
+        "200":
+          description: OK
+  /api/market/fundamental/style-preference:
+    get:
+      summary: Style/quality preference derived from financials & earnings
+      parameters:
+        - in: query
+          name: date
+          schema: { type: string, example: "20250115" }
+      responses:
+        "200":
+          description: OK
+components:
+  schemas:
+    CapitalPulseEntry:
+      type: object
+      properties:
+        board: { type: string, example: "main|chi|star" }
+        window: { type: string, example: "1m" }
+        amount_total: { type: number }
+        speed_per_min: { type: number }
+        accel_per_min2: { type: number }
+        ts: { type: string }
+        data_source: { type: string, example: "amazingdata" }
+        calc: { type: string, example: "none" }
+    AuctionOverview:
+      type: object
+      properties:
+        board: { type: string }
+        amount_acc: { type: number }
+        volume_acc: { type: number }
+        speed_per_min: { type: number }
+        price_stability: { type: number }
+        ts: { type: string }
+        data_source: { type: string, example: "amazingdata" }
+    OrderImbalanceEntry:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        obi: { type: number }
+        eis: { type: number }
+        ntm: { type: number }
+        ts: { type: string }
+        data_source: { type: string, example: "amazingdata" }
+    LimitStrengthEntry:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        lock_amount: { type: number }
+        hold_secs: { type: number }
+        stability: { type: number }
+        ts: { type: string }
+        data_source: { type: string, example: "amazingdata" }
+    ETFTempEntry:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        premium: { type: number }
+        amount: { type: number }
+        speed_per_min: { type: number }
+        ts: { type: string }
+        data_source: { type: string, example: "amazingdata" }
+    ExternalOverlayEntry:
+      type: object
+      properties:
+        asset: { type: string, example: "AU" }
+        industry: { type: string, example: "gold" }
+        corr: { type: number }
+        lag: { type: integer, description: "minutes" }
+        strength: { type: number }
+        ts: { type: string }
+        data_source: { type: string, example: "amazingdata" }
+    MarginSummary:
+      type: object
+      properties:
+        trade_date: { type: string }
+        financing_balance: { type: number }
+        financing_buy: { type: number }
+        financing_repay: { type: number }
+        lending_balance: { type: number }
+        short_sold_volume: { type: number }
+        total_balance: { type: number }
+        data_source: { type: string, example: "amazingdata" }
+    MarginDetail:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        trade_date: { type: string }
+        financing_balance: { type: number }
+        financing_buy: { type: number }
+        financing_repay: { type: number }
+        lending_balance: { type: number }
+        short_sold_volume: { type: number }
+        lending_balance_vol: { type: number }
+        total_balance: { type: number }
+        data_source: { type: string, example: "amazingdata" }

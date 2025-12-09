@@ -11,10 +11,12 @@ from typing import Any, Dict, Final, cast
 import yaml
 from fastapi import APIRouter, HTTPException
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from deepsearch.config import Settings, get_config, reload_config
+from deepsearch.config.models.log import LogConfig as LogConfigModel
 from deepsearch.constants import YAML_ENCODING
+from deepsearch.observability.logger import logger_manager
 
 # Windows 兼容性：设置事件循环策略
 if sys.platform == "win32":
@@ -23,6 +25,48 @@ if sys.platform == "win32":
 router = APIRouter()
 
 MASKED_SECRET: Final[str] = "***"  # nosec B105 - UI 脱敏显示占位符
+
+
+def _serialize_log_config(config: LogConfigModel) -> Dict[str, Any]:
+    """将 LogConfig 转换为可序列化的字典。"""
+    return config.model_dump()
+
+
+@router.get("/log")
+async def get_log_configuration() -> Dict[str, Any]:
+    """获取当前日志配置。"""
+    try:
+        config = get_config()
+        if config is None or config.log is None:
+            raise HTTPException(status_code=500, detail="日志配置未初始化")
+        return _serialize_log_config(config.log)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"获取日志配置失败：{exc}")
+        raise HTTPException(status_code=500, detail=f"获取日志配置失败：{exc}") from exc
+
+
+@router.post("/log")
+async def update_log_configuration(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """更新日志配置并刷新日志系统。"""
+    try:
+        log_config = LogConfigModel.model_validate(payload)
+    except ValidationError as exc:
+        logger.warning("日志配置验证失败：{}", exc)
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+    save_result = await save_config({"log": log_config.model_dump()})
+    try:
+        logger_manager.stop()
+        logger_manager.start()
+    except Exception as exc:  # pragma: no cover - 仅记录刷新失败
+        logger.warning(f"刷新日志系统失败：{exc}")
+        warnings = save_result.setdefault("warnings", [])
+        warnings.append(f"日志配置已写入，但运行时刷新失败：{exc}")
+
+    save_result.setdefault("log", _serialize_log_config(log_config))
+    return save_result
 
 
 def parse_database_error(error_str: str, db_type: str = "postgresql") -> str:

@@ -4,7 +4,9 @@ DeepSearch 命令行接口
 提供统一的命令行工具来管理和运行 DeepSearch 系统。
 """
 
+import asyncio
 import json
+import os
 import socket
 import sys
 import time
@@ -167,6 +169,53 @@ def check_ports():
     from deepsearch.utils.system.port_checker import check_and_report_ports
 
     check_and_report_ports()
+
+
+
+@cli.command(name="check-realtime")
+@click.option("--env", type=click.Choice(["dev", "test", "prod"]), help="指定 settings.<env>.yaml")
+@click.option("--config", type=click.Path(exists=True), help="指定设置文件")
+def check_realtime(env: str | None, config: str | None) -> None:
+    """检测实时数据源 orchestrator 失效点"""
+
+    if env:
+        os.environ["APP__ENV"] = env
+
+    if config:
+        from deepsearch.config import config_manager
+
+        config_manager.load(config)
+
+    from deepsearch.application.market_data import RealtimeDataOrchestrator
+    from deepsearch.config import get_config
+
+    settings = get_config()
+    orchestrator = RealtimeDataOrchestrator(settings)
+
+    async def _run_probe() -> dict[str, dict[str, object]]:
+        try:
+            return await orchestrator.probe_adapters()
+        finally:
+            await orchestrator.shutdown()
+
+    results = asyncio.run(_run_probe())
+    click.echo("Realtime adapter status:")
+    ok = True
+    for name, info in results.items():
+        status = info.get("status", "unknown")
+        timestamp = info.get("timestamp")
+        detail = info.get("error")
+        line = f" - [{status}] {name}"
+        if timestamp:
+            line += f" @ {timestamp}"
+        if detail:
+            line += f" | {detail}"
+        click.echo(line)
+        if status != "healthy":
+            ok = False
+
+    if not ok:
+        raise SystemExit(1)
 
 
 @cli.command(name="check-amazingdata")

@@ -1,4 +1,4 @@
-import type { JsonObject } from './common'
+import type {JsonObject} from './common'
 
 /**
  * 系统配置相关的类型定义
@@ -113,4 +113,29 @@ export interface DatabaseFormProps {
 export interface RateLimitEditorProps {
   value: number
   onChange: (value: number) => void
+}
+
+export interface LogArchiveSettings {
+    enabled: boolean
+    format: string
+    directory: string
+    archive_after_days: number
+    purge_after_days?: number | null
+}
+
+export interface ModuleLogSettings {
+    enabled: boolean
+    directory: string
+    max_depth: number
+    rotation?: string | null
+    retention_days?: number | null
+}
+
+export interface LogSettings {
+    level: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL'
+    rotation: string
+    retention_days: number
+    enable_json: boolean
+    archive: LogArchiveSettings
+    modules: ModuleLogSettings
 }

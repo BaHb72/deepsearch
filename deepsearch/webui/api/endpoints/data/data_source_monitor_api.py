@@ -12,12 +12,12 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-from deepsearch.infrastructure.providers.unified_proxy import get_data_proxy
-from deepsearch.observability.monitoring.data_source_monitor import (
-    DataAccessType,
-    DataSourceType,
-    get_monitor,
+from deepsearch.infrastructure.providers.managers.data_source_manager import (
+    StockListFetchResult,
 )
+from deepsearch.infrastructure.providers.unified_proxy import get_data_proxy
+from deepsearch.observability.monitoring.data_source_monitor import get_monitor
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
 router = APIRouter(prefix="/api/monitor/datasource", tags=["data_source_monitor"])
 
@@ -349,7 +349,18 @@ async def test_data_access(
             stock_list = await proxy.get_stock_list(prefer_source=prefer_source, module="test_api")
             list_success = True
             list_error = None
-            list_count = len(stock_list)
+            if isinstance(stock_list, StockListFetchResult):
+                list_count = len(stock_list.records) or len(stock_list.legacy)
+                if stock_list.mismatch:
+                    logger.warning(
+                        "ͳһ���ݴ���˫д����� stock_list source=%s mismatch=%d",
+                        stock_list.source,
+                        stock_list.mismatch,
+                    )
+            elif stock_list:
+                list_count = len(stock_list)
+            else:
+                list_count = 0
         except Exception as e:
             list_success = False
             list_error = str(e)

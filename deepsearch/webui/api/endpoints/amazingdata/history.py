@@ -3,13 +3,13 @@ AmazingData 历史行情 API 模块
 覆盖历史快照与 K 线查询接口
 """
 from collections.abc import Mapping
-
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
 import pandas as pd
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from deepsearch.infrastructure.providers.implementations.amazingdata import SnapshotAlignPolicy
 from .base import (
     JSONDict,
     dataframe_to_dict,
@@ -26,9 +26,12 @@ class QuerySnapshotRequest(BaseModel):
     """历史快照查询参数"""
 
     code_list: List[str] = Field(..., description="证券代码列表")
-    begin_date: int = Field(..., description="起始日期 YYYYMMDD")
+    begin_date: int = Field(..., description="开始日期 YYYYMMDD")
     end_date: int = Field(..., description="结束日期 YYYYMMDD")
-
+    align_policy: SnapshotAlignPolicy = Field(
+        default=SnapshotAlignPolicy.NEAREST_PREV,
+        description="对齐策略：nearest_prev/strict/passthrough",
+    )
 
 class QueryKlineRequest(BaseModel):
     """历史 K 线查询参数"""
@@ -71,6 +74,7 @@ async def query_snapshot(request: QuerySnapshotRequest) -> JSONDict:
             code_list=request.code_list,
             begin_date=request.begin_date,
             end_date=request.end_date,
+            align_policy=request.align_policy,
         )
         filtered = _filter_history_mapping(raw, request.begin_date, request.end_date)
         return format_response(

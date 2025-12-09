@@ -12,7 +12,7 @@ from typing import Dict, List, MutableMapping, TypeVar
 
 from loguru import logger
 
-from deepsearch.infrastructure.providers.interfaces.base import DataSourceType
+from deepsearch.ports.data_sources import DataSourceType
 
 
 EnumT = TypeVar("EnumT", bound=Enum)

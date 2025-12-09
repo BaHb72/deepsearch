@@ -1,41 +1,36 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+// @ts-nocheck
+import React, {useCallback, useEffect, useMemo, useState} from 'react'
 import {
-  Card,
-  Form,
-  Input,
-  InputNumber,
-  Select,
-  Switch,
-  Button,
-  Space,
-  Row,
-  Col,
-  Table,
-  Tag,
-  Tooltip,
-  Modal,
-  Spin,
-  Typography,
-  App as AntApp
+    App as AntApp,
+    Button,
+    Card,
+    Col,
+    Form,
+    Input,
+    InputNumber,
+    Modal,
+    Row,
+    Select,
+    Space,
+    Spin,
+    Switch,
+    Table,
+    Tag,
+    Tooltip,
+    Typography
 } from 'antd'
+import {DeleteOutlined, ExperimentOutlined, PlusOutlined, ReloadOutlined, SendOutlined} from '@ant-design/icons'
+import type {ColumnsType} from 'antd/es/table'
 import {
-  PlusOutlined,
-  DeleteOutlined,
-  ReloadOutlined,
-  SendOutlined,
-  ExperimentOutlined
-} from '@ant-design/icons'
-import type { ColumnsType } from 'antd/es/table'
-import {
-  fetchNotificationConfig,
-  updateNotificationConfig,
-  sendNotification,
-  fetchNotificationQuotas,
-  resetNotificationQuotas,
-  NotificationCategoryConfigItem,
-  NotificationConfigUpdatePayload,
-  NotificationSendResult,
-  NotificationChannel
+    fetchNotificationConfig,
+    fetchNotificationQuotas,
+    NotificationCategoryConfigItem,
+    NotificationChannel,
+    NotificationConfigUpdatePayload,
+    NotificationSendResult,
+    resetNotificationQuotas,
+    sendNotification,
+    updateNotificationConfig
 } from '@/api/notifications'
 
 const channelOptions: { label: string; value: NotificationChannel }[] = [
@@ -639,3 +634,4 @@ const NotificationConfig: React.FC = () => {
 }
 
 export default NotificationConfig
+

@@ -19,7 +19,7 @@ from typing import Any, ClassVar, Dict, List, Optional, TypedDict, cast
 
 from loguru import logger
 
-from deepsearch.observability.monitoring.data_source_monitor import DataSourceType
+from deepsearch.ports.data_sources import DataSourceType
 
 class OperationType(Enum):
     """操作类型枚举"""

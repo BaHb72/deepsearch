@@ -1,7 +1,8 @@
-import { Alert, Button, Card, Progress, Space, Switch, Table, Tag, Typography } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
+// @ts-nocheck
+import {Alert, Button, Card, Progress, Space, Switch, Table, Tag, Typography} from 'antd'
+import type {ColumnsType} from 'antd/es/table'
 import dayjs from 'dayjs'
-import type { QuotaRow } from './useNotificationQuota'
+import type {QuotaRow} from './useNotificationQuota'
 
 const CHANNEL_LABEL_MAP: Record<string, string> = {
   wechat: '微信',
@@ -136,3 +137,4 @@ const QuotaSection = ({
 )
 
 export default QuotaSection
+

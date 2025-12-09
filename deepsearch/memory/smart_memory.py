@@ -22,6 +22,8 @@ from typing import Any, Callable, ClassVar, Optional, TypedDict, cast
 import psutil
 from loguru import logger
 
+from deepsearch.config import get_config
+
 HAS_RESOURCE = importlib.util.find_spec("resource") is not None
 
 IS_WINDOWS = sys.platform.startswith("win")
@@ -360,12 +362,14 @@ class SmartMemoryManager:
             self.monitor_interval: int = 10  # 秒
 
             # 自动清理设置
+            self.auto_cleanup: bool = False
             try:
-                from deepsearch.config import settings
-
-                self.auto_cleanup: bool = settings.app.env == "production"
-            except ImportError:
-                self.auto_cleanup = False
+                config = get_config()
+                env = getattr(getattr(config, "app", None), "env", None)
+                if isinstance(env, str):
+                    self.auto_cleanup = env.lower() == "production"
+            except Exception as exc:  # pragma: no cover - 配置异常仅记录日志
+                logger.debug(f"读取配置失败，自动清理默认关闭: {exc}")
             self.last_cleanup: datetime = datetime.now()
             self.cleanup_interval: int = 300  # 5分钟
 

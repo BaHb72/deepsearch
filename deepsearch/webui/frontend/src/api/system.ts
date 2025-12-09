@@ -10,6 +10,35 @@ type ApiEnvelope<T> = {
   data: T;
 };
 
+export interface ProviderStatusDetails {
+    connected: boolean;
+    available?: boolean;
+    details?: Record<string, any>;
+}
+
+export interface BoardStatus {
+    ready: boolean;
+    count: number;
+    sample?: string[];
+}
+
+export interface RuntimeStatus {
+    pipeline: string;
+    runner: string;
+}
+
+export interface CacheStatus {
+    available: boolean;
+}
+
+export interface MarketDataStatus {
+    ready: boolean;
+    provider: ProviderStatusDetails;
+    boards: BoardStatus;
+    runtime: RuntimeStatus;
+    cache: CacheStatus;
+}
+
 function unwrapResponse<T>(response: unknown): T | null {
   if (response == null) {
     return null;
@@ -42,6 +71,8 @@ export interface SystemInfo {
   timestamp: number;
   status?: 'running' | 'stopped' | string;
   updated_at?: string;
+    ready?: boolean;
+    market_data?: MarketDataStatus;
   engine?: {
     running: boolean;
     uptime: number;
@@ -91,60 +122,86 @@ export interface SystemHealth {
   };
 }
 
-export const systemAPI = {
-  /**
-   * 获取系统状态信息
-   */
-  getSystemStatus: async (): Promise<SystemInfo | null> => {
+const getSystemStatus = async (): Promise<SystemInfo | null> => {
     const response = await request.get<SystemInfo | ApiEnvelope<SystemInfo>>('/system/status');
     return unwrapResponse<SystemInfo>(response);
-  },
+};
 
-  /**
-   * 获取系统性能指标
-   */
-  getSystemMetrics: () =>
-    request.get<SystemMetrics>('/system/metrics'),
+const getSystemMetrics = () => request.get<SystemMetrics>('/system/metrics');
 
-  /**
-   * 获取系统健康检查
-   */
-  getHealthCheck: () =>
-    request.get<SystemHealth>('/health'),
+const getSystemStatistics = () => request.get('/system/statistics');
 
-  /**
-   * 获取系统日志
-   */
-  getSystemLogs: (params?: {
-    level?: string;
-    limit?: number;
-    offset?: number
-  }) =>
-    request.get('/system/logs', { params }),
+const getHealthCheck = () => request.get<SystemHealth>('/health');
 
-  /**
-   * 获取系统配置
-   */
-  getSystemConfig: () =>
-    request.get('/system/config'),
+const getSystemLogs = (params?: { level?: string; limit?: number; offset?: number }) =>
+    request.get('/system/logs', {params});
 
-  /**
-   * 更新系统配置
-   */
-  updateSystemConfig: (config: any) =>
-    request.post('/system/config', config),
+const getRecentLogs = (params?: { lines?: number; level?: string }) =>
+    request.get('/system/logs/recent', {params});
 
-  /**
-   * 获取系统监控数据
-   */
-  getMonitorData: () =>
-    request.get('/monitor/metrics'),
+const getSystemConfig = () => request.get('/system/config');
 
-  /**
-   * 获取组件状态
-   */
-  getComponentStatus: () =>
-    request.get('/monitor/components'),
+const updateSystemConfig = (config: any) => request.post('/system/config', config);
+
+const getLogConfig = () => request.get('/system/config/log');
+
+const updateLogConfig = (config: any) => request.post('/system/config/log', config);
+
+const getSystemInfo = () => request.get('/system/info');
+
+const getMonitorData = () => request.get('/monitor/metrics');
+
+const getComponentStatus = () => request.get('/monitor/components');
+
+const startSystem = () => request.post('/system/start');
+
+const stopSystem = () => request.post('/system/stop');
+
+const restartSystem = () => request.post('/system/restart');
+
+const startComponent = (componentName: string) =>
+    request.post(`/system/components/${componentName}/start`);
+
+const stopComponent = (componentName: string) =>
+    request.post(`/system/components/${componentName}/stop`);
+
+const controlComponent = (componentName: string, action: string) =>
+    request.post(`/system/components/${componentName}/${action}`);
+
+const checkComponentHealth = (componentName: string) =>
+    request.get(`/system/components/${componentName}/health`);
+
+export const systemAPI = {
+    getSystemStatus,
+    getStatus: getSystemStatus,
+    getSystemMetrics,
+    getMetrics: getSystemMetrics,
+    getSystemStatistics,
+    getStatistics: getSystemStatistics,
+    getHealthCheck,
+    getHealth: getHealthCheck,
+    getSystemLogs,
+    getLogs: getSystemLogs,
+    getRecentLogs,
+    getSystemConfig,
+    getConfig: getSystemConfig,
+    updateSystemConfig,
+    updateConfig: updateSystemConfig,
+    getLogConfig,
+    updateLogConfig,
+    getSystemInfo,
+    getInfo: getSystemInfo,
+    getMonitorData,
+    getMonitorMetrics: getMonitorData,
+    getComponentStatus,
+    getComponents: getComponentStatus,
+    startSystem,
+    stopSystem,
+    restartSystem,
+    startComponent,
+    stopComponent,
+    controlComponent,
+    checkComponentHealth,
 };
 
 export default systemAPI;

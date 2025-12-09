@@ -151,6 +151,7 @@ class ProcessHandle:
     is_test: bool = False
     last_health_status: dict[str, Any] | None = None
     last_health_check_at: float | None = None
+    health_failure_streak: int = 0
 
     def mark_used(self) -> None:
         """Refresh the last-used timestamp."""
@@ -207,9 +208,9 @@ def _terminate_worker(process: WorkerProcess, *, force: bool) -> None:
         return
     try:
         if force and hasattr(process, "kill"):
-            process.kill()  # type: ignore[attr-defined]
+            process.kill()
         else:
-            process.terminate()  # type: ignore[attr-defined]
+            process.terminate()
     except Exception as exc:  # pragma: no cover - best effort
         logger.debug(f"[ProcessPool] Failed to terminate worker cleanly: {exc}")
 
@@ -261,6 +262,9 @@ def _log_health_transition(
         summary["errors"] = health["errors"]
     if "probe" in health:
         summary["probe"] = health["probe"]
+    for key in ("exitcode", "signal", "pid"):
+        if key in health:
+            summary[key] = health[key]
 
     if status == "ok":
         logger.info(
@@ -292,6 +296,8 @@ class AmazingDataProcessPool:
         self.executor = ThreadPoolExecutor(max_workers=3)
         self._datasource_locks: Dict[str, threading.RLock] = {}
         self._locks_guard = threading.Lock()
+        self._degraded_restart_threshold = 3
+        self._warmup_grace_seconds = 10.0  # 刚启动且未登录阶段不触发重启
         self._start_health_monitor()
 
     # ------------------------------------------------------------------ #
@@ -396,11 +402,11 @@ class AmazingDataProcessPool:
             self._cleanup_idle_processes()
 
             with self.lock:
-                handle = self._handles.get(datasource_id)
-                if handle:
-                    proxy = handle.proxy
+                existing_handle = self._handles.get(datasource_id)
+                if existing_handle:
+                    proxy = existing_handle.proxy
                     if proxy.is_running:
-                        handle.mark_used()
+                        existing_handle.mark_used()
                         logger.info(f"[ProcessPool] Reusing process for {datasource_id}")
                         return proxy
                     logger.warning(f"[ProcessPool] Dead process detected for {datasource_id}")
@@ -409,7 +415,7 @@ class AmazingDataProcessPool:
                         "[ProcessPool] Max processes reached, attempting idle cleanup"
                     )
 
-            if handle:
+            if existing_handle:
                 self.stop(datasource_id)
 
             config_dict = dict(config or {})
@@ -450,11 +456,11 @@ class AmazingDataProcessPool:
         """Stop the worker process bound to the given datasource."""
         with self._guard_datasource(datasource_id):
             with self.lock:
-                handle = self._handles.get(datasource_id)
-                if not handle:
+                current_handle = self._handles.get(datasource_id)
+                if current_handle is None:
                     return True
 
-            proxy = handle.proxy
+            proxy = current_handle.proxy
             logger.info(
                 f"[ProcessPool] Stopping process for {datasource_id} (with_logout={with_logout})"
             )
@@ -481,16 +487,17 @@ class AmazingDataProcessPool:
         for datasource_id in self._snapshot_ids():
             self.stop(datasource_id, force=force)
 
-    def restart(self, datasource_id: str) -> bool:
+    def restart(self, datasource_id: str, *, with_logout: bool | None = None) -> bool:
         """Restart the worker process for the specified datasource."""
         logger.info(f"[ProcessPool] Restarting process for {datasource_id}")
         with self._guard_datasource(datasource_id):
             with self.lock:
-                handle = self._handles.get(datasource_id)
-                stored_config = handle.clone_config() if handle else {}
-                auto_cleanup = handle.auto_cleanup if handle else False
+                current_handle = self._handles.get(datasource_id)
+                stored_config = current_handle.clone_config() if current_handle else {}
+                auto_cleanup = current_handle.auto_cleanup if current_handle else False
 
-            self.stop(datasource_id)
+            stop_with_logout = True if with_logout is None else with_logout
+            self.stop(datasource_id, with_logout=stop_with_logout)
 
             try:
                 proxy = self.get_or_create(
@@ -512,13 +519,13 @@ class AmazingDataProcessPool:
         lock = self._get_datasource_lock(datasource_id)
         with lock:
             with self.lock:
-                handle = self._handles.get(datasource_id)
-            if not handle:
+                current_handle = self._handles.get(datasource_id)
+            if current_handle is None:
                 return
-            handle.login_throttle.wait_slot()
+            current_handle.login_throttle.wait_slot()
             with self.lock:
-                handle.last_login_started_at = time.time()
-                handle.last_login_error_reason = None
+                current_handle.last_login_started_at = time.time()
+                current_handle.last_login_error_reason = None
 
     def record_login_result(
             self, datasource_id: str, success: bool, error: Optional[str] = None
@@ -527,19 +534,19 @@ class AmazingDataProcessPool:
         lock = self._get_datasource_lock(datasource_id)
         with lock:
             with self.lock:
-                handle = self._handles.get(datasource_id)
-            if not handle:
+                current_handle = self._handles.get(datasource_id)
+            if current_handle is None:
                 return
-            handle.login_throttle.record_result(success)
+            current_handle.login_throttle.record_result(success)
             timestamp = time.time()
             with self.lock:
-                handle.last_login_completed_at = timestamp
+                current_handle.last_login_completed_at = timestamp
                 if success:
-                    handle.last_login_success_at = timestamp
-                    handle.last_login_error_reason = None
+                    current_handle.last_login_success_at = timestamp
+                    current_handle.last_login_error_reason = None
                 else:
-                    handle.last_login_error_at = timestamp
-                    handle.last_login_error_reason = str(error) if error else None
+                    current_handle.last_login_error_at = timestamp
+                    current_handle.last_login_error_reason = str(error) if error else None
 
     def get_status(self) -> ProcessPoolStatus:
         """Return a snapshot describing the current process pool state."""
@@ -692,7 +699,7 @@ class AmazingDataProcessPool:
 
     def _check_process_health(self) -> None:
         """Inspect worker processes and restart unhealthy ones."""
-        unhealthy: list[str] = []
+        restart_targets: list[tuple[str, bool, int]] = []
         with self.lock:
             handles_snapshot = list(self._handles.items())
 
@@ -706,6 +713,15 @@ class AmazingDataProcessPool:
 
             health = _normalise_health_status(raw_health)
             status_value = str(health.get("status") or "unknown").lower()
+            # 将某些可恢复的 error 降级为 degraded：
+            # - 进程仍在（无 exitcode/signal），且已登录，多为繁忙/探针超时
+            if status_value == "error":
+                logged_in = bool(health.get("loggedIn"))
+                has_exit = ("exitcode" in health) or ("signal" in health) or (
+                            health.get("reason") == "process_not_running")
+                if logged_in and not has_exit:
+                    health["status"] = "degraded"
+                    status_value = "degraded"
             previous_status = (
                 str(handle.last_health_status.get("status")).lower()
                 if handle.last_health_status and "status" in handle.last_health_status
@@ -716,21 +732,64 @@ class AmazingDataProcessPool:
             if not isinstance(record_time, (int, float)):
                 record_time = time.time()
 
+            logged_in = bool(health.get("loggedIn"))
+            failure_streak = 0
+
             with self.lock:
                 current_handle = self._handles.get(datasource_id)
                 if current_handle:
                     current_handle.last_health_status = dict(health)
                     current_handle.last_health_check_at = record_time
+                    if status_value == "ok":
+                        current_handle.health_failure_streak = 0
+                    elif status_value in {"degraded", "error"}:
+                        current_handle.health_failure_streak += 1
+                    else:
+                        current_handle.health_failure_streak = min(
+                            current_handle.health_failure_streak + 1, self._degraded_restart_threshold
+                        )
+                    failure_streak = current_handle.health_failure_streak
 
             if previous_status != status_value:
                 _log_health_transition(datasource_id, previous_status, health)
 
             if status_value == "error":
-                unhealthy.append(datasource_id)
+                if failure_streak >= 1:
+                    restart_targets.append((datasource_id, logged_in, failure_streak))
+            elif status_value == "degraded":
+                errors = health.get("errors") or []
+                # 启动暖身期：未登录且运行时间 < grace 时，不将 degraded 计入重启
+                with self.lock:
+                    handle = self._handles.get(datasource_id)
+                    uptime_ok = True
+                    if handle is not None:
+                        uptime_ok = handle.uptime(time.time()) >= self._warmup_grace_seconds
+                if errors and failure_streak >= self._degraded_restart_threshold and (logged_in or uptime_ok):
+                    restart_targets.append((datasource_id, logged_in, failure_streak))
 
-        for datasource_id in unhealthy:
-            logger.warning(f"[ProcessPool] Unhealthy process detected: {datasource_id}")
-            self.restart(datasource_id)
+        for datasource_id, logged_in, streak in restart_targets:
+            reason_label = "logged-in failure" if logged_in else "pre-login failure"
+            exit_info = ""
+            with self.lock:
+                active_handle = self._handles.get(datasource_id)
+                if active_handle and active_handle.last_health_status:
+                    parts: list[str] = []
+                    exitcode = active_handle.last_health_status.get("exitcode")
+                    signal = active_handle.last_health_status.get("signal")
+                    pid = active_handle.last_health_status.get("pid")
+                    if exitcode is not None:
+                        parts.append(f"exitcode={exitcode}")
+                    if signal is not None:
+                        parts.append(f"signal={signal}")
+                    if pid is not None:
+                        parts.append(f"pid={pid}")
+                    if parts:
+                        parts_str = ", ".join(parts)
+                        exit_info = f" details=({parts_str})"
+            logger.warning(
+                f"[ProcessPool] Restarting unhealthy process {datasource_id} after {reason_label} streak (count={streak}){exit_info}"
+            )
+            self.restart(datasource_id, with_logout=logged_in)
 
 
 _global_pool: Optional[AmazingDataProcessPool] = None

@@ -1,27 +1,43 @@
-"""
+﻿"""
 Logger Manager for DeepSearch
 
 Provides centralized logging management using loguru.
 """
 
 import logging
+import os
 import re
 import sys
+import threading
+import zipfile
 from collections.abc import Mapping as MappingABC
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import FrameType
-from typing import Callable, Dict, MutableMapping, Optional, Sequence, TYPE_CHECKING
+from typing import Any, Callable, Dict, Mapping, MutableMapping, Optional, Sequence, TYPE_CHECKING, cast
 
 from loguru import logger
 
+from deepsearch.constants import (
+    DEFAULT_LOG_ARCHIVE_AFTER_DAYS,
+    DEFAULT_LOG_ARCHIVE_DIRECTORY,
+    DEFAULT_LOG_MODULE_DIRECTORY,
+    DEFAULT_LOG_MODULE_MAX_DEPTH,
+    DEFAULT_LOG_RETENTION_DAYS,
+    DEFAULT_LOG_ROTATION_TIME,
+)
+
 if TYPE_CHECKING:
-    from loguru import FormatFunction, Record as LogRecordDict
+    from deepsearch.config.models.log import LogConfig
+    from loguru import Logger, Record as LogRecordDict
 else:
     FormatFunction = Callable[[MutableMapping[str, object]], str]
     LogRecordDict = MutableMapping[str, object]
 
 MODULE_SPLIT_PATTERN = re.compile(r"[._]+")
+ARCHIVE_COMPRESSION_LEVEL = 9
+
+ModuleFilter = Callable[[LogRecordDict], bool]
 
 
 class InterceptHandler(logging.Handler):
@@ -40,7 +56,9 @@ class InterceptHandler(logging.Handler):
             frame = frame.f_back
             depth += 1
 
-        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+        logger.opt(depth=depth, exception=record.exc_info).bind(module=record.name).log(
+            level, record.getMessage()
+        )
 
 
 class LoggerManager:
@@ -51,6 +69,24 @@ class LoggerManager:
         self.log_level: str = "INFO"
         self._started: bool = False
         self._logging_bridge_installed: bool = False
+        self._datasource_sinks: Dict[str, int] = {}
+        self._datasource_configs: Dict[str, None] = {}
+        self._module_sinks: Dict[str, int] = {}
+        self._module_lock = threading.Lock()
+        self._rotation_rule: str = DEFAULT_LOG_ROTATION_TIME
+        self._retention_days: int = DEFAULT_LOG_RETENTION_DAYS
+        self._json_enabled: bool = False
+        self._archive_enabled: bool = True
+        self._archive_format: str = "zip"
+        self._archive_after_days: int = DEFAULT_LOG_ARCHIVE_AFTER_DAYS
+        self._archive_purge_days: Optional[int] = None
+        self._archive_directory_name: str = DEFAULT_LOG_ARCHIVE_DIRECTORY
+        self._module_logging_enabled: bool = False
+        self._module_directory_name: str = DEFAULT_LOG_MODULE_DIRECTORY
+        self._module_max_depth: int = DEFAULT_LOG_MODULE_MAX_DEPTH
+        self._module_rotation_rule: Optional[str] = None
+        self._module_retention_days: Optional[int] = None
+        self._level_override: bool = False
         self.module_aliases: Dict[str, str] = {
             "deepsearch": "深度搜索平台",
             "deepsearch.core": "核心模块",
@@ -205,6 +241,59 @@ class LoggerManager:
             + 1
         )
 
+    def _load_log_configuration(self) -> None:
+        """从全局设置加载并应用日志配置。"""
+
+        try:
+            from deepsearch.config import get_config
+
+            settings_obj = get_config()
+        except Exception:
+            return
+
+        log_config = getattr(settings_obj, "log", None)
+        if log_config is None:
+            return
+
+        log_dir_candidate = getattr(settings_obj, "log_dir", None)
+        if isinstance(log_dir_candidate, Path):
+            self.log_path = log_dir_candidate
+        elif isinstance(log_dir_candidate, str) and log_dir_candidate:
+            self.log_path = Path(log_dir_candidate)
+
+        self._apply_log_config(log_config)
+
+    def _apply_log_config(self, config: "LogConfig") -> None:
+        """应用 Settings.log 中的详细配置。"""
+
+        self._rotation_rule = config.rotation or DEFAULT_LOG_ROTATION_TIME
+        self._retention_days = int(config.retention_days)
+        self._json_enabled = bool(config.enable_json)
+        if not self._level_override:
+            self.log_level = config.level
+
+        archive_config = config.archive
+        self._archive_enabled = archive_config.enabled
+        self._archive_format = archive_config.format
+        self._archive_after_days = int(archive_config.archive_after_days)
+        self._archive_directory_name = archive_config.directory or DEFAULT_LOG_ARCHIVE_DIRECTORY
+        self._archive_purge_days = (
+            int(archive_config.purge_after_days)
+            if archive_config.purge_after_days is not None
+            else None
+        )
+
+        modules_config = config.modules
+        self._module_logging_enabled = modules_config.enabled
+        self._module_directory_name = modules_config.directory or DEFAULT_LOG_MODULE_DIRECTORY
+        self._module_max_depth = int(modules_config.max_depth)
+        self._module_rotation_rule = modules_config.rotation
+        self._module_retention_days = (
+            int(modules_config.retention_days)
+            if modules_config.retention_days is not None
+            else None
+        )
+
     def _normalize_module_name(self, raw_name: Optional[str]) -> str:
         """Normalize module identifier while keeping readable labels"""
         if not raw_name:
@@ -266,6 +355,171 @@ class LoggerManager:
         if not module_value:
             return None
         return self._normalize_module_name(module_value)
+
+    def _module_key_from_name(self, logger_name: Optional[str]) -> Optional[str]:
+        """根据 logger 名称提取用于分模块的键。"""
+        if not logger_name or not isinstance(logger_name, str):
+            return None
+        segments = [segment for segment in logger_name.split(".") if segment]
+        if not segments:
+            return None
+        limited = segments[: self._module_max_depth]
+        return ".".join(limited)
+
+    def _module_filter_factory(self, module_key: str) -> ModuleFilter:
+        """构造模块日志过滤器，仅接受匹配模块的记录。"""
+
+        def _filter(record: LogRecordDict) -> bool:
+            extra = record.get("extra")
+            if isinstance(extra, MappingABC):
+                extra_key = extra.get("module_key")
+                if isinstance(extra_key, str):
+                    return extra_key == module_key
+            name = record.get("name")
+            return isinstance(name, str) and self._module_key_from_name(name) == module_key
+
+        return _filter
+
+    def _module_directory_for_key(self, module_key: str) -> Path:
+        """返回指定模块日志所在目录，并确保路径存在。"""
+        segments = [segment.strip() or "default" for segment in module_key.split(".")]
+        relative_path = Path(self._module_directory_name, *segments)
+        full_path = self.log_path / relative_path
+        full_path.mkdir(parents=True, exist_ok=True)
+        return full_path
+
+    def _ensure_module_sink(self, module_key: Optional[str]) -> None:
+        """确保为模块创建独立日志 sink。"""
+        if not self._module_logging_enabled or not module_key:
+            return
+        if module_key in self._module_sinks:
+            return
+
+        with self._module_lock:
+            if module_key in self._module_sinks:
+                return
+            module_dir = self._module_directory_for_key(module_key)
+            pattern = module_dir / f"{module_key.replace('.', '_')}_{{time:YYYY-MM-DD}}.log"
+            rotation_rule = self._module_rotation_rule or self._rotation_rule
+            archive_days = self._module_retention_days or self._archive_after_days
+            archive_dir = module_dir / self._archive_directory_name
+            retention_handler = self._build_retention_handler(
+                archive_base=archive_dir,
+                retention_days=archive_days,
+            )
+            filter_callable = self._module_filter_factory(module_key)
+            sink_id = logger.add(
+                str(pattern),
+                rotation=rotation_rule,
+                retention=retention_handler,
+                level=self.log_level,
+                format=self._format_file,
+                encoding="utf-8",
+                filter=cast(Any, filter_callable),
+            )
+            self._module_sinks[module_key] = sink_id
+
+    def _build_retention_handler(
+            self,
+            *,
+            archive_base: Path,
+            retention_days: Optional[int],
+    ) -> Callable[[Sequence[str]], None]:
+        """创建处理过期日志的回调。"""
+        effective_days = retention_days or self._archive_after_days
+        effective_days = max(effective_days, 1)
+        archive_enabled = self._archive_enabled and self._archive_format == "zip"
+
+        def _handler(files: Sequence[str]) -> None:
+            now = datetime.now()
+            cutoff = now - timedelta(days=effective_days)
+            for file_name in files:
+                file_path = Path(file_name)
+                if not file_path.exists():
+                    continue
+                if file_path.suffix.lower() == ".zip":
+                    continue
+                try:
+                    mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+                except OSError:
+                    continue
+                if mtime <= cutoff:
+                    if archive_enabled:
+                        self._compress_log_file(file_path, archive_base)
+                    else:
+                        file_path.unlink(missing_ok=True)
+
+            if archive_enabled and self._archive_purge_days is not None and archive_base.exists():
+                purge_cutoff = now - timedelta(days=self._archive_purge_days)
+                for archive_file in archive_base.glob("*.zip"):
+                    try:
+                        archive_mtime = datetime.fromtimestamp(archive_file.stat().st_mtime)
+                    except OSError:
+                        continue
+                    if archive_mtime <= purge_cutoff:
+                        archive_file.unlink(missing_ok=True)
+
+        return _handler
+
+    def _ensure_datasource_sink(self, datasource_name: str) -> None:
+        """Ensure datasource sink exists by creating it on demand."""
+        self.get_datasource_logger(datasource_name)
+
+    def _compress_log_file(self, source: Path, archive_dir: Path) -> None:
+        """将日志压缩为 zip 存档并删除原文件。"""
+        if not source.exists():
+            return
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        base_name = source.stem
+        target = archive_dir / f"{base_name}.zip"
+        counter = 1
+        while target.exists():
+            target = archive_dir / f"{base_name}_{counter:02d}.zip"
+            counter += 1
+
+        try:
+            stat_info = source.stat()
+        except OSError:
+            stat_info = None
+
+        with zipfile.ZipFile(
+                target,
+                mode="w",
+                compression=zipfile.ZIP_DEFLATED,
+                compresslevel=ARCHIVE_COMPRESSION_LEVEL,
+        ) as archive:
+            archive.write(source, arcname=source.name)
+
+        if stat_info is not None:
+            os.utime(target, (stat_info.st_atime, stat_info.st_mtime))
+
+        source.unlink(missing_ok=True)
+
+    def _patch_record_for_modules(self, record: LogRecordDict) -> LogRecordDict:
+        """在日志记录中补充模块信息并触发 sink 创建。"""
+        if not self._module_logging_enabled:
+            return record
+
+        module_key = None
+        name_obj = record.get("name")
+        if isinstance(name_obj, str):
+            module_key = self._module_key_from_name(name_obj)
+
+        extra = record.get("extra")
+        if module_key is None and isinstance(extra, MappingABC):
+            module_candidate = extra.get("module")
+            if isinstance(module_candidate, str):
+                module_key = self._module_key_from_name(module_candidate)
+
+        if module_key:
+            self._ensure_module_sink(module_key)
+            if not isinstance(extra, dict):
+                extra = {}
+                record["extra"] = extra
+            extra.setdefault("module", self._normalize_module_name(module_key))
+            extra["module_key"] = module_key
+
+        return record
 
     def _resolve_file_location(self, record: LogRecordDict) -> str:
         """Resolve a concise file location for logging output"""
@@ -444,6 +698,21 @@ class LoggerManager:
     def _format_file(self, record: LogRecordDict) -> str:
         return self._format_spring_boot_line(record, colorize=False)
 
+    def _apply_logger_configuration(
+            self,
+            *,
+            extra: Mapping[str, object] | None = None,
+            patcher: Callable[[LogRecordDict], object] | None = None,
+    ) -> None:
+        """Thin wrapper around loguru.configure with permissive typing."""
+        configure_kwargs: dict[str, object] = {}
+        if extra is not None:
+            configure_kwargs["extra"] = extra
+        if patcher is not None:
+            configure_kwargs["patcher"] = patcher
+        configure_callable = cast(Callable[..., object], logger.configure)
+        configure_callable(**configure_kwargs)
+
     def _configure_stdlib_bridge(self) -> None:
         """Ensure all stdlib logging is routed through loguru"""
 
@@ -479,12 +748,18 @@ class LoggerManager:
         if self._started:
             return
 
+        self._load_log_configuration()
+
         self.log_path.mkdir(parents=True, exist_ok=True)
 
         self._configure_stdlib_bridge()
 
-        logger.configure(extra={"module": None})
         logger.remove()
+        patcher = self._patch_record_for_modules if self._module_logging_enabled else None
+        self._apply_logger_configuration(
+            extra={"module": None, "module_key": None},
+            patcher=patcher,
+        )
 
         logger.add(
             sys.stderr,
@@ -494,14 +769,24 @@ class LoggerManager:
         )
 
         log_file = self.log_path / "deepsearch_{time:YYYY-MM-DD}.log"
+        archive_root = self.log_path / self._archive_directory_name
+        primary_retention = self._build_retention_handler(
+            archive_base=archive_root,
+            retention_days=self._archive_after_days,
+        )
         logger.add(
             str(log_file),
-            rotation="1 day",
-            retention="7 days",
+            rotation=self._rotation_rule,
+            retention=primary_retention,
             level=self.log_level,
             format=self._format_file,
             encoding="utf-8",
         )
+
+        self._datasource_sinks = {}
+        self._module_sinks = {}
+        for datasource_name in self._datasource_configs.keys():
+            self._ensure_datasource_sink(datasource_name)
 
         self._started = True
         self.get_logger("observability").info("logging system started")
@@ -514,11 +799,18 @@ class LoggerManager:
         self.get_logger("observability").info("logging system stopping")
         self._teardown_stdlib_bridge()
         logger.remove()
+        self._apply_logger_configuration(
+            extra={"module": None, "module_key": None},
+            patcher=None,
+        )
+        self._datasource_sinks = {}
+        self._module_sinks = {}
         self._started = False
 
     def set_level(self, level: str) -> None:
         """Set the logging level"""
         self.log_level = level
+        self._level_override = True
         if self._started:
             self.stop()
             self.start()
@@ -534,6 +826,37 @@ class LoggerManager:
         subdir = self.log_path / name
         subdir.mkdir(parents=True, exist_ok=True)
         return subdir
+
+    def get_datasource_logger(self, name: str) -> "Logger":
+        """为指定数据源提供专用 logger，并确保开启独立 sink。"""
+        from loguru import logger as loguru_logger
+
+        if name not in self._datasource_sinks:
+            subdir = self.ensure_subdirectory("datasource")
+            sink_path = subdir / f"{name}_{{time:YYYY-MM-DD}}.log"
+            archive_dir = subdir / self._archive_directory_name
+            retention_handler = self._build_retention_handler(
+                archive_base=archive_dir,
+                retention_days=self._archive_after_days,
+            )
+
+            def _filter(record: LogRecordDict) -> bool:
+                extra = record.get("extra")
+                if isinstance(extra, MappingABC):
+                    return extra.get("datasource") == name
+                return False
+
+            sink_id = loguru_logger.add(
+                str(sink_path),
+                rotation="50 MB",
+                retention=retention_handler,
+                level="DEBUG",
+                format=self._format_file,
+                encoding="utf-8",
+                filter=cast(Any, _filter),
+            )
+            self._datasource_sinks[name] = sink_id
+        return loguru_logger.bind(datasource=name, module=f"datasource.{name}")
 
 
 

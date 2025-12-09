@@ -7,6 +7,7 @@ Version: 1.0.0
 """
 
 import asyncio
+import os
 import threading
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -30,6 +31,11 @@ if TYPE_CHECKING:
 else:
     BacktraderDataBase = Any
     BacktraderGenericCSVData = Any
+
+
+def _allow_mock_data() -> bool:
+    """Return True only during automated tests to allow mock streaming."""
+    return bool(os.getenv("PYTEST_CURRENT_TEST"))
 
 
 class DeepSearchLiveData(bt.DataBase):
@@ -118,15 +124,13 @@ class DeepSearchLiveData(bt.DataBase):
         asyncio.set_event_loop(loop)
 
         async def subscribe_data():
-            """订阅实时数据"""
-            # 这里应该连接到实时数据源
-            # 为了演示，我们模拟实时数据
+            """Subscribe real-time data stream."""
+            if not _allow_mock_data():
+                logger.warning("mock live data generation is disabled outside tests")
+                return
+            # TODO: connect to actual live data source
             while not self._stop_event.is_set():
-                # 模拟获取实时数据
-                await asyncio.sleep(60)  # 每分钟更新一次
-
-                # 获取最新数据
-                # 实际应该从实时源获取
+                await asyncio.sleep(60)  # refresh every minute
                 new_data = self._generate_mock_tick()
                 if new_data:
                     self.live_data_queue.append(new_data)
@@ -139,7 +143,9 @@ class DeepSearchLiveData(bt.DataBase):
             loop.close()
 
     def _generate_mock_tick(self) -> Optional[Dict]:
-        """生成模拟tick数据（用于测试）"""
+        """Generate mock tick data for tests only."""
+        if not _allow_mock_data():
+            return None
         import random
 
         if self.historical_data is not None and not self.historical_data.empty:

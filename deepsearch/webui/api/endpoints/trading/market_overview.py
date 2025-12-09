@@ -8,6 +8,9 @@ from typing import Dict, TypedDict, cast
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 
+from deepsearch.infrastructure.providers.implementations.cloudflare.cloudflare import (
+    ProxyDataProvider,
+)
 from deepsearch.webui.api.types import JSONDict, JSONValue
 
 router = APIRouter(prefix="/api/market-overview", tags=["市场总貌"])
@@ -30,6 +33,59 @@ class MarketDataProvider:
     def __init__(self):
         self._cache: Dict[str, MarketResponse] = {}
         self._cache_ttl = 60  # 60秒缓存
+        self._proxy_provider: ProxyDataProvider | None = None
+        self._spot_limit = 100
+
+    def _get_proxy_provider(self) -> ProxyDataProvider:
+        if self._proxy_provider is None:
+            self._proxy_provider = ProxyDataProvider()
+        return self._proxy_provider
+
+    async def _get_spot_via_proxy(self, market: str) -> MarketResponse | None:
+        provider = self._get_proxy_provider()
+        try:
+            payload = await provider.fetch_market_spot(market=market, limit=self._spot_limit)
+        except Exception as exc:
+            logger.warning("Cloudflare 行情接口失败: {}", exc)
+            return None
+
+        items = payload.get("items") or []
+        if not items:
+            return None
+
+        return {
+            "success": True,
+            "data": items,
+            "total": payload.get("total", len(items)),
+            "market": market,
+            "source": payload.get("source", "cloudflare"),
+        }
+
+    async def _get_spot_via_akshare(self, market: str) -> MarketResponse:
+        import akshare as ak
+
+        func_map = {
+            "all": ak.stock_zh_a_spot_em,
+            "sh": ak.stock_sh_a_spot_em,
+            "sz": ak.stock_sz_a_spot_em,
+            "bj": ak.stock_bj_a_spot_em,
+            "cy": ak.stock_cy_a_spot_em,
+            "kc": ak.stock_kc_a_spot_em,
+            "new": ak.stock_new_a_spot_em,
+        }
+
+        func = func_map.get(market, ak.stock_zh_a_spot_em)
+        df = await asyncio.get_event_loop().run_in_executor(None, func)
+
+        if df is not None and not df.empty:
+            data = df.head(self._spot_limit).to_dict("records")
+            return {
+                "success": True,
+                "data": data,
+                "total": len(df),
+                "market": market,
+            }
+        return {"success": False, "error": "No data"}
 
     async def get_sse_summary(self) -> MarketResponse:
         """获取上海证券交易所市场总貌"""
@@ -150,32 +206,18 @@ class MarketDataProvider:
             return {"success": False, "error": str(e)}
 
     async def get_spot_em(self, market: str = "all") -> MarketResponse:
-        """获取实时行情数据"""
+        """优先使用 Cloudflare 接口，如失败则回退至 akshare"""
+
+        proxy_payload = await self._get_spot_via_proxy(market)
+        if proxy_payload:
+            return proxy_payload
+
         try:
-            import akshare as ak
-
-            # 根据市场选择对应的函数
-            func_map = {
-                "all": ak.stock_zh_a_spot_em,
-                "sh": ak.stock_sh_a_spot_em,
-                "sz": ak.stock_sz_a_spot_em,
-                "bj": ak.stock_bj_a_spot_em,
-                "cy": ak.stock_cy_a_spot_em,
-                "kc": ak.stock_kc_a_spot_em,
-                "new": ak.stock_new_a_spot_em,
-            }
-
-            func = func_map.get(market, ak.stock_zh_a_spot_em)
-            df = await asyncio.get_event_loop().run_in_executor(None, func)
-
-            if df is not None and not df.empty:
-                # 限制返回数量避免数据过大
-                data = df.head(100).to_dict("records")
-                return {"success": True, "data": data, "total": len(df), "market": market}
-            return {"success": False, "error": "No data"}
+            return await self._get_spot_via_akshare(market)
         except Exception as e:
             logger.error(f"获取实时行情失败: {e}")
             return {"success": False, "error": str(e)}
+
 
 
 # 全局实例

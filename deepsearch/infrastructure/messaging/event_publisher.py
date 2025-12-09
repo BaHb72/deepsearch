@@ -4,17 +4,21 @@ Event publisher implementations.
 
 import asyncio
 from collections import defaultdict
-from typing import Any, Awaitable, Callable, DefaultDict, Dict, List
-
-from domain.interfaces.base import DomainEvent
-from domain.interfaces.services import IEventPublisher
+from typing import Any, Awaitable, Callable, DefaultDict, Dict, List, Protocol
 
 from deepsearch.observability import get_logger
 
 logger = get_logger(__name__)
 
 
-class InMemoryEventPublisher(IEventPublisher):
+class DomainEventProtocol(Protocol):
+    event_name: str
+    aggregate_id: str
+    occurred_at: Any  # expected to expose isoformat()
+    __dict__: Dict[str, Any]
+
+
+class InMemoryEventPublisher:
     """
     In-memory event publisher for development and testing.
     """
@@ -39,7 +43,7 @@ class InMemoryEventPublisher(IEventPublisher):
             except Exception as e:
                 logger.error(f"Error in event handler: {e}")
 
-    async def publish_domain_event(self, event: DomainEvent) -> None:
+    async def publish_domain_event(self, event: DomainEventProtocol) -> None:
         """Publish a domain event."""
         event_dict = {
             "event_type": event.event_name,

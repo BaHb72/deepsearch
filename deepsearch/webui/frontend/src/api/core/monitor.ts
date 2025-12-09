@@ -3,13 +3,24 @@
  * 实时监控 API 性能和健康状态
  */
 
-import { 
-  ApiCategory, 
-  HealthRule, 
-  HealthIssue,
-  RequestLog 
-} from './types'
-import { ApiLogger } from './logger'
+import {ApiCategory, HealthIssue, HealthRule, HttpMethod, RequestLog,} from './types'
+import {ApiLogger} from './logger'
+
+type RequestSample = {
+    timestamp: number
+    duration: number
+    success: boolean
+}
+
+interface MonitorSnapshot {
+    global: PerformanceMetrics
+    categories: Record<string, PerformanceMetrics>
+    endpoints: Record<string, PerformanceMetrics>
+    health: {
+        issues: HealthIssue[]
+        status: 'healthy' | 'degraded' | 'unhealthy'
+    }
+}
 
 // 性能指标
 interface PerformanceMetrics {
@@ -25,28 +36,22 @@ interface PerformanceMetrics {
 }
 
 // 分类指标
-interface CategoryMetrics extends PerformanceMetrics {
-  category: ApiCategory
-}
-
 // 端点指标
-interface EndpointMetrics extends PerformanceMetrics {
-  endpoint: string
-  method: string
-}
-
 /**
  * API 监控器
  */
 export class ApiMonitor {
   private static instance: ApiMonitor
+    private static readonly HISTORY_LIMIT = 200
+    private static readonly HISTORY_RETENTION_MS = 5 * 60 * 1000
   private logger: ApiLogger
   private metrics: Map<string, PerformanceMetrics> = new Map()
+    private requestHistory: Map<string, RequestSample[]> = new Map()
   private healthRules: HealthRule[] = []
   private healthIssues: HealthIssue[] = []
-  private monitorInterval: NodeJS.Timeout | null = null
+    private monitorInterval: ReturnType<typeof setInterval> | null = null
   private readonly checkInterval: number = 10000 // 10秒检查一次
-  private subscribers: Set<(metrics: any) => void> = new Set()
+    private subscribers: Set<(metrics: MonitorSnapshot) => void> = new Set()
   
   private constructor() {
     this.logger = ApiLogger.getInstance()
@@ -135,8 +140,8 @@ export class ApiMonitor {
       this.performHealthCheck()
       this.updateMetrics()
     }, this.checkInterval)
-    
-    console.log('📊 API Monitor started')
+
+      console.log('[API Monitor] started')
   }
   
   /**
@@ -146,7 +151,7 @@ export class ApiMonitor {
     if (this.monitorInterval) {
       clearInterval(this.monitorInterval)
       this.monitorInterval = null
-      console.log('📊 API Monitor stopped')
+        console.log('[API Monitor] stopped')
     }
   }
   
@@ -189,95 +194,59 @@ export class ApiMonitor {
   }
   
   /**
-   * 更新指标
+   * 记录请求
    */
-  private updateMetrics(): void {
-    const logs = this.logger.getAllLogs()
-    const now = Date.now()
-    const recentLogs = logs.filter(log => now - log.timestamp < 60000) // 最近1分钟
-    
-    // 全局指标
-    const globalMetrics = this.calculateMetrics(recentLogs)
-    this.metrics.set('global', globalMetrics)
-    
-    // 分类指标
-    const categories = Object.values(ApiCategory)
-    for (const category of categories) {
-      const categoryLogs = recentLogs.filter(log => log.category === category)
-      if (categoryLogs.length > 0) {
-        const metrics = this.calculateMetrics(categoryLogs)
-        this.metrics.set(`category:${category}`, metrics)
+  public recordRequest({
+                           duration,
+                           category,
+                           success,
+                           method,
+                           url,
+                       }: {
+      requestId: string
+      duration: number
+      category: ApiCategory
+      success: boolean
+      method: HttpMethod
+      url?: string
+  }): void {
+      const sample: RequestSample = {timestamp: Date.now(), duration, success}
+
+      this.appendSample('global', sample)
+      this.appendSample(`category:${category}`, sample)
+
+      if (url) {
+          const endpointKey = `endpoint:${method}:${url}`
+          this.appendSample(endpointKey, sample)
       }
-    }
-    
-    // 端点指标
-    const endpoints = new Set(recentLogs.map(log => `${log.method}:${log.url}`))
-    for (const endpoint of endpoints) {
-      const [method, url] = endpoint.split(':')
-      const endpointLogs = recentLogs.filter(
-        log => log.method === method && log.url === url
-      )
-      if (endpointLogs.length > 0) {
-        const metrics = this.calculateMetrics(endpointLogs)
-        this.metrics.set(`endpoint:${endpoint}`, metrics)
-      }
-    }
-    
-    // 通知订阅者
-    this.notifySubscribers()
+
+      this.notifySubscribers()
   }
-  
-  /**
-   * 计算指标
-   */
-  private calculateMetrics(logs: RequestLog[]): PerformanceMetrics {
-    const requestCount = logs.length
-    const successCount = logs.filter(log => !log.error).length
-    const errorCount = logs.filter(log => log.error).length
-    
-    const durations = logs
-      .filter(log => log.duration)
-      .map(log => log.duration!)
-      .sort((a, b) => a - b)
-    
-    const avgDuration = this.calculateAvgDuration(logs)
-    const p50Duration = this.calculatePercentile(durations, 0.5)
-    const p95Duration = this.calculatePercentile(durations, 0.95)
-    const p99Duration = this.calculatePercentile(durations, 0.99)
-    
-    const errorRate = requestCount > 0 ? errorCount / requestCount : 0
-    
-    // 计算吞吐量（请求/秒）
-    const timeSpan = logs.length > 1 
-      ? (logs[logs.length - 1].timestamp - logs[0].timestamp) / 1000
-      : 60
-    const throughput = timeSpan > 0 ? requestCount / timeSpan : 0
-    
-    return {
-      requestCount,
-      successCount,
-      errorCount,
-      avgDuration,
-      p50Duration,
-      p95Duration,
-      p99Duration,
-      errorRate,
-      throughput
-    }
+
+    public getMetrics(): MonitorSnapshot {
+        const snapshot: MonitorSnapshot = {
+            global: this.metrics.get('global') ?? this.createEmptyMetrics(),
+            categories: {},
+            endpoints: {},
+            health: {
+                issues: [...this.healthIssues],
+                status: this.getHealthStatus(),
+            },
+        }
+
+        for (const [key, value] of this.metrics.entries()) {
+            if (key.startsWith('category:')) {
+                const category = key.replace('category:', '')
+                snapshot.categories[category] = value
+            } else if (key.startsWith('endpoint:')) {
+                const endpoint = key.replace('endpoint:', '')
+                snapshot.endpoints[endpoint] = value
+            }
+        }
+
+        return snapshot
   }
-  
-  /**
-   * 计算平均响应时间
-   */
-  private calculateAvgDuration(logs: RequestLog[]): number {
-    const durations = logs.filter(log => log.duration).map(log => log.duration!)
-    if (durations.length === 0) return 0
-    return durations.reduce((a, b) => a + b, 0) / durations.length
-  }
-  
-  /**
-   * 计算错误率
-   */
+
   private calculateErrorRate(logs: RequestLog[]): number {
     if (logs.length === 0) return 0
     const errors = logs.filter(log => log.error).length
@@ -287,12 +256,6 @@ export class ApiMonitor {
   /**
    * 计算百分位数
    */
-  private calculatePercentile(sortedValues: number[], percentile: number): number {
-    if (sortedValues.length === 0) return 0
-    const index = Math.ceil(sortedValues.length * percentile) - 1
-    return sortedValues[Math.max(0, index)]
-  }
-  
   /**
    * 确定严重程度
    */
@@ -339,50 +302,160 @@ export class ApiMonitor {
     }
     return suggestions[rule.name] || '请检查系统状态'
   }
-  
+
+    /**
+     * 订阅指标更新
+     */
+    public subscribe(callback: (metrics: MonitorSnapshot) => void): () => void {
+        this.subscribers.add(callback)
+        return () => this.subscribers.delete(callback)
+    }
+
+    /**
+     * 更新指标
+     */
+    private updateMetrics(): void {
+        const now = Date.now()
+        let changed = false
+        const keysToDelete: string[] = []
+
+        for (const [key, history] of this.requestHistory.entries()) {
+            const normalized = this.normalizeHistory(history, now)
+            if (normalized.length === 0) {
+                keysToDelete.push(key)
+                if (this.metrics.delete(key)) {
+                    changed = true
+                }
+                continue
+            }
+
+            if (normalized.length !== history.length) {
+                this.requestHistory.set(key, normalized)
+            }
+
+            const previousMetrics = this.metrics.get(key)
+            const metrics = this.computeMetricsFromHistory(normalized)
+            this.metrics.set(key, metrics)
+            if (!previousMetrics || JSON.stringify(previousMetrics) !== JSON.stringify(metrics)) {
+                changed = true
+            }
+        }
+
+        if (keysToDelete.length > 0) {
+            for (const key of keysToDelete) {
+                this.requestHistory.delete(key)
+            }
+        }
+
+        if (changed) {
+            this.notifySubscribers()
+        }
+    }
+
+    /**
+     * 计算错误率
+     */
+    private calculateAvgDuration(logs: RequestLog[]): number {
+        const durations = logs
+            .map((log) => log.duration)
+            .filter((value): value is number => typeof value === 'number')
+
+        if (durations.length === 0) {
+            return 0
+        }
+
+        return durations.reduce((sum, value) => sum + value, 0) / durations.length
+    }
+
   /**
    * 处理健康问题
    */
   private handleHealthIssue(issue: HealthIssue): void {
-    console.warn(`⚠️ Health Issue Detected: ${issue.message}`)
-    console.warn(`   Severity: ${issue.severity}`)
-    console.warn(`   Suggested Action: ${issue.suggestedAction}`)
-    
+      console.warn(`[API Monitor] Health issue detected: ${issue.message}`)
+      console.warn(`  Severity: ${issue.severity}`)
+      if (issue.suggestedAction) {
+          console.warn(`  Suggested Action: ${issue.suggestedAction}`)
+      }
+
     if (issue.affectedEndpoints && issue.affectedEndpoints.length > 0) {
-      console.warn(`   Affected Endpoints:`, issue.affectedEndpoints)
+        console.warn('  Affected Endpoints:', issue.affectedEndpoints)
     }
-    
-    // 根据严重程度采取行动
+
     switch (issue.severity) {
       case 'critical':
-        // TODO: 发送紧急通知
+          console.error('[API Monitor] Critical issue requires immediate attention.')
         break
       case 'high':
-        // TODO: 记录到错误追踪系统
+          console.warn('[API Monitor] High severity issue recorded.')
         break
       case 'medium':
-        // TODO: 记录到日志
+          console.info('[API Monitor] Medium severity issue logged.')
         break
       default:
-        // 仅控制台警告
+          console.debug('[API Monitor] Issue captured for monitoring.')
         break
     }
   }
-  
-  /**
-   * 记录请求
-   */
-  public recordRequest(params: {
-    requestId: string
-    duration: number
-    category: ApiCategory
-    success: boolean
-  }): void {
-    // 这个方法由 ApiClient 调用，用于实时更新指标
-    // 当前实现依赖于日志系统，但可以扩展为独立的指标收集
+
+    private appendSample(key: string, sample: RequestSample) {
+        const history = this.requestHistory.get(key) ?? []
+        history.push(sample)
+        const normalized = this.normalizeHistory(history, sample.timestamp)
+        this.requestHistory.set(key, normalized)
+        this.metrics.set(key, this.computeMetricsFromHistory(normalized))
+    }
+
+    private normalizeHistory(history: RequestSample[], currentTimestamp: number): RequestSample[] {
+        const cutoff = currentTimestamp - ApiMonitor.HISTORY_RETENTION_MS
+        const recent = history.filter((item) => item.timestamp >= cutoff)
+        if (recent.length > ApiMonitor.HISTORY_LIMIT) {
+            return recent.slice(-ApiMonitor.HISTORY_LIMIT)
+        }
+        return recent
+    }
+
+    // ========== 公共方法 ==========
+
+    private computeMetricsFromHistory(history: RequestSample[]): PerformanceMetrics {
+        const requestCount = history.length
+        const successCount = history.filter((item) => item.success).length
+        const errorCount = requestCount - successCount
+
+        const durations = history.map((item) => item.duration).sort((a, b) => a - b)
+        const avgDuration =
+            requestCount > 0 ? durations.reduce((acc, value) => acc + value, 0) / requestCount : 0
+
+        const percentile = (p: number) => {
+            if (durations.length === 0) {
+                return 0
+            }
+            const index = Math.min(
+                durations.length - 1,
+                Math.max(0, Math.floor((durations.length - 1) * p))
+            )
+            return durations[index]
+        }
+
+        const firstTimestamp = history[0]?.timestamp ?? Date.now()
+        const lastTimestamp = history[history.length - 1]?.timestamp ?? firstTimestamp
+        const timeSpanSeconds =
+            requestCount > 1 ? Math.max(1, (lastTimestamp - firstTimestamp) / 1000) : 60
+        const throughput = requestCount / timeSpanSeconds
+
+        return {
+            requestCount,
+            successCount,
+            errorCount,
+            avgDuration,
+            p50Duration: percentile(0.5),
+            p95Duration: percentile(0.95),
+            p99Duration: percentile(0.99),
+            errorRate: requestCount > 0 ? errorCount / requestCount : 0,
+            throughput,
+        }
   }
-  
-  /**
+
+    /**
    * 通知订阅者
    */
   private notifySubscribers(): void {
@@ -395,37 +468,6 @@ export class ApiMonitor {
       }
     })
   }
-  
-  // ========== 公共方法 ==========
-  
-  /**
-   * 获取所有指标
-   */
-  public getMetrics() {
-    const metrics: any = {
-      global: this.metrics.get('global'),
-      categories: {},
-      endpoints: {},
-      health: {
-        issues: this.healthIssues,
-        status: this.getHealthStatus()
-      }
-    }
-    
-    // 整理分类指标
-    for (const [key, value] of this.metrics.entries()) {
-      if (key.startsWith('category:')) {
-        const category = key.replace('category:', '')
-        metrics.categories[category] = value
-      } else if (key.startsWith('endpoint:')) {
-        const endpoint = key.replace('endpoint:', '')
-        metrics.endpoints[endpoint] = value
-      }
-    }
-    
-    return metrics
-  }
-  
   /**
    * 获取健康状态
    */
@@ -463,11 +505,20 @@ export class ApiMonitor {
   }
   
   /**
-   * 订阅指标更新
+   * 获取所有指标
    */
-  public subscribe(callback: (metrics: any) => void): () => void {
-    this.subscribers.add(callback)
-    return () => this.subscribers.delete(callback)
+  private createEmptyMetrics(): PerformanceMetrics {
+      return {
+          requestCount: 0,
+          successCount: 0,
+          errorCount: 0,
+          avgDuration: 0,
+          p50Duration: 0,
+          p95Duration: 0,
+          p99Duration: 0,
+          errorRate: 0,
+          throughput: 0,
+      }
   }
   
   /**

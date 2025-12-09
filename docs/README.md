@@ -1,5 +1,7 @@
 # DeepSearch 文档中心
 
+> **快速导航**：[文档索引总表](./overview/document_index.md)
+
 ## 📚 文档地图
 - **概览**（目录：overview/）
   - [架构优化策略](./overview/architecture_optimization_strategy.md)
@@ -12,10 +14,14 @@
   - [数据提供者架构设计](./architecture/data_provider_design.md)
   - [策略模块规划](./architecture/STRATEGY_MODULE_PLAN.md)
   - [关键设计决策](./architecture/DESIGN_DECISIONS.md)
+  - [AmazingData 本地数据路径重构方案](./architecture/amazingdata-local-path-refactor.md)
+- **模块说明**（目录：modules/）
+  - [模块技术说明索引](./modules/README.md)
 - **数据源手册**（目录：datasources/）
   - [AmazingData 系列](./datasources/amazingdata/README.md) — 快速开始、接入配置、隔离与容灾方案（接口文档同步至 2025-09-11 V1.0.8）
   - [QMT 数据馈送（已归档）](./archive/datasources/qmt/README.md) — 历史本地终端集成方案
 - **开发指南**（目录：development/）
+    - [盘后展示与实时页面改造](./development/frontend/market_live_after_hours.md)
   - [最佳实践](./development/BEST_PRACTICES.md)
   - [调试功能](./development/DEBUG_FEATURES.md)
   - [代码审查要点](./development/CODE_REVIEW.md)
@@ -25,6 +31,8 @@
   - [数据源监控体系](./operations/monitoring/data_source_monitoring.md)
   - [资源管理改进方案](./operations/resource_management_improvements.md)
   - [前端超时应急手册](./operations/runbooks/frontend_timeout_solution.md)
+- **计划与阶段性文档**（目录：plans/）
+  - [阶段性计划汇总](./plans/README.md) —— 汇集数据源 orchestrator、AmazingData 重构、Market Live 休市体验、SDK 登录应急、盘面规划与缓存方案等内容
 - **API 参考**（目录：api/）
   - [API 总览](./api/README.md)
   - [前端接口注册表](./api/FRONTEND_API_REGISTRY.md)

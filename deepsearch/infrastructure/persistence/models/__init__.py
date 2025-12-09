@@ -4,6 +4,15 @@
 """
 
 from .base import Base
-from .market import Market1Min, MarketTick
+from .ingestion import IngestionBatch, IngestionJob, RawProviderPayload
+from .market import Market1Min, MarketSnapshot, MarketTick
 
-__all__ = ["Base", "Market1Min", "MarketTick"]
+__all__ = [
+    "Base",
+    "Market1Min",
+    "MarketTick",
+    "MarketSnapshot",
+    "IngestionJob",
+    "IngestionBatch",
+    "RawProviderPayload",
+]

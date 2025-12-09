@@ -4,7 +4,8 @@
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional, cast
+import time
+from typing import Any, Dict, Iterable, List, Optional, cast
 
 import pandas as pd
 from loguru import logger
@@ -19,7 +20,6 @@ from deepsearch.infrastructure.providers.interfaces.base import (
 )
 from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
 from deepsearch.utils.network.akshare_proxy import patch_akshare
-
 from .api_methods import AkShareAPIMethods
 from .async_wrapper import get_async_wrapper
 from .cache_manager import get_cache_manager
@@ -85,6 +85,12 @@ class AkShareProxyProvider:
         self._monitor_task = None
 
         self.strategy = self.worker_manager.strategy
+
+        # 交易日历缓存，避免重复拉取
+
+        self._calendar_cache: Dict[str, tuple[list[int], float]] = {}
+
+        self._calendar_cache_ttl_seconds = 600.0
 
         logger.info(f"AkShare代理提供者初始化完成，Worker数量: {len(worker_urls)}")
 
@@ -211,6 +217,139 @@ class AkShareProxyProvider:
         except Exception as e:
             logger.error(f"健康监控任务异常: {e}")
 
+    # ==================== 状态工具 ====================
+
+    def is_connected(self) -> bool:
+
+        """初始化成功且存在可用 Worker 即视为已连接"""
+
+        if not self._initialized or self.status != "running":
+            return False
+
+        try:
+
+            health_flags = self.worker_manager.get_health_flags()
+
+        except Exception:
+
+            return True
+
+        return any(health_flags.values()) or bool(self.worker_manager.worker_urls)
+
+    async def get_calendar(self, *, market: str = "SH", data_type: str = "int") -> list[int] | list[str]:
+
+        """使用 AkShare 交易日历供 TradingSessionGuard 判断开闭市"""
+
+        normalized_market = (market or "SH").strip().upper() or "SH"
+
+        now = time.time()
+
+        cache_entry = self._calendar_cache.get(normalized_market)
+
+        if cache_entry and (now - cache_entry[1]) <= self._calendar_cache_ttl_seconds:
+
+            base_dates = list(cache_entry[0])
+
+        else:
+
+            if not self._initialized:
+                await self.initialize()
+
+            base_dates = await asyncio.to_thread(self._load_calendar_dates, normalized_market)
+
+            self._calendar_cache[normalized_market] = (list(base_dates), now)
+
+        if data_type.lower() == "str":
+            return [f"{value:08d}" for value in base_dates]
+
+        return base_dates
+
+    def _load_calendar_dates(self, market: str) -> list[int]:
+
+        raw_dates = self._fetch_calendar_dates_sync(market)
+
+        normalized = self._normalize_trade_dates(raw_dates)
+
+        if not normalized:
+            logger.warning("AkShare 未返回交易日历: market={}", market)
+
+        return normalized
+
+    def _fetch_calendar_dates_sync(self, market: str) -> list[str]:
+
+        """同步调用 AkShare 的交易日历接口"""
+
+        try:
+
+            import akshare as ak  # type: ignore
+
+        except Exception as exc:  # pragma: no cover - 记录环境异常
+
+            logger.error("AkShare 未安装或导入失败，无法获取交易日历: {}", exc)
+
+            return []
+
+        calendar_func = getattr(ak, "tool_trade_date_hist_sina", None)
+
+        if calendar_func is None:
+            logger.error("akshare.tool_trade_date_hist_sina 不可用，无法获取交易日历")
+
+            return []
+
+        try:
+
+            df = calendar_func()
+
+        except Exception as exc:
+
+            logger.error("获取 AkShare 交易日历失败 market={} error={}", market, exc)
+
+            return []
+
+        if df is None or "trade_date" not in df.columns:
+            logger.warning("AkShare 返回的交易日历缺少 trade_date 列 market={}", market)
+
+            return []
+
+        return [str(item) for item in df["trade_date"].tolist()]
+
+    @staticmethod
+    def _normalize_trade_dates(raw_dates: Iterable[str | int]) -> list[int]:
+
+        """将字符串日期规范成 20250101 形式并去重"""
+
+        normalized: list[int] = []
+
+        seen: set[int] = set()
+
+        for entry in raw_dates:
+
+            digits = "".join(ch for ch in str(entry) if ch.isdigit())
+
+            if len(digits) != 8:
+                continue
+
+            try:
+
+                value = int(digits)
+
+            except ValueError:
+
+                continue
+
+            if value in seen:
+                continue
+
+            seen.add(value)
+
+            normalized.append(value)
+
+        normalized.sort()
+
+        return normalized
+
+
+
     # ==================== API方法代理 ====================
 
     async def get_data(self, request: DataRequest) -> DataResponse:
@@ -320,7 +459,7 @@ class AkShareProxyProvider:
         except DataProviderError as exc:
             return DataResponse(success=False, error=str(exc), metadata=metadata)
         except Exception as exc:  # pragma: no cover - 防御日志
-            logger.exception("AkShare 获取数据异常: %s", exc)
+            logger.exception("AkShare 获取数据异常: {}", exc)
             return DataResponse(success=False, error=str(exc), metadata=metadata)
 
     async def get_realtime_data(self, symbols: List[str]) -> Dict[str, Any]:
@@ -546,6 +685,10 @@ class AkShareProxyProvider:
 
         except Exception as e:
             logger.error(f"清理资源时发生错误: {e}")
+
+    async def close(self) -> None:
+        """Expose cleanup hook for factory-managed lifecycles."""
+        await self.cleanup()
 
     def __str__(self):
         """字符串表示"""

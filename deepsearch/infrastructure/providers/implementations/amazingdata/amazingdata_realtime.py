@@ -218,9 +218,9 @@ class AmazingDataRealtime:
         """3.5.3.6 沪港通实时行情"""
 
         return await self._register_handler(
-                        key="hkt_snapshot",
+            key="hkt_snapshot",
             code_list=code_list,
-            period_value=ad.constant.Period.snapshot_hkt.value,
+            period_value=ad.constant.Period.snapshotHKT.value,
             callback=callback,
             success_message=f"成功订阅{len(code_list)}个沪港通实时行情",
             error_message="订阅沪港通实时行情失败",

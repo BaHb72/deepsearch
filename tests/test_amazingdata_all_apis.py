@@ -8,7 +8,7 @@ Version: 1.0.0
 Date: 2025-09-18
 """
 
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pandas as pd
 import pytest
@@ -16,6 +16,7 @@ import pytest
 from deepsearch.infrastructure.providers.implementations.amazingdata import (
     AmazingDataExtended,
     AmazingDataRealtime,
+    SnapshotAlignPolicy,
 )
 
 
@@ -67,6 +68,7 @@ async def provider(mock_ad):
             provider._info_data = Mock()
             provider._market_data = Mock()
             provider._initialized_objects = True
+            provider.get_calendar = AsyncMock(return_value=[20250101, 20250102])
             return provider
 
 
@@ -245,7 +247,9 @@ class TestHistoricalData:
         provider._market_data.query_snapshot.return_value = {
             "000001.SZ": pd.DataFrame({"close": [10.5]})
         }
-        result = await provider.query_snapshot(["000001.SZ"], 20240101, 20240131)
+        result = await provider.query_snapshot(
+            ["000001.SZ"], 20240101, 20240131, align_policy=SnapshotAlignPolicy.PASSTHROUGH
+        )
         assert result is not None
 
     @pytest.mark.asyncio

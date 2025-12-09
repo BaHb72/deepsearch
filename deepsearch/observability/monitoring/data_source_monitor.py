@@ -15,43 +15,9 @@ from typing import Any, ClassVar, Deque, DefaultDict, Dict, List, Optional, Tupl
 
 from loguru import logger
 
-
-# Import DataSourceType dynamically to avoid circular import
-
-class DataSourceType(Enum):
-    """数据源类型 - 复制自base.py以避免循环导入"""
-
-    AMAZINGDATA = "amazingdata"
-    QMT = "qmt"
-    CLOUDFLARE = "cloudflare"
-    AKSHARE = "akshare"
-    AKSHARE_PROXY = "akshare_proxy"
-    AKSHARE_DIRECT = "akshare_direct"
-    TUSHARE = "tushare"
-    EASTMONEY = "eastmoney"
-    SINA = "sina"
-    MINIQMT = "miniqmt"
-    UNIFIED = "unified"
-    DIRECT_API = "direct_api"
-    DATABASE = "database"
-    DEFAULT = "default"
-    CUSTOM = "custom"
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
 _HIDDEN_SOURCES = {DataSourceType.DEFAULT, DataSourceType.CUSTOM}
-
-class DataAccessType(Enum):
-    """数据访问类型"""
-
-    REALTIME_QUOTE = "realtime_quote"  # 实时行情
-    HISTORICAL_KLINE = "historical_kline"  # 历史K线
-    STOCK_LIST = "stock_list"  # 股票列表
-    STOCK_INFO = "stock_info"  # 股票信息
-    ORDERBOOK = "orderbook"  # 盘口数据
-    TICK_DATA = "tick_data"  # Tick数据
-    TRADE_DETAIL = "trade_detail"  # 逐笔成交
-    FINANCIAL_DATA = "financial_data"  # 财务数据
-    NORTH_FLOW = "north_flow"  # 北向资金流向
-    BLOCK_TRADE = "block_trade"  # 大宗交易
 
 DEFAULT_MODULE_KEY = "unknown"
 

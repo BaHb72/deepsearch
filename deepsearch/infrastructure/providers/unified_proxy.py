@@ -3,19 +3,21 @@
 
 作为所有数据访问的统一入口，提供监控、路由和容错功能。
 """
-
+import asyncio
+import inspect
 import time
 from contextlib import asynccontextmanager
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, Optional, cast
 
 from loguru import logger
 
-from deepsearch.observability.monitoring.data_source_monitor import (
-    DataAccessType,
-    DataSourceType,
-    get_monitor,
+from deepsearch.infrastructure.providers.managers.data_source_manager import (
+    StockListFetchResult,
+    build_stock_list_result,
 )
+from deepsearch.observability.monitoring.data_source_monitor import get_monitor
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
 
 class DataAccessProxy:
@@ -309,17 +311,12 @@ class DataAccessProxy:
         raise Exception(error_msg)
 
     async def get_stock_list(
-        self, prefer_source: Optional[DataSourceType] = None, module: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+            self,
+            prefer_source: Optional[DataSourceType] = None,
+            module: Optional[str] = None,
+    ) -> StockListFetchResult:
         """
-        获取股票列表（带监控和容错）
-
-        Args:
-            prefer_source: 优先数据源
-            module: 调用模块
-
-        Returns:
-            股票列表
+        获取股票列表，并返回领域对象与旧结构。
         """
         sources = self._get_source_priority(DataAccessType.STOCK_LIST, prefer_source)
 
@@ -335,122 +332,74 @@ class DataAccessProxy:
                 async with self._monitor_access(
                     source=source, access_type=DataAccessType.STOCK_LIST, module=module
                 ):
-                    if source == DataSourceType.AKSHARE:
-                        result = await provider.fetch_stock_list()
-                    else:
-                        continue
+                    payload: Optional[Any] = None
+                    fetch_records = getattr(provider, "get_stock_list_records", None)
+                    if callable(fetch_records):
+                        maybe_records = fetch_records()
+                        payload = (
+                            await maybe_records
+                            if inspect.isawaitable(maybe_records)
+                            else maybe_records
+                        )
 
-                    if result is not None and not result.empty:
-                        normalized = result.to_dict("records") if hasattr(result, "to_dict") else result
-                        return cast(List[Dict[str, Any]], normalized)
+                    if payload is None:
+                        fetch_stock_list = getattr(provider, "fetch_stock_list", None)
+                        if callable(fetch_stock_list):
+                            maybe_payload = fetch_stock_list()
+                            payload = (
+                                await maybe_payload
+                                if inspect.isawaitable(maybe_payload)
+                                else maybe_payload
+                            )
 
-            except Exception as e:
-                logger.warning(f"从 {source.value} 获取股票列表失败: {e}")
+                    if payload is None:
+                        get_stock_list = getattr(provider, "get_stock_list", None)
+                        if callable(get_stock_list):
+                            maybe_payload = get_stock_list()
+                            payload = (
+                                await maybe_payload
+                                if inspect.isawaitable(maybe_payload)
+                                else maybe_payload
+                            )
+
+                    result = build_stock_list_result(payload, source.value)
+                    if result and (result.records or result.legacy):
+                        if result.mismatch:
+                            logger.warning(
+                                "股票列表双写存在差异 source=%s mismatch=%d",
+                                source.value,
+                                result.mismatch,
+                            )
+                        return result
+            except Exception as error:
+                logger.warning(f"从 {source.value} 获取股票列表失败: {error}")
                 continue
 
-        # 返回默认列表
-        logger.warning("所有数据源失败，返回默认股票列表")
-        return [
-            {"代码": "000001", "名称": "平安银行"},
-            {"代码": "000002", "名称": "万科A"},
-            {"代码": "600000", "名称": "浦发银行"},
-            {"代码": "600036", "名称": "招商银行"},
+        fallback_legacy = [
+            {"code": "000001", "name": "平安银行", "label": "平安银行 (000001)", "value": "000001"},
+            {"code": "000002", "name": "万科A", "label": "万科A (000002)", "value": "000002"},
+            {"code": "000858", "name": "五粮液", "label": "五粮液 (000858)", "value": "000858"},
+            {"code": "002415", "name": "海康威视", "label": "海康威视 (002415)", "value": "002415"},
+            {"code": "300750", "name": "宁德时代", "label": "宁德时代 (300750)", "value": "300750"},
+            {"code": "600000", "name": "浦发银行", "label": "浦发银行 (600000)", "value": "600000"},
+            {"code": "600036", "name": "招商银行", "label": "招商银行 (600036)", "value": "600036"},
+            {"code": "600519", "name": "贵州茅台", "label": "贵州茅台 (600519)", "value": "600519"},
+            {"code": "601318", "name": "中国平安", "label": "中国平安 (601318)", "value": "601318"},
+            {"code": "601606", "name": "长城军工", "label": "长城军工 (601606)", "value": "601606"},
         ]
+        fallback_result = build_stock_list_result(fallback_legacy, "fallback")
+        if fallback_result:
+            logger.warning("使用本地兜底股票列表，source=fallback")
+            return fallback_result
 
-    def _get_source_priority(
-        self, access_type: DataAccessType, prefer_source: Optional[DataSourceType] = None
-    ) -> List[DataSourceType]:
-        """
-        获取数据源优先级列表
-
-        Args:
-            access_type: 访问类型
-            prefer_source: 优先数据源
-
-        Returns:
-            排序后的数据源列表
-        """
-        # 基础优先级
-        priority_map = {
-            DataAccessType.REALTIME_QUOTE: [
-                DataSourceType.QMT,
-                DataSourceType.AKSHARE,
-                DataSourceType.CLOUDFLARE,
-            ],
-            DataAccessType.HISTORICAL_KLINE: [
-                DataSourceType.AKSHARE,
-                DataSourceType.QMT,
-                DataSourceType.DATABASE,
-            ],
-            DataAccessType.STOCK_LIST: [
-                DataSourceType.AKSHARE,
-                DataSourceType.DATABASE,
-            ],
-            DataAccessType.ORDERBOOK: [
-                DataSourceType.QMT,
-            ],
-            DataAccessType.TICK_DATA: [
-                DataSourceType.QMT,
-            ],
-        }
-
-        sources = priority_map.get(access_type, list(DataSourceType))
-
-        # 如果指定了优先数据源，调整顺序
-        if prefer_source and prefer_source in sources:
-            sources.remove(prefer_source)
-            sources.insert(0, prefer_source)
-
-        # 根据监控数据动态调整（获取推荐）
-        recommended = self.monitor.get_recommendation(
-            access_type=access_type, require_realtime=(access_type == DataAccessType.REALTIME_QUOTE)
+        return StockListFetchResult(
+            source="fallback",
+            records=(),
+            legacy=tuple(fallback_legacy),
+            mismatch=len(fallback_legacy),
         )
-        if recommended and recommended in sources and recommended != sources[0]:
-            sources.remove(recommended)
-            sources.insert(0, recommended)
-            logger.debug(f"根据监控数据，推荐使用 {recommended.value} 作为首选数据源")
-
-        return sources
-
-    def get_monitor_stats(self) -> Dict[str, Any]:
-        """获取监控统计信息"""
-        return cast(Dict[str, Any], self.monitor.export_metrics())
-
-    def reset_circuit_breaker(self, source: Optional[DataSourceType] = None):
-        """
-        重置熔断器
-
-        Args:
-            source: 数据源，如果为None则重置所有
-        """
-        if source:
-            self.circuit_breaker_status[source] = {
-                "is_open": False,
-                "failure_count": 0,
-                "last_failure_time": 0,
-            }
-            logger.info(f"重置数据源 {source.value} 的熔断器")
-        else:
-            for s in DataSourceType:
-                self.circuit_breaker_status[s] = {
-                    "is_open": False,
-                    "failure_count": 0,
-                    "last_failure_time": 0,
-                }
-            logger.info("重置所有数据源的熔断器")
 
 
-# 全局代理实例
-_proxy_instance = None
-
-
-async def get_data_proxy() -> DataAccessProxy:
-    """获取全局数据访问代理实例"""
-    global _proxy_instance
-    if _proxy_instance is None:
-        _proxy_instance = DataAccessProxy()
-        await _proxy_instance.initialize()
-    return _proxy_instance
 
 
 def monitor_access(
@@ -496,6 +445,31 @@ def monitor_access(
         return wrapper
 
     return decorator
+
+
+_DATA_PROXY_INSTANCE: Optional[DataAccessProxy] = None
+_DATA_PROXY_LOCK: asyncio.Lock | None = None
+
+
+async def get_data_proxy() -> DataAccessProxy:
+    """
+    获取 DataAccessProxy 单例实例，确保只初始化一次。
+    """
+
+    global _DATA_PROXY_INSTANCE, _DATA_PROXY_LOCK
+
+    if _DATA_PROXY_INSTANCE is not None and _DATA_PROXY_INSTANCE.initialized:
+        return _DATA_PROXY_INSTANCE
+
+    if _DATA_PROXY_LOCK is None:
+        _DATA_PROXY_LOCK = asyncio.Lock()
+
+    async with _DATA_PROXY_LOCK:
+        if _DATA_PROXY_INSTANCE is None:
+            _DATA_PROXY_INSTANCE = DataAccessProxy()
+        if not _DATA_PROXY_INSTANCE.initialized:
+            await _DATA_PROXY_INSTANCE.initialize()
+        return _DATA_PROXY_INSTANCE
 
 
 def async_monitor_access(

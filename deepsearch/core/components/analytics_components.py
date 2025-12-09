@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional
 
 from deepsearch.config import get_config
 from deepsearch.config.models.database import AnalyticsDatabaseConfig
-
 from ..async_component import AsyncComponent
 from ..interfaces import ComponentType
 from ..utils.exceptions import error_context
@@ -18,6 +17,7 @@ from ..utils.timeout_config import TimeoutCategory, get_timeout_manager
 if TYPE_CHECKING:  # pragma: no cover - 仅用于类型检查
     from deepsearch.infrastructure.persistence.duckdb_analytics import DuckDBAnalytics
     from deepsearch.infrastructure.providers.managers.data_sync_service import DataSyncService
+    from deepsearch.infrastructure.providers.managers.data_sync_pipeline import DataSyncPipeline
     from .data_components import DatabaseComponent
 
 
@@ -28,14 +28,18 @@ class AnalyticsComponent(AsyncComponent):
         super().__init__("analytics", ComponentType.INFRASTRUCTURE, "数据分析")
         self._analytics_db: DuckDBAnalytics | None = None
         self._sync_service: DataSyncService | None = None
+        self._sync_pipeline: DataSyncPipeline | None = None  # 新版简化管道
         self._database_component: DatabaseComponent | None = None
         self._config: AnalyticsDatabaseConfig | None = None
         self._timeout_manager = get_timeout_manager()
+        self._auto_sync_pending: bool = False
 
     async def _do_initialize(self) -> None:
         """初始化分析组件"""
         from deepsearch.infrastructure.persistence.duckdb_analytics import get_analytics_db
         from deepsearch.infrastructure.providers.managers.data_sync_service import get_sync_service
+        from deepsearch.infrastructure.providers.managers.pipeline_setup import create_sync_pipeline
+
 
         with error_context(self.name, "initialize"):
             # 获取配置
@@ -71,16 +75,35 @@ class AnalyticsComponent(AsyncComponent):
                 )
 
             # 初始化同步服务
+            self._auto_sync_pending = False
             if analytics_config.auto_sync:
+                # 创建新版简化管道
+                self._sync_pipeline = create_sync_pipeline(
+                    target_db=self._analytics_db,
+                    database_component=self._database_component,
+                )
+                self._logger.info(
+                    "数据同步管道已初始化，已注册数据源: %s",
+                    self._sync_pipeline.sources,
+                )
+                
+                # 保留旧版服务用于兼容（将在后续版本移除）
                 self._sync_service = get_sync_service(self._database_component)
                 self._sync_service.sync_interval = analytics_config.sync_interval
-                # 设置DuckDB实例到同步服务
+                # 将 DuckDB 实例注入同步服务
                 self._sync_service.set_analytics_db(self._analytics_db)
-                await self._sync_service.start()
-                self._logger.info(
-                    "数据同步服务已启动，同步间隔: %s秒",
-                    analytics_config.sync_interval,
-                )
+                if self._database_component:
+                    self._sync_service.set_database_component(self._database_component)
+                    await self._sync_service.start()
+                    self._logger.info(
+                        "数据同步服务已启动，间隔: %s秒",
+                        analytics_config.sync_interval,
+                    )
+                else:
+                    self._auto_sync_pending = True
+                    self._logger.info(
+                        "自动同步服务暂未启动，因未配置数据库组件，将在组件注入后再尝试"
+                    )
 
             self._instance = self
             self._logger.info("分析组件初始化完成")
@@ -88,6 +111,27 @@ class AnalyticsComponent(AsyncComponent):
     def set_database_component(self, database_component: DatabaseComponent | None) -> None:
         """设置数据库组件（用于数据同步）"""
         self._database_component = database_component
+        if self._sync_service and database_component:
+            self._sync_service.set_database_component(database_component)
+            if self._auto_sync_pending and not getattr(self._sync_service, "_running", False):
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    return
+
+                async def _start_sync_service() -> None:
+                    sync_service = self._sync_service
+                    if sync_service is None or getattr(sync_service, "_running", False):
+                        return
+                    await sync_service.start()
+                    if self._config:
+                        self._logger.info(
+                            "数据同步服务已启动，间隔: %s秒",
+                            self._config.sync_interval,
+                        )
+
+                loop.create_task(_start_sync_service())
+                self._auto_sync_pending = False
 
     async def _do_start(self) -> None:
         """启动分析组件"""
@@ -100,8 +144,24 @@ class AnalyticsComponent(AsyncComponent):
             try:
 
                 async def _start_analytics():
-                    # 如果有额外的启动逻辑，在这里添加
-                    self._logger.info("分析组件已启动")
+                    if self._auto_sync_pending and self._sync_service:
+                        sync_service = self._sync_service
+                        if self._database_component and sync_service is not None:
+                            sync_service.set_database_component(self._database_component)
+                            if not getattr(sync_service, "_running", False):
+                                await sync_service.start()
+                                if self._config:
+                                    self._logger.info(
+                                        "数据同步服务已启动，间隔: %s秒",
+                                        self._config.sync_interval,
+                                    )
+                            self._auto_sync_pending = False
+                        else:
+                            self._logger.warning(
+                                "自动同步已启用，但尚未配置数据库组件，将继续等待注入"
+                            )
+                    # 启动阶段的自检逻辑占位
+                    self._logger.info("分析组件启动")
 
                 await asyncio.wait_for(_start_analytics(), timeout=timeout)
             except asyncio.TimeoutError:
@@ -179,8 +239,63 @@ class AnalyticsComponent(AsyncComponent):
         if self._sync_service:
             info["sync_interval"] = self._config.sync_interval
             info["sync_running"] = getattr(self._sync_service, "_running", False)
+        
+        # 新版管道信息
+        if self._sync_pipeline:
+            info["pipeline_sources"] = self._sync_pipeline.sources
+            info["pipeline_states"] = {
+                k: {
+                    "last_timestamp": str(v.last_timestamp) if v.last_timestamp else None,
+                    "rows_synced": v.rows_synced,
+                }
+                for k, v in self._sync_pipeline.get_all_states().items()
+            }
 
         return info
+    
+    @property
+    def sync_pipeline(self) -> "DataSyncPipeline | None":
+        """获取数据同步管道实例"""
+        return self._sync_pipeline
+    
+    async def sync_data(
+        self,
+        table: str = "kline_history",
+        sources: list | None = None,
+        force_full: bool = False,
+    ) -> dict:
+        """使用新管道同步数据
+        
+        Args:
+            table: 目标表名
+            sources: 数据源列表，None 表示全部
+            force_full: 是否强制全量同步
+            
+        Returns:
+            同步结果字典
+        """
+        if not self._sync_pipeline:
+            self._logger.warning("数据同步管道未初始化")
+            return {"error": "Pipeline not initialized"}
+        
+        try:
+            results = await self._sync_pipeline.sync(
+                table=table,
+                sources=sources,
+                force_full=force_full,
+            )
+            return {
+                source: {
+                    "rows_synced": r.rows_synced,
+                    "duration_ms": r.duration_ms,
+                    "success": r.success,
+                    "error": r.error,
+                }
+                for source, r in results.items()
+            }
+        except Exception as e:
+            self._logger.error(f"数据同步失败: {e}", exc_info=True)
+            return {"error": str(e)}
 
     def _normalize_statistics(self, result: Any) -> Dict[str, Any]:
         """将统计结果规范化为字典，避免向外暴露 Any。"""

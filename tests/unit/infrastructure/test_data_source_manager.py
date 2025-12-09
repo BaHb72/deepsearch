@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from deepsearch.infrastructure.providers.interfaces.base import DataSourceType
+from deepsearch.ports.data_sources import DataSourceType
 from deepsearch.infrastructure.providers.managers.data_source_manager import (
     DataSourceConfig,
     DataSourceManager,
@@ -334,6 +334,46 @@ class TestDataSourceManager:
         assert len(results) == 10
         assert all(r is not None for r in results)
         assert mock_provider.get_realtime_quotes.call_count == 10
+
+
+def test_disable_akshare_cascades(mock_config):
+    """��֤���� AkShare �� Cloudflare ����ͬʱ���ر�"""
+    manager = DataSourceManager(config=mock_config)
+    ak_config = manager.registry.get_config(DataSourceType.AKSHARE)
+    assert ak_config is not None
+
+    manager.disable_provider(DataSourceType.AKSHARE, reinitialize=False)
+
+    assert ak_config.enabled is False
+    assert ak_config.fallback_sources == []
+    assert ak_config.fallback_enabled is False
+    assert ak_config.config.get("mode") == "direct"
+    proxy_cfg = ak_config.config.get("proxy") if isinstance(ak_config.config, dict) else {}
+    if isinstance(proxy_cfg, dict):
+        assert proxy_cfg.get("enabled") is False
+
+    assert DataSourceType.AKSHARE not in manager._fallback_order
+    assert manager.config.data_sources["fallback_order"] == ["amazingdata"]
+
+    amazing_config = manager.registry.get_config(DataSourceType.AMAZINGDATA)
+    assert amazing_config is not None
+    assert DataSourceType.AKSHARE not in amazing_config.fallback_sources
+
+
+def test_enable_akshare_restores_fallback_order(mock_config):
+    """���� AkShare ʱ�� fallback ˳��������ѡ��"""
+    manager = DataSourceManager(config=mock_config)
+    ak_config = manager.registry.get_config(DataSourceType.AKSHARE)
+    assert ak_config is not None
+
+    manager.disable_provider(DataSourceType.AKSHARE, reinitialize=False)
+    ak_config.fallback_enabled = True
+
+    manager.enable_provider(DataSourceType.AKSHARE, reinitialize=False)
+
+    assert DataSourceType.AKSHARE in manager._fallback_order
+    assert manager.config.data_sources["fallback_order"] == ["amazingdata", "akshare"]
+
 
 
 @pytest.mark.integration

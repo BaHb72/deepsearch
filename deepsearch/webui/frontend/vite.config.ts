@@ -1,4 +1,4 @@
-import {defineConfig, createLogger} from 'vite'
+import {createLogger, defineConfig} from 'vite'
 import react from '@vitejs/plugin-react'
 import {fileURLToPath, URL} from 'node:url'
 
@@ -67,6 +67,8 @@ export default defineConfig({
             '/api': {
                 target: 'http://localhost:8000',
                 changeOrigin: true,
+                timeout: 30000,
+                proxyTimeout: 30000,
                 configure: (proxy) => {
                     proxy.on('error', (err, req) => {
                         proxyLogger.error(`[PROXY_ERROR] ${req?.url ?? 'unknown'}`, err)

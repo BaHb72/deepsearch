@@ -34,7 +34,10 @@ LOG_DIR: Path = user_log_path(APP_NAME, appauthor=APP_AUTHOR)
 
 DEFAULT_LOG_RETENTION_DAYS = 7
 DEFAULT_LOG_ROTATION_TIME = "00:00"
-
+DEFAULT_LOG_ARCHIVE_AFTER_DAYS = DEFAULT_LOG_RETENTION_DAYS
+DEFAULT_LOG_ARCHIVE_DIRECTORY = "archive"
+DEFAULT_LOG_MODULE_DIRECTORY = "modules"
+DEFAULT_LOG_MODULE_MAX_DEPTH = 2
 
 # ==============================================================================
 # 工具函数

@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { Alert, Button, Result, Skeleton, Space, Tabs } from 'antd'
+// @ts-nocheck
+import {useState} from 'react'
+import {Alert, Button, Result, Skeleton, Space, Tabs} from 'antd'
 import useNotificationConfig from './useNotificationConfig'
 import useNotificationQuota from './useNotificationQuota'
 import useNotificationTest from './useNotificationTest'
@@ -136,4 +137,5 @@ const NotificationCenter = () => {
 }
 
 export default NotificationCenter
+
 

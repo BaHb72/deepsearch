@@ -8,11 +8,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from deepsearch.observability.monitoring.data_source_monitor import (
-    DataAccessType,
-    DataSourceType,
-    get_monitor,
-)
+from deepsearch.observability.monitoring.data_source_monitor import get_monitor
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 from deepsearch.webui.api.endpoints.datasources.datasource_manager import (
     update_datasource_status_after_test,
 )

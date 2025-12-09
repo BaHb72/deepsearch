@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
@@ -32,6 +32,20 @@ def get_data_manager() -> DataSourceManager:
         config = get_config()
         _data_manager = DataSourceManager(config)
     return _data_manager
+
+
+def _data_unavailable(endpoint: str) -> HTTPException:
+    """统一抛出数据不可用异常，杜绝假数据泄露。"""
+
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": "DATA_SOURCE_UNAVAILABLE",
+            "endpoint": endpoint,
+            "message": "接口尚未接入真实数据源，请启用实际数据提供者后重试。",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        },
+    )
 
 
 # 请求和响应模型
@@ -188,19 +202,8 @@ async def get_chart_series(
             )
 
         except Exception as e:
-            logger.warning(f"获取K线数据失败: {e}")
-            # 返回模拟数据
-            return ChartSeriesResponse(
-                success=True,
-                data={
-                    "symbol": symbol,
-                    "period": period,
-                    "adjust": adjust,
-                    "count": 0,
-                    "series": [],
-                    "message": f"数据获取失败，使用空数据: {str(e)}",
-                },
-            )
+            logger.warning(f"��ȡK������ʧ��: {e}")
+            raise _data_unavailable("chart.series") from e
 
     except Exception as e:
         logger.error(f"获取图表序列数据失败: {e}")
@@ -347,32 +350,7 @@ async def get_chip_distribution(
 
     返回指定日期的筹码分布情况
     """
-    try:
-        # 如果没有指定日期，使用最新日期
-        if not date:
-            date = datetime.now().strftime("%Y-%m-%d")
-
-        # 这里应该调用实际的筹码分布计算逻辑
-        # 现在返回模拟数据
-        chip_data = {
-            "symbol": symbol,
-            "date": date,
-            "distribution": [
-                {"price": 10.0, "volume": 1000000, "percentage": 10.5},
-                {"price": 10.5, "volume": 1500000, "percentage": 15.2},
-                {"price": 11.0, "volume": 2000000, "percentage": 20.3},
-                {"price": 11.5, "volume": 1800000, "percentage": 18.5},
-                {"price": 12.0, "volume": 1200000, "percentage": 12.4},
-            ],
-            "cost": {"average": 10.85, "concentration": 68.5, "profit_ratio": 62.3},
-            "message": "筹码分布功能正在完善中，当前为示例数据",
-        }
-
-        return JSONResponse(chip_data)
-
-    except Exception as e:
-        logger.error(f"获取筹码分布失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise _data_unavailable("chart.chip-distribution")
 
 
 @router.get("/realtime")
@@ -386,42 +364,20 @@ async def get_realtime_data(
     返回股票的最新价格、涨跌幅等实时信息
     """
     try:
-        # 获取实时行情
-        realtime_data = data_manager.get_realtime_quote(symbol)
-
-        if realtime_data:
-            return JSONResponse(
-                {
-                    "success": True,
-                    "symbol": symbol,
-                    "data": realtime_data,
-                    "timestamp": datetime.now().isoformat(),
-                }
-            )
-        else:
-            # 返回模拟数据
-            return JSONResponse(
-                {
-                    "success": True,
-                    "symbol": symbol,
-                    "data": {
-                        "price": 10.50,
-                        "change": 0.25,
-                        "change_percent": 2.44,
-                        "volume": 1500000,
-                        "amount": 15750000,
-                        "high": 10.80,
-                        "low": 10.20,
-                        "open": 10.30,
-                    },
-                    "timestamp": datetime.now().isoformat(),
-                    "message": "实时数据暂不可用，使用示例数据",
-                }
-            )
-
+        realtime_data = await data_manager.get_realtime_quote(symbol)
+        if not realtime_data:
+            raise _data_unavailable("chart.realtime")
+        return JSONResponse({
+            "success": True,
+            "symbol": symbol,
+            "data": realtime_data,
+            "timestamp": datetime.now().isoformat(),
+        })
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"获取实时数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"realtime data fetch failed: {e}")
+        raise _data_unavailable("chart.realtime") from e
 
 
 @router.get("/market-depth")
@@ -434,30 +390,4 @@ async def get_market_depth(
 
     返回买卖五档的价格和数量
     """
-    try:
-        # 这里应该调用实际的盘口数据接口
-        # 现在返回模拟数据
-        depth_data = {
-            "symbol": symbol,
-            "bids": [
-                {"price": 10.48, "volume": 5000},
-                {"price": 10.47, "volume": 8000},
-                {"price": 10.46, "volume": 12000},
-                {"price": 10.45, "volume": 15000},
-                {"price": 10.44, "volume": 20000},
-            ],
-            "asks": [
-                {"price": 10.49, "volume": 3000},
-                {"price": 10.50, "volume": 7000},
-                {"price": 10.51, "volume": 10000},
-                {"price": 10.52, "volume": 13000},
-                {"price": 10.53, "volume": 18000},
-            ],
-            "timestamp": datetime.now().isoformat(),
-        }
-
-        return JSONResponse(depth_data)
-
-    except Exception as e:
-        logger.error(f"获取盘口数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise _data_unavailable("chart.market-depth")

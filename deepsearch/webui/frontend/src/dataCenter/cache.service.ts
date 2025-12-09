@@ -193,6 +193,6 @@ if (typeof window !== 'undefined') {
 }
 
 // 开发环境下暴露到 window
-if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
+if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as any).__CACHE__ = cacheService
 }

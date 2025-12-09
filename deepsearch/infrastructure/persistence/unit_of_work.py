@@ -5,17 +5,16 @@ Unit of Work pattern implementation for transaction management.
 from typing import Optional
 
 import asyncpg
-from domain.interfaces.repository import IStockRepository, IUnitOfWork
+
 from deepsearch.infrastructure.repositories.stock_repository import (
     PostgreSQLStockRepository,
 )
-
 from deepsearch.observability import get_logger
 
 logger = get_logger(__name__)
 
 
-class PostgreSQLUnitOfWork(IUnitOfWork):
+class PostgreSQLUnitOfWork:
     """
     PostgreSQL implementation of Unit of Work pattern.
     Manages database transactions across multiple repositories.
@@ -25,10 +24,10 @@ class PostgreSQLUnitOfWork(IUnitOfWork):
         self._pool = connection_pool
         self._connection: Optional[asyncpg.Connection] = None
         self._transaction: Optional[asyncpg.Transaction] = None
-        self._stock_repository: Optional[IStockRepository] = None
+        self._stock_repository: Optional[PostgreSQLStockRepository] = None
 
     @property
-    def stocks(self) -> IStockRepository:
+    def stocks(self) -> PostgreSQLStockRepository:
         """Get stock repository."""
         if not self._stock_repository:
             raise RuntimeError("Unit of Work not started. Use 'async with' context.")

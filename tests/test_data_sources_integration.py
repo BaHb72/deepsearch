@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 import pytest
 from loguru import logger
 
+from deepsearch.infrastructure.providers.managers.data_source_manager import StockListFetchResult
+
 # 配置日志
 logger.add("test_data_sources.log", rotation="10 MB")
 
@@ -55,36 +57,58 @@ class DataSourceTestSuite:
             logger.error(f"初始化失败: {e}")
             return False
 
+
     async def test_get_stock_list(self, source: str) -> TestResult:
         """测试获取股票列表"""
         start_time = time.time()
 
         try:
-            # 切换数据源
             self.manager.set_primary_source(source)
 
-            # 获取股票列表（限制10条）
-            stocks = await self.manager.get_stock_list(limit=10)
-
+            stock_result = await self.manager.get_stock_list(limit=10)
             response_time = time.time() - start_time
 
-            if stocks:
+            if isinstance(stock_result, StockListFetchResult):
+                data_count = len(stock_result.records) or len(stock_result.legacy)
+                sample = None
+                if stock_result.legacy:
+                    sample = stock_result.legacy[0]
+                elif stock_result.records:
+                    sample = dict(stock_result.records[0].as_mapping())
+                if data_count:
+                    return TestResult(
+                        source=source,
+                        method="get_stock_list",
+                        success=True,
+                        response_time=response_time,
+                        data_count=data_count,
+                        data_sample=sample,
+                    )
+                return TestResult(
+                    source=source,
+                    method="get_stock_list",
+                    success=False,
+                    error="返回为空",
+                    response_time=response_time,
+                )
+
+            if stock_result:
                 return TestResult(
                     source=source,
                     method="get_stock_list",
                     success=True,
                     response_time=response_time,
-                    data_count=len(stocks),
-                    data_sample=stocks[0] if stocks else None,
+                    data_count=len(stock_result),
+                    data_sample=stock_result[0] if stock_result else None,
                 )
-            else:
-                return TestResult(
-                    source=source,
-                    method="get_stock_list",
-                    success=False,
-                    error="返回空数据",
-                    response_time=response_time,
-                )
+
+            return TestResult(
+                source=source,
+                method="get_stock_list",
+                success=False,
+                error="返回为空",
+                response_time=response_time,
+            )
 
         except Exception as e:
             return TestResult(

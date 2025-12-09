@@ -14,6 +14,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 import pandas as pd
 from loguru import logger
+
 from deepsearch.infrastructure.providers.interfaces.base import (
     DataProvider,
     DataProviderConfig,
@@ -23,7 +24,6 @@ from deepsearch.infrastructure.providers.interfaces.base import (
     DataSourceType,
 )
 from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
-
 
 
 class MiniQMTProvider(DataProvider):
@@ -604,7 +604,7 @@ class MiniQMTProvider(DataProvider):
         except DataProviderError as exc:
             return DataResponse(success=False, error=str(exc), metadata=metadata)
         except Exception as exc:  # pragma: no cover - 防御日志
-            logger.exception("MiniQMT 获取数据异常: %s", exc)
+            logger.exception("MiniQMT 获取数据异常: {}", exc)
             return DataResponse(success=False, error=str(exc), metadata=metadata)
 
         return DataResponse(success=True, data=dataframe, metadata=metadata)

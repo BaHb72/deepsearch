@@ -160,6 +160,15 @@ class AsyncRunner:
             # 启动引擎
             await runner.start_engine(mode, config)
 
+            # 执行应用层引导
+            try:
+                from deepsearch.application.bootstrap import bootstrap_system
+                await bootstrap_system()
+            except ImportError:
+                runner.logger.debug("未找到引导模块 deepsearch.application.bootstrap，跳过引导步骤")
+            except Exception as e:
+                runner.logger.error(f"引导步骤执行失败: {e}")
+
             # 运行直到停止
             await runner.run_until_complete()
 

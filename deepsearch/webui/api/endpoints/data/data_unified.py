@@ -9,11 +9,60 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
 
+from deepsearch.domain.market_data import StockListRecord
+from deepsearch.infrastructure.providers.managers.data_source_manager import StockListFetchResult
 from deepsearch.utils.data_sources import DataSourceType, get_data_source_manager
 from deepsearch.webui.api.common.response_format import success_response
+from deepsearch.webui.api.endpoints.data import data as data_module
 from deepsearch.webui.api.utils import sanitize_for_json
 
 router = APIRouter(prefix="/api/data", tags=["unified_data"])
+
+
+def _record_to_legacy(record: StockListRecord) -> dict[str, object]:
+    legacy: dict[str, object] = dict(record.as_mapping())
+    if record.boards:
+        legacy.setdefault("board", record.boards[0])
+    return legacy
+
+
+def _normalize_stock_records(payload: Any) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    if payload is None:
+        return [], []
+
+    records: list[dict[str, object]] = []
+    legacy: list[dict[str, object]] = []
+
+    if isinstance(payload, StockListFetchResult):
+        records = [dict(record.as_mapping()) for record in payload.records]
+        legacy = payload.as_legacy()
+        return records, legacy
+
+    if hasattr(payload, "to_dict") and callable(getattr(payload, "to_dict")):
+        payload = payload.to_dict("records")
+
+    for entry in payload:
+        if isinstance(entry, StockListRecord):
+            record_map = dict(entry.as_mapping())
+            records.append(record_map)
+            legacy.append(_record_to_legacy(entry))
+        elif isinstance(entry, dict):
+            legacy_map = dict(entry)
+            legacy.append(legacy_map)
+            record = StockListRecord.from_payload(entry)
+            if record.symbol:
+                records.append(dict(record.as_mapping()))
+        else:
+            try:
+                legacy_map = dict(entry)
+            except Exception:
+                continue
+            legacy.append(legacy_map)
+            record = StockListRecord.from_payload(legacy_map)
+            if record.symbol:
+                records.append(dict(record.as_mapping()))
+
+    return records, legacy
 
 
 @router.get("/stock/hist")
@@ -133,35 +182,91 @@ async def get_stock_info(
 
 
 @router.get("/stock/list")
+
 async def get_stock_list(source: Optional[str] = Query(None, description="指定数据源")):
     """
-    获取股票列表
-
-    返回所有可交易股票的代码和名称
+    获取股票列表，返回并行的领域结构与旧结构映射。
     """
     try:
         manager = get_data_source_manager()
 
-        # 优先从Cloudflare获取完整列表
+        # 优先尝试 Cloudflare/QMT 等直接数据源，便于灰度
         for source_type in [DataSourceType.CLOUDFLARE, DataSourceType.QMT]:
             provider = manager.providers.get(source_type)
-            if provider and hasattr(provider, "fetch_stock_list"):
-                try:
-                    stocks = await provider.fetch_stock_list()
-                    if stocks:
-                        return success_response(
-                            sanitize_for_json(
-                                {"data": stocks, "source": source_type.value, "count": len(stocks)}
-                            )
-                        )
-                except Exception as e:
-                    logger.debug(f"{source_type.value} 获取股票列表失败: {e}")
+            if not provider or not hasattr(provider, "fetch_stock_list"):
+                continue
+            try:
+                stocks = await provider.fetch_stock_list()
+            except Exception as error:
+                logger.debug("%s 获取股票列表失败: %s", source_type.value, error)
+                continue
 
-        return success_response({"data": [], "source": "none", "error": "无法获取股票列表"})
+            records, legacy = _normalize_stock_records(stocks)
+            if not records and not legacy:
+                continue
+            payload = {
+                "records": records,
+                "legacy": legacy,
+                "source": source_type.value,
+                "count": len(records) or len(legacy),
+                "schema_version": "v2",
+            }
+            return success_response(sanitize_for_json(payload))
 
-    except Exception as e:
-        logger.error(f"获取股票列表失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        service = data_module.get_data_service()
+        stock_result = await service.get_stock_list(limit=None)
+        records, legacy = _normalize_stock_records(stock_result)
+        if records or legacy:
+            source_name = "manager"
+            mismatch = 0
+            if isinstance(stock_result, StockListFetchResult):
+                source_name = stock_result.source
+                mismatch = stock_result.mismatch
+            if mismatch:
+                logger.warning(
+                    "股票列表双写存在差异 source=%s mismatch=%d",
+                    source_name,
+                    mismatch,
+                )
+            payload = {
+                "records": records,
+                "legacy": legacy,
+                "source": source_name,
+                "count": len(records) or len(legacy),
+                "schema_version": "v2",
+            }
+            return success_response(sanitize_for_json(payload))
+
+        fallback = {
+            "records": [],
+            "legacy": [],
+            "source": "none",
+            "error": "无法获取股票列表",
+        }
+        return success_response(sanitize_for_json(fallback))
+
+    except Exception as exc:
+        logger.error(f"获取股票列表失败: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/stocks")
+async def get_stock_list_legacy(source: Optional[str] = Query(None, description="指定数据源")) -> list[
+    dict[str, object]]:
+    """旧版 /api/data/stocks 兼容输出，仅返回 legacy 列表。"""
+
+    service = data_module.get_data_service()
+    stocks = await service.get_stock_list(limit=None)
+    if isinstance(stocks, StockListFetchResult) and stocks.mismatch:
+        logger.warning(
+            "��Ʊ�б�˫д���ڲ��� source=%s mismatch=%d",
+            stocks.source,
+            stocks.mismatch,
+        )
+    records, legacy = _normalize_stock_records(stocks)
+    if legacy:
+        return legacy
+    return records
 
 
 @router.get("/source/status")

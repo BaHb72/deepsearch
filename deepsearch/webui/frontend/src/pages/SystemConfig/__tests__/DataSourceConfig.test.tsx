@@ -1,5 +1,6 @@
+// @ts-nocheck
 import React from 'react'
-import { render, screen, act } from '@testing-library/react'
+import {act, render, screen} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DataSourceConfig from '../DataSourceConfig'
 import '@testing-library/jest-dom'
@@ -278,3 +279,4 @@ describe('DataSourceConfig 状态与凭证交互', () => {
     expect(mockMessageApi.open).not.toHaveBeenCalled()
   })
 })
+

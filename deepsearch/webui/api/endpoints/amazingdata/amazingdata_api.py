@@ -16,6 +16,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from deepsearch.infrastructure.providers.implementations.amazingdata import SnapshotAlignPolicy
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_extended import (
     AmazingDataExtended,
 )
@@ -108,13 +109,16 @@ class HistCodeListRequest(BaseModel):
 
 
 class KlineRequest(BaseModel):
-    """K线查询请求"""
+    """K线查询参数"""
 
-    code_list: List[str] = Field(..., description="代码列表")
+    code_list: List[str] = Field(..., description="证券代码列表")
     begin_date: int = Field(..., description="开始日期")
     end_date: int = Field(..., description="结束日期")
+    align_policy: SnapshotAlignPolicy = Field(
+        default=SnapshotAlignPolicy.NEAREST_PREV,
+        description="对齐策略：nearest_prev/strict/passthrough",
+    )
     period: Optional[str] = Field(None, description="K线周期")
-
 
 class SubscriptionRequest(BaseModel):
     """订阅请求"""
@@ -155,13 +159,22 @@ async def get_amazingdata_provider() -> AmazingDataExtended:
                     payload = dict(direct_config)
 
             if payload is None:
-                data_sources = getattr(config, "data_sources", None)
+                data_sources_section = getattr(config, "data_sources", None)
                 amazingdata_section: Any | None = None
-                if data_sources is not None:
-                    if hasattr(data_sources, "amazingdata"):
-                        amazingdata_section = getattr(data_sources, "amazingdata")
-                    elif isinstance(data_sources, Mapping):
-                        amazingdata_section = data_sources.get("amazingdata")
+                if data_sources_section is not None:
+                    providers_section = getattr(data_sources_section, "providers", None)
+                    if providers_section is None and data_sources_section is not None and hasattr(data_sources_section,
+                                                                                                  "model_dump"):
+                        providers_section = data_sources_section.model_dump().get("providers")
+                    if providers_section is not None and hasattr(providers_section, "get"):
+                        amazingdata_section = providers_section.get("amazingdata")
+                if amazingdata_section is None and hasattr(data_sources_section, "model_dump"):
+                    try:
+                        providers_map = data_sources_section.model_dump().get("providers", {})
+                    except Exception:
+                        providers_map = {}
+                    if isinstance(providers_map, dict):
+                        amazingdata_section = providers_map.get("amazingdata")
 
                 if amazingdata_section is not None:
                     if hasattr(amazingdata_section, "to_provider_payload"):
@@ -471,7 +484,10 @@ async def query_snapshot(request: KlineRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.query_snapshot(
-            request.code_list, request.begin_date, request.end_date
+            request.code_list,
+            request.begin_date,
+            request.end_date,
+            align_policy=request.align_policy,
         )
 
         # 转换结果

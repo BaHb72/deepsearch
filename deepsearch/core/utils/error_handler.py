@@ -17,8 +17,8 @@ from typing import Any, Callable, Dict, List, Optional
 import psutil
 from loguru import logger
 
-from deepsearch.observability.logger import logger_manager
 from deepsearch.config import get_config
+from deepsearch.observability.logger import logger_manager
 
 
 class ErrorSolution:
@@ -127,6 +127,12 @@ class EnhancedErrorHandler:
         original_excepthook = sys.excepthook
 
         def enhanced_excepthook(exc_type, exc_value, exc_traceback):
+            try:
+                if issubclass(exc_type, KeyboardInterrupt) or issubclass(exc_type, SystemExit):
+                    logger.info("收到终止信号（{}），进程将正常退出", exc_type.__name__)
+                    return
+            except Exception:
+                pass
             # 增强的错误处理
             self.handle_error(
                 exc_value,
@@ -145,6 +151,24 @@ class EnhancedErrorHandler:
         self, error: Exception, context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """处理错误并提供详细诊断"""
+        # 将终止信号归类为正常退出，避免被记录为异常
+        try:
+            if isinstance(error, (KeyboardInterrupt, SystemExit)):
+                logger.info("收到终止信号（{}），正常退出", type(error).__name__)
+                return {
+                    "id": f"err_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{id(error)}",
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(error),
+                    "type": type(error).__name__,
+                    "context": context or {},
+                    "locals": {},
+                    "system_state": {},
+                    "diagnosis": {"category": "shutdown", "severity": "INFO"},
+                    "solutions": [],
+                    "traceback": "",
+                }
+        except Exception:
+            pass
         error_info: Dict[str, Any] = {
             "id": f"err_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{id(error)}",
             "timestamp": datetime.now().isoformat(),

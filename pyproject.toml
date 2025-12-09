@@ -32,6 +32,7 @@ dependencies = [
     "asyncpg>=0.30.0",
     "psycopg[binary]>=3.2.10",
     "duckdb>=1.4.1",
+    "aiosqlite>=0.20.0",
     # ==== Web UI 依赖 ====
     "fastapi==0.119.0",
     "uvicorn[standard]>=0.37.0",
@@ -40,8 +41,8 @@ dependencies = [
     "httpx>=0.28.1",
     "python-jose[cryptography]>=3.5.0",
     # ==== 数据获取依赖 ====
-    "amazingdata==1.0.15",
-    "tgw==1.0.8.1",
+    "amazingdata==1.0.20",
+    "tgw==1.0.8.3",
     "akshare==1.17.65",
     "aiohttp>=3.13.0",
     "numpy>=1.24.0",
@@ -119,8 +120,8 @@ python-preference = "only-system"
 compile-bytecode = true
 
 [tool.uv.sources]
-amazingdata = { url = "https://bahbai.com/packages/AmazingData-1.0.15-cp313-none-any.whl" }
-tgw = { url = "https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl" }
+amazingdata = { url = "https://bahbai.com/packages/AmazingData-1.0.20-cp313-none-any.whl" }
+tgw = { url = "https://bahbai.com/packages/tgw-1.0.8.3-py3-none-any.whl" }
 
 [tool.uv.pip]
 index-url = "https://pypi.org/simple"

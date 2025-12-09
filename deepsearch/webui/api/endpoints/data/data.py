@@ -30,6 +30,7 @@ from deepsearch.indicators.simple import SimpleIndicators
 from deepsearch.infrastructure.persistence.analytics import AnalyticsDB
 from deepsearch.infrastructure.persistence.database import DatabaseService
 from deepsearch.infrastructure.persistence.models.market import Market1Min, MarketTick
+from deepsearch.infrastructure.providers.managers.data_source_manager import StockListFetchResult
 from deepsearch.observability.logger import logger
 from deepsearch.utils.data_sources import DataSourceManager, get_data_source_manager
 
@@ -115,13 +116,14 @@ def _require_duckdb_connection(analytics_db: AnalyticsDB) -> DuckDBPyConnection:
     return analytics_db.conn
 
 
+from deepsearch.core.runtime.context import get_context
+
 def get_db_service() -> DatabaseService:
     """获取数据库服务实例。"""
 
     global _db_service
     if _db_service is None:
-        cm = ComponentManager()
-        component = cm.get_component("database")
+        component = get_context().get_component("database")
         db_component = _ensure_database_component(cast(Optional[DatabaseComponent], component))
         _db_service = DatabaseService(db_component)
     return _db_service
@@ -545,10 +547,26 @@ async def get_stocks(limit: int = Query(100, description="返回股票数量限�
 
     try:
         data_service = get_data_service()
-        stocks = await data_service.get_stock_list(limit=limit)
-        if not stocks:
+        result = await data_service.get_stock_list(limit=limit)
+        if isinstance(result, StockListFetchResult):
+            if result.mismatch:
+                logger.warning(
+                    "��Ʊ�б�˫д���ڲ��� source=%s mismatch=%d",
+                    result.source,
+                    result.mismatch,
+                )
+            legacy = result.as_legacy()
+            if limit and legacy:
+                legacy = legacy[:limit]
+            if legacy:
+                return legacy
+            records = [dict(record.as_mapping()) for record in result.records]
+            if limit and records:
+                records = records[:limit]
+            return records
+        if not result:
             return []
-        return cast(List[Dict[str, Any]], stocks)
+        return cast(List[Dict[str, Any]], result)
     except HTTPException:
         raise
     except Exception as exc:  # pragma: no cover - 运行时防御

@@ -1,5 +1,3 @@
-"""应用层服务模块。"""
+"""应用服务包。"""
 
-from . import market
-
-__all__ = ["market"]
+__all__ = []

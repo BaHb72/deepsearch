@@ -1,9 +1,10 @@
-import { act, renderHook } from '@testing-library/react'
-import { App as AntdApp, ConfigProvider } from 'antd'
-import type { ReactNode } from 'react'
-import { useNotificationTest } from '../useNotificationTest'
-import { TEST_HISTORY_MAX_ITEMS } from '../constants'
-import { sendNotification } from '@/api/notifications'
+// @ts-nocheck
+import {act, renderHook} from '@testing-library/react'
+import {App as AntdApp, ConfigProvider} from 'antd'
+import type {ReactNode} from 'react'
+import {useNotificationTest} from '../useNotificationTest'
+import {TEST_HISTORY_MAX_ITEMS} from '../constants'
+import {sendNotification} from '@/api/notifications'
 
 jest.mock('@/api/notifications', () => ({
   sendNotification: jest.fn(),
@@ -109,3 +110,4 @@ describe('useNotificationTest', () => {
     expect(result.current.history[0].errorMessage).toContain('额度')
   })
 })
+

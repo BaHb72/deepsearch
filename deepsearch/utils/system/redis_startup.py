@@ -111,11 +111,11 @@ def ensure_redis_running(
         _refresh_wsl_host(cache_config, wsl_config, echo_fn, force=True)
 
     if not (_is_local_host(cache_config.host) or wsl_enabled):
-        logger.debug("Redis 主机 %s 被视为远程地址，跳过自动启动", cache_config.host)
+        logger.debug("Redis host {} is remote, skip auto-start", cache_config.host)
         return
 
     if _can_connect(cache_config):
-        logger.debug("Redis 已可用 (%s:%s)", cache_config.host, cache_config.port)
+        logger.debug("Redis already reachable ({}:{})", cache_config.host, cache_config.port)
         return
 
     if platform.system() != "Windows":
@@ -136,7 +136,7 @@ def ensure_redis_running(
         startup_command = _build_default_wsl_start_command(wsl_config)
         if startup_command:
             used_default_wsl_command = True
-            logger.debug("WSL 模式启用，使用默认启动命令: %s", " ".join(startup_command))
+            logger.debug("WSL 模式启用，使用默认启动命令: {}", " ".join(startup_command))
         else:
             logger.debug("WSL 模式启用，但无法构造默认启动命令（缺少发行版配置）")
 
@@ -292,14 +292,14 @@ def _refresh_wsl_host(
     if mirrored_mode:
         if should_update_host:
             logger.info(
-                "WSL %s Mirrored \u6a21\u5f0f\uff0c\u4f7f\u7528 localhost \u8bbf\u95ee Redis (WSL IP: %s)",
+                "WSL {} Mirrored \u6a21\u5f0f\uff0c\u4f7f\u7528 localhost \u8bbf\u95ee Redis (WSL IP: {})",
                 wsl_config.distro,
                 ip,
             )
             echo_fn("\u68c0\u6d4b\u5230 WSL Mirrored \u6a21\u5f0f\uff0c\u6539\u7528 127.0.0.1 \u8bbf\u95ee Redis")
             config.host = target_host
         elif ip_changed:
-            logger.info("WSL %s Mirrored \u6a21\u5f0f IP \u53d8\u66f4: %s", wsl_config.distro, ip)
+            logger.info("WSL {} Mirrored \u6a21\u5f0f IP \u53d8\u66f4: {}", wsl_config.distro, ip)
     else:
         if should_update_host:
             if ip_changed:
@@ -317,15 +317,15 @@ def _resolve_wsl_ip(wsl_config: CacheDatabaseWSLConfig) -> Optional[str]:
     try:
         result = subprocess.run(command, capture_output=True, text=False, check=False)
     except FileNotFoundError as exc:
-        logger.debug("无法执行 wsl.exe 解析 WSL IP: %s", exc)
+        logger.debug("无法执行 wsl.exe 解析 WSL IP: {}", exc)
         return None
     except Exception as exc:  # pragma: no cover - 防御性日志
-        logger.warning("解析 WSL IP 异常: %s", exc)
+        logger.warning("解析 WSL IP 异常: {}", exc)
         return None
 
     if result.returncode != 0:
         output = _merge_subprocess_output(result.stdout, result.stderr)
-        logger.debug("WSL %s IP 查询失败: %s", wsl_config.distro, output)
+        logger.debug("WSL {} IP 查询失败: {}", wsl_config.distro, output)
         return None
 
     stdout_text = _decode_subprocess_output(result.stdout)
@@ -336,7 +336,7 @@ def _resolve_wsl_ip(wsl_config: CacheDatabaseWSLConfig) -> Optional[str]:
             continue
         if getattr(ip_obj, "version", 4) == 4:
             return token
-    logger.debug("WSL(%s) 未返回有效 IPv4 地址: %s", wsl_config.distro, stdout_text)
+    logger.debug("WSL({}) 未返回有效 IPv4 地址: {}", wsl_config.distro, stdout_text)
     return None
 
 
@@ -349,6 +349,7 @@ def _build_client(config: CacheDatabaseConfig) -> Redis:
     if username == "***":
         username = None
 
+    logger.debug(f"DEBUG: _build_client username={repr(username)} password={repr(password)}")
     return Redis(
         host=config.host,
         port=config.port,
@@ -370,7 +371,7 @@ def _can_connect(config: CacheDatabaseConfig) -> bool:
         client.ping()
         return True
     except (ValueError, RedisError) as exc:
-        logger.debug("Redis ping 失败: %s", exc)
+        logger.debug("Redis ping 失败: {}", exc)
         return False
     finally:
         try:
@@ -399,11 +400,11 @@ def _start_via_services(service_names: Sequence[str], echo_fn: EchoFunc) -> bool
 
         status = _query_service(service_name)
         if status == "running":
-            logger.info("Windows 服务 %s 已运行", service_name)
+            logger.info("Windows 服务 {} 已运行", service_name)
             return True
 
         if status is None:
-            logger.debug("Windows 服务 %s 不存在或未注册", service_name)
+            logger.debug("Windows 服务 {} 不存在或未注册", service_name)
             continue
 
         echo_fn(f"尝试启动 Windows 服务 {service_name} ...")
@@ -421,12 +422,12 @@ def _query_service(service_name: str) -> Optional[str]:
             check=False,
         )
     except OSError as exc:
-        logger.warning("查询 Windows 服务 %s 失败: %s", service_name, exc)
+        logger.warning("查询 Windows 服务 {} 失败: {}", service_name, exc)
         return None
 
     if result.returncode != 0:
         output = _merge_subprocess_output(result.stdout, result.stderr)
-        logger.debug("Windows 服务 %s 查询失败: %s", service_name, output)
+        logger.debug("Windows 服务 {} 查询失败: {}", service_name, output)
         return None
 
     output = result.stdout.lower()
@@ -446,15 +447,15 @@ def _start_service(service_name: str) -> bool:
             check=False,
         )
     except OSError as exc:
-        logger.error("启动 Windows 服务 %s 失败: %s", service_name, exc)
+        logger.error("启动 Windows 服务 {} 失败: {}", service_name, exc)
         return False
 
     output = (result.stdout + result.stderr).lower()
     if result.returncode == 0 or "service already running" in output:
-        logger.info("已发送启动指令到 Windows 服务 %s", service_name)
+        logger.info("已发送启动指令到 Windows 服务 {}", service_name)
         return True
 
-    logger.warning("Windows 服务 %s 启动失败: %s", service_name, output.strip())
+    logger.warning("Windows 服务 {} 启动失败: {}", service_name, output.strip())
     return False
 
 
@@ -465,14 +466,14 @@ def _wait_for_service(service_name: str) -> bool:
         if status == "running":
             return True
         time.sleep(WAIT_INTERVAL_SECONDS)
-    logger.debug("Windows 服务 %s 在超时时间内仍未运行", service_name)
+    logger.debug("Windows 服务 {} 在超时时间内仍未运行", service_name)
     return False
 
 
 def _start_via_binary(binary_path: str, arguments: Sequence[str], echo_fn: EchoFunc) -> bool:
     path_obj = Path(binary_path).expanduser()
     if not path_obj.exists():
-        logger.warning("Redis 可执行文件不存在: %s", path_obj)
+        logger.warning("Redis 可执行文件不存在: {}", path_obj)
         echo_fn(f"Redis 可执行文件不存在: {path_obj}")
         return False
 
@@ -489,10 +490,10 @@ def _start_via_binary(binary_path: str, arguments: Sequence[str], echo_fn: EchoF
             cwd=str(path_obj.parent),
             creationflags=creation_flags,
         )
-        logger.info("已执行 Redis 可执行文件: %s", " ".join(command))
+        logger.info("已执行 Redis 可执行文件: {}", " ".join(command))
         return True
     except Exception as exc:
-        logger.error("启动 Redis 可执行文件失败: %s", exc)
+        logger.error("启动 Redis 可执行文件失败: {}", exc)
         return False
 
 
@@ -509,7 +510,7 @@ def _start_via_command(command: Sequence[str], echo_fn: EchoFunc) -> bool:
             check=False,
         )
     except Exception as exc:
-        logger.error("执行自动启动命令失败: %s", exc)
+        logger.error("执行自动启动命令失败: {}", exc)
         return False
 
     if result.returncode == 0:
@@ -517,5 +518,5 @@ def _start_via_command(command: Sequence[str], echo_fn: EchoFunc) -> bool:
         return True
 
     output = _merge_subprocess_output(result.stdout, result.stderr) or "<无输出信息>"
-    logger.warning("自动启动命令返回非零状态: %s", output)
+    logger.warning("自动启动命令返回非零状态: {}", output)
     return False

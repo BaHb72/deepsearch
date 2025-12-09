@@ -9,6 +9,7 @@ Date: 2025-09-20
 """
 
 import time
+import weakref
 from typing import Any, Dict, Mapping, Optional, Tuple, TypedDict, cast
 
 import pandas as pd
@@ -22,6 +23,7 @@ from deepsearch.infrastructure.providers.interfaces.runtime import (
 )
 from .amazingdata_process_pool import get_global_pool
 from .amazingdata_process_proxy import ProxyResponse, RequestType
+from .subscription import SubscriptionInfo
 
 
 class ProxyResultPayload(TypedDict, total=False):
@@ -115,6 +117,7 @@ class AmazingDataSafeWrapper:
             "crashes_handled": 0,
             "last_health_status": None,
         }
+        self._subscription_bridge_ref: weakref.ReferenceType[Any] | None = None
 
     def safe_login(
         self,
@@ -280,6 +283,83 @@ class AmazingDataSafeWrapper:
         self.is_connected = False
         self.login_info = None
         return True
+
+    def register_subscription_bridge(self, bridge: Any) -> None:
+        """
+        注册订阅桥接器，用于在子进程重启时同步订阅快照。
+        """
+        if bridge is None:
+            self._subscription_bridge_ref = None
+            return
+        required = (
+            "snapshot_subscriptions",
+            "drain_subscriptions",
+            "restore_subscriptions",
+        )
+        missing = [name for name in required if not callable(getattr(bridge, name, None))]
+        if missing:
+            raise TypeError(f"bridge 缺少订阅接口: {', '.join(missing)}")
+        self._subscription_bridge_ref = weakref.ref(bridge)
+        logger.debug("[SafeWrapper] 已注册订阅桥接器: {}", type(bridge).__name__)
+
+    def unregister_subscription_bridge(self, bridge: Any) -> None:
+        """
+        注销当前已注册的订阅桥接器。
+        """
+        current = self._get_subscription_bridge()
+        if current is bridge:
+            self._subscription_bridge_ref = None
+            logger.debug("[SafeWrapper] 已注销订阅桥接器")
+
+    def _get_subscription_bridge(self) -> Any | None:
+        if self._subscription_bridge_ref is None:
+            return None
+        target = self._subscription_bridge_ref()
+        if target is None:
+            self._subscription_bridge_ref = None
+        return target
+
+    async def snapshot_subscriptions(self) -> Mapping[str, SubscriptionInfo]:
+        """
+        读取当前订阅状态，供外部在重连前持久化。
+        """
+        bridge = self._get_subscription_bridge()
+        if bridge is None:
+            return {}
+        try:
+            result = await bridge.snapshot_subscriptions()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[SafeWrapper] 获取订阅快照失败: {}", exc)
+            return {}
+        return dict(result)
+
+    async def drain_subscriptions(self) -> Mapping[str, SubscriptionInfo]:
+        """
+        清空当前订阅并返回快照，便于重新注册。
+        """
+        bridge = self._get_subscription_bridge()
+        if bridge is None:
+            return {}
+        try:
+            result = await bridge.drain_subscriptions()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[SafeWrapper] 清空订阅状态失败: {}", exc)
+            return {}
+        return dict(result)
+
+    async def restore_subscriptions(self, snapshot: Mapping[str, SubscriptionInfo]) -> None:
+        """
+        将订阅快照重新同步到 Provider。
+        """
+        if not snapshot:
+            return
+        bridge = self._get_subscription_bridge()
+        if bridge is None:
+            return
+        try:
+            await bridge.restore_subscriptions(snapshot)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[SafeWrapper] 恢复订阅状态失败: {}", exc)
 
     def safe_get_data(
         self, method: str, *args, timeout: Optional[float] = None, **kwargs

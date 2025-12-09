@@ -96,7 +96,9 @@ async def test_login_system_exit_triggers_alert(provider, fake_ad_module, monkey
 
     assert "SDK" in str(exc.value)
     assert provider._connected is False
-    provider._trigger_alert.assert_awaited_once()
+    assert provider._trigger_alert.await_count >= 1
+    args, kwargs = provider._trigger_alert.await_args_list[0]
+    assert args[0] == "SDK_EXIT"
 
 
 @pytest.mark.asyncio
@@ -115,7 +117,7 @@ async def test_logout_calls_sdk(provider, fake_ad_module):
 
     await provider._logout()
 
-    fake_ad_module.logout.assert_called_once_with()
+    fake_ad_module.logout.assert_called_once_with("test-user")
     assert provider._connected is False
 
 
@@ -128,7 +130,7 @@ async def test_get_kline_raises_when_sdk_missing(provider):
     with pytest.raises(DataProviderError) as exc:
         await provider.get_kline("000001.SZ")
 
-    assert "未加载成功" in str(exc.value)
+    assert "not detected" in str(exc.value)
     assert provider._stats["query_errors"] == 1
 
 
@@ -141,7 +143,7 @@ async def test_get_kline_raises_when_not_connected(provider):
     with pytest.raises(DataProviderError) as exc:
         await provider.get_kline("000001.SZ")
 
-    assert "尚未建立连接" in str(exc.value)
+    assert "not connected" in str(exc.value)
     assert provider._stats["query_errors"] == 1
 
 

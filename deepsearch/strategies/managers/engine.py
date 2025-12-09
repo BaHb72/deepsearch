@@ -225,7 +225,7 @@ class StrategyEngine:
         payload = event.data
         if not isinstance(payload, dict):
             logger.warning(
-                "MARKET_BAR event payload is not a mapping: %s", type(payload).__name__
+                "MARKET_BAR event payload is not a mapping: {}", type(payload).__name__
             )
             return
 
@@ -239,7 +239,7 @@ class StrategyEngine:
         payload = event.data
         if not isinstance(payload, dict):
             logger.warning(
-                "MARKET_TICK event payload is not a mapping: %s", type(payload).__name__
+                "MARKET_TICK event payload is not a mapping: {}", type(payload).__name__
             )
             return
 
@@ -253,7 +253,7 @@ class StrategyEngine:
         payload = event.data
         if not isinstance(payload, dict):
             logger.warning(
-                "MARKET_DEPTH event payload is not a mapping: %s", type(payload).__name__
+                "MARKET_DEPTH event payload is not a mapping: {}", type(payload).__name__
             )
             return
 
@@ -267,7 +267,7 @@ class StrategyEngine:
         payload_obj, headers = self._unwrap_envelope(event.data)
         if not isinstance(payload_obj, Mapping):
             logger.warning(
-                "STRATEGY_ORDER_SUBMIT payload is not a mapping: %s", type(payload_obj).__name__
+                "STRATEGY_ORDER_SUBMIT payload is not a mapping: {}", type(payload_obj).__name__
             )
             return
 
@@ -283,7 +283,7 @@ class StrategyEngine:
         strategy_id_obj = order.get("strategy_id")
         order_id_obj = order.get("id")
         if not isinstance(strategy_id_obj, str) or not isinstance(order_id_obj, str):
-            logger.warning("Strategy order missing identifiers: %s", order)
+            logger.warning("Strategy order missing identifiers: {}", order)
             return
 
         strategy_id = strategy_id_obj
@@ -305,7 +305,7 @@ class StrategyEngine:
         payload_obj, headers = self._unwrap_envelope(event.data)
         if not isinstance(payload_obj, Mapping):
             logger.warning(
-                "STRATEGY_ORDER_CANCEL payload is not a mapping: %s", type(payload_obj).__name__
+                "STRATEGY_ORDER_CANCEL payload is not a mapping: {}", type(payload_obj).__name__
             )
             return
 
@@ -318,7 +318,7 @@ class StrategyEngine:
                 order_id_obj = header_order
 
         if not isinstance(order_id_obj, str):
-            logger.warning("Cancel event missing order_id: %s", cancel_payload)
+            logger.warning("Cancel event missing order_id: {}", cancel_payload)
             return
 
         order_id = order_id_obj
@@ -331,7 +331,7 @@ class StrategyEngine:
         payload_obj, headers = self._unwrap_envelope(event.data)
         if not isinstance(payload_obj, Mapping):
             logger.warning(
-                "ORDER_STATUS payload is not a mapping: %s", type(payload_obj).__name__
+                "ORDER_STATUS payload is not a mapping: {}", type(payload_obj).__name__
             )
             return
 
@@ -346,7 +346,7 @@ class StrategyEngine:
         order_update = cast(StrategyOrder, order_update_map)
         order_id_obj = order_update.get("order_id")
         if not isinstance(order_id_obj, str):
-            logger.warning("Order status update missing order_id: %s", order_update)
+            logger.warning("Order status update missing order_id: {}", order_update)
             return
 
         order_id = order_id_obj
@@ -367,7 +367,7 @@ class StrategyEngine:
         payload_obj, headers = self._unwrap_envelope(event.data)
         if not isinstance(payload_obj, Mapping):
             logger.warning(
-                "ORDER_FILLED payload is not a mapping: %s", type(payload_obj).__name__
+                "ORDER_FILLED payload is not a mapping: {}", type(payload_obj).__name__
             )
             return
 
@@ -386,7 +386,7 @@ class StrategyEngine:
         trade = cast(StrategyTrade, trade_map)
         order_id_obj = trade.get("order_id")
         if not isinstance(order_id_obj, str):
-            logger.warning("Filled order payload missing order_id: %s", trade)
+            logger.warning("Filled order payload missing order_id: {}", trade)
             return
 
         order_id = order_id_obj
@@ -405,7 +405,7 @@ class StrategyEngine:
         side = trade.get("side")
 
         if not isinstance(symbol, str) or not isinstance(side, str):
-            logger.warning("Trade payload missing required fields: %s", trade)
+            logger.warning("Trade payload missing required fields: {}", trade)
             return
 
         size = _coerce_float(trade.get("size"), 0.0)

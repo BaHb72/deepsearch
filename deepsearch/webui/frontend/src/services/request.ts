@@ -49,16 +49,19 @@ service.interceptors.response.use(
     const res = response.data
     
     // 如果返回的状态码不是200，则判定为错误
-    if (res.code !== 200 && res.code !== 0) {
-      message.error(res.message || '请求失败')
-      
-      // 401: 未登录
-      if (res.code === 401) {
-        // 跳转到登录页面
-        window.location.href = '/login'
-      }
-      
-      return Promise.reject(new Error(res.message || '请求失败'))
+      if (res && typeof (res as ApiResponse).code !== 'undefined') {
+          const code = (res as ApiResponse).code
+          if (code !== 200 && code !== 0) {
+              message.error(res.message || '请求失败')
+
+              // 401: 未登录
+              if (code === 401) {
+                  // 跳转到登录页面
+                  window.location.href = '/login'
+              }
+
+              return Promise.reject(new Error(res.message || '请求失败'))
+          }
     }
     
     return response

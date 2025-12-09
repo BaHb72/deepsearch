@@ -6,7 +6,6 @@ AmazingData 优化版本的单元测试
 
 import asyncio
 import gc
-
 # 假设 AmazingData SDK 可能未安装，先 mock
 import sys
 import time
@@ -516,6 +515,8 @@ class TestOptimizedAmazingDataProvider:
                 # 第一次查询 - 应该调用 API
                 result1 = await provider.get_kline("000001.SZ", "daily")
                 assert len(result1) == 1
+                assert "symbol" in result1.columns
+                assert result1.index.name == "datetime"
                 assert mock_ad.KLine.get_kline.call_count == 1
 
                 # 第二次查询相同数据 - 应该命中缓存

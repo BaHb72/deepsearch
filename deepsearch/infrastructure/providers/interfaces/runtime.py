@@ -70,6 +70,7 @@ class ProviderCallStats(TypedDict):
     failed_calls: int
     retries: int
     crashes_handled: int
+    last_health_status: NotRequired[Mapping[str, Any] | None]
 
 
 class ProxyRuntimeStats(TypedDict, total=False):

@@ -12,9 +12,9 @@ from typing import Any, Dict, List, Optional, TypedDict, cast
 import aiohttp
 from loguru import logger
 
-from ..interfaces.base import ProxyConfig
 from .pool import ProxyPool
 from .validator import ProxyValidator, ProxyValidationResult
+from ..interfaces.base import ProxyConfig
 
 
 class ProxyManagerConfigSnapshot(TypedDict):
@@ -61,7 +61,7 @@ class ProxyManager:
 
         await self._validate_all_proxies()
         available = len(await self._get_available_proxies())
-        logger.info("代理管理器初始化完成，可用代理: %s", available)
+        logger.info("代理管理器初始化完成，可用代理: {}", available)
 
     async def start(self) -> None:
         if self._running:
@@ -106,7 +106,7 @@ class ProxyManager:
             proxy = await self._pool.get_proxy()
 
         if proxy:
-            logger.debug("分配代理: %s", proxy)
+            logger.debug("分配代理: {}", proxy)
         else:
             logger.warning("暂无可用代理")
 
@@ -125,7 +125,7 @@ class ProxyManager:
     async def _add_static_proxies(self) -> None:
         for proxy_url in self.config.proxy_list:
             await self._pool.add_proxy(proxy_url, {"source": "static"})
-        logger.info("已添加 %s 个静态代理", len(self.config.proxy_list))
+        logger.info("已添加 {} 个静态代理", len(self.config.proxy_list))
 
     async def _fetch_dynamic_proxies(self) -> None:
         if not self.config.proxy_api_url:
@@ -141,7 +141,7 @@ class ProxyManager:
                     self.config.proxy_api_url, headers=headers, timeout=30
                 ) as response:
                     if response.status != 200:
-                        logger.error("获取动态代理失败: HTTP %s", response.status)
+                        logger.error("获取动态代理失败: HTTP {}", response.status)
                         return
 
                     data = await response.json()
@@ -162,17 +162,17 @@ class ProxyManager:
                         new_count += 1
 
                     self._last_dynamic_fetch = datetime.now()
-                    logger.info("获取到 %s 个动态代理", new_count)
+                    logger.info("获取到 {} 个动态代理", new_count)
 
         except Exception as exc:  # pragma: no cover - 网络异常
-            logger.error("获取动态代理异常: %s", exc)
+            logger.error("获取动态代理异常: {}", exc)
 
     async def _validate_all_proxies(self) -> None:
         proxies = list(self._pool._proxies.keys())
         if not proxies:
             return
 
-        logger.info("开始验证 %s 个代理", len(proxies))
+        logger.info("开始验证 {} 个代理", len(proxies))
 
         async with ProxyValidator(timeout=self.config.timeout) as validator:
             results: Dict[str, ProxyValidationResult] = await validator.batch_validate(
@@ -207,7 +207,7 @@ class ProxyManager:
                         proxies_to_check.append(url)
 
                 if proxies_to_check:
-                    logger.debug("健康检查 %s 个代理", len(proxies_to_check))
+                    logger.debug("健康检查 {} 个代理", len(proxies_to_check))
 
                     async with ProxyValidator(timeout=self.config.timeout) as validator:
                         for proxy_url in proxies_to_check[:5]:
@@ -229,7 +229,7 @@ class ProxyManager:
             except asyncio.CancelledError:
                 break
             except Exception as exc:  # pragma: no cover - 健康检查异常
-                logger.error("健康检查异常: %s", exc)
+                logger.error("健康检查异常: {}", exc)
 
     async def _dynamic_fetch_loop(self) -> None:
         while self._running:
@@ -239,7 +239,7 @@ class ProxyManager:
                 available_count = len(await self._get_available_proxies())
                 if available_count < self.config.pool_size:
                     logger.info(
-                        "可用代理数量不足 (%s/%s)，尝试补充",
+                        "可用代理数量不足 ({}/{})，尝试补充",
                         available_count,
                         self.config.pool_size,
                     )
@@ -249,7 +249,7 @@ class ProxyManager:
             except asyncio.CancelledError:
                 break
             except Exception as exc:  # pragma: no cover - API 异常
-                logger.error("动态代理获取异常: %s", exc)
+                logger.error("动态代理获取异常: {}", exc)
 
     def get_statistics(self) -> ProxyManagerStats:
         pool_stats = cast(Dict[str, Any], self._pool.get_statistics())

@@ -37,8 +37,9 @@ deepsearch/
 ## 核心能力
 
 - **事件驱动引擎**：`core/runtime/async_runner.py` 提供高并发事件循环，组件拓扑由 `core/components` 与 `core/managers` 管理，支持批量调度与健康检查。
-- **数据源与缓存**：仅支持 AmazingData，统一由 `infrastructure/providers` 注册；多级缓存覆盖内存、Redis、DuckDB，保证断线重连与速率控制。
-- **可观测性**：`observability` 集成结构化日志、性能统计与告警通道，配合 `tools/` 下的诊断脚本快速定位问题。
+- **数据源与缓存**：默认由 AmazingData 驱动实时流水，统一由 `infrastructure/providers` 注册；多级缓存覆盖内存、Redis、DuckDB，保证断线重连与速率控制。针对多源演进与 fallback 机制，详见 `docs/development/realtime_data_source_unification.md` 与 `docs/datasources/realtime_capability_matrix.md`。
+- **可观测性**：`observability` 集成结构化日志、性能统计与告警通道，配合 `tools/` 下的诊断脚本快速定位问题。新增
+  `log.archive` 与 `log.modules` 配置，可自动压缩过期日志（zip）并将输出按模块拆分存储。
 - **Web 管理界面**：FastAPI 暴露 `/api/*` 接口，React 前端（Ant Design Pro + Zustand + ECharts）提供监控、策略与事件视图。
 - **自动化运维**：CLI 提供 `run`、`check-ports`、`check-amazingdata` 等命令，脚本目录覆盖一键测试与 Git Hooks 安装。
 
@@ -46,7 +47,8 @@ deepsearch/
 
 - DeepSearch 仅支持单机部署，禁止引入分布式缓存、消息队列、微服务或容器调度等方案。
 - 基础设施组件统一归类于 `deepsearch/infrastructure/`，新增能力需遵守现有分层与工厂/观察者等模式实现。
-- AmazingData 为默认优先数据源，核心实现位于 `deepsearch/infrastructure/providers/implementations/amazingdata/`；按配置可降级至 AkShare、Cloudflare Worker 或 QMT 等实现，遵循现有优先级与故障切换策略。Mock 仅用于测试稳定性及回归验证，不向终端用户提供数据。
+- AmazingData 为默认优先数据源，核心实现位于 `deepsearch/infrastructure/providers/implementations/amazingdata/`；按配置可降级至 AkShare、Cloudflare Worker 或 QMT 等实现，遵循现有优先级与故障切换策略。Mock 仅用于测试稳定性及回归验证，不向终端用户提供数据。实时能力矩阵与适配器规划位于 `docs/datasources/realtime_capability_matrix.md`，端口设计详见 `docs/architecture/realtime_ports.md`。
+- WebUI 实时链路已通过 `RealtimeDataOrchestrator` 自动遍历 `AmazingData → AkShare → Cloudflare` 的 fallback 顺序，并在响应 `detail` 字段附带健康状态，运维/前端可据此展示降级原因。
 - QMT 历史脚本位于 `deepsearch/infrastructure/providers/datafeed/qmt/scripts/`，需使用 GBK 编码并在首行声明 `# encoding:gbk`。
 
 ## 环境准备
@@ -84,25 +86,39 @@ deepsearch/
    ```
    > 📎 **注意**：仓库约定不提交 `package-lock.json`。在 Windows 终端执行 `npm install` 后，请确认未将该文件纳入提交；如已生成，请运行
    > `Remove-Item package-lock.json` 或手动删除。
-6. AmazingData 运行在隔离解释器：按 `docs/datasources/amazingdata/` 指南配置 `runtime/interpreters/py39/`，并在 `settings.<env>.yaml` 中填写 `amazingdata.connection.python_interpreter_path`。
+6. AmazingData 现使用共享的 Python 3.13 外部环境：请参考 `docs/datasources/amazingdata/README.md` 指南确认系统 Python 3.13 安装路径，并在
+   settings.<env>.yaml 中填写 amazingdata.connection.python_interpreter_path 或通过
+   DEEPSEARCH_AMAZINGDATA_EXTERNAL_PYTHON 指定。
 
 ## 启动方式
 
-### 后端引擎与 API
+### 后端服务
 
+在项目根目录下，可使用不同模式启动后端。
+
+**开发模式 (推荐)**
+
+以开发模式启动完整后端服务，并开启调试日志：
 ```powershell
-# 生产配置（默认）
+uv run deepsearch run dev --log-level DEBUG
+```
+
+**生产模式**
+```powershell
 uv run deepsearch run
+```
 
-# 开发模式 + 前端另行启动
-uv run deepsearch run dev --mode full --no-frontend
-
+**其他启动模式**
+```powershell
 # 仅运行事件引擎
 uv run deepsearch run dev --mode engine
 
 # 仅运行 WebUI 后端（FastAPI）
 uv run deepsearch run dev --mode webui
+```
 
+**系统自检**
+```powershell
 # 端口自检
 uv run deepsearch check-ports
 
@@ -110,16 +126,15 @@ uv run deepsearch check-ports
 uv run deepsearch check-amazingdata dev
 ```
 
-### WebUI 前端
+### 前端服务
 
 ```powershell
 cd deepsearch/webui/frontend
-npm run dev          # 默认端口 3000
-# 或构建生产包
-npm run build
+npm run dev
 ```
 
-访问入口：
+### 访问入口
+
 - WebUI（开发环境）：http://localhost:3000
 - API 文档（FastAPI）：http://localhost:8000/docs
 
@@ -129,6 +144,16 @@ npm run build
 - 非必要情况下不要依赖环境变量覆盖配置，确需调整时务必同步更新示例文件并保持结构一致。
 - 涉及敏感字段使用占位符（如 `your_database_password`），真实凭据仅保存在本地未纳入 Git。
 - 提交前执行 `git grep -i "password\|secret\|token" -- ':(exclude)*.example'` 自检，确保未泄露真实凭据。
+
+
+### 实时数据源编排
+
+- `data_sources.realtime.adapters` 用于声明所有可供 orchestrator 选择的 adapter，包含 `name`、`driver`（如 `amazingdata`/`akshare_polling`）以及 `options`（`use_proxy`、`batch_size` 等），按 `priority` 从小到大顺序探活、切换。
+- `health_check_interval` 控制后台探活频率（单位秒），`alert_policy` 提供失败阈值与通知渠道，可直接映射到运维机器人。
+- 示例配置见 `settings.template.yaml`，操作指引详见 `docs/runbooks/realtime_source_failover.md`。
+- 实时探活：`uv run deepsearch check-realtime --env <env>` 配合 runbook 可快速判断并切换数据源
+- WebUI 市场看板支持 `/api/market/live/data-source/switch` 强制指定 adapter；若 AmazingData 无可用数据，前端会自动降级到 AkShare，并允许在页面下拉菜单中手动切换回主数据源
+- 顶部导航栏提供全局实时数据源信息展示与切换入口，任意页面/模块都可实时查看状态或刷新可用列表
 
 ## API 管理
 
@@ -176,7 +201,7 @@ uv run bandit -r deepsearch
 - `docs/README.md`：文档索引与快速导航
 - 架构说明：`docs/architecture/SYSTEM_ARCHITECTURE.md`、`docs/architecture/DEEPSEARCH_ARCH_IMPROVEMENT_PLAN.md`
 - 开发与调试：`docs/development/BEST_PRACTICES.md`、`docs/development/DEBUG_FEATURES.md`、`docs/development/CODE_REVIEW.md`
-- 数据源资料：`docs/datasources/`（含 AmazingData 快速开始与隔离方案）
+- 数据源资料：`docs/datasources/amazingdata/README.md`（含 AmazingData 快速开始与隔离方案）
 - 运维与常见问题：`docs/operations/` 及 `docs/operations/runbooks/`
 - 历史归档： `docs/archive/datasources/amazingdata/AmazingData_API.md` 记录 AmazingData 官方 API 摘要版本，供参考使用
 
@@ -195,4 +220,7 @@ uv run bandit -r deepsearch
 - GitHub Issues: https://github.com/BaHb/deepsearch/issues
 - 团队邮箱（示例）：team@deepsearch.local
 
+## 文档导航补充
 
+- AmazingData 进程隔离版使用：docs/datasources/amazingdata/process_usage.md
+- 文档索引：docs/overview/document_index.md

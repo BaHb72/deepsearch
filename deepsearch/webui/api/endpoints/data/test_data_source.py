@@ -11,11 +11,8 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.observability.monitoring.data_source_monitor import (
-    DataAccessType,
-    DataSourceMonitor,
-    DataSourceType,
-)
+from deepsearch.observability.monitoring.data_source_monitor import DataSourceMonitor
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
 router = APIRouter(prefix="/api/data-source", tags=["data-source-test"])
 

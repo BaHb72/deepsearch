@@ -10,7 +10,7 @@ import pandas as pd
 from loguru import logger
 
 from deepsearch.observability.decorators.decorators import monitor_data_source
-from deepsearch.observability.monitoring.data_source_monitor import DataAccessType, DataSourceType
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 from deepsearch.utils.time.market_time import MarketTimeUtil
 
 

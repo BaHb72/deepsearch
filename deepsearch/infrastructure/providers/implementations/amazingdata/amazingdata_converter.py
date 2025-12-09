@@ -5,7 +5,7 @@ AmazingData 数据转换器
 """
 
 from datetime import datetime
-from typing import Mapping, Optional, Sequence, Union, cast
+from typing import Callable, Mapping, Optional, Sequence, Union, cast
 
 import pandas as pd
 from loguru import logger
@@ -248,7 +248,7 @@ class AmazingDataConverter:
         try:
             result: dict[str, SnapshotPayload] = {}
             normalized_type = snapshot_type.lower()
-            converter_map = {
+            converter_map: dict[str, Callable[[Mapping[str, object], str], SnapshotPayload]] = {
                 "level1": AmazingDataConverter._convert_single_snapshot,
                 "snapshot": AmazingDataConverter._convert_single_snapshot,
                 "stock": AmazingDataConverter._convert_single_snapshot,
@@ -264,14 +264,23 @@ class AmazingDataConverter:
             converter = converter_map.get(normalized_type, AmazingDataConverter._convert_single_snapshot)
 
             if isinstance(data, Mapping):
-                for symbol, snapshot in data.items():
-                    result[symbol] = converter(cast(Mapping[str, object], snapshot), symbol)
+                for raw_symbol, snapshot in data.items():
+                    symbol_key = str(raw_symbol)
+                    snapshot_mapping = _ensure_mapping(snapshot)
+                    result[symbol_key] = converter(snapshot_mapping, symbol_key)
             else:
-                for item in data:
-                    snapshot_item = cast(Mapping[str, object], item)
-                    symbol_value = snapshot_item.get("code") or snapshot_item.get("symbol")
-                    if symbol_value:
-                        result[str(symbol_value)] = converter(snapshot_item, str(symbol_value))
+                for index, item in enumerate(data):
+                    snapshot_mapping = _ensure_mapping(item)
+                    raw_symbol_value = snapshot_mapping.get("code") or snapshot_mapping.get("symbol")
+                    if isinstance(raw_symbol_value, str) and raw_symbol_value:
+                        symbol_key = raw_symbol_value
+                    elif raw_symbol_value is not None:
+                        symbol_key = str(raw_symbol_value)
+                    elif symbols and index < len(symbols):
+                        symbol_key = str(symbols[index])
+                    else:
+                        continue
+                    result[symbol_key] = converter(snapshot_mapping, symbol_key)
 
             return result
 

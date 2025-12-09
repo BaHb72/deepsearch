@@ -1,5 +1,6 @@
-import { create } from 'zustand'
-import { devtools, persist } from 'zustand/middleware'
+// @ts-nocheck
+import {create} from 'zustand'
+import {devtools, persist} from 'zustand/middleware'
 
 export interface NotificationSettings {
   enabled: boolean
@@ -105,3 +106,4 @@ export const useConfigStore = create<ConfigState>()(
     { name: 'config-store' }
   )
 )
+

@@ -8,6 +8,7 @@ Version: 2.0.0
 
 import asyncio
 import concurrent.futures
+import functools
 import gc
 import hashlib
 import json
@@ -19,28 +20,28 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Sequence, Mapping, TYPE_CHECKING, Union, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 import pandas as pd
-from loguru import logger
 
 from deepsearch.infrastructure.providers.interfaces.base import (
     DataProvider,
-    DataProviderConfig,
     DataProviderError,
 )
-
 # AmazingData SDK
 from ._sdk_loader import HAS_AMAZINGDATA, ad
-
-
-from .amazingdata import (
+from .config import (
     AmazingDataConfig,
-    AmazingDataSDKProtocol,
     ProviderConfigLike,
     ensure_amazingdata_provider_config,
+    resolve_local_cache_path,
 )
-from .amazingdata_types import KlineBarMessage, StockListItem
+from .helpers import fetch_stock_dataset_blocking, normalize_stock_records
+from .logging_utils import ProcessLoggerAdapter
+from .query_manager import AmazingDataQueryManager
+from .types import AmazingDataSDKProtocol
+
+logger = ProcessLoggerAdapter(action="optimized")
 
 class ErrorCode(Enum):
     """错误代码枚举"""
@@ -146,7 +147,8 @@ class OptimizedThreadPoolManager:
             self.stats["active_threads"] += 1
             try:
                 loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(self.executor, func, *args, **kwargs)
+                wrapped = functools.partial(func, *args, **kwargs)
+                result = await loop.run_in_executor(self.executor, wrapped)
                 self.stats["completed_tasks"] += 1
                 return result
             except Exception:
@@ -740,6 +742,7 @@ class OptimizedAmazingDataProvider(DataProvider):
         # 连接状态
         self._connected = False
         self._login_time: datetime | None = None
+        self._stats: Dict[str, Any] = {}
 
         # 任务管理
         self._heartbeat_task: asyncio.Task[None] | None = None
@@ -793,18 +796,31 @@ class OptimizedAmazingDataProvider(DataProvider):
         try:
             logger.info("正在登录 AmazingData (优化版本)...")
 
+            username = (self.config.username or "").strip()
+            password = (self.config.password or "").strip()
+            if not username or username.replace("*", "").strip() == "":
+                raise DataProviderError("AmazingData 优化版缺少有效的用户名配置")
+            if not password:
+                raise DataProviderError("AmazingData 优化版缺少有效的密码配置")
+
             # 使用优化的线程池执行登录
             sdk = self._require_sdk()
-            result = await asyncio.wait_for(
-                self.thread_pool.execute_async(
-                    sdk.login,
-                    self.config.username,
-                    self.config.password,
-                    self.config.host,
-                    self.config.port,
-                ),
-                timeout=5.0,
-            )
+            try:
+                result = await asyncio.wait_for(
+                    self.thread_pool.execute_async(
+                        sdk.login,
+                        self.config.username,
+                        self.config.password,
+                        self.config.host,
+                        self.config.port,
+                    ),
+                    timeout=5.0,
+                )
+            except SystemExit as exc:
+                exit_code = getattr(exc, "code", 0)
+                error_msg = f"SDK尝试强制退出，请查看 exit code: {exit_code}"
+                await self._trigger_alert("SDK_EXIT", error_msg)
+                raise DataProviderError(error_msg) from exc
 
             if result == 0 or result is True:
                 self._connected = True
@@ -820,7 +836,19 @@ class OptimizedAmazingDataProvider(DataProvider):
             return False
         except Exception as e:
             logger.error(f"登录异常: {e}")
+            if isinstance(e, DataProviderError):
+                raise
             return False
+
+    async def _trigger_alert(self, alert_type: str, message: str) -> None:
+        """触发告警并记录基础统计"""
+        try:
+            logger.critical(f"[ALERT][{alert_type}] {message}")
+            self.monitoring.record_event("alert", {"type": alert_type, "message": message})
+            alerts = cast(List[Dict[str, str]], self._stats.setdefault(alert_type, []))
+            alerts.append({"timestamp": datetime.now().isoformat(), "message": message})
+        except Exception as exc:
+            logger.error(f"Failed to trigger alert: {exc}")
 
     async def _logout(self) -> None:
         """登出 AmazingData"""
@@ -840,7 +868,7 @@ class OptimizedAmazingDataProvider(DataProvider):
             logger.info("AmazingData 已登出")
         except SystemExit as exc:
             exit_code = getattr(exc, "code", None)
-            logger.warning("AmazingData SDK 在登出时触发 SystemExit，exit_code=%r", exit_code)
+            logger.warning("AmazingData SDK 在登出时触发 SystemExit，exit_code={!r}", exit_code)
         except Exception as e:
             logger.error(f"登出失败: {e}")
         finally:
@@ -890,7 +918,7 @@ class OptimizedAmazingDataProvider(DataProvider):
                     sdk.KLine.get_kline, symbol, period, start_date, end_date, count, adjust
                 )
 
-                df = OptimizedDataConverter.convert_kline_vectorized(result)
+                df = AmazingDataQueryManager.normalize_kline_payload(result, symbol)
                 df = OptimizedDataConverter.validate_and_clean(df)
                 self.cache.set(cache_key, df)
 
@@ -977,28 +1005,27 @@ class OptimizedAmazingDataProvider(DataProvider):
 
             # 通过优化的线程池执行
             sdk = self._require_sdk()
-            result = await self.thread_pool.execute_async(sdk.BaseData.get_stock_list)
+            security_type = str(kwargs.get("security_type", "EXTRA_STOCK_A"))
+            start_date = kwargs.get("start_date")
+            end_date = kwargs.get("end_date")
+            local_path = resolve_local_cache_path(self.config, kwargs.get("local_path"))
+            raw_dataset = await self.thread_pool.execute_async(
+                fetch_stock_dataset_blocking,
+                sdk,
+                security_type=security_type,
+                start_date=start_date,
+                end_date=end_date,
+                local_path=local_path,
+            )
 
-            if not result:
+            records = normalize_stock_records(raw_dataset)
+            if not records:
                 return None
 
-            # 转换为标准格式
-            stock_list: list[dict[str, Any]] = []
-            for item in result:
-                stock_info: dict[str, Any] = {
-                    "symbol": str(item.get("code", "")),
-                    "name": str(item.get("name", "")),
-                    "exchange": str(item.get("exchange", "")),
-                    "list_date": str(item.get("list_date", "")),
-                    "status": str(item.get("status", "active")),
-                }
-                stock_list.append(stock_info)
-
-            # 如果有限制数量
             if limit and limit > 0:
-                stock_list = stock_list[:limit]
+                records = records[:limit]
 
-            return stock_list
+            return records
 
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
