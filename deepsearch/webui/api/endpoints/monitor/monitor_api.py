@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 # from deepsearch.event.types import EventType  # EventType模块不存在，且未使用
 
 
-router = APIRouter(prefix="/monitor", tags=["monitor"])
+router = APIRouter(tags=["monitor"])
 
 
 # 全局监控数据存储

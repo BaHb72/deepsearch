@@ -153,11 +153,25 @@ def ensure_amazingdata_provider_config(config_like: ProviderConfigLike) -> Amazi
 
     data = dict(raw_data)
 
+    # 首先检查顶层的 connection
     connection_section = data.get("connection")
     if isinstance(connection_section, Mapping):
         merged = dict(connection_section)
         merged.update({k: v for k, v in data.items() if k != "connection"})
         data = merged
+    # 如果顶层没有 connection，检查 config.connection（嵌套结构）
+    elif isinstance(config_section, Mapping):
+        nested_connection = config_section.get("connection")
+        if isinstance(nested_connection, Mapping):
+            # 将 config.connection 中的值合并到 data
+            for key in ("username", "password", "host", "port", "timeout",
+                        "heartbeat_interval", "auto_reconnect", "reconnect_interval",
+                        "max_retries", "api_mode"):
+                if key not in data or not data.get(key):
+                    value = nested_connection.get(key)
+                    if value is not None:
+                        data[key] = value
+
 
     worker_env_raw = data.get("worker_env")
     if isinstance(worker_env_raw, Mapping):

@@ -17,7 +17,7 @@ import {
     Tooltip,
     Typography,
 } from 'antd'
-import {ProCard, StatisticCard} from '@ant-design/pro-components'
+import {PageContainer, ProCard, StatisticCard} from '@ant-design/pro-components'
 import {Area, Column, Gauge, Line, Pie} from '@ant-design/charts'
 import {
     ApiOutlined,
@@ -28,13 +28,12 @@ import {
     FallOutlined,
     InfoCircleOutlined,
     LineChartOutlined,
-    MonitorOutlined,
     ReloadOutlined,
     RiseOutlined,
     ThunderboltOutlined,
     WarningOutlined,
 } from '@ant-design/icons'
-import {dataSourceAPI} from '../api/dataSource'
+import {dataSourceAPI} from '@/api/dataSource'
 import {DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary} from '@/utils/dataSourceStatus'
 
 const { Title } = Typography
@@ -60,7 +59,7 @@ const DataSourceMonitor = () => {
   const [selectedSource, setSelectedSource] = useState('all')
   const [timeRange, setTimeRange] = useState('1h')
 
-    // 妯℃嫙瀹炴椂鏁版嵁
+    // 模拟实时数据
   const [monitorData, setMonitorData] = useState({
     statusSummary: {},
     overview: {
@@ -162,9 +161,9 @@ const DataSourceMonitor = () => {
     ],
   })
 
-    // 鑷姩鍒锋柊
+    // 自动刷新
   useEffect(() => {
-      // 鍒濆鍔犺浇鏁版嵁
+      // 初始加载数据
     fetchMonitorData()
 
     if (!autoRefresh) return
@@ -182,34 +181,34 @@ const DataSourceMonitor = () => {
 
       const normalizedSources = Array.isArray(data?.sources)
         ? data.sources.map((source: any, index: number) => {
-            const meta = getDataSourceStatusMeta(source?.status)
-            const lastTestTime =
-              source?.lastTestTime ?? source?.last_test_time ?? source?.last_tested_at ?? null
-            const lastTransition =
-              source?.lastTransition ?? source?.last_transition ?? source?.updated_at ?? null
-            const testSummary = normalizeTestSummary(
-              source?.testSummary ?? source?.test_summary ?? null
-            )
-            const hasSavedCredential =
-              typeof source?.hasSavedCredential === 'boolean'
-                ? source.hasSavedCredential
-                : Boolean(source?.has_saved_credential)
+              const meta = getDataSourceStatusMeta(source?.status)
+              const lastTestTime =
+                  source?.lastTestTime ?? source?.last_test_time ?? source?.last_tested_at ?? null
+              const lastTransition =
+                  source?.lastTransition ?? source?.last_transition ?? source?.updated_at ?? null
+              const testSummary = normalizeTestSummary(
+                  source?.testSummary ?? source?.test_summary ?? null
+              )
+              const hasSavedCredential =
+                  typeof source?.hasSavedCredential === 'boolean'
+                      ? source.hasSavedCredential
+                      : Boolean(source?.has_saved_credential)
 
-            return {
-              ...source,
-              status: meta.value,
-              available:
-                typeof source?.available === 'boolean'
-                  ? source.available
-                  : typeof source?.is_available === 'boolean'
-                    ? source.is_available
-                    : undefined,
-              lastTestTime,
-              lastTransition,
-              testSummary,
-              hasSavedCredential,
-              key: source?.id ?? source?.name ?? index,
-            }
+              return {
+                  ...source,
+                  status: meta.value,
+                  available:
+                      typeof source?.available === 'boolean'
+                          ? source.available
+                          : typeof source?.is_available === 'boolean'
+                              ? source.is_available
+                              : undefined,
+                  lastTestTime,
+                  lastTransition,
+                  testSummary,
+                  hasSavedCredential,
+                  key: source?.id ?? source?.name ?? index,
+              }
           })
         : []
 
@@ -337,7 +336,7 @@ const DataSourceMonitor = () => {
     }
   }
 
-    // 浜嬩欢鏃ュ織
+    // 事件日志
   const eventLogs = [
     { time: '10:30:45', type: 'success', message: 'AmazingData 连接恢复正常' },
     { time: '10:28:12', type: 'error', message: 'Redis Cache 连接失败，错误码: TIMEOUT' },
@@ -347,7 +346,7 @@ const DataSourceMonitor = () => {
     { time: '10:10:22', type: 'success', message: 'PostgreSQL 性能优化完成' },
   ]
 
-    // 鍥捐〃鏁版嵁
+    // 图表数据
   const [latencyTrendData, setLatencyTrendData] = useState([
     { time: '10:00', source: 'AmazingData', value: 45 },
     { time: '10:00', source: 'CloudFlare', value: 120 },
@@ -428,7 +427,7 @@ const DataSourceMonitor = () => {
 
   const abnormalCount = statusCounts.degraded + statusCounts.error
 
-    // 鍥捐〃缁勪欢
+    // 图表组件
   const LatencyTrendChart = ({ data }) => {
     const config = {
       data,
@@ -443,10 +442,10 @@ const DataSourceMonitor = () => {
         },
       },
       xAxis: {
-          title: {text: '鏃堕棿'},
+          title: {text: '时间'},
       },
       yAxis: {
-          title: {text: '寤惰繜 (ms)'},
+          title: {text: '延迟 (ms)'},
       },
       legend: {
         position: 'top-right',
@@ -467,10 +466,10 @@ const DataSourceMonitor = () => {
         },
       },
       xAxis: {
-          title: {text: '鏃堕棿'},
+          title: {text: '时间'},
       },
       yAxis: {
-          title: {text: '鎴愬姛鐜?(%)'},
+          title: {text: '成功率 (%)'},
         min: 95,
         max: 100,
       },
@@ -680,7 +679,7 @@ const DataSourceMonitor = () => {
       },
     },
     {
-        title: '寤惰繜',
+        title: '延迟',
       dataIndex: 'latency',
       key: 'latency',
       width: 100,
@@ -734,19 +733,19 @@ const DataSourceMonitor = () => {
   ]
 
   return (
-    <div>
-      <ProCard gutter={[16, 16]}>
+      <PageContainer
+          header={{
+              title: '数据源实时监控',
+              ghost: true,
+          }}
+      >
+          <ProCard gutter={[16, 16]} ghost>
         <ProCard colSpan={24}>
           <Row justify="space-between" align="middle">
             <Col>
-              <Space size="large">
-                <Title level={4} style={{ margin: 0 }}>
-                  <MonitorOutlined /> 数据源实时监控
-                </Title>
                 <Tag color="blue">
-                  <ClockCircleOutlined /> 实时数据
+                    <ClockCircleOutlined/> 实时数据
                 </Tag>
-              </Space>
             </Col>
             <Col>
               <Space>
@@ -780,26 +779,26 @@ const DataSourceMonitor = () => {
                   unCheckedChildren="手动"
                 />
                 <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={loading}>
-                    鍒锋柊
+                    刷新
                 </Button>
               </Space>
             </Col>
           </Row>
         </ProCard>
 
-          {/* 姒傝缁熻 */}
+              {/* 概览统计 */}
         <ProCard colSpan={24}>
           <StatisticCard.Group>
             <StatisticCard
               statistic={{
-                  title: '鎬绘暟鎹簮',
+                  title: '总数据源',
                 value: totalSources,
                 icon: <DatabaseOutlined style={{ fontSize: 24, color: '#1890ff' }} />,
               }}
             />
             <StatisticCard
               statistic={{
-                  title: '鍙敤',
+                  title: '可用',
                 value: availableSources,
                 valueStyle: { color: '#52c41a' },
                 icon: <CheckCircleOutlined style={{ fontSize: 24, color: '#52c41a' }} />,
@@ -891,7 +890,7 @@ const DataSourceMonitor = () => {
           </Card>
         </ProCard>
 
-          {/* 鎬ц兘瓒嬪娍鍥捐〃 */}
+              {/* 性能趋势图表 */}
         <ProCard colSpan={12}>
           <Card title="延迟趋势" variant="borderless">
             <LatencyTrendChart data={latencyTrendData} />
@@ -948,7 +947,7 @@ const DataSourceMonitor = () => {
           </Card>
         </ProCard>
       </ProCard>
-    </div>
+      </PageContainer>
   )
 }
 

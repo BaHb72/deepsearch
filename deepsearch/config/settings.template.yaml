@@ -98,6 +98,28 @@ data_sources:
     timeout: 5
     retry_count: 3
     backoff_factor: 2
+  
+  # 模块级数据源覆盖配置
+  # 允许不同模块使用不同的数据源优先级
+  module_overrides:
+  # 按功能模块覆盖（示例）
+  # market_strength:
+  #   primary: akshare
+  #   fallback: [amazingdata]
+  # historical_sync:
+  #   primary: akshare
+  #   fallback: []
+  
+  # 按数据访问类型覆盖配置
+  access_type_overrides:
+  # 按访问类型覆盖（示例）
+  # realtime_quote:
+  #   primary: amazingdata
+  #   fallback: [akshare]
+  # historical_kline:
+  #   primary: akshare
+  #   fallback: [amazingdata]
+  
   providers:
     amazingdata:
       enabled: true

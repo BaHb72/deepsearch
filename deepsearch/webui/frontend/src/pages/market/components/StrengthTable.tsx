@@ -1,8 +1,8 @@
 import React from 'react'
-import { Select, Space, Typography } from 'antd'
-import { ProTable } from '@ant-design/pro-components'
-import type { ProColumns } from '@ant-design/pro-components'
-import type { StrengthItem } from '../../../api/marketDataLive'
+import {Select, Space, theme, Typography} from 'antd'
+import type {ProColumns} from '@ant-design/pro-components'
+import {ProTable} from '@ant-design/pro-components'
+import type {StrengthItem} from '../../../api/marketDataLive'
 import ModuleSourceSelector from './ModuleSourceSelector'
 import {
     formatAmountBillion,
@@ -40,14 +40,35 @@ const StrengthTable: React.FC<StrengthTableProps> = ({
     fallbackLabel,
     onModuleSourceChange,
 }) => {
+    const {token} = theme.useToken()
+    // Chinese Market: Red = Up (+), Green = Down (-)
+    const colorUp = '#ff4d4f' // or token.colorError
+    const colorDown = '#52c41a' // or token.colorSuccess
+
+    const getTrendColor = (val?: number | null) => {
+        if (!val) return token.colorText
+        return val > 0 ? colorUp : val < 0 ? colorDown : token.colorText
+    }
+
     const columns: ProColumns<StrengthItem>[] = [
-        { title: '板块', dataIndex: 'board', key: 'board', width: 160, fixed: 'left' },
+        {
+            title: '板块',
+            dataIndex: 'board',
+            key: 'board',
+            width: 160,
+            fixed: 'left',
+            render: (dom) => <Text strong>{dom}</Text>
+        },
         {
             title: '净流入',
             dataIndex: 'amount_total',
             key: 'amount_total',
             width: 140,
-            render: (_, record) => formatAmountBillion(record.amount_total),
+            render: (_, record) => (
+                <span style={{color: getTrendColor(record.amount_total), fontFamily: 'Monaco, monospace'}}>
+                    {formatAmountBillion(record.amount_total)}
+                </span>
+            ),
             sorter: (a, b) => (a.amount_total || 0) - (b.amount_total || 0),
         },
         {
@@ -55,7 +76,11 @@ const StrengthTable: React.FC<StrengthTableProps> = ({
             dataIndex: 'speed_per_min',
             key: 'speed_per_min',
             width: 150,
-            render: (_, record) => formatAmountMillionPerMinute(record.speed_per_min),
+            render: (_, record) => (
+                <span style={{color: getTrendColor(record.speed_per_min), fontFamily: 'Monaco, monospace'}}>
+                    {formatAmountMillionPerMinute(record.speed_per_min)}
+                </span>
+            ),
             sorter: (a, b) => (a.speed_per_min || 0) - (b.speed_per_min || 0),
         },
         {
@@ -63,7 +88,11 @@ const StrengthTable: React.FC<StrengthTableProps> = ({
             dataIndex: 'accel_per_min2',
             key: 'accel_per_min2',
             width: 150,
-            render: (_, record) => formatAmountMillionPerMinuteSquared(record.accel_per_min2),
+            render: (_, record) => (
+                <span style={{color: getTrendColor(record.accel_per_min2), fontFamily: 'Monaco, monospace'}}>
+                    {formatAmountMillionPerMinuteSquared(record.accel_per_min2)}
+                </span>
+            ),
             sorter: (a, b) => (a.accel_per_min2 || 0) - (b.accel_per_min2 || 0),
         },
         {
@@ -71,14 +100,14 @@ const StrengthTable: React.FC<StrengthTableProps> = ({
             dataIndex: 'ts',
             key: 'ts',
             width: 120,
-            render: (_, record) => formatTime(record.ts),
+            render: (_, record) => <span style={{color: token.colorTextSecondary}}>{formatTime(record.ts)}</span>,
             valueType: 'time',
         },
     ]
 
     return (
         <ProTable<StrengthItem>
-            headerTitle="资金脉冲榜"
+            headerTitle={null}
             rowKey={(item) => `${item.board}-${item.window}`}
             columns={columns}
             dataSource={items}

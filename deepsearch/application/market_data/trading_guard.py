@@ -10,6 +10,11 @@ from zoneinfo import ZoneInfo
 
 from loguru import logger
 
+from deepsearch.config.trading_schedule_config import (
+    PhaseBehavior,
+    TradingScheduleConfig,
+    get_trading_schedule_config,
+)
 from deepsearch.ports.market_data import MarketSnapshot
 
 CalendarLoader = Callable[[str], Awaitable[Sequence[int] | None]]
@@ -80,15 +85,24 @@ class TradingSessionDecision:
     interval_seconds: float
     timeout_seconds: float
     timeout_log_level: str  # "warning" 或 "info"
+    skip_in_window: bool = False  # 是否因配置的跳过窗口而跳过
 
     @property
     def should_skip_step(self) -> bool:
-        return not (self.is_trading_day and self.is_trading_session)
+        # OFF_DAY 始终跳过
+        if self.phase_state == PhaseState.OFF_DAY:
+            return True
+        # NO_TRADE 时根据配置的 skip_windows 决定
+        if self.phase_state == PhaseState.NO_TRADE and self.skip_in_window:
+            return True
+        return False
 
     @property
     def status_label(self) -> str:
         if not self.is_trading_day:
             return "off-day"
+        if self.skip_in_window:
+            return "skip-window"
         if not self.is_trading_session:
             return "off-session"
         return "trading"
@@ -105,9 +119,11 @@ class TradingSessionGuard:
     calendar_ttl: timedelta = timedelta(minutes=10)
     phase_intervals: dict[PhaseState, float] = field(default_factory=dict)
     phase_timeouts: dict[PhaseState, float] = field(default_factory=dict)
+    schedule_config: TradingScheduleConfig | None = None  # 交易时段配置
     _calendar_cache: dict[str, tuple[set[int], datetime]] = field(default_factory=dict, init=False)
     _phase_detector: PhaseDetector = field(init=False)
     _calendar_fallback_active: bool = field(default=False, init=False)
+    _schedule_config_loaded: TradingScheduleConfig | None = field(default=None, init=False)
 
     _DEFAULT_INTERVALS = {
         PhaseState.OFF_DAY: 120.0,
@@ -135,6 +151,15 @@ class TradingSessionGuard:
             auction_windows=self._AUCTION_WINDOWS,
             continuous_windows=self._CONTINUOUS_WINDOWS,
         )
+        # 加载交易时段配置
+        if self.schedule_config is not None:
+            self._schedule_config_loaded = self.schedule_config
+        else:
+            try:
+                self._schedule_config_loaded = get_trading_schedule_config()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("加载交易时段配置失败，使用默认逻辑: {}", exc)
+                self._schedule_config_loaded = None
 
     async def evaluate(
             self,
@@ -186,6 +211,11 @@ class TradingSessionGuard:
 
         timeout_log_level = "warning" if phase_state is PhaseState.CONTINUOUS else "info"
 
+        # 检查是否在跳过时间窗口内
+        skip_in_window = self._check_skip_window(phase_state, now.time())
+        if skip_in_window:
+            reason = "no-trade-skip-window"
+
         return TradingSessionDecision(
             now=now,
             is_trading_day=is_trading_day,
@@ -197,7 +227,32 @@ class TradingSessionGuard:
             interval_seconds=interval,
             timeout_seconds=timeout,
             timeout_log_level=timeout_log_level,
+            skip_in_window=skip_in_window,
         )
+
+    def _check_skip_window(
+            self, phase_state: PhaseState, current_time: time_type
+    ) -> bool:
+        """检查当前阶段是否应该跳过轮询
+
+        根据配置决定是否跳过：
+        - 如果配置了 skip_polling=true，则该阶段完全跳过
+        - 如果配置了 skip_windows，则检查当前时间是否在跳过窗口内
+        """
+        if not self._schedule_config_loaded:
+            return False
+
+        # 只对 NO_TRADE 阶段检查跳过配置
+        if phase_state != PhaseState.NO_TRADE:
+            return False
+
+        phase_key = phase_state.value  # "no_trade"
+        # 尝试获取第一个市场的配置，如果有的话
+        market_id = self.markets[0] if self.markets else None
+        behavior: PhaseBehavior = self._schedule_config_loaded.get_phase_behavior(
+            phase_key, market_id
+        )
+        return behavior.should_skip_at(current_time)
 
     async def _collect_trading_days(self) -> set[int]:
         merged: set[int] = set()

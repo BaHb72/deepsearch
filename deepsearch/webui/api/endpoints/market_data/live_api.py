@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime, time as time_type, timezone
 from typing import Any, Iterable, Sequence
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -51,6 +53,19 @@ def _parse_csv(value: str | None) -> list[str]:
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _is_trading_hours() -> bool:
+    """判断当前是否在交易时段内（北京时间）。"""
+    try:
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    except Exception:
+        now = datetime.now()
+    current_time = now.time()
+    # A股交易时段: 9:30-11:30, 13:00-15:00
+    morning_session = time_type(9, 30) <= current_time <= time_type(11, 30)
+    afternoon_session = time_type(13, 0) <= current_time <= time_type(15, 0)
+    return morning_session or afternoon_session
 
 
 def _resolve_data_source_name(app_state: Any) -> str:
@@ -271,19 +286,34 @@ async def get_market_strength(
 
     if not strength_result.items:
         if requested_source:
-            fallback_detail = await _ensure_fallback_data(app_state, "strength", requested_source)
-            strength_result = await _fetch(requested_source)
-            effective_source = requested_source
+            try:
+                fallback_detail = await asyncio.wait_for(
+                    _ensure_fallback_data(app_state, "strength", requested_source),
+                    timeout=5.0
+                )
+                strength_result = await _fetch(requested_source)
+                effective_source = requested_source
+            except asyncio.TimeoutError:
+                logger.warning("strength fallback 超时（5秒），返回空结果")
         else:
             auto_source = _auto_fallback_source(settings, "strength", error_code=None if provider_ready else "DATA_SOURCE_OFFLINE")
             if auto_source:
-                fallback_detail = await _ensure_fallback_data(app_state, "strength", auto_source)
-                strength_result = await _fetch(auto_source)
-                effective_source = auto_source
+                try:
+                    fallback_detail = await asyncio.wait_for(
+                        _ensure_fallback_data(app_state, "strength", auto_source),
+                        timeout=5.0
+                    )
+                    strength_result = await _fetch(auto_source)
+                    effective_source = auto_source
+                except asyncio.TimeoutError:
+                    logger.warning("strength fallback 超时（5秒），跳过 {} fallback", auto_source)
             elif provider_ready:
-                await refresh_market_data_once(app_state)
-                strength_result = await _fetch(None)
-                effective_source = None
+                try:
+                    await asyncio.wait_for(refresh_market_data_once(app_state), timeout=5.0)
+                    strength_result = await _fetch(None)
+                    effective_source = None
+                except asyncio.TimeoutError:
+                    logger.warning("strength refresh 超时（5秒），返回空结果")
 
     cache_info = {
         "cachedAt": strength_result.cached_at,
@@ -291,6 +321,7 @@ async def get_market_strength(
     }
     cache_info = {k: v for k, v in cache_info.items() if v}
 
+    is_trading = _is_trading_hours()
     payload = {
         "windows": list(window_candidates),
         "boards": board_filter or list(getattr(pipeline, "boards", ())),
@@ -299,6 +330,8 @@ async def get_market_strength(
         "stale": strength_result.stale,
         "retrieved_at": _iso_now(),
         "data_source": effective_source or _resolve_data_source_name(app_state),
+        "mode": "realtime" if is_trading else "summary",
+        "is_trading_hours": is_trading,
     }
     if cache_info:
         payload["cache"] = cache_info
@@ -354,14 +387,26 @@ async def get_board_overview(
 
     if not strength_result.items:
         if requested_source:
-            fallback_detail = await _ensure_fallback_data(app_state, "board_overview", requested_source)
-            strength_result = await _fetch(requested_source)
+            try:
+                fallback_detail = await asyncio.wait_for(
+                    _ensure_fallback_data(app_state, "board_overview", requested_source),
+                    timeout=5.0
+                )
+                strength_result = await _fetch(requested_source)
+            except asyncio.TimeoutError:
+                logger.warning("board_overview fallback 超时（5秒），返回空结果")
         else:
             auto_source = _auto_fallback_source(settings, "board_overview", error_code=None if provider_ready else "DATA_SOURCE_OFFLINE")
             if auto_source:
-                fallback_detail = await _ensure_fallback_data(app_state, "board_overview", auto_source)
-                strength_result = await _fetch(auto_source)
-                requested_source = auto_source
+                try:
+                    fallback_detail = await asyncio.wait_for(
+                        _ensure_fallback_data(app_state, "board_overview", auto_source),
+                        timeout=5.0
+                    )
+                    strength_result = await _fetch(auto_source)
+                    requested_source = auto_source
+                except asyncio.TimeoutError:
+                    logger.warning("board_overview fallback 超时（5秒），跳过 {} fallback", auto_source)
             elif provider_ready:
                 await refresh_market_data_once(app_state)
                 strength_result = await _fetch(None)
@@ -409,6 +454,7 @@ async def get_board_overview(
 
     orchestrator_info = _orchestrator_detail(app_state)
 
+    is_trading = _is_trading_hours()
     payload: dict[str, Any] = {
         "type": type_,
         "window": window_name,
@@ -417,6 +463,8 @@ async def get_board_overview(
         "stale": strength_result.stale or not overview_items,
         "retrieved_at": _iso_now(),
         "data_source": requested_source or _resolve_data_source_name(app_state),
+        "mode": "realtime" if is_trading else "summary",
+        "is_trading_hours": is_trading,
     }
     if cache_info:
         payload["cache"] = cache_info
@@ -573,17 +621,32 @@ async def get_order_imbalance(
 
     if not imbalance_result.items:
         if requested_source:
-            fallback_detail = await _ensure_fallback_data(app_state, "order_imbalance", requested_source)
-            imbalance_result = await _fetch(requested_source)
+            try:
+                fallback_detail = await asyncio.wait_for(
+                    _ensure_fallback_data(app_state, "order_imbalance", requested_source),
+                    timeout=5.0
+                )
+                imbalance_result = await _fetch(requested_source)
+            except asyncio.TimeoutError:
+                logger.warning("order_imbalance fallback 超时（5秒），返回空结果")
         else:
             auto_source = _auto_fallback_source(settings, "order_imbalance", error_code=None if provider_ready else "DATA_SOURCE_OFFLINE")
             if auto_source:
-                fallback_detail = await _ensure_fallback_data(app_state, "order_imbalance", auto_source)
-                imbalance_result = await _fetch(auto_source)
-                requested_source = auto_source
+                try:
+                    fallback_detail = await asyncio.wait_for(
+                        _ensure_fallback_data(app_state, "order_imbalance", auto_source),
+                        timeout=5.0
+                    )
+                    imbalance_result = await _fetch(auto_source)
+                    requested_source = auto_source
+                except asyncio.TimeoutError:
+                    logger.warning("order_imbalance fallback 超时（5秒），跳过 {} fallback", auto_source)
             elif provider_ready:
-                await refresh_market_data_once(app_state)
-                imbalance_result = await _fetch(None)
+                try:
+                    await asyncio.wait_for(refresh_market_data_once(app_state), timeout=5.0)
+                    imbalance_result = await _fetch(None)
+                except asyncio.TimeoutError:
+                    logger.warning("order_imbalance refresh 超时（5秒），返回空结果")
 
     cache_info = {
         "cachedAt": imbalance_result.cached_at,

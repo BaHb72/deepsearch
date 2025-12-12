@@ -6,13 +6,13 @@ import asyncio
 import contextlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, Tuple
+from typing import Any, Dict, Iterable, Tuple
 
 from loguru import logger
 
 from deepsearch.adapters.market_data.akshare_polling_adapter import AkSharePollingAdapter
-from deepsearch.config.settings import Settings
 from deepsearch.config.models.data_sources import RealtimeAdapterSpec
+from deepsearch.config.settings import Settings
 from deepsearch.infrastructure.providers.implementations.amazingdata.ports import (
     build_board_source,
 )
@@ -24,7 +24,6 @@ from deepsearch.ports.market_data import (
     RealtimePortBundle,
 )
 from deepsearch.webui.api.providers import DataProviderFactory, DataSourceType
-
 from .cache_reader import MarketDataCacheReader
 from .cache_writer import MarketDataCacheWriter
 from .factory import create_realtime_streaming_pipeline
@@ -240,6 +239,9 @@ class RealtimeDataOrchestrator:
                 AkSharePollingAdapter(name=label, use_proxy=use_proxy, batch_size=batch_size)
             )
 
+        if driver in {"miniqmt", "qmt", "xtquant", "mini-qmt"}:
+            return await self._start_miniqmt(label)
+
         raise RuntimeError(f"unsupported realtime adapter driver={driver} name={label}")
 
     async def _start_amazingdata(self, adapter_alias: str | None = None) -> RealtimeRuntimeHandle:
@@ -295,6 +297,23 @@ class RealtimeDataOrchestrator:
             runner=runner,
             provider=provider,
         )
+
+    async def _start_miniqmt(self, adapter_alias: str | None = None) -> RealtimeRuntimeHandle:
+        """Start MiniQMT/xtquant adapter for realtime market data."""
+        market_cfg = getattr(self._settings, "market_data", None)
+        if market_cfg is None:
+            raise RuntimeError("market_data config missing, cannot start miniqmt runtime")
+        realtime_cfg = getattr(market_cfg, "realtime", None)
+        if realtime_cfg is None:
+            raise RuntimeError("market_data.realtime config missing")
+
+        try:
+            from deepsearch.adapters.market_data.miniqmt_polling_adapter import MiniQMTPollingAdapter
+            adapter = MiniQMTPollingAdapter(name=adapter_alias or "miniqmt")
+            return await self._start_polling_adapter(adapter)
+        except ImportError as exc:
+            logger.warning("MiniQMT adapter not available: {}", exc)
+            raise RuntimeError(f"MiniQMT adapter import failed: {exc}") from exc
 
     async def _start_polling_adapter(self, adapter: RealtimeAdapter) -> RealtimeRuntimeHandle:
         market_cfg = getattr(self._settings, "market_data", None)

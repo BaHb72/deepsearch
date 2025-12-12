@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Awaitable, Callable, List, Sequence, Set
@@ -79,15 +80,18 @@ class RealTimeMarketDataService:
         for board in query.boards:
             for window in windows:
                 window_start = perf_counter()
-                entry = self.capital_calculator.compute(board, window, as_of=query.as_of)
+                entry = self.capital_calculator.compute(
+                    board, window, as_of=query.as_of, summary_mode=query.summary_mode
+                )
                 if entry:
                     entries.append(entry)
                     logger.debug(
-                        "实时行情 capital_pulse 计算成功 board={} window={} amount_total={} speed={} duration={:.3f}s",
+                        "实时行情 capital_pulse 计算成功 board={} window={} amount_total={} speed={} mode={} duration={:.3f}s",
                         board,
                         window.name,
                         entry.amount_total,
                         entry.speed_per_min,
+                        "summary" if query.summary_mode else "realtime",
                         perf_counter() - window_start,
                     )
                 else:
@@ -258,7 +262,13 @@ class RealTimeMarketDataService:
         if not missing:
             return
         ensure_start = perf_counter()
-        await self.refresh_board_universe()
+        try:
+            # 添加超时保护，避免无限等待阻塞 API
+            await asyncio.wait_for(self.refresh_board_universe(), timeout=10.0)
+        except asyncio.TimeoutError:
+            logger.warning("刷新板块数据超时（10秒），将使用已有缓存")
+        except Exception as exc:
+            logger.warning("刷新板块数据失败: {}", exc)
         still_missing = [board for board in missing if not self.board_universe.resolve_codes(board)]
         if still_missing:
             logger.warning(
@@ -271,3 +281,4 @@ class RealTimeMarketDataService:
             len(still_missing),
             perf_counter() - ensure_start,
         )
+

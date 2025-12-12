@@ -1,0 +1,88 @@
+# 交易时段配置
+# 独立配置文件，管理各市场交易时段参数
+# 
+# 设计原则：只记录交易时段，非交易时段自动跳过轮询
+
+# 日历缓存 TTL
+calendar_ttl_minutes: 10
+
+# 默认行为配置（当市场未定义时使用）
+defaults:
+  off_day:
+    interval_seconds: 120.0
+    timeout_seconds: 5.0
+    skip_polling: true
+  no_trade:
+    interval_seconds: 45.0
+    timeout_seconds: 5.0
+    # 非交易时段默认跳过轮询
+    skip_polling: true
+  auction:
+    interval_seconds: 5.0
+    timeout_seconds: 3.0
+    skip_polling: false
+  continuous:
+    interval_seconds: 1.0
+    timeout_seconds: 3.0
+    skip_polling: false
+
+# 各市场配置
+markets:
+  # A股市场（当前启用）
+  CN:
+    enabled: true
+    aliases: [ SH, SZ, STAR, BSE ]
+    timezone: "Asia/Shanghai"
+    sessions:
+      # 开盘集合竞价：9:15-9:25
+      # 其中 9:15-9:20 可撤单，9:20-9:25 不可撤单
+      auction:
+        windows:
+          - start: "09:15"
+            end: "09:25"
+          # 深交所收盘集合竞价：14:57-15:00
+          - start: "14:57"
+            end: "15:00"
+      # 连续竞价时段
+      continuous:
+        windows:
+          - start: "09:30"
+            end: "11:30"
+          - start: "13:00"
+            end: "14:57"
+    # A股：非交易时段跳过轮询（默认行为）
+    # 交易时段 = 9:15-15:00，其他时间跳过
+
+  # 港股市场（未来支持）
+  HK:
+    enabled: false
+    aliases: [ HKEX ]
+    timezone: "Asia/Hong_Kong"
+    sessions:
+      # 港股开市前竞价：9:00-9:30
+      auction:
+        windows:
+          - start: "09:00"
+            end: "09:30"
+          # 收市竞价：16:00-16:10
+          - start: "16:00"
+            end: "16:10"
+      continuous:
+        windows:
+          - start: "09:30"
+            end: "12:00"
+          - start: "13:00"
+            end: "16:00"
+
+  # 美股市场（未来支持）
+  US:
+    enabled: false
+    aliases: [ NYSE, NASDAQ ]
+    timezone: "America/New_York"
+    sessions:
+      # 美股无集合竞价，仅连续交易
+      continuous:
+        windows:
+          - start: "09:30"
+            end: "16:00"
+

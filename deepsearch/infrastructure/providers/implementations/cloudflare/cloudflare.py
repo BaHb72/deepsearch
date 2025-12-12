@@ -11,6 +11,11 @@ from urllib.parse import urlparse
 import aiohttp
 from loguru import logger
 
+from deepsearch.infrastructure.providers.interfaces.base import (
+    DataProviderConfig,
+    DataSourceType,
+)
+
 
 # from deepsearch.application.services.cache.stock_info_cache import get_stock_info_cache
 
@@ -93,6 +98,17 @@ class ProxyDataProvider:
         self._cache_config = cache or {}
         self._extra_options = kwargs
         self._using_placeholder_worker = self._is_placeholder_worker(self.worker_url)
+
+        # 添加 config 属性以兼容 DataProviderManager
+        self.config = DataProviderConfig(
+            name="cloudflare",
+            source_type=DataSourceType.CLOUDFLARE,
+            enabled=True,
+            priority=10,
+            timeout=self._timeout_seconds,
+            retry_count=self._retry_count,
+        )
+        self.status = "running"
 
     @staticmethod
     def _is_placeholder_worker(worker_url: str) -> bool:
@@ -833,3 +849,13 @@ class ProxyDataProvider:
         else:
             logger.warning(f"未支持的API: {path}")
             return {"data": [], "error": f"Unsupported API: {path}"}
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """返回提供者统计信息，满足 DataProviderManager 接口要求。"""
+        return {
+            "worker_url": self.worker_url,
+            "timeout": self._timeout_seconds,
+            "retry_count": self._retry_count,
+            "cache_size": len(self._cache),
+            "using_placeholder": self._using_placeholder_worker,
+        }

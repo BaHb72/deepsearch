@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react'
-import { Alert } from 'antd'
-import { ProCard } from '@ant-design/pro-components'
+import React, {useMemo} from 'react'
+import {Alert} from 'antd'
+import {ProCard} from '@ant-design/pro-components'
 
-import { useMarketData } from './hooks/useMarketData'
+import {useMarketData} from './hooks/useMarketData'
 import MarketHeader from './components/MarketHeader'
 import StrengthTable from './components/StrengthTable'
 import BoardOverviewTable from './components/BoardOverviewTable'
@@ -64,19 +64,22 @@ const MarketData: React.FC = () => {
     )
 
     return (
-        <ProCard direction="column" ghost gutter={[0, 16]} style={{ padding: 24 }}>
+
+        <ProCard ghost gutter={[24, 24]} wrap style={{padding: 24}}>
             {fetchError && (
-                <Alert
-                    type="error"
-                    showIcon
-                    message="市场行情数据拉取失败"
-                    description={fetchError}
-                    closable
-                    style={{ marginBottom: 16 }}
-                />
+                <ProCard colSpan={24} ghost>
+                    <Alert
+                        type="error"
+                        showIcon
+                        message="市场行情数据拉取失败"
+                        description={fetchError}
+                        closable
+                    />
+                </ProCard>
             )}
 
-            <ProCard>
+            {/* Header Area: Key Metrics & Controls */}
+            <ProCard colSpan={24} bordered boxShadow>
                 <MarketHeader
                     phase={phase}
                     isStale={isStale}
@@ -97,54 +100,56 @@ const MarketData: React.FC = () => {
                 />
             </ProCard>
 
-            <ProCard ghost gutter={16}>
-                <ProCard colSpan={24} ghost>
-                    <StrengthTable
-                        items={strengthItems}
-                        loading={loading}
-                        refreshing={refreshing}
-                        isStale={isStale}
-                        windows={strength?.windows ?? []}
-                        selectedWindow={selectedWindow}
-                        onWindowChange={setSelectedWindow}
-                        moduleSource={moduleSources.strength}
-                        moduleSourceOptions={moduleSourceOptions}
-                        fallbackLabel={strengthFallbackLabel}
-                        onModuleSourceChange={handleModuleSourceChange}
-                    />
-                </ProCard>
+            {/* Main Data Area */}
+            {/* Row 1: Strength (Most important) */}
+            <ProCard colSpan={24} bordered boxShadow title="资金脉冲 (Real-time Flow)" headStyle={{fontWeight: 'bold'}}>
+                <StrengthTable
+                    items={strengthItems}
+                    loading={loading}
+                    refreshing={refreshing}
+                    isStale={isStale}
+                    windows={strength?.windows ?? []}
+                    selectedWindow={selectedWindow}
+                    onWindowChange={setSelectedWindow}
+                    moduleSource={moduleSources.strength}
+                    moduleSourceOptions={moduleSourceOptions}
+                    fallbackLabel={strengthFallbackLabel}
+                    onModuleSourceChange={handleModuleSourceChange}
+                />
             </ProCard>
 
-            <ProCard ghost gutter={16}>
-                <ProCard colSpan={14} ghost>
-                    <BoardOverviewTable
-                        items={boardItems}
-                        loading={loading}
-                        refreshing={refreshing}
-                        isStale={isStale}
-                        boardType={boardType}
-                        onBoardTypeChange={setBoardType}
-                        moduleSource={moduleSources.board_overview}
-                        moduleSourceOptions={moduleSourceOptions}
-                        fallbackLabel={boardFallbackLabel}
-                        onModuleSourceChange={handleModuleSourceChange}
-                    />
-                </ProCard>
-                <ProCard colSpan={10} ghost>
-                    <OrderImbalanceTable
-                        items={orderItems}
-                        loading={loading}
-                        refreshing={refreshing}
-                        isStale={isStale}
-                        moduleSource={moduleSources.order_imbalance}
-                        moduleSourceOptions={moduleSourceOptions}
-                        fallbackLabel={orderFallbackLabel}
-                        onModuleSourceChange={handleModuleSourceChange}
-                    />
-                </ProCard>
+            {/* Row 2: Split View */}
+            <ProCard colSpan={14} bordered boxShadow title="板块概览 (Board Overview)" headStyle={{fontWeight: 'bold'}}>
+                <BoardOverviewTable
+                    items={boardItems}
+                    loading={loading}
+                    refreshing={refreshing}
+                    isStale={isStale}
+                    boardType={boardType}
+                    onBoardTypeChange={setBoardType}
+                    moduleSource={moduleSources.board_overview}
+                    moduleSourceOptions={moduleSourceOptions}
+                    fallbackLabel={boardFallbackLabel}
+                    onModuleSourceChange={handleModuleSourceChange}
+                />
+            </ProCard>
+            <ProCard colSpan={10} bordered boxShadow title="订单失衡 (Order Imbalance)"
+                     headStyle={{fontWeight: 'bold'}}>
+                <OrderImbalanceTable
+                    items={orderItems}
+                    loading={loading}
+                    refreshing={refreshing}
+                    isStale={isStale}
+                    moduleSource={moduleSources.order_imbalance}
+                    moduleSourceOptions={moduleSourceOptions}
+                    fallbackLabel={orderFallbackLabel}
+                    onModuleSourceChange={handleModuleSourceChange}
+                />
             </ProCard>
 
-            <ProCard ghost>
+            {/* Row 3: Auction Quality */}
+            <ProCard colSpan={24} bordered boxShadow title="竞价质量 (Auction Quality)"
+                     headStyle={{fontWeight: 'bold'}}>
                 <AuctionQualityTable
                     items={auctionItems}
                     loading={loading}
@@ -158,6 +163,7 @@ const MarketData: React.FC = () => {
             </ProCard>
         </ProCard>
     )
+
 }
 
 export default MarketData

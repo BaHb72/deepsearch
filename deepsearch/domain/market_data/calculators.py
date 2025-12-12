@@ -62,6 +62,7 @@ class CapitalPulseCalculator:
             window: WindowSpec,
             *,
             as_of: datetime | None = None,
+            summary_mode: bool = False,
     ) -> CapitalPulseEntry | None:
         codes = tuple(self.resolve_board_codes(board))
         if not codes:
@@ -79,6 +80,33 @@ class CapitalPulseCalculator:
             include_prefetch=True,
         )
 
+        if summary_mode:
+            # 汇总模式：取当日累计成交额，速度设为 0
+            from loguru import logger
+            logger.debug("汇总模式计算 board={} codes_count={} series_map_keys={}", board, len(codes), len(series_map))
+            total_amount = Decimal("0")
+            valid_series_count = 0
+            for code, payload in series_map.items():
+                series, _ = payload
+                if series:
+                    valid_series_count += 1
+                    amt = _to_decimal(series[-1].amount)
+                    total_amount += amt
+                    if amt > 0 and valid_series_count <= 3:
+                        logger.debug("汇总模式示例 code={} amount={}", code, amt)
+            logger.debug("汇总模式结果 board={} valid_series={} total_amount={}", board, valid_series_count,
+                         total_amount)
+            return CapitalPulseEntry(
+                board=board,
+                window=window,
+                amount_total=total_amount,
+                speed_per_min=Decimal("0"),
+                accel_per_min2=Decimal("0"),
+                ts=end_ts,
+                data_source=self.data_source,
+            )
+
+        # 实时模式：计算时间窗口内的增量
         total_delta = Decimal("0")
         for payload in series_map.values():
             series, prefix = payload

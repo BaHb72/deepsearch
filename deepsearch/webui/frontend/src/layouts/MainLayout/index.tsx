@@ -1,35 +1,26 @@
-import React, { useCallback, useMemo, useState } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import React, {useCallback, useMemo} from 'react'
+import {Outlet, useLocation, useNavigate} from 'react-router-dom'
+import {App as AntApp, Badge, Button, Dropdown, Space, Switch, Tag, Tooltip,} from 'antd'
 import {
-  App as AntApp,
-  Badge,
-  Button,
-  Dropdown,
-  Space,
-  Switch,
-  Tag,
-  Tooltip,
-} from 'antd'
-import {
-  BellOutlined,
-  DashboardOutlined,
-  DatabaseOutlined,
-  FileTextOutlined,
-  LineChartOutlined,
-  LogoutOutlined,
-  MoonOutlined,
-  ReloadOutlined,
-  SettingOutlined,
-  SunOutlined,
-  TransactionOutlined,
-  UserOutlined,
+    BellOutlined,
+    DashboardOutlined,
+    DatabaseOutlined,
+    FileTextOutlined,
+    LineChartOutlined,
+    LogoutOutlined,
+    MoonOutlined,
+    ReloadOutlined,
+    SettingOutlined,
+    SunOutlined,
+    TransactionOutlined,
+    UserOutlined,
 } from '@ant-design/icons'
-import { ProLayout, type ProSettings } from '@ant-design/pro-components'
-import { useTheme } from '@/contexts/ThemeContext'
-import { useSystemStore } from '@/stores'
+import {ProLayout} from '@ant-design/pro-components'
+import {useTheme} from '@/contexts/ThemeContext'
+import {useSystemStore} from '@/stores'
 import DataSourceSwitch from '@/components/common/DataSourceSwitch'
-import { useRealtimeSource } from '@/contexts/RealtimeSourceContext'
-import { formatDataSourceLabel } from '@/utils/dataSource'
+import {useRealtimeSource} from '@/contexts/RealtimeSourceContext'
+import {formatDataSourceLabel} from '@/utils/dataSource'
 import JobStatusIndicator from '@/components/common/JobStatusIndicator'
 import './index.scss'
 
@@ -41,11 +32,7 @@ const MainLayout: React.FC = () => {
   const realtimeSource = useRealtimeSource()
   const { message } = AntApp.useApp()
 
-  const [settings] = useState<Partial<ProSettings> | undefined>({
-    fixSiderbar: true,
-    layout: 'mix',
-    splitMenus: false,
-  })
+
 
   const route = useMemo(() => ({
     path: '/',
@@ -225,9 +212,29 @@ const MainLayout: React.FC = () => {
             </Badge>,
           ]
         }}
-        {...settings}
+        token={{
+            header: {
+                colorBgHeader: 'rgba(255, 255, 255, 0.8)',
+                colorHeaderTitle: '#1f1f1f',
+                heightLayoutHeader: 56,
+            },
+            sider: {
+                colorMenuBackground: '#ffffff',
+                colorMenuItemDivider: '#f0f0f0',
+                colorTextMenu: '#595959',
+                colorTextMenuSelected: '#3e79f7',
+                colorBgMenuItemSelected: 'rgba(62, 121, 247, 0.08)',
+                colorBgMenuItemHover: 'rgba(0, 0, 0, 0.03)',
+            },
+            bgLayout: '#f4f6f9',
+        }}
+        fixSiderbar
+        layout="mix"
+        splitMenus={false}
       >
-        <Outlet />
+          <div style={{padding: 24, minHeight: '100%'}}>
+              <Outlet/>
+          </div>
       </ProLayout>
     </div>
   )

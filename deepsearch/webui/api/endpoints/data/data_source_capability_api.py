@@ -22,7 +22,6 @@ from deepsearch.webui.api.models import (
     CapabilityCategorySummary,
     CapabilityComparisonEntry,
     CapabilityComparisonResponse,
-    CapabilityDescriptor,
     CapabilityDiffStats,
     CapabilityInfo,
     CapabilityItem,
@@ -88,6 +87,9 @@ DATA_SOURCE_CAPABILITIES: Final[dict[DataSourceSlug, frozenset[DataCapability]]]
             DataCapability.REALTIME_QUOTE,
             DataCapability.ORDER_BOOK,
             DataCapability.KLINE_DATA,
+            DataCapability.STOCK_LIST,
+            DataCapability.TRADE_DETAIL,
+            DataCapability.TICK_DATA,
         }
     ),
     "cloudflare": frozenset(
@@ -290,6 +292,8 @@ CAPABILITY_NAMES: Final[dict[DataCapability, str]] = {
     DataCapability.SHAREHOLDER_INFO: "股东信息",
     DataCapability.TRADING_CALENDAR: "交易日历",
     DataCapability.ADJUSTMENT_FACTOR: "复权因子",
+    DataCapability.STOCK_LIST: "股票列表",
+    DataCapability.TRADE_DETAIL: "交易详情",
 }
 
 
@@ -348,7 +352,13 @@ async def get_capability_matrix():
         logger.error(f"获取能力矩阵失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/capabilities/{source}")
+
+# 注意：动态路由 /capabilities/{source} 必须放在静态路由之后
+# 否则 "compare", "recommend", "check" 等路径会被错误匹配为 source 参数
+# 但由于FastAPI的路由注册顺序是代码定义顺序，我们需要将此路由移到文件末尾
+# 暂时保持原有位置，下面在419行后重新定义
+
+@router.get("/capabilities/source/{source}")
 async def get_source_capabilities(source: str):
     """
     获取特定数据源的能力
@@ -545,7 +555,7 @@ async def recommend_source(
             "name": CAPABILITY_NAMES.get(cap, capability),
         }
 
-        # ��ȡ֧�ָ�����������Դ
+        # 获取支持该能力的数据源
         capable_sources = _iter_capable_sources(cap)
 
         if not capable_sources:
@@ -555,7 +565,7 @@ async def recommend_source(
                     "capability": capability_descriptor,
                     "recommendations": [],
                     "best_choice": None,
-                    "message": "û������Դ֧�ִ˹���",
+                    "message": "没有数据源支持此功能",
                 },
             }
             return JSONResponse(content=payload)

@@ -1,12 +1,9 @@
 // @ts-nocheck
-
 import React, {Fragment, useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {
-    Alert,
     Badge,
     Button,
     Card,
-    Col,
     Collapse,
     DatePicker,
     Divider,
@@ -14,25 +11,19 @@ import {
     Input,
     List,
     message as antdMessage,
-    Progress,
-    Row,
-    Segmented,
     Select,
     Space,
-    Spin,
-    Statistic,
     Switch,
     Table,
-    Tabs,
     Tag,
-    Timeline,
+    theme,
     Tooltip,
     Typography
 } from 'antd'
+import {PageContainer, ProCard, StatisticCard} from '@ant-design/pro-components'
 import {
     AlertOutlined,
     CloudDownloadOutlined,
-    FileTextOutlined,
     FireOutlined,
     LinkOutlined,
     PauseCircleOutlined,
@@ -42,8 +33,7 @@ import {
     ThunderboltOutlined
 } from '@ant-design/icons'
 import type {ColumnsType} from 'antd/es/table'
-import type {SegmentedValue} from 'antd/es/segmented'
-import {Column, type ColumnConfig, Tiny, type TinyAreaConfig} from '@ant-design/charts'
+import {Column, Tiny} from '@ant-design/charts'
 import dayjs, {Dayjs} from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import advancedFormat from 'dayjs/plugin/advancedFormat'
@@ -52,6 +42,7 @@ import durationPlugin from 'dayjs/plugin/duration'
 const { Paragraph, Text, Title } = Typography
 const { RangePicker } = DatePicker
 const { Panel } = Collapse
+const {Statistic} = StatisticCard
 
 dayjs.extend(relativeTime)
 dayjs.extend(advancedFormat)
@@ -333,10 +324,12 @@ const formatBytes = (bytes: number): string => {
 }
 
 const LogCenter: React.FC = () => {
+    const {token} = theme.useToken()
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting')
   const [rawLogs, setRawLogs] = useState<LogEntry[]>([])
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'table' | 'realtime' | 'timeline'>('table')
+    const [rightPanelTab, setRightPanelTab] = useState<'details' | 'insights' | 'files'>('insights')
   const [rangeKey, setRangeKey] = useState<RangeKey>('30m')
   const [customRange, setCustomRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [levelFilter, setLevelFilter] = useState<LogLevel[]>(['ERROR', 'WARN', 'INFO'])
@@ -388,26 +381,20 @@ const LogCenter: React.FC = () => {
       manualCloseRef.current = true
       wsRef.current.close()
     }
-
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const wsUrl = `${protocol}://${window.location.host}/api/system/logs/ws`
-
     setConnectionState(prev => (prev === 'error' ? 'reconnecting' : 'connecting'))
     manualCloseRef.current = false
-
     try {
       const socket = new WebSocket(wsUrl)
       wsRef.current = socket
-
       socket.onopen = () => {
         window.clearTimeout(reconnectTimerRef.current)
         setConnectionState('connected')
       }
-
       socket.onerror = () => {
         setConnectionState('error')
       }
-
       socket.onclose = () => {
         wsRef.current = null
         if (!manualCloseRef.current) {
@@ -415,7 +402,6 @@ const LogCenter: React.FC = () => {
           scheduleReconnect()
         }
       }
-
       socket.onmessage = (event: MessageEvent) => {
         try {
           const payload = JSON.parse(event.data)
@@ -429,7 +415,9 @@ const LogCenter: React.FC = () => {
               return limited
             })
             if (initial.length) {
-              setSelectedLogId(initial[initial.length - 1].id)
+                const lastId = initial[initial.length - 1].id;
+                // Don't auto-select to avoid jumping
+                // setSelectedLogId(lastId)
             }
             setPendingRealtimeCount(0)
             bufferRef.current = []
@@ -523,24 +511,26 @@ const LogCenter: React.FC = () => {
     fetchLogFiles()
   }, [fetchLogFiles])
 
+    // --- Derived State ---
+
   const computedRange = useMemo(() => {
     if (rangeKey === 'custom') {
       return customRange
     }
     const now = dayjs()
     switch (rangeKey) {
-      case '5m':
-        return [now.subtract(5, 'minute'), now] as [Dayjs, Dayjs]
-      case '30m':
-        return [now.subtract(30, 'minute'), now] as [Dayjs, Dayjs]
-      case '4h':
-        return [now.subtract(4, 'hour'), now] as [Dayjs, Dayjs]
-      case '24h':
-        return [now.subtract(24, 'hour'), now] as [Dayjs, Dayjs]
-      case 'all':
-        return null
-      default:
-        return [now.subtract(30, 'minute'), now] as [Dayjs, Dayjs]
+        case '5m':
+            return [now.subtract(5, 'minute'), now] as [Dayjs, Dayjs]
+        case '30m':
+            return [now.subtract(30, 'minute'), now] as [Dayjs, Dayjs]
+        case '4h':
+            return [now.subtract(4, 'hour'), now] as [Dayjs, Dayjs]
+        case '24h':
+            return [now.subtract(24, 'hour'), now] as [Dayjs, Dayjs]
+        case 'all':
+            return null
+        default:
+            return [now.subtract(30, 'minute'), now] as [Dayjs, Dayjs]
     }
   }, [rangeKey, customRange])
 
@@ -561,11 +551,7 @@ const LogCenter: React.FC = () => {
       if (keyword.trim()) {
         const needle = keyword.trim().toLowerCase()
         const haystack = [
-          log.message,
-          log.service,
-          log.location,
-          log.processInfo,
-          log.traceId
+            log.message, log.service, log.location, log.processInfo, log.traceId
         ].filter(Boolean).join(' ').toLowerCase()
         if (!haystack.includes(needle)) {
           return false
@@ -585,16 +571,15 @@ const LogCenter: React.FC = () => {
     return [...filteredLogs].sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf())
   }, [filteredLogs])
 
+    // Auto switch right tab to Details when log selected
   useEffect(() => {
-    if (!selectedLogId && sortedLogs.length) {
-      setSelectedLogId(sortedLogs[0].id)
+      if (selectedLogId) {
+          setRightPanelTab('details');
     }
-  }, [sortedLogs, selectedLogId])
+  }, [selectedLogId]);
 
   const selectedLog = useMemo(() => {
-    if (!selectedLogId) {
-      return null
-    }
+      if (!selectedLogId) return null
     return rawLogs.find(item => item.id === selectedLogId) || null
   }, [rawLogs, selectedLogId])
 
@@ -664,30 +649,15 @@ const LogCenter: React.FC = () => {
     const timeline = Array.from(bucketMap.values()).sort((a, b) => a.key - b.key)
     const durationAvg = durations.length ? durations.reduce((sum, value) => sum + value, 0) / durations.length : undefined
     const durationP95 = percentile(durations, 0.95)
-    const durationP99 = percentile(durations, 0.99)
-
+      // const durationP99 = percentile(durations, 0.99)
     const services = Array.from(serviceCounter.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6)
     const topErrors = Array.from(errorMessageCounter.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5)
 
-    return {
-      total,
-      error,
-      warn,
-      info,
-      timeline,
-      durationAvg,
-      durationP95,
-      durationP99,
-      statusCounter,
-      services,
-      topErrors
-    }
+      return {total, error, warn, info, timeline, durationAvg, durationP95, statusCounter, services, topErrors}
   }, [filteredLogs])
 
-  const realtimeLogs = useMemo(() => {
-    return rawLogs.slice(-200)
-  }, [rawLogs])
-
+    // Realtime scroll logic
+    const realtimeLogs = useMemo(() => rawLogs.slice(-200), [rawLogs])
   useEffect(() => {
     if (activeTab === 'realtime' && autoScrollRealtime) {
       const container = realtimeListRef.current
@@ -697,6 +667,7 @@ const LogCenter: React.FC = () => {
     }
   }, [realtimeLogs, activeTab, autoScrollRealtime])
 
+    // Handlers
   const handleManualRefresh = () => {
     setStreamPaused(false)
     bufferRef.current = []
@@ -719,12 +690,14 @@ const LogCenter: React.FC = () => {
     document.body.removeChild(link)
   }
 
+    // --- Render Components ---
+
   const columns: ColumnsType<LogEntry> = useMemo(() => [
     {
       title: '时间',
       dataIndex: 'timestamp',
       width: 160,
-      render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm:ss.SSS')
+        render: (value: string) => dayjs(value).format('HH:mm:ss.SSS')
     },
     {
       title: '级别',
@@ -737,19 +710,14 @@ const LogCenter: React.FC = () => {
       )
     },
     {
-      title: '服务 / 模块',
+        title: '服务',
       dataIndex: 'service',
-      width: 180,
-      render: (value?: string) => value || <Text type="secondary">未标识</Text>
+        width: 140,
+        ellipsis: true,
+        render: (value?: string) => value ? <Tag bordered={false}>{value}</Tag> : '-'
     },
     {
-      title: '位置',
-      dataIndex: 'location',
-      width: 200,
-      render: (value?: string) => value || <Text type="secondary">--</Text>
-    },
-    {
-      title: '摘要',
+        title: '消息',
       dataIndex: 'message',
       ellipsis: true,
       render: (value: string) => (
@@ -759,538 +727,340 @@ const LogCenter: React.FC = () => {
       )
     },
     {
-      title: '耗时',
-      dataIndex: 'durationMs',
-      width: 110,
-      sorter: (a, b) => (a.durationMs || 0) - (b.durationMs || 0),
-      render: (value?: number) => formatDuration(value)
-    },
-    {
-      title: '状态码',
-      dataIndex: 'statusCode',
-      width: 110,
-      render: (value?: number) => value ?? '--'
-    },
-    {
-      title: 'Trace ID',
+        title: 'TraceID',
       dataIndex: 'traceId',
-      width: 220,
-      render: (value?: string) => value || <Text type="secondary">--</Text>
+        width: 180,
+        ellipsis: true,
+        render: (value?: string) => value ? <Text type="secondary" code>{value}</Text> : '-'
+    },
+      {
+          title: '操作',
+          key: 'action',
+          width: 80,
+          render: (_, record) => (
+              <Button
+                  type="link"
+                  size="small"
+                  onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedLogId(record.id);
+                  }}
+              >
+                  详情
+              </Button>
+          )
     }
   ], [keyword])
 
-  const timelineChartConfig: ColumnConfig = useMemo(() => ({
+    const timelineChartConfig = useMemo(() => ({
     data: metrics.timeline.flatMap(bucket => ([
-      { 时间: bucket.label, 类型: '错误', 数量: bucket.error },
-      { 时间: bucket.label, 类型: '警告', 数量: bucket.warn },
-      { 时间: bucket.label, 类型: '信息', 数量: bucket.info }
+        {time: bucket.label, type: 'Error', count: bucket.error},
+        {time: bucket.label, type: 'Warn', count: bucket.warn},
+        {time: bucket.label, type: 'Info', count: bucket.info}
     ])),
-    xField: '时间',
-    yField: '数量',
-    seriesField: '类型',
+        xField: 'time',
+        yField: 'count',
+        seriesField: 'type',
     isStack: true,
-    height: 260,
-    legend: {
-      position: 'top'
-    },
+        height: 200,
+        color: {Error: '#ff4d4f', Warn: '#faad14', Info: '#36cfc9'},
+        legend: {position: 'top'},
     animation: false,
-    scrollbar: metrics.timeline.length > 24 ? { type: 'horizontal' } : undefined,
-    tooltip: {
-      showMarkers: false
-    }
-  }), [metrics.timeline])
-
-  const errorTrendConfig: TinyAreaConfig = useMemo(() => ({
-    data: metrics.timeline.map(bucket => bucket.error),
-    smooth: true,
-    height: 60,
-    autoFit: true,
-    areaStyle: { fill: 'l(270) 0:#ffccc7 1:#ffa39e' }
-  }), [metrics.timeline])
-
-  const warnTrendConfig: TinyAreaConfig = useMemo(() => ({
-    data: metrics.timeline.map(bucket => bucket.warn),
-    smooth: true,
-    height: 60,
-    autoFit: true,
-    areaStyle: { fill: 'l(270) 0:#fff7e6 1:#ffe7ba' }
-  }), [metrics.timeline])
-
-  const infoTrendConfig: TinyAreaConfig = useMemo(() => ({
-    data: metrics.timeline.map(bucket => bucket.info),
-    smooth: true,
-    height: 60,
-    autoFit: true,
-    areaStyle: { fill: 'l(270) 0:#e6fffb 1:#b5f5ec' }
-  }), [metrics.timeline])
+    }), [metrics.timeline]);
 
   return (
-    <div style={{ padding: 24, background: '#f5f7fa', minHeight: '100%' }}>
-      <Space direction="vertical" size={24} style={{ width: '100%' }}>
-        <Card variant="borderless" style={{ boxShadow: '0 4px 16px rgba(15, 23, 42, 0.06)' }}>
-          <Row justify="space-between" align="middle">
-            <Col>
-              <Space size={16} align="center">
-                <FileTextOutlined style={{ fontSize: 28, color: '#1677ff' }} />
-                <div>
-                  <Title level={3} style={{ marginBottom: 0 }}>
-                    系统日志中心
-                  </Title>
-                  <Text type="secondary">
-                    一站式实时监控、检索与洞察
-                  </Text>
-                </div>
-                <Badge status={CONNECTION_BADGE[connectionState].status} text={CONNECTION_BADGE[connectionState].text} />
-                {lastLogTime && (
-                  <Tooltip title={lastLogTime.format('YYYY-MM-DD HH:mm:ss')}>
-                    <Text type="secondary">
-                      最近日志 {lastLogTime.fromNow()}
-                    </Text>
-                  </Tooltip>
-                )}
-              </Space>
-            </Col>
-            <Col>
-              <Space size={12}>
-                {pendingRealtimeCount > 0 && (
-                  <Badge count={pendingRealtimeCount} style={{ backgroundColor: '#ff4d4f' }}>
-                    <Button type="link" onClick={() => setStreamPaused(false)}>
-                      有新日志，点击恢复
-                    </Button>
-                  </Badge>
-                )}
-                <Tooltip title={streamPaused ? '恢复实时流' : '暂停追加新日志'}>
-                  <Switch
-                    checkedChildren={<PlayCircleOutlined />}
-                    unCheckedChildren={<PauseCircleOutlined />}
-                    checked={!streamPaused}
-                    onChange={(checked: boolean) => {
-                      setStreamPaused(!checked)
-                      if (checked) {
-                        setPendingRealtimeCount(0)
-                      }
-                    }}
-                  />
-                </Tooltip>
-                <Tooltip title="手动刷新日志列表">
-                  <Button icon={<ReloadOutlined />} onClick={handleManualRefresh} />
-                </Tooltip>
-                <Tooltip title="下载最新日志文件">
-                  <Button icon={<CloudDownloadOutlined />} onClick={handleDownloadLatest}>
-                    下载日志
-                  </Button>
-                </Tooltip>
-              </Space>
-            </Col>
-          </Row>
-          {connectionState === 'error' && (
-            <Alert
-              style={{ marginTop: 16 }}
-              type="error"
-              message="无法连接日志流"
-              description="请检查后端服务是否启动，或稍后重试。"
-              showIcon
-            />
-          )}
-        </Card>
-
-        <Row gutter={16}>
-          <Col span={8}>
-            <Card>
-              <Space align="start" size={16}>
-                <FireOutlined style={{ fontSize: 28, color: '#ff4d4f' }} />
-                <div>
-                  <Statistic title="错误日志" value={metrics.error} suffix={`/ ${metrics.total}`} valueStyle={{ color: '#ff4d4f' }} />
-                  <div style={{ marginTop: 12 }}>
-                    <TinyArea {...errorTrendConfig} />
-                  </div>
-                </div>
-              </Space>
-            </Card>
-          </Col>
-          <Col span={8}>
-            <Card>
-              <Space align="start" size={16}>
-                <AlertOutlined style={{ fontSize: 28, color: '#faad14' }} />
-                <div>
-                  <Statistic title="警告日志" value={metrics.warn} suffix={`/ ${metrics.total}`} valueStyle={{ color: '#faad14' }} />
-                  <div style={{ marginTop: 12 }}>
-                    <TinyArea {...warnTrendConfig} />
-                  </div>
-                </div>
-              </Space>
-            </Card>
-          </Col>
-          <Col span={8}>
-            <Card>
-              <Space align="start" size={16}>
-                <ThunderboltOutlined style={{ fontSize: 28, color: '#36cfc9' }} />
-                <div>
-                  <Statistic
-                    title="平均处理耗时"
-                    value={metrics.durationAvg ? Math.round(metrics.durationAvg) : '--'}
-                    suffix={metrics.durationAvg ? ' ms' : ''}
-                  />
-                  <Space size={12} style={{ marginTop: 8 }}>
-                    <Tag color="blue">P95 {formatDuration(metrics.durationP95)}</Tag>
-                    <Tag color="purple">P99 {formatDuration(metrics.durationP99)}</Tag>
+      <PageContainer
+          header={{
+              title: '日志中心',
+              subTitle: (
+                  <Space>
+                      <Badge status={CONNECTION_BADGE[connectionState].status}
+                             text={CONNECTION_BADGE[connectionState].text}/>
+                      {lastLogTime && <Text type="secondary"
+                                            style={{fontSize: 12}}>最后更新: {lastLogTime.format('HH:mm:ss')}</Text>}
                   </Space>
-                  <div style={{ marginTop: 12 }}>
-                    <TinyArea {...infoTrendConfig} />
-                  </div>
-                </div>
-              </Space>
-            </Card>
-          </Col>
-        </Row>
-
-        <Card>
-          <Collapse defaultActiveKey={['filters']} ghost>
-            <Panel header="检索条件" key="filters">
-              <Space wrap size={16}>
-                <div>
-                  <Text type="secondary">时间范围</Text>
-                  <div style={{ marginTop: 8 }}>
-                    <Segmented
-                      options={QUICK_RANGE_OPTIONS}
-                      value={rangeKey}
-                      onChange={(value: SegmentedValue) => {
-                        setRangeKey(value as RangeKey)
-                        if (value !== 'custom') {
-                          setCustomRange(null)
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-                {rangeKey === 'custom' && (
-                  <RangePicker
-                    showTime
-                    value={customRange}
-                    onChange={(values) => {
-                      if (values) {
-                        setCustomRange(values as [Dayjs, Dayjs])
-                      } else {
-                        setCustomRange(null)
-                      }
-                    }}
-                  />
-                )}
-                <div>
-                  <Text type="secondary">日志级别</Text>
-                  <Select
-                    mode="multiple"
-                    allowClear
-                    placeholder="选择级别"
-                    value={levelFilter}
-                    options={levelOptions}
-                    onChange={(values) => setLevelFilter(values as LogLevel[])}
-                    style={{ minWidth: 220, marginTop: 8 }}
-                  />
-                </div>
-                <div>
-                  <Text type="secondary">服务模块</Text>
-                  <Select
-                    mode="multiple"
-                    allowClear
-                    placeholder="筛选服务"
-                    value={serviceFilter}
-                    options={serviceOptions}
-                    onChange={(values) => setServiceFilter(values as string[])}
-                    style={{ minWidth: 240, marginTop: 8 }}
-                  />
-                </div>
-                <div>
-                  <Text type="secondary">关键字</Text>
-                  <Input
-                    allowClear
-                    prefix={<SearchOutlined />}
-                    placeholder="请输入关键词"
-                    value={keyword}
-                    onChange={(event) => setKeyword(event.target.value)}
-                    style={{ width: 240, marginTop: 8 }}
-                  />
-                </div>
-                <div>
-                  <Text type="secondary">Trace ID / Request ID</Text>
-                  <Input
-                    allowClear
-                    prefix={<LinkOutlined />}
-                    placeholder="输入 Trace ID"
-                    value={traceIdFilter}
-                    onChange={(event) => setTraceIdFilter(event.target.value)}
-                    style={{ width: 240, marginTop: 8 }}
-                  />
-                </div>
-              </Space>
-            </Panel>
-          </Collapse>
-        </Card>
-
-        <Row gutter={24}>
-          <Col span={16}>
-            <Card style={{ minHeight: 680 }}>
-              <Tabs
-                activeKey={activeTab}
-                onChange={(key) => setActiveTab(key as 'table' | 'realtime' | 'timeline')}
-                items={[
-                  {
-                    key: 'table',
-                    label: '列表视图',
-                    children: (
-                      <Table
-                        rowKey="id"
-                        columns={columns}
-                        dataSource={sortedLogs}
-                        size="middle"
-                        pagination={{
-                          pageSize: 30,
-                          showSizeChanger: true,
-                          pageSizeOptions: ['20', '30', '50', '100']
-                        }}
-                        scroll={{ y: 460 }}
-                        onRow={record => ({
-                          onClick: () => setSelectedLogId(record.id),
-                          style: record.id === selectedLogId ? { backgroundColor: 'rgba(22, 119, 255, 0.12)' } : undefined
-                        })}
-                        locale={{
-                          emptyText: (
-                            <Empty
-                              description={(
-                                <span>
-                                  暂无匹配日志
-                                  {keyword && <span>，请尝试调整关键字</span>}
-                                </span>
-                              )}
-                            />
-                          )
-                        }}
-                      />
-                    )
-                  },
-                  {
-                    key: 'realtime',
-                    label: '实时流',
-                    children: (
-                      <div>
-                        <Space style={{ marginBottom: 12 }}>
-                          <Switch
-                            checkedChildren="自动滚动"
-                            unCheckedChildren="手动滚动"
-                            checked={autoScrollRealtime}
-                            onChange={setAutoScrollRealtime}
-                          />
-                          <Text type="secondary">展示最近 200 条日志</Text>
-                        </Space>
-                        <div
-                          ref={realtimeListRef}
-                          style={{
-                            maxHeight: 480,
-                            overflowY: 'auto',
-                            background: '#0f172a',
-                            color: '#e2e8f0',
-                            padding: '12px 16px',
-                            borderRadius: 8,
-                            fontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+              ),
+              extra: [
+                  <Space key="controls">
+                      {pendingRealtimeCount > 0 && (
+                          <Badge count={pendingRealtimeCount} style={{backgroundColor: '#ff4d4f'}}>
+                              <Button type="primary" shape="round" onClick={() => setStreamPaused(false)}>
+                                  有新日志
+                              </Button>
+                          </Badge>
+                      )}
+                      <Switch
+                          checkedChildren={<PlayCircleOutlined/>}
+                          unCheckedChildren={<PauseCircleOutlined/>}
+                          checked={!streamPaused}
+                          onChange={(checked) => {
+                              setStreamPaused(!checked)
+                              if (checked) setPendingRealtimeCount(0)
                           }}
-                        >
-                          {realtimeLogs.map(log => (
-                            <div key={log.id} style={{ marginBottom: 12, opacity: selectedLogId === log.id ? 1 : 0.85 }}>
-                              <Space align="start" size={12}>
-                                <Text style={{ color: '#94a3b8' }}>{dayjs(log.timestamp).format('HH:mm:ss')}</Text>
-                                <Tag color={LEVEL_COLORS[log.level]}>{log.level}</Tag>
-                                <Text style={{ color: '#38bdf8' }}>{log.service || 'unknown'}</Text>
-                                <Text style={{ color: '#e2e8f0' }}>{highlightKeyword(log.message, keyword)}</Text>
-                              </Space>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  },
-                  {
-                    key: 'timeline',
-                    label: '时间线视图',
-                    children: (
-                      <div>
-                        {metrics.timeline.length ? (
-                          <Column {...timelineChartConfig} />
-                        ) : (
-                          <Empty description="当前筛选下暂无时间线数据" />
-                        )}
-                        <Divider />
-                        <Timeline mode="left" style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 12 }}>
-                          {sortedLogs
-                            .filter(log => isErrorLevel(log.level) || isWarnLevel(log.level))
-                            .slice(0, 30)
-                            .reverse()
-                            .map(log => (
-                              <Timeline.Item
-                                key={log.id}
-                                color={isErrorLevel(log.level) ? 'red' : 'orange'}
-                                dot={<AlertOutlined />}
-                              >
-                                <Space direction="vertical" size={4}>
-                                  <Text strong>{dayjs(log.timestamp).format('HH:mm:ss')}</Text>
-                                  <Text type="secondary">{log.service || 'unknown'} / {log.location || '---'}</Text>
-                                  <Text>{log.message}</Text>
-                                </Space>
-                              </Timeline.Item>
-                            ))}
-                        </Timeline>
-                      </div>
-                    )
-                  }
-                ]}
+                      />
+                      <Button icon={<ReloadOutlined/>} onClick={handleManualRefresh}>刷新</Button>
+                      <Button icon={<CloudDownloadOutlined/>} onClick={handleDownloadLatest}>下载</Button>
+                  </Space>
+              ]
+          }}
+      >
+          <ProCard.Group direction="row" gutter={16} ghost title="实时概览">
+              <StatisticCard
+                  statistic={{
+                      title: '错误 (Error)',
+                      value: metrics.error,
+                      icon: <FireOutlined style={{color: token.colorError}}/>,
+                  }}
               />
-            </Card>
-          </Col>
-          <Col span={8}>
-            <Space direction="vertical" size={16} style={{ width: '100%' }}>
-              <Card title="日志详情" style={{ minHeight: 220 }}>
-                {selectedLog ? (
-                  <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                    <Space size={12}>
+              <StatisticCard
+                  statistic={{
+                      title: '警告 (Warn)',
+                      value: metrics.warn,
+                      icon: <AlertOutlined style={{color: token.colorWarning}}/>,
+                  }}
+              />
+              <StatisticCard
+                  statistic={{
+                      title: '平均耗时',
+                      value: metrics.durationAvg ? Math.round(metrics.durationAvg) : '--',
+                      suffix: 'ms',
+                      icon: <ThunderboltOutlined style={{color: token.colorPrimary}}/>,
+                  }}
+              />
+          </ProCard.Group>
+
+          <ProCard split="vertical" bordered headerBordered gutter={16} ghost style={{marginTop: 16}}>
+              {/* Left: Main Content */}
+              <ProCard colSpan="flex" ghost direction="column" gutter={[0, 16]}>
+
+                  {/* Filter Bar */}
+                  <ProCard bordered size="small" collapsible title="筛选" defaultCollapsed={false}>
+                      <Space wrap size={16}>
+                          <Select
+                              popupMatchSelectWidth={false}
+                              value={rangeKey}
+                              options={QUICK_RANGE_OPTIONS}
+                              onChange={v => {
+                                  setRangeKey(v);
+                                  if (v !== 'custom') setCustomRange(null);
+                              }}
+                              style={{width: 100}}
+                          />
+                          {rangeKey === 'custom' &&
+                              <RangePicker showTime value={customRange} onChange={v => setCustomRange(v)}/>}
+                          <Select
+                              mode="multiple"
+                              placeholder="日志级别"
+                              allowClear
+                              value={levelFilter}
+                              options={levelOptions}
+                              onChange={setLevelFilter}
+                              style={{minWidth: 120}}
+                          />
+                          <Select
+                              mode="multiple"
+                              placeholder="服务模块"
+                              allowClear
+                              value={serviceFilter}
+                              options={serviceOptions}
+                              onChange={setServiceFilter}
+                              style={{minWidth: 150}}
+                          />
+                          <Input
+                              prefix={<SearchOutlined/>}
+                              placeholder="关键字搜索..."
+                              value={keyword}
+                              onChange={e => setKeyword(e.target.value)}
+                              style={{width: 200}}
+                              allowClear
+                          />
+                          <Input
+                              prefix={<LinkOutlined/>}
+                              placeholder="TraceID"
+                              value={traceIdFilter}
+                              onChange={e => setTraceIdFilter(e.target.value)}
+                              style={{width: 160}}
+                              allowClear
+                          />
+                      </Space>
+                  </ProCard>
+
+                  {/* Content Tabs */}
+                  <ProCard bordered tabs={{
+                      activeKey: activeTab,
+                      onChange: (key) => setActiveTab(key as any),
+                      items: [
+                          {
+                              key: 'table',
+                              label: '列表视图',
+                              children: (
+                                  <Table
+                                      rowKey="id"
+                                      columns={columns}
+                                      dataSource={sortedLogs}
+                                      size="small"
+                                      pagination={{pageSize: 20, showSizeChanger: true}}
+                                      scroll={{y: 600}}
+                                      onRow={(record) => ({
+                                          onClick: () => setSelectedLogId(record.id),
+                                          style: {
+                                              cursor: 'pointer',
+                                              backgroundColor: record.id === selectedLogId ? token.colorPrimaryBg : undefined
+                                          }
+                                      })}
+                                  />
+                              )
+                          },
+                          {
+                              key: 'realtime',
+                              label: '实时流',
+                              children: (
+                                  <div style={{background: '#1e1e1e', borderRadius: 8, padding: 16}}>
+                                      <Space style={{marginBottom: 12}}>
+                                          <Switch checked={autoScrollRealtime} onChange={setAutoScrollRealtime}
+                                                  checkedChildren="自动滚动" unCheckedChildren="停止"/>
+                                          <Text style={{color: '#888'}}>显示最近 200 条</Text>
+                                      </Space>
+                                      <div
+                                          ref={realtimeListRef}
+                                          style={{
+                                              height: 600,
+                                              overflowY: 'auto',
+                                              fontFamily: 'monospace',
+                                              fontSize: 13
+                                          }}
+                                      >
+                                          {realtimeLogs.map(log => (
+                                              <div key={log.id}
+                                                   style={{marginBottom: 4, lineHeight: '1.4', color: '#ccc'}}>
+                                                  <span style={{
+                                                      color: '#666',
+                                                      marginRight: 8
+                                                  }}>{dayjs(log.timestamp).format('HH:mm:ss')}</span>
+                                                  <span style={{
+                                                      color: LEVEL_COLORS[log.level],
+                                                      marginRight: 8,
+                                                      fontWeight: 'bold'
+                                                  }}>[{log.level}]</span>
+                                                  <span style={{color: '#569cd6', marginRight: 8}}>{log.service}:</span>
+                                                  <span>{log.message}</span>
+                                              </div>
+                                          ))}
+                                      </div>
+                                  </div>
+                              )
+                          },
+                          {
+                              key: 'timeline',
+                              label: '趋势分析',
+                              children: <Column {...timelineChartConfig} />
+                          }
+                      ]
+                  }}/>
+              </ProCard>
+
+              {/* Right: Sidebar */}
+              <ProCard
+                  title="详情与分析"
+                  colSpan={8}
+                  collapsible
+                  bordered
+
+                  tabs={{
+                      activeKey: rightPanelTab,
+                      onChange: (k) => setRightPanelTab(k as any),
+                      items: [
+                          {
+                              key: 'details',
+                              label: '详情',
+                              children: selectedLog ? (
+                                  <Space direction="vertical" style={{width: '100%'}}>
+                                      <Space>
                       <Tag color={LEVEL_COLORS[selectedLog.level]}>{selectedLog.level}</Tag>
                       <Text type="secondary">{dayjs(selectedLog.timestamp).format('YYYY-MM-DD HH:mm:ss.SSS')}</Text>
                     </Space>
-                    <Row gutter={[8, 8]}>
-                      <Col span={12}>
-                        <Text type="secondary">服务模块</Text>
-                        <div>{selectedLog.service || '--'}</div>
-                      </Col>
-                      <Col span={12}>
-                        <Text type="secondary">Trace ID</Text>
-                        <div>{selectedLog.traceId || '--'}</div>
-                      </Col>
-                      <Col span={12}>
-                        <Text type="secondary">调用位置</Text>
-                        <div>{selectedLog.location || '--'}</div>
-                      </Col>
-                      <Col span={12}>
-                        <Text type="secondary">耗时 / 状态</Text>
-                        <div>
-                          {formatDuration(selectedLog.durationMs)}
-                          {' '}
-                          {selectedLog.statusCode ? ` / ${selectedLog.statusCode}` : ''}
-                        </div>
-                      </Col>
-                    </Row>
-                    <Divider style={{ margin: '8px 0' }} />
-                    <Paragraph
-                      style={{ marginBottom: 0 }}
-                      copyable={{ text: selectedLog.message }}
-                      ellipsis={{ rows: 6, expandable: true, symbol: '展开全文' }}
-                    >
-                      {highlightKeyword(selectedLog.message, keyword)}
-                    </Paragraph>
+                                      <Divider style={{margin: '8px 0'}}/>
+                                      <div style={{wordBreak: 'break-all', maxHeight: 400, overflow: 'auto'}}>
+                                          <Text style={{fontSize: 13, fontFamily: 'monospace'}}>
+                                              {highlightKeyword(selectedLog.message, keyword)}
+                                          </Text>
+                                      </div>
+                                      <Divider style={{margin: '8px 0'}}/>
+                                      <List size="small">
+                                          <List.Item><Text type="secondary">Service:</Text> {selectedLog.service}
+                                          </List.Item>
+                                          <List.Item><Text type="secondary">TraceID:</Text> {selectedLog.traceId || '-'}
+                                          </List.Item>
+                                          <List.Item><Text
+                                              type="secondary">Location:</Text> {selectedLog.location || '-'}
+                                          </List.Item>
+                                          <List.Item><Text
+                                              type="secondary">StatusCode:</Text> {selectedLog.statusCode || '-'}
+                                          </List.Item>
+                                          <List.Item><Text
+                                              type="secondary">Duration:</Text> {formatDuration(selectedLog.durationMs)}
+                                          </List.Item>
+                                      </List>
                   </Space>
-                ) : (
-                  <Empty description="请选择一条日志" />
-                )}
-              </Card>
-
-              <Card title="智能洞察">
-                <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                  <Text strong>状态分布</Text>
-                  <Space size={8}>
-                    {Object.entries(metrics.statusCounter).map(([status, count]) => (
-                      <Tag key={status} color={status.startsWith('5') ? 'red' : status.startsWith('4') ? 'orange' : 'blue'}>
-                        {status.toUpperCase()} {count}
-                      </Tag>
-                    ))}
-                  </Space>
-                  <Divider style={{ margin: '12px 0' }} />
-                  <Text strong>高频错误</Text>
-                  {metrics.topErrors.length ? (
-                    <List
-                      size="small"
-                      dataSource={metrics.topErrors}
-                      renderItem={([message, count]) => (
-                        <List.Item>
-                          <Space align="start" size={8}>
-                            <Badge color="#ff4d4f" />
-                            <div>
-                              <Text>{message}</Text>
-                              <div style={{ color: '#8c8c8c' }}>{count} 次</div>
-                            </div>
-                          </Space>
-                        </List.Item>
-                      )}
-                    />
-                  ) : (
-                    <Text type="secondary">暂无明显异常模式</Text>
-                  )}
-                </Space>
-              </Card>
-
-              <Card title="日志文件">
-                {loadingFiles ? (
-                  <Spin />
-                ) : filesError ? (
-                  <Alert type="error" message={filesError} showIcon action={<Button size="small" onClick={fetchLogFiles}>重试</Button>} />
-                ) : logFiles.length ? (
+                              ) : <Empty description="点击日志查看详情"/>
+                          },
+                          {
+                              key: 'insights',
+                              label: '洞察',
+                              children: (
+                                  <Space direction="vertical" style={{width: '100%'}}>
+                                      <Card size="small" title="高频错误" bordered={false}>
+                                          <List
+                                              size="small"
+                                              dataSource={metrics.topErrors}
+                                              renderItem={([msg, count]) => (
+                                                  <List.Item>
+                                                      <Badge count={count} overflowCount={999}
+                                                             style={{backgroundColor: '#f5222d'}}/>
+                                                      <Text type="secondary" ellipsis
+                                                            style={{marginLeft: 8, maxWidth: 200}}>{msg}</Text>
+                                                  </List.Item>
+                                              )}
+                                          />
+                                      </Card>
+                                      <Card size="small" title="状态码分布" bordered={false}>
+                                          <Space wrap>
+                                              {Object.entries(metrics.statusCounter).map(([k, v]) => v > 0 &&
+                                                  <Tag key={k}>{k}: {v}</Tag>)}
+                                          </Space>
+                                      </Card>
+                                  </Space>
+                              )
+                          },
+                          {
+                              key: 'files',
+                              label: '文件',
+                              children: (
                   <List
                     size="small"
-                    dataSource={logFiles.slice(0, 6)}
-                    renderItem={(item) => (
-                      <List.Item
-                        actions={[
-                          <Button
-                            key="download"
-                            type="link"
-                            icon={<CloudDownloadOutlined />}
-                            onClick={() => {
-                              const link = document.createElement('a')
-                              link.href = `/api/system/logs/download/${encodeURIComponent(item.name)}`
-                              link.download = item.name
-                              document.body.appendChild(link)
-                              link.click()
-                              document.body.removeChild(link)
-                            }}
-                          >
-                            下载
-                          </Button>
-                        ]}
-                      >
+                    dataSource={logFiles}
+                    renderItem={item => (
+                        <List.Item actions={[<a onClick={() => {
+                            const link = document.createElement('a')
+                            link.href = `/api/system/logs/download/${encodeURIComponent(item.name)}`
+                            link.download = item.name
+                            link.click()
+                        }}><CloudDownloadOutlined/></a>]}>
                         <List.Item.Meta
-                          title={item.name}
-                          description={(
-                            <Space size={16}>
-                              <span>{formatBytes(item.size)}</span>
-                              <span>更新 {dayjs(item.modified).fromNow()}</span>
-                            </Space>
-                          )}
+                            title={<Text ellipsis>{item.name}</Text>}
+                            description={formatBytes(item.size)}
                         />
                       </List.Item>
                     )}
                   />
-                ) : (
-                  <Empty description="暂无日志文件" />
-                )}
-                <Divider style={{ margin: '12px 0' }} />
-                <Space direction="vertical" size={6} style={{ width: '100%' }}>
-                  <Text strong>高频服务</Text>
-                  {metrics.services.length ? (
-                    metrics.services.map(([name, count]) => (
-                      <Space key={name} style={{ width: '100%' }}>
-                        <Text style={{ flex: 1 }}>{name}</Text>
-                        <Progress percent={Math.min(100, Number(((count / Math.max(1, metrics.total)) * 100).toFixed(1)))} showInfo={false} style={{ flex: 2 }} />
-                        <Text type="secondary">{count}</Text>
-                      </Space>
-                    ))
-                  ) : (
-                    <Text type="secondary">暂无服务分布数据</Text>
-                  )}
-                </Space>
-              </Card>
-            </Space>
-          </Col>
-        </Row>
-      </Space>
-    </div>
+                              )
+                          }
+                      ]
+                  }}
+              />
+          </ProCard>
+      </PageContainer>
   )
 }
 
 export default LogCenter
-

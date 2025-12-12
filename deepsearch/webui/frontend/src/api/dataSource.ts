@@ -253,8 +253,29 @@ export const dataSourceAPI = {
    * 获取数据源能力列表
    */
   async getDataSourceCapabilities(sourceName: string): Promise<string[]> {
-    const url = `/data-sources/capabilities/${encodeURIComponent(sourceName)}`
-    return get<string[]>(url)
+      // 使用新的数据源能力API路径
+      const url = `/datasource/capabilities/source/${encodeURIComponent(sourceName)}`
+      const response = await get<{ capabilities?: string[], categorized_capabilities?: Record<string, unknown> }>(url)
+      // 从响应中提取能力列表
+      if (response?.capabilities) {
+          return response.capabilities
+      }
+      // 如果是分类格式，提取所有能力ID
+      if (response?.categorized_capabilities) {
+          const allCapabilities: string[] = []
+          for (const category of Object.values(response.categorized_capabilities)) {
+              const caps = (category as {
+                  capabilities?: Array<{ id: string, supported: boolean }>
+              })?.capabilities || []
+              for (const cap of caps) {
+                  if (cap.supported) {
+                      allCapabilities.push(cap.id)
+                  }
+              }
+          }
+          return allCapabilities
+      }
+      return []
   },
 
   /**

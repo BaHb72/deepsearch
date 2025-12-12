@@ -1,16 +1,23 @@
-// @ts-nocheck
 import React from 'react'
-import {Card, Empty} from 'antd'
+import {PageContainer} from '@ant-design/pro-components'
+import {Button, Result} from 'antd'
 import {MonitorOutlined} from '@ant-design/icons'
 
-const ComponentManager = () => {
+const ComponentManager: React.FC = () => {
   return (
-    <div>
-      <h1><MonitorOutlined /> 组件管理</h1>
-      <Card>
-        <Empty description="组件管理页面开发中..." />
-      </Card>
-    </div>
+      <PageContainer
+          header={{
+              title: '组件管理',
+              ghost: true,
+          }}
+      >
+          <Result
+              icon={<MonitorOutlined/>}
+              title="功能开发中"
+              subTitle="组件管理功能即将上线，敬请期待。"
+              extra={<Button type="primary">返回首页</Button>}
+          />
+      </PageContainer>
   )
 }
 

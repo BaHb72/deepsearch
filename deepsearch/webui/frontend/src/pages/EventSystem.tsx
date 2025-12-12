@@ -1,6 +1,17 @@
-// @ts-nocheck
 import React, {useCallback, useEffect, useState} from 'react'
-import {Button, Card, Col, message, Progress, Row, Space, Statistic, Table, Tag, Timeline} from 'antd'
+import {
+    Button,
+    type GlobalToken,
+    message,
+    Progress,
+    Space,
+    Statistic,
+    Table,
+    Tag,
+    theme,
+    Timeline,
+    Typography
+} from 'antd'
 import {
     ApiOutlined,
     ClockCircleOutlined,
@@ -9,76 +20,94 @@ import {
     ReloadOutlined,
     SendOutlined,
     SyncOutlined,
-    ThunderboltOutlined
+    ThunderboltOutlined,
 } from '@ant-design/icons'
+import {PageContainer, ProCard, type ProCardProps} from '@ant-design/pro-components'
 import ReactECharts from 'echarts-for-react'
 
 import {type EventSystemOverviewResponse, monitorAPI} from '@/api/monitor'
 
-// 事件流量监控卡片
-const EventFlowCard = ({ metrics, loading }) => {
+const {Text} = Typography
+
+// Interfaces and Components
+interface EventFlowCardProps extends ProCardProps {
+    metrics: EventSystemOverviewResponse['eventMetrics'] | null
+    loading: boolean
+    token: GlobalToken
+}
+
+const EventFlowCard: React.FC<EventFlowCardProps> = ({metrics, loading, token, ...props}) => {
   return (
-    <Card title={<Space><ThunderboltOutlined /> 事件流量监控</Space>} loading={loading}>
-      <Row gutter={[16, 16]}>
-        <Col span={8}>
+      <ProCard
+          title={<Space><ThunderboltOutlined style={{color: token.colorPrimary}}/><span>事件流量监控</span></Space>}
+          loading={loading}
+          bordered
+          headerBordered
+          boxShadow
+          {...props}
+      >
+          {/* ... existing content ... */}
+          <ProCard ghost gutter={16}>
+              <ProCard colSpan={8}>
           <Statistic
             title="事件产生速率"
             value={metrics?.produceRate || 0}
             suffix="条/秒"
-            valueStyle={{ color: '#1890ff' }}
+            valueStyle={{color: token.colorPrimary}}
             prefix={<SendOutlined />}
           />
-        </Col>
-        <Col span={8}>
+              </ProCard>
+              <ProCard colSpan={8}>
           <Statistic
             title="事件处理速率"
             value={metrics?.consumeRate || 0}
             suffix="条/秒"
-            valueStyle={{ color: '#52c41a' }}
+            valueStyle={{color: token.colorSuccess}}
             prefix={<SyncOutlined />}
           />
-        </Col>
-        <Col span={8}>
+              </ProCard>
+              <ProCard colSpan={8}>
           <Statistic
             title="队列深度"
             value={metrics?.queueDepth || 0}
             suffix="条"
-            valueStyle={{ color: metrics?.queueDepth > 1000 ? '#f5222d' : '#1890ff' }}
+            valueStyle={{color: (metrics?.queueDepth || 0) > 1000 ? token.colorError : token.colorPrimary}}
             prefix={<InboxOutlined />}
           />
-        </Col>
-      </Row>
+              </ProCard>
+          </ProCard>
       <div style={{ marginTop: 24 }}>
-        <div style={{ marginBottom: 8 }}>
-          <span>队列使用率</span>
-          <span style={{ float: 'right' }}>{metrics?.queueUsage || 0}%</span>
+          <div style={{marginBottom: 8, display: 'flex', justifyContent: 'space-between'}}>
+              <Text>队列使用率</Text>
+              <Text>{metrics?.queueUsage || 0}%</Text>
         </div>
-        <Progress 
-          percent={metrics?.queueUsage || 0} 
+          <Progress
+              percent={metrics?.queueUsage || 0}
           strokeColor={{
-            '0%': '#52c41a',
-            '50%': '#faad14',
-            '100%': '#f5222d',
+              '0%': token.colorSuccess,
+              '50%': token.colorWarning,
+              '100%': token.colorError,
           }}
         />
       </div>
-    </Card>
+      </ProCard>
   )
 }
 
-// 事件类型分布图
-const EventTypeChart = ({ data, loading }) => {
+interface EventTypeChartProps extends ProCardProps {
+    data: EventSystemOverviewResponse['eventTypes']
+    loading: boolean
+}
+
+const EventTypeChart: React.FC<EventTypeChartProps> = ({data, loading, ...props}) => {
+    // ... existing option ...
   const option = {
-    title: {
-      text: '事件类型分布',
-      left: 'center'
-    },
     tooltip: {
       trigger: 'item',
-      formatter: '{a} <br/>{b}: {c} ({d}%)'
+        formatter: '{b}: {c} ({d}%)'
     },
     legend: {
-      bottom: '5%',
+        bottom: '0%',
       left: 'center'
     },
     series: [
@@ -88,7 +117,7 @@ const EventTypeChart = ({ data, loading }) => {
         radius: ['40%', '70%'],
         avoidLabelOverlap: false,
         itemStyle: {
-          borderRadius: 10,
+            borderRadius: 8,
           borderColor: '#fff',
           borderWidth: 2
         },
@@ -96,48 +125,39 @@ const EventTypeChart = ({ data, loading }) => {
           show: false,
           position: 'center'
         },
-        emphasis: {
-          label: {
-            show: true,
-            fontSize: 20,
-            fontWeight: 'bold'
-          }
-        },
-        labelLine: {
-          show: false
-        },
         data: data || []
       }
     ]
   }
 
   return (
-    <Card loading={loading}>
+      <ProCard title="事件类型分布" loading={loading} bordered headerBordered boxShadow {...props}>
       <ReactECharts option={option} style={{ height: 300 }} />
-    </Card>
+      </ProCard>
   )
 }
 
-// 事件处理延迟分布
-const EventLatencyChart = ({ data, loading }) => {
+interface EventLatencyChartProps extends ProCardProps {
+    data: EventSystemOverviewResponse['latencyDistribution']
+    loading: boolean
+    token: GlobalToken
+}
+
+const EventLatencyChart: React.FC<EventLatencyChartProps> = ({data, loading, token, ...props}) => {
+    // ... existing option ...
   const option = {
-    title: {
-      text: '事件处理延迟分布',
-      left: 'center'
-    },
     tooltip: {
       trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      }
+        axisPointer: {type: 'shadow'}
     },
+      grid: {top: 20, bottom: 20, left: 40, right: 20, containLabel: true},
     xAxis: {
       type: 'category',
       data: data?.categories || ['<10ms', '10-50ms', '50-100ms', '100-500ms', '>500ms']
     },
     yAxis: {
       type: 'value',
-      name: '事件数量'
+        splitLine: {lineStyle: {type: 'dashed'}}
     },
     series: [
       {
@@ -145,33 +165,40 @@ const EventLatencyChart = ({ data, loading }) => {
         type: 'bar',
         data: data?.values || [],
         itemStyle: {
-          color: (params) => {
-            const colors = ['#52c41a', '#73d13d', '#faad14', '#fa8c16', '#f5222d']
-            return colors[params.dataIndex]
-          }
+            color: (params: any) => {
+                const colors = [token.colorSuccess, '#73d13d', token.colorWarning, '#fa8c16', token.colorError]
+                return colors[params.dataIndex] || token.colorPrimary
+            },
+            borderRadius: [4, 4, 0, 0]
         }
       }
     ]
   }
 
   return (
-    <Card loading={loading}>
+      <ProCard title="事件处理延迟分布" loading={loading} bordered headerBordered boxShadow {...props}>
       <ReactECharts option={option} style={{ height: 300 }} />
-    </Card>
+      </ProCard>
   )
 }
 
-// 消息总线状态
-const MessageBusStatus = ({ buses, loading }) => {
+interface MessageBusStatusProps extends ProCardProps {
+    buses: EventSystemOverviewResponse['messageBuses']
+    loading: boolean
+    token: GlobalToken
+}
+
+const MessageBusStatus: React.FC<MessageBusStatusProps> = ({buses, loading, token, ...props}) => {
+    // ... existing columns ...
   const columns = [
     {
       title: '总线类型',
       dataIndex: 'type',
       key: 'type',
-      render: (type) => (
+        render: (type: string) => (
         <Space>
-          <ApiOutlined />
-          <span>{type}</span>
+            <ApiOutlined style={{color: token.colorPrimary}}/>
+            <Text strong>{type}</Text>
         </Space>
       )
     },
@@ -179,8 +206,8 @@ const MessageBusStatus = ({ buses, loading }) => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: (status) => (
-        <Tag color={status === 'connected' ? 'green' : 'red'}>
+        render: (status: string) => (
+            <Tag color={status === 'connected' ? 'success' : 'error'}>
           {status === 'connected' ? '已连接' : '断开'}
         </Tag>
       )
@@ -189,7 +216,7 @@ const MessageBusStatus = ({ buses, loading }) => {
       title: '吞吐量',
       dataIndex: 'throughput',
       key: 'throughput',
-      render: (val) => `${val} msg/s`
+        render: (val: number) => `${val} msg/s`
     },
     {
       title: '连接数',
@@ -200,68 +227,79 @@ const MessageBusStatus = ({ buses, loading }) => {
       title: '缓冲区使用',
       dataIndex: 'bufferUsage',
       key: 'bufferUsage',
-      render: (usage) => (
-        <Progress percent={usage} size="small" strokeColor={usage > 80 ? '#f5222d' : '#52c41a'} />
+        render: (usage: number) => (
+            <Progress percent={usage} size="small" strokeColor={usage > 80 ? token.colorError : token.colorSuccess}/>
       )
     },
   ]
 
   return (
-    <Card 
-      title={<Space><DatabaseOutlined /> 消息总线状态</Space>} 
+      <ProCard
+          title={<Space><DatabaseOutlined style={{color: token.colorPrimary}}/><span>消息总线状态</span></Space>}
       loading={loading}
+          bordered
+          headerBordered
+          boxShadow
+          {...props}
     >
       <Table
         columns={columns}
         dataSource={buses || []}
         rowKey="type"
-        size="small"
+        size="middle"
         pagination={false}
       />
-    </Card>
+      </ProCard>
   )
 }
 
-// 事件处理器性能
-const EventHandlerPerformance = ({ handlers, loading }) => {
+interface EventHandlerPerformanceProps extends ProCardProps {
+    handlers: EventSystemOverviewResponse['eventHandlers']
+    loading: boolean
+    token: GlobalToken
+}
+
+const EventHandlerPerformance: React.FC<EventHandlerPerformanceProps> = ({handlers, loading, token, ...props}) => {
+    // ... existing columns ...
   const columns = [
     {
       title: '处理器',
       dataIndex: 'name',
       key: 'name',
+        render: (text: string) => <Text strong>{text}</Text>
     },
     {
       title: '处理事件数',
       dataIndex: 'processed',
       key: 'processed',
-      sorter: (a, b) => a.processed - b.processed,
+        sorter: (a: any, b: any) => a.processed - b.processed,
     },
     {
       title: '成功率',
       dataIndex: 'successRate',
       key: 'successRate',
-      render: (rate) => (
-        <Progress 
-          percent={rate} 
-          size="small" 
-          strokeColor={rate >= 95 ? '#52c41a' : rate >= 80 ? '#faad14' : '#f5222d'}
+        render: (rate: number) => (
+            <Progress
+                percent={rate}
+                size="small"
+                strokeColor={rate >= 95 ? token.colorSuccess : rate >= 80 ? token.colorWarning : token.colorError}
         />
       ),
-      sorter: (a, b) => a.successRate - b.successRate,
+        sorter: (a: any, b: any) => a.successRate - b.successRate,
     },
     {
       title: '平均处理时间',
       dataIndex: 'avgTime',
       key: 'avgTime',
-      render: (time) => (typeof time === 'number' ? `${time.toFixed(2)} ms` : (time ?? '-')),
-      sorter: (a, b) => a.avgTime - b.avgTime,
+        render: (time: number | undefined) => (typeof time === 'number' ? `${time.toFixed(2)} ms` : (time ?? '-')),
+        sorter: (a: any, b: any) => a.avgTime - b.avgTime,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: (status) => (
-        <Tag color={status === 'active' ? 'green' : 'orange'}>
+        render: (status: string) => (
+            <Tag color={status === 'active' ? 'processing' : 'default'}>
           {status === 'active' ? '活跃' : '空闲'}
         </Tag>
       )
@@ -269,51 +307,66 @@ const EventHandlerPerformance = ({ handlers, loading }) => {
   ]
 
   return (
-    <Card 
-      title={<Space><ClockCircleOutlined /> 事件处理器性能</Space>} 
+      <ProCard
+          title={<Space><ClockCircleOutlined style={{color: token.colorPrimary}}/><span>事件处理器性能</span></Space>}
       loading={loading}
+          bordered
+          headerBordered
+          boxShadow
+          {...props}
     >
       <Table
         columns={columns}
         dataSource={handlers || []}
         rowKey="name"
-        size="small"
-        pagination={{ pageSize: 10 }}
+        size="middle"
+        pagination={{pageSize: 5}}
       />
-    </Card>
+      </ProCard>
   )
 }
 
-// 实时事件流
-const EventStream = ({ events, loading }) => {
+interface EventStreamProps extends ProCardProps {
+    events: EventSystemOverviewResponse['eventStream']
+    loading: boolean
+    token: GlobalToken
+}
+
+const EventStream: React.FC<EventStreamProps> = ({events, loading, token, ...props}) => {
   return (
-    <Card 
-      title={<Space><SyncOutlined spin /> 实时事件流</Space>} 
+      <ProCard
+          title={<Space><SyncOutlined spin style={{color: token.colorPrimary}}/><span>实时事件流</span></Space>}
       loading={loading}
-      styles={{ body: { maxHeight: 400, overflowY: 'auto' } }}
+          bordered
+          headerBordered
+          boxShadow
+          bodyStyle={{maxHeight: 400, overflowY: 'auto'}}
+          {...props}
     >
       <Timeline mode="left">
         {(events || []).map((event, index) => (
-          <Timeline.Item 
+            <Timeline.Item
             key={index}
-            color={event.type === 'error' ? 'red' : event.type === 'warning' ? 'orange' : 'green'}
-            label={new Date(event.time).toLocaleTimeString('zh-CN')}
+            color={event.type === 'error' ? 'red' : event.type === 'warning' ? 'gold' : 'green'}
+            label={<Text type="secondary"
+                         style={{fontSize: 12}}>{new Date(event.time).toLocaleTimeString('zh-CN')}</Text>}
           >
-            <Space direction="vertical" size="small">
-              <Tag color={event.type === 'error' ? 'red' : event.type === 'warning' ? 'orange' : 'blue'}>
+                <Space direction="vertical" size={2}>
+                    <Tag color={event.type === 'error' ? 'error' : event.type === 'warning' ? 'warning' : 'processing'}>
                 {event.eventType}
               </Tag>
-              <span>{event.message}</span>
+                    <Text>{event.message}</Text>
             </Space>
           </Timeline.Item>
         ))}
       </Timeline>
-    </Card>
+      </ProCard>
   )
 }
 
 // 主页面组件
 const EventSystem = () => {
+    const {token} = theme.useToken()
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
     const [eventMetrics, setEventMetrics] =
@@ -334,7 +387,10 @@ const EventSystem = () => {
     const fetchOverview = useCallback(
         async (options: { showSuccess?: boolean } = {}) => {
             try {
-                const data = await monitorAPI.getEventSystemOverview()
+                const response = await monitorAPI.getEventSystemOverview()
+                // @ts-ignore
+                const data = response.data || response
+
                 setEventMetrics(data.eventMetrics ?? null)
                 setEventTypes(data.eventTypes ?? [])
                 setLatencyData(data.latencyDistribution ?? {categories: [], values: []})
@@ -373,58 +429,76 @@ const EventSystem = () => {
   }
 
   return (
-    <div>
-      {/* 页面标题 */}
-      <div style={{ marginBottom: 24 }}>
-        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-          <h1 style={{ margin: 0 }}>
-            <ApiOutlined /> 事件系统监控
-          </h1>
-          <Button 
-            type="primary" 
+      <PageContainer
+          header={{
+              title: '事件系统监控',
+              ghost: true,
+              extra: [
+                  <Button
+                      key="refresh"
+                      type="primary"
             icon={<ReloadOutlined spin={refreshing} />}
             onClick={refreshAll}
             loading={refreshing}
           >
             刷新
           </Button>
-        </Space>
-      </div>
+              ]
+          }}
+      >
+          <Space direction="vertical" size={48} style={{width: '100%'}}>
+              {/* 事件流量监控 - 独占一行 */}
+              <EventFlowCard
+                  metrics={eventMetrics}
+                  loading={loading}
+                  token={token}
+                  hoverable
+              />
 
-      {/* 事件流量监控 */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col span={24}>
-          <EventFlowCard metrics={eventMetrics} loading={loading} />
-        </Col>
-      </Row>
+              {/* 事件分布图表 - 并排显示 */}
+              <ProCard gutter={[24, 24]} ghost>
+                  <EventTypeChart
+                      colSpan={{xs: 24, md: 12}}
+                      data={eventTypes}
+                      loading={loading}
+                      hoverable
+                  />
+                  <EventLatencyChart
+                      colSpan={{xs: 24, md: 12}}
+                      data={latencyData}
+                      loading={loading}
+                      token={token}
+                      hoverable
+                  />
+              </ProCard>
 
-      {/* 事件分布图表 */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} lg={12}>
-          <EventTypeChart data={eventTypes} loading={loading} />
-        </Col>
-        <Col xs={24} lg={12}>
-          <EventLatencyChart data={latencyData} loading={loading} />
-        </Col>
-      </Row>
+              {/* 消息总线状态 - 独占一行 */}
+              <MessageBusStatus
+                  buses={messageBuses}
+                  loading={loading}
+                  token={token}
+                  hoverable
+              />
 
-      {/* 消息总线状态 */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col span={24}>
-          <MessageBusStatus buses={messageBuses} loading={loading} />
-        </Col>
-      </Row>
-
-      {/* 事件处理器和实时流 */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={16}>
-          <EventHandlerPerformance handlers={eventHandlers} loading={loading} />
-        </Col>
-        <Col xs={24} lg={8}>
-          <EventStream events={eventStream} loading={loading} />
-        </Col>
-      </Row>
-    </div>
+              {/* 事件处理器和实时流 - 并排显示 */}
+              <ProCard gutter={[24, 24]} ghost>
+                  <EventHandlerPerformance
+                      colSpan={{xs: 24, md: 16}}
+                      handlers={eventHandlers}
+                      loading={loading}
+                      token={token}
+                      hoverable
+                  />
+                  <EventStream
+                      colSpan={{xs: 24, md: 8}}
+                      events={eventStream}
+                      loading={loading}
+                      token={token}
+                      hoverable
+                  />
+              </ProCard>
+          </Space>
+      </PageContainer>
   )
 }
 

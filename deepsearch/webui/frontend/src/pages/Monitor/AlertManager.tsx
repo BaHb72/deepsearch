@@ -1,16 +1,23 @@
-// @ts-nocheck
 import React from 'react'
-import {Card, Empty} from 'antd'
+import {PageContainer} from '@ant-design/pro-components'
+import {Button, Result} from 'antd'
 import {BellOutlined} from '@ant-design/icons'
 
-const AlertManager = () => {
+const AlertManager: React.FC = () => {
   return (
-    <div>
-      <h1><BellOutlined /> 告警管理</h1>
-      <Card>
-        <Empty description="告警管理页面开发中..." />
-      </Card>
-    </div>
+      <PageContainer
+          header={{
+              title: '告警管理',
+              ghost: true,
+          }}
+      >
+          <Result
+              icon={<BellOutlined/>}
+              title="功能开发中"
+              subTitle="告警管理功能即将上线，敬请期待。"
+              extra={<Button type="primary">返回首页</Button>}
+          />
+      </PageContainer>
   )
 }
 

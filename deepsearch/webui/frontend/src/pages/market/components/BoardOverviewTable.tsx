@@ -1,8 +1,8 @@
 import React from 'react'
-import { Select, Space, Tag, Typography } from 'antd'
-import { ProTable } from '@ant-design/pro-components'
-import type { ProColumns } from '@ant-design/pro-components'
-import type { BoardOverviewItem } from '../../../api/marketDataLive'
+import {Select, Space, Tag, theme, Typography} from 'antd'
+import type {ProColumns} from '@ant-design/pro-components'
+import {ProTable} from '@ant-design/pro-components'
+import type {BoardOverviewItem} from '../../../api/marketDataLive'
 import ModuleSourceSelector from './ModuleSourceSelector'
 import {
     CLASSIFICATION_META,
@@ -39,14 +39,34 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
     fallbackLabel,
     onModuleSourceChange,
 }) => {
+    const {token} = theme.useToken()
+    const colorUp = '#ff4d4f'
+    const colorDown = '#52c41a'
+
+    const getTrendColor = (val?: number | null) => {
+        if (!val) return token.colorText
+        return val > 0 ? colorUp : val < 0 ? colorDown : token.colorText
+    }
+
     const columns: ProColumns<BoardOverviewItem>[] = [
-        { title: '板块', dataIndex: 'board', key: 'board', width: 160, fixed: 'left' },
+        {
+            title: '板块',
+            dataIndex: 'board',
+            key: 'board',
+            width: 160,
+            fixed: 'left',
+            render: (dom) => <Text strong>{dom}</Text>
+        },
         {
             title: '净流入',
             dataIndex: 'inflow_net',
             key: 'inflow_net',
             width: 140,
-            render: (_, record) => formatAmountBillion(record.inflow_net),
+            render: (_, record) => (
+                <span style={{color: getTrendColor(record.inflow_net), fontFamily: 'Monaco, monospace'}}>
+                    {formatAmountBillion(record.inflow_net)}
+                </span>
+            ),
             sorter: (a, b) => (a.inflow_net || 0) - (b.inflow_net || 0),
         },
         {
@@ -54,7 +74,11 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
             dataIndex: 'inflow_speed',
             key: 'inflow_speed',
             width: 150,
-            render: (_, record) => formatAmountMillionPerMinute(record.inflow_speed),
+            render: (_, record) => (
+                <span style={{color: getTrendColor(record.inflow_speed), fontFamily: 'Monaco, monospace'}}>
+                    {formatAmountMillionPerMinute(record.inflow_speed)}
+                </span>
+            ),
             sorter: (a, b) => (a.inflow_speed || 0) - (b.inflow_speed || 0),
         },
         {
@@ -78,7 +102,11 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
             dataIndex: 'breadth_up_ratio',
             key: 'breadth_up_ratio',
             width: 120,
-            render: (_, record) => formatPercent(record.breadth_up_ratio),
+            render: (_, record) => (
+                <span style={{color: (record.breadth_up_ratio || 0) > 0.5 ? colorUp : colorDown}}>
+                    {formatPercent(record.breadth_up_ratio)}
+                </span>
+            ),
             sorter: (a, b) => (a.breadth_up_ratio || 0) - (b.breadth_up_ratio || 0),
         },
         {
@@ -104,7 +132,7 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
 
     return (
         <ProTable<BoardOverviewItem>
-            headerTitle="板块概览"
+            headerTitle={null}
             rowKey="board"
             columns={columns}
             dataSource={items}

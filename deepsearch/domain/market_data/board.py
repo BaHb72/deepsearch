@@ -75,7 +75,7 @@ _BOARD_CANONICAL_SPECS: tuple[dict[str, object], ...] = (
     },
     {
         "name": "北交所",
-        "keywords": ("北交所", "北京证券交易所", "beijing stock exchange", "bse"),
+        "keywords": ("北交所", "北证", "北京证券交易所", "beijing stock exchange", "bse"),
     },
     {
         "name": "中小板",

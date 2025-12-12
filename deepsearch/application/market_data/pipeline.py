@@ -50,13 +50,17 @@ class MarketDataRealtimePipeline:
             perf_counter() - phase_start,
         )
 
-        if effective_phase in (PhaseState.OFF_DAY, PhaseState.NO_TRADE):
+        # OFF_DAY（非交易日）跳过数据采集
+        if effective_phase == PhaseState.OFF_DAY:
             logger.debug("实时行情流水线 phase={} 跳过数据采集", effective_phase.value)
             logger.debug(
                 "实时行情流水线结束 total_duration={:.3f}s",
                 perf_counter() - loop_start,
             )
             return
+
+        # 判断是否使用汇总模式：NO_TRADE（收盘后当日）使用汇总模式
+        use_summary_mode = effective_phase == PhaseState.NO_TRADE
 
         phase_start = perf_counter()
         await self.service.ingest_from_stream()
@@ -90,12 +94,14 @@ class MarketDataRealtimePipeline:
             boards=tuple(self.boards),
             windows=tuple(self.capital_windows),
             limit=self.capital_limit,
+            summary_mode=use_summary_mode,
         )
         phase_start = perf_counter()
         capital_entries = await self.service.compute_capital_pulse(capital_query)
         logger.debug(
-            "实时行情 capital_pulse 计算完成 entries={} duration={:.3f}s",
+            "实时行情 capital_pulse 计算完成 entries={} mode={} duration={:.3f}s",
             len(capital_entries),
+            "summary" if use_summary_mode else "realtime",
             perf_counter() - phase_start,
         )
         phase_start = perf_counter()

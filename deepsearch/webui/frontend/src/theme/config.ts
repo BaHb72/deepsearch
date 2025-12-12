@@ -1,133 +1,89 @@
-import { theme } from 'antd'
-import type { ThemeConfig } from 'antd/es/config-provider/context'
+import {theme} from 'antd'
+import type {ThemeConfig} from 'antd/es/config-provider/context'
 
 export type ThemeMode = 'light' | 'dark'
 
 export const DEFAULT_THEME_MODE: ThemeMode = 'light'
 
 const baseTokens = {
-    colorPrimary: '#1677ff', // Ant Design v5 default blue, more vibrant
-    colorSuccess: '#52c41a',
-    colorWarning: '#faad14',
-    colorError: '#ff4d4f',
-    colorInfo: '#1677ff',
+    colorPrimary: '#3e79f7', // A more sophisticated Tech Blue
+    colorSuccess: '#30d158', // iOS-like success green
+    colorWarning: '#ff9f0a', // iOS-like warning orange
+    colorError: '#ff453a',   // iOS-like error red
+    colorInfo: '#3e79f7',
     colorBgContainer: '#ffffff',
     colorBgElevated: '#ffffff',
-    colorBgLayout: '#f5f5f5', // Slightly lighter gray for modern feel
-    colorBgSpotlight: '#ffffff',
-    colorBorder: '#d9d9d9',
-    colorBorderSecondary: '#f0f0f0',
-    colorText: 'rgba(0, 0, 0, 0.88)',
+    colorBgLayout: '#f4f6f9', // Very light cool gray
+    colorText: '#1f1f1f',
     colorTextSecondary: 'rgba(0, 0, 0, 0.65)',
     colorTextTertiary: 'rgba(0, 0, 0, 0.45)',
     colorTextQuaternary: 'rgba(0, 0, 0, 0.25)',
-    borderRadius: 8, // More rounded corners for modern look
+    borderRadius: 8,
     borderRadiusLG: 12,
-    borderRadiusSM: 6,
+    borderRadiusSM: 4,
     fontSize: 14,
     fontSizeLG: 16,
     fontSizeSM: 12,
     fontFamily:
-        'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif', // Added Inter
-    marginXS: 8,
-    marginSM: 12,
-    margin: 16,
-    marginMD: 20,
-    marginLG: 24,
-    marginXL: 32,
+        'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     boxShadow:
-        '0 2px 8px rgba(0, 0, 0, 0.08)', // Softer shadow
+        '0 2px 12px 0 rgba(0, 0, 0, 0.05)', // Softer, more diffuse shadow
     boxShadowSecondary:
-        '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)',
-    motionDurationFast: '0.1s',
-    motionDurationMid: '0.2s',
-    motionDurationSlow: '0.3s',
-    controlHeight: 36, // Slightly taller controls for better touch/click targets
-    controlHeightLG: 44,
+        '0 6px 16px -8px rgba(0, 0, 0, 0.08), 0 9px 28px 0 rgba(0, 0, 0, 0.05), 0 12px 48px 16px rgba(0, 0, 0, 0.03)',
+    controlHeight: 38, // Slightly taller for modern feel
+    controlHeightLG: 46,
     controlHeightSM: 28,
 } satisfies ThemeConfig['token']
 
 const componentTokens = {
     Button: {
-        colorPrimary: '#1890ff',
-        algorithm: true,
+        borderRadius: 6,
+        controlHeight: 38,
+        colorPrimary: '#3e79f7',
     },
     Input: {
-        colorPrimary: '#1890ff',
-        algorithm: true,
+        borderRadius: 6,
+        colorBgContainer: '#ffffff',
+        activeBorderColor: '#3e79f7',
+        hoverBorderColor: '#3e79f7',
     },
     Select: {
-        colorPrimary: '#1890ff',
-        algorithm: true,
+        borderRadius: 6,
+    },
+    Layout: {
+        bodyBg: '#f4f6f9',
+        headerBg: '#ffffff',
+        headerHeight: 56, // Slightly compact header
+        headerPadding: '0 24px',
+        siderBg: '#ffffff',
+    },
+    Menu: {
+        itemBorderRadius: 6,
+        itemSelectedBg: 'rgba(62, 121, 247, 0.08)',
+        itemSelectedColor: '#3e79f7',
+        itemActiveBg: 'rgba(62, 121, 247, 0.12)',
+        itemHoverBg: 'rgba(0, 0, 0, 0.03)',
+    },
+    Card: {
+        headerBg: 'transparent',
+        headerFontSize: 16,
+        headerHeight: 56, // Taller header for cards
+        borderRadiusLG: 12, // More rounded cards
+        boxShadowTertiary: '0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px 0 rgba(0, 0, 0, 0.02)', // Subtle card shadow
     },
     Table: {
         headerBg: '#fafafa',
         headerColor: 'rgba(0, 0, 0, 0.88)',
         headerSortActiveBg: '#f0f0f0',
-        bodySortBg: '#fafafa',
-    },
-    Layout: {
-        bodyBg: '#f0f2f5',
-        headerBg: '#ffffff',
-        headerHeight: 64,
-        headerPadding: '0 24px',
-        headerColor: 'rgba(0, 0, 0, 0.88)',
-        siderBg: '#ffffff',
-        triggerBg: '#002140',
-        triggerColor: '#ffffff',
-    },
-    Menu: {
-        itemBg: 'transparent',
-        itemSelectedBg: 'rgba(24, 144, 255, 0.1)',
-        itemSelectedColor: '#1890ff',
-        itemHoverBg: 'rgba(24, 144, 255, 0.05)',
-        itemHoverColor: '#1890ff',
-        itemActiveBg: 'rgba(24, 144, 255, 0.15)',
-    },
-    Card: {
-        headerBg: '#ffffff',
-        headerFontSize: 16,
-        headerHeight: 48,
-        actionsLiMargin: '12px 0',
-        tabsMarginBottom: -17,
-        extraColor: 'rgba(0, 0, 0, 0.88)',
+        borderRadiusLG: 8,
+        headerSplitColor: 'transparent', // Cleaner headers
     },
     Tabs: {
-        inkBarColor: '#1890ff',
-        itemSelectedColor: '#1890ff',
-        itemHoverColor: '#40a9ff',
-        itemActiveColor: '#096dd9',
-        cardBg: '#f5f5f5',
+        itemSelectedColor: '#3e79f7',
+        inkBarColor: '#3e79f7',
     },
     Tag: {
-        defaultBg: '#fafafa',
-        defaultColor: 'rgba(0, 0, 0, 0.88)',
-    },
-    Modal: {
-        headerBg: '#ffffff',
-        titleFontSize: 16,
-        titleLineHeight: 1.5,
-    },
-    Form: {
-        labelColor: 'rgba(0, 0, 0, 0.88)',
-        labelFontSize: 14,
-        labelHeight: 32,
-        labelColonMarginInlineStart: 2,
-        labelColonMarginInlineEnd: 8,
-        itemMarginBottom: 24,
-    },
-    DatePicker: {
-        cellHoverBg: '#f5f5f5',
-        cellActiveWithRangeBg: '#e6f4ff',
-        cellHoverWithRangeBg: '#cfe8fc',
-        cellRangeBorderColor: 'transparent',
-        cellBgDisabled: 'rgba(0, 0, 0, 0.04)',
-        cellWidth: 36,
-        cellHeight: 24,
-    },
-    Drawer: {
-        footerPaddingBlock: 8,
-        footerPaddingInline: 16,
+        borderRadius: 4,
     },
 } satisfies NonNullable<ThemeConfig['components']>
 

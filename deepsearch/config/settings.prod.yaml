@@ -33,13 +33,13 @@ database:
     username: postgres
     password: '123456'
     path: ./data/deepsearch.db
-    auto_connect: false
+    auto_connect: true
     echo: false
   cache:
     enabled: true
     host: localhost
     port: 6379
-    password: updated-cache
+    password: ''
     db: 0
     pool_size: 10
     socket_timeout: 5
@@ -67,17 +67,14 @@ database:
       user: root
 message_bus:
   buses:
-    zmq:
-      type: zmq
+    inmem:
+      type: inmem
       enabled: true
-      config:
-        host: localhost
-        pub_port: 5556
-        sub_port: 5557
+      config: { }
   routes:
   - match: '*'
     buses:
-    - zmq
+      - inmem
 webui:
   enabled: true
   backend_host: 0.0.0.0
@@ -88,9 +85,9 @@ webui:
   enable_cors: true
   reload: false
 data_sources:
-  default: amazingdata
+  default: miniqmt
   fallback_order:
-  - amazingdata
+    - miniqmt
   - akshare
   circuit_breaker:
     enabled: true
@@ -151,7 +148,7 @@ data_sources:
       provider_name: amazingdata
     akshare:
       enabled: true
-      priority: 2
+      priority: 3
       config:
         mode: direct
         timeout: 30
@@ -164,6 +161,16 @@ data_sources:
           cache:
             enabled: true
             ttl: 300
+    miniqmt:
+      enabled: true
+      priority: 1
+      config:
+        host: localhost
+        port: 58610
+        timeout: 10
+        cache:
+          enabled: true
+          ttl: 60
   realtime:
     health_check_interval: 120
     alert_policy:
@@ -173,25 +180,26 @@ data_sources:
       channels:
       - ops-bot
     adapters:
-    - name: amazingdata
-      driver: amazingdata
+      - name: miniqmt
+        driver: miniqmt
       priority: 1
       enabled: true
       health:
         probe_timeout_seconds: 5
         failure_threshold: 3
         cool_down_seconds: 30
-    - name: cloudflare
-      driver: akshare_polling
+          - name: amazingdata
+            driver: amazingdata
       priority: 2
-      enabled: true
-      options:
-        use_proxy: true
-        batch_size: 50
+        enabled: false
+        health:
+          probe_timeout_seconds: 5
+          failure_threshold: 3
+          cool_down_seconds: 30
     - name: akshare
       driver: akshare_polling
       priority: 3
-      enabled: true
+      enabled: false
       options:
         use_proxy: false
         batch_size: 50
@@ -247,7 +255,7 @@ market_data:
       max_strength_entries: 50
   modules:
     strength:
-      primary: amazingdata
+      primary: miniqmt
       fallbacks:
         - source: akshare
           phases:
@@ -259,7 +267,7 @@ market_data:
           cache_ttl_seconds: 90
           min_interval_seconds: 15
     board_overview:
-      primary: amazingdata
+      primary: miniqmt
       fallbacks:
         - source: akshare
           phases:
@@ -269,7 +277,7 @@ market_data:
           cache_ttl_seconds: 120
           min_interval_seconds: 30
     order_imbalance:
-      primary: amazingdata
+      primary: miniqmt
       fallbacks:
         - source: akshare
           phases:
@@ -280,7 +288,7 @@ market_data:
           cache_ttl_seconds: 60
           min_interval_seconds: 15
     auction_quality:
-      primary: amazingdata
+      primary: miniqmt
       fallbacks:
         - source: akshare
           phases:

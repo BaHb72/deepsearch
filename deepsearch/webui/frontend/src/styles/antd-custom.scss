@@ -21,20 +21,20 @@
   --border-color: #434343;
   --bg-color: #141414;
   --card-bg: #1f1f1f;
-  
+
   .ant-layout {
     background: var(--bg-color);
   }
-  
+
   .ant-layout-sider {
     background: var(--card-bg);
   }
-  
+
   .ant-menu {
     background: transparent;
     color: var(--text-color);
   }
-  
+
   .ant-layout-header {
     background: var(--card-bg);
     border-bottom-color: var(--border-color);
@@ -48,7 +48,7 @@
 
 .ant-layout-sider {
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
-  
+
   .logo {
     height: 64px;
     display: flex;
@@ -56,7 +56,7 @@
     justify-content: center;
     background: rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-    
+
     h2 {
       margin: 0;
       color: var(--primary-color);
@@ -73,7 +73,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  
+
   .header-left {
     h3 {
       margin: 0;
@@ -81,7 +81,7 @@
       color: var(--text-color);
     }
   }
-  
+
   .header-right {
     display: flex;
     align-items: center;
@@ -101,15 +101,15 @@
 .ant-menu-item {
   margin: 4px 8px;
   border-radius: 4px;
-  
+
   &:hover {
     color: var(--primary-color);
     background-color: rgba(24, 144, 255, 0.05);
   }
-  
+
   &.ant-menu-item-selected {
     background-color: rgba(24, 144, 255, 0.1);
-    
+
     &::after {
       content: '';
       position: absolute;
@@ -129,16 +129,16 @@
   border-radius: 4px;
   font-weight: 500;
   transition: all 0.3s;
-  
+
   &:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   }
-  
+
   &.ant-btn-primary {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border: none;
-    
+
     &:hover {
       background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
     }
@@ -150,7 +150,7 @@
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   transition: all 0.3s;
-  
+
   &:hover {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   }
@@ -162,7 +162,7 @@
     background: #fafafa;
     font-weight: 600;
   }
-  
+
   .ant-table-tbody > tr {
     &:hover {
       background: #f5f5f5;
@@ -174,19 +174,19 @@
 .ant-tag {
   border-radius: 4px;
   padding: 2px 8px;
-  
+
   &.ant-tag-success {
     background: rgba(82, 196, 26, 0.1);
     border-color: #52c41a;
     color: #52c41a;
   }
-  
+
   &.ant-tag-warning {
     background: rgba(250, 173, 20, 0.1);
     border-color: #faad14;
     color: #faad14;
   }
-  
+
   &.ant-tag-error {
     background: rgba(245, 34, 45, 0.1);
     border-color: #f5222d;

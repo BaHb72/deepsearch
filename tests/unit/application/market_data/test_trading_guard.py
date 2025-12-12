@@ -145,3 +145,92 @@ async def test_load_calendar_skips_caching_when_get_calendar_returns_empty():
     assert second == {20250303}
     cached_days, _ = guard._calendar_cache["SH"]
     assert cached_days == {20250303}
+
+
+@pytest.mark.asyncio
+async def test_session_guard_skip_in_no_trade_phase():
+    """验证 NO_TRADE 阶段当配置 skip_polling=true 时会跳过轮询"""
+    from deepsearch.config.trading_schedule_config import (
+        PhaseBehavior,
+        TradingScheduleConfig,
+    )
+
+    # 创建模拟配置：非交易时段默认跳过
+    config = TradingScheduleConfig(
+        defaults={
+            "no_trade": PhaseBehavior(
+                interval_seconds=45.0,
+                timeout_seconds=5.0,
+                skip_polling=True,  # 非交易时段跳过
+            ),
+        },
+        markets={},
+    )
+
+    async def fake_calendar_loader(_: str):
+        return [20250303]
+
+    guard = TradingSessionGuard(
+        calendar_loader=fake_calendar_loader,
+        snapshot_supplier=lambda: None,
+        markets=("SH",),
+        schedule_config=config,
+    )
+
+    # 测试凌晨 2 点（非交易时段，应跳过）
+    decision = await guard.evaluate(
+        default_interval=1.0,
+        default_timeout=3.0,
+        now=_day("2025-03-03 02:00"),
+    )
+    assert decision.phase_state is PhaseState.NO_TRADE
+    assert decision.skip_in_window is True
+    assert decision.should_skip_step is True
+    assert decision.status_label == "skip-window"
+
+
+@pytest.mark.asyncio
+async def test_session_guard_no_skip_during_trading():
+    """验证交易时段（CONTINUOUS/AUCTION）不会跳过轮询"""
+    from deepsearch.config.trading_schedule_config import (
+        PhaseBehavior,
+        TradingScheduleConfig,
+    )
+
+    # 即使配置了 no_trade 跳过，交易时段也不应跳过
+    config = TradingScheduleConfig(
+        defaults={
+            "no_trade": PhaseBehavior(
+                interval_seconds=45.0,
+                timeout_seconds=5.0,
+                skip_polling=True,
+            ),
+            "continuous": PhaseBehavior(
+                interval_seconds=1.0,
+                timeout_seconds=3.0,
+                skip_polling=False,
+            ),
+        },
+        markets={},
+    )
+
+    async def fake_calendar_loader(_: str):
+        return [20250303]
+
+    guard = TradingSessionGuard(
+        calendar_loader=fake_calendar_loader,
+        snapshot_supplier=lambda: None,
+        markets=("SH",),
+        schedule_config=config,
+    )
+
+    # 测试交易时段 10:00（连续竞价，不应跳过）
+    decision = await guard.evaluate(
+        default_interval=1.0,
+        default_timeout=3.0,
+        now=_day("2025-03-03 10:00"),
+    )
+    assert decision.phase_state is PhaseState.CONTINUOUS
+    assert decision.skip_in_window is False
+    assert decision.should_skip_step is False
+    assert decision.status_label == "trading"

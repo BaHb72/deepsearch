@@ -46,9 +46,9 @@ const describeBackendIssue = () => {
 }
 
 // 创建 axios 实例（初始不设置baseURL，由动态端口决定）
-debugLog('INIT', '创建axios实例', {timeout: 8000})
+debugLog('INIT', '创建axios实例', {timeout: 30000})
 const request = axios.create({
-    timeout: 8000,  // 统一 8s 超时，确保前端快速降级
+    timeout: 30000,  // 30s 超时，给后端足够的初始化时间
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'  // 明确要求JSON响应

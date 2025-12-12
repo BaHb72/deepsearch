@@ -1,11 +1,12 @@
 import React from 'react'
-import { Card, Col, Row, Spin, Table, Typography } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
-import type { OrderImbalanceItem } from '@/api/marketDataLive'
+import {theme, Typography} from 'antd'
+import type {ProColumns} from '@ant-design/pro-components'
+import {ProTable} from '@ant-design/pro-components'
+import type {OrderImbalanceItem} from '@/api/marketDataLive'
 import ModuleSourceSelector from './ModuleSourceSelector'
-import { formatNumber, formatTime } from '../utils'
+import {formatNumber, formatTime} from '../utils'
 
-const { Title } = Typography
+const {Text} = Typography
 
 interface OrderImbalanceTableProps {
     items: OrderImbalanceItem[]
@@ -28,77 +29,98 @@ const OrderImbalanceTable: React.FC<OrderImbalanceTableProps> = ({
     fallbackLabel,
     onModuleSourceChange,
 }) => {
-    const columns: ColumnsType<OrderImbalanceItem & { key: string }> = [
-        { title: '标的', dataIndex: 'code', key: 'code', width: 120 },
-        { title: '名称', dataIndex: 'name', key: 'name', width: 140 },
+    const {token} = theme.useToken()
+    const colorUp = '#ff4d4f'
+    const colorDown = '#52c41a'
+
+    const getTrendColor = (val?: number | null) => {
+        if (!val) return token.colorText
+        return val > 0 ? colorUp : val < 0 ? colorDown : token.colorText
+    }
+
+    const columns: ProColumns<OrderImbalanceItem>[] = [
+        {title: '标的', dataIndex: 'code', key: 'code', width: 100},
+        {title: '名称', dataIndex: 'name', key: 'name', width: 120, render: (dom) => <Text strong>{dom}</Text>},
         {
             title: 'OBI',
             dataIndex: 'obi',
             key: 'obi',
-            width: 120,
-            render: (value) => formatNumber(value, 2),
+            width: 100,
+            render: (_, record) => (
+                <span style={{color: getTrendColor(record.obi), fontFamily: 'Monaco, monospace'}}>
+                    {formatNumber(record.obi, 2)}
+                </span>
+            ),
+            sorter: (a, b) => (a.obi || 0) - (b.obi || 0),
         },
         {
             title: 'EIS',
             dataIndex: 'eis',
             key: 'eis',
-            width: 120,
-            render: (value) => formatNumber(value, 2),
+            width: 100,
+            render: (_, record) => (
+                <span style={{color: getTrendColor(record.eis), fontFamily: 'Monaco, monospace'}}>
+                    {formatNumber(record.eis, 2)}
+                </span>
+            ),
+            sorter: (a, b) => (a.eis || 0) - (b.eis || 0),
         },
         {
             title: 'NTM',
             dataIndex: 'ntm',
             key: 'ntm',
-            width: 120,
-            render: (value) => formatNumber(value, 2),
+            width: 100,
+            render: (_, record) => (
+                <span style={{color: getTrendColor(record.ntm), fontFamily: 'Monaco, monospace'}}>
+                    {formatNumber(record.ntm, 2)}
+                </span>
+            ),
+            sorter: (a, b) => (a.ntm || 0) - (b.ntm || 0),
         },
         {
             title: '时间',
             dataIndex: 'ts',
             key: 'ts',
-            width: 120,
-            render: (value) => formatTime(value),
+            width: 100,
+            render: (_, record) => <span style={{color: token.colorTextSecondary}}>{formatTime(record.ts)}</span>,
+            valueType: 'time',
         },
     ]
 
     return (
-        <Card>
-            <Row justify="space-between" align="middle" gutter={[16, 16]}>
-                <Col>
-                    <Title level={4} style={{ marginBottom: 0 }}>
-                        订单失衡
-                    </Title>
-                </Col>
-            </Row>
-            <Row style={{ marginTop: 8 }}>
-                <Col>
-                    <ModuleSourceSelector
-                        moduleKey="order_imbalance"
-                        value={moduleSource}
-                        options={moduleSourceOptions}
-                        fallbackLabel={fallbackLabel}
-                        onChange={onModuleSourceChange}
-                    />
-                </Col>
-            </Row>
-            <Spin spinning={loading && items.length === 0}>
-                <Table
-                    rowKey="code"
-                    columns={columns}
-                    dataSource={items.map((item) => ({ ...item, key: item.code }))}
-                    size="small"
-                    pagination={{ pageSize: 10, showSizeChanger: false }}
-                    loading={loading || refreshing}
-                    locale={{
-                        emptyText: isStale
-                            ? '暂无可用数据（数据可能已过期）'
-                            : '暂无数据，请稍后重试',
-                    }}
-                    scroll={{ x: 720 }}
-                    style={{ marginTop: 16 }}
+        <ProTable<OrderImbalanceItem>
+            headerTitle={null} // Title handled by parent ProCard
+            rowKey="code"
+            columns={columns}
+            dataSource={items}
+            size="small"
+            loading={loading || refreshing}
+            search={false}
+            options={{
+                density: true,
+                fullScreen: false,
+                reload: false,
+                setting: true,
+            }}
+            pagination={{pageSize: 10, showSizeChanger: false}}
+            locale={{
+                emptyText: isStale
+                    ? '暂无可用数据（数据可能已过期）'
+                    : '暂无数据，请稍后重试',
+            }}
+            toolBarRender={() => [
+                <ModuleSourceSelector
+                    key="selector"
+                    moduleKey="order_imbalance"
+                    value={moduleSource}
+                    options={moduleSourceOptions}
+                    fallbackLabel={fallbackLabel}
+                    onChange={onModuleSourceChange}
                 />
-            </Spin>
-        </Card>
+            ]}
+            scroll={{x: 600}}
+            cardProps={{bodyStyle: {padding: 0}}}
+        />
     )
 }
 

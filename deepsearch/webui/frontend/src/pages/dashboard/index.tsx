@@ -1,256 +1,162 @@
 // @ts-nocheck
-import React, { useMemo, useState } from 'react'
-import {
-  Alert,
-  Button,
-  Segmented,
-  Space,
-  Switch,
-  Tooltip,
-  Typography,
-} from 'antd'
-import {
-  AlertOutlined,
-  ApiOutlined,
-  CheckCircleOutlined,
-  CloudServerOutlined,
-  DashboardOutlined,
-  DatabaseOutlined,
-  DeploymentUnitOutlined,
-  FieldTimeOutlined,
-  ReloadOutlined,
-} from '@ant-design/icons'
-import { ProCard } from '@ant-design/pro-components'
+import React, {useMemo} from 'react'
+import {Alert, Button} from 'antd'
+import {PageContainer, ProCard} from '@ant-design/pro-components'
+import {useNavigate} from 'react-router-dom'
+import {LineChartOutlined} from '@ant-design/icons'
 
-import { useDashboardLogic, getRefreshIntervalByRange } from './dashboard/hooks/useDashboardLogic'
-import StatusCard from './dashboard/components/StatusCard'
-import QuickStats from './dashboard/components/QuickStats'
-import ResourceUsage from './dashboard/components/ResourceUsage'
-import IncidentList from './dashboard/components/IncidentList'
-import DataSourceTable from './dashboard/components/DataSourceTable'
-import { getRecommendationByStatus } from './dashboard/utils'
+// Import Market Components
+import {useMarketData} from '../market/hooks/useMarketData'
+import MarketHeader from '../market/components/MarketHeader'
+import StrengthTable from '../market/components/StrengthTable'
+import BoardOverviewTable from '../market/components/BoardOverviewTable'
 
-const { Title } = Typography
-
-const TIME_RANGE_OPTIONS = [
-  { label: '近15分钟', value: '15m' },
-  { label: '近1小时', value: '1h' },
-  { label: '近24小时', value: '24h' },
-]
-
-const Dashboard = () => {
-  const [timeRange, setTimeRange] = useState<string>('15m')
-  const [autoRefresh, setAutoRefresh] = useState<boolean>(true)
-  const refreshInterval = useMemo(() => getRefreshIntervalByRange(timeRange), [timeRange])
-
+const Dashboard: React.FC = () => {
+    const navigate = useNavigate()
+    // Reuse the market data hook
   const {
+      phase,
+      isStale,
+      globalAsOf,
+      retrievedAt,
+      dataSource,
+      activeDataSource,
+      adapterOptions,
+      cacheInfo,
+      realtimeSource,
+      autoRefresh,
+      canAutoRefresh,
     loading,
-    systemInfo,
-    error,
-    lastUpdated,
-    dataSourceStatus,
-    statusSummary,
-    dataSourcesLoading,
-    dataSourcesError,
-    refresh,
-    systemStatusDetails,
-    incidents,
-    healthScore,
-    dependencyAvailability,
-    averageSuccessRateValue,
-  } = useDashboardLogic({ autoRefresh, refreshInterval })
+      refreshing,
+      fetchError,
 
-  const criticalIncidentCount = incidents.filter((item) => item.level === 'critical').length
+      // Data Items
+      strengthItems,
+      boardItems,
 
-  const quickStatsData = [
-    {
-      key: 'health',
-      title: '系统健康指数',
-      icon: <CheckCircleOutlined />,
-      color: '#52c41a',
-      value: healthScore !== null ? healthScore : '--',
-      suffix: healthScore !== null ? '%' : undefined,
-      description:
-        statusSummary.total > 0
-          ? '可用 ' + statusSummary.availableCount + ' / 总计 ' + statusSummary.total
-          : '暂无可用数据',
-    },
-    {
-      key: 'success-rate',
-      title: 'SLA 成功率',
-      icon: <FieldTimeOutlined />,
-      color: '#1890ff',
-      value: averageSuccessRateValue !== null ? averageSuccessRateValue : '--',
-      suffix: averageSuccessRateValue !== null ? '%' : undefined,
-      description:
-        averageSuccessRateValue !== null ? '根据数据源近期请求平均计算' : '暂无测试数据',
-    },
-    {
-      key: 'incidents',
-      title: '待处理事件',
-      icon: <AlertOutlined />,
-      color: incidents.length > 0 ? '#fa541c' : '#52c41a',
-      value: incidents.length,
-      suffix: '项',
-      description:
-        incidents.length > 0
-          ? '严重 ' +
-          criticalIncidentCount +
-          ' 项 ｜ 提示 ' +
-          (incidents.length - criticalIncidentCount) +
-          ' 项'
-          : '一切正常，未检测到异常事件',
-    },
-    {
-      key: 'dependencies',
-      title: '依赖可用率',
-      icon: <DeploymentUnitOutlined />,
-      color:
-        dependencyAvailability !== null && dependencyAvailability < 90 ? '#faad14' : '#722ed1',
-      value: dependencyAvailability !== null ? dependencyAvailability : '--',
-      suffix: dependencyAvailability !== null ? '%' : undefined,
-      description:
-        statusSummary.total > 0
-          ? '离线 ' + (statusSummary.counts.offline ?? 0) + ' 个'
-          : '暂无依赖数据',
-    },
-  ]
+      // State & Handlers
+      strength,
+      boardOverview,
+      moduleSources,
+      moduleSourceOptions,
+      selectedWindow,
+      boardType,
 
-  const resourceCards = [
-    {
-      key: 'cpu',
-      title: 'CPU 使用率',
-      value: Number.isFinite(systemInfo.cpu_usage)
-        ? Number(systemInfo.cpu_usage.toFixed(1))
-        : 0,
-      suffix: '%',
-      icon: <DashboardOutlined style={{ color: '#3f8600' }} />,
-      color: systemInfo.cpu_usage > 80 ? '#cf1322' : '#3f8600',
-    },
-    {
-      key: 'memory',
-      title: '内存使用率',
-      value: Number.isFinite(systemInfo.memory_usage)
-        ? Number(systemInfo.memory_usage.toFixed(1))
-        : 0,
-      suffix: '%',
-      icon: <CloudServerOutlined style={{ color: '#1890ff' }} />,
-      color: systemInfo.memory_usage > 80 ? '#cf1322' : '#1890ff',
-    },
-    {
-      key: 'disk',
-      title: '存储使用率',
-      value: Number.isFinite(systemInfo.disk_usage)
-        ? Number(systemInfo.disk_usage.toFixed(1))
-        : 0,
-      suffix: '%',
-      icon: <DatabaseOutlined style={{ color: '#722ed1' }} />,
-      color: systemInfo.disk_usage > 80 ? '#cf1322' : '#722ed1',
-    },
-    {
-      key: 'network',
-      title: '网络吞吐',
-      icon: <ApiOutlined style={{ color: '#1890ff' }} />,
-      inbound: Number.isFinite(systemInfo.network_in)
-        ? Math.max(0, Math.round(systemInfo.network_in))
-        : 0,
-      outbound: Number.isFinite(systemInfo.network_out)
-        ? Math.max(0, Math.round(systemInfo.network_out))
-        : 0,
-      color: '#1890ff',
-    },
-  ]
+      handleSwitchDataSource,
+      handleAutoRefreshChange,
+      fetchAll,
+      setSelectedWindow,
+      setBoardType,
+      handleModuleSourceChange,
+      getFallbackLabel,
+  } = useMarketData()
 
-  const actionItems = useMemo(() => {
-    return incidents.slice(0, 5).map((incident) => ({
-      key: incident.key,
-      name: incident.name,
-      title: incident.level === 'critical' ? '立即处理' : '关注',
-      reason: incident.reason,
-      recommendation: getRecommendationByStatus(incident.status),
-      level: incident.level,
-    }))
-  }, [incidents])
-
-  const dataSourceErrorMessage = dataSourcesError?.message ?? null
+    const strengthFallbackLabel = useMemo(
+        () => getFallbackLabel(strength?.detail),
+        [strength, getFallbackLabel]
+    )
+    const boardFallbackLabel = useMemo(
+        () => getFallbackLabel(boardOverview?.detail),
+        [boardOverview, getFallbackLabel]
+    )
 
   return (
-    <ProCard direction="column" ghost gutter={[0, 16]} style={{ padding: 24 }}>
-      {error && (
-        <Alert
-          message="系统状态获取失败"
-          description={error}
-          type="error"
-          showIcon
-          closable
-          style={{ marginBottom: 16 }}
-        />
-      )}
-      {dataSourceErrorMessage && (
-        <Alert
-          message="数据源状态获取失败"
-          description={dataSourceErrorMessage}
-          type="error"
-          showIcon
-          closable
-          style={{ marginBottom: 16 }}
-        />
-      )}
+      <PageContainer
+          header={{
+              title: '实时总览',
+              subTitle: 'Real-time Market Dashboard',
+              extra: [
+                  <Button
+                      key="market-view"
+                      type="primary"
+                      icon={<LineChartOutlined/>}
+                      onClick={() => navigate('/market')}
+                  >
+                      完整行情视图
+                  </Button>
+              ]
+          }}
+      >
+          <ProCard ghost gutter={[24, 24]} wrap>
+              {fetchError && (
+                  <ProCard colSpan={24} ghost>
+                      <Alert
+                          type="error"
+                          showIcon
+                          message="市场行情数据拉取失败"
+                          description={fetchError}
+                          closable
+                      />
+                  </ProCard>
+              )}
 
-      <ProCard ghost gutter={16}>
-        <ProCard colSpan={16} direction="column" ghost gutter={[0, 16]}>
-          <ProCard title="系统概览" extra={
-            <Space>
-              <Segmented
-                options={TIME_RANGE_OPTIONS}
-                value={timeRange}
-                onChange={setTimeRange}
-              />
-              <Tooltip title="自动刷新">
-                <Switch
-                  checkedChildren="自动"
-                  unCheckedChildren="手动"
-                  checked={autoRefresh}
-                  onChange={setAutoRefresh}
-                />
-              </Tooltip>
-              <Button
-                icon={<ReloadOutlined spin={loading} />}
-                onClick={() => refresh(true)}
+              {/* Header Area: Key Metrics & Controls */}
+              <ProCard colSpan={24} bordered boxShadow>
+                  <MarketHeader
+                      phase={phase}
+                      isStale={isStale}
+                      globalAsOf={globalAsOf}
+                      retrievedAt={retrievedAt}
+                      dataSource={dataSource}
+                      activeDataSource={activeDataSource}
+                      adapterOptions={adapterOptions}
+                      cacheInfo={cacheInfo}
+                      realtimeSource={realtimeSource}
+                      autoRefresh={autoRefresh}
+                      canAutoRefresh={canAutoRefresh}
+                      loading={loading}
+                      refreshing={refreshing}
+                      onSwitchDataSource={handleSwitchDataSource}
+                      onAutoRefreshChange={handleAutoRefreshChange}
+                      onRefresh={() => fetchAll()}
+                  />
+              </ProCard>
+
+              {/* Core Market Data: Strength & Boards */}
+              <ProCard
+                  colSpan={24}
+                  bordered
+                  boxShadow
+                  title="资金脉冲 (Real-time Flow)"
+                  headStyle={{fontWeight: 'bold'}}
               >
-                刷新
-              </Button>
-            </Space>
-          }>
-            <QuickStats stats={quickStatsData} />
-          </ProCard>
+                  <StrengthTable
+                      items={strengthItems}
+                      loading={loading}
+                      refreshing={refreshing}
+                      isStale={isStale}
+                      windows={strength?.windows ?? []}
+                      selectedWindow={selectedWindow}
+                      onWindowChange={setSelectedWindow}
+                      moduleSource={moduleSources.strength}
+                      moduleSourceOptions={moduleSourceOptions}
+                      fallbackLabel={strengthFallbackLabel}
+                      onModuleSourceChange={handleModuleSourceChange}
+                  />
+              </ProCard>
 
-          <ProCard title="资源监控">
-            <ResourceUsage resources={resourceCards} />
-          </ProCard>
-        </ProCard>
-
-        <ProCard colSpan={8} direction="column" ghost gutter={[0, 16]}>
-          <ProCard>
-            <StatusCard
-              systemStatusDetails={systemStatusDetails}
-              uptime={systemInfo.uptime}
-              lastUpdated={lastUpdated}
-            />
-          </ProCard>
-          <ProCard title="待处理事件">
-            <IncidentList incidents={actionItems} />
-          </ProCard>
+              <ProCard
+                  colSpan={24}
+                  bordered
+                  boxShadow
+                  title="板块概览 (Board Overview)"
+                  headStyle={{fontWeight: 'bold'}}
+              >
+                  <BoardOverviewTable
+                      items={boardItems}
+                      loading={loading}
+                      refreshing={refreshing}
+                      isStale={isStale}
+                      boardType={boardType}
+                      onBoardTypeChange={setBoardType}
+                      moduleSource={moduleSources.board_overview}
+                      moduleSourceOptions={moduleSourceOptions}
+                      fallbackLabel={boardFallbackLabel}
+                      onModuleSourceChange={handleModuleSourceChange}
+                  />
         </ProCard>
       </ProCard>
-
-      <ProCard title="数据源状态监控">
-        <DataSourceTable
-          dataSourceStatus={dataSourceStatus}
-          loading={dataSourcesLoading && dataSourceStatus.length === 0}
-        />
-      </ProCard>
-    </ProCard>
+      </PageContainer>
   )
 }
 

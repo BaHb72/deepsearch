@@ -6,6 +6,7 @@
 from .base import Base
 from .ingestion import IngestionBatch, IngestionJob, RawProviderPayload
 from .market import Market1Min, MarketSnapshot, MarketTick
+from .module_source import ModuleSourceConfig
 
 __all__ = [
     "Base",
@@ -15,4 +16,6 @@ __all__ = [
     "IngestionJob",
     "IngestionBatch",
     "RawProviderPayload",
+    "ModuleSourceConfig",
 ]
+

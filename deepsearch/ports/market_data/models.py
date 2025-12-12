@@ -24,6 +24,7 @@ class CapitalPulseQuery:
     windows: Sequence[WindowSpec]
     limit: int | None = None
     as_of: datetime | None = None
+    summary_mode: bool = False
 
 
 @dataclass(slots=True, frozen=True)

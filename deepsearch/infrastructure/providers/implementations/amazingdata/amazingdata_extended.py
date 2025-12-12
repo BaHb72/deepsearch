@@ -1787,7 +1787,7 @@ except Exception:  # Safe fallbacks for test environments without SDK
 ad: Optional[ModuleType] = _loader_ad
 
 # Candidate real SDK module names to import lazily
-_SDK_CANDIDATES = ("amazingdata", "tgw", "amazingdata_sdk")
+_SDK_CANDIDATES = ("AmazingData", "amazingdata", "tgw", "amazingdata_sdk")
 
 __sdk_mod = None  # cache loaded SDK module
 

@@ -39,6 +39,10 @@ from deepsearch.infrastructure.providers.interfaces.runtime import (
     ProviderMessageEnvelope,
     RealtimeCallback,
 )
+from deepsearch.infrastructure.providers.managers.module_source_config import (
+    ModuleSourceResolver,
+    create_resolver_from_config,
+)
 from deepsearch.infrastructure.providers.registry import get_registry
 from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
@@ -374,6 +378,7 @@ class DataSourceManager:
         self._provider_names: Dict[DataSourceType, str] = {}
         self._fallback_order: List[DataSourceType] = []
         self._default_source: Optional[DataSourceType] = None
+        self._module_resolver: Optional[ModuleSourceResolver] = None
 
         # 数据源状态
         self._source_status: Dict[DataSourceType, SourceStatusEntry] = {}
@@ -669,6 +674,12 @@ class DataSourceManager:
             self._default_source = self._fallback_order[0]
 
         self._update_fallback_order_config()
+
+        # 初始化模块级数据源解析器
+        if data_sources:
+            self._module_resolver = create_resolver_from_config(data_sources)
+        else:
+            self._module_resolver = None
 
     def _load_data_sources_config(self, data_sources: Dict[str, Any]) -> None:
         """解析 data_sources.providers 配置并注册数据源。"""
@@ -1201,6 +1212,39 @@ class DataSourceManager:
         if not available and self.providers:
             available = list(self.providers.keys())
         return available
+
+    def get_sources_for_context(
+            self,
+            module: Optional[str] = None,
+            access_type: Optional[DataAccessType] = None,
+    ) -> List[DataSourceType]:
+        """
+        获取特定模块/访问类型的数据源顺序。
+        
+        按以下优先级查找：
+        1. module_overrides[module] - 模块级配置
+        2. access_type_overrides[access_type] - 访问类型配置
+        3. 全局 fallback_order / available sources
+        
+        Args:
+            module: 模块名称（如 "market_strength"）
+            access_type: 数据访问类型
+            
+        Returns:
+            数据源类型列表（按优先级排序）
+        """
+        # 使用模块解析器获取配置的数据源顺序
+        if self._module_resolver:
+            resolved = self._module_resolver.resolve(module=module, access_type=access_type)
+            if resolved:
+                # 过滤出当前可用的数据源
+                available_set = set(self.get_available_sources())
+                filtered = [s for s in resolved if s in available_set or s in self.providers]
+                if filtered:
+                    return filtered
+
+        # 回退到全局可用数据源
+        return self.get_available_sources()
 
     def get_last_success_source(self) -> Optional[DataSourceType]:
         """获取最近一次成功返回数据的源类型。"""
@@ -1947,7 +1991,10 @@ class DataSourceManager:
 
         result, source = await self._executor.execute(
             providers=self.providers,
-            source_order=self.get_available_sources(),
+            source_order=self.get_sources_for_context(
+                module=(monitor_context or {}).get("module"),
+                access_type=access_type,
+            ),
             method_name=method_name,
             args=args,
             kwargs=kwargs,
