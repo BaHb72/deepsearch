@@ -1,6 +1,6 @@
 import React, {useCallback, useMemo} from 'react'
 import {Outlet, useLocation, useNavigate} from 'react-router-dom'
-import {App as AntApp, Badge, Button, Dropdown, Space, Switch, Tag, Tooltip,} from 'antd'
+import {App as AntApp, Badge, Button, Dropdown, Switch,} from 'antd'
 import {
     BellOutlined,
     DashboardOutlined,
@@ -9,7 +9,6 @@ import {
     LineChartOutlined,
     LogoutOutlined,
     MoonOutlined,
-    ReloadOutlined,
     SettingOutlined,
     SunOutlined,
     TransactionOutlined,
@@ -18,9 +17,7 @@ import {
 import {ProLayout} from '@ant-design/pro-components'
 import {useTheme} from '@/contexts/ThemeContext'
 import {useSystemStore} from '@/stores'
-import DataSourceSwitch from '@/components/common/DataSourceSwitch'
 import {useRealtimeSource} from '@/contexts/RealtimeSourceContext'
-import {formatDataSourceLabel} from '@/utils/dataSource'
 import JobStatusIndicator from '@/components/common/JobStatusIndicator'
 import './index.scss'
 
@@ -173,27 +170,6 @@ const MainLayout: React.FC = () => {
         actionsRender={(props) => {
           if (props.isMobile) return []
           return [
-            <Space key="source-control" size={8} style={{ marginRight: 16 }}>
-              <Tooltip title="当前实时数据源">
-                <Tag color="blue" style={{ margin: 0 }}>{formatDataSourceLabel(realtimeSource.activeSource)}</Tag>
-              </Tooltip>
-              <DataSourceSwitch
-                size="small"
-                sources={realtimeSource.availableSources}
-                value={realtimeSource.activeSource}
-                loading={realtimeSource.loading || realtimeSource.switching}
-                onChange={handleGlobalSourceChange}
-              />
-              <Tooltip title="刷新数据源状态">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<ReloadOutlined />}
-                  onClick={handleRefreshRealtimeSource}
-                  loading={realtimeSource.loading}
-                />
-              </Tooltip>
-            </Space>,
             <JobStatusIndicator key="job-status" />,
             <Switch
               key="theme-switch"

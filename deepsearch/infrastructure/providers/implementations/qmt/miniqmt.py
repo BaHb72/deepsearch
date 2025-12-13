@@ -122,7 +122,11 @@ class MiniQMTProvider(DataProvider):
     async def _start_source(self) -> None:
         """启动 MiniQMT 连接"""
         # 连接到 MiniQMT
-        await self._connect()
+        if not await self._connect():
+            raise DataProviderError(
+                f"无法连接到 MiniQMT 终端 ({self.host}:{self.port})，"
+                "请确保 QMT 量化终端已启动并监听正确端口"
+            )
 
         # 启动心跳任务
         self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())

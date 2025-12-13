@@ -36,4 +36,6 @@ async def test_board_source_returns_empty_when_no_payload():
 
     result = await source.fetch_stock_list()
 
-    assert result == []
+    # API 返回 Sequence[StockListRecord]，实现返回 tuple，空值应该是 ()
+    assert result == ()
+    assert len(result) == 0

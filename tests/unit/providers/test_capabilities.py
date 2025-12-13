@@ -7,13 +7,13 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
 from deepsearch.infrastructure.providers.implementations.akshare.akshare_refactored import (
     AkShareProxyProvider,
 )
 from deepsearch.infrastructure.providers.implementations.qmt.unified_qmt_provider import (
     UnifiedQMTProvider,
 )
+from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
 
 
 @pytest.fixture()
@@ -95,6 +95,7 @@ def test_amazingdata_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
         DataCapability.KEY_INDICATORS,
         DataCapability.SHAREHOLDER_INFO,
         DataCapability.DRAGON_TIGER,
+        DataCapability.BLOCK_TRADE,
         DataCapability.MARGIN_TRADING,
         DataCapability.NORTH_FLOW,
         DataCapability.TRADING_CALENDAR,

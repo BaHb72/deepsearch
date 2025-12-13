@@ -88,7 +88,7 @@ data_sources:
   default: miniqmt
   fallback_order:
     - miniqmt
-  - akshare
+    - akshare
   circuit_breaker:
     enabled: true
     failure_threshold: 5
@@ -182,27 +182,27 @@ data_sources:
     adapters:
       - name: miniqmt
         driver: miniqmt
-      priority: 1
-      enabled: true
-      health:
-        probe_timeout_seconds: 5
-        failure_threshold: 3
-        cool_down_seconds: 30
-          - name: amazingdata
-            driver: amazingdata
-      priority: 2
+        priority: 1
+        enabled: true
+        health:
+          probe_timeout_seconds: 5
+          failure_threshold: 3
+          cool_down_seconds: 30
+      - name: amazingdata
+        driver: amazingdata
+        priority: 2
         enabled: false
         health:
           probe_timeout_seconds: 5
           failure_threshold: 3
           cool_down_seconds: 30
-    - name: akshare
-      driver: akshare_polling
-      priority: 3
-      enabled: false
-      options:
-        use_proxy: false
-        batch_size: 50
+      - name: akshare
+        driver: akshare_polling
+        priority: 3
+        enabled: false
+        options:
+          use_proxy: false
+          batch_size: 50
 data_source_prefetch:
   enabled: true
   interval_seconds: 300

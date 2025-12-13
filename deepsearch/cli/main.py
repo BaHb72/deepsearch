@@ -41,7 +41,12 @@ def cli():
 )
 @click.option("--no-frontend", is_flag=True, help="不启动前端（仅在full模式下有效）")
 @click.option("--open-browser", is_flag=True, help="自动打开浏览器")
-def run(env, mode, config, log_level, no_frontend, open_browser):
+@click.option(
+    "--status-display/--no-status-display",
+    default=True,
+    help="启用 Rich 终端状态显示（减少日志刷屏）",
+)
+def run(env, mode, config, log_level, no_frontend, open_browser, status_display):
     """运行 DeepSearch 系统
 
     ENV: 环境模式 (dev/prod)，默认为 prod
@@ -132,9 +137,27 @@ def run(env, mode, config, log_level, no_frontend, open_browser):
 
                 webbrowser.open(f"http://localhost:{app_config.webui.backend_port}")
 
+        # 启动状态显示（如果启用）
+        status_ctx = None
+        if status_display:
+            try:
+                from deepsearch.core.utils.status_display import get_status_display
+
+                status = get_status_display()
+                status.enable(suppress_logs=False)
+                status.start()
+                status_ctx = status
+                click.echo("[OK] Rich 状态显示已启用")
+            except Exception as e:
+                click.echo(f"[WARN] 状态显示启动失败: {e}")
+
         # 使用异步运行器
         click.echo("System running, press Ctrl+C to exit")
-        run_async_engine(mode=mode, config=context_config)
+        try:
+            run_async_engine(mode=mode, config=context_config)
+        finally:
+            if status_ctx:
+                status_ctx.stop()
         click.echo("System closed")
 
 

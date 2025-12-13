@@ -117,6 +117,7 @@ async def run_debug_server():
 
     # 导入并配置服务器
     from deepsearch.webui.server import create_app
+    from deepsearch.core.utils.status_display import get_status_display
 
     logger.info("[1] 创建 FastAPI 应用...")
     app = create_app()
@@ -149,7 +150,9 @@ async def run_debug_server():
     logger.info("API 文档: http://localhost:8000/docs")
     logger.info("=" * 60)
 
-    await server.serve()
+    status_display = get_status_display()
+    with status_display.live_context():
+        await server.serve()
 
 
 def main():

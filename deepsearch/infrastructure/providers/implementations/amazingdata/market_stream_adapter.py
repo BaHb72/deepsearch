@@ -138,6 +138,7 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
             retention: timedelta = timedelta(minutes=10),
             freshness_window: timedelta | None = None,
     ) -> None:
+        self.name = "AmazingData"
         self._provider = provider
         self._retention = retention
         self._active_codes: set[str] = set()
@@ -271,11 +272,11 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
             try:
                 quotes_raw = await self._provider.get_realtime_quote(refresh_codes)
             except Exception as exc:  # pragma: no cover - provider errors handled upstream
-                logger.warning("AmazingDataʵʱ���鲹��ʧ��: {}", exc)
+                logger.warning("AmazingDataʵʱ鲹ʧ: {}", exc)
                 quotes_map: RealtimeQuoteMap = {}
             else:
                 logger.debug(
-                    "AmazingDataʵʱ���鲹����� codes={} duration={:.3f}s",
+                    "AmazingDataʵʱ鲹 codes={} duration={:.3f}s",
                     len(refresh_codes),
                     time.perf_counter() - refresh_start,
                 )

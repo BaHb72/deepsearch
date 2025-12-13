@@ -7,9 +7,10 @@
 from __future__ import annotations
 
 import asyncio
-from enum import Enum
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import (
+    Any,
     Awaitable,
     Callable,
     Dict,
@@ -186,16 +187,7 @@ class DataProviderManager:
     def __init__(self) -> None:
         """初始化管理器"""
         self._providers: Dict[str, DataProvider] = {}
-        self._provider_priority: Dict[str, int] = {
-            "qmt": 1,  # QMT 优先级最高，提供实时数据
-            "miniqmt": 2,  # MiniQMT 次优先，适合本地终端
-            "amazingdata": 3,  # AmazingData 核心证券级数据源
-            "akshare": 4,  # AkShare 作为 Cloudflare 代理的兜底源
-        }
         self._initialized = False
-        self._akshare_provider: Optional[DataProvider] = None
-        self._miniqmt_provider: Optional[DataProvider] = None
-        self._qmt_provider: Optional[DataProvider] = None
 
     async def initialize(self) -> None:
         """初始化所有数据提供者"""
@@ -203,65 +195,24 @@ class DataProviderManager:
             return
 
         logger.info("初始化数据提供者管理器...")
+        from deepsearch.config import get_config
 
-        # 初始化 MiniQMT 提供者
-        try:
-            from deepsearch.config import get_config
+        config = get_config()
+        provider_configs = config.get("providers", [])
 
-            config = get_config()
+        for provider_config in provider_configs:
+            if provider_config.get("enabled", False):
+                try:
+                    provider = self._create_provider(provider_config)
+                    if provider:
+                        self.register_provider(provider)
+                except Exception as e:
+                    logger.error(f"创建提供者 {provider_config.get('name')} 失败: {e}")
 
-            miniqmt_config = getattr(config, "miniqmt", None)
-            miniqmt_enabled = False
-            if isinstance(miniqmt_config, Mapping):
-                miniqmt_enabled = bool(miniqmt_config.get("enabled", False))
-            elif miniqmt_config is not None:
-                miniqmt_enabled = bool(getattr(miniqmt_config, "enabled", False))
-
-            if miniqmt_enabled:
-                from deepsearch.infrastructure.providers.implementations.qmt.unified_qmt_provider import (
-                    UnifiedQMTProvider,
-                )
-
-                self._miniqmt_provider = UnifiedQMTProvider()
-                await self._miniqmt_provider.initialize_async()
-                self._providers["miniqmt"] = self._miniqmt_provider
-                logger.info("MiniQMT 提供者初始化成功")
-        except Exception as e:
-            logger.error(f"MiniQMT 提供者初始化失败: {e}")
-
-        # 初始化 AkShare 提供者（可能使用Cloudflare代理）
-        try:
-            from deepsearch.infrastructure.providers.implementations.akshare.akshare import (
-                AkShareProxyProvider,
-            )
-
-            akshare_provider = AkShareProxyProvider()
-
-            if not hasattr(akshare_provider, "config"):
-                akshare_provider.config = DataProviderConfig(
-                    name="akshare",
-                    source_type=DataSourceType.AKSHARE,
-                    enabled=True,
-                )
-            if not hasattr(akshare_provider, "status"):
-                akshare_provider.status = "running"
-
-            await akshare_provider.initialize()
-            self._akshare_provider = cast(DataProvider, akshare_provider)
-            self._providers["akshare"] = self._akshare_provider
-            logger.info("AkShare 提供者初始化成功")
-        except Exception as e:
-            logger.error(f"AkShare 提供者初始化失败: {e}")
-
-        # 初始化其他已注册的提供者
         init_tasks = []
         init_names: List[str] = []
         for name, provider in self._providers.items():
-            if (
-                name not in ("cloudflare", "cloudflare_proxy")
-                and hasattr(provider, "config")
-                and provider.config.enabled
-            ):
+            if hasattr(provider, "config") and provider.config.enabled:
                 init_tasks.append(self._init_provider(name, provider))
                 init_names.append(name)
 
@@ -277,6 +228,108 @@ class DataProviderManager:
 
         self._initialized = True
         logger.info(f"数据提供者管理器初始化完成，可用提供者: {self.get_available_providers()}")
+
+    def _create_provider(self, config: Dict[str, Any]) -> Optional[DataProvider]:
+        """根据配置创建提供者实例
+        
+        支持两种方式：
+        1. 动态导入：使用 module_path 和 class_name 配置
+        2. 默认映射：使用 source_type 查找预定义的提供者类
+        
+        Args:
+            config: 提供者配置字典
+            
+        Returns:
+            创建的提供者实例，失败返回 None
+        """
+        import importlib
+        import inspect
+
+        source_type = config.get("source_type")
+        if not source_type:
+            return None
+
+        provider: Optional[DataProvider] = None
+
+        # 获取动态加载配置
+        module_path = config.get("module_path")
+        class_name = config.get("class_name")
+
+        # 默认提供者映射（向后兼容）
+        DEFAULT_PROVIDER_MAPPING: Dict[str, tuple] = {
+            "QMT": (
+                "deepsearch.infrastructure.providers.implementations.qmt.unified_qmt_provider",
+                "UnifiedQMTProvider",
+            ),
+            "MiniQMT": (
+                "deepsearch.infrastructure.providers.implementations.qmt.unified_qmt_provider",
+                "UnifiedQMTProvider",
+            ),
+            "AkShare": (
+                "deepsearch.infrastructure.providers.implementations.akshare.akshare",
+                "AkShareProxyProvider",
+            ),
+            "AmazingData": (
+                "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process",
+                "ProcessIsolatedAmazingDataProvider",
+            ),
+        }
+
+        # 如果未指定 module_path/class_name，使用默认映射
+        if not module_path or not class_name:
+            default_mapping = DEFAULT_PROVIDER_MAPPING.get(source_type)
+            if default_mapping:
+                module_path, class_name = default_mapping
+            else:
+                logger.warning(f"未知数据源类型: {source_type}，且未提供 module_path/class_name")
+                return None
+
+        # 动态导入并创建实例
+        try:
+            module = importlib.import_module(module_path)
+            provider_class = getattr(module, class_name)
+
+            # 检查构造函数是否接受 config 参数
+            sig = inspect.signature(provider_class.__init__)
+            params = sig.parameters
+
+            # 获取提供者特定配置
+            provider_config = config.get("config", {})
+
+            if "config" in params or "kwargs" in str(params):
+                # 尝试传递配置
+                try:
+                    provider = provider_class(config=provider_config)
+                except TypeError:
+                    provider = provider_class()
+            else:
+                provider = provider_class()
+
+            logger.debug(f"动态加载数据提供者: {module_path}.{class_name}")
+
+        except ImportError as e:
+            logger.error(f"导入模块失败 {module_path}: {e}")
+            return None
+        except AttributeError as e:
+            logger.error(f"类 {class_name} 在模块 {module_path} 中未找到: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"创建数据提供者实例失败 {source_type}: {e}")
+            return None
+
+        if provider:
+            provider.config = DataProviderConfig(
+                name=config.get("name"),
+                source_type=DataSourceType(source_type),
+                enabled=config.get("enabled", False),
+                priority=config.get("priority", DEFAULT_PRIORITY),
+                timeout=config.get("timeout", 30.0),
+                retry_count=config.get("retry_count", 3),
+                config=config.get("config", {}),
+            )
+            if not hasattr(provider, "status"):
+                provider.status = "initialized"
+        return provider
 
     async def _init_provider(self, name: str, provider: DataProvider) -> None:
         """初始化单个提供者"""
@@ -294,7 +347,9 @@ class DataProviderManager:
             start_async = getattr(provider, "start_async", None)
             if callable(start_async):
                 await start_async()
+            provider.status = "running"
         except Exception as e:
+            provider.status = "error"
             logger.error(f"初始化提供者 {name} 失败: {e}")
             raise
 
@@ -380,10 +435,7 @@ class DataProviderManager:
             except Exception:
                 pass
 
-        effective_priority = self._provider_priority.get(
-            (provider.config.name or name).lower(),
-            config_snapshot.priority,
-        )
+        effective_priority = provider.config.priority
 
         return ProviderRuntimeStatus(
             resolved_name=name,
@@ -749,13 +801,7 @@ class DataProviderManager:
                     continue
                 available.append(provider)
 
-        available.sort(
-            key=lambda provider: self._provider_priority.get(
-                (provider.config.name or "").lower(),
-                DEFAULT_PRIORITY,
-            )
-        )
-
+        available.sort(key=lambda p: p.config.priority)
         return available
 
     async def stop(self) -> None:
@@ -829,25 +875,6 @@ class DataProviderManager:
 
             try:
                 logger.info(f"尝试使用 {provider_name} 获取 {capability.value} 数据")
-
-                if provider_name == "akshare" and hasattr(provider, "_fetch_with_fallback"):
-                    from .capabilities import get_akshare_api
-
-                    api_name = get_akshare_api(capability)
-                    if api_name:
-                        response_payload = await provider._fetch_with_fallback(
-                            api_name, provider_request.extra_params
-                        )
-                        normalized = self._normalize_response(
-                            response_payload.get("data") if response_payload else None,
-                            provider,
-                            provider_request,
-                        )
-                        if normalized.success:
-                            normalized.metadata["capability"] = capability.value
-                            return normalized
-                        last_error = normalized.error
-                        continue
 
                 response = await self._fetch_with_provider(provider, provider_request)
                 if response.success:

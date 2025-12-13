@@ -11,6 +11,7 @@ except ImportError:
     pd = None  # type: ignore
 
 from deepsearch.infrastructure.providers.datafeed.base import IDataFeed, KlineParams
+from deepsearch.infrastructure.providers.datafeed.normalizer import DataNormalizer
 from deepsearch.infrastructure.providers.implementations.akshare.akshare import AkShareProxyProvider
 
 
@@ -25,6 +26,16 @@ class AkShareDataFeed(IDataFeed):
 
     def __init__(self, provider: Optional[AkShareProxyProvider] = None) -> None:
         self.provider = provider or AkShareProxyProvider()
+        schema_mapping = {
+            "ts": "日期",
+            "open": "开盘",
+            "close": "收盘",
+            "high": "最高",
+            "low": "最低",
+            "volume": "成交量",
+            "amount": "成交额",
+        }
+        self.normalizer = DataNormalizer(schema_mapping)
 
     async def get_kline(self, params: KlineParams) -> "pd.DataFrame | List[Dict[str, Any]]":
         # Reuse provider's fallback routing to Worker or direct akshare
@@ -64,66 +75,23 @@ class AkShareDataFeed(IDataFeed):
         return (
             self.normalize_bars(data_list)[: params.limit]
             if HAS_PANDAS
-            else data_list[: params.limit]
+            else self.normalizer.normalize(data_list)[: params.limit]
         )
 
     async def get_realtime(self, symbols: List[str]) -> Dict[str, Any]:
         return await self.provider.get_realtime_data(symbols)
 
     def normalize_bars(self, data: List[Dict[str, Any]]) -> "pd.DataFrame | List[Dict[str, Any]]":
+        normalized_data = self.normalizer.normalize(data)
         if not HAS_PANDAS:
-            # Basic mapping for list of dicts
-            out: List[Dict[str, Any]] = []
-            for row in data:
-                r = dict(row)
-                # map possible keys
-                ts = (
-                    r.get("ts")
-                    or r.get("日期")
-                    or r.get("时间")
-                    or r.get("date")
-                    or r.get("datetime")
-                    or r.get("time")
-                )
-                r["ts"] = ts
-                # rename
-                for cn, en in [
-                    ("开盘", "open"),
-                    ("收盘", "close"),
-                    ("最高", "high"),
-                    ("最低", "low"),
-                    ("成交量", "volume"),
-                    ("成交额", "amount"),
-                ]:
-                    if cn in r and en not in r:
-                        r[en] = r[cn]
-                out.append(r)
-            return out
+            return normalized_data
 
         import pandas as pd
 
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(normalized_data)
         if df.empty:
             return df
-        rename_map = {
-            "日期": "ts",
-            "时间": "ts",
-            "date": "ts",
-            "datetime": "ts",
-            "time": "ts",
-            "开盘": "open",
-            "收盘": "close",
-            "最高": "high",
-            "最低": "low",
-            "成交量": "volume",
-            "成交额": "amount",
-        }
-        df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns}, inplace=True)
-        if "ts" not in df.columns:
-            for cand in ["日期", "时间", "date", "datetime", "time"]:
-                if cand in df.columns:
-                    df["ts"] = df[cand]
-                    break
+
         if "ts" in df.columns:
             try:
                 df["ts"] = pd.to_datetime(df["ts"])

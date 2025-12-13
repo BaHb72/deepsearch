@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Awaitable, Callable, List, Sequence, Set
+from typing import Any, Awaitable, Callable, List, Sequence, Set
 
 from loguru import logger
 
+from deepsearch.core.utils.status_display import get_status_display
 from deepsearch.domain.market_data import (
     AuctionQualityCalculator,
     BoardUniverse,
@@ -48,29 +49,47 @@ class RealTimeMarketDataService:
     board_universe: BoardUniverse
     stock_list_fetcher: BoardStockListFetcher | None = None
     _subscribed_codes: Set[str] = field(default_factory=set, init=False, repr=False)
+    _status: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.capital_calculator.resolve_board_codes = self.board_universe.resolve_codes
         self.auction_calculator.resolve_board_codes = self.board_universe.resolve_codes
+        self._status = get_status_display()
 
     async def ingest_from_stream(self, codes: Sequence[str] | None = None) -> None:
         """Pull latest snapshots and update buffer."""
+        stream_port = self.registry.resolve_market_stream()
+        source_name = stream_port.name if hasattr(stream_port, "name") else "unknown"
+        self._status.set_active_source(source_name)
+        self._status.update_source(source_name, status="online", request=True)
 
         fetch_start = perf_counter()
-        stream_port = self.registry.resolve_market_stream()
-        snapshots = await stream_port.fetch_latest(codes)
-        requested_scope = len(codes) if codes is not None else "<auto>"
-        logger.debug(
-            "实时行情 ingest_from_stream 获取快照完成 codes_scope={} snapshots={} duration={:.3f}s",
-            requested_scope,
-            len(snapshots),
-            perf_counter() - fetch_start,
-        )
-        self.snapshot_buffer.bulk_ingest(snapshots)
-        logger.debug(
-            "实时行情 ingest_from_stream 写入缓冲区完成 total_duration={:.3f}s",
-            perf_counter() - fetch_start,
-        )
+        try:
+            snapshots = await stream_port.fetch_latest(codes)
+            latency_ms = (perf_counter() - fetch_start) * 1000
+            self._status.update_source(
+                source_name,
+                success=True,
+                latency_ms=latency_ms,
+                cache_hit=False,  # Assuming stream is always a network request
+            )
+            requested_scope = len(codes) if codes is not None else "<auto>"
+            logger.debug(
+                "实时行情 ingest_from_stream 获取快照完成 codes_scope={} snapshots={} duration={:.3f}s",
+                requested_scope,
+                len(snapshots),
+                perf_counter() - fetch_start,
+            )
+            self.snapshot_buffer.bulk_ingest(snapshots)
+            logger.debug(
+                "实时行情 ingest_from_stream 写入缓冲区完成 total_duration={:.3f}s",
+                perf_counter() - fetch_start,
+            )
+        except Exception as e:
+            latency_ms = (perf_counter() - fetch_start) * 1000
+            self._status.update_source(source_name, error=True, latency_ms=latency_ms)
+            logger.error(f"Ingest from stream failed: {e}")
+            raise
 
     async def compute_capital_pulse(self, query: CapitalPulseQuery) -> Sequence[CapitalPulseEntry]:
         await self._ensure_boards(query.boards)
@@ -176,17 +195,34 @@ class RealTimeMarketDataService:
         raise NotImplementedError("LimitStrength calculation is not yet implemented")
 
     async def snapshot_once(self, codes: Sequence[str]) -> Sequence[MarketSnapshot]:
-        snapshot_start = perf_counter()
         stream_port = self.registry.resolve_market_stream()
-        snapshots = await stream_port.fetch_latest(codes)
-        logger.debug(
-            "实时行情 snapshot_once 获取快照完成 codes={} snapshots={} duration={:.3f}s",
-            len(codes),
-            len(snapshots),
-            perf_counter() - snapshot_start,
-        )
-        self.snapshot_buffer.bulk_ingest(snapshots)
-        return snapshots
+        source_name = stream_port.name if hasattr(stream_port, "name") else "unknown"
+        self._status.set_active_source(source_name)
+        self._status.update_source(source_name, status="online", request=True)
+
+        snapshot_start = perf_counter()
+        try:
+            snapshots = await stream_port.fetch_latest(codes)
+            latency_ms = (perf_counter() - snapshot_start) * 1000
+            self._status.update_source(
+                source_name,
+                success=True,
+                latency_ms=latency_ms,
+                cache_hit=False,  # Assuming snapshot is a direct request
+            )
+            logger.debug(
+                "实时行情 snapshot_once 获取快照完成 codes={} snapshots={} duration={:.3f}s",
+                len(codes),
+                len(snapshots),
+                perf_counter() - snapshot_start,
+            )
+            self.snapshot_buffer.bulk_ingest(snapshots)
+            return snapshots
+        except Exception as e:
+            latency_ms = (perf_counter() - snapshot_start) * 1000
+            self._status.update_source(source_name, error=True, latency_ms=latency_ms)
+            logger.error(f"Snapshot once failed: {e}")
+            raise
 
     async def ensure_subscription(self, boards: Sequence[str]) -> None:
         if not boards:
@@ -281,4 +317,3 @@ class RealTimeMarketDataService:
             len(still_missing),
             perf_counter() - ensure_start,
         )
-

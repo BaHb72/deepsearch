@@ -66,10 +66,13 @@ deepsearch/config/settings.local.yaml
 config/.crypto_key
 .crypto_key
 deepsearch/config/database_connections.*.yaml
+# 数据源配置（包含敏感信息如密码）
+deepsearch/config/data_sources.yaml
 
 # Shared templates must remain tracked
 !deepsearch/config/settings.template.yaml
 !deepsearch/config/settings.dev.yaml.example
+!deepsearch/config/data_sources.yaml.example
 
 # ==================== Frontend Build Artifacts ====================
 /deepsearch/webui/static/assets/
@@ -150,3 +153,5 @@ D?Stockcodedeepsearch.pre-commit-config.yaml
 
 !/third_party/amazingdata/src/amazingdata/AmazingData-1.0.10-cp313-none-any.whl
 !/third_party/tgw/tgw-1.0.8.1-py3-none-any.whl
+/infra_test.txt
+/test_output.txt

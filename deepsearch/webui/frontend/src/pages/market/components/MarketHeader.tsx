@@ -2,8 +2,6 @@ import React from 'react'
 import {Badge, Button, Col, Row, Space, Switch, Tag, Tooltip, Typography} from 'antd'
 import {ReloadOutlined} from '@ant-design/icons'
 import dayjs from 'dayjs'
-import DataSourceSwitch from '@/components/common/DataSourceSwitch'
-import {formatDataSourceLabel} from '@/utils/dataSource'
 import {PHASE_META} from '../hooks/useMarketData'
 import type {PhaseState} from '@/api/marketDataLive'
 
@@ -78,16 +76,7 @@ const MarketHeader: React.FC<MarketHeaderProps> = ({
                             {retrievedAt ? dayjs(retrievedAt).format('YYYY-MM-DD HH:mm:ss') : '--'}
                         </Text>
                     </Space>
-                    <Space>
-                        <Text strong>数据源</Text>
-                        <Tag color="blue">{formatDataSourceLabel(dataSource)}</Tag>
-                        <DataSourceSwitch
-                            sources={adapterOptions}
-                            value={activeDataSource}
-                            loading={realtimeSource.switching}
-                            onChange={onSwitchDataSource}
-                        />
-                    </Space>
+                    {/* Data Source toggle removed in favor of module-level control */}
                     {cacheInfo?.expiresAt ? (
                         <Space>
                             <Text strong>缓存到期</Text>

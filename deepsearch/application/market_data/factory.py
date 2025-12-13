@@ -20,10 +20,6 @@ from deepsearch.domain.market_data import (
     OrderImbalanceCalculator,
     SnapshotBuffer,
 )
-from deepsearch.infrastructure.providers.implementations.amazingdata.ports import (
-    build_board_source,
-    build_market_data_registry,
-)
 from deepsearch.ports.market_data import (
     MarketDataPortRegistry,
     WindowSpec,
@@ -96,6 +92,9 @@ def create_realtime_market_data_service(
     if registry is None:
         if provider is None:
             raise ValueError("provider or registry must be provided")
+        from deepsearch.infrastructure.providers.implementations.amazingdata.ports import (
+            build_market_data_registry,
+        )
         registry = build_market_data_registry(provider, retention=stream_retention)
 
     capital_calc = CapitalPulseCalculator(
@@ -123,6 +122,9 @@ def create_realtime_market_data_service(
     if board_fetcher is None:
         if provider is None:
             raise ValueError("board_fetcher or provider must be provided")
+        from deepsearch.infrastructure.providers.implementations.amazingdata.ports import (
+            build_board_source,
+        )
         board_source = build_board_source(provider)
         board_fetcher = board_source.fetch_records
 

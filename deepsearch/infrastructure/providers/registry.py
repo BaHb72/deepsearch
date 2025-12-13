@@ -31,6 +31,7 @@ ALLOWED_PROVIDER_TYPES = {
     ProviderType.AMAZINGDATA,
     ProviderType.CLOUDFLARE,
     ProviderType.AKSHARE,
+    ProviderType.MINIQMT,
     ProviderType.CUSTOM,
 }
 
@@ -115,6 +116,15 @@ class DataProviderRegistry:
                 description="Cloudflare 代理（兼容）",
                 priority=78,
                 enabled=False,
+            ),
+            ProviderInfo(
+                name="miniqmt",
+                type=ProviderType.MINIQMT,
+                module_path="deepsearch.infrastructure.providers.implementations.qmt.miniqmt",
+                class_name="MiniQMTProvider",
+                description="MiniQMT 量化终端数据提供者",
+                priority=100,
+                enabled=True,
             ),
         ]
 

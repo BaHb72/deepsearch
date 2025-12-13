@@ -31,9 +31,15 @@ from loguru import logger
 from deepsearch.config import get_config
 from deepsearch.domain.market_data import StockListRecord
 from deepsearch.infrastructure.providers.executor import DataSourceExecutor
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
-    get_global_pool,
-)
+
+
+# Lazy import to avoid requiring amazingdata SDK when disabled
+def get_global_pool():
+    """Lazy import of get_global_pool from amazingdata_process_pool."""
+    from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
+        get_global_pool as _get_global_pool,
+    )
+    return _get_global_pool()
 from deepsearch.infrastructure.providers.interfaces.base import IDataSource
 from deepsearch.infrastructure.providers.interfaces.runtime import (
     ProviderMessageEnvelope,
@@ -49,11 +55,13 @@ from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 SUPPORTED_SOURCE_TYPES = {
     DataSourceType.AMAZINGDATA,
     DataSourceType.AKSHARE,
+    DataSourceType.MINIQMT,
 }
 
 DEFAULT_SOURCE_PRIORITY = {
     DataSourceType.AMAZINGDATA: 10,
     DataSourceType.AKSHARE: 30,
+    DataSourceType.MINIQMT: 5,
 }
 
 # 注意：用户名需要在前端表单中回显，因此不要加入到敏感字段过滤列表中
@@ -493,6 +501,8 @@ class DataSourceManager:
             "akshare_proxy": DataSourceType.AKSHARE,
             "akshare": DataSourceType.AKSHARE,
             "akshare_direct": DataSourceType.AKSHARE,
+            "miniqmt": DataSourceType.MINIQMT,
+            "qmt": DataSourceType.MINIQMT,
         }
 
         mapped = alias_map.get(name)
@@ -2422,3 +2432,15 @@ async def initialize_data_sources():
     manager = get_data_source_manager()
     await manager.initialize()
     return manager
+
+
+async def get_data_manager() -> DataSourceManager:
+    """获取已初始化的数据管理器实例
+    
+    这是一个向后兼容的别名函数，供从 enhanced_manager 迁移的代码使用。
+    等同于调用 initialize_data_sources()。
+    
+    Returns:
+        初始化后的 DataSourceManager 实例
+    """
+    return await initialize_data_sources()

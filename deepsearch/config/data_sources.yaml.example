@@ -1,0 +1,111 @@
+# ============================================================
+# DeepSearch 数据源配置示例
+# ============================================================
+# 
+# 这是 data_sources.yaml 的示例模板。
+# 复制此文件为 data_sources.yaml 并填入您的实际配置。
+#
+# 使用方法:
+#   1. 复制此文件: cp data_sources.yaml.example data_sources.yaml
+#   2. 编辑 data_sources.yaml，填入您的账号信息
+#   3. 确保 data_sources.yaml 已加入 .gitignore（避免泄露敏感信息）
+#
+# ============================================================
+
+version: "1.0"
+
+global:
+  default: amazingdata
+  fallback_order:
+    - amazingdata
+    - akshare
+  
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    recovery_timeout: 60
+    half_open_attempts: 3
+  
+  failover:
+    enabled: true
+    timeout: 5
+    retry_count: 3
+    backoff_factor: 2
+  
+  health_check:
+    enabled: true
+    interval: 60
+    timeout: 10
+
+providers:
+  amazingdata:
+    enabled: true
+    priority: 1
+    source_type: "AmazingData"
+    module_path: "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process"
+    class_name: "ProcessIsolatedAmazingDataProvider"
+    timeout: 30.0
+    retry_count: 3
+    fallback_sources:
+      - akshare
+    fallback_enabled: true
+    config:
+      implementation_mode: process
+      connection:
+        host: 101.230.159.234
+        port: 8600
+        timeout: 10
+        heartbeat_interval: 60
+        auto_reconnect: true
+        reconnect_interval: 10
+        max_retries: 3
+        # ========== 请填入您的账号 ==========
+        username: YOUR_USERNAME_HERE
+        password: YOUR_PASSWORD_HERE
+        # ===================================
+      subscription:
+        enabled: true
+        batch_size: 100
+        max_symbols: 500
+        auto_resubscribe: true
+      cache:
+        enabled: true
+        ttl: 300
+        max_size: 10000
+  
+  qmt:
+    enabled: true
+    priority: 2
+    source_type: "QMT"
+    module_path: "deepsearch.infrastructure.providers.implementations.qmt.unified_qmt_provider"
+    class_name: "UnifiedQMTProvider"
+    timeout: 30.0
+    retry_count: 3
+    config:
+      mode: auto
+  
+  akshare:
+    enabled: true
+    priority: 3
+    source_type: "AkShare"
+    module_path: "deepsearch.infrastructure.providers.implementations.akshare.akshare"
+    class_name: "AkShareProxyProvider"
+    timeout: 30.0
+    retry_count: 3
+    config:
+      mode: proxy
+      proxy:
+        enabled: true
+        # ========== 请填入您的 Cloudflare Worker URL ==========
+        worker_url: https://YOUR-WORKER.example.com
+        # =====================================================
+        timeout: 15
+        retry_count: 3
+        fallback_to_direct: true
+        cache:
+          enabled: true
+          ttl: 300
+
+module_overrides: {}
+
+access_type_overrides: {}

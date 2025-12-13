@@ -59,9 +59,13 @@ def test_migrate_legacy_provider_blocks():
     assert amazing["has_saved_credential"] is True
     assert "amazingdata" not in migrated
 
-    cloudflare = providers["cloudflare"]
-    assert cloudflare["config"]["connection"]["worker_url"] == "https://example.workers.dev"
-    assert cloudflare["config"]["cache"]["ttl"] == 180
+    # cloudflare 配置被合并到 akshare 的 proxy 配置中
+    akshare = providers["akshare"]
+    assert akshare["enabled"] is True
+    assert akshare["config"]["mode"] == "proxy"
+    proxy_config = akshare["config"]["proxy"]
+    assert proxy_config["worker_url"] == "https://example.workers.dev"
+    assert proxy_config["cache"]["ttl"] == 180
     assert "cloudflare_workers" not in migrated
 
     qmt = providers["qmt"]

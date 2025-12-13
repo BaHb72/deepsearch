@@ -11,6 +11,7 @@ from loguru import logger
 from deepsearch.core.managers.component_manager import ComponentManager, ComponentStatus, ComponentType
 from deepsearch.core.runtime.engine import MainEngine
 from deepsearch.core.utils.exceptions import ComponentError
+from deepsearch.core.utils.status_display import get_status_display
 from deepsearch.debug.diagnostics import diagnostic_logger, log_diagnostic
 from deepsearch.webui.api.services.system_data_service import (
     ComponentNotFoundError,
@@ -62,7 +63,10 @@ log_diagnostic(
 
 def get_standalone_manager(request: Request) -> Optional[Any]:
     """获取独立模式下的组件管理器（若存在）"""
-
+    app_state = getattr(request.app.state, "app_state", None)
+    if app_state is None:
+        return None
+    return getattr(app_state, "standalone_manager", None)
 
 def _resolve_provider_connected(provider: Any) -> bool:
     if provider is None:
@@ -97,7 +101,7 @@ def _collect_market_data_status(app_state: Any) -> Dict[str, Any]:
                 if isinstance(status_payload, dict):
                     provider_details = status_payload
         except Exception as exc:  # pragma: no cover - diagnostics only
-            logger.debug("��ȡ�ṩ������״̬ʧ��: {}", exc)
+            logger.debug("ȡṩ״̬ʧ: {}", exc)
 
     boards_ready = False
     boards_count = 0
@@ -448,7 +452,6 @@ async def get_recent_logs(lines: int = 100, level: str = "INFO") -> Dict[str, An
                     log_level = level_value.upper()
                     if log_level in level_priority and level_priority[log_level] >= min_level:
                         logs.append(log_entry)
-                        logs.append(log_entry)
                 except (ValueError, KeyError):
                     # 如果解析失败，作为原始日志添加
                     logs.append(
@@ -613,6 +616,18 @@ async def check_component_health(component_name: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"健康检查失败: {exc}")
 
 
+@router.get("/data_sources/health")
+async def get_data_sources_health() -> Dict[str, Any]:
+    """获取数据源健康状况。"""
+    status_display = get_status_display()
+    metrics = status_display._metrics
+    sources_data = [vars(s) for s in metrics.sources.values()]
+    return _ok(
+        {
+            "active_source": metrics.active_source,
+            "sources": sources_data,
+        }
+    )
+
+
 router.include_router(modules_router)
-
-

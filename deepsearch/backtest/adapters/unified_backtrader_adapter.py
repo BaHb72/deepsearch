@@ -7,13 +7,14 @@ Version: 1.0.0
 """
 
 import asyncio
+import concurrent.futures
 from datetime import datetime
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
 
 import pandas as pd
 from loguru import logger
-from deepsearch.infrastructure.providers.managers.enhanced_manager import get_data_manager
 
+from deepsearch.infrastructure.providers.managers.data_source_manager import get_data_manager
 from ..data.data_bridge import DataBridge
 
 bt: Any
@@ -71,22 +72,47 @@ class UnifiedBacktraderAdapter:
             logger.info("初始化Unified Backtrader Adapter...")
             self.data_manager = await get_data_manager()
             self._initialized = True
-            logger.info("✅ 适配器初始化完成")
+            logger.info("适配器初始化完成")
+
+    def _run_sync(self, coro):
+        """安全地在同步上下文中运行异步协程
+        
+        基于Python asyncio最佳实践：
+        - 如果已有运行中的事件循环，使用线程池避免嵌套循环
+        - 如果没有运行中的循环，使用asyncio.run()
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None:
+            # 已有事件循环运行中，使用线程池执行
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
+        else:
+            # 没有运行中的循环，安全使用 asyncio.run
+            return asyncio.run(coro)
 
     def initialize_sync(self):
         """同步初始化（用于Backtrader）"""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(self.initialize())
-        loop.close()
+        self._run_sync(self.initialize())
 
     def _ensure_dataframe(self, data: Any) -> pd.DataFrame:
-        """Ensure the returned payload is a DataFrame."""
+        """Ensure the returned payload is a DataFrame.
+        
+        基于pandas最佳实践，增加异常处理避免意外类型导致崩溃。
+        """
         if isinstance(data, pd.DataFrame):
             return data.copy()
         if data is None:
             return pd.DataFrame()
-        return pd.DataFrame(data)
+        try:
+            return pd.DataFrame(data)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"无法转换数据为DataFrame: {e}")
+            return pd.DataFrame()
 
     async def get_data(
         self,
@@ -133,9 +159,9 @@ class UnifiedBacktraderAdapter:
 
         if not df.empty:
             self._cache[cache_key] = df.copy()
-            logger.info(f"✔ 获取到 {len(df)} 条记录")
+            logger.info(f"获取到 {len(df)} 条记录")
         else:
-            logger.warning(f"✘ 未获取到数据: {symbol}")
+            logger.warning(f"未获取到数据: {symbol}")
 
         return df
 
@@ -197,13 +223,19 @@ class UnifiedBacktraderAdapter:
         return self._resample_to_weekly(standardized)
 
     def _resample_to_weekly(self, df: pd.DataFrame) -> pd.DataFrame:
-        """将日线数据转换为周线"""
+        """将日线数据转换为周线
+        
+        基于pandas最佳实践，避免使用inplace=True，先复制再修改。
+        """
         if df.empty:
-            return df
+            return df.copy()  # 返回副本而非原对象
 
+        # 先复制，避免修改原始数据
+        df = df.copy()
+        
         if not isinstance(df.index, pd.DatetimeIndex):
             if "date" in df.columns:
-                df.set_index("date", inplace=True)
+                df = df.set_index("date")  # 不使用inplace
 
         resampler = df.resample("W")
         weekly_data: Dict[str, pd.Series] = {}
@@ -240,15 +272,9 @@ class UnifiedBacktraderAdapter:
         adjust: str = "qfq",
     ) -> pd.DataFrame:
         """同步获取数据，兼容 Backtrader 引擎调用"""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            result = loop.run_until_complete(
-                self.get_data(symbol, start_date, end_date, timeframe, adjust)
-            )
-        finally:
-            loop.close()
-        return result
+        return self._run_sync(
+            self.get_data(symbol, start_date, end_date, timeframe, adjust)
+        )
 
     async def get_multi_data(
         self,
@@ -276,7 +302,7 @@ class UnifiedBacktraderAdapter:
                 data_dict[symbol] = self._ensure_dataframe(result)
 
         success_count = sum(1 for df in data_dict.values() if not df.empty)
-        logger.info(f"✔ 成功获取 {success_count}/{len(symbols)} 支股票数据")
+        logger.info(f"成功获取 {success_count}/{len(symbols)} 支股票数据")
 
         return data_dict
 
@@ -304,10 +330,16 @@ class UnifiedBacktraderAdapter:
             if invalid_low.any():
                 validation_result["warnings"].append(f"存在 {invalid_low.sum()} 条 low 值异常记录")
 
+        # 安全获取日期范围，处理边界情况
+        try:
+            date_range = f"{df.index[0]} to {df.index[-1]}" if len(df) > 0 else "N/A"
+        except (IndexError, KeyError):
+            date_range = "N/A"
+        
         validation_result["stats"] = {
             "rows": len(df),
             "columns": list(df.columns),
-            "date_range": f"{df.index[0]} to {df.index[-1]}" if len(df) > 0 else "N/A",
+            "date_range": date_range,
             "null_values": df.isnull().sum().to_dict(),
         }
 

@@ -35,7 +35,8 @@ async def test_board_source_handles_none() -> None:
     provider = FakeProvider(None)
     source = AmazingDataBoardSource(provider)
     result = await source.fetch_stock_list()
-    assert result == []
+    # API 返回 Sequence[StockListRecord]，实现返回 tuple
+    assert result == ()
 
 
 class TypedProvider:
@@ -58,4 +59,5 @@ async def test_board_source_prefers_typed_records() -> None:
     provider = TypedProvider()
     source = AmazingDataBoardSource(provider)  # type: ignore[arg-type]
     result = await source.fetch_stock_list()
-    assert result == [StockListRecord(symbol="000002.SZ", name="???", exchange="SZSE", boards=("????",))]
+    # API 返回 Sequence[StockListRecord]，实现返回 tuple
+    assert result == (StockListRecord(symbol="000002.SZ", name="???", exchange="SZSE", boards=("????",)),)

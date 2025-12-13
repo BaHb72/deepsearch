@@ -79,7 +79,7 @@ async def test_executor_respects_validator():
         providers={DataSourceType.AMAZINGDATA: provider},
         source_order=[DataSourceType.AMAZINGDATA],
         method_name="get_data",
-        result_validator=lambda payload: payload.get("success") is True,
+        validator=lambda payload: payload.get("success") is True,
         require_result=True,
     )
 

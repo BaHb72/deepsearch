@@ -12,7 +12,13 @@ from loguru import logger
 from pydantic import BaseModel
 
 from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTProvider
+# 兼容新旧管理器
 from deepsearch.infrastructure.providers.managers.manager import DataProviderManager
+
+try:
+    from deepsearch.utils.data_sources import DataSourceManager
+except ImportError:
+    DataSourceManager = None  # type: ignore
 
 # 创建 API 路由
 router = APIRouter(prefix="/api/miniqmt", tags=["MiniQMT"])
@@ -61,7 +67,10 @@ def get_miniqmt_provider() -> MiniQMTProvider:
 
             # 获取数据提供者管理器
             data_manager = get_context().get_component("data_provider_manager")
-            if isinstance(data_manager, DataProviderManager):
+            # 兼容检查：支持新旧两种管理器
+            if isinstance(data_manager, DataProviderManager) or (
+                    DataSourceManager is not None and isinstance(data_manager, DataSourceManager)
+            ):
                 provider_candidate = data_manager.get_provider("miniqmt")
                 if isinstance(provider_candidate, MiniQMTProvider):
                     _miniqmt_provider = provider_candidate
