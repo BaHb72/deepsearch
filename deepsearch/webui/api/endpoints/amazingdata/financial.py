@@ -45,22 +45,25 @@ class ProfitNoticeRequest(BaseModel):
     start_date: Optional[int] = Field(None, description="开始日期")
     end_date: Optional[int] = Field(None, description="结束日期")
     is_local: bool = Field(True, description="是否使用本地存储")
+    start_date: Optional[int] = Field(None, description="开始日期")
+    end_date: Optional[int] = Field(None, description="结束日期")
+    is_local: bool = Field(True, description="是否使用本地存储")
     local_path: Optional[str] = Field(DEFAULT_LOCAL_PATH, description="本地存储路径")
 
 
 # ================== API接口 ==================
 
 
-@router.post("/balance-sheet", summary="��ȡ�ʲ���ծ��")
+@router.post("/balance-sheet", summary="获取资产负债表")
 async def get_balance_sheet(request: FinancialReportRequest) -> JSONDict:
     """
-    ��ȡ�ʲ���ծ������
+    获取资产负债表数据
 
     Args:
-        request: ���񱨱�����
+        request: 财务报表请求
 
     Returns:
-        �ʲ���ծ������
+        资产负债表数据
     """
     try:
         provider = await get_amazingdata_provider()
@@ -101,16 +104,16 @@ async def get_balance_sheet(request: FinancialReportRequest) -> JSONDict:
         return handle_api_error("get_balance_sheet", e)
 
 
-@router.post("/cash-flow", summary="��ȡ�ֽ�����������")
+@router.post("/cash-flow", summary="获取现金流量表")
 async def get_cash_flow(request: FinancialReportRequest) -> JSONDict:
     """
-    ��ȡ�ֽ�����������
+    获取现金流量表数据
 
     Args:
-        request: ���񱨱�����
+        request: 财务报表请求
 
     Returns:
-        �ֽ�����������
+        现金流量表数据
     """
     try:
         provider = await get_amazingdata_provider()
@@ -151,16 +154,16 @@ async def get_cash_flow(request: FinancialReportRequest) -> JSONDict:
         return handle_api_error("get_cash_flow", e)
 
 
-@router.post("/income", summary="��ȡ�����")
+@router.post("/income", summary="获取利润表")
 async def get_income(request: FinancialReportRequest) -> JSONDict:
     """
-    ��ȡ���������
+    获取利润表数据
 
     Args:
-        request: ���񱨱�����
+        request: 财务报表请求
 
     Returns:
-        ���������
+        利润表数据
     """
     try:
         provider = await get_amazingdata_provider()
@@ -201,16 +204,16 @@ async def get_income(request: FinancialReportRequest) -> JSONDict:
         return handle_api_error("get_income", e)
 
 
-@router.post("/profit-express", summary="��ȡҵ���챨")
+@router.post("/profit-express", summary="获取业绩快报")
 async def get_profit_express(request: ProfitNoticeRequest) -> JSONDict:
     """
-    ��ȡҵ���챨����
+    获取业绩快报数据
 
     Args:
-        request: ҵ��Ԥ������
+        request: 业绩预告请求
 
     Returns:
-        ҵ���챨����
+        业绩快报数据
     """
     try:
         provider = await get_amazingdata_provider()
@@ -257,16 +260,16 @@ async def get_profit_express(request: ProfitNoticeRequest) -> JSONDict:
         return handle_api_error("get_profit_express", e)
 
 
-@router.post("/profit-notice", summary="��ȡҵ��Ԥ��")
+@router.post("/profit-notice", summary="获取业绩预告")
 async def get_profit_notice(request: ProfitNoticeRequest) -> JSONDict:
     """
-    ��ȡҵ��Ԥ������
+    获取业绩预告数据
 
     Args:
-        request: ҵ��Ԥ������
+        request: 业绩预告请求
 
     Returns:
-        ҵ��Ԥ������
+        业绩预告数据
     """
     try:
         provider = await get_amazingdata_provider()
@@ -314,16 +317,16 @@ async def get_profit_notice(request: ProfitNoticeRequest) -> JSONDict:
         return handle_api_error("get_profit_notice", e)
 
 
-@router.post("/financial-summary", summary="��ȡ����ժҪ")
+@router.post("/financial-summary", summary="获取财务摘要")
 async def get_financial_summary(code: str) -> JSONDict:
     """
-    ��ȡ������Ʊ�Ĳ���ժҪ��Ϣ
+    获取单只股票的财务摘要信息
 
     Args:
-        code: ��Ʊ����
+        code: 股票代码
 
     Returns:
-        ����ժҪ����
+        财务摘要数据
     """
     try:
         provider = await get_amazingdata_provider()

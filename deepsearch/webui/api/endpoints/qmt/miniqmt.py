@@ -637,55 +637,121 @@ async def get_xtdata_kline(
             pass  # 忽略下载错误，尝试获取本地缓存
 
         result = xtdata.get_market_data(
+            field_list=[],  # 空列表表示获取所有字段
             stock_list=[symbol],
             period=period,
             count=count,
         )
 
+        # 添加调试日志
+        logger.debug(f"xtdata.get_market_data 返回类型: {type(result)}")
+        if isinstance(result, dict):
+            logger.debug(f"返回字段: {list(result.keys())}")
+            for key, val in result.items():
+                logger.debug(f"  {key}: type={type(val)}, shape={getattr(val, 'shape', 'N/A')}")
+
         # 检查返回数据是否有效
-        if not isinstance(result, dict) or 'time' not in result or symbol not in result.get('open', {}):
+        if not isinstance(result, dict) or not result:
             return {
                 "success": False,
-                "message": "未获取到K线数据或数据格式不正确",
+                "message": "未获取到K线数据",
                 "data": [],
+                "debug_info": f"result type: {type(result)}",
                 "timestamp": datetime.now().isoformat(),
             }
 
-        # 转换数据格式
-        klines = []
-        time_data = result.get('time', [])
-        open_data = result.get('open', {}).get(symbol, [])
-        high_data = result.get('high', {}).get(symbol, [])
-        low_data = result.get('low', {}).get(symbol, [])
-        close_data = result.get('close', {}).get(symbol, [])
-        volume_data = result.get('volume', {}).get(symbol, [])
-        amount_data = result.get('amount', {}).get(symbol, [])
+        # xtdata 返回的是 DataFrame 格式: {field_name: pd.DataFrame}
+        # DataFrame 的结构是: index=时间戳, columns=股票代码
+        import pandas as pd
+        import numpy as np
 
-        # 找出最短的数据序列长度，以防数据不一致
-        min_len = min(
-            len(time_data),
-            len(open_data),
-            len(high_data),
-            len(low_data),
-            len(close_data),
-            len(volume_data),
-            len(amount_data)
-        )
+        try:
+            # 获取各字段数据
+            time_df = result.get('time')
+            open_df = result.get('open')
+            high_df = result.get('high')
+            low_df = result.get('low')
+            close_df = result.get('close')
+            volume_df = result.get('volume')
+            amount_df = result.get('amount')
 
-        if min_len != len(time_data):
-            logger.warning(f"K线数据字段长度不一致 for symbol {symbol}, period {period}")
+            # 检查是否有数据
+            if open_df is None or (isinstance(open_df, pd.DataFrame) and open_df.empty):
+                return {
+                    "success": False,
+                    "message": "K线数据为空，可能需要先下载历史数据",
+                    "data": [],
+                    "timestamp": datetime.now().isoformat(),
+                }
 
-        for i in range(min_len):
-            klines.append({
-                # xtdata 时间戳是毫秒
-                "time": int(time_data[i]),
-                "open": float(open_data[i]),
-                "high": float(high_data[i]),
-                "low": float(low_data[i]),
-                "close": float(close_data[i]),
-                "volume": int(volume_data[i]),
-                "amount": float(amount_data[i]),
-            })
+            # 转换数据格式
+            klines = []
+
+            # DataFrame 结构: index=股票代码, columns=时间戳(如 '20250116')
+            if isinstance(open_df, pd.DataFrame):
+                # 检查股票代码是否在 index 中
+                if symbol not in open_df.index:
+                    return {
+                        "success": False,
+                        "message": f"未找到股票 {symbol} 的数据",
+                        "data": [],
+                        "available_symbols": list(open_df.index),
+                        "timestamp": datetime.now().isoformat(),
+                    }
+
+                # 获取时间列（columns 是时间戳字符串如 '20250116'）
+                time_columns = open_df.columns.tolist()
+
+                # 按行提取该股票的数据
+                open_data = open_df.loc[symbol].tolist()
+                high_data = high_df.loc[symbol].tolist() if isinstance(high_df, pd.DataFrame) and symbol in high_df.index else []
+                low_data = low_df.loc[symbol].tolist() if isinstance(low_df, pd.DataFrame) and symbol in low_df.index else []
+                close_data = close_df.loc[symbol].tolist() if isinstance(close_df, pd.DataFrame) and symbol in close_df.index else []
+                volume_data = volume_df.loc[symbol].tolist() if isinstance(volume_df, pd.DataFrame) and symbol in volume_df.index else []
+                amount_data = amount_df.loc[symbol].tolist() if isinstance(amount_df, pd.DataFrame) and symbol in amount_df.index else []
+
+                # 构建 K 线数据
+                for i, time_str in enumerate(time_columns):
+                    # 尝试将时间字符串转换为时间戳
+                    try:
+                        if isinstance(time_str, str) and len(time_str) == 8:
+                            # YYYYMMDD 格式
+                            ts = int(datetime.strptime(time_str, "%Y%m%d").timestamp() * 1000)
+                        elif isinstance(time_str, (int, float)):
+                            ts = int(time_str)
+                        else:
+                            ts = int(datetime.strptime(str(time_str), "%Y%m%d").timestamp() * 1000)
+                    except Exception:
+                        ts = 0
+
+                    klines.append({
+                        "time": ts,
+                        "time_str": str(time_str),
+                        "open": float(open_data[i]) if i < len(open_data) and not np.isnan(open_data[i]) else 0,
+                        "high": float(high_data[i]) if i < len(high_data) and not np.isnan(high_data[i]) else 0,
+                        "low": float(low_data[i]) if i < len(low_data) and not np.isnan(low_data[i]) else 0,
+                        "close": float(close_data[i]) if i < len(close_data) and not np.isnan(close_data[i]) else 0,
+                        "volume": int(volume_data[i]) if i < len(volume_data) and not np.isnan(volume_data[i]) else 0,
+                        "amount": float(amount_data[i]) if i < len(amount_data) and not np.isnan(amount_data[i]) else 0,
+                    })
+            else:
+                # 可能是旧版本格式或其他格式
+                return {
+                    "success": False,
+                    "message": f"未识别的数据格式: {type(open_df)}",
+                    "data": [],
+                    "timestamp": datetime.now().isoformat(),
+                }
+
+
+        except Exception as parse_error:
+            logger.error(f"解析 K 线数据失败: {parse_error}")
+            return {
+                "success": False,
+                "message": f"解析数据失败: {str(parse_error)}",
+                "data": [],
+                "timestamp": datetime.now().isoformat(),
+            }
 
         return {
             "success": True,
@@ -695,6 +761,7 @@ async def get_xtdata_kline(
             "count": len(klines),
             "timestamp": datetime.now().isoformat(),
         }
+
 
     except ImportError:
         raise HTTPException(status_code=503, detail="xtquant SDK 未安装")

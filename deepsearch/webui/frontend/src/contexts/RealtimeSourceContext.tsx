@@ -7,10 +7,10 @@ import React, {
   useRef,
   useState,
 } from 'react'
-import {message} from 'antd'
+import { message } from 'antd'
 
-import {marketDataLiveApi, type DataSourceSwitchResponse} from '@/api/marketDataLive'
-import {formatDataSourceLabel, normalizeDataSourceList, normalizeDataSourceValue} from '@/utils/dataSource'
+import { marketDataLiveApi, type DataSourceSwitchResponse } from '@/api/marketDataLive'
+import { formatDataSourceLabel, normalizeDataSourceList, normalizeDataSourceValue } from '@/utils/dataSource'
 
 type RealtimeSourceState = {
   activeSource: string | null
@@ -42,19 +42,20 @@ const initialState: RealtimeSourceState = {
   lastUpdated: null,
 }
 
-const noopAsync = async () => null
+const noopAsync = async (): Promise<void> => { /* noop */ }
+const noopSwitchSource = async (): Promise<DataSourceSwitchResponse | null> => null
 
 const RealtimeSourceContext = createContext<RealtimeSourceContextValue>({
   ...initialState,
   refreshStatus: noopAsync,
-  switchSource: noopAsync,
+  switchSource: noopSwitchSource,
 })
 
 interface ProviderProps {
   children: React.ReactNode
 }
 
-export const RealtimeSourceProvider: React.FC<ProviderProps> = ({children}) => {
+export const RealtimeSourceProvider: React.FC<ProviderProps> = ({ children }) => {
   const [state, setState] = useState<RealtimeSourceState>(initialState)
   const mountedRef = useRef(true)
   const switchingLockRef = useRef(false)

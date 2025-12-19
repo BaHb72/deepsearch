@@ -37,6 +37,13 @@ export interface StrengthResponse extends BaseLiveResponse {
 export interface BoardOverviewItem {
     board: string
     stock_count?: number
+    // 新增字段
+    change_pct?: number       // 板块涨跌幅
+    lead_stock?: string       // 领涨股代码
+    lead_stock_name?: string  // 领涨股名称
+    lead_change?: number      // 领涨股涨幅
+    limit_up_count?: number   // 涨停数
+    // 原有字段
     probing_count?: number
     probing_ratio?: number
     inflow_speed?: number
@@ -117,17 +124,39 @@ export interface RealtimeSourceStatus {
     status?: string
 }
 
+// 概念资金流类型
+export interface ConceptFlowItem {
+    board: string
+    concept_code?: string
+    velocity: number
+    lead_stock?: string
+    lead_change?: number
+    data_source?: string
+}
+
+export interface ConceptFlowResponse extends BaseLiveResponse {
+    items: ConceptFlowItem[]
+    count: number
+}
+
 export const marketDataLiveApi = {
     getStrength: (params?: { windows?: string; boards?: string; limit?: number; source?: string | null }) =>
         request.get<StrengthResponse>('/market/live/strength', { params }) as unknown as Promise<StrengthResponse>,
+    // 概念板块资金脉冲
+    getConceptStrength: (params?: { limit?: number; source?: string | null }) =>
+        request.get<StrengthResponse>('/market/live/concept-strength', { params }) as unknown as Promise<StrengthResponse>,
     getBoardOverview: (params?: { type?: string; window?: string; limit?: number; source?: string | null }) =>
         request.get<BoardOverviewResponse>('/market/live/board-overview', { params }) as unknown as Promise<BoardOverviewResponse>,
     getOrderImbalance: (params?: { window?: string; limit?: number; source?: string | null }) =>
         request.get<OrderImbalanceResponse>('/market/live/order-imbalance', { params }) as unknown as Promise<OrderImbalanceResponse>,
     getAuctionQuality: (params?: { boards?: string; source?: string | null }) =>
         request.get<AuctionQualityResponse>('/market/live/auction-quality', { params }) as unknown as Promise<AuctionQualityResponse>,
+    // 概念资金流 (替代订单失衡)
+    getConceptFlow: (params?: { limit?: number; source?: string | null }) =>
+        request.get<ConceptFlowResponse>('/market/live/concept-flow', { params }) as unknown as Promise<ConceptFlowResponse>,
     getDataSourceStatus: () =>
         request.get<RealtimeSourceStatus>('/market/live/data-source/status') as unknown as Promise<RealtimeSourceStatus>,
     switchDataSource: (target: string) =>
         request.post<DataSourceSwitchResponse>('/market/live/data-source/switch', { target }) as unknown as Promise<DataSourceSwitchResponse>,
 }
+

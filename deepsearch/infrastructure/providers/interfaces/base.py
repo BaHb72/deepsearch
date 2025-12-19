@@ -158,6 +158,22 @@ class DataProviderError(Exception):
     pass
 
 
+class TGWError(DataProviderError):
+    """TGW网关相关错误
+    
+    用于标识以下情况：
+    - TGW连接失败
+    - TGW超时
+    - TGW初始化失败
+    - SDK系统退出
+    """
+    
+    def __init__(self, message: str, error_code: str | None = None, is_recoverable: bool = False):
+        super().__init__(message)
+        self.error_code = error_code
+        self.is_recoverable = is_recoverable
+
+
 class DataProvider(ABC):
     """数据提供者基类"""
 

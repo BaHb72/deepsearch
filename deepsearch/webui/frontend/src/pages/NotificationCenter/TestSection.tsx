@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {useEffect} from 'react'
 import {Alert, Button, Card, Form, Input, Select, Space, Switch, Table, Tag, Typography} from 'antd'
 import type {ColumnsType} from 'antd/es/table'

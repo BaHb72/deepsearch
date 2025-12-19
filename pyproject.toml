@@ -42,7 +42,7 @@ dependencies = [
     "python-jose[cryptography]>=3.5.0",
     # ==== 数据获取依赖 ====
     "amazingdata==1.0.23",
-    "tgw==1.0.8.3",
+    "tgw==1.0.8.4",
     "akshare==1.17.65",
     "aiohttp>=3.13.0",
     "numpy>=1.24.0",
@@ -67,6 +67,8 @@ dependencies = [
     "types-pywin32>=311.0.0.20251008",
     "xtquant>=250516.1.1",
     "tigeropen>=3.4.4",
+    "python-docx>=1.2.0",
+    "tables>=3.10.2",
 ]
 
 [project.optional-dependencies]
@@ -123,7 +125,7 @@ compile-bytecode = true
 
 [tool.uv.sources]
 amazingdata = { url = "https://bahbai.com/packages/AmazingData-1.0.23-cp313-none-any.whl" }
-tgw = { url = "https://bahbai.com/packages/tgw-1.0.8.3-py3-none-any.whl" }
+tgw = { url = "https://bahbai.com/packages/tgw-1.0.8.4-py3-none-any.whl" }
 
 [tool.uv.pip]
 index-url = "https://pypi.org/simple"

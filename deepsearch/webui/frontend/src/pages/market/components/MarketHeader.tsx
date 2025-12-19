@@ -1,9 +1,9 @@
 import React from 'react'
-import {Badge, Button, Col, Row, Space, Switch, Tag, Tooltip, Typography} from 'antd'
-import {ReloadOutlined} from '@ant-design/icons'
+import { Badge, Button, Col, Row, Space, Switch, Tag, Tooltip, Typography } from 'antd'
+import { ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import {PHASE_META} from '../hooks/useMarketData'
-import type {PhaseState} from '@/api/marketDataLive'
+import { PHASE_META } from '../hooks/useMarketData'
+import type { PhaseState } from '@/api/marketDataLive'
 
 const { Text } = Typography
 
@@ -31,16 +31,16 @@ const MarketHeader: React.FC<MarketHeaderProps> = ({
     isStale,
     globalAsOf,
     retrievedAt,
-    dataSource,
-    activeDataSource,
-    adapterOptions,
+    dataSource: _dataSource,
+    activeDataSource: _activeDataSource,
+    adapterOptions: _adapterOptions,
     cacheInfo,
-    realtimeSource,
+    realtimeSource: _realtimeSource,
     autoRefresh,
     canAutoRefresh,
     loading,
     refreshing,
-    onSwitchDataSource,
+    onSwitchDataSource: _onSwitchDataSource,
     onAutoRefreshChange,
     onRefresh,
 }) => {
@@ -50,7 +50,7 @@ const MarketHeader: React.FC<MarketHeaderProps> = ({
     })()
 
     return (
-        <Row justify="space-between" align="middle" gutter={[16, 16]} style={{padding: '8px 0'}}>
+        <Row justify="space-between" align="middle" gutter={[16, 16]} style={{ padding: '8px 0' }}>
             <Col flex="auto">
                 <Space size="large" wrap>
                     <Space>
@@ -97,7 +97,7 @@ const MarketHeader: React.FC<MarketHeaderProps> = ({
                         />
                     </Tooltip>
                     <Button
-                        icon={<ReloadOutlined spin={refreshing}/>}
+                        icon={<ReloadOutlined spin={refreshing} />}
                         onClick={onRefresh}
                         loading={loading}
                         type="primary"

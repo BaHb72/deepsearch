@@ -1,8 +1,8 @@
 import React from 'react'
-import {Select, Space, Tag, theme, Typography} from 'antd'
-import type {ProColumns} from '@ant-design/pro-components'
-import {ProTable} from '@ant-design/pro-components'
-import type {BoardOverviewItem} from '../../../api/marketDataLive'
+import { Select, Space, Tag, theme, Typography } from 'antd'
+import type { ProColumns } from '@ant-design/pro-components'
+import { ProTable } from '@ant-design/pro-components'
+import type { BoardOverviewItem } from '../../../api/marketDataLive'
 import ModuleSourceSelector from './ModuleSourceSelector'
 import {
     CLASSIFICATION_META,
@@ -39,7 +39,7 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
     fallbackLabel,
     onModuleSourceChange,
 }) => {
-    const {token} = theme.useToken()
+    const { token } = theme.useToken()
     const colorUp = '#ff4d4f'
     const colorDown = '#52c41a'
 
@@ -53,9 +53,47 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
             title: '板块',
             dataIndex: 'board',
             key: 'board',
-            width: 160,
+            width: 140,
             fixed: 'left',
             render: (dom) => <Text strong>{dom}</Text>
+        },
+        {
+            title: '涨跌幅',
+            dataIndex: 'change_pct',
+            key: 'change_pct',
+            width: 100,
+            render: (_, record) => (
+                <span style={{ color: getTrendColor(record.change_pct), fontFamily: 'Monaco, monospace' }}>
+                    {record.change_pct != null ? `${record.change_pct >= 0 ? '+' : ''}${record.change_pct.toFixed(2)}%` : '--'}
+                </span>
+            ),
+            sorter: (a, b) => (a.change_pct || 0) - (b.change_pct || 0),
+        },
+        {
+            title: '领涨股',
+            dataIndex: 'lead_stock',
+            key: 'lead_stock',
+            width: 160,
+            render: (_, record) => (
+                record.lead_stock ? (
+                    <span>
+                        <Text>{record.lead_stock_name || record.lead_stock}</Text>
+                        <Text type="danger" style={{ marginLeft: 4, fontFamily: 'Monaco, monospace' }}>
+                            +{(record.lead_change || 0).toFixed(2)}%
+                        </Text>
+                    </span>
+                ) : <span style={{ color: token.colorTextSecondary }}>--</span>
+            ),
+        },
+        {
+            title: '涨停',
+            dataIndex: 'limit_up_count',
+            key: 'limit_up_count',
+            width: 80,
+            render: (_, record) => (
+                record.limit_up_count ? <Tag color="red">{record.limit_up_count}</Tag> : <span style={{ color: token.colorTextSecondary }}>0</span>
+            ),
+            sorter: (a, b) => (a.limit_up_count || 0) - (b.limit_up_count || 0),
         },
         {
             title: '净流入',
@@ -63,7 +101,7 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
             key: 'inflow_net',
             width: 140,
             render: (_, record) => (
-                <span style={{color: getTrendColor(record.inflow_net), fontFamily: 'Monaco, monospace'}}>
+                <span style={{ color: getTrendColor(record.inflow_net), fontFamily: 'Monaco, monospace' }}>
                     {formatAmountBillion(record.inflow_net)}
                 </span>
             ),
@@ -75,7 +113,7 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
             key: 'inflow_speed',
             width: 150,
             render: (_, record) => (
-                <span style={{color: getTrendColor(record.inflow_speed), fontFamily: 'Monaco, monospace'}}>
+                <span style={{ color: getTrendColor(record.inflow_speed), fontFamily: 'Monaco, monospace' }}>
                     {formatAmountMillionPerMinute(record.inflow_speed)}
                 </span>
             ),
@@ -103,7 +141,7 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
             key: 'breadth_up_ratio',
             width: 120,
             render: (_, record) => (
-                <span style={{color: (record.breadth_up_ratio || 0) > 0.5 ? colorUp : colorDown}}>
+                <span style={{ color: (record.breadth_up_ratio || 0) > 0.5 ? colorUp : colorDown }}>
                     {formatPercent(record.breadth_up_ratio)}
                 </span>
             ),

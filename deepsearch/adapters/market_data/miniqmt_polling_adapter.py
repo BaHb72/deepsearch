@@ -11,7 +11,11 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Mapping, MutableSet, Sequence
 
+import time
+
 from loguru import logger
+
+from deepsearch.core.utils.status_display import get_status_display
 
 from deepsearch.domain.market_data import StockListRecord
 from deepsearch.ports.market_data import (
@@ -185,6 +189,9 @@ class MiniQMTPollingStreamPort(RealtimeStreamPort):
         self._batch_size = max(1, batch_size)
         self._collector: Any = None
         self._name_cache: Dict[str, str] = {}
+        self._status_display = get_status_display()
+        self._fetch_count = 0
+        self._last_log_time = 0.0
 
     async def _ensure_collector(self) -> Any:
         """Lazy initialize the MiniQMTCollector."""
@@ -244,6 +251,7 @@ class MiniQMTPollingStreamPort(RealtimeStreamPort):
 
         snapshots: list[MarketSnapshot] = []
         loop = asyncio.get_event_loop()
+        start_time = time.time()
 
         for i in range(0, len(target), self._batch_size):
             batch = target[i:i + self._batch_size]
@@ -273,7 +281,29 @@ class MiniQMTPollingStreamPort(RealtimeStreamPort):
 
             except Exception as exc:
                 logger.warning("MiniQMT polling error for batch: {}", exc)
+                self._status_display.update_source("miniqmt", error=True)
                 continue
+
+        # 更新状态显示
+        elapsed_ms = (time.time() - start_time) * 1000
+        self._fetch_count += 1
+        self._status_display.update_source(
+            "miniqmt",
+            status="online" if snapshots else "idle",
+            request=True,
+            success=bool(snapshots),
+            latency_ms=elapsed_ms,
+        )
+        self._status_display.set_active_source("miniqmt")
+
+        # 每30秒打印一次汇总日志
+        now = time.time()
+        if now - self._last_log_time >= 30:
+            self._last_log_time = now
+            logger.info(
+                "MiniQMT 数据轮询: 已获取 {}/{} 只股票, 平均延迟 {:.0f}ms, 累计请求 {} 次",
+                len(snapshots), len(target), elapsed_ms, self._fetch_count
+            )
 
         return snapshots
 
@@ -294,7 +324,7 @@ class MiniQMTBoardUniversePort(BoardUniversePort):
         return self._collector
 
     async def fetch_records(self) -> Sequence[StockListRecord]:
-        logger.info("MiniQMT fetch_records 开始执行")
+
         collector = await self._ensure_collector()
         if not collector.connected:
             logger.warning("MiniQMTCollector 未连接，无法获取板块数据")
@@ -324,7 +354,6 @@ class MiniQMTBoardUniversePort(BoardUniversePort):
                 logger.warning("MiniQMT 返回空股票列表")
                 return ()
 
-            logger.info("MiniQMT 获取到 {} 只股票", len(all_symbols))
 
             # Build records directly without fetching names (too slow for 5000+ stocks)
             # Names will be fetched lazily during fetch_latest
@@ -348,7 +377,6 @@ class MiniQMTBoardUniversePort(BoardUniversePort):
                 )
                 records.append(record)
 
-            logger.info("MiniQMT 构建 {} 条股票记录", len(records))
 
         except Exception as exc:
             logger.warning("MiniQMT fetch stock list failed: {}", exc)

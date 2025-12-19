@@ -1,14 +1,13 @@
-// @ts-nocheck
 /**
  * Zustand Stores 统一导出入口
  */
 
-import {useDatabaseConnections, useDatabaseStore, useDataSourceStatus, useSelectedConnection,} from './database.store'
-import {useSystemStore} from './system.store'
-import {useMarketStore} from './market.store'
-import {useConfigStore} from './config.store'
-import {cacheService} from '@/dataCenter/cache.service'
-import {requestManager} from '@/dataCenter/utils'
+import { useDatabaseConnections, useDatabaseStore, useDataSourceStatus, useSelectedConnection, } from './database.store'
+import { useSystemStore } from './system.store'
+import { useMarketStore } from './market.store'
+import { useConfigStore } from './config.store'
+import { cacheService } from '@/dataCenter/cache.service'
+import { requestManager } from '@/dataCenter/utils'
 
 // 导出各类 stores
 export {
@@ -84,7 +83,7 @@ export function getRequestStatus() {
 
 // 开发环境下将 store 暴露到 window 方便调试
 if (import.meta.env.DEV) {
-  ;(window as any).__STORES__ = {
+  ; (window as any).__STORES__ = {
     database: useDatabaseStore,
     system: useSystemStore,
     market: useMarketStore,

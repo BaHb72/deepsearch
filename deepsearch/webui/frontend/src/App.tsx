@@ -10,11 +10,16 @@ const EventSystem = lazy(() => import('./pages/EventSystem'))
 const MarketData = lazy(() => import('./pages/market'))
 const LogCenter = lazy(() => import('./pages/System/LogCenter'))
 const SystemConfig = lazy(() => import('./pages/SystemConfig'))
-const DataSourceMonitor = lazy(() => import('./pages/Monitor/DataSourceMonitor'))
+const MarketMonitor = lazy(() => import('./pages/Monitor/MarketMonitor'))
 const CacheSystem = lazy(() => import('./pages/Monitor/CacheSystem'))
 const PerformanceAnalytics = lazy(() => import('./pages/Monitor/PerformanceAnalytics'))
 const AlertManager = lazy(() => import('./pages/Monitor/AlertManager'))
 const ComponentManager = lazy(() => import('./pages/Monitor/ComponentManager'))
+const ConceptMonitor = lazy(() => import('./pages/ConceptMonitor'))
+
+const DataExplorer = lazy(() => import('./pages/DataSource/Explorer'))
+const StrategyGenerator = lazy(() => import('./pages/Strategy/Generator'))
+const AmazingDataPlayground = lazy(() => import('./pages/Playground/AmazingData'))
 
 const Loading: React.FC = () => (
   <div
@@ -46,11 +51,19 @@ const App: React.FC = () => {
           <Route path="system/logs" element={<LogCenter />} />
           <Route path="system/config" element={<SystemConfig />} />
 
-          <Route path="monitor/datasource" element={<DataSourceMonitor />} />
+          <Route path="datasource/explorer" element={<DataExplorer />} />
+          <Route path="strategy/generator" element={<StrategyGenerator />} />
+
+          <Route path="monitor/market" element={<MarketMonitor />} />
+          <Route path="monitor/datasource" element={<MarketMonitor />} />
           <Route path="monitor/cache" element={<CacheSystem />} />
           <Route path="monitor/performance" element={<PerformanceAnalytics />} />
           <Route path="monitor/alert" element={<AlertManager />} />
           <Route path="monitor/component" element={<ComponentManager />} />
+          <Route path="monitor/concept" element={<ConceptMonitor />} />
+
+          {/* Playground 页面 */}
+          <Route path="dev/amazingdata" element={<AmazingDataPlayground />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Union, cast
 import pandas as pd
 
 from deepsearch.domain.market_data import StockListRecord
-from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
+from deepsearch.infrastructure.providers.interfaces.base import DataProviderError, TGWError
 # AmazingData SDK
 from .amazingdata import AmazingDataProvider
 from .amazingdata_types import StockListItem
@@ -26,6 +26,13 @@ from .config import ProviderConfigLike
 from .helpers import _normalize_date_to_int
 from .logging_utils import ProcessLoggerAdapter
 from .process import ProcessIsolatedAmazingDataProvider, SnapshotAlignPolicy
+
+# 导入枚举类型供文档引用使用
+# 用户可通过以下方式使用枚举:
+#   from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_enums_extended import (
+#       AmazingDataTradingPhase, AmazingDataDivProgress, AmazingDataProgress,
+#       get_trading_phase_name, get_div_progress_name, get_progress_name
+#   )
 
 logger = ProcessLoggerAdapter(action="extended")
 
@@ -61,6 +68,28 @@ def _record_to_stock_item(record: StockListRecord) -> StockListItem:
         item["short_name"] = record.short_name
     return item
 
+def _is_tgw_connection_error(error_msg: str) -> bool:
+    """识别是否为TGW连接相关错误
+    
+    TGW错误模式包括:
+    - 未登录/登录失败
+    - 连接超时
+    - 网络错误
+    - 进程崩溃
+    - SDK系统退出
+    """
+    tgw_patterns = [
+        "not login", "login first", "未登录", "登录失败",
+        "connection", "timeout", "超时", "连接失败",
+        "tgw", "push_init_failed", "tgw_push",
+        "systemexit", "process crash", "进程崩溃",
+        "network", "socket", "网络错误",
+        "sdk unavailable", "sdk not detected",
+    ]
+    error_lower = error_msg.lower()
+    return any(pattern in error_lower for pattern in tgw_patterns)
+
+
 def _safe_dataframe(payload: Any) -> pd.DataFrame:
     """Normalize SDK responses into a DataFrame."""
     if isinstance(payload, pd.DataFrame):
@@ -89,27 +118,68 @@ class AmazingDataExtended(AmazingDataProvider):
 
     async def _ensure_data_objects(self):
         """确保数据对象已初始化"""
-        if not self._initialized_objects and self._connected:
+        # 添加详细调试日志
+        logger.debug(
+            f"[DEBUG] _ensure_data_objects called: "
+            f"_initialized_objects={self._initialized_objects}, "
+            f"_connected={self._connected}, "
+            f"_degraded_mode={self._degraded_mode}, "
+            f"_sdk_available={self._sdk_available}"
+        )
+        
+        # 关键修复：如果未连接，抛出TGWError明确错误而不是静默跳过
+        if not self._connected:
+            error_msg = (
+                "AmazingData 未连接，无法获取数据。"
+                f"状态: _connected={self._connected}, "
+                f"_degraded_mode={self._degraded_mode}, "
+                f"_sdk_available={self._sdk_available}。"
+                "请检查: 1) SDK是否安装 2) 账号密码是否正确 3) 网络是否能连接TGW服务器(端口600)"
+            )
+            logger.error(f"[DEBUG] {error_msg}")
+            raise TGWError(error_msg, error_code="TGW_NOT_CONNECTED", is_recoverable=True)
+        
+        if not self._initialized_objects:
+            logger.debug("[DEBUG] 开始初始化数据对象...")
             try:
                 sdk = self._require_sdk()
                 loop = asyncio.get_event_loop()
 
                 # 初始化基础数据对象
+                logger.debug("[DEBUG] 初始化 BaseData...")
                 self._base_data = await loop.run_in_executor(None, sdk.BaseData)
+                logger.debug(f"[DEBUG] BaseData 初始化完成: {type(self._base_data)}")
 
                 # 初始化信息数据对象
+                logger.debug("[DEBUG] 初始化 InfoData...")
                 self._info_data = await loop.run_in_executor(None, sdk.InfoData)
+                logger.debug(f"[DEBUG] InfoData 初始化完成: {type(self._info_data)}")
 
                 # 获取交易日历
+                logger.debug("[DEBUG] 获取交易日历...")
                 calendar = await self.get_calendar()
                 if calendar:
                     # 初始化市场数据对象
+                    logger.debug("[DEBUG] 初始化 MarketData...")
                     self._market_data = await loop.run_in_executor(None, sdk.MarketData, calendar)
+                    logger.debug(f"[DEBUG] MarketData 初始化完成: {type(self._market_data)}")
+                else:
+                    logger.warning("[DEBUG] 未能获取交易日历，MarketData 未初始化")
 
                 self._initialized_objects = True
-                logger.info("AmazingData 数据对象初始化成功")
+                logger.debug("[DEBUG] AmazingData 数据对象初始化成功")
+            except TGWError:
+                raise  # TGWError直接向上传播
             except Exception as e:
-                logger.error(f"初始化数据对象失败: {e}")
+                error_str = str(e)
+                logger.error(f"[DEBUG] 初始化数据对象失败: {e}")
+                # 识别TGW相关错误
+                if _is_tgw_connection_error(error_str):
+                    raise TGWError(
+                        f"TGW数据对象初始化失败: {e}", 
+                        error_code="TGW_INIT_FAILED",
+                        is_recoverable=True
+                    )
                 raise DataProviderError(f"Failed to initialize data objects: {e}")
 
     # ================== P0基础接口 ==================
@@ -176,7 +246,13 @@ class AmazingDataExtended(AmazingDataProvider):
             logger.info(f"成功获取{len(result) if result is not None else 0}条证券信息")
             return _safe_dataframe(result)
 
+        except TGWError:
+            raise  # TGW错误向上传播，让调用方处理
         except Exception as e:
+            error_str = str(e)
+            # 识别TGW相关错误
+            if _is_tgw_connection_error(error_str):
+                raise TGWError(f"获取证券信息时TGW连接失败: {e}", error_code="TGW_CONNECTION_FAILED")
             logger.error(f"获取证券信息失败: {e}")
             return pd.DataFrame()
 
@@ -732,6 +808,8 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
             local_path: Optional[str] = None,
         is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         3.5.5.4 业绩快报
@@ -741,16 +819,37 @@ class AmazingDataExtended(AmazingDataProvider):
             code_list: 股票代码列表
             local_path: 本地存储路径
             is_local: 是否使用本地存储
+            begin_date: 报告期开始日期筛选(格式: YYYYMMDD)，可选
+            end_date: 报告期结束日期筛选(格式: YYYYMMDD)，可选
 
         Returns:
-            DataFrame: 业绩快报数据
+            DataFrame: 业绩快报数据，包含字段:
+                MARKET_CODE: 证券代码
+                REPORTING_PERI: 报告期
+                ANN_DATE: 公告日期
+                TOTAL_ASSETS: 总资产(万元)
+                NET_PRO_EXCL_MIN_INT_INC: 归母净利润(万元)
+                TOT_OPERA_REV: 营业总收入(万元)
+                TOTAL_PROFIT: 利润总额(万元)
+                EPS_BASIC: 每股收益(元)
+                等40+字段
         """
         await self._ensure_data_objects()
 
         try:
             _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_profit_express, code_list)
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
+            result = await loop.run_in_executor(
+                None, 
+                lambda: self._info_data.get_profit_express(code_list, **kwargs)
+            )
 
             logger.info("成功获取业绩快报数据")
             return _safe_dataframe(result)
@@ -764,6 +863,8 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
             local_path: Optional[str] = None,
         is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         3.5.5.5 业绩预告
@@ -773,16 +874,37 @@ class AmazingDataExtended(AmazingDataProvider):
             code_list: 股票代码列表
             local_path: 本地存储路径
             is_local: 是否使用本地存储
+            begin_date: 报告期开始日期筛选(格式: YYYYMMDD)，可选
+            end_date: 报告期结束日期筛选(格式: YYYYMMDD)，可选
 
         Returns:
-            DataFrame: 业绩预告数据
+            DataFrame: 业绩预告数据，包含字段:
+                MARKET_CODE: 证券代码
+                SECURITY_NAME: 证券简称
+                P_TYPECODE: 业绩预告类型代码(1-11对应不同类型)
+                REPORTING_PERIOD: 报告期
+                ANN_DATE: 公告日期
+                P_CHANGE_MAX: 预告净利润变动幅度上限(%)
+                P_CHANGE_MIN: 预告净利润变动幅度下限(%)
+                NET_PROFIT_MAX: 预告净利润最高值(万元)
+                等字段
         """
         await self._ensure_data_objects()
 
         try:
             _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_profit_notice, code_list)
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._info_data.get_profit_notice(code_list, **kwargs)
+            )
 
             logger.info("成功获取业绩预告数据")
             return _safe_dataframe(result)
@@ -893,6 +1015,8 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
             local_path: Optional[str] = None,
         is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         3.5.6.1 十大股东数据
@@ -902,16 +1026,39 @@ class AmazingDataExtended(AmazingDataProvider):
             code_list: 股票代码列表
             local_path: 本地存储路径
             is_local: 是否使用本地存储
+            begin_date: 截止日期开始筛选(格式: YYYYMMDD)，可选
+            end_date: 截止日期结束筛选(格式: YYYYMMDD)，可选
 
         Returns:
-            DataFrame: 十大股东数据
+            DataFrame: 十大股东数据，包含字段:
+                ANN_DATE: 公告日期
+                MARKET_CODE: 证券代码
+                HOLDER_ENDDATE: 截止日期  
+                HOLDER_TYPE: 股东类型(10-十大股东, 20-流通股前十大股东)
+                QTY_NUM: 持股数量
+                HOLDER_NAME: 股东名称
+                HOLDER_HOLDER_CATEGORY: 股东性质(1-个人, 2-公司)
+                HOLDER_QUANTITY: 持股数(股)
+                HOLDER_PCT: 持股占比(%)
+                HOLDER_SHARECATEGORYNAME: 股东类型
+                FLOAT_QTY: 流通股数量
         """
         await self._ensure_data_objects()
 
         try:
             _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_share_holder, code_list)
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._info_data.get_share_holder(code_list, **kwargs)
+            )
 
             logger.info("成功获取十大股东数据")
             return _safe_dataframe(result)
@@ -925,6 +1072,8 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
             local_path: Optional[str] = None,
         is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         3.5.6.2 股东人数
@@ -934,16 +1083,33 @@ class AmazingDataExtended(AmazingDataProvider):
             code_list: 股票代码列表
             local_path: 本地存储路径
             is_local: 是否使用本地存储
+            begin_date: 股东户数统计上报日开始筛选(格式: YYYYMMDD)，可选
+            end_date: 股东户数统计上报日结束筛选(格式: YYYYMMDD)，可选
 
         Returns:
-            DataFrame: 股东人数数据
+            DataFrame: 股东人数数据，包含字段:
+                MARKET_CODE: 证券代码
+                ANN_DT: 公告日期
+                HOLDER_ENDDATE: 股东户数统计上报日
+                HOLDER_TOTAL_NUM: A股、B股、H股、优先股的总户数
+                HOLDER_NUM: A级或B类户数
         """
         await self._ensure_data_objects()
 
         try:
             _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_holder_num, code_list)
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._info_data.get_holder_num(code_list, **kwargs)
+            )
 
             logger.info("成功获取股东人数数据")
             return _safe_dataframe(result)
@@ -957,6 +1123,8 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
             local_path: Optional[str] = None,
         is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         3.5.6.3 股本结构
@@ -966,17 +1134,40 @@ class AmazingDataExtended(AmazingDataProvider):
             code_list: 股票代码列表
             local_path: 本地存储路径
             is_local: 是否使用本地存储
+            begin_date: 变动日期开始筛选(格式: YYYYMMDD)，可选
+            end_date: 变动日期结束筛选(格式: YYYYMMDD)，可选
 
         Returns:
-            DataFrame: 股本结构数据
+            DataFrame: 股本结构数据，包含字段:
+                MARKET_CODE: 证券代码
+                ANN_DATE: 公告日期
+                CHANGE_DATE: 变动日期
+                SHARE_CHANGE_REASON_STR: 股本变动原因说明
+                EX_CHANGE_DATE: 除权日期
+                CURRENT_SIGN: 是否有效(1-是, 0-否)
+                IS_VALID: 是否有效
+                TOT_SHARE: 总股本(万股)
+                FLOAT_SHARE: 流通股(万股)
+                FLOAT_A_SHARE: 流通A股(万股)
+                FLOAT_B_SHARE: 流通B股(万股)
+                FLOAT_HK_SHARE: 流通H股(万股)
+                等30+字段
         """
         await self._ensure_data_objects()
 
         try:
             _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
             result = await loop.run_in_executor(
-                None, self._info_data.get_equity_structure, code_list
+                None,
+                lambda: self._info_data.get_equity_structure(code_list, **kwargs)
             )
 
             logger.info("成功获取股本结构数据")
@@ -991,6 +1182,8 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
             local_path: Optional[str] = None,
         is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         3.5.6.4 股权质押/冻结
@@ -1000,17 +1193,37 @@ class AmazingDataExtended(AmazingDataProvider):
             code_list: 股票代码列表
             local_path: 本地存储路径
             is_local: 是否使用本地存储
+            begin_date: 公告日期开始筛选(格式: YYYYMMDD)，可选
+            end_date: 公告日期结束筛选(格式: YYYYMMDD)，可选
 
         Returns:
-            DataFrame: 股权质押/冻结数据
+            DataFrame: 股权质押/冻结数据，包含字段:
+                MARKET_CODE: 证券代码
+                ANN_DATE: 公告日期
+                HOLDFR_NAME: 股东名称
+                HOLDFR_TYPE_CODE: 股东类型代码(2-公司, 3-个人, 5-其他, 20-6-高管或创始人, 7-0-宏观政投, 7-8-非自然人股东, 9-保密, 1-未知)
+                IS_EQUITY_PLEDGFR_REPO: 是否是股权质押(1-是, 0-否)
+                IS_DISFROZEN: 是否是股权冻结(1-是, 0-否)
+                FROZEN_INSTITLJTTON: 执行冻结机构
+                DISFROZEN_TIME: 解冻时间
+                SHR_CATEGORY_CODE: 股份性质类别代码(1-沪深主板; 2-个人或企业; 3-B股可交易; 4-已质押; 5-6-已质押或可质押; 9-保密; 远程- )
+                FREEZE_TYPE: 冻结/质押类型(1-质押; 2-司法; 3-冻结; 6; 10)
         """
         await self._ensure_data_objects()
 
         try:
             _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
             result = await loop.run_in_executor(
-                None, self._info_data.get_equity_pledge_freeze, code_list
+                None,
+                lambda: self._info_data.get_equity_pledge_freeze(code_list, **kwargs)
             )
 
             logger.info("成功获取股权质押/冻结数据")
@@ -1025,6 +1238,8 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
             local_path: Optional[str] = None,
         is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         3.5.6.5 限售股解禁
@@ -1034,17 +1249,35 @@ class AmazingDataExtended(AmazingDataProvider):
             code_list: 股票代码列表
             local_path: 本地存储路径
             is_local: 是否使用本地存储
+            begin_date: 解禁日期开始筛选(格式: YYYYMMDD)，可选
+            end_date: 解禁日期结束筛选(格式: YYYYMMDD)，可选
 
         Returns:
-            DataFrame: 限售股解禁数据
+            DataFrame: 限售股解禁数据，包含字段:
+                MARKET_CODE: 证券代码
+                LIST_DATE: 解禁日期
+                SHARE_RATIO: 解禁占总股本比(%)
+                SHARE_LST_TYPE_NAME: 解禁分类型名称
+                SHARE_LST: 解禁数(张)
+                SHARE_LST_IS_ANN: 上市解禁是否公告在(0-否, 1-是, 为空时标示公告位置清晰)
+                CLOSE_PRICE: 近日收盘价(元)
+                SHARE_LST_MARKET_VALUE: 解禁市值(元)
         """
         await self._ensure_data_objects()
 
         try:
             _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
             result = await loop.run_in_executor(
-                None, self._info_data.get_equity_restricted, code_list
+                None,
+                lambda: self._info_data.get_equity_restricted(code_list, **kwargs)
             )
 
             logger.info("成功获取限售股解禁数据")
@@ -1061,6 +1294,8 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
             local_path: Optional[str] = None,
         is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         3.5.7.1 分红数据
@@ -1070,16 +1305,40 @@ class AmazingDataExtended(AmazingDataProvider):
             code_list: 股票代码列表
             local_path: 本地存储路径
             is_local: 是否使用本地存储
+            begin_date: 公告日期开始筛选(格式: YYYYMMDD)，可选
+            end_date: 公告日期结束筛选(格式: YYYYMMDD)，可选
 
         Returns:
-            DataFrame: 分红数据
+            DataFrame: 分红数据，包含字段:
+                MARKET_CODE: 证券代码
+                DIV_PROGRESS: 分红进度(需要从枚举值对应查询类型)
+                DVD_PER_SHARE_S1K: 每股送转(股)
+                DVD_PER_SHARE_PRE_T: 每股派息(税前)(元)
+                DVD_PER_SHARE_AFTER_TAX_CASH: 每现派息(税后)(元)
+                DATE_BOD_RECORD: 股权登记日
+                DATE_EX: 除权除息日
+                DATE_DVD_PAYOUT: 派息日
+                LISTINGDATE_OF_DVD_SHR: 红股上市日
+                DIV_PRELANDATE: 预案公告日
+                DIV_SMTGDATE: 股东大会公告日
+                DATE_DVD_ANN: 分红公告日
         """
         await self._ensure_data_objects()
 
         try:
             _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_dividend, code_list)
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._info_data.get_dividend(code_list, **kwargs)
+            )
 
             logger.info("成功获取分红数据")
             return _safe_dataframe(result)
@@ -1093,6 +1352,8 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
             local_path: Optional[str] = None,
         is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         3.5.7.2 配股数据
@@ -1102,16 +1363,59 @@ class AmazingDataExtended(AmazingDataProvider):
             code_list: 股票代码列表
             local_path: 本地存储路径
             is_local: 是否使用本地存储
+            begin_date: 公告日期开始筛选(格式: YYYYMMDD)，可选
+            end_date: 公告日期结束筛选(格式: YYYYMMDD)，可选
 
         Returns:
-            DataFrame: 配股数据
+            DataFrame: 配股数据，包含字段:
+                MARKET_CODE: 证券代码
+                PROGRESS: 方案进度，参看股票配股进度代码表 (AmazingDataProgress枚举)
+                使用 get_progress_name(value) 可获取进度说明
+                PRICE: 配股价格(元)
+                RATIO: 配股比例
+                AMT_PLAN: 配股(计划)解禁(万股)
+                AMT_REAL: 配股实际募集(万股)
+                COLLECTION_FUND: 募集资金(元)
+                PLAN_REG_DATE: 预计登记日
+                EX_DIVIDEND_DATE: 除权日
+                LISTED_DATE: 配股上市日
+                PAY_START_DATE: 缴款起始日
+                PAY_END_DATE: 缴款终止日
+                PREPLAN_DATE: 预案公告日
+                SMTG_ANN_DATE: 股东大会公告日
+                PASS_DATE: 发审委通过公告日
+                APPROVTD_DATE: 证监会核准公告日
+                EXECUTE_DATE: 配股实施公告日
+                RESULT_ANN_DATE: 配股结果公告日
+                LIST_ANN_DATE: 上市公告日
+                GUARANTOR: 担保方
+                GUARTYPE: 担保类型(万股)
+                RIGHTSISSUE_CODE: 配股代码
+                ANN_DATE: 公告日期
+                RIGHTSISSUE_YEAR: 配股年度
+                RIGHTSISSUE_DESC: 配股说明
+                RIGHTSISSUE_NAME: 配股简称
+                RATIO_DENOMINATO_R: 配股比例分母
+                RATIO_MOLECULAR: 配股比例分子
+                SUBS_METHOD: 认购方式
+                EXPECTED_FUND_RAISING: 预计募集资金(元)
         """
         await self._ensure_data_objects()
 
         try:
             _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_right_issue, code_list)
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._info_data.get_right_issue(code_list, **kwargs)
+            )
 
             logger.info("成功获取配股数据")
             return _safe_dataframe(result)
@@ -1122,19 +1426,49 @@ class AmazingDataExtended(AmazingDataProvider):
 
     # ================== 融资融券接口 ==================
 
-    async def get_margin_summary(self) -> pd.DataFrame:
+    async def get_margin_summary(
+        self,
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
+    ) -> pd.DataFrame:
         """
         3.5.8.1 融资融券交易汇总
         获取融资融券交易汇总数据
 
+        Args:
+            local_path: 本地存储路径
+            is_local: 是否使用本地存储
+            begin_date: 交易日期开始筛选(格式: YYYYMMDD)，可选
+            end_date: 交易日期结束筛选(格式: YYYYMMDD)，可选
+
         Returns:
-            DataFrame: 融资融券汇总数据
+            DataFrame: 融资融券汇总数据，包含字段:
+                TRADE_DATE: 交易日期
+                SUM_BORROW_MONEY_BALANCE: 融资余额(元)
+                SUM_PURCH_WITH_BORROW_MONEY: 融资买入额(元)
+                SUM_REPAYMENT_OF_BORROW_MONEY: 融资偿还额(元)
+                SUM_SEC_LENDING_BALANCE: 融券余额(元)
+                SUM_SALES_OF_BORROWED_SEC: 融券卖出量(股,份,手)
+                SUM_MARGIN_TRADE_BALANCE: 融资融券余额(元)
         """
         await self._ensure_data_objects()
 
         try:
+            _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_margin_summary)
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._info_data.get_margin_summary(**kwargs)
+            )
 
             logger.info("成功获取融资融券汇总数据")
             return _safe_dataframe(result)
@@ -1143,22 +1477,55 @@ class AmazingDataExtended(AmazingDataProvider):
             logger.error(f"获取融资融券汇总失败: {e}")
             return pd.DataFrame()
 
-    async def get_margin_detail(self, code_list: List[str]) -> pd.DataFrame:
+    async def get_margin_detail(
+        self,
+        code_list: List[str],
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
+    ) -> pd.DataFrame:
         """
         3.5.8.2 融资融券标的明细
         获取指定股票的融资融券明细数据
 
         Args:
             code_list: 股票代码列表
+            local_path: 本地存储路径
+            is_local: 是否使用本地存储
+            begin_date: 交易日期开始筛选(格式: YYYYMMDD)，可选
+            end_date: 交易日期结束筛选(格式: YYYYMMDD)，可选
 
         Returns:
-            DataFrame: 融资融券明细数据
+            DataFrame: 融资融券明细数据，包含字段:
+                MARKET_CODE: 证券代码
+                SECURITY_NAME: 证券简称
+                TRADE_DATE: 交易日期
+                BORROW_MONEY_BALANCE: 融资余额(元)
+                PURCH_WITH_BORROW_MONEY: 融资买入额(元)
+                REPAYMENT_OF_BORROW_MONEY: 融资偿还额(元)
+                SEC_LENDING_BALANCE: 融券余额(元)
+                SALES_OF_BORROWED_SEC: 融券卖出量(股,份,手)
+                REPAYMENT_OF_BORROW_SEC: 融券偿还量(股,份,手)
+                SEC_LENDING_BALANCE_VOL: 融券余量(股,份,手)
+                MARGIN_TRADE_BALANCE: 融资融券余额(元)
         """
         await self._ensure_data_objects()
 
         try:
+            _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_margin_detail, code_list)
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._info_data.get_margin_detail(code_list, **kwargs)
+            )
 
             logger.info("成功获取融资融券明细数据")
             return _safe_dataframe(result)
@@ -1169,22 +1536,56 @@ class AmazingDataExtended(AmazingDataProvider):
 
     # ================== 市场异动数据接口 ==================
 
-    async def get_long_hu_bang(self, code_list: List[str]) -> pd.DataFrame:
+    async def get_long_hu_bang(
+        self,
+        code_list: List[str],
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
+    ) -> pd.DataFrame:
         """
         3.5.9.1 龙虎榜
         获取指定股票的龙虎榜数据
 
         Args:
             code_list: 股票代码列表
+            local_path: 本地存储路径
+            is_local: 是否使用本地存储
+            begin_date: 交易日期开始筛选(格式: YYYYMMDD)，可选
+            end_date: 交易日期结束筛选(格式: YYYYMMDD)，可选
 
         Returns:
-            DataFrame: 龙虎榜数据
+            DataFrame: 龙虎榜数据，包含字段:
+                MARKET_CODE: 证券代码
+                TRADE_DATE: 交易日期
+                SECURITY_NAME: 证券名称
+                REASON_TYPE: 二级原因类别
+                REASON_TYPE_NAME: 二级原因
+                CHANGE_RANGE: 涨跌幅(%)
+                TRADER_NAME: 营业部名称
+                BUY_AMOUNT: 买入金额(万)
+                SELL_AMOUNT: 卖出金额(万)
+                FLOW_MARK: 资金标示(1表示买入,2表示卖出)
+                TOTAL_AMOUNT: 交易总金额(万元)
+                TOTAL_VOLUME: 交易总数量(万股)
         """
         await self._ensure_data_objects()
 
         try:
+            _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_long_hu_bang, code_list)
+            
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+            
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._info_data.get_long_hu_bang(code_list, **kwargs)
+            )
 
             logger.info("成功获取龙虎榜数据")
             return _safe_dataframe(result)
@@ -1204,6 +1605,25 @@ class AmazingDataExtended(AmazingDataProvider):
         """
         3.5.9.2 大宗交易
         获取指定股票列表的大宗交易数据
+
+        Args:
+            code_list: 股票代码列表
+            local_path: 本地存储路径
+            is_local: 是否使用本地存储
+            begin_date: 交易日期开始筛选(格式: YYYYMMDD)，可选
+            end_date: 交易日期结束筛选(格式: YYYYMMDD)，可选
+
+        Returns:
+            DataFrame: 大宗交易数据，包含字段:
+                MARKET_CODE: 证券代码
+                TRADE_DATE: 交易日期
+                B_SHARE_PRICE: 成交价(元)
+                B_SHARE_VOLUME: 成交量(万股)
+                B_FREQUENCY: 年数
+                BLOCK_AVG_VOLUME: 每笔成交数量(万股份)
+                B_SHARE_AMOUNT: 成交金额(万元)
+                B_BUYER_NAME: 买方席位部制
+                B_SELLER_NAME: 卖方席位部制
         """
         await self._ensure_data_objects()
 
@@ -1331,7 +1751,8 @@ class AmazingDataExtended(AmazingDataProvider):
         is_local: bool = True,
     ) -> pd.DataFrame:
         """
-        获取期权基本资料
+        3.5.10.1 期权基本资料
+        获取期权基本资料(沪深交易所的ETF期权)
 
         Args:
             code_list: 期权代码列表
@@ -1339,7 +1760,23 @@ class AmazingDataExtended(AmazingDataProvider):
             is_local: 是否使用本地存储
 
         Returns:
-            DataFrame: 期权基本资料，包含行权价、到期日、认购/认沽类型等
+            DataFrame: 期权基本资料，包含字段:
+                CONTRACT_FULL_NAME: 合约全称
+                CONTRACT_TYPE: 合约类型(C表示认购, P表示认沽)
+                DELIVERY_MONTH: 交割月份
+                EXPIRY_DATE: 到期日
+                EXERCISE_PRICE: 行权价格
+                EXERCISE_END_DATE: 权利行权日
+                START_TRADE_DATE: 开始交易日
+                LISTING_REF_PRICE: 挂牌参考价
+                LAST_TRADE_DATE: 最后交易日
+                EXCHANGE_CODE: 合约交易所代码
+                DELIVERY_DATE: 标的交割日
+                CONTRACT_UNIT: 合约单位
+                IS_TRADE: 是否交易
+                EXCHANGE_SHORT_NAME: 合约交易所简称
+                CONTRACT_ADJUST_FLAG: 合约调整标识
+                MARKET_CODE: 合约代码
         """
         await self._ensure_data_objects()
 
@@ -1364,15 +1801,40 @@ class AmazingDataExtended(AmazingDataProvider):
         is_local: bool = True,
     ) -> pd.DataFrame:
         """
-        获取期权合约属性
+        3.5.10.2 期权标准合约属性
+        获取沪深期权标准合约的结构属性(沪深交易所的ETF期权)
 
         Args:
-            code_list: 期权代码列表
+            code_list: 期权代码列表(支持深沪ETF期权的代码列表，如159919.SZ、159915.SZ、159922.SZ等)
             local_path: 本地存储路径
             is_local: 是否使用本地存储
 
         Returns:
-            DataFrame: 期权合约属性，包含合约单位、涨跌幅限制等
+            DataFrame: 期权标准合约属性，包含字段:
+                EXERCISE_DATE: 期权行权日
+                CONTRACT_UNIT: 合约单位
+                POSITION_DECLARE_MIN: 实行申报下限
+                QUOTE_CURRENCY_UNIT: 报价货币单位
+                LAST_TRADING_DATE: 最后交易日
+                POSITION_LIMIT: 实行限制
+                DELIST_DATE: 摘牌日期
+                NOTIONAL_VALUE: 名义价值
+                EXERCISE_METHOD: 行权方式
+                DELIVERY_METHOD: 交割方式
+                SETTLEMENT_MONTH: 合约结算月份
+                TRADING_FEE: 交易费叙
+                EXCHANGE_NAME: 交易所名称
+                OPTION_EN_NAME: 期权英文名称
+                CONTRACT_VALUE: 合约价值
+                IS_SIMULATION: 是否仿真交易(0否1是)
+                CONTRACT_UNIT_DIMENSI: 合约单位量纲
+                OPTION_STRIKE_PRICE: 期权行权价
+                IS_SIMULATION_TRADE: 是否仿真交易(0否1是)
+                LISTED_DATE: 上市日期
+                OPTION_NAME: 期权名称
+                PREMIUM: 期权金
+                OPTION_TYPE: 期权类型(ETF对标类型)
+                TRADING_HOURS_DESC: 交易时间说明
         """
         await self._ensure_data_objects()
 
@@ -1388,6 +1850,53 @@ class AmazingDataExtended(AmazingDataProvider):
 
         except Exception as e:
             logger.error(f"获取期权合约属性失败: {e}")
+            return pd.DataFrame()
+
+    async def get_option_mon_ctr_spcon(
+        self,
+        code_list: List[str],
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+    ) -> pd.DataFrame:
+        """
+        3.5.10.3 期权月合约属性变动
+        获取期权月度合约的规格变化数据
+
+        Args:
+            code_list: 支持沪深ETF期权合约代码列表，可见get_code_list
+            local_path: 本地存储数据的路径，需指定路径，格式如: 'D://AmazingData_local_data//'
+            is_local: 默认为True，是否从本地获取已下载数据
+
+        Returns:
+            DataFrame: 期权月合约属性变动column为block_trading约定等
+            index为标的代码
+            包含字段:
+                CODE_OLD: 原交易代码
+                CHANGE_DATE: 调整日期
+                MARKET_CODE: 市场代码
+                NAME_NEW: 新合约简称
+                EXERCISE_PRICE_NEW: 新行权价格(元)
+                NAME_OLD: 原合约简称
+                CODE_NEW: 新交易代码
+                EXERCISE_PRICE_OLD: 原行权价(元)
+                UNIT_OLD: 原合约单位(份)
+                UNIT_NEW: 新合约单位(份)
+                CHANGE_REASON: 调整原因
+        """
+        await self._ensure_data_objects()
+
+        try:
+            _ = self._prepare_local_path(local_path)
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, self._info_data.get_option_mon_ctr_spcon, code_list
+            )
+
+            logger.info("成功获取期权月合约属性变动数据")
+            return _safe_dataframe(result)
+
+        except Exception as e:
+            logger.error(f"获取期权月合约属性变动失败: {e}")
             return pd.DataFrame()
 
     # ================== ETF 相关接口 ==================
@@ -1585,15 +2094,23 @@ class AmazingDataExtended(AmazingDataProvider):
         try:
             _ = self._prepare_local_path(local_path)
             loop = asyncio.get_event_loop()
+
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+
             result = await loop.run_in_executor(
-                None, self._info_data.get_industry_daily, industry_code, begin_date, end_date
+                None,
+                lambda: self._info_data.get_industry_daily(industry_code, **kwargs)
             )
 
-            logger.info("成功获取行业指数日线数据")
+            logger.info("成功获取行业指数日行情数据")
             return _safe_dataframe(result)
 
         except Exception as e:
-            logger.error(f"获取行业指数日线数据失败: {e}")
+            logger.error(f"获取行业指数日行情数据失败: {e}")
             return pd.DataFrame()
 
     async def get_industry_constituent(
@@ -1627,6 +2144,101 @@ class AmazingDataExtended(AmazingDataProvider):
 
         except Exception as e:
             logger.error(f"获取行业成分股失败: {e}")
+            return pd.DataFrame()
+
+    async def get_industry_base_info(
+        self,
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+    ) -> pd.DataFrame:
+        """
+        3.5.13.1 行业指数基本信息
+        获取行业指数基本信息列表
+
+        Args:
+            local_path: 本地存储路径
+            is_local: 是否使用本地存储
+
+        Returns:
+            DataFrame: 行业指数基本信息，包含字段:
+                INDEX_CODE: 指数代码
+                INDUSTRY_CODE: 行业代码
+                LEVEL_TYPE: 指数类别
+                    1: 一级行业
+                    2: 二级行业
+                    3: 三级行业
+                LEVEL1_NAME: 一级行业
+                LEVEL2_NAME: 二级行业
+                LEVEL3_NAME: 三级行业
+                IS_PUB: 是否发布
+                    1: 已发布
+                    2: 未发布
+                CHANGE_REASON: 更改原因
+        """
+        await self._ensure_data_objects()
+
+        try:
+            _ = self._prepare_local_path(local_path)
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, self._info_data.get_industry_base_info
+            )
+
+            logger.info("成功获取行业指数基本信息")
+            return _safe_dataframe(result)
+
+        except Exception as e:
+            logger.error(f"获取行业指数基本信息失败: {e}")
+            return pd.DataFrame()
+
+    async def get_industry_weight(
+        self,
+        code_list: List[str],
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """
+        3.5.13.3 行业指数成分股日权重
+        获取指定行业指数的成分股日权重数据
+
+        Args:
+            code_list: 行业指数代码列表(支持从get_industry_base_info获取的指数代码)
+            local_path: 本地存储路径
+            is_local: 是否使用本地存储
+            begin_date: 开始日期(格式: YYYYMMDD)，可选
+            end_date: 结束日期(格式: YYYYMMDD)，可选
+
+        Returns:
+            DataFrame: 行业指数成分股权重数据，包含字段:
+                WEIGHT: 权重
+                CON_CODE: 成份股代码
+                TRADE_DATE: 交易日期
+                INDEX_CODE: 指数代码
+        """
+        await self._ensure_data_objects()
+
+        try:
+            _ = self._prepare_local_path(local_path)
+            loop = asyncio.get_event_loop()
+
+            kwargs = {}
+            if begin_date is not None:
+                kwargs['begin_date'] = begin_date
+            if end_date is not None:
+                kwargs['end_date'] = end_date
+
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._info_data.get_industry_weight(code_list, **kwargs)
+            )
+
+            logger.info("成功获取行业指数成分股权重数据")
+            return _safe_dataframe(result)
+
+        except Exception as e:
+            logger.error(f"获取行业指数成分股权重数据失败: {e}")
             return pd.DataFrame()
 
     # ================== 其他接口 ==================

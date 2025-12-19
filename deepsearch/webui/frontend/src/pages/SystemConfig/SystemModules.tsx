@@ -1,57 +1,60 @@
-// @ts-nocheck
 import React from 'react'
-
-/**
- * @typedef {import('@/types/systemConfig').SystemModule} SystemModule
- * @typedef {import('@/types/systemConfig').ModuleLog} ModuleLog
- */
+import type { ModuleLog } from '@/types/systemConfig'
+import type { SystemModule } from '@/api/config/modules'
+import type { Key } from 'react'
+import type { ColumnsType } from 'antd/es/table'
 import {
-    Badge,
-    Button,
-    Card,
-    Col,
-    Descriptions,
-    Drawer,
-    message,
-    Progress,
-    Row,
-    Space,
-    Statistic,
-    Switch,
-    Table,
-    Tag,
-    Timeline,
-    Tooltip
+  Badge,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Drawer,
+  message,
+  Progress,
+  Row,
+  Space,
+  Statistic,
+  Switch,
+  Table,
+  Tag,
+  Timeline,
+  Tooltip
 } from 'antd'
 import {
-    AppstoreOutlined,
-    CheckCircleOutlined,
-    CloseCircleOutlined,
-    PauseCircleOutlined,
-    PlayCircleOutlined,
-    ReloadOutlined,
-    SettingOutlined,
-    SyncOutlined,
-    WarningOutlined
+  AppstoreOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  ReloadOutlined,
+  SettingOutlined,
+  SyncOutlined,
+  WarningOutlined
 } from '@ant-design/icons'
-import {useAsyncData} from '@/hooks'
+import { useAsyncData } from '@/hooks'
 import {
-    batchModuleOperation,
-    fetchModuleLogs,
-    fetchSystemModules,
-    restartModule,
-    setModuleAutoStart,
-    startModule,
-    stopModule
-} from '@/api/systemConfig'
+  batchModuleOperation,
+  fetchModuleLogs,
+  fetchSystemModules,
+  restartModule,
+  setModuleAutoStart,
+  startModule,
+  stopModule
+} from '@/api/config/modules'
 
+interface ModuleDetailDrawerProps {
+  module: SystemModule | null
+  visible: boolean
+  onClose: () => void
+}
 
 /**
  * 模块详情抽屉组件
  */
-const ModuleDetailDrawer = ({ module, visible, onClose }) => {
-  const { data: logs } = useAsyncData(
-    () => fetchModuleLogs(module.id, { limit: 50 }),
+const ModuleDetailDrawer: React.FC<ModuleDetailDrawerProps> = ({ module, visible, onClose }) => {
+  const { data: logs } = useAsyncData<ModuleLog[]>(
+    () => (module ? fetchModuleLogs(module.id, { limit: 50 }) as Promise<ModuleLog[]> : Promise.resolve([])),
     {
       immediate: !!module,
       showError: false
@@ -76,16 +79,16 @@ const ModuleDetailDrawer = ({ module, visible, onClose }) => {
           <Badge
             status={
               module.status === 'running' ? 'success' :
-              module.status === 'error' ? 'error' :
-              module.status === 'starting' ? 'processing' :
-              module.status === 'stopping' ? 'warning' : 'default'
+                module.status === 'error' ? 'error' :
+                  module.status === 'starting' ? 'processing' :
+                    module.status === 'stopping' ? 'warning' : 'default'
             }
             text={
               module.status === 'running' ? '运行中' :
-              module.status === 'stopped' ? '已停止' :
-              module.status === 'error' ? '错误' :
-              module.status === 'starting' ? '启动中' :
-              module.status === 'stopping' ? '停止中' : module.status
+                module.status === 'stopped' ? '已停止' :
+                  module.status === 'error' ? '错误' :
+                    module.status === 'starting' ? '启动中' :
+                      module.status === 'stopping' ? '停止中' : module.status
             }
           />
         </Descriptions.Item>
@@ -126,18 +129,18 @@ const ModuleDetailDrawer = ({ module, visible, onClose }) => {
 
       <Card title="运行日志" size="small" style={{ marginTop: 16 }}>
         <Timeline mode="left">
-          {logs?.map((log, index) => (
+          {(logs ?? []).map((log: ModuleLog, index: number) => (
             <Timeline.Item
               key={index}
               color={
                 log.level === 'error' ? 'red' :
-                log.level === 'warning' ? 'orange' : 'green'
+                  log.level === 'warning' ? 'orange' : 'green'
               }
               label={log.timestamp}
             >
               <Tag color={
                 log.level === 'error' ? 'error' :
-                log.level === 'warning' ? 'warning' : 'success'
+                  log.level === 'warning' ? 'warning' : 'success'
               }>
                 {log.level.toUpperCase()}
               </Tag>
@@ -154,93 +157,92 @@ const ModuleDetailDrawer = ({ module, visible, onClose }) => {
  * 系统模块管理组件
  */
 const SystemModules = () => {
-  const [selectedRowKeys, setSelectedRowKeys] = React.useState([])
-  const [detailModule, setDetailModule] = React.useState(null)
+  const [selectedRowKeys, setSelectedRowKeys] = React.useState<Key[]>([])
+  const [detailModule, setDetailModule] = React.useState<SystemModule | null>(null)
   const [detailVisible, setDetailVisible] = React.useState(false)
-  
+
   const {
     data: modules,
     loading,
     refresh
   } = useAsyncData(
     fetchSystemModules,
-    { 
+    {
       immediate: true,
       showError: false,
       pollingInterval: 10000 // 10秒轮询
     }
   )
 
-  const handleStart = async (moduleId) => {
+  const handleStart = async (moduleId: string) => {
     try {
       await startModule(moduleId)
       message.success('模块启动成功')
       refresh()
     } catch (error) {
-      message.error('启动失败: ' + error.message)
+      message.error('启动失败: ' + (error instanceof Error ? error.message : String(error)))
     }
   }
 
-  const handleStop = async (moduleId) => {
+  const handleStop = async (moduleId: string) => {
     try {
       await stopModule(moduleId)
       message.success('模块停止成功')
       refresh()
     } catch (error) {
-      message.error('停止失败: ' + error.message)
+      message.error('停止失败: ' + (error instanceof Error ? error.message : String(error)))
     }
   }
 
-  const handleRestart = async (moduleId) => {
+  const handleRestart = async (moduleId: string) => {
     try {
       await restartModule(moduleId)
       message.success('模块重启成功')
       refresh()
     } catch (error) {
-      message.error('重启失败: ' + error.message)
+      message.error('重启失败: ' + (error instanceof Error ? error.message : String(error)))
     }
   }
 
-  const handleAutoStart = async (moduleId, autoStart) => {
+  const handleAutoStart = async (moduleId: string, autoStart: boolean) => {
     try {
       await setModuleAutoStart(moduleId, autoStart)
       message.success(autoStart ? '已设置自动启动' : '已取消自动启动')
       refresh()
     } catch (error) {
-      message.error('设置失败: ' + error.message)
+      message.error('设置失败: ' + (error instanceof Error ? error.message : String(error)))
     }
   }
 
-  const handleBatchOperation = async (action) => {
+  const handleBatchOperation = async (action: 'start' | 'stop' | 'restart') => {
     if (selectedRowKeys.length === 0) {
       message.warning('请先选择模块')
       return
     }
-    
+
     try {
-      await batchModuleOperation(action, selectedRowKeys)
-      message.success(`批量${
-        action === 'start' ? '启动' :
+      await batchModuleOperation(action, selectedRowKeys as string[])
+      message.success(`批量${action === 'start' ? '启动' :
         action === 'stop' ? '停止' : '重启'
-      }成功`)
+        }成功`)
       setSelectedRowKeys([])
       refresh()
     } catch (error) {
-      message.error('批量操作失败: ' + error.message)
+      message.error('批量操作失败: ' + (error instanceof Error ? error.message : String(error)))
     }
   }
 
-  const showModuleDetail = (module) => {
+  const showModuleDetail = (module: SystemModule) => {
     setDetailModule(module)
     setDetailVisible(true)
   }
 
-  const columns = [
+  const columns: ColumnsType<SystemModule> = [
     {
       title: '模块名称',
       dataIndex: 'name',
       key: 'name',
-      render: (text, record) => (
+      render: (text: string, record: SystemModule) => (
         <Space>
           <AppstoreOutlined />
           <a onClick={() => showModuleDetail(record)}>{text}</a>
@@ -257,8 +259,8 @@ const SystemModules = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: (status) => {
-        const statusMap = {
+      render: (status: SystemModule['status']) => {
+        const statusMap: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
           running: { color: 'green', icon: <CheckCircleOutlined />, text: '运行中' },
           stopped: { color: 'default', icon: <CloseCircleOutlined />, text: '已停止' },
           error: { color: 'red', icon: <WarningOutlined />, text: '错误' },
@@ -276,7 +278,7 @@ const SystemModules = () => {
     {
       title: '资源使用',
       key: 'resources',
-      render: (_, record) => (
+      render: (_: unknown, record: SystemModule) => (
         <Space size="small">
           {record.cpu !== undefined && (
             <Tooltip title={`CPU: ${record.cpu}%`}>
@@ -307,7 +309,7 @@ const SystemModules = () => {
       title: '自动启动',
       dataIndex: 'autoStart',
       key: 'autoStart',
-      render: (autoStart, record) => (
+      render: (autoStart: boolean, record: SystemModule) => (
         <Switch
           checked={autoStart}
           onChange={(checked) => handleAutoStart(record.id, checked)}
@@ -319,7 +321,7 @@ const SystemModules = () => {
     {
       title: '操作',
       key: 'action',
-      render: (_, record) => (
+      render: (_: unknown, record: SystemModule) => (
         <Space size="small">
           {record.status === 'stopped' ? (
             <Button
@@ -455,7 +457,7 @@ const SystemModules = () => {
         <Table
           rowSelection={{
             selectedRowKeys,
-            onChange: setSelectedRowKeys
+            onChange: (keys: Key[]) => setSelectedRowKeys(keys)
           }}
           columns={columns}
           dataSource={modules || []}

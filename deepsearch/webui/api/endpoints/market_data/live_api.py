@@ -199,7 +199,7 @@ def _enabled_adapter_names(settings: Any | None) -> list[str]:
     normalized = [name for name in (item.lower() for item in names) if name]
     if normalized:
         return _unique(normalized)
-    return ["amazingdata", "cloudflare", "akshare"]
+    return ["amazingdata", "miniqmt", "akshare"]
 
 
 def _ensure_runtime_components(
@@ -345,6 +345,62 @@ async def get_market_strength(
     return JSONResponse(payload)
 
 
+@router.get("/concept-strength")
+async def get_concept_strength(
+        request: Request,
+        limit: int = Query(50, ge=1, le=200, description="返回数量"),
+        source: str | None = Query(None, description="指定数据源，默认 amazingdata"),
+) -> JSONResponse:
+    """获取概念板块资金脉冲数据（调用 AmazingData 概念资金流接口）。"""
+
+    requested_source = _normalize_source_param(source) or "amazingdata"
+
+    try:
+        from deepsearch.webui.api.endpoints.amazingdata.concept import get_concept_velocity
+        result = await get_concept_velocity(limit=limit)
+
+        if result.get("success") and result.get("data"):
+            # 转换为 strength 格式
+            items = []
+            for item in result["data"]:
+                velocity = item.get("velocity", 0)
+                items.append({
+                    "board": item.get("name", ""),
+                    "window": "1m",  # 默认窗口
+                    "amount_total": velocity,
+                    "speed_per_min": velocity / 60 if velocity else 0,
+                    "accel_per_min2": 0,
+                    "lead_stock": item.get("lead_stock", ""),
+                    "lead_change": item.get("lead_change", 0),
+                    "data_source": "amazingdata",
+                })
+
+            is_trading = _is_trading_hours()
+            return JSONResponse({
+                "windows": ["1m"],
+                "boards": [item["board"] for item in items],
+                "items": items,
+                "asOf": _iso_now(),
+                "stale": False,
+                "retrieved_at": _iso_now(),
+                "data_source": requested_source,
+                "mode": "realtime" if is_trading else "summary",
+                "is_trading_hours": is_trading,
+            })
+    except Exception as e:
+        logger.warning(f"获取概念资金脉冲失败: {e}")
+
+    # 返回空数据
+    return JSONResponse({
+        "windows": ["1m"],
+        "boards": [],
+        "items": [],
+        "asOf": _iso_now(),
+        "stale": True,
+        "retrieved_at": _iso_now(),
+        "data_source": requested_source,
+        "detail": {"code": "DATA_SOURCE_OFFLINE", "message": "获取数据失败"},
+    })
 
 
 
@@ -428,6 +484,13 @@ async def get_board_overview(
             {
                 "board": board_name,
                 "stock_count": len(stock_list) or None,
+                # 新增字段 - 从 entry 中提取或设置默认值
+                "change_pct": _safe_float(entry.get("change_pct")),
+                "lead_stock": entry.get("lead_stock"),
+                "lead_stock_name": entry.get("lead_stock_name"),
+                "lead_change": _safe_float(entry.get("lead_change")),
+                "limit_up_count": entry.get("limit_up_count"),
+                # 原有字段
                 "probing_count": None,
                 "probing_ratio": None,
                 "inflow_speed": _safe_float(entry.get("speed_per_min")),
@@ -754,4 +817,49 @@ async def get_auction_quality(
     return JSONResponse(payload)
 
 
+@router.get("/concept-flow")
+async def get_concept_flow(
+        request: Request,
+        limit: int = Query(50, ge=1, le=200, description="返回数量"),
+        source: str | None = Query(None, description="指定数据源，默认 amazingdata"),
+) -> JSONResponse:
+    """获取概念板块资金流向排行（替代订单失衡）。"""
 
+    requested_source = _normalize_source_param(source) or "amazingdata"
+
+    # 调用 AmazingData 的 /concept/velocity 接口
+    try:
+        from deepsearch.webui.api.endpoints.amazingdata.concept import get_concept_velocity
+        result = await get_concept_velocity(limit=limit)
+
+        if result.get("success") and result.get("data"):
+            items = []
+            for item in result["data"]:
+                items.append({
+                    "board": item.get("name", ""),
+                    "concept_code": item.get("concept_code", ""),
+                    "velocity": item.get("velocity", 0),
+                    "lead_stock": item.get("lead_stock", ""),
+                    "lead_change": item.get("lead_change", 0),
+                    "data_source": "amazingdata",
+                })
+
+            return JSONResponse({
+                "items": items,
+                "count": len(items),
+                "retrieved_at": _iso_now(),
+                "data_source": requested_source,
+                "stale": False,
+            })
+    except Exception as e:
+        logger.warning(f"获取概念资金流失败: {e}")
+
+    # 返回空数据
+    return JSONResponse({
+        "items": [],
+        "count": 0,
+        "retrieved_at": _iso_now(),
+        "data_source": requested_source,
+        "stale": True,
+        "detail": {"code": "DATA_SOURCE_OFFLINE", "message": "获取数据失败"},
+    })

@@ -1,36 +1,35 @@
-// @ts-nocheck
-import React, {useCallback, useEffect, useMemo, useState} from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-    App as AntApp,
-    Button,
-    Card,
-    Col,
-    Form,
-    Input,
-    InputNumber,
-    Modal,
-    Row,
-    Select,
-    Space,
-    Spin,
-    Switch,
-    Table,
-    Tag,
-    Tooltip,
-    Typography
+  App as AntApp,
+  Button,
+  Card,
+  Col,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Row,
+  Select,
+  Space,
+  Spin,
+  Switch,
+  Table,
+  Tag,
+  Tooltip,
+  Typography
 } from 'antd'
-import {DeleteOutlined, ExperimentOutlined, PlusOutlined, ReloadOutlined, SendOutlined} from '@ant-design/icons'
-import type {ColumnsType} from 'antd/es/table'
+import { DeleteOutlined, ExperimentOutlined, PlusOutlined, ReloadOutlined, SendOutlined } from '@ant-design/icons'
+import type { ColumnsType } from 'antd/es/table'
 import {
-    fetchNotificationConfig,
-    fetchNotificationQuotas,
-    NotificationCategoryConfigItem,
-    NotificationChannel,
-    NotificationConfigUpdatePayload,
-    NotificationSendResult,
-    resetNotificationQuotas,
-    sendNotification,
-    updateNotificationConfig
+  fetchNotificationConfig,
+  fetchNotificationQuotas,
+  NotificationCategoryConfigItem,
+  NotificationChannel,
+  NotificationConfigUpdatePayload,
+  NotificationSendResult,
+  resetNotificationQuotas,
+  sendNotification,
+  updateNotificationConfig
 } from '@/api/notifications'
 
 const channelOptions: { label: string; value: NotificationChannel }[] = [

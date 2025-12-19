@@ -124,10 +124,8 @@ class MiniQMTCollector:
             cache_key = f"{stock_code}_{period}_{start_time}_{end_time}_{dividend_type}"
             cached_data = self._get_cached_data(cache_key)
             if cached_data:
-                logger.info(f"📦 使用缓存数据: {stock_code}")
                 return cached_data
 
-            logger.info(f"⬇️ 下载历史数据: {stock_code} {period}")
 
             # 调用MiniQMT下载接口
             # 注意：MiniQMT需要先确保有数据，如果不足需要先补充
@@ -177,7 +175,7 @@ class MiniQMTCollector:
                     # 缓存数据
                     self._cache_data(cache_key, result)
 
-                    logger.info(f"✅ 下载成功: {len(df)} 条数据")
+                    logger.debug(f"下载成功: {len(df)} 条数据")
                     return result
                 else:
                     return {"success": False, "error": "返回数据为空"}
@@ -221,8 +219,6 @@ class MiniQMTCollector:
                 # 发送到消息队列
                 self.message_queue.put(processed)
 
-            # 调用MiniQMT订阅接口
-            logger.info(f"📡 订阅实时行情: {stock_code} ({period})")
 
             self.xtdata.subscribe_quote(
                 stock_code=stock_code,
@@ -237,7 +233,6 @@ class MiniQMTCollector:
             with self.subscription_locks:
                 self.subscriptions[f"{stock_code}_{period}"] = on_data
 
-            logger.info(f"✅ 订阅成功: {stock_code}")
             return True
 
         except Exception as e:
@@ -261,7 +256,6 @@ class MiniQMTCollector:
             return False
 
         try:
-            logger.info(f"🔕 取消订阅: {stock_code} ({period})")
 
             self.xtdata.unsubscribe_quote(stock_code, period)
 
@@ -271,7 +265,6 @@ class MiniQMTCollector:
                 if key in self.subscriptions:
                     del self.subscriptions[key]
 
-            logger.info(f"✅ 取消订阅成功: {stock_code}")
             return True
 
         except Exception as e:
@@ -307,7 +300,6 @@ class MiniQMTCollector:
             if field_list is None:
                 field_list = ["time", "open", "high", "low", "close", "volume", "amount"]
 
-            logger.info(f"📊 获取市场数据: {len(stock_list)} 只股票")
 
             # 获取数据
             data = self.xtdata.get_market_data(
@@ -325,7 +317,6 @@ class MiniQMTCollector:
                         df.reset_index(inplace=True)
                         result[stock] = df
 
-            logger.info(f"✅ 获取成功: {len(result)} 只股票数据")
             return result
 
         except Exception as e:
@@ -348,7 +339,6 @@ class MiniQMTCollector:
             return {}
 
         try:
-            logger.info(f"📈 获取Tick数据: {len(stock_codes)} 只股票")
 
             # 获取tick数据
             tick_data = self.xtdata.get_full_tick(stock_codes)
@@ -376,7 +366,6 @@ class MiniQMTCollector:
                         "ask_volume": [tick.get(f"askVol{i}", 0) for i in range(1, 6)],
                     }
 
-            logger.info(f"✅ 获取Tick成功: {len(result)} 只股票")
             return result
 
         except Exception as e:
@@ -406,7 +395,6 @@ class MiniQMTCollector:
             if table_list is None:
                 table_list = ["Balance", "Income", "CashFlow"]
 
-            logger.info(f"💰 获取财务数据: {len(stock_list)} 只股票")
 
             result = {}
 
@@ -423,7 +411,6 @@ class MiniQMTCollector:
                 if stock_finance:
                     result[stock] = stock_finance
 
-            logger.info(f"✅ 获取财务数据成功: {len(result)} 只股票")
             return result
 
         except Exception as e:
@@ -447,7 +434,6 @@ class MiniQMTCollector:
             return {}
 
         try:
-            logger.info(f"📋 获取合约信息: {stock_code}")
 
             # 获取合约信息
             info = self.xtdata.get_instrument_detail(stock_code)
@@ -465,7 +451,6 @@ class MiniQMTCollector:
                     "create_date": info.get("CreateDate", ""),
                 }
 
-                logger.info(f"✅ 获取合约信息成功: {info.get('InstrumentName', '')}")
                 return result
             else:
                 return {}
@@ -491,7 +476,6 @@ class MiniQMTCollector:
             return []
 
         try:
-            logger.info(f"🏢 获取板块成分股: {sector_name}")
 
             # 获取板块成分股
             stock_list_raw = self.xtdata.get_stock_list_in_sector(sector_name)
@@ -500,7 +484,6 @@ class MiniQMTCollector:
             else:
                 stock_list = []
 
-            logger.info(f"✅ 获取成功: {len(stock_list)} 只股票")
             return stock_list
 
         except Exception as e:
@@ -535,7 +518,6 @@ class MiniQMTCollector:
     def clear_cache(self):
         """清空缓存"""
         self.data_cache.clear()
-        logger.info("🗑️ 缓存已清空")
 
     def get_connection_status(self) -> Dict[str, Any]:
         """获取连接状态"""

@@ -16,6 +16,7 @@ from loguru import logger
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_extended import (
     AmazingDataExtended,
 )
+from deepsearch.infrastructure.providers.interfaces.base import TGWError
 from deepsearch.webui.api.providers import DataProviderFactory, DataSourceType
 
 DEFAULT_LOCAL_PATH = "D://AmazingData_local_data//"
@@ -43,10 +44,43 @@ async def get_amazingdata_provider() -> AmazingDataExtended:
     Raises:
         HTTPException: 获取提供者失败时
     """
+    import time
+    start_time = time.time()
+    logger.debug("[DEBUG] get_amazingdata_provider 开始...")
+    
     try:
+        logger.debug("[DEBUG] 调用 DataProviderFactory.get_provider_async(AMAZINGDATA)...")
+        step_start = time.time()
         provider = await DataProviderFactory.get_provider_async(DataSourceType.AMAZINGDATA)
+        logger.debug(f"[DEBUG] get_provider_async 完成, 耗时: {time.time() - step_start:.2f}秒, 类型: {type(provider).__name__}")
+        
+        # 检查provider状态
+        if provider is None:
+            logger.error("[DEBUG] provider 为 None!")
+            raise HTTPException(status_code=500, detail="AmazingData provider 获取失败: 返回 None")
+        
+        # 检查连接状态
+        is_connected = getattr(provider, '_connected', False)
+        is_degraded = getattr(provider, '_degraded_mode', False)
+        sdk_available = getattr(provider, '_sdk_available', False)
+        
+        logger.debug(
+            f"[DEBUG] Provider状态: _connected={is_connected}, "
+            f"_degraded_mode={is_degraded}, _sdk_available={sdk_available}"
+        )
+        
+        if not is_connected:
+            error_msg = (
+                f"AmazingData 未连接! "
+                f"_connected={is_connected}, _degraded_mode={is_degraded}, _sdk_available={sdk_available}. "
+                "可能原因: 1) SDK未安装 2) 登录失败 3) TGW连接失败(端口600)"
+            )
+            logger.error(f"[DEBUG] {error_msg}")
+            raise HTTPException(status_code=503, detail=error_msg)
+        
         if not isinstance(provider, AmazingDataExtended):
             # 如果不是扩展版本，尝试创建扩展版本
+            logger.debug("[DEBUG] provider不是AmazingDataExtended，创建扩展版本...")
             from deepsearch.config import get_config
 
             config = get_config()
@@ -76,10 +110,22 @@ async def get_amazingdata_provider() -> AmazingDataExtended:
             else:
                 raise HTTPException(status_code=500, detail="AmazingData 配置格式不受支持")
             provider = AmazingDataExtended(amazingdata_payload)
+            logger.debug("[DEBUG] 初始化新创建的AmazingDataExtended...")
             await provider.initialize()
+            
+            # 再次检查连接状态
+            if not provider._connected:
+                raise HTTPException(
+                    status_code=503, 
+                    detail="AmazingData 初始化失败: 登录未成功。请检查账号密码和网络连接。"
+                )
+        
+        logger.debug(f"[DEBUG] get_amazingdata_provider 完成, 总耗时: {time.time() - start_time:.2f}秒")
         return provider
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"获取AmazingData提供者失败: {e}")
+        logger.error(f"[DEBUG] 获取AmazingData提供者失败: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get AmazingData provider: {e}")
 
 
@@ -130,6 +176,18 @@ def ensure_dataframe(data: object) -> pd.DataFrame | None:
     """辅助函数：将输入安全转换为 DataFrame，无法转换时返回 None。"""
     return data if isinstance(data, pd.DataFrame) else None
 
+def _is_tgw_related_error(error_msg: str) -> bool:
+    """识别是否为TGW相关错误"""
+    tgw_patterns = [
+        "tgw", "not login", "login first", "未登录", "登录失败",
+        "connection", "timeout", "超时", "连接失败",
+        "push_init_failed", "进程崩溃", "network", "socket",
+        "sdk unavailable", "sdk not detected", "未连接",
+    ]
+    error_lower = error_msg.lower()
+    return any(pattern in error_lower for pattern in tgw_patterns)
+
+
 def handle_api_error(api_name: str, error: Exception) -> JSONDict:
     """
     统一处理API错误
@@ -143,6 +201,33 @@ def handle_api_error(api_name: str, error: Exception) -> JSONDict:
     """
     error_msg = str(error)
     logger.error(f"AmazingData API [{api_name}] 调用失败: {error_msg}")
+
+    # TGW相关错误返回503，表示服务暂时不可用
+    if isinstance(error, TGWError):
+        error_code = getattr(error, "error_code", None)
+        is_recoverable = getattr(error, "is_recoverable", False)
+        return {
+            "success": False,
+            "error": error_msg,
+            "error_type": "TGW_ERROR",
+            "error_code": error_code,
+            "api": api_name,
+            "status_code": 503,
+            "recoverable": is_recoverable,
+            "suggestion": "TGW网关连接异常，请检查网络或稍后重试",
+        }
+    
+    # 根据错误消息模式识别TGW相关错误
+    if _is_tgw_related_error(error_msg):
+        return {
+            "success": False,
+            "error": error_msg,
+            "error_type": "TGW_ERROR",
+            "api": api_name,
+            "status_code": 503,
+            "recoverable": True,
+            "suggestion": "TGW网关连接异常，请检查网络或稍后重试",
+        }
 
     # 根据错误类型返回不同的状态码
     if "login" in error_msg.lower() or "auth" in error_msg.lower():

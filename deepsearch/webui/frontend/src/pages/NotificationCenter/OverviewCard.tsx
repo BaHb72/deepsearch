@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {useMemo, useState} from 'react'
 import {Alert, Button, Card, Descriptions, Space, Switch, Tag, Tooltip, Typography} from 'antd'
 import {ExperimentOutlined, EyeOutlined, ReloadOutlined} from '@ant-design/icons'

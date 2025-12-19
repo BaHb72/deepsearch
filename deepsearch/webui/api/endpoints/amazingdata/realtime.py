@@ -12,6 +12,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from .base import JSONDict, format_response, get_amazingdata_provider, handle_api_error
+from deepsearch.domain.concept_engine import get_concept_engine
 
 # 创建路由器
 router = APIRouter(tags=["AmazingData-实时行情"])
@@ -351,6 +352,45 @@ async def subscribe_hkt(request: SubscribeRequest) -> JSONDict:
         return handle_api_error("subscribe_hkt", e)
 
 
+@router.post("/subscribe/option", summary="订阅ETF期权实时快照")
+async def subscribe_option(request: SubscribeRequest) -> JSONDict:
+    """
+    订阅ETF期权实时快照数据
+
+    Args:
+        request: 订阅请求，code_list为ETF期权代码列表
+
+    Returns:
+        订阅成功信息
+    """
+    try:
+        provider = await get_amazingdata_provider()
+
+        async def on_snapshot(data):
+            logger.debug(f"收到期权快照: {data}")
+
+        subscription_id = await subscription_manager.add_subscription(
+            client_id="api_client",
+            subscription_type="option",
+            code_list=request.code_list,
+            callback=on_snapshot,
+        )
+
+        await provider.subscribe_option_snapshot(code_list=request.code_list, callback=on_snapshot)
+
+        return format_response(
+            success=True,
+            data={
+                "subscription_id": subscription_id,
+                "type": "option",
+                "code_list": request.code_list,
+                "status": "active",
+            },
+        )
+    except Exception as e:
+        return handle_api_error("subscribe_option", e)
+
+
 @router.post("/subscribe/kline", summary="订阅实时K线")
 async def subscribe_kline(request: KlineSubscribeRequest) -> JSONDict:
     """
@@ -466,6 +506,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                     await websocket.send_json({"type": sub_type, "data": data})
 
                 # 添加订阅
+                # 添加订阅
                 await subscription_manager.add_subscription(
                     client_id=client_id,
                     subscription_type=sub_type,
@@ -475,6 +516,32 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
 
                 # 发送确认消息
                 await websocket.send_json({"type": "subscription_confirmed", "codes": code_list})
+
+            elif message.get("action") == "subscribe_concept_flow":
+                 engine = get_concept_engine(await get_amazingdata_provider())
+                 await engine.start()
+                 
+                 async def push_loop():
+                     try:
+                         while True:
+                             if client_id not in subscription_manager.websockets:
+                                 break
+                             data = engine.get_sector_velocity_map()
+                             await websocket.send_json({"type": "concept_flow", "data": data})
+                             await asyncio.sleep(3)
+                     except Exception as e:
+                         logger.error(f"Push loop error: {e}")
+
+                 task = asyncio.create_task(push_loop())
+                 sub_id = f"{client_id}_concept_flow"
+                 subscription_manager.active_tasks[sub_id] = task
+                 subscription_manager.subscriptions[sub_id] = {
+                     "client_id": client_id,
+                     "type": "concept_flow",
+                     "code_list": [],
+                     "status": "active"
+                 }
+                 await websocket.send_json({"type": "subscription_confirmed", "subtype": "concept_flow"})
 
             elif message.get("action") == "unsubscribe":
                 # 取消订阅

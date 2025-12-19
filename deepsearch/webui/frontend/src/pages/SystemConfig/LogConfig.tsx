@@ -1,12 +1,11 @@
-// @ts-nocheck
 import React from 'react'
-import {Button, Card, Col, Divider, Form, Input, InputNumber, message, Row, Space, Spin, Switch, Typography} from 'antd'
-import {ApartmentOutlined, FolderOpenOutlined, ReloadOutlined, SaveOutlined} from '@ant-design/icons'
+import { Button, Card, Col, Divider, Form, Input, InputNumber, message, Row, Space, Spin, Switch, Typography } from 'antd'
+import { ApartmentOutlined, FolderOpenOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons'
 
 import systemAPI from '@/api/system'
-import type {LogSettings} from '@/types/systemConfig'
+import type { LogSettings } from '@/types/systemConfig'
 
-const {Paragraph} = Typography
+const { Paragraph } = Typography
 
 const DEFAULT_LOG_CONFIG: LogSettings = {
     level: 'INFO',
@@ -34,8 +33,7 @@ const normalizePayload = (values: LogSettings): LogSettings => {
         ...values.archive,
         purge_after_days:
             values.archive?.purge_after_days === undefined ||
-            values.archive?.purge_after_days === null ||
-            values.archive?.purge_after_days === ''
+                values.archive?.purge_after_days === null
                 ? null
                 : values.archive?.purge_after_days
     }
@@ -45,8 +43,7 @@ const normalizePayload = (values: LogSettings): LogSettings => {
         rotation: values.modules?.rotation ?? null,
         retention_days:
             values.modules?.retention_days === undefined ||
-            values.modules?.retention_days === null ||
-            values.modules?.retention_days === ''
+                values.modules?.retention_days === null
                 ? null
                 : values.modules?.retention_days
     }
@@ -126,7 +123,7 @@ const LogConfig: React.FC = () => {
                 extra={
                     <Space>
                         <Button
-                            icon={<ReloadOutlined/>}
+                            icon={<ReloadOutlined />}
                             onClick={loadConfig}
                             disabled={saving}
                         >
@@ -134,7 +131,7 @@ const LogConfig: React.FC = () => {
                         </Button>
                         <Button
                             type="primary"
-                            icon={<SaveOutlined/>}
+                            icon={<SaveOutlined />}
                             onClick={handleSubmit}
                             loading={saving}
                         >
@@ -157,9 +154,9 @@ const LogConfig: React.FC = () => {
                             <Form.Item
                                 label="日志级别"
                                 name="level"
-                                rules={[{required: true, message: '请选择日志级别'}]}
+                                rules={[{ required: true, message: '请选择日志级别' }]}
                             >
-                                <Input placeholder="INFO / DEBUG / WARNING / ERROR"/>
+                                <Input placeholder="INFO / DEBUG / WARNING / ERROR" />
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={12} md={8}>
@@ -168,19 +165,19 @@ const LogConfig: React.FC = () => {
                                 name="rotation"
                                 tooltip="每天在指定时间切换日志文件"
                                 rules={[
-                                    {required: true, message: '请输入轮转时间，例如 00:00'}
+                                    { required: true, message: '请输入轮转时间，例如 00:00' }
                                 ]}
                             >
-                                <Input placeholder="00:00"/>
+                                <Input placeholder="00:00" />
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={12} md={8}>
                             <Form.Item
                                 label="原始日志保留天数"
                                 name="retention_days"
-                                rules={[{required: true, message: '请输入保留天数'}]}
+                                rules={[{ required: true, message: '请输入保留天数' }]}
                             >
-                                <InputNumber min={1} precision={0} style={{width: '100%'}}/>
+                                <InputNumber min={1} precision={0} style={{ width: '100%' }} />
                             </Form.Item>
                         </Col>
                     </Row>
@@ -192,14 +189,14 @@ const LogConfig: React.FC = () => {
                                 name="enable_json"
                                 valuePropName="checked"
                             >
-                                <Switch/>
+                                <Switch />
                             </Form.Item>
                         </Col>
                     </Row>
 
                     <Divider orientation="left">
                         <Space>
-                            <FolderOpenOutlined/>
+                            <FolderOpenOutlined />
                             归档策略
                         </Space>
                     </Divider>
@@ -211,38 +208,38 @@ const LogConfig: React.FC = () => {
                                 name={['archive', 'enabled']}
                                 valuePropName="checked"
                             >
-                                <Switch/>
+                                <Switch />
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={12} md={6}>
                             <Form.Item
                                 label="归档目录"
                                 name={['archive', 'directory']}
-                                rules={[{required: true, message: '请输入归档目录'}]}
+                                rules={[{ required: true, message: '请输入归档目录' }]}
                             >
-                                <Input disabled={!archiveEnabled} placeholder="archive"/>
+                                <Input disabled={!archiveEnabled} placeholder="archive" />
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={12} md={6}>
                             <Form.Item
                                 label="压缩格式"
                                 name={['archive', 'format']}
-                                rules={[{required: true, message: '请输入压缩格式'}]}
+                                rules={[{ required: true, message: '请输入压缩格式' }]}
                             >
-                                <Input disabled placeholder="zip"/>
+                                <Input disabled placeholder="zip" />
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={12} md={6}>
                             <Form.Item
                                 label="归档阈值 (天)"
                                 name={['archive', 'archive_after_days']}
-                                rules={[{required: true, message: '请输入归档天数'}]}
+                                rules={[{ required: true, message: '请输入归档天数' }]}
                             >
                                 <InputNumber
                                     min={1}
                                     precision={0}
                                     disabled={!archiveEnabled}
-                                    style={{width: '100%'}}
+                                    style={{ width: '100%' }}
                                 />
                             </Form.Item>
                         </Col>
@@ -258,7 +255,7 @@ const LogConfig: React.FC = () => {
                                     min={1}
                                     precision={0}
                                     disabled={!archiveEnabled}
-                                    style={{width: '100%'}}
+                                    style={{ width: '100%' }}
                                 />
                             </Form.Item>
                         </Col>
@@ -270,7 +267,7 @@ const LogConfig: React.FC = () => {
 
                     <Divider orientation="left">
                         <Space>
-                            <ApartmentOutlined/>
+                            <ApartmentOutlined />
                             模块化日志
                         </Space>
                     </Divider>
@@ -282,29 +279,29 @@ const LogConfig: React.FC = () => {
                                 name={['modules', 'enabled']}
                                 valuePropName="checked"
                             >
-                                <Switch/>
+                                <Switch />
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={12} md={6}>
                             <Form.Item
                                 label="模块日志目录"
                                 name={['modules', 'directory']}
-                                rules={[{required: true, message: '请输入目录名称'}]}
+                                rules={[{ required: true, message: '请输入目录名称' }]}
                             >
-                                <Input disabled={!modulesEnabled} placeholder="modules"/>
+                                <Input disabled={!modulesEnabled} placeholder="modules" />
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={12} md={6}>
                             <Form.Item
                                 label="模块层级深度"
                                 name={['modules', 'max_depth']}
-                                rules={[{required: true, message: '请输入层级深度'}]}
+                                rules={[{ required: true, message: '请输入层级深度' }]}
                             >
                                 <InputNumber
                                     min={1}
                                     precision={0}
                                     disabled={!modulesEnabled}
-                                    style={{width: '100%'}}
+                                    style={{ width: '100%' }}
                                 />
                             </Form.Item>
                         </Col>
@@ -331,7 +328,7 @@ const LogConfig: React.FC = () => {
                                     min={1}
                                     precision={0}
                                     disabled={!modulesEnabled}
-                                    style={{width: '100%'}}
+                                    style={{ width: '100%' }}
                                 />
                             </Form.Item>
                         </Col>

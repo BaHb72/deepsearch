@@ -130,6 +130,10 @@ class AmazingDataProvider(DataProvider):
         assert self._sdk is not None  # mypy 收窄
         return self._sdk
 
+    def is_connected(self) -> bool:
+        """返回当前连接状态。"""
+        return self._connected
+
     def _resolve_local_path(self, candidate: Optional[str]) -> str:
         """统一解析 AmazingData 本地缓存路径。"""
 
@@ -145,11 +149,18 @@ class AmazingDataProvider(DataProvider):
     async def _perform_login(self) -> bool:
         """执行登录流程，返回是否成功"""
 
+        logger.debug(
+            f"[DEBUG] _perform_login 开始, _connected={self._connected}, "
+            f"_degraded_mode={self._degraded_mode}, _sdk_available={self._sdk_available}"
+        )
+
         if self._connected:
-            logger.debug("AmazingData login skipped: already connected", action="login")
+            logger.debug("[DEBUG] AmazingData login skipped: already connected", action="login")
             return True
 
+        logger.debug("[DEBUG] 获取SDK...")
         sdk = self._require_sdk()
+        logger.debug(f"[DEBUG] SDK获取成功: {type(sdk)}")
 
         def safe_login() -> int | bool:
             import threading
@@ -158,61 +169,71 @@ class AmazingDataProvider(DataProvider):
             result_holder: dict[str, object | None] = {"result": None, "exception": None}
 
             def login_in_thread() -> None:
+                logger.debug(
+                    f"[DEBUG] login_in_thread 开始: "
+                    f"username={self.config.username}, host={self.config.host}, port={self.config.port}"
+                )
                 try:
+                    logger.debug("[DEBUG] 调用 sdk.login()...")
                     result = sdk.login(
                         self.config.username,
                         self.config.password,
                         self.config.host,
                         self.config.port,
                     )
+                    logger.debug(f"[DEBUG] sdk.login() 返回: {result}")
                     result_holder["result"] = result
                 except SystemExit as exc:
                     logger.critical(
-                        f"CRITICAL: AmazingData SDK attempted system exit with code: {exc.code}",
+                        f"[DEBUG] CRITICAL: AmazingData SDK attempted system exit with code: {exc.code}",
                         action="login",
                     )
-                    logger.critical(f"Stack trace: {traceback.format_exc()}", action="login")
+                    logger.critical(f"[DEBUG] Stack trace: {traceback.format_exc()}", action="login")
                     result_holder["result"] = -999
                     result_holder["exception"] = exc
                 except ConnectionError as exc:
-                    logger.error(f"Network connection failed: {exc}", action="login")
+                    logger.error(f"[DEBUG] Network connection failed: {exc}", action="login")
                     result_holder["result"] = -997
                     result_holder["exception"] = exc
                 except Exception as exc:  # noqa: BLE001
-                    logger.error(f"Unexpected error in SDK login: {exc}", action="login")
-                    logger.error(f"Exception type: {type(exc).__name__}", action="login")
+                    logger.error(f"[DEBUG] Unexpected error in SDK login: {exc}", action="login")
+                    logger.error(f"[DEBUG] Exception type: {type(exc).__name__}", action="login")
                     result_holder["result"] = -998
                     result_holder["exception"] = exc
 
             thread = threading.Thread(target=login_in_thread, daemon=True)
+            logger.debug("[DEBUG] 启动登录线程...")
             thread.start()
             thread.join(timeout=30)
 
             if thread.is_alive():
-                logger.error("Login thread timeout after 30 seconds", action="login")
+                logger.error("[DEBUG] Login thread timeout after 30 seconds", action="login")
                 return -998
 
             result = result_holder["result"]
             if result is None:
-                logger.error("Login thread did not produce a result", action="login")
+                logger.error("[DEBUG] Login thread did not produce a result", action="login")
                 return -998
 
+            logger.debug(f"[DEBUG] 登录线程完成, result={result}")
             return result  # type: ignore[return-value]
 
-        logger.info(
-            f"Attempting safe login to AmazingData (host={self.config.host}:{self.config.port})",
+        logger.debug(
+            f"[DEBUG] Attempting safe login to AmazingData (host={self.config.host}:{self.config.port})",
             action="login",
         )
 
         loop = asyncio.get_event_loop()
 
         try:
+            logger.debug(f"[DEBUG] 开始异步登录, timeout={self.config.timeout or 5.0}s...")
             result = await asyncio.wait_for(
                 loop.run_in_executor(None, safe_login),
                 timeout=self.config.timeout or 5.0,
             )
+            logger.debug(f"[DEBUG] 异步登录完成, result={result}")
         except asyncio.TimeoutError:
-            logger.error(f"Login timeout after {self.config.timeout or 5}s", action="login")
+            logger.error(f"[DEBUG] Login timeout after {self.config.timeout or 5}s", action="login")
             raise DataProviderError(
                 "AmazingData login timeout. Possible causes:\n"
                 "1. Network connectivity issue\n"
@@ -220,7 +241,7 @@ class AmazingDataProvider(DataProvider):
                 "3. Firewall blocked the connection"
             )
         except Exception as exc:  # noqa: BLE001
-            logger.error(f"Unexpected error during login process: {exc}", action="login")
+            logger.error(f"[DEBUG] Unexpected error during login process: {exc}", action="login")
             raise DataProviderError(f"Login failed: {exc}") from exc
 
         if result == -999:
@@ -232,49 +253,74 @@ class AmazingDataProvider(DataProvider):
                 "3. Invalid credentials\n"
                 "Provider will switch to degraded mode."
             )
-            logger.critical(error_msg, action="login")
+            logger.critical(f"[DEBUG] {error_msg}", action="login")
             await self._trigger_alert("SDK_EXIT", error_msg)
             raise DataProviderError(error_msg)
         if result == -997:
             message = "Network connection failed; please verify connection settings"
-            logger.error(message, action="login")
+            logger.error(f"[DEBUG] {message}", action="login")
             raise DataProviderError(message)
 
         if result == -998:
             message = "SDK internal error; check logs"
-            logger.error(message, action="login")
+            logger.error(f"[DEBUG] {message}", action="login")
             raise DataProviderError(message)
 
         if result in (0, True):
             self._connected = True
             self._login_time = datetime.now()
-            logger.info("AmazingData login successful", action="login")
+            logger.info("[DEBUG] AmazingData login successful!", action="login")
             return True
 
         error_msg = f"AmazingData登录失败，错误码: {result}"
-        logger.error(error_msg, action="login")
+        logger.error(f"[DEBUG] {error_msg}", action="login")
         raise DataProviderError(error_msg)
 
     def get_capabilities(self) -> set[DataCapability]:
-        """返回 AmazingData 支持的数据能力集合。"""
+        """返回 AmazingData 支持的数据能力集合。
+        
+        AmazingData SDK 提供全面的数据能力：
+        - 基础行情：实时行情、K线、分钟数据、Tick
+        - 基础信息：股票列表、股票信息、交易日历、复权因子
+        - 财务数据：财务报表、关键指标、股东信息
+        - 特色数据：龙虎榜、大宗交易、融资融券、北向资金
+        - 高级能力：资金流向、板块数据、市场概览、L2数据
+        - 扩展能力：指数、期权、ETF、期货、债券、行业
+        """
 
         return {
+            # 基础行情能力
             DataCapability.REALTIME_QUOTE,
             DataCapability.REALTIME_QUOTES,
             DataCapability.KLINE_DATA,
             DataCapability.MINUTE_DATA,
             DataCapability.TICK_DATA,
+            # 基础信息能力
             DataCapability.STOCK_LIST,
+            DataCapability.STOCK_INFO,
+            DataCapability.TRADING_CALENDAR,
+            DataCapability.ADJUSTMENT_FACTOR,
+            # 财务数据能力
             DataCapability.FINANCIAL_DATA,
             DataCapability.KEY_INDICATORS,
             DataCapability.SHAREHOLDER_INFO,
+            # 特色数据能力
             DataCapability.DRAGON_TIGER,
             DataCapability.BLOCK_TRADE,
             DataCapability.MARGIN_TRADING,
             DataCapability.NORTH_FLOW,
-            DataCapability.TRADING_CALENDAR,
-            DataCapability.ADJUSTMENT_FACTOR,
-            DataCapability.STOCK_INFO,
+            # 市场数据能力
+            DataCapability.CAPITAL_FLOW,
+            DataCapability.SECTOR_DATA,
+            DataCapability.MARKET_OVERVIEW,
+            DataCapability.MARKET_BREADTH,
+            DataCapability.LEVEL2_DATA,
+            # 扩展数据能力
+            DataCapability.INDEX_DATA,
+            DataCapability.OPTION_DATA,
+            DataCapability.ETF_DATA,
+            DataCapability.INDUSTRY_DATA,
+            DataCapability.BOND_DATA,
         }
 
     def _get_stat_int(self, key: str) -> int:
@@ -880,6 +926,106 @@ class AmazingDataProvider(DataProvider):
             logger.error(f"获取K线数据失败: {e}")
             return None
 
+    # ==================== Extended 接口快捷方法 ====================
+    # 以下方法委托给 AmazingDataExtended 实现
+
+    async def get_option_code_list(
+        self, security_type: str = "EXTRA_ETF_OP"
+    ) -> Optional[List[str]]:
+        """获取期权代码列表"""
+        try:
+            from .amazingdata_extended import AmazingDataExtended
+
+            extended = AmazingDataExtended(self.config)
+            await extended.initialize()
+            return extended.get_option_code_list(security_type)
+        except Exception as e:
+            logger.error(f"获取期权代码列表失败: {e}")
+            return None
+
+    async def get_etf_pcf(
+        self, code_list: List[str], **kwargs: Any
+    ) -> Optional[pd.DataFrame]:
+        """获取ETF申赎清单 (PCF)"""
+        try:
+            from .amazingdata_extended import AmazingDataExtended
+
+            extended = AmazingDataExtended(self.config)
+            await extended.initialize()
+            return extended.get_etf_pcf(code_list, **kwargs)
+        except Exception as e:
+            logger.error(f"获取ETF申赎清单失败: {e}")
+            return None
+
+    async def get_index_constituent(
+        self, index_code: str, **kwargs: Any
+    ) -> Optional[pd.DataFrame]:
+        """获取指数成分股"""
+        try:
+            from .amazingdata_extended import AmazingDataExtended
+
+            extended = AmazingDataExtended(self.config)
+            await extended.initialize()
+            return extended.get_index_constituent(index_code, **kwargs)
+        except Exception as e:
+            logger.error(f"获取指数成分股失败: {e}")
+            return None
+
+    async def get_index_weight(
+        self, index_code: str, **kwargs: Any
+    ) -> Optional[pd.DataFrame]:
+        """获取指数成分股权重"""
+        try:
+            from .amazingdata_extended import AmazingDataExtended
+
+            extended = AmazingDataExtended(self.config)
+            await extended.initialize()
+            return extended.get_index_weight(index_code, **kwargs)
+        except Exception as e:
+            logger.error(f"获取指数权重失败: {e}")
+            return None
+
+    async def get_industry_constituent(
+        self, industry_code: str, **kwargs: Any
+    ) -> Optional[pd.DataFrame]:
+        """获取行业成分股"""
+        try:
+            from .amazingdata_extended import AmazingDataExtended
+
+            extended = AmazingDataExtended(self.config)
+            await extended.initialize()
+            return extended.get_industry_constituent(industry_code, **kwargs)
+        except Exception as e:
+            logger.error(f"获取行业成分股失败: {e}")
+            return None
+
+    async def get_treasury_yield(
+        self, term: str = "y10", **kwargs: Any
+    ) -> Optional[pd.DataFrame]:
+        """获取国债收益率"""
+        try:
+            from .amazingdata_extended import AmazingDataExtended
+
+            extended = AmazingDataExtended(self.config)
+            await extended.initialize()
+            return extended.get_treasury_yield(term=term, **kwargs)
+        except Exception as e:
+            logger.error(f"获取国债收益率失败: {e}")
+            return None
+
+    async def get_fund_share(
+        self, code_list: List[str], **kwargs: Any
+    ) -> Optional[pd.DataFrame]:
+        """获取ETF份额数据"""
+        try:
+            from .amazingdata_extended import AmazingDataExtended
+
+            extended = AmazingDataExtended(self.config)
+            await extended.initialize()
+            return extended.get_fund_share(code_list, **kwargs)
+        except Exception as e:
+            logger.error(f"获取ETF份额失败: {e}")
+            return None
 
 
 # ==================== 工具函数 ====================

@@ -154,6 +154,83 @@ export interface DataSourceMonitor {
   alerts: DataSourceMonitorAlert[]
 }
 
+// ============= 数据源能力相关类型 =============
+
+/** 单个能力项 */
+export interface CapabilityItem {
+  id: string
+  name: string
+  supported: boolean
+}
+
+/** 能力分类汇总 */
+export interface CapabilityCategorySummary {
+  name: string
+  capabilities: CapabilityItem[]
+  support_rate: string
+}
+
+/** 能力统计摘要 */
+export interface CapabilitySummary {
+  total: number
+  supported: number
+  unsupported: number
+}
+
+/** 数据源元数据 */
+export interface SourceMetadata {
+  name: string
+  label: string
+  description: string
+  badge: string
+  color: string
+  priority: number
+  unique_features: string[]
+  connection_type: 'local' | 'remote'
+  requires_auth: boolean
+  cost: 'free' | 'paid' | 'unknown'
+}
+
+/** 数据源能力详情响应 */
+export interface SourceCapabilitiesResponse extends SourceMetadata {
+  categorized_capabilities: Record<string, CapabilityCategorySummary>
+  summary: CapabilitySummary
+}
+
+/** 能力信息 */
+export interface CapabilityInfo {
+  supported: boolean
+  name: string
+}
+
+/** 矩阵中的数据源信息 */
+export interface SourceMatrixInfo extends SourceMetadata {
+  supported_count: number
+  total_count: number
+  coverage_rate: string
+  capabilities: Record<string, CapabilityInfo>
+}
+
+/** 分类标签 */
+export interface CategoryLabel {
+  id: string
+  name: string
+}
+
+/** 能力分类信息 */
+export interface CategoryInfo {
+  name: string
+  capabilities: CategoryLabel[]
+}
+
+/** 能力矩阵数据 */
+export interface CapabilityMatrix {
+  sources: Record<string, SourceMatrixInfo>
+  categories: Record<string, CategoryInfo>
+}
+
+
+
 interface ApiEnvelope<T> {
   success?: boolean
   data?: T
@@ -250,33 +327,62 @@ export const dataSourceAPI = {
   },
 
   /**
-   * 获取数据源能力列表
+   * 获取数据源能力列表（简化版，仅返回支持的能力ID列表）
    */
   async getDataSourceCapabilities(sourceName: string): Promise<string[]> {
-      // 使用新的数据源能力API路径
-      const url = `/datasource/capabilities/source/${encodeURIComponent(sourceName)}`
-      const response = await get<{ capabilities?: string[], categorized_capabilities?: Record<string, unknown> }>(url)
-      // 从响应中提取能力列表
-      if (response?.capabilities) {
-          return response.capabilities
-      }
-      // 如果是分类格式，提取所有能力ID
-      if (response?.categorized_capabilities) {
-          const allCapabilities: string[] = []
-          for (const category of Object.values(response.categorized_capabilities)) {
-              const caps = (category as {
-                  capabilities?: Array<{ id: string, supported: boolean }>
-              })?.capabilities || []
-              for (const cap of caps) {
-                  if (cap.supported) {
-                      allCapabilities.push(cap.id)
-                  }
-              }
+    // 使用新的数据源能力API路径
+    const url = `/datasource/capabilities/source/${encodeURIComponent(sourceName)}`
+    const response = await get<{ capabilities?: string[], categorized_capabilities?: Record<string, unknown> }>(url)
+    // 从响应中提取能力列表
+    if (response?.capabilities) {
+      return response.capabilities
+    }
+    // 如果是分类格式，提取所有能力ID
+    if (response?.categorized_capabilities) {
+      const allCapabilities: string[] = []
+      for (const category of Object.values(response.categorized_capabilities)) {
+        const caps = (category as {
+          capabilities?: Array<{ id: string, supported: boolean }>
+        })?.capabilities || []
+        for (const cap of caps) {
+          if (cap.supported) {
+            allCapabilities.push(cap.id)
           }
-          return allCapabilities
+        }
       }
-      return []
+      return allCapabilities
+    }
+    return []
   },
+
+  /**
+   * 获取数据源能力详情（完整版，包含分类、元数据和统计信息）
+   */
+  async getSourceCapabilitiesDetail(sourceName: string): Promise<SourceCapabilitiesResponse | null> {
+    const url = `/datasource/capabilities/source/${encodeURIComponent(sourceName)}`
+    try {
+      const response = await get<SourceCapabilitiesResponse>(url)
+      return response
+    } catch (error) {
+      console.error('Failed to fetch source capabilities detail:', error)
+      return null
+    }
+  },
+
+  /**
+   * 获取能力矩阵（全量数据源能力对比）
+   */
+  async getCapabilityMatrix(): Promise<CapabilityMatrix | null> {
+    try {
+      const response = await get<CapabilityMatrix>('/datasource/capabilities/matrix')
+      return response
+    } catch (error) {
+      console.error('Failed to fetch capability matrix:', error)
+      return null
+    }
+  },
+
+
 
   /**
    * 刷新缓存

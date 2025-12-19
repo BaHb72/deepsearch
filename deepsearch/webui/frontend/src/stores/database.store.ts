@@ -1,42 +1,50 @@
-// @ts-nocheck
-import type {JsonObject, JsonValue, UnknownRecord} from '@/types/common'
+import type { JsonObject, UnknownRecord } from '@/types/common'
 /**
  * 数据库状态管理 Store
  */
-import {create} from 'zustand'
-import {immer} from 'zustand/middleware/immer'
-import {devtools} from 'zustand/middleware'
-import {message} from 'antd'
+import { create } from 'zustand'
+import { immer } from 'zustand/middleware/immer'
+import { devtools } from 'zustand/middleware'
+import { message } from 'antd'
 
 import {
-    CreateConnectionDTO,
-    DatabaseConnection,
-    DataSource,
-    DataSourceHealthReport,
-    DataSourceMetricsSnapshot,
-    DataSourceProxy,
-    DataSourceStatusSummary,
-    DataSourceSummaryStatus,
-    StoreError,
-    TestResult,
-    UpdateConnectionDTO
+  CreateConnectionDTO,
+  DatabaseConnection,
+  DataSource,
+  DataSourceHealthReport,
+  DataSourceMetricsSnapshot,
+  DataSourceProxy,
+  DataSourceStatusSummary,
+  DataSourceSummaryStatus,
+  RawActivationState,
+  RawConfigData,
+  RawConnectivityState,
+  RawDataSourceData,
+  RawMetrics,
+  RawProxyData,
+  StoreError,
+  TestResult,
+  UpdateConnectionDTO
 } from './types'
 
 import {
-    activateDatabaseConnection,
-    createDatabaseConnection,
-    deactivateDatabaseConnection,
-    deleteDatabaseConnection,
-    fetchDatabaseConnections,
-    fetchDataSourceHealth,
-    fetchDataSources,
-    testDatabaseConnection,
-    updateDatabaseConnection
-} from '@/api/systemConfig'
+  activateDatabaseConnection,
+  createDatabaseConnection,
+  deactivateDatabaseConnection,
+  deleteDatabaseConnection,
+  fetchDatabaseConnections,
+  testDatabaseConnection,
+  updateDatabaseConnection,
+  DatabaseConnection as ApiDatabaseConnection,
+} from '@/api/config/database'
+import {
+  fetchDataSourceHealth,
+  fetchDataSources,
+} from '@/api/config/dataSourceConfig'
 
-import {cacheService} from '@/dataCenter/cache.service'
-import {generateCacheKey, requestManager} from '@/dataCenter/utils'
-import {DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary} from '@/utils/dataSourceStatus'
+import { cacheService } from '@/dataCenter/cache.service'
+import { generateCacheKey, requestManager } from '@/dataCenter/utils'
+import { DATA_SOURCE_STATUS_ORDER, getDataSourceStatusMeta, normalizeTestSummary } from '@/utils/dataSourceStatus'
 
 const PASSWORD_PLACEHOLDER = '***'
 
@@ -45,7 +53,7 @@ const normalizeConnection = (connection: Partial<DatabaseConnection> & UnknownRe
     throw new Error('无效的数据库连接数据')
   }
 
-  const activationRaw = (connection.activation ?? {}) as JsonObject
+  const activationRaw = (connection.activation ?? {}) as RawActivationState
   const activationState = typeof activationRaw.state === 'string'
     ? activationRaw.state
     : (connection.enabled ? 'active' : 'inactive')
@@ -53,19 +61,23 @@ const normalizeConnection = (connection: Partial<DatabaseConnection> & UnknownRe
     ? activationRaw.enabled
     : Boolean(connection.enabled)
   const activationUpdatedAtRaw = activationRaw.updated_at ?? activationRaw.updatedAt ?? connection.updated_at
-  const activationUpdatedAt = activationUpdatedAtRaw ? new Date(activationUpdatedAtRaw).toISOString() : undefined
+  const activationUpdatedAt = (activationUpdatedAtRaw && (typeof activationUpdatedAtRaw === 'string' || typeof activationUpdatedAtRaw === 'number' || activationUpdatedAtRaw instanceof Date))
+    ? new Date(activationUpdatedAtRaw as string | number | Date).toISOString()
+    : undefined
   const activationError = activationRaw.error ?? null
 
-  const connectivityRaw = (connection.connectivity ?? {}) as JsonObject
+  const connectivityRaw = (connection.connectivity ?? {}) as RawConnectivityState
   const connectivityState = typeof connectivityRaw.state === 'string'
     ? connectivityRaw.state
     : (activationState === 'active' ? 'disconnected' : 'unknown')
   const lastSuccessAtRaw = connectivityRaw.last_success_at ?? connectivityRaw.lastSuccessAt ?? connection.last_health_check ?? connection.lastHealthCheck
-  const lastSuccessAt = lastSuccessAtRaw ? new Date(lastSuccessAtRaw).toISOString() : undefined
+  const lastSuccessAt = (lastSuccessAtRaw && (typeof lastSuccessAtRaw === 'string' || typeof lastSuccessAtRaw === 'number' || lastSuccessAtRaw instanceof Date))
+    ? new Date(lastSuccessAtRaw as string | number | Date).toISOString()
+    : undefined
   const lastError = connectivityRaw.last_error ?? connectivityRaw.lastError ?? connection.error ?? null
   const retrying = Boolean(connectivityRaw.retrying)
 
-  const deprecatedRaw = (connection.deprecated ?? {}) as JsonObject
+  const deprecatedRaw = (connection.deprecated ?? {}) as { enabled?: boolean; connected?: boolean; status?: string }
   const statusSource = (connection.status_source ?? connection.statusSource ?? 'stored') as 'runtime' | 'stored'
   const activeConnection = Boolean(connection.active_connection ?? connection.activeConnection)
   const statusDetail = connection.status_detail ?? connection.statusDetail ?? (connectivityState === 'error' ? (lastError ?? undefined) : undefined)
@@ -147,12 +159,12 @@ const resolveRequestErrorMessage = (error: unknown, fallback: string): string =>
   return fallback
 }
 
-const normalizeDateValue = (value: JsonValue): string | null => {
+const normalizeDateValue = (value: string | number | Date | null | undefined): string | null => {
   if (!value) {
     return null
   }
 
-  const date = value instanceof Date ? value : new Date(value)
+  const date = value instanceof Date ? value : new Date(value as string | number)
   if (Number.isNaN(date.getTime())) {
     return null
   }
@@ -160,7 +172,7 @@ const normalizeDateValue = (value: JsonValue): string | null => {
   return date.toISOString()
 }
 
-export const normalizeMetrics = (metrics: JsonValue): DataSourceMetricsSnapshot | undefined => {
+export const normalizeMetrics = (metrics: RawMetrics | null | undefined): DataSourceMetricsSnapshot | undefined => {
   if (!metrics || typeof metrics !== 'object') {
     return undefined
   }
@@ -230,7 +242,7 @@ export const normalizeMetrics = (metrics: JsonValue): DataSourceMetricsSnapshot 
   }
 }
 
-export const normalizeProxy = (proxy: JsonValue): DataSourceProxy | null => {
+export const normalizeProxy = (proxy: RawProxyData | null | undefined): DataSourceProxy | null => {
   if (!proxy || typeof proxy !== 'object') {
     return null
   }
@@ -273,7 +285,7 @@ export const normalizeProxy = (proxy: JsonValue): DataSourceProxy | null => {
   const result: DataSourceProxy = {
     id,
     name: displayName,
-    source: proxy.source ?? proxy.id ?? proxy.name ?? id,
+    source: String(proxy.source ?? proxy.id ?? proxy.name ?? id),
     kind: typeof proxy.kind === 'string' ? proxy.kind : undefined,
     status: statusMeta.value,
     available: availableValue,
@@ -283,7 +295,7 @@ export const normalizeProxy = (proxy: JsonValue): DataSourceProxy | null => {
     testSummary,
     hasSavedCredential:
       typeof hasSavedRaw === 'boolean' ? hasSavedRaw : undefined,
-    config: typeof proxy.config === 'object' && proxy.config !== null ? proxy.config : {},
+    config: (typeof proxy.config === 'object' && proxy.config !== null ? proxy.config : {}) as JsonObject,
   }
 
   if (metricsSnapshot) {
@@ -293,39 +305,39 @@ export const normalizeProxy = (proxy: JsonValue): DataSourceProxy | null => {
   return result
 }
 
-const normalizeDataSource = (source: JsonObject): DataSource => {
+const normalizeDataSource = (source: RawDataSourceData): DataSource => {
   if (!source) {
     throw new Error('无效的数据源数据')
   }
 
-    const rawConfig =
-        source.config && typeof source.config === 'object'
-            ? (source.config as JsonObject)
-            : ({} as JsonObject)
-    const configForState: Record<string, any> = {...rawConfig}
+  const rawConfig =
+    source.config && typeof source.config === 'object'
+      ? source.config
+      : {} as RawConfigData
+  const configForState: Record<string, unknown> = { ...rawConfig }
 
-    const isAmazingData =
-        (typeof source.type === 'string' && source.type.toLowerCase() === 'amazingdata') ||
-        (typeof rawConfig.provider_name === 'string' &&
-            rawConfig.provider_name.toLowerCase() === 'amazingdata')
+  const isAmazingData =
+    (typeof source.type === 'string' && source.type.toLowerCase() === 'amazingdata') ||
+    (typeof rawConfig.provider_name === 'string' &&
+      rawConfig.provider_name.toLowerCase() === 'amazingdata')
 
-    if (isAmazingData) {
-        const connectionRaw =
-            rawConfig.connection && typeof rawConfig.connection === 'object'
-                ? (rawConfig.connection as JsonObject)
-                : undefined
-        if (connectionRaw) {
-            if (configForState.host === undefined && connectionRaw.host !== undefined) {
-                configForState.host = connectionRaw.host
-            }
-            if (configForState.port === undefined && connectionRaw.port !== undefined) {
-                configForState.port = connectionRaw.port
-            }
-            if (configForState.username === undefined && connectionRaw.username !== undefined) {
-                configForState.username = connectionRaw.username
-            }
-        }
+  if (isAmazingData) {
+    const connectionRaw =
+      rawConfig.connection && typeof rawConfig.connection === 'object'
+        ? (rawConfig.connection as JsonObject)
+        : undefined
+    if (connectionRaw) {
+      if (configForState.host === undefined && connectionRaw.host !== undefined) {
+        configForState.host = connectionRaw.host
+      }
+      if (configForState.port === undefined && connectionRaw.port !== undefined) {
+        configForState.port = connectionRaw.port
+      }
+      if (configForState.username === undefined && connectionRaw.username !== undefined) {
+        configForState.username = connectionRaw.username
+      }
     }
+  }
 
   const statusMeta = getDataSourceStatusMeta(source.status)
   const lastTestTime = normalizeDateValue(
@@ -365,8 +377,8 @@ const normalizeDataSource = (source: JsonObject): DataSource => {
   const metricsSnapshot = normalizeMetrics(source.metrics)
   const proxies = Array.isArray(source.proxies)
     ? source.proxies
-        .map(normalizeProxy)
-        .filter((item): item is DataSourceProxy => item !== null)
+      .map(normalizeProxy)
+      .filter((item): item is DataSourceProxy => item !== null)
     : []
 
   const proxyEnabledRaw = source.proxyEnabled ?? source.proxy_enabled
@@ -380,7 +392,7 @@ const normalizeDataSource = (source: JsonObject): DataSource => {
   // - 其次回退到 config.enabled（部分后端实现将其内嵌在 config）
   // - 默认值改为 false，避免缺失字段时误判为已启用
   const enabledRawTop = (source as any).enabled ?? (source as any).is_enabled
-    const enabledFromConfig = (configForState as any)?.enabled
+  const enabledFromConfig = (configForState as any)?.enabled
   const enabled =
     typeof enabledRawTop === 'boolean'
       ? enabledRawTop
@@ -390,11 +402,11 @@ const normalizeDataSource = (source: JsonObject): DataSource => {
 
   return {
     id: (source.id ?? source.name ?? source.type ?? Date.now()) as number | string,
-      name: source.name ?? (configForState as any)?.name ?? '未命名数据源',
+    name: source.name ?? (configForState as any)?.name ?? '未命名数据源',
     type: source.type ?? 'unknown',
     enabled,
     priority: Number(source.priority ?? 0),
-      config: configForState,
+    config: configForState as JsonObject,
     status: statusMeta.value,
     available,
     lastTestTime,
@@ -412,7 +424,7 @@ const normalizeDataSource = (source: JsonObject): DataSource => {
         ? source.avgResponseTime
         : typeof source.avg_response_time === 'number'
           ? source.avg_response_time
-          : metricsSnapshot?.avgLatency,
+          : (metricsSnapshot?.avgLatency ?? null) as number | undefined,
     availableCount,
     reason:
       source.reason ??
@@ -439,8 +451,9 @@ const buildDataSourceSummary = (
   let availableDerived = 0
 
   if (health?.sources && typeof health.sources === 'object') {
-    Object.values(health.sources as JsonObject).forEach(entry => {
-      const meta = getDataSourceStatusMeta(entry?.status)
+    Object.values(health.sources).forEach(rawEntry => {
+      const entry = rawEntry as { status?: unknown; available?: boolean } | null
+      const meta = getDataSourceStatusMeta(entry?.status as string | null | undefined)
       if (Object.prototype.hasOwnProperty.call(counts, meta.value)) {
         const key = meta.value as DataSourceSummaryStatus
         counts[key] += 1
@@ -480,8 +493,8 @@ const buildDataSourceSummary = (
   }
 }
 
-const preparePayload = (values: Record<string, JsonValue>) => {
-  const payload = { ...values }
+const preparePayload = (values: Record<string, unknown>) => {
+  const payload: Record<string, unknown> = { ...values }
   if (payload.type === 'redis' && payload.database !== undefined && payload.database !== null) {
     payload.database = String(payload.database)
   }
@@ -498,9 +511,9 @@ const preparePayload = (values: Record<string, JsonValue>) => {
   delete payload.status_source
   delete payload.status_detail
   delete payload.active_connection
-    delete payload.masked_password
-    delete payload.has_saved_password
-    delete (payload as Record<string, unknown>).hasSavedPassword
+  delete payload.masked_password
+  delete payload.has_saved_password
+  delete (payload as Record<string, unknown>).hasSavedPassword
   return payload
 }
 
@@ -533,7 +546,7 @@ interface DatabaseState {
   reset: () => void
 }
 
-const initialState: Pick<DatabaseState, 'connections' | 'loading' | 'error' | 'selectedId' | 'lastFetch' | 'cacheTime' | 'dataSources' | 'dataSourcesLoading' | 'dataSourcesError' | 'dataSourceSummary' | 'lastSourcesFetch'> = {
+const initialState: Omit<DatabaseState, 'fetchConnections' | 'createConnection' | 'updateConnection' | 'deleteConnection' | 'testConnection' | 'activateConnection' | 'deactivateConnection' | 'selectConnection' | 'clearError' | 'fetchDataSourcesStatus' | 'refreshDataSourcesStatus' | 'reset'> = {
   connections: [],
   loading: false,
   error: null,
@@ -590,17 +603,17 @@ export const useDatabaseStore = create<DatabaseState>()(
           draft.error = null
         })
 
-          const requestOptions = force ? {dedupe: false} : undefined
+        const requestOptions = force ? { dedupe: false } : undefined
 
         try {
           const rawConnections = await requestManager.execute(
             'database:fetchConnections',
-              () => fetchDatabaseConnections(force),
-              requestOptions
+            () => fetchDatabaseConnections(force),
+            requestOptions
           )
 
           const normalizedConnections = Array.isArray(rawConnections)
-            ? rawConnections.map(normalizeConnection)
+            ? rawConnections.map(conn => normalizeConnection(conn as Partial<DatabaseConnection> & UnknownRecord))
             : []
 
           set(draft => {
@@ -610,17 +623,18 @@ export const useDatabaseStore = create<DatabaseState>()(
           })
 
           const cacheKey = generateCacheKey('database:connections')
-          cacheService.set(cacheKey, normalizedConnections, state.cacheTime)
+          cacheService.set(cacheKey, normalizedConnections as unknown, state.cacheTime)
         } catch (error) {
           const fetchConnectionsError = {
             code: 'FETCH_ERROR',
             message: error instanceof Error ? error.message : '获取数据库连接失败',
-            details: error,
+            details: error instanceof Error ? error.message : String(error),
             timestamp: now,
           } as StoreError
 
           set(draft => {
             draft.loading = false
+            // @ts-ignore - immer/zustand deep type instantiation limit
             draft.error = fetchConnectionsError
           })
 
@@ -656,15 +670,15 @@ export const useDatabaseStore = create<DatabaseState>()(
 
           const cacheKey = generateCacheKey('datasource:status')
 
-            const cached = cacheService.getWithStats<{
+          const cached = cacheService.getWithStats<{
 
-                sources: DataSource[]
+            sources: DataSource[]
 
-                summary: DataSourceStatusSummary
+            summary: DataSourceStatusSummary
 
-                health: DataSourceHealthReport | null
+            health: DataSourceHealthReport | null
 
-            }>(cacheKey)
+          }>(cacheKey)
 
 
 
@@ -676,30 +690,30 @@ export const useDatabaseStore = create<DatabaseState>()(
 
               draft.dataSourceSummary = cached.summary
 
-                draft.dataSourceHealth = cached.health
+              draft.dataSourceHealth = cached.health
 
-                draft.dataSourcesLoading = false
+              draft.dataSourcesLoading = false
 
-                draft.dataSourcesError = null
+              draft.dataSourcesError = null
 
-                draft.lastSourcesFetch = requestTimestamp
+              draft.lastSourcesFetch = requestTimestamp
 
             })
 
-              return
+            return
 
           }
 
         }
 
 
-          set(draft => {
+        set(draft => {
 
-              draft.dataSourcesLoading = true
+          draft.dataSourcesLoading = true
 
-              draft.dataSourcesError = null
+          draft.dataSourcesError = null
 
-          })
+        })
 
 
 
@@ -708,11 +722,11 @@ export const useDatabaseStore = create<DatabaseState>()(
           const requestOptions = force ? { dedupe: false } : undefined
 
 
-            const [sourcesList, health] = await Promise.all([
+          const [sourcesList, health] = await Promise.all([
 
             requestManager.execute('datasource:list', () => fetchDataSources(), requestOptions),
 
-                requestManager.execute('datasource:health', () => fetchDataSourceHealth(), requestOptions)
+            requestManager.execute('datasource:health', () => fetchDataSourceHealth(), requestOptions)
 
           ])
 
@@ -721,9 +735,9 @@ export const useDatabaseStore = create<DatabaseState>()(
           const healthReport = health && typeof health === 'object' ? (health as DataSourceHealthReport) : null
 
 
-            const normalizedSources = Array.isArray(sourcesList)
+          const normalizedSources = Array.isArray(sourcesList)
 
-            ? sourcesList.map((item: JsonValue) => normalizeDataSource(item))
+            ? sourcesList.map((item) => normalizeDataSource(item as RawDataSourceData))
 
             : []
 
@@ -773,7 +787,7 @@ export const useDatabaseStore = create<DatabaseState>()(
 
             message: error instanceof Error ? error.message : '获取数据源状态失败',
 
-            details: error,
+            details: error instanceof Error ? error.message : String(error),
 
             timestamp: requestTimestamp,
 
@@ -807,150 +821,150 @@ export const useDatabaseStore = create<DatabaseState>()(
 
       refreshDataSourcesStatus: async () => {
 
+        await get().fetchDataSourcesStatus(true)
+
+      },
+
+
+      activateConnection: async (id: number, options: UnknownRecord = {}) => {
+
+        set(draft => {
+
+          draft.loading = true
+
+          draft.error = null
+
+        })
+
+
+        try {
+
+          await activateDatabaseConnection(id, options)
+
+          cacheService.invalidate('database:')
+
+          message.success('数据库连接已启用')
+
+          await get().fetchConnections(true)
           await get().fetchDataSourcesStatus(true)
 
-      },
+        } catch (error) {
+
+          const activateError: StoreError = {
+
+            code: 'ACTIVATE_ERROR',
+
+            message: resolveRequestErrorMessage(error, '启用连接失败'),
+
+            details: error instanceof Error ? error.message : String(error),
+
+            timestamp: Date.now(),
+
+          }
 
 
-        activateConnection: async (id: number, options: UnknownRecord = {}) => {
+          set(draft => {
 
-            set(draft => {
+            draft.error = activateError
 
-                draft.loading = true
-
-                draft.error = null
-
-            })
+          })
 
 
-            try {
+          message.error(activateError.message)
 
-                await activateDatabaseConnection(id, options)
+          throw error
 
-                cacheService.invalidate('database:')
+        } finally {
 
-                message.success('数据库连接已启用')
+          set(draft => {
 
-                await get().fetchConnections(true)
-                await get().fetchDataSourcesStatus(true)
+            draft.loading = false
 
-            } catch (error) {
+          })
 
-                const activateError: StoreError = {
-
-                    code: 'ACTIVATE_ERROR',
-
-                    message: resolveRequestErrorMessage(error, '启用连接失败'),
-
-                    details: error,
-
-                    timestamp: Date.now(),
-
-                }
-
-
-                set(draft => {
-
-                    draft.error = activateError
-
-                })
-
-
-                message.error(activateError.message)
-
-                throw error
-
-            } finally {
-
-                set(draft => {
-
-                    draft.loading = false
-
-                })
-
-            }
-
-        },
-
-
-        deactivateConnection: async (id: number, options: UnknownRecord = {}) => {
-
-            set(draft => {
-
-                draft.loading = true
-
-                draft.error = null
-
-            })
-
-
-            try {
-
-                await deactivateDatabaseConnection(id, options)
-
-                cacheService.invalidate('database:')
-
-                message.success('数据库连接已停用')
-
-                await get().fetchConnections(true)
-                await get().fetchDataSourcesStatus(true)
-
-            } catch (error) {
-
-                const deactivateError: StoreError = {
-
-                    code: 'DEACTIVATE_ERROR',
-
-                    message: resolveRequestErrorMessage(error, '停用连接失败'),
-
-                    details: error,
-
-                    timestamp: Date.now(),
-
-                }
-
-
-                set(draft => {
-
-                    draft.error = deactivateError
-
-                })
-
-
-                message.error(deactivateError.message)
-
-                throw error
-
-            } finally {
-
-                set(draft => {
-
-                    draft.loading = false
-
-                })
-
-            }
+        }
 
       },
 
 
-        createConnection: async (data: CreateConnectionDTO) => {
+      deactivateConnection: async (id: number, options: UnknownRecord = {}) => {
+
+        set(draft => {
+
+          draft.loading = true
+
+          draft.error = null
+
+        })
+
+
+        try {
+
+          await deactivateDatabaseConnection(id, options)
+
+          cacheService.invalidate('database:')
+
+          message.success('数据库连接已停用')
+
+          await get().fetchConnections(true)
+          await get().fetchDataSourcesStatus(true)
+
+        } catch (error) {
+
+          const deactivateError: StoreError = {
+
+            code: 'DEACTIVATE_ERROR',
+
+            message: resolveRequestErrorMessage(error, '停用连接失败'),
+
+            details: error instanceof Error ? error.message : String(error),
+
+            timestamp: Date.now(),
+
+          }
+
+
+          set(draft => {
+
+            draft.error = deactivateError
+
+          })
+
+
+          message.error(deactivateError.message)
+
+          throw error
+
+        } finally {
+
+          set(draft => {
+
+            draft.loading = false
+
+          })
+
+        }
+
+      },
+
+
+      createConnection: async (data: CreateConnectionDTO) => {
         set(draft => {
           draft.loading = true
           draft.error = null
         })
 
         try {
-          await createDatabaseConnection(preparePayload(data))
+          await createDatabaseConnection(preparePayload(data as unknown as Record<string, unknown>) as unknown as ApiDatabaseConnection)
           cacheService.invalidate('database:')
           message.success('创建连接成功')
           await get().fetchConnections(true)
-            await get().fetchDataSourcesStatus(true)
+          await get().fetchDataSourcesStatus(true)
         } catch (error) {
           const errorObj: StoreError = {
             code: 'CREATE_ERROR',
             message: error instanceof Error ? error.message : '创建连接失败',
-            details: error,
+            details: error instanceof Error ? error.message : String(error),
             timestamp: Date.now()
           }
 
@@ -974,36 +988,36 @@ export const useDatabaseStore = create<DatabaseState>()(
         })
 
         try {
-            const current = get().connections.find(item => item.id === id)
-            const mergedValues: Record<string, JsonValue> = {
-                ...(current ? {...current} : {}),
-                ...data,
-            }
-            const payload = preparePayload(mergedValues)
-            const passwordValue = mergedValues.password
-            const shouldKeepCurrentPassword =
-                Boolean(current?.password) &&
-                (passwordValue === undefined ||
-                    (typeof passwordValue === 'string' && passwordValue.trim() === PASSWORD_PLACEHOLDER))
+          const current = get().connections.find(item => item.id === id)
+          const mergedValues: Record<string, unknown> = {
+            ...(current ? { ...current } : {}),
+            ...data,
+          }
+          const payload = preparePayload(mergedValues)
+          const passwordValue = mergedValues.password
+          const shouldKeepCurrentPassword =
+            Boolean(current?.password) &&
+            (passwordValue === undefined ||
+              (typeof passwordValue === 'string' && passwordValue.trim() === PASSWORD_PLACEHOLDER))
 
-            if (shouldKeepCurrentPassword) {
-                payload.password = current.password
-            } else if (passwordValue === null) {
-                payload.password = ''
-            } else if (passwordValue === '') {
-                payload.password = ''
-            }
+          if (shouldKeepCurrentPassword && current) {
+            payload.password = current.password
+          } else if (passwordValue === null) {
+            payload.password = ''
+          } else if (passwordValue === '') {
+            payload.password = ''
+          }
 
-            await updateDatabaseConnection(id, payload)
+          await updateDatabaseConnection(id, payload as unknown as Partial<DatabaseConnection>)
           cacheService.invalidate('database:')
           message.success('更新连接成功')
           await get().fetchConnections(true)
-            await get().fetchDataSourcesStatus(true)
+          await get().fetchDataSourcesStatus(true)
         } catch (error) {
           const errorObj: StoreError = {
             code: 'UPDATE_ERROR',
             message: error instanceof Error ? error.message : '更新连接失败',
-            details: error,
+            details: error instanceof Error ? error.message : String(error),
             timestamp: Date.now()
           }
 
@@ -1036,12 +1050,12 @@ export const useDatabaseStore = create<DatabaseState>()(
             })
           }
           await get().fetchConnections(true)
-            await get().fetchDataSourcesStatus(true)
+          await get().fetchDataSourcesStatus(true)
         } catch (error) {
           const errorObj: StoreError = {
             code: 'DELETE_ERROR',
             message: error instanceof Error ? error.message : '删除连接失败',
-            details: error,
+            details: error instanceof Error ? error.message : String(error),
             timestamp: Date.now()
           }
 
@@ -1067,7 +1081,7 @@ export const useDatabaseStore = create<DatabaseState>()(
         }
 
         const payload = {
-          ...preparePayload(current),
+          ...preparePayload(current as unknown as Record<string, unknown>),
           connection_id: id
         }
 

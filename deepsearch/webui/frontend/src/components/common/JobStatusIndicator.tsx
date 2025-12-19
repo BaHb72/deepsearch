@@ -8,7 +8,7 @@ const { Text } = Typography
 const JobStatusIndicator: React.FC = () => {
     const [jobs, setJobs] = useState<IngestionJob[]>([])
     const [loading, setLoading] = useState(false)
-    const [polling, setPolling] = useState(true)
+    const [polling, _setPolling] = useState(true)
 
     const fetchJobs = useCallback(async () => {
         try {

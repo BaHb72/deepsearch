@@ -681,11 +681,89 @@ async def get_market_service():
                 'market_sentiment': 'unknown',
             }
 
-        async def get_top_gainers(self):
+        async def get_top_gainers(self, **kwargs):
             return []
 
-        async def get_top_losers(self):
+        async def get_top_losers(self, **kwargs):
             return []
+
+        async def get_zt_pool(self, date=None):
+            """获取涨停股池"""
+            from datetime import datetime as dt
+
+            from deepsearch.infrastructure.providers.implementations.akshare.akshare_direct import (
+                AKShareDirectProvider,
+            )
+
+            if date is None:
+                date = dt.now().strftime("%Y%m%d")
+
+            try:
+                provider = AKShareDirectProvider()
+                await provider.initialize()
+                result = await provider.get_limit_up_pool(date)
+
+                if result:
+                    # 转换字段名以匹配API响应模型ZTPoolItem
+                    return [
+                        {
+                            "rank": item.get("rank", 0),
+                            "symbol": item.get("symbol", ""),
+                            "name": item.get("name", ""),
+                            "change_pct": item.get("change_pct", 0),
+                            "price": item.get("price", 0),
+                            "amount": int(item.get("amount", 0)),
+                            "turnover_rate": item.get("turnover_rate", 0),
+                            "seal_funds": int(item.get("seal_amount", 0)),
+                            "first_seal_time": item.get("first_seal_time", ""),
+                            "last_seal_time": item.get("last_seal_time", ""),
+                            "open_times": item.get("break_count", 0),
+                            "zt_stats": item.get("limit_up_stats", ""),
+                            "continuous_days": item.get("continuous_count", 0),
+                            "industry": item.get("industry", ""),
+                        }
+                        for item in result
+                    ]
+            except Exception as e:
+                logger.error(f"FallbackMarketService.get_zt_pool failed: {e}")
+            return []
+
+        async def get_anomalies(self, kind="all", min_change=0, min_amount=0):
+            """获取异动数据"""
+            return []
+
+        async def get_market_activity(self):
+            """获取赚钱效应数据"""
+            from datetime import datetime as dt
+
+            return {
+                "rise": 0,
+                "fall": 0,
+                "flat": 0,
+                "limit_up": 0,
+                "limit_down": 0,
+                "real_limit_up": 0,
+                "real_limit_down": 0,
+                "st_limit_up": 0,
+                "st_limit_down": 0,
+                "halt": 0,
+                "activity_rate": "N/A",
+                "rise_ratio": "N/A",
+                "statistics_time": "",
+                "timestamp": dt.now().isoformat(),
+            }
+
+        async def get_stock_changes(self, change_type="大笔买入"):
+            """获取盘口异动"""
+            return []
+
+        async def get_sectors(self, sector_type="industry", limit=20, sort_by="change_pct", level=None):
+            """获取板块数据"""
+            return []
+
+        def get_statistics(self):
+            """获取统计信息"""
+            return {"requests": 0, "cache_hits": 0, "errors": 0}
 
     logger.warning('Using fallback MarketService stub; real providers are unavailable')
     return _FallbackMarketService()

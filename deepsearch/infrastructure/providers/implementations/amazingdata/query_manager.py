@@ -37,6 +37,80 @@ from .param_guards import CacheParamMode, CachePolicy
 if TYPE_CHECKING:
     from .amazingdata import AmazingDataProvider
 
+# Period枚举映射：用户输入 -> SDK Period枚举属性名
+# 按开发手册4.1.6章节 数据周期 Period
+PERIOD_MAPPING: Dict[str, str] = {
+    # 分钟K线
+    "1m": "min1",
+    "min1": "min1",
+    "1min": "min1",
+    "3m": "min3",
+    "min3": "min3",
+    "5m": "min5",
+    "min5": "min5",
+    "5min": "min5",
+    "10m": "min10",
+    "min10": "min10",
+    "15m": "min15",
+    "min15": "min15",
+    "15min": "min15",
+    "30m": "min30",
+    "min30": "min30",
+    "30min": "min30",
+    "60m": "min60",
+    "min60": "min60",
+    "1h": "min60",
+    "120m": "min120",
+    "min120": "min120",
+    "2h": "min120",
+    # 日/周/月/季/年线
+    "1d": "day",
+    "d": "day",
+    "day": "day",
+    "daily": "day",
+    "1w": "week",
+    "w": "week",
+    "week": "week",
+    "weekly": "week",
+    "1M": "month",
+    "M": "month",
+    "month": "month",
+    "monthly": "month",
+    "1q": "season",
+    "q": "season",
+    "season": "season",
+    "quarter": "season",
+    "1y": "year",
+    "y": "year",
+    "year": "year",
+    "yearly": "year",
+}
+
+
+def _resolve_period_value(sdk: Any, period_str: str) -> Any:
+    """将用户输入的period字符串解析为SDK的Period枚举值.
+    
+    按开发手册4.1.6节，需要使用 Period.xxx.value 形式的枚举值。
+    """
+    # 获取SDK的Period枚举
+    constant = getattr(sdk, "constant", None)
+    period_enum = getattr(constant, "Period", None) if constant else None
+    
+    # 标准化输入
+    normalized = period_str.lower().strip()
+    sdk_attr_name = PERIOD_MAPPING.get(normalized, normalized)
+    
+    # 尝试从枚举获取值
+    if period_enum is not None:
+        period_attr = getattr(period_enum, sdk_attr_name, None)
+        if period_attr is not None:
+            # 返回枚举的.value
+            return getattr(period_attr, "value", period_attr)
+    
+    # 回退：直接返回字符串
+    return sdk_attr_name
+
+
 RouteHandler = Callable[[DataRequest], Awaitable[Tuple[Any, Dict[str, object]]]]
 
 
@@ -417,7 +491,9 @@ class AmazingDataQueryManager:
                 market = _create_market_data_instance(sdk)
                 query = getattr(market, "query_kline", None)
                 if callable(query):
-                    kwargs: dict[str, object] = {"period": period}
+                    # 使用_resolve_period_value解析period为SDK枚举值
+                    resolved_period = _resolve_period_value(sdk, period)
+                    kwargs: dict[str, object] = {"period": resolved_period}
                     begin_int = _normalize_date_to_int(start_date)
                     end_int = _normalize_date_to_int(end_date)
                     if begin_int is not None:

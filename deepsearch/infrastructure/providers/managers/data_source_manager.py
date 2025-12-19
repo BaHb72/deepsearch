@@ -1058,6 +1058,22 @@ class DataSourceManager:
             proxy_enabled = proxy_enabled.lower() in {"1", "true", "yes", "on"}
 
         use_proxy = mode == "proxy" or bool(proxy_enabled)
+        
+        # 检查 Worker URL 是否为有效配置（非占位符）
+        if use_proxy:
+            worker_url = str(proxy_payload.get("worker_url", "")).lower()
+            is_placeholder = (
+                not worker_url
+                or "your-cloudflare-worker" in worker_url
+                or "example.com" in worker_url
+                or worker_url.endswith("your-worker.example.com")
+            )
+            if is_placeholder:
+                logger.warning(
+                    "AkShare 代理启用但未配置有效的 Worker URL，将回退直连模式"
+                )
+                use_proxy = False
+
         if use_proxy:
             resolved_proxy = {k: v for k, v in proxy_payload.items() if k != "enabled"}
             return "cloudflare", resolved_proxy
@@ -1908,6 +1924,12 @@ class DataSourceManager:
         logger.error(f"所有数据源均无法获取股票信息: {symbol}")
         return None
 
+    async def get_stock_info(
+        self, symbol: str, preferred_source: Optional[Union[str, DataSourceType]] = None, **kwargs
+    ) -> Optional[Dict[str, Any]]:
+        """获取股票基础信息，fetch_stock_info 的别名方法。"""
+        return await self.fetch_stock_info(symbol, preferred_source=preferred_source, **kwargs)
+
     async def get_realtime_quotes(
         self, symbols: List[str], **kwargs
     ) -> Optional[Dict[str, Dict[str, Any]]]:
@@ -1931,14 +1953,21 @@ class DataSourceManager:
                 if provider and hasattr(provider, "get_realtime_quotes"):
                     method = getattr(provider, "get_realtime_quotes")
                     if callable(method):
-                        bound_method = cast(
-                            Callable[..., Awaitable[Optional[Dict[str, Dict[str, Any]]]]],
-                            method,
-                        )
-                        result = await bound_method(symbols=symbols, **kwargs)
+                        # 直接使用位置参数调用，不使用 symbols= 关键字参数
+                        result = await method(symbols, **kwargs)
                         if result:
-                            logger.info(f"从{source_type}获取实时行情成功")
-                            return result
+                            # 如果返回的是列表，转换为字典格式
+                            if isinstance(result, list):
+                                result_dict: Dict[str, Dict[str, Any]] = {}
+                                for item in result:
+                                    if isinstance(item, dict) and "symbol" in item:
+                                        result_dict[item["symbol"]] = item
+                                if result_dict:
+                                    logger.info(f"从{source_type}获取实时行情成功")
+                                    return result_dict
+                            elif isinstance(result, dict):
+                                logger.info(f"从{source_type}获取实时行情成功")
+                                return result
             except Exception as e:
                 logger.error(f"从{source_type}获取实时行情失败: {e}")
                 continue

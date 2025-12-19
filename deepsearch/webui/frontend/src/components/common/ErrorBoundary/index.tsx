@@ -1,14 +1,23 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { Result, Button, Typography, Collapse, Space, Card } from 'antd'
-import { 
-  ReloadOutlined, 
-  HomeOutlined, 
+import {
+  ReloadOutlined,
+  HomeOutlined,
   BugOutlined,
   CopyOutlined,
-  QuestionCircleOutlined 
+  QuestionCircleOutlined
 } from '@ant-design/icons'
 import { copyToClipboard } from '@/utils/clipboard'
 import './index.scss'
+
+// 扩展 Window 接口
+declare global {
+  interface Window {
+    errorReporter?: {
+      report: (data: unknown) => void
+    }
+  }
+}
 
 const { Paragraph, Text } = Typography
 const { Panel } = Collapse
@@ -52,7 +61,7 @@ class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const { onError, enableReport } = this.props
-    
+
     // 记录错误历史
     this.setState(prevState => ({
       errorInfo,
@@ -72,7 +81,7 @@ class ErrorBoundary extends Component<Props, State> {
     }
 
     // 开发环境打印详细错误
-      if (import.meta.env.DEV) {
+    if (import.meta.env.DEV) {
       console.group('🚨 ErrorBoundary Caught Error')
       console.error('Error:', error)
       console.error('Error Info:', errorInfo)
@@ -84,13 +93,13 @@ class ErrorBoundary extends Component<Props, State> {
   componentDidUpdate(prevProps: Props) {
     const { resetKeys } = this.props
     const { hasError } = this.state
-    
+
     // 通过 resetKeys 的变化来重置错误状态
     if (hasError && prevProps.resetKeys !== resetKeys) {
       const hasResetKeyChanged = resetKeys?.some(
         (key, index) => key !== prevProps.resetKeys?.[index]
       )
-      
+
       if (hasResetKeyChanged) {
         this.resetError()
       }
@@ -109,12 +118,12 @@ class ErrorBoundary extends Component<Props, State> {
         userAgent: navigator.userAgent,
         url: window.location.href,
       }
-      
+
       // 示例：发送到错误收集服务
       if (window.errorReporter) {
         window.errorReporter.report(errorData)
       }
-      
+
       // 或者发送到后端
       // await fetch('/api/errors', {
       //   method: 'POST',
@@ -155,7 +164,7 @@ Component Stack: ${errorInfo?.componentStack}
 Time: ${new Date().toISOString()}
 URL: ${window.location.href}
     `.trim()
-    
+
     copyToClipboard(errorText)
   }
 
@@ -167,13 +176,13 @@ URL: ${window.location.href}
     if (!showDetails) return null
 
     return (
-      <Collapse 
-        ghost 
+      <Collapse
+        ghost
         className="error-details-collapse"
         defaultActiveKey={import.meta.env.DEV ? ['1'] : []}
       >
-        <Panel 
-          header="错误详情" 
+        <Panel
+          header="错误详情"
           key="1"
           extra={
             <Button
@@ -262,16 +271,16 @@ URL: ${window.location.href}
               </Space>
             }
             extra={[
-              <Button 
-                type="primary" 
-                key="refresh" 
+              <Button
+                type="primary"
+                key="refresh"
                 icon={<ReloadOutlined />}
                 onClick={this.handleRefresh}
               >
                 刷新页面
               </Button>,
-              <Button 
-                key="home" 
+              <Button
+                key="home"
                 icon={<HomeOutlined />}
                 onClick={this.handleGoHome}
               >
@@ -316,9 +325,9 @@ export const withErrorBoundary = <P extends object>(
       <Component {...props} />
     </ErrorBoundary>
   )
-  
+
   WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`
-  
+
   return WrappedComponent
 }
 
@@ -326,7 +335,7 @@ export const withErrorBoundary = <P extends object>(
 export const useErrorHandler = () => {
   return (error: Error, errorInfo?: ErrorInfo) => {
     console.error('useErrorHandler:', error, errorInfo)
-    
+
     // 可以在这里进行错误处理
     // 例如：显示通知、上报错误等
     if (window.errorReporter) {

@@ -7,11 +7,7 @@
   --text-color: rgba(0, 0, 0, 0.88);
 }
 
-.dark {
-  --primary-color: #1677ff;
-  --bg-color: #000000;
-  --text-color: rgba(255, 255, 255, 0.85);
-}
+/* Removed Dark Mode Override to enforce consistent Light Theme */
 
 * {
   margin: 0;

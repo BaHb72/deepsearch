@@ -407,10 +407,16 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
 
     def _build_proxy_config(self) -> Dict[str, Any]:
         proxy_config: Dict[str, Any] = {}
+        # 检查多个可能的配置位置
         python_candidate = (
                 getattr(self.config, "python_interpreter_path", "")
                 or self.config.config.get("python_interpreter_path")
         )
+        # 也检查嵌套的 connection 块
+        if not python_candidate:
+            connection_cfg = self.config.config.get("connection", {})
+            if isinstance(connection_cfg, dict):
+                python_candidate = connection_cfg.get("python_interpreter_path")
         python_path = str(python_candidate or "").strip()
         if python_path:
             proxy_config["python_executable"] = python_path

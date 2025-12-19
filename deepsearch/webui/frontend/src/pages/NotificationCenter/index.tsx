@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {useState} from 'react'
 import {Alert, Button, Result, Skeleton, Space, Tabs} from 'antd'
 import useNotificationConfig from './useNotificationConfig'

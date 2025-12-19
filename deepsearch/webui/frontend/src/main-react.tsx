@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { App as AntApp } from 'antd'
 import { StyleProvider } from '@ant-design/cssinjs'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
 
@@ -17,6 +19,19 @@ import { RealtimeSourceProvider } from './contexts/RealtimeSourceContext'
 
 import 'antd/dist/reset.css'
 import './styles/index.scss'
+import './index.css'
+
+// React Query 客户端配置
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            staleTime: 10_000,          // 10秒内数据视为新鲜
+            gcTime: 5 * 60 * 1000,      // 5分钟后清理缓存
+            retry: 1,                    // 失败重试1次
+            refetchOnWindowFocus: false, // 禁用窗口聚焦时自动刷新
+        },
+    },
+})
 
 dayjs.locale('zh-cn')
 
@@ -43,19 +58,22 @@ function mountApplication(root: ReturnType<typeof createRoot>, themeMode: ThemeM
 
     root.render(
         <React.StrictMode>
-            <ErrorBoundary>
-                <StyleProvider hashPriority="high">
-                    <ThemeProvider>
-                        <AntApp>
-                            <RealtimeSourceProvider>
-                                <BrowserRouter>
-                                    <App />
-                                </BrowserRouter>
-                            </RealtimeSourceProvider>
-                        </AntApp>
-                    </ThemeProvider>
-                </StyleProvider>
-            </ErrorBoundary>
+            <QueryClientProvider client={queryClient}>
+                <ErrorBoundary>
+                    <StyleProvider hashPriority="high">
+                        <ThemeProvider>
+                            <AntApp>
+                                <RealtimeSourceProvider>
+                                    <BrowserRouter>
+                                        <App />
+                                    </BrowserRouter>
+                                </RealtimeSourceProvider>
+                            </AntApp>
+                        </ThemeProvider>
+                    </StyleProvider>
+                </ErrorBoundary>
+                <ReactQueryDevtools initialIsOpen={false} />
+            </QueryClientProvider>
         </React.StrictMode>
     )
 }

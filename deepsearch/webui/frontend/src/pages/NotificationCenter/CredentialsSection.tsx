@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {useEffect, useState} from 'react'
 import {App, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Tag, Typography} from 'antd'
 import type {NotificationChannel, NotificationConfigResponse} from '@/api/notifications'

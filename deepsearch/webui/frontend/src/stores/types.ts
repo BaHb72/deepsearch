@@ -1,6 +1,5 @@
-// @ts-nocheck
-import type {JsonObject, JsonValue} from '@/types/common'
-import type {DataSourceHealthStatus as ApiDataSourceHealthStatus} from '../api/dataSource'
+import type { JsonObject, JsonValue } from '@/types/common'
+import type { DataSourceHealthStatus as ApiDataSourceHealthStatus } from '../api/dataSource'
 
 /**
  * Zustand Store 类型定义
@@ -100,11 +99,11 @@ export interface DataSourceMetricsSnapshot {
 }
 
 export interface DataSourceLoginThrottle {
-    inProgress?: boolean
-    nextAllowedAt?: string | null
-    waitSeconds?: number | null
-    backoffLevel?: number
-    failureStreak?: number
+  inProgress?: boolean
+  nextAllowedAt?: string | null
+  waitSeconds?: number | null
+  backoffLevel?: number
+  failureStreak?: number
 }
 
 export interface DataSourceProxy {
@@ -145,14 +144,14 @@ export interface DataSource {
   metrics?: DataSourceMetricsSnapshot
   proxies?: DataSourceProxy[]
   proxyEnabled?: boolean
-    loginThrottle?: DataSourceLoginThrottle
-    pendingLogin?: boolean
-    lastLoginStartedAt?: string | null
-    lastLoginCompletedAt?: string | null
-    lastLoginSuccessAt?: string | null
-    lastLoginErrorAt?: string | null
-    lastLoginErrorReason?: string | null
-    healthStatus?: ApiDataSourceHealthStatus | null
+  loginThrottle?: DataSourceLoginThrottle
+  pendingLogin?: boolean
+  lastLoginStartedAt?: string | null
+  lastLoginCompletedAt?: string | null
+  lastLoginSuccessAt?: string | null
+  lastLoginErrorAt?: string | null
+  lastLoginErrorReason?: string | null
+  healthStatus?: ApiDataSourceHealthStatus | null
 }
 
 // 数据源统计
@@ -174,14 +173,14 @@ export interface DataSourceStatus {
   testSummary?: string | null
   reason?: string
   hasSavedCredential?: boolean
-    loginThrottle?: DataSourceLoginThrottle
-    pendingLogin?: boolean
-    lastLoginStartedAt?: string | null
-    lastLoginCompletedAt?: string | null
-    lastLoginSuccessAt?: string | null
-    lastLoginErrorAt?: string | null
-    lastLoginErrorReason?: string | null
-    healthStatus?: ApiDataSourceHealthStatus | null
+  loginThrottle?: DataSourceLoginThrottle
+  pendingLogin?: boolean
+  lastLoginStartedAt?: string | null
+  lastLoginCompletedAt?: string | null
+  lastLoginSuccessAt?: string | null
+  lastLoginErrorAt?: string | null
+  lastLoginErrorReason?: string | null
+  healthStatus?: ApiDataSourceHealthStatus | null
 }
 
 // 数据源健康报告
@@ -190,7 +189,7 @@ export interface DataSourceHealthReport {
   availableCount?: number
   available_count?: number
   degraded?: number
-  [key: string]: JsonValue
+  // 移除冲突的索引签名，使用明确的字段定义
 }
 
 // 数据源状态汇总
@@ -215,5 +214,167 @@ export interface StoreError {
   message: string
   details?: JsonValue
   timestamp: number
+}
+
+// ============ Raw API 响应类型 ============
+// 用于描述从后端 API 返回的原始 JSON 结构，支持 snake_case/camelCase 双命名
+
+/** 原始度量数据 */
+export interface RawMetrics {
+  totalRequests?: number | string
+  total_requests?: number | string
+  successRate?: number | string
+  success_rate?: number | string
+  avgLatency?: number | string
+  avg_latency?: number | string
+  recentErrorRate?: number | string
+  recent_error_rate?: number | string
+  errorCount?: number | string
+  error_count?: number | string
+  errorRate?: number | string
+  error_rate?: number | string
+  lastAccess?: string | number | Date
+  last_access?: string | number | Date
+  lastCheckedAt?: string | number | Date
+  last_checked_at?: string | number | Date
+}
+
+/** 原始连接激活状态 */
+export interface RawActivationState {
+  state?: string
+  enabled?: boolean
+  updated_at?: string | number | Date
+  updatedAt?: string | number | Date
+  error?: string | null
+}
+
+/** 原始连接状态 */
+export interface RawConnectivityState {
+  state?: string
+  last_success_at?: string | number | Date
+  lastSuccessAt?: string | number | Date
+  last_error?: string | null
+  lastError?: string | null
+  retrying?: boolean
+}
+
+/** 原始配置数据 */
+export interface RawConfigData {
+  name?: string
+  host?: string
+  port?: number | string
+  username?: string
+  provider_name?: string
+  connection?: RawConnectionConfig
+  enabled?: boolean
+  [key: string]: unknown
+}
+
+/** 原始连接配置 */
+export interface RawConnectionConfig {
+  host?: string
+  port?: number | string
+  username?: string
+  [key: string]: unknown
+}
+
+/** 原始代理数据 */
+export interface RawProxyData {
+  id?: string | number
+  name?: string
+  source?: string | number
+  kind?: string
+  status?: string
+  available?: boolean
+  is_available?: boolean
+  reason?: string | null
+  degradedReason?: string | null
+  status_reason?: string | null
+  lastTransition?: string | number | Date | null
+  last_transition?: string | number | Date | null
+  updated_at?: string | number | Date | null
+  lastStatusChange?: string | number | Date | null
+  lastTestTime?: string | number | Date | null
+  last_test_time?: string | number | Date | null
+  last_tested_at?: string | number | Date | null
+  testSummary?: unknown
+  test_summary?: unknown
+  hasSavedCredential?: boolean
+  has_saved_credential?: boolean
+  metrics?: RawMetrics
+  config?: RawConfigData
+}
+
+/** 原始数据源数据 */
+export interface RawDataSourceData {
+  id?: number | string
+  name?: string
+  type?: string
+  enabled?: boolean
+  is_enabled?: boolean
+  priority?: number | string
+  status?: string
+  available?: boolean
+  is_available?: boolean
+  availableCount?: number
+  available_count?: number
+  reason?: string | null
+  degradedReason?: string | null
+  status_reason?: string | null
+  lastTestTime?: string | number | Date | null
+  last_test_time?: string | number | Date | null
+  last_tested_at?: string | number | Date | null
+  lastTransition?: string | number | Date | null
+  last_transition?: string | number | Date | null
+  updated_at?: string | number | Date | null
+  testSummary?: unknown
+  test_summary?: unknown
+  lastTestSummary?: unknown
+  last_test_summary?: unknown
+  hasSavedCredential?: boolean
+  has_saved_credential?: boolean
+  successRate?: number
+  success_rate?: number
+  avgResponseTime?: number
+  avg_response_time?: number
+  config?: RawConfigData
+  metrics?: RawMetrics
+  proxies?: RawProxyData[]
+  proxyEnabled?: boolean
+  proxy_enabled?: boolean
+}
+
+/** 原始数据库连接数据 */
+export interface RawConnectionData {
+  id?: number | string
+  name?: string
+  type?: string
+  host?: string
+  port?: number | string
+  database?: string | number
+  username?: string
+  password?: string
+  isDefault?: boolean
+  default?: boolean
+  enabled?: boolean
+  connected?: boolean
+  status?: string
+  error?: string | null
+  lastHealthCheck?: string
+  last_health_check?: string
+  activation?: RawActivationState
+  connectivity?: RawConnectivityState
+  deprecated?: {
+    enabled?: boolean
+    connected?: boolean
+    status?: string
+  }
+  status_source?: string
+  statusSource?: string
+  status_detail?: string
+  statusDetail?: string
+  active_connection?: boolean
+  activeConnection?: boolean
+  updated_at?: string | number | Date
 }
 

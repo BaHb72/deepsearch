@@ -48,6 +48,15 @@ class DataCapability(Enum):
     TRADING_CALENDAR = "trading_calendar"
     ADJUSTMENT_FACTOR = "adjustment_factor"
 
+    # 扩展数据能力
+    INDEX_DATA = "index_data"           # 指数数据（成分股、权重）
+    OPTION_DATA = "option_data"         # 期权数据
+    ETF_DATA = "etf_data"               # ETF数据（申赎清单、份额）
+    FUTURE_DATA = "future_data"         # 期货数据
+    BOND_DATA = "bond_data"             # 债券/国债数据
+    ORDER_FLOW = "order_flow"           # 订单流数据 (VIP)
+    INDUSTRY_DATA = "industry_data"     # 行业分类数据
+
 
 class DataProvider(ABC):
     """数据提供者基类"""

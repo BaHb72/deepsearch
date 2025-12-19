@@ -96,11 +96,27 @@ class TestMiniQMTProviderInit:
         capabilities = provider.get_capabilities()
 
         expected = {
+            # 基础行情能力
             DataCapability.REALTIME_QUOTE,
             DataCapability.REALTIME_QUOTES,
             DataCapability.TICK_DATA,
             DataCapability.MINUTE_DATA,
             DataCapability.KLINE_DATA,
+            # 基础信息能力
+            DataCapability.STOCK_LIST,
+            DataCapability.STOCK_INFO,
+            DataCapability.ORDER_BOOK,
+            DataCapability.TRADING_CALENDAR,
+            # 特色数据能力
+            DataCapability.CAPITAL_FLOW,
+            DataCapability.DRAGON_TIGER,
+            DataCapability.NORTH_FLOW,
+            DataCapability.FINANCIAL_DATA,
+            DataCapability.SECTOR_DATA,
+            # 扩展数据能力
+            DataCapability.INDEX_DATA,
+            DataCapability.INDUSTRY_DATA,
+            DataCapability.ORDER_FLOW,
         }
 
         assert capabilities == expected

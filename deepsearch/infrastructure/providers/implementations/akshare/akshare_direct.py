@@ -18,6 +18,7 @@ from deepsearch.core.utils.async_timeout import timeout_decorator
 # 导入监控装饰器
 from deepsearch.infrastructure.providers.unified_proxy import async_monitor_access
 from deepsearch.ports.data_sources import DataAccessType, DataSourceType
+from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
 
 from ._deps import AkshareModule, PandasModule, load_akshare, load_pandas
 
@@ -57,6 +58,38 @@ class AKShareDirectProvider:
         self.proxy_info = {"enabled": False, "worker_url": None, "mode": "direct"}
         self._akshare: Optional[AkshareModule] = akshare_module if akshare_module is not None else ak
         self._pandas: Optional[PandasModule] = pandas_module if pandas_module is not None else pd
+
+    def get_capabilities(self) -> set[DataCapability]:
+        """返回 AKShare Direct 支持的数据能力集合。
+        
+        AKShare 提供丰富的免费股票数据接口：
+        - 基础数据：股票列表、实时行情、K线数据、股票信息
+        - 市场数据：资金流向、板块数据、行业数据
+        - 特色数据：融资融券、大宗交易、北向资金、龙虎榜
+        - 财务数据：财务报表
+        - 基础信息：交易日历
+        """
+        return {
+            # 基础数据能力
+            DataCapability.STOCK_LIST,
+            DataCapability.REALTIME_QUOTE,
+            DataCapability.REALTIME_QUOTES,
+            DataCapability.KLINE_DATA,
+            DataCapability.STOCK_INFO,
+            # 市场数据能力
+            DataCapability.CAPITAL_FLOW,
+            DataCapability.SECTOR_DATA,
+            DataCapability.INDUSTRY_DATA,
+            # 特色数据能力
+            DataCapability.MARGIN_TRADING,
+            DataCapability.BLOCK_TRADE,
+            DataCapability.NORTH_FLOW,
+            DataCapability.DRAGON_TIGER,
+            # 财务数据能力
+            DataCapability.FINANCIAL_DATA,
+            # 基础信息能力
+            DataCapability.TRADING_CALENDAR,
+        }
 
     def _ensure_akshare(self) -> AkshareModule:
         """获取注入的 AkShare 模块"""
@@ -539,12 +572,12 @@ class AKShareDirectProvider:
         access_type=DataAccessType.REALTIME_QUOTE,
         module="akshare_direct",
     )
-    @timeout_decorator(
-        seconds=45.0, default=[]  # 批量获取使用更长超时
-    )
     async def get_realtime_quotes(self, symbols: List[str]) -> Optional[List[Dict[str, Any]]]:
         """
         批量获取实时行情
+
+        对于少量股票（<=10），使用并发单股票查询（快速）
+        对于大量股票，使用全市场查询（较慢但高效）
 
         Args:
             symbols: 股票代码列表
@@ -555,8 +588,32 @@ class AKShareDirectProvider:
         if self._akshare is None or not self.initialized:
             return []
 
+        if not symbols:
+            return []
+
         try:
-            # 在线程池中执行阻塞的AKShare调用
+            # 对于少量股票，使用并发单股票查询（更快）
+            if len(symbols) <= 10:
+                logger.info(f"[AKShare] 使用并发单股票查询获取 {len(symbols)} 只股票行情")
+                tasks = [self.get_realtime_quote(symbol) for symbol in symbols]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                quotes = []
+                for symbol, result in zip(symbols, results):
+                    if isinstance(result, Exception):
+                        logger.debug(f"获取 {symbol} 行情失败: {result}")
+                        quotes.append({"symbol": symbol, "error": str(result), "source": "akshare_direct"})
+                    elif isinstance(result, dict) and not result.get("error"):
+                        result["symbol"] = symbol
+                        quotes.append(result)
+                    elif isinstance(result, dict):
+                        quotes.append(result)
+                
+                logger.info(f"[AKShare] 并发查询完成，获取 {len(quotes)} 条行情")
+                return quotes
+            
+            # 对于大量股票，使用全市场查询（慢但高效）
+            logger.info(f"[AKShare] 使用全市场查询获取 {len(symbols)} 只股票行情")
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
                 self._executor, self._fetch_realtime_quotes_sync, symbols
@@ -1128,3 +1185,1205 @@ class AKShareDirectProvider:
         self._cache.clear()
         self.initialized = False
         logger.info("AKShare直连数据提供者已关闭")
+
+    # ==================== 板块接口 ====================
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.STOCK_LIST,
+        module="akshare_direct",
+    )
+    async def get_concept_sectors(self, **kwargs) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取概念板块列表
+
+        使用东方财富接口 stock_board_concept_name_em
+
+        Returns:
+            概念板块列表，包含板块名称、代码、涨跌幅等
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            # 检查缓存
+            cache_key = "concept_sectors"
+            if cache_key in self._cache:
+                cached_time, cached_data = self._cache[cache_key]
+                if time.time() - cached_time < self._cache_ttl.get("info", 3600):
+                    return cast(List[Dict[str, Any]], cached_data.get("data", []))
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor, self._fetch_concept_sectors_sync
+            )
+
+            if result:
+                self._cache[cache_key] = (time.time(), {"data": result})
+
+            return result
+
+        except Exception as e:
+            logger.error(f"获取概念板块列表失败: {e}")
+            return None
+
+    def _fetch_concept_sectors_sync(self) -> List[Dict[str, Any]]:
+        """同步获取概念板块列表"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        try:
+            df = module.stock_board_concept_name_em()
+            if df is None or df.empty:
+                return []
+
+            result = []
+            for _, row in df.iterrows():
+                result.append({
+                    "rank": int(row.get("排名", 0)),
+                    "name": str(row.get("板块名称", "")),
+                    "code": str(row.get("板块代码", "")),
+                    "price": float(row.get("最新价", 0) or 0),
+                    "change": float(row.get("涨跌额", 0) or 0),
+                    "change_pct": float(row.get("涨跌幅", 0) or 0),
+                    "market_cap": int(row.get("总市值", 0) or 0),
+                    "turnover_rate": float(row.get("换手率", 0) or 0),
+                    "up_count": int(row.get("上涨家数", 0) or 0),
+                    "down_count": int(row.get("下跌家数", 0) or 0),
+                    "leading_stock": str(row.get("领涨股票", "")),
+                    "leading_stock_change_pct": float(row.get("领涨股票-涨跌幅", 0) or 0),
+                    "source": "akshare_direct",
+                })
+
+            logger.info(f"获取到 {len(result)} 个概念板块")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取概念板块列表失败: {e}")
+            return []
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.STOCK_LIST,
+        module="akshare_direct",
+    )
+    async def get_industry_sectors(self, **kwargs) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取行业板块列表
+
+        使用东方财富接口 stock_board_industry_name_em
+
+        Returns:
+            行业板块列表，包含板块名称、代码、涨跌幅等
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            # 检查缓存
+            cache_key = "industry_sectors"
+            if cache_key in self._cache:
+                cached_time, cached_data = self._cache[cache_key]
+                if time.time() - cached_time < self._cache_ttl.get("info", 3600):
+                    return cast(List[Dict[str, Any]], cached_data.get("data", []))
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor, self._fetch_industry_sectors_sync
+            )
+
+            if result:
+                self._cache[cache_key] = (time.time(), {"data": result})
+
+            return result
+
+        except Exception as e:
+            logger.error(f"获取行业板块列表失败: {e}")
+            return None
+
+    def _fetch_industry_sectors_sync(self) -> List[Dict[str, Any]]:
+        """同步获取行业板块列表"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        try:
+            df = module.stock_board_industry_name_em()
+            if df is None or df.empty:
+                return []
+
+            result = []
+            for _, row in df.iterrows():
+                result.append({
+                    "rank": int(row.get("排名", 0)),
+                    "name": str(row.get("板块名称", "")),
+                    "code": str(row.get("板块代码", "")),
+                    "price": float(row.get("最新价", 0) or 0),
+                    "change": float(row.get("涨跌额", 0) or 0),
+                    "change_pct": float(row.get("涨跌幅", 0) or 0),
+                    "market_cap": int(row.get("总市值", 0) or 0),
+                    "turnover_rate": float(row.get("换手率", 0) or 0),
+                    "up_count": int(row.get("上涨家数", 0) or 0),
+                    "down_count": int(row.get("下跌家数", 0) or 0),
+                    "leading_stock": str(row.get("领涨股票", "")),
+                    "leading_stock_change_pct": float(row.get("领涨股票-涨跌幅", 0) or 0),
+                    "source": "akshare_direct",
+                })
+
+            logger.info(f"获取到 {len(result)} 个行业板块")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取行业板块列表失败: {e}")
+            return []
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.STOCK_LIST,
+        module="akshare_direct",
+    )
+    async def get_sector_stocks(
+        self,
+        sector_name: str,
+        sector_type: str = "concept",
+        **kwargs,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取板块成份股
+
+        Args:
+            sector_name: 板块名称或代码（如 "融资融券" 或 "BK0655"）
+            sector_type: 板块类型，"concept" 或 "industry"
+
+        Returns:
+            成份股列表
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            # 检查缓存
+            cache_key = f"sector_stocks_{sector_type}_{sector_name}"
+            if cache_key in self._cache:
+                cached_time, cached_data = self._cache[cache_key]
+                if time.time() - cached_time < self._cache_ttl.get("info", 3600):
+                    return cast(List[Dict[str, Any]], cached_data.get("data", []))
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_sector_stocks_sync,
+                sector_name,
+                sector_type,
+            )
+
+            if result:
+                self._cache[cache_key] = (time.time(), {"data": result})
+
+            return result
+
+        except Exception as e:
+            logger.error(f"获取板块成份股失败: {e}")
+            return None
+
+    def _fetch_sector_stocks_sync(
+        self,
+        sector_name: str,
+        sector_type: str,
+    ) -> List[Dict[str, Any]]:
+        """同步获取板块成份股"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        try:
+            if sector_type == "concept":
+                df = module.stock_board_concept_cons_em(symbol=sector_name)
+            else:
+                df = module.stock_board_industry_cons_em(symbol=sector_name)
+
+            if df is None or df.empty:
+                return []
+
+            result = []
+            for _, row in df.iterrows():
+                result.append({
+                    "rank": int(row.get("序号", 0)),
+                    "symbol": str(row.get("代码", "")),
+                    "name": str(row.get("名称", "")),
+                    "price": float(row.get("最新价", 0) or 0),
+                    "change_pct": float(row.get("涨跌幅", 0) or 0),
+                    "change": float(row.get("涨跌额", 0) or 0),
+                    "volume": float(row.get("成交量", 0) or 0),
+                    "amount": float(row.get("成交额", 0) or 0),
+                    "amplitude": float(row.get("振幅", 0) or 0),
+                    "high": float(row.get("最高", 0) or 0),
+                    "low": float(row.get("最低", 0) or 0),
+                    "open": float(row.get("今开", 0) or 0),
+                    "prev_close": float(row.get("昨收", 0) or 0),
+                    "turnover_rate": float(row.get("换手率", 0) or 0),
+                    "pe_ratio": float(row.get("市盈率-动态", 0) or 0),
+                    "pb_ratio": float(row.get("市净率", 0) or 0),
+                    "source": "akshare_direct",
+                })
+
+            logger.info(f"获取到 {sector_name} 板块 {len(result)} 只成份股")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取板块成份股失败: {e}")
+            return []
+
+    # ==================== 资金流向接口 ====================
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.HISTORICAL_KLINE,
+        module="akshare_direct",
+    )
+    async def get_individual_capital_flow(
+        self,
+        symbol: str,
+        market: str = "sh",
+        **kwargs,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取个股资金流向
+
+        使用东方财富接口 stock_individual_fund_flow
+
+        Args:
+            symbol: 股票代码（如 "600094"）
+            market: 市场，"sh" 上海 / "sz" 深圳 / "bj" 北京
+
+        Returns:
+            近 100 个交易日的资金流向数据
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_individual_capital_flow_sync,
+                symbol,
+                market,
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"获取个股资金流向失败: {e}")
+            return None
+
+    def _fetch_individual_capital_flow_sync(
+        self,
+        symbol: str,
+        market: str,
+    ) -> List[Dict[str, Any]]:
+        """同步获取个股资金流向"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        try:
+            df = module.stock_individual_fund_flow(stock=symbol, market=market)
+            if df is None or df.empty:
+                return []
+
+            result = []
+            for _, row in df.iterrows():
+                result.append({
+                    "date": str(row.get("日期", "")),
+                    "close": float(row.get("收盘价", 0) or 0),
+                    "change_pct": float(row.get("涨跌幅", 0) or 0),
+                    "main_net_inflow": float(row.get("主力净流入-净额", 0) or 0),
+                    "main_net_inflow_pct": float(row.get("主力净流入-净占比", 0) or 0),
+                    "super_large_net_inflow": float(row.get("超大单净流入-净额", 0) or 0),
+                    "super_large_net_inflow_pct": float(row.get("超大单净流入-净占比", 0) or 0),
+                    "large_net_inflow": float(row.get("大单净流入-净额", 0) or 0),
+                    "large_net_inflow_pct": float(row.get("大单净流入-净占比", 0) or 0),
+                    "medium_net_inflow": float(row.get("中单净流入-净额", 0) or 0),
+                    "medium_net_inflow_pct": float(row.get("中单净流入-净占比", 0) or 0),
+                    "small_net_inflow": float(row.get("小单净流入-净额", 0) or 0),
+                    "small_net_inflow_pct": float(row.get("小单净流入-净占比", 0) or 0),
+                    "source": "akshare_direct",
+                })
+
+            logger.info(f"获取到 {symbol} 共 {len(result)} 条资金流向数据")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取个股资金流向失败: {e}")
+            return []
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.STOCK_LIST,
+        module="akshare_direct",
+    )
+    async def get_sector_capital_flow_rank(
+        self,
+        indicator: str = "今日",
+        sector_type: str = "行业资金流",
+        **kwargs,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取板块资金流向排名
+
+        使用东方财富接口 stock_sector_fund_flow_rank
+
+        Args:
+            indicator: 时间周期，"今日" / "5日" / "10日"
+            sector_type: 板块类型，"行业资金流" / "概念资金流" / "地域资金流"
+
+        Returns:
+            板块资金流向排名数据
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            # 检查缓存
+            cache_key = f"sector_capital_flow_{indicator}_{sector_type}"
+            if cache_key in self._cache:
+                cached_time, cached_data = self._cache[cache_key]
+                if time.time() - cached_time < self._cache_ttl.get("realtime", 60):
+                    return cast(List[Dict[str, Any]], cached_data.get("data", []))
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_sector_capital_flow_rank_sync,
+                indicator,
+                sector_type,
+            )
+
+            if result:
+                self._cache[cache_key] = (time.time(), {"data": result})
+
+            return result
+
+        except Exception as e:
+            logger.error(f"获取板块资金流向排名失败: {e}")
+            return None
+
+    def _fetch_sector_capital_flow_rank_sync(
+        self,
+        indicator: str,
+        sector_type: str,
+    ) -> List[Dict[str, Any]]:
+        """同步获取板块资金流向排名"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        try:
+            df = module.stock_sector_fund_flow_rank(
+                indicator=indicator, sector_type=sector_type
+            )
+            if df is None or df.empty:
+                return []
+
+            result = []
+            # 动态获取列名前缀
+            prefix = indicator if indicator != "今日" else "今日"
+
+            for _, row in df.iterrows():
+                result.append({
+                    "rank": int(row.get("序号", 0)),
+                    "name": str(row.get("名称", "")),
+                    "change_pct": float(row.get(f"{prefix}涨跌幅", row.get("今日涨跌幅", 0)) or 0),
+                    "main_net_inflow": float(row.get("主力净流入-净额", 0) or 0),
+                    "main_net_inflow_pct": float(row.get("主力净流入-净占比", 0) or 0),
+                    "super_large_net_inflow": float(row.get("超大单净流入-净额", 0) or 0),
+                    "super_large_net_inflow_pct": float(row.get("超大单净流入-净占比", 0) or 0),
+                    "large_net_inflow": float(row.get("大单净流入-净额", 0) or 0),
+                    "large_net_inflow_pct": float(row.get("大单净流入-净占比", 0) or 0),
+                    "leading_stock": str(row.get(f"{prefix}主力净流入最大股", row.get("今日主力净流入最大股", ""))),
+                    "source": "akshare_direct",
+                })
+
+            logger.info(f"获取到 {len(result)} 条板块资金流向数据")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取板块资金流向排名失败: {e}")
+            return []
+
+    # ==================== 融资融券接口 ====================
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.HISTORICAL_KLINE,
+        module="akshare_direct",
+    )
+    async def get_margin_trading(
+        self,
+        start_date: str,
+        end_date: str,
+        **kwargs,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取融资融券汇总数据（上交所）
+
+        使用接口 stock_margin_sse
+
+        Args:
+            start_date: 开始日期 (如 "20240101")
+            end_date: 结束日期 (如 "20240131")
+
+        Returns:
+            融资融券汇总数据
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_margin_trading_sync,
+                start_date,
+                end_date,
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"获取融资融券数据失败: {e}")
+            return None
+
+    def _fetch_margin_trading_sync(
+        self,
+        start_date: str,
+        end_date: str,
+    ) -> List[Dict[str, Any]]:
+        """同步获取融资融券汇总数据"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        try:
+            df = module.stock_margin_sse(start_date=start_date, end_date=end_date)
+            if df is None or df.empty:
+                return []
+
+            result = []
+            for _, row in df.iterrows():
+                result.append({
+                    "date": str(row.get("信用交易日期", "")),
+                    "margin_balance": float(row.get("融资余额", 0) or 0),
+                    "margin_buy": float(row.get("融资买入额", 0) or 0),
+                    "short_volume": float(row.get("融券余量", 0) or 0),
+                    "short_volume_value": float(row.get("融券余量金额", 0) or 0),
+                    "short_sell_volume": float(row.get("融券卖出量", 0) or 0),
+                    "total_balance": float(row.get("融资融券余额", 0) or 0),
+                    "source": "akshare_direct",
+                })
+
+            logger.info(f"获取到 {len(result)} 条融资融券数据")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取融资融券数据失败: {e}")
+            return []
+
+    # ==================== 大宗交易接口 ====================
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.HISTORICAL_KLINE,
+        module="akshare_direct",
+    )
+    async def get_block_trades(
+        self,
+        start_date: str,
+        end_date: str,
+        symbol: str = "A股",
+        **kwargs,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取大宗交易每日明细
+
+        使用接口 stock_dzjy_mrmx
+
+        Args:
+            start_date: 开始日期 (如 "20240101")
+            end_date: 结束日期 (如 "20240101")
+            symbol: 证券类型 ("A股", "B股", "基金", "债券")
+
+        Returns:
+            大宗交易明细数据
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_block_trades_sync,
+                start_date,
+                end_date,
+                symbol,
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"获取大宗交易数据失败: {e}")
+            return None
+
+    def _fetch_block_trades_sync(
+        self,
+        start_date: str,
+        end_date: str,
+        symbol: str,
+    ) -> List[Dict[str, Any]]:
+        """同步获取大宗交易明细"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        try:
+            df = module.stock_dzjy_mrmx(
+                symbol=symbol, start_date=start_date, end_date=end_date
+            )
+            if df is None or df.empty:
+                return []
+
+            result = []
+            for _, row in df.iterrows():
+                result.append({
+                    "rank": int(row.get("序号", 0)),
+                    "date": str(row.get("交易日期", "")),
+                    "symbol": str(row.get("证券代码", "")),
+                    "name": str(row.get("证券简称", "")),
+                    "change_pct": float(row.get("涨跌幅", 0) or 0),
+                    "close": float(row.get("收盘价", 0) or 0),
+                    "trade_price": float(row.get("成交价", 0) or 0),
+                    "premium_rate": float(row.get("折溢率", 0) or 0),
+                    "volume": float(row.get("成交量", 0) or 0),
+                    "amount": float(row.get("成交额", 0) or 0),
+                    "buyer": str(row.get("买方营业部", "")),
+                    "seller": str(row.get("卖方营业部", "")),
+                    "source": "akshare_direct",
+                })
+
+            logger.info(f"获取到 {len(result)} 条大宗交易数据")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取大宗交易数据失败: {e}")
+            return []
+
+    # ==================== 北向资金接口 ====================
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.HISTORICAL_KLINE,
+        module="akshare_direct",
+    )
+    async def get_northbound_flow_hist(
+        self,
+        symbol: str = "北向资金",
+        **kwargs,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取北向资金历史数据
+
+        使用接口 stock_hsgt_hist_em
+
+        Args:
+            symbol: 资金类型 ("北向资金", "沪股通", "深股通", "南向资金", "港股通沪", "港股通深")
+
+        Returns:
+            北向资金历史数据
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            # 检查缓存
+            cache_key = f"northbound_hist_{symbol}"
+            if cache_key in self._cache:
+                cached_time, cached_data = self._cache[cache_key]
+                if time.time() - cached_time < self._cache_ttl.get("historical", 300):
+                    return cast(List[Dict[str, Any]], cached_data.get("data", []))
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_northbound_flow_hist_sync,
+                symbol,
+            )
+
+            if result:
+                self._cache[cache_key] = (time.time(), {"data": result})
+
+            return result
+
+        except Exception as e:
+            logger.error(f"获取北向资金历史数据失败: {e}")
+            return None
+
+    def _fetch_northbound_flow_hist_sync(self, symbol: str) -> List[Dict[str, Any]]:
+        """同步获取北向资金历史数据"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        try:
+            df = module.stock_hsgt_hist_em(symbol=symbol)
+            if df is None or df.empty:
+                return []
+
+            result = []
+            for _, row in df.iterrows():
+                result.append({
+                    "date": str(row.get("日期", "")),
+                    "net_buy": float(row.get("当日成交净买额", 0) or 0),
+                    "buy_amount": float(row.get("买入成交额", 0) or 0),
+                    "sell_amount": float(row.get("卖出成交额", 0) or 0),
+                    "cumulative_net_buy": float(row.get("历史累计净买额", 0) or 0),
+                    "fund_inflow": float(row.get("当日资金流入", 0) or 0),
+                    "balance": float(row.get("当日余额", 0) or 0),
+                    "market_value": float(row.get("持股市值", 0) or 0),
+                    "leading_stock": str(row.get("领涨股", "")),
+                    "leading_stock_change_pct": float(row.get("领涨股-涨跌幅", 0) or 0),
+                    "source": "akshare_direct",
+                })
+
+            logger.info(f"获取到 {len(result)} 条北向资金历史数据")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取北向资金历史数据失败: {e}")
+            return []
+
+    # ==================== 涨停板接口 ====================
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.STOCK_LIST,
+        module="akshare_direct",
+    )
+    async def get_limit_up_pool(
+        self,
+        date: str,
+        **kwargs,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取涨停股池
+
+        使用接口 stock_zt_pool_em
+
+        Args:
+            date: 交易日期 (如 "20241008")
+
+        Returns:
+            涨停股池数据
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            # 检查缓存
+            cache_key = f"limit_up_pool_{date}"
+            if cache_key in self._cache:
+                cached_time, cached_data = self._cache[cache_key]
+                if time.time() - cached_time < self._cache_ttl.get("historical", 300):
+                    return cast(List[Dict[str, Any]], cached_data.get("data", []))
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_limit_up_pool_sync,
+                date,
+            )
+
+            if result:
+                self._cache[cache_key] = (time.time(), {"data": result})
+
+            return result
+
+        except Exception as e:
+            logger.error(f"获取涨停股池数据失败: {e}")
+            return None
+
+    def _fetch_limit_up_pool_sync(self, date: str) -> List[Dict[str, Any]]:
+        """同步获取涨停股池"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        try:
+            df = module.stock_zt_pool_em(date=date)
+            if df is None or df.empty:
+                return []
+
+            result = []
+            for _, row in df.iterrows():
+                result.append({
+                    "rank": int(row.get("序号", 0)),
+                    "symbol": str(row.get("代码", "")),
+                    "name": str(row.get("名称", "")),
+                    "change_pct": float(row.get("涨跌幅", 0) or 0),
+                    "price": float(row.get("最新价", 0) or 0),
+                    "amount": float(row.get("成交额", 0) or 0),
+                    "circulating_market_cap": float(row.get("流通市值", 0) or 0),
+                    "total_market_cap": float(row.get("总市值", 0) or 0),
+                    "turnover_rate": float(row.get("换手率", 0) or 0),
+                    "seal_amount": float(row.get("封板资金", 0) or 0),
+                    "first_seal_time": str(row.get("首次封板时间", "")),
+                    "last_seal_time": str(row.get("最后封板时间", "")),
+                    "break_count": int(row.get("炸板次数", 0) or 0),
+                    "limit_up_stats": str(row.get("涨停统计", "")),
+                    "continuous_count": int(row.get("连板数", 0) or 0),
+                    "industry": str(row.get("所属行业", "")),
+                    "source": "akshare_direct",
+                })
+
+            logger.info(f"获取到 {len(result)} 只涨停股")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取涨停股池数据失败: {e}")
+            return []
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.STOCK_LIST,
+        module="akshare_direct",
+    )
+    async def get_limit_down_pool(
+        self,
+        date: str,
+        **kwargs,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取跌停股池
+
+        使用接口 stock_zt_pool_dtgc_em
+
+        Args:
+            date: 交易日期 (如 "20241011")
+
+        Returns:
+            跌停股池数据
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_limit_down_pool_sync,
+                date,
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"获取跌停股池数据失败: {e}")
+            return None
+
+    def _fetch_limit_down_pool_sync(self, date: str) -> List[Dict[str, Any]]:
+        """同步获取跌停股池"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        try:
+            df = module.stock_zt_pool_dtgc_em(date=date)
+            if df is None or df.empty:
+                return []
+
+            result = []
+            for _, row in df.iterrows():
+                result.append({
+                    "rank": int(row.get("序号", 0)),
+                    "symbol": str(row.get("代码", "")),
+                    "name": str(row.get("名称", "")),
+                    "change_pct": float(row.get("涨跌幅", 0) or 0),
+                    "price": float(row.get("最新价", 0) or 0),
+                    "amount": float(row.get("成交额", 0) or 0),
+                    "circulating_market_cap": float(row.get("流通市值", 0) or 0),
+                    "total_market_cap": float(row.get("总市值", 0) or 0),
+                    "turnover_rate": float(row.get("换手率", 0) or 0),
+                    "seal_amount": float(row.get("封单资金", 0) or 0),
+                    "last_seal_time": str(row.get("最后封板时间", "")),
+                    "on_board_amount": float(row.get("板上成交额", 0) or 0),
+                    "continuous_count": int(row.get("连续跌停", 0) or 0),
+                    "break_count": int(row.get("开板次数", 0) or 0),
+                    "industry": str(row.get("所属行业", "")),
+                    "source": "akshare_direct",
+                })
+
+            logger.info(f"获取到 {len(result)} 只跌停股")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取跌停股池数据失败: {e}")
+            return []
+
+    # ==================== 财务报表接口 ====================
+
+    @async_monitor_access(
+        source=DataSourceType.AKSHARE,
+        access_type=DataAccessType.HISTORICAL_KLINE,
+        module="akshare_direct",
+    )
+    async def get_financial_report(
+        self,
+        date: str,
+        report_type: str = "业绩报表",
+        **kwargs,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取财务报表数据
+
+        Args:
+            date: 报告期 (如 "20240331"、"20240630"、"20240930"、"20241231")
+            report_type: 报表类型 ("业绩报表", "业绩快报", "业绩预告")
+
+        Returns:
+            财务报表数据
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_financial_report_sync,
+                date,
+                report_type,
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"获取财务报表数据失败: {e}")
+            return None
+
+    def _fetch_financial_report_sync(
+        self,
+        date: str,
+        report_type: str,
+    ) -> List[Dict[str, Any]]:
+        """同步获取财务报表"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        try:
+            if report_type == "业绩报表":
+                df = module.stock_yjbb_em(date=date)
+            elif report_type == "业绩快报":
+                df = module.stock_yjkb_em(date=date)
+            elif report_type == "业绩预告":
+                df = module.stock_yjyg_em(date=date)
+            else:
+                logger.warning(f"未知的报表类型: {report_type}")
+                return []
+
+            if df is None or df.empty:
+                return []
+
+            result = []
+            for _, row in df.iterrows():
+                item = {
+                    "rank": int(row.get("序号", 0)),
+                    "symbol": str(row.get("股票代码", "")),
+                    "name": str(row.get("股票简称", "")),
+                    "report_type": report_type,
+                    "source": "akshare_direct",
+                }
+
+                # 根据不同报表类型添加不同字段
+                if report_type == "业绩报表":
+                    item.update({
+                        "eps": float(row.get("每股收益", 0) or 0),
+                        "revenue": float(row.get("营业总收入-营业总收入", 0) or 0),
+                        "revenue_yoy": float(row.get("营业总收入-同比增长", 0) or 0),
+                        "net_profit": float(row.get("净利润-净利润", 0) or 0),
+                        "net_profit_yoy": float(row.get("净利润-同比增长", 0) or 0),
+                        "bps": float(row.get("每股净资产", 0) or 0),
+                        "roe": float(row.get("净资产收益率", 0) or 0),
+                        "gross_margin": float(row.get("销售毛利率", 0) or 0),
+                        "industry": str(row.get("所处行业", "")),
+                    })
+                elif report_type == "业绩快报":
+                    item.update({
+                        "eps": float(row.get("每股收益", 0) or 0) if row.get("每股收益") else 0,
+                        "revenue": float(row.get("营业收入-营业收入", 0) or 0) if row.get("营业收入-营业收入") else 0,
+                        "net_profit": float(row.get("净利润-净利润", 0) or 0) if row.get("净利润-净利润") else 0,
+                        "bps": float(row.get("每股净资产", 0) or 0) if row.get("每股净资产") else 0,
+                        "roe": float(row.get("净资产收益率", 0) or 0) if row.get("净资产收益率") else 0,
+                        "industry": str(row.get("所处行业", "")),
+                    })
+                elif report_type == "业绩预告":
+                    item.update({
+                        "forecast_indicator": str(row.get("预测指标", "")),
+                        "performance_change": str(row.get("业绩变动", "")),
+                        "forecast_value": str(row.get("预测数值", "")),
+                        "change_range": str(row.get("业绩变动幅度", "")),
+                        "change_reason": str(row.get("业绩变动原因", "")),
+                        "forecast_type": str(row.get("预告类型", "")),
+                        "last_year_value": str(row.get("上年同期值", "")),
+                    })
+
+                result.append(item)
+
+            logger.info(f"获取到 {len(result)} 条{report_type}数据")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取财务报表数据失败: {e}")
+            return []
+
+    # ==================== 扩展接口 ====================
+
+    async def get_trading_calendar(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        **kwargs,
+    ) -> Optional[List[str]]:
+        """
+        获取交易日历
+
+        使用 AkShare 的 tool_trade_date_hist_sina 接口
+
+        Args:
+            start_date: 开始日期 (格式: YYYYMMDD)
+            end_date: 结束日期 (格式: YYYYMMDD)
+            **kwargs: 其他参数
+
+        Returns:
+            交易日期列表 (格式: YYYYMMDD)，失败返回 None
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_trading_calendar_sync,
+                start_date,
+                end_date,
+            )
+            return result
+        except Exception as e:
+            logger.error(f"获取交易日历失败: {e}")
+            return None
+
+    def _fetch_trading_calendar_sync(
+        self,
+        start_date: Optional[str],
+        end_date: Optional[str],
+    ) -> Optional[List[str]]:
+        """同步获取交易日历"""
+        module = self._akshare
+        if module is None:
+            return None
+
+        try:
+            # 使用 tool_trade_date_hist_sina 获取历史交易日
+            df = module.tool_trade_date_hist_sina()
+
+            if df is None or df.empty:
+                return None
+
+            # 提取交易日期
+            if "trade_date" in df.columns:
+                dates = df["trade_date"].tolist()
+            else:
+                # 尝试第一列
+                dates = df.iloc[:, 0].tolist()
+
+            # 转换为字符串格式 YYYYMMDD
+            result = []
+            for d in dates:
+                try:
+                    if hasattr(d, "strftime"):
+                        result.append(d.strftime("%Y%m%d"))
+                    else:
+                        # 清洗字符串
+                        cleaned = "".join(c for c in str(d) if c.isdigit())
+                        if len(cleaned) == 8:
+                            result.append(cleaned)
+                except Exception:
+                    continue
+
+            # 过滤日期范围
+            if start_date:
+                result = [d for d in result if d >= start_date]
+            if end_date:
+                result = [d for d in result if d <= end_date]
+
+            logger.info(f"获取到 {len(result)} 个交易日")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取交易日历失败: {e}")
+            return None
+
+    async def get_dragon_tiger(
+        self,
+        date: Optional[str] = None,
+        **kwargs,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取龙虎榜数据
+
+        使用 AkShare 的 stock_lhb_detail_em 接口
+
+        Args:
+            date: 交易日期 (格式: YYYYMMDD)，默认为最近交易日
+            **kwargs: 其他参数
+
+        Returns:
+            龙虎榜数据列表，失败返回 None
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            # 默认使用最近的交易日
+            if not date:
+                date = datetime.now().strftime("%Y%m%d")
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_dragon_tiger_sync,
+                date,
+            )
+            return result
+        except Exception as e:
+            logger.error(f"获取龙虎榜失败: {e}")
+            return None
+
+    def _fetch_dragon_tiger_sync(self, date: str) -> Optional[List[Dict[str, Any]]]:
+        """同步获取龙虎榜数据"""
+        module = self._akshare
+        if module is None:
+            return None
+
+        try:
+            # 使用 stock_lhb_detail_em 获取龙虎榜详情
+            df = module.stock_lhb_detail_em(
+                start_date=date,
+                end_date=date,
+            )
+
+            if df is None or df.empty:
+                logger.warning(f"龙虎榜 {date} 无数据")
+                return []
+
+            result = []
+            for _, row in df.iterrows():
+                item = {
+                    "date": date,
+                    "symbol": str(row.get("代码", "")),
+                    "name": str(row.get("名称", "")),
+                    "close": self._safe_float(row.get("收盘价", 0)),
+                    "change_pct": self._safe_float(row.get("涨跌幅", 0)),
+                    "turnover_rate": self._safe_float(row.get("换手率", 0)),
+                    "net_buy": self._safe_float(row.get("龙虎榜净买额", 0)),
+                    "buy_amount": self._safe_float(row.get("龙虎榜买入额", 0)),
+                    "sell_amount": self._safe_float(row.get("龙虎榜卖出额", 0)),
+                    "reason": str(row.get("上榜原因", "")),
+                    "source": "akshare_direct",
+                }
+                result.append(item)
+
+            logger.info(f"获取到 {len(result)} 条龙虎榜数据")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取龙虎榜数据失败: {e}")
+            return None
+
+    async def get_minute_kline(
+        self,
+        symbol: str,
+        period: str = "1",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        **kwargs,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取分钟K线数据
+
+        使用 AkShare 的 stock_zh_a_hist_min_em 接口
+
+        Args:
+            symbol: 股票代码 (如 "000001")
+            period: 分钟周期 ("1", "5", "15", "30", "60")
+            start_date: 开始日期
+            end_date: 结束日期
+            **kwargs: 其他参数
+
+        Returns:
+            分钟K线数据列表，失败返回 None
+        """
+        if self._akshare is None or not self.initialized:
+            return None
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self._executor,
+                self._fetch_minute_kline_sync,
+                symbol,
+                period,
+            )
+            return result
+        except Exception as e:
+            logger.error(f"获取分钟K线失败: {e}")
+            return None
+
+    def _fetch_minute_kline_sync(
+        self,
+        symbol: str,
+        period: str,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """同步获取分钟K线"""
+        module = self._akshare
+        if module is None:
+            return None
+
+        try:
+            # 使用 stock_zh_a_hist_min_em 获取分钟K线
+            df = module.stock_zh_a_hist_min_em(
+                symbol=symbol,
+                period=period,
+            )
+
+            if df is None or df.empty:
+                return None
+
+            result = []
+            for _, row in df.iterrows():
+                item = {
+                    "datetime": str(row.get("时间", "")),
+                    "open": self._safe_float(row.get("开盘", 0)),
+                    "high": self._safe_float(row.get("最高", 0)),
+                    "low": self._safe_float(row.get("最低", 0)),
+                    "close": self._safe_float(row.get("收盘", 0)),
+                    "volume": self._safe_float(row.get("成交量", 0)),
+                    "amount": self._safe_float(row.get("成交额", 0)),
+                    "source": "akshare_direct",
+                }
+                result.append(item)
+
+            logger.info(f"获取到 {len(result)} 条分钟K线数据")
+            return result
+
+        except Exception as e:
+            logger.error(f"获取分钟K线失败: {e}")
+            return None

@@ -13,6 +13,9 @@ from .history import router as history_router
 from .margin import router as margin_router
 from .realtime import router as realtime_router
 from .shareholder import router as shareholder_router
+from .concept import router as concept_router
+from .option import router as option_router
+from .etf import router as etf_router
 
 # 创建主路由器
 router = APIRouter(prefix="/api/amazingdata", tags=["AmazingData"])
@@ -24,6 +27,9 @@ router.include_router(history_router, prefix="/history")
 router.include_router(financial_router, prefix="/financial")
 router.include_router(margin_router, prefix="/margin")
 router.include_router(shareholder_router, prefix="/shareholder")
+router.include_router(concept_router, prefix="/concept")
+router.include_router(option_router, prefix="/option")
+router.include_router(etf_router, prefix="/etf")
 
 
 # 添加根路径信息接口
@@ -37,7 +43,7 @@ async def get_api_info():
     """
     return {
         "name": "AmazingData Web API",
-        "version": "2.1.0",
+        "version": "2.2.0",
         "description": "AmazingData SDK的RESTful API封装",
         "modules": {
             "basic_data": {
@@ -70,8 +76,23 @@ async def get_api_info():
                 "description": "股东股本和分红配股接口",
                 "endpoints": 7,
             },
+            "concept": {
+                "path": "/api/amazingdata/concept",
+                "description": "概念资金流向和联动接口",
+                "endpoints": 3,
+            },
+            "option": {
+                "path": "/api/amazingdata/option",
+                "description": "期权数据接口",
+                "endpoints": 4,
+            },
+            "etf": {
+                "path": "/api/amazingdata/etf",
+                "description": "ETF数据接口",
+                "endpoints": 1,
+            },
         },
-        "total_endpoints": 38,
+        "total_endpoints": 46,
         "features": [
             "模块化设计",
             "统一错误处理",
@@ -79,8 +100,9 @@ async def get_api_info():
             "批量查询支持",
             "本地缓存支持",
         ],
-        "update_time": "2025-09-19",
+        "update_time": "2025-12-18",
     }
 
 
 logger.info("AmazingData API路由器已初始化")
+

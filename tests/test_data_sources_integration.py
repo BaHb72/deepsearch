@@ -182,13 +182,21 @@ class DataSourceTestSuite:
             response_time = time.time() - start_time
 
             if quotes:
+                # quotes 可能是 dict 或 list，统一处理
+                if isinstance(quotes, dict):
+                    data_count = len(quotes)
+                    data_sample = next(iter(quotes.values()), None)
+                else:
+                    data_count = len(quotes)
+                    data_sample = quotes[0] if quotes else None
+                    
                 return TestResult(
                     source=source,
                     method="get_realtime_quotes",
                     success=True,
                     response_time=response_time,
-                    data_count=len(quotes),
-                    data_sample=quotes[0] if quotes else None,
+                    data_count=data_count,
+                    data_sample=data_sample,
                 )
             else:
                 return TestResult(

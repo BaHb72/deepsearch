@@ -1192,7 +1192,7 @@ class MainEngine:
         components_to_start = infrastructure_components.copy()
 
         if include_business:
-            components_to_start.extend(["monitor", "gateway", "qmt_gateway"])
+            components_to_start.extend(["monitor", "gateway"])  # qmt_gateway removed for debugging
 
         # 启动非 WebUI 组件
         for name, component in self._components.items():

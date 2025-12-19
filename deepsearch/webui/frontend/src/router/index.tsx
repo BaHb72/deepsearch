@@ -14,6 +14,8 @@ const CacheSystem = lazy(() => import('@/pages/Monitor/CacheSystem'))
 const PerformanceAnalytics = lazy(() => import('@/pages/Monitor/PerformanceAnalytics'))
 const AlertManager = lazy(() => import('@/pages/Monitor/AlertManager'))
 const ComponentManager = lazy(() => import('@/pages/Monitor/ComponentManager'))
+const DataExplorer = lazy(() => import('@/pages/DataSource/Explorer'))
+const CapabilityMatrix = lazy(() => import('@/pages/DataSource/CapabilityMatrix'))
 const NotFound = lazy(() => import('@/pages/NotFound'))
 
 const PageLoading: React.FC = () => (
@@ -85,6 +87,14 @@ const routes: RouteObject[] = [
       {
         path: 'monitor/component',
         element: <RouteWrapper element={ComponentManager} />
+      },
+      {
+        path: 'datasource/explorer',
+        element: <RouteWrapper element={DataExplorer} />
+      },
+      {
+        path: 'datasource/matrix',
+        element: <RouteWrapper element={CapabilityMatrix} />
       },
       {
         path: '*',

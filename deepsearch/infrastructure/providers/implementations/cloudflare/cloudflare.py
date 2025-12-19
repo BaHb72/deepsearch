@@ -568,6 +568,45 @@ class ProxyDataProvider:
             logger.error(f"获取股票信息失败 {symbol}: {e}")
             return {"symbol": symbol, "name": f"股票{symbol}", "error": str(e)}
 
+    async def get_stock_info(self, symbol: str) -> Dict[str, Any]:
+        """获取股票基础信息，fetch_stock_info 的别名。"""
+        return await self.fetch_stock_info(symbol)
+
+    async def get_realtime_quotes(self, symbols: List[str]) -> List[Dict[str, Any]]:
+        """
+        批量获取实时行情
+
+        Args:
+            symbols: 股票代码列表
+
+        Returns:
+            实时行情数据列表
+        """
+        if not symbols:
+            return []
+
+        try:
+            # 并发获取所有股票的实时行情
+            import asyncio
+            tasks = [self.get_realtime_quote(symbol) for symbol in symbols]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            quotes = []
+            for symbol, result in zip(symbols, results):
+                if isinstance(result, Exception):
+                    logger.error(f"获取 {symbol} 实时行情失败: {result}")
+                    quotes.append({"symbol": symbol, "error": str(result)})
+                elif isinstance(result, dict):
+                    result["symbol"] = symbol  # 确保有 symbol 字段
+                    quotes.append(result)
+
+            logger.info(f"CloudFlare 批量获取 {len(quotes)} 条实时行情")
+            return quotes
+
+        except Exception as e:
+            logger.error(f"批量获取实时行情失败: {e}")
+            return []
+
     async def get_stock_list(self, limit: Optional[int] = None, **kwargs) -> Optional[list]:
         """
         获取股票列表 - DataSourceManager接口方法

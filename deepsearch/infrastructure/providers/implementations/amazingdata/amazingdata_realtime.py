@@ -227,10 +227,26 @@ class AmazingDataRealtime:
             log_prefix="沪港通实时行情",
         )
 
+    async def onSnapshotoption(
+        self, code_list: List[str], callback: Optional[CallbackFunc] = None
+    ) -> bool:
+        """3.5.3.7 ETF期权实时快照"""
+
+        return await self._register_handler(
+            key="option_snapshot",
+            code_list=code_list,
+            period_value=ad.constant.Period.snapshotoption.value,
+            callback=callback,
+            success_message=f"成功订阅{len(code_list)}个ETF期权实时行情",
+            error_message="订阅ETF期权实时行情失败",
+            log_prefix="ETF期权实时行情",
+        )
+
+
     async def OnKLine(
         self, code_list: List[str], period: Optional[str] = None, callback: Optional[CallbackFunc] = None
     ) -> bool:
-        """3.5.3.7 实时 K 线"""
+        """3.5.3.8 实时 K 线"""
 
         effective_period = period or ad.constant.Period.min1.value
         return await self._register_handler(

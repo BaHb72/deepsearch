@@ -555,3 +555,83 @@ async def get_top_losers(limit: int = Query(10, ge=1, le=100), service=Depends(g
         logger.error(f"获取跌幅榜失败: {e}")
         # 在依赖不可用或实现缺失时，返回空列表以保持端点稳定性
         return []
+
+
+# 概念板块资金流速缓存和单例 provider
+_concept_velocity_cache: dict = {"data": None, "timestamp": 0}
+_CACHE_TTL = 60  # 缓存60秒
+_akshare_provider = None
+
+
+async def _get_akshare_provider():
+    """获取共享的 AKShare provider 实例"""
+    global _akshare_provider
+    if _akshare_provider is None:
+        from deepsearch.infrastructure.providers.implementations.akshare.akshare_direct import (
+            AKShareDirectProvider,
+        )
+        _akshare_provider = AKShareDirectProvider()
+        await _akshare_provider.initialize()
+    return _akshare_provider
+
+
+@router.get("/concept-velocity", summary="获取板块资金流速排行")
+async def get_concept_velocity(
+    limit: int = Query(50, ge=1, le=200, description="返回数量"),
+):
+    """
+    获取实时计算的板块资金流向速度排行榜 (Sector Velocity)
+    用于ConceptMonitor页面
+    """
+    import asyncio
+    import time
+    
+    # 检查缓存
+    current_time = time.time()
+    if _concept_velocity_cache["data"] and (current_time - _concept_velocity_cache["timestamp"]) < _CACHE_TTL:
+        cached_data = _concept_velocity_cache["data"][:limit]
+        return {"success": True, "data": cached_data, "cached": True}
+    
+    try:
+        provider = await _get_akshare_provider()
+
+        # 使用更快的 get_concept_sectors API，添加超时控制
+        try:
+            data = await asyncio.wait_for(
+                provider.get_concept_sectors(),
+                timeout=10.0  # 10秒超时
+            )
+        except asyncio.TimeoutError:
+            logger.warning("获取概念板块列表超时")
+            # 如果有缓存数据，返回缓存
+            if _concept_velocity_cache["data"]:
+                return {"success": True, "data": _concept_velocity_cache["data"][:limit], "cached": True}
+            return {"success": False, "error": "请求超时，请稍后重试"}
+
+        if data:
+            # 转换为前端期望的格式
+            result = [
+                {
+                    "concept_code": item.get("code", str(i)),
+                    "name": item.get("name", ""),
+                    "velocity": item.get("change_pct", 0),  # 用涨跌幅作为"velocity"指标
+                    "lead_stock": item.get("leading_stock", ""),
+                    "lead_change": item.get("leading_stock_change_pct", 0) / 100 if item.get("leading_stock_change_pct") else 0,
+                }
+                for i, item in enumerate(data[:200])  # 最多缓存200条
+            ]
+            # 更新缓存
+            _concept_velocity_cache["data"] = result
+            _concept_velocity_cache["timestamp"] = current_time
+            return {"success": True, "data": result[:limit]}
+
+        return {"success": False, "error": "无数据"}
+
+    except Exception as e:
+        logger.error(f"获取概念板块资金流速失败: {e}")
+        # 如果有缓存数据，返回缓存
+        if _concept_velocity_cache["data"]:
+            return {"success": True, "data": _concept_velocity_cache["data"][:limit], "cached": True}
+        return {"success": False, "error": str(e)}
+
+

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {act, renderHook} from '@testing-library/react'
 import {App as AntdApp, ConfigProvider} from 'antd'
 import type {ReactNode} from 'react'

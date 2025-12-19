@@ -49,6 +49,10 @@ class AnalyticsComponent(AsyncComponent):
             )
             self._config = analytics_config
 
+            if True: # Force disable for now
+                self._logger.info("分析数据库强制已禁用")
+                return
+
             if not analytics_config or not analytics_config.enabled:
                 self._logger.info("分析数据库已禁用")
                 return

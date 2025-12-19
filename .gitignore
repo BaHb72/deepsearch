@@ -47,6 +47,9 @@ diagnostic_log.json
 test_data_sources.log
 tmp_test.log
 data_source_test_report.txt
+*.dmp
+scripts/amazingdata_test_log.txt
+deepsearch/webui/frontend/tsc_errors.txt
 
 # ==================== OS & Editors ====================
 .DS_Store
@@ -134,11 +137,13 @@ final_*.py
 *-think.txt
 temp_block.txt
 *qmt_config.json
+debug_api.py
 
 # ==================== Project Automation ====================
 runtime/interpreters/
 worker/
 .python-version
+.agent/
 
 # ==================== Misc ====================
 /.claude/

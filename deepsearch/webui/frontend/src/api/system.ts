@@ -3,6 +3,7 @@
  * 提供系统状态、监控和资源使用情况的真实数据
  */
 import request from './request';
+import type { LogSettings } from '@/types/systemConfig';
 
 type ApiEnvelope<T> = {
   code?: number;
@@ -11,32 +12,32 @@ type ApiEnvelope<T> = {
 };
 
 export interface ProviderStatusDetails {
-    connected: boolean;
-    available?: boolean;
-    details?: Record<string, any>;
+  connected: boolean;
+  available?: boolean;
+  details?: Record<string, any>;
 }
 
 export interface BoardStatus {
-    ready: boolean;
-    count: number;
-    sample?: string[];
+  ready: boolean;
+  count: number;
+  sample?: string[];
 }
 
 export interface RuntimeStatus {
-    pipeline: string;
-    runner: string;
+  pipeline: string;
+  runner: string;
 }
 
 export interface CacheStatus {
-    available: boolean;
+  available: boolean;
 }
 
 export interface MarketDataStatus {
-    ready: boolean;
-    provider: ProviderStatusDetails;
-    boards: BoardStatus;
-    runtime: RuntimeStatus;
-    cache: CacheStatus;
+  ready: boolean;
+  provider: ProviderStatusDetails;
+  boards: BoardStatus;
+  runtime: RuntimeStatus;
+  cache: CacheStatus;
 }
 
 function unwrapResponse<T>(response: unknown): T | null {
@@ -71,8 +72,8 @@ export interface SystemInfo {
   timestamp: number;
   status?: 'running' | 'stopped' | string;
   updated_at?: string;
-    ready?: boolean;
-    market_data?: MarketDataStatus;
+  ready?: boolean;
+  market_data?: MarketDataStatus;
   engine?: {
     running: boolean;
     uptime: number;
@@ -123,8 +124,8 @@ export interface SystemHealth {
 }
 
 const getSystemStatus = async (): Promise<SystemInfo | null> => {
-    const response = await request.get<SystemInfo | ApiEnvelope<SystemInfo>>('/system/status');
-    return unwrapResponse<SystemInfo>(response);
+  const response = await request.get<SystemInfo | ApiEnvelope<SystemInfo>>('/system/status');
+  return unwrapResponse<SystemInfo>(response);
 };
 
 const getSystemMetrics = () => request.get<SystemMetrics>('/system/metrics');
@@ -134,18 +135,29 @@ const getSystemStatistics = () => request.get('/system/statistics');
 const getHealthCheck = () => request.get<SystemHealth>('/health');
 
 const getSystemLogs = (params?: { level?: string; limit?: number; offset?: number }) =>
-    request.get('/system/logs', {params});
+  request.get('/system/logs', { params });
 
 const getRecentLogs = (params?: { lines?: number; level?: string }) =>
-    request.get('/system/logs/recent', {params});
+  request.get('/system/logs/recent', { params });
 
 const getSystemConfig = () => request.get('/system/config');
 
 const updateSystemConfig = (config: any) => request.post('/system/config', config);
 
-const getLogConfig = () => request.get('/system/config/log');
+const getLogConfig = async (): Promise<LogSettings | null> => {
+  const response = await request.get<LogSettings | ApiEnvelope<LogSettings>>('/system/config/log');
+  return unwrapResponse<LogSettings>(response);
+};
 
-const updateLogConfig = (config: any) => request.post('/system/config/log', config);
+interface LogConfigUpdateResponse {
+  success?: boolean;
+  message?: string;
+}
+
+const updateLogConfig = async (config: LogSettings): Promise<LogConfigUpdateResponse> => {
+  const response = await request.post<LogConfigUpdateResponse | ApiEnvelope<LogConfigUpdateResponse>>('/system/config/log', config);
+  return unwrapResponse<LogConfigUpdateResponse>(response) ?? {};
+};
 
 const getSystemInfo = () => request.get('/system/info');
 
@@ -160,48 +172,64 @@ const stopSystem = () => request.post('/system/stop');
 const restartSystem = () => request.post('/system/restart');
 
 const startComponent = (componentName: string) =>
-    request.post(`/system/components/${componentName}/start`);
+  request.post(`/system/components/${componentName}/start`);
 
 const stopComponent = (componentName: string) =>
-    request.post(`/system/components/${componentName}/stop`);
+  request.post(`/system/components/${componentName}/stop`);
 
 const controlComponent = (componentName: string, action: string) =>
-    request.post(`/system/components/${componentName}/${action}`);
+  request.post(`/system/components/${componentName}/${action}`);
 
 const checkComponentHealth = (componentName: string) =>
-    request.get(`/system/components/${componentName}/health`);
+  request.get(`/system/components/${componentName}/health`);
+
+// ============ 合并自废弃 services/system.ts|js ============
+
+const clearCache = () => request.post('/system/cache/clear');
+
+const getAlerts = () => request.get('/system/alerts');
+
+const getPerformanceMetrics = () => request.get('/system/performance');
 
 export const systemAPI = {
-    getSystemStatus,
-    getStatus: getSystemStatus,
-    getSystemMetrics,
-    getMetrics: getSystemMetrics,
-    getSystemStatistics,
-    getStatistics: getSystemStatistics,
-    getHealthCheck,
-    getHealth: getHealthCheck,
-    getSystemLogs,
-    getLogs: getSystemLogs,
-    getRecentLogs,
-    getSystemConfig,
-    getConfig: getSystemConfig,
-    updateSystemConfig,
-    updateConfig: updateSystemConfig,
-    getLogConfig,
-    updateLogConfig,
-    getSystemInfo,
-    getInfo: getSystemInfo,
-    getMonitorData,
-    getMonitorMetrics: getMonitorData,
-    getComponentStatus,
-    getComponents: getComponentStatus,
-    startSystem,
-    stopSystem,
-    restartSystem,
-    startComponent,
-    stopComponent,
-    controlComponent,
-    checkComponentHealth,
+  getSystemStatus,
+  getStatus: getSystemStatus,
+  getSystemMetrics,
+  getMetrics: getSystemMetrics,
+  getSystemStatistics,
+  getStatistics: getSystemStatistics,
+  getHealthCheck,
+  getHealth: getHealthCheck,
+  getSystemLogs,
+  getLogs: getSystemLogs,
+  getRecentLogs,
+  getSystemConfig,
+  getConfig: getSystemConfig,
+  updateSystemConfig,
+  updateConfig: updateSystemConfig,
+  getLogConfig,
+  updateLogConfig,
+  getSystemInfo,
+  getInfo: getSystemInfo,
+  getMonitorData,
+  getMonitorMetrics: getMonitorData,
+  getComponentStatus,
+  getComponents: getComponentStatus,
+  startSystem,
+  stopSystem,
+  restartSystem,
+  // 兼容 AppContext 使用的短别名
+  start: startSystem,
+  stop: stopSystem,
+  restart: restartSystem,
+  startComponent,
+  stopComponent,
+  controlComponent,
+  checkComponentHealth,
+  // 合并自废弃 services/system.ts|js
+  clearCache,
+  getAlerts,
+  getPerformanceMetrics,
 };
 
 export default systemAPI;

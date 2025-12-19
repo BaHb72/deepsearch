@@ -1,25 +1,25 @@
-import {theme} from 'antd'
-import type {ThemeConfig} from 'antd/es/config-provider/context'
+import { theme } from 'antd'
+import type { ThemeConfig } from 'antd/es/config-provider/context'
 
 export type ThemeMode = 'light' | 'dark'
 
 export const DEFAULT_THEME_MODE: ThemeMode = 'light'
 
 const baseTokens = {
-    colorPrimary: '#3e79f7', // A more sophisticated Tech Blue
-    colorSuccess: '#30d158', // iOS-like success green
-    colorWarning: '#ff9f0a', // iOS-like warning orange
-    colorError: '#ff453a',   // iOS-like error red
-    colorInfo: '#3e79f7',
-    colorBgContainer: '#ffffff',
+    colorPrimary: '#1677ff', // Ant Design Default Blue
+    colorSuccess: '#52c41a',
+    colorWarning: '#faad14',
+    colorError: '#ff4d4f',
+    colorInfo: '#1677ff',
+    colorBgContainer: '#ffffff', // Pure White for content
     colorBgElevated: '#ffffff',
-    colorBgLayout: '#f4f6f9', // Very light cool gray
-    colorText: '#1f1f1f',
+    colorBgLayout: '#f5f5f5', // Standard Antd Neutral Gray (Matches "White-ish/Beige-ish" perception in UI)
+    colorText: 'rgba(0, 0, 0, 0.88)',
     colorTextSecondary: 'rgba(0, 0, 0, 0.65)',
     colorTextTertiary: 'rgba(0, 0, 0, 0.45)',
     colorTextQuaternary: 'rgba(0, 0, 0, 0.25)',
-    borderRadius: 8,
-    borderRadiusLG: 12,
+    borderRadius: 6,
+    borderRadiusLG: 8,
     borderRadiusSM: 4,
     fontSize: 14,
     fontSizeLG: 16,
@@ -27,12 +27,12 @@ const baseTokens = {
     fontFamily:
         'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     boxShadow:
-        '0 2px 12px 0 rgba(0, 0, 0, 0.05)', // Softer, more diffuse shadow
+        '0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px 0 rgba(0, 0, 0, 0.02)',
     boxShadowSecondary:
-        '0 6px 16px -8px rgba(0, 0, 0, 0.08), 0 9px 28px 0 rgba(0, 0, 0, 0.05), 0 12px 48px 16px rgba(0, 0, 0, 0.03)',
-    controlHeight: 38, // Slightly taller for modern feel
-    controlHeightLG: 46,
-    controlHeightSM: 28,
+        '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)',
+    controlHeight: 32, // Standard Antd Height
+    controlHeightLG: 40,
+    controlHeightSM: 24,
 } satisfies ThemeConfig['token']
 
 const componentTokens = {

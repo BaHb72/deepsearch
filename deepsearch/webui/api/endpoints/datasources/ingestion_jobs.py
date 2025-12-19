@@ -13,7 +13,17 @@ from deepsearch.application.services.data_sources import (
 )
 
 router = APIRouter(prefix="/api/data-sources/jobs", tags=["DataSource Jobs"])
-_ingestion_service = DataSourceIngestionService()
+
+# 延迟初始化服务实例，避免模块导入时组件管理器未设置的问题
+_ingestion_service: DataSourceIngestionService | None = None
+
+
+def _get_ingestion_service() -> DataSourceIngestionService:
+    """延迟获取 ingestion 服务实例。"""
+    global _ingestion_service
+    if _ingestion_service is None:
+        _ingestion_service = DataSourceIngestionService()
+    return _ingestion_service
 
 
 class JobSummaryPayload(BaseModel):
@@ -68,19 +78,36 @@ async def list_ingestion_jobs(
 ) -> JobListResponse:
     if job_type != "prefetch_stock_basics":
         raise HTTPException(status_code=400, detail="暂不支持的作业类型")
-    jobs = await _ingestion_service.list_jobs(limit=limit)
-    return JobListResponse(jobs=[JobSummaryPayload.from_summary(job) for job in jobs])
+    
+    # 添加防护检查：如果组件管理器未设置，返回空列表
+    try:
+        from deepsearch.core.runtime.context import get_context
+        context = get_context()
+        # 检查组件管理器是否已设置
+        if context._component_manager is None:
+            return JobListResponse(jobs=[])
+    except Exception:
+        return JobListResponse(jobs=[])
+    
+    try:
+        jobs = await _get_ingestion_service().list_jobs(limit=limit)
+        return JobListResponse(jobs=[JobSummaryPayload.from_summary(job) for job in jobs])
+    except RuntimeError as e:
+        # 如果是组件未初始化的错误，返回空列表
+        if "组件" in str(e) or "未设置" in str(e) or "未初始化" in str(e):
+            return JobListResponse(jobs=[])
+        raise
 
 
 @router.post("/prefetch-stock-basics", response_model=JobSummaryPayload)
 async def trigger_prefetch_job(payload: PrefetchRequest) -> JobSummaryPayload:
-    summary = await _ingestion_service.ensure_stock_list_job(force=payload.force)
+    summary = await _get_ingestion_service().ensure_stock_list_job(force=payload.force)
     return JobSummaryPayload.from_summary(summary)
 
 
 @router.post("/{job_id}/cancel")
 async def cancel_job(job_id: str) -> dict[str, bool]:
-    success = await _ingestion_service.cancel_job(job_id)
+    success = await _get_ingestion_service().cancel_job(job_id)
     if not success:
         raise HTTPException(status_code=404, detail="作业不存在或已经完成")
     return {"success": True}

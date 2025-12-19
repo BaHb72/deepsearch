@@ -79,7 +79,7 @@ class DataProviderRegistry:
                 class_name="AmazingDataProvider",
                 description="银河证券数据提供者",
                 priority=90,
-                enabled=False,
+                enabled=True,
             ),
             ProviderInfo(
                 name="cloudflare",

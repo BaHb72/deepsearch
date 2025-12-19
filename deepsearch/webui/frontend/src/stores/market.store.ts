@@ -1,6 +1,5 @@
-// @ts-nocheck
-import {create} from 'zustand'
-import {devtools} from 'zustand/middleware'
+import { create } from 'zustand'
+import { devtools } from 'zustand/middleware'
 
 export interface MarketData {
   indices: any[]

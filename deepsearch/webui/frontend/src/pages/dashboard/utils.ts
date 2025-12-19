@@ -55,7 +55,7 @@ export const formatSuccessRate = (value?: number | null) => {
         return null
     }
     const percent = value <= 1 ? value * 100 : value
-    return percent.toFixed(1) + '%'
+    return percent.toFixed(2) + '%'
 }
 
 export const getRecommendationByStatus = (status: string) => {

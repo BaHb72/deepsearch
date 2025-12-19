@@ -1,8 +1,7 @@
-// @ts-nocheck
-import {useEffect, useMemo} from 'react'
-import {Alert, App, Button, Card, Form, Input, Space, Tag, Typography} from 'antd'
-import type {NotificationConfigResponse} from '@/api/notifications'
-import {DEFAULT_BODY_TEMPLATE, DEFAULT_TITLE_TEMPLATE, WECHAT_TITLE_MAX_LENGTH,} from './constants'
+import { useEffect, useMemo } from 'react'
+import { Alert, App, Button, Card, Form, Input, Space, Tag, Typography } from 'antd'
+import type { NotificationConfigResponse } from '@/api/notifications'
+import { DEFAULT_BODY_TEMPLATE, DEFAULT_TITLE_TEMPLATE, WECHAT_TITLE_MAX_LENGTH, } from './constants'
 
 interface FormatSectionProps {
   config: NotificationConfigResponse
@@ -58,7 +57,7 @@ const FormatSection = ({ config, disabled, saving, onSave }: FormatSectionProps)
     try {
       await navigator.clipboard.writeText(value)
       message.success('模板内容已复制到剪贴板')
-    } catch {
+    } catch (error) {
       console.error('[NotificationCenter] 复制模板失败', error)
       message.error('复制失败，请手动选择文本复制')
     }
@@ -131,7 +130,7 @@ const FormatSection = ({ config, disabled, saving, onSave }: FormatSectionProps)
             <Space direction="vertical" size={4}>
               <Typography.Text strong>{watchedTitle || '标题示例'}</Typography.Text>
               <Typography.Paragraph style={{ marginBottom: 0 }}>
-                {(watchedBody || '正文示例').split('\n').map((line, index) => (
+                {(watchedBody || '正文示例').split('\n').map((line: string, index: number) => (
                   <span key={index}>
                     {line}
                     <br />

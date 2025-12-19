@@ -1,5 +1,4 @@
-// @ts-nocheck
-import React, {useCallback, useEffect, useState} from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
     Alert,
     App as AntApp,
@@ -16,10 +15,10 @@ import {
     Tooltip,
     Typography,
 } from 'antd'
-import {ReloadOutlined, SaveOutlined, SearchOutlined, UndoOutlined,} from '@ant-design/icons'
+import { ReloadOutlined, SaveOutlined, SearchOutlined, UndoOutlined, } from '@ant-design/icons'
 
-const {Title, Text} = Typography
-const {Option} = Select
+const { Text } = Typography
+const { Option } = Select
 
 interface ModuleConfig {
     name: string
@@ -71,7 +70,7 @@ const DATA_SOURCE_COLORS: Record<string, string> = {
  * 模块数据源配置组件
  */
 const ModuleSourceConfig: React.FC = () => {
-    const {message} = AntApp.useApp()
+    const { message } = AntApp.useApp()
     const [loading, setLoading] = useState(false)
     const [saving, setSaving] = useState(false)
     const [modules, setModules] = useState<ModuleConfig[]>([])
@@ -147,7 +146,7 @@ const ModuleSourceConfig: React.FC = () => {
             for (const [moduleName, changes] of Object.entries(pendingChanges)) {
                 const response = await fetch(`/api/module-sources/${moduleName}`, {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(changes),
                 })
                 if (!response.ok) {
@@ -168,7 +167,7 @@ const ModuleSourceConfig: React.FC = () => {
     // 重新加载配置
     const handleReload = async () => {
         try {
-            await fetch('/api/module-sources/reload', {method: 'POST'})
+            await fetch('/api/module-sources/reload', { method: 'POST' })
             message.success('配置已重新加载')
             await loadModules()
             setPendingChanges({})
@@ -212,31 +211,31 @@ const ModuleSourceConfig: React.FC = () => {
 
     if (loading && modules.length === 0) {
         return (
-            <div style={{textAlign: 'center', padding: '50px'}}>
-                <Spin size="large"/>
-                <div style={{marginTop: 16}}>加载中...</div>
+            <div style={{ textAlign: 'center', padding: '50px' }}>
+                <Spin size="large" />
+                <div style={{ marginTop: 16 }}>加载中...</div>
             </div>
         )
     }
 
     return (
-        <div style={{padding: '16px 0'}}>
+        <div style={{ padding: '16px 0' }}>
             {/* 工具栏 */}
-            <Row gutter={16} style={{marginBottom: 16}} align="middle">
+            <Row gutter={16} style={{ marginBottom: 16 }} align="middle">
                 <Col flex="auto">
                     <Space>
                         <Input
                             placeholder="搜索模块..."
-                            prefix={<SearchOutlined/>}
+                            prefix={<SearchOutlined />}
                             value={searchText}
                             onChange={e => setSearchText(e.target.value)}
-                            style={{width: 200}}
+                            style={{ width: 200 }}
                             allowClear
                         />
                         <Select
                             value={selectedCategory}
                             onChange={setSelectedCategory}
-                            style={{width: 150}}
+                            style={{ width: 150 }}
                         >
                             <Option value="all">全部分类</Option>
                             {categories.map(cat => (
@@ -248,14 +247,14 @@ const ModuleSourceConfig: React.FC = () => {
                 <Col>
                     <Space>
                         <Button
-                            icon={<ReloadOutlined/>}
+                            icon={<ReloadOutlined />}
                             onClick={handleReload}
                         >
                             重载配置
                         </Button>
                         <Button
                             type="primary"
-                            icon={<SaveOutlined/>}
+                            icon={<SaveOutlined />}
                             onClick={handleSaveAll}
                             loading={saving}
                             disabled={!hasChanges}
@@ -272,21 +271,21 @@ const ModuleSourceConfig: React.FC = () => {
                     description={'点击"保存更改"按钮保存所有修改到配置文件。'}
                     type="warning"
                     showIcon
-                    style={{marginBottom: 16}}
+                    style={{ marginBottom: 16 }}
                 />
             )}
 
             {/* 模块列表 */}
             {filteredModules.length === 0 ? (
-                <Empty description="没有找到模块"/>
+                <Empty description="没有找到模块" />
             ) : (
                 Object.entries(groupedModules).map(([category, categoryModules]) => (
                     <Card
                         key={category}
                         title={getCategoryLabel(category)}
                         size="small"
-                        style={{marginBottom: 16}}
-                        headStyle={{background: '#fafafa'}}
+                        style={{ marginBottom: 16 }}
+                        headStyle={{ background: '#fafafa' }}
                     >
                         {categoryModules.map(module => {
                             const effectiveConfig = getEffectiveConfig(module)
@@ -306,23 +305,23 @@ const ModuleSourceConfig: React.FC = () => {
                                                 <Text strong>
                                                     {module.label}
                                                     {isModified && (
-                                                        <Tag color="orange" style={{marginLeft: 8}}>
+                                                        <Tag color="orange" style={{ marginLeft: 8 }}>
                                                             已修改
                                                         </Tag>
                                                     )}
                                                 </Text>
-                                                <Text type="secondary" style={{fontSize: 12}}>
+                                                <Text type="secondary" style={{ fontSize: 12 }}>
                                                     {module.description || module.name}
                                                 </Text>
                                             </Space>
                                         </Col>
                                         <Col span={6}>
-                                            <Space direction="vertical" size={4} style={{width: '100%'}}>
-                                                <Text type="secondary" style={{fontSize: 12}}>主数据源</Text>
+                                            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                                <Text type="secondary" style={{ fontSize: 12 }}>主数据源</Text>
                                                 <Select
                                                     value={effectiveConfig.primary || undefined}
                                                     onChange={v => handlePrimaryChange(module.name, v)}
-                                                    style={{width: '100%'}}
+                                                    style={{ width: '100%' }}
                                                     placeholder="选择主数据源"
                                                 >
                                                     {module.availableSources.map(source => (
@@ -336,13 +335,13 @@ const ModuleSourceConfig: React.FC = () => {
                                             </Space>
                                         </Col>
                                         <Col span={8}>
-                                            <Space direction="vertical" size={4} style={{width: '100%'}}>
-                                                <Text type="secondary" style={{fontSize: 12}}>回退数据源</Text>
+                                            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                                <Text type="secondary" style={{ fontSize: 12 }}>回退数据源</Text>
                                                 <Select
                                                     mode="multiple"
                                                     value={effectiveConfig.fallback}
                                                     onChange={v => handleFallbackChange(module.name, v)}
-                                                    style={{width: '100%'}}
+                                                    style={{ width: '100%' }}
                                                     placeholder="选择回退数据源"
                                                     maxTagCount={2}
                                                 >
@@ -358,11 +357,11 @@ const ModuleSourceConfig: React.FC = () => {
                                                 </Select>
                                             </Space>
                                         </Col>
-                                        <Col span={4} style={{textAlign: 'right'}}>
+                                        <Col span={4} style={{ textAlign: 'right' }}>
                                             <Tooltip title="重置为默认配置">
                                                 <Button
                                                     size="small"
-                                                    icon={<UndoOutlined/>}
+                                                    icon={<UndoOutlined />}
                                                     onClick={() => handleResetModule(module.name, module.defaultConfig)}
                                                 >
                                                     重置

@@ -1,13 +1,12 @@
-// @ts-nocheck
-import React, {useState} from 'react'
-import {Tabs} from 'antd'
+import { useState } from 'react'
+import { Tabs } from 'antd'
 import {
-    ApiOutlined,
-    AppstoreOutlined,
-    BellOutlined,
-    DatabaseOutlined,
-    FileZipOutlined,
-    NodeIndexOutlined
+  ApiOutlined,
+  AppstoreOutlined,
+  BellOutlined,
+  DatabaseOutlined,
+  FileZipOutlined,
+  NodeIndexOutlined
 } from '@ant-design/icons'
 import DatabaseConfigWithStore from './DatabaseConfigWithStore'
 import DataSourceConfig from './DataSourceConfig'
@@ -45,26 +44,26 @@ const SystemConfig = () => {
       children: <DataSourceConfig />
     },
     {
-        key: 'module-sources',
-        label: (
-            <span>
-          <NodeIndexOutlined/>
+      key: 'module-sources',
+      label: (
+        <span>
+          <NodeIndexOutlined />
           模块数据源
         </span>
-        ),
-        children: <ModuleSourceConfig/>
+      ),
+      children: <ModuleSourceConfig />
     },
-      {
-          key: 'log',
-          label: (
-              <span>
-          <FileZipOutlined/>
+    {
+      key: 'log',
+      label: (
+        <span>
+          <FileZipOutlined />
           日志配置
         </span>
-          ),
-          children: <LogConfig/>
+      ),
+      children: <LogConfig />
     },
-      {
+    {
       key: 'notification',
       label: (
         <span>

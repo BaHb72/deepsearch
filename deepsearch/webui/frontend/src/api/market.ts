@@ -129,6 +129,50 @@ export const marketAPI = {
    */
   getSectorData: () =>
     request.get('/market/sectors'),
+
+  // ============ 合并自废弃 services/market.ts|js ============
+
+  /**
+   * 获取指数列表
+   */
+  getIndices: () =>
+    request.get('/market/indices'),
+
+  /**
+   * 获取涨停池
+   */
+  getLimitUpPool: (date?: string) =>
+    request.get('/market/limit-up', { params: { date } }),
+
+  /**
+   * 获取龙虎榜
+   */
+  getDragonTigerList: (date?: string) =>
+    request.get('/market/dragon-tiger', { params: { date } }),
+
+  /**
+   * 获取资金流向
+   */
+  getMoneyFlow: (params?: { sector?: string; date?: string }) =>
+    request.get('/market/money-flow', { params }),
+
+  /**
+   * 获取北向资金
+   */
+  getNorthboundFlow: (date?: string) =>
+    request.get('/market/northbound', { params: { date } }),
+
+  /**
+   * 获取盘口数据
+   */
+  getOrderBook: (symbol: string) =>
+    request.get(`/market/orderbook/${symbol}`),
+
+  /**
+   * 获取逐笔成交
+   */
+  getTickData: (symbol: string, limit: number = 50) =>
+    request.get(`/market/ticks/${symbol}`, { params: { limit } }),
 };
 
 export default marketAPI;
