@@ -6,7 +6,7 @@
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -154,7 +154,6 @@ class CacheScheduler:
         """
         logger.info("[Scheduler] 检查过期缓存...")
         
-        from datetime import timedelta
         
         for task in self.tasks.values():
             needs_refresh = False

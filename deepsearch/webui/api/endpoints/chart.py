@@ -4,6 +4,8 @@
 提供高性能的图表数据接口，支持K线、分时、技术指标等
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence

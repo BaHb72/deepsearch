@@ -11,7 +11,6 @@ from typing import Any, Mapping, MutableSet, Sequence
 from loguru import logger
 
 from deepsearch.core.components.data_components import DatabaseComponent
-from deepsearch.core.managers.component_manager import ComponentManager
 from deepsearch.domain.market_data import StockListRecord
 from deepsearch.infrastructure.persistence.database import DatabaseService
 from deepsearch.infrastructure.persistence.ingestion_records import DataSourceRecordPersistence

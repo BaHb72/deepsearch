@@ -155,7 +155,7 @@ def _load_data_sources_config(config: Dict[str, Any], config_dir: Path) -> Dict[
                 # 深度合并 data_sources 配置
                 _deep_merge(config["data_sources"], transformed)
 
-                print(f"[INFO] Loaded data sources config: data_sources.yaml")
+                print("[INFO] Loaded data sources config: data_sources.yaml")
                 return config
         except Exception as e:
             print(f"[WARNING] Failed to load data_sources.yaml: {e}", file=sys.stderr)
@@ -185,7 +185,7 @@ def _load_data_sources_config(config: Dict[str, Any], config_dir: Path) -> Dict[
                 elif isinstance(providers_list, dict):
                     config["data_sources"]["providers"].update(providers_list)
 
-                print(f"[INFO] Loaded legacy providers config: providers.yaml")
+                print("[INFO] Loaded legacy providers config: providers.yaml")
         except Exception as e:
             print(f"[WARNING] Failed to load providers.yaml: {e}", file=sys.stderr)
 

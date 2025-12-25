@@ -81,10 +81,6 @@ def get_miniqmt_provider() -> MiniQMTProvider:
     if _miniqmt_provider is None:
         # Fallback: 直接创建一个可用的 Provider 实例
         try:
-            from deepsearch.infrastructure.providers.interfaces.base import (
-                DataProviderConfig,
-                DataSourceType,
-            )
 
             # 创建一个实现了抽象方法的测试子类
             class _DirectMiniQMTProvider(MiniQMTProvider):
@@ -713,8 +709,7 @@ async def get_xtdata_kline(
         import numpy as np
 
         try:
-            # 获取各字段数据
-            time_df = result.get('time')
+            # 获取各字段数据（time字段不需要，时间在columns中）
             open_df = result.get('open')
             high_df = result.get('high')
             low_df = result.get('low')
@@ -1458,7 +1453,6 @@ async def get_stock_list(
     from deepsearch.webui.api.services.stock_cache import (
         get_stock_list_from_cache,
         refresh_stock_cache,
-        ensure_stock_cache,
     )
     
     try:
@@ -1469,7 +1463,7 @@ async def get_stock_list(
             asyncio.create_task(refresh_stock_cache(sector))
             return {
                 "success": True,
-                "message": f"缓存刷新任务已启动，请稍后重试获取",
+                "message": "缓存刷新任务已启动，请稍后重试获取",
                 "sector": sector,
                 "data": [],
                 "count": 0,

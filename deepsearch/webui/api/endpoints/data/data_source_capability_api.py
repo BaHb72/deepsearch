@@ -22,6 +22,7 @@ from deepsearch.webui.api.models import (
     CapabilityCategorySummary,
     CapabilityComparisonEntry,
     CapabilityComparisonResponse,
+    CapabilityDescriptor,
     CapabilityDiffStats,
     CapabilityInfo,
     CapabilityItem,

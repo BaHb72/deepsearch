@@ -11,7 +11,6 @@ import asyncio
 import atexit
 import importlib
 import inspect
-import os
 from datetime import datetime
 from enum import Enum
 from threading import Lock
@@ -311,7 +310,6 @@ class DataProviderFactory:
                         try:
                             from deepsearch.config import get_config
                             from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
-                                AmazingDataProvider,
                                 ensure_amazingdata_provider_config,
                             )
 

@@ -1288,7 +1288,6 @@ class AmazingDataProcessProxy:
                     # 注意: AmazingData 和 tgw 的 login 函数签名不同！优先使用 AmazingData
                     # 注意: tgw 模块使用 Login (大写L)，而 AmazingData 使用 login (小写l)
                     sdk_candidates = ("AmazingData", "amazingdata", "tgw", "amazingdata_sdk")
-                    detected_method_name: Optional[str] = None
                     for sdk_name in sdk_candidates:
                         try:
                             ad_module = __import__(sdk_name)
@@ -1296,14 +1295,12 @@ class AmazingDataProcessProxy:
                             if hasattr(ad_module, 'login') and callable(getattr(ad_module, 'login', None)):
                                 ad = cast(Any, ad_module)
                                 sdk_imported = True
-                                detected_method_name = 'login'
                                 login_method_name = 'login'
                                 logger.info(f"AmazingData SDK imported in worker process (package: {sdk_name}, login_method: login)")
                                 break
                             elif hasattr(ad_module, 'Login') and callable(getattr(ad_module, 'Login', None)):
                                 ad = cast(Any, ad_module)
                                 sdk_imported = True
-                                detected_method_name = 'Login'
                                 login_method_name = 'Login'
                                 logger.info(f"AmazingData SDK imported in worker process (package: {sdk_name}, login_method: Login)")
                                 break

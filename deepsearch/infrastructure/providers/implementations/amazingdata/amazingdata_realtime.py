@@ -19,7 +19,7 @@ from loguru import logger
 
 # AmazingData SDK
 from ._sdk_loader import ad as _sdk_module
-from .amazingdata_types import KlineRecord, AmazingDataPeriod
+from .amazingdata_types import KlineRecord
 
 # 回调函数类型定义
 KlineCallbackFunc = Callable[[KlineRecord, str], Coroutine[Any, Any, None]]

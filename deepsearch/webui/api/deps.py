@@ -7,7 +7,6 @@ FastAPI 依赖注入模块
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Optional
 
 from fastapi import Depends, HTTPException
@@ -117,8 +116,6 @@ async def get_optional_ingestion_service() -> Optional["DataSourceIngestionServi
     Returns:
         DataSourceIngestionService | None: 服务实例或 None
     """
-    from fastapi import Request
-    from starlette.requests import Request as StarletteRequest
     
     from deepsearch.application.services.data_sources import DataSourceIngestionService
     from deepsearch.infrastructure.persistence.database import DatabaseService

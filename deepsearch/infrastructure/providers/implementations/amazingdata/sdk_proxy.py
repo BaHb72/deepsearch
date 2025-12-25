@@ -130,7 +130,6 @@ class ProcessIsolatedSDKProxySync:
             try:
                 loop = asyncio.get_running_loop()
                 # 如果在异步上下文中，创建任务
-                import concurrent.futures
                 future = asyncio.run_coroutine_threadsafe(backend._execute(command), loop)
                 return future.result(timeout=60)
             except RuntimeError:

@@ -8,8 +8,6 @@
 """
 
 import asyncio
-import json
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -113,7 +111,7 @@ async def refresh_stock_cache(sector: str = "沪深A股") -> bool:
         stock_list = await loop.run_in_executor(None, _fetch_stock_list_sync, sector)
         
         if not stock_list:
-            logger.warning(f"[StockCache] 刷新失败，股票列表为空")
+            logger.warning("[StockCache] 刷新失败，股票列表为空")
             return False
         
         # 存入缓存

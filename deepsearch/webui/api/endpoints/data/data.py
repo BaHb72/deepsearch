@@ -24,7 +24,6 @@ from sqlalchemy import select
 from sqlalchemy.sql import Select, and_
 
 from deepsearch.core.components.data_components import DatabaseComponent
-from deepsearch.core.managers.component_manager import ComponentManager
 from deepsearch.data.cleaner import DataCleaner
 from deepsearch.indicators.simple import SimpleIndicators
 from deepsearch.infrastructure.persistence.analytics import AnalyticsDB

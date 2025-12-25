@@ -18,7 +18,6 @@ from deepsearch.config.settings import Settings
 
 if TYPE_CHECKING:
     from deepsearch.application.market_data.orchestrator import (
-        RealtimeDataOrchestrator,
         RealtimeRuntimeHandle,
     )
 

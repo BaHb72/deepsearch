@@ -4,9 +4,9 @@ AmazingData 概念资金流向API
 使用延迟导入避免模块加载时的依赖问题
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from loguru import logger
 
 router = APIRouter(tags=["AmazingData-概念资金"])
@@ -152,7 +152,7 @@ async def get_concept_linkage(
             if data and data.get("concepts"):
                 return format_response(success=True, data=data)
         except asyncio.TimeoutError:
-            logger.warning(f"获取联动图谱超时(10s)，使用模拟数据")
+            logger.warning("获取联动图谱超时(10s)，使用模拟数据")
         except Exception as e:
             logger.warning(f"获取联动图谱失败: {e}，使用模拟数据")
 

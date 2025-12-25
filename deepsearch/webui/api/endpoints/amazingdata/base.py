@@ -13,9 +13,6 @@ import pandas as pd
 from fastapi import HTTPException
 from loguru import logger
 
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_extended import (
-    AmazingDataExtended,
-)
 from deepsearch.infrastructure.providers.interfaces.base import TGWError
 from deepsearch.webui.api.providers import DataProviderFactory, DataSourceType
 

@@ -6,7 +6,6 @@ T-Trading 日内做T策略 API 端点
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status

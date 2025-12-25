@@ -256,7 +256,7 @@ class FreeQMTAdapter:
                     )
                     success_count += 1
                     # 动态状态更新
-                    self._status.update_source(\"MiniQMT\", request=True, success=True)
+                    self._status.update_source("MiniQMT", request=True, success=True)
                 except Exception as e:
                     logger.error(f"订阅 {symbol} 失败: {e}")
 

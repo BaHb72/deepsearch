@@ -12,6 +12,7 @@ from deepsearch.observability import get_logger
 if TYPE_CHECKING:
     from deepsearch.infrastructure.persistence.duckdb_analytics import DuckDBAnalytics
     from deepsearch.core.components.data_components import DatabaseComponent
+    from .data_sync_pipeline import DataSyncPipeline
 
 logger = get_logger(__name__)
 

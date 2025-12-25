@@ -9,7 +9,6 @@ import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from threading import Lock
 from typing import Any, ClassVar, Deque, DefaultDict, Dict, List, Optional, Tuple, TypedDict
 

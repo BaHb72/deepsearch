@@ -395,8 +395,8 @@ class AnalyticsComponent(AsyncComponent):
         """获取DuckDB实例（供其他组件使用）"""
         return self._analytics_db
 
-    async def sync_data(self) -> Dict[str, Any]:
-        """手动触发数据同步（带超时）"""
+    async def sync_now(self) -> Dict[str, Any]:
+        """手动触发数据同步（带超时）- 使用旧版同步服务"""
         if not self._sync_service:
             return {"error": "Sync service not initialized"}
 

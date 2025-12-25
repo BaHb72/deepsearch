@@ -41,7 +41,6 @@ if TYPE_CHECKING:
     from deepsearch.event.engine.engine import EventEngine
     from deepsearch.application.market_data.orchestrator import (
         RealtimeDataOrchestrator,
-        RealtimeRuntimeHandle,
     )
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -527,9 +526,7 @@ log_diagnostic(
 
 # 市场数据运行时函数已迁移到 services.market_data_runtime 模块
 from deepsearch.webui.services.market_data_runtime import (
-    bind_market_data_handle,
     ensure_market_data_runtime,
-    refresh_market_data_once,
     shutdown_market_data_runtime,
 )
 
@@ -599,12 +596,6 @@ def create_startup_handler(app_state: AppState) -> Callable[[], Awaitable[None]]
             # 注意：DatabaseComponent 现在在 lifespan 中初始化，避免重复创建
             # 这里暂时跳过 Repository 初始化，待后续重构使用 app.state.db_service
             try:
-                from deepsearch.infrastructure.persistence.module_source_repository import (
-                    ModuleSourceRepository,
-                )
-                from deepsearch.infrastructure.providers.managers.module_registry import (
-                    get_module_registry,
-                )
                 
                 # 由于 Repository 需要 db_service，而 db_service 在 lifespan yield 后才可用
                 # 这里暂时跳过初始化，将在后续请求中延迟初始化
@@ -766,7 +757,7 @@ def create_app() -> FastAPI:
 
     # 添加请求限流和去重中间件
     try:
-        from deepsearch.webui.api.middleware import DeduplicationMiddleware, RateLimitMiddleware
+        from deepsearch.webui.api.middleware import DeduplicationMiddleware
 
         # 添加去重中间件（先去重，再限流）
         app.add_middleware(

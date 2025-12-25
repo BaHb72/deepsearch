@@ -40,8 +40,8 @@ def _normalize_iterable(values: Iterable[str]) -> tuple[str, ...]:
 
 def _merge_board_values(payload: Mapping[str, Any], board_fields: Sequence[str]) -> tuple[str, ...]:
     candidates: list[str] = []
-    for field in board_fields:
-        raw_value = payload.get(field)
+    for field_name in board_fields:
+        raw_value = payload.get(field_name)
         if raw_value is None:
             continue
         if isinstance(raw_value, str):

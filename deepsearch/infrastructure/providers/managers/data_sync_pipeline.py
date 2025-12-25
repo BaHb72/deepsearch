@@ -13,7 +13,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Union, Set
+from typing import Any, Callable, Dict, List, Optional, Union
 import asyncio
 import pandas as pd
 
@@ -170,7 +170,7 @@ class DataSyncPipeline:
         )
         
         if not sorted_sources:
-            logger.warning(f"没有可用的数据源进行同步")
+            logger.warning("没有可用的数据源进行同步")
             return results
         
         logger.info(f"开始同步表 {table}，数据源: {[s.name for s in sorted_sources]}")
