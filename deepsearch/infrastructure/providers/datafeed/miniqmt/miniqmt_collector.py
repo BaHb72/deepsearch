@@ -59,27 +59,34 @@ class MiniQMTCollector:
 
     def _init_connection(self):
         """初始化MiniQMT连接"""
+        from deepsearch.infrastructure.providers.implementations.qmt.connection_guard import (
+            MiniQMTConnectionGuard,
+        )
+
+        # 检查是否应该尝试连接（可能在静默期间）
+        if not MiniQMTConnectionGuard.should_attempt_connection():
+            self.connected = False
+            return
+
         try:
             import xtquant.xtdata as xtdata
 
             self.xtdata = xtdata
 
-            # 连接到MiniQMT
-            # 注意：MiniQMT需要先启动
-            logger.info("正在连接到MiniQMT...")
-
             # 对于MiniQMT，通常不需要显式连接
             # xtdata会自动处理与MiniQMT的通信
 
             self.connected = True
-            logger.info("✅ MiniQMT连接成功")
+            MiniQMTConnectionGuard.mark_available()
+            logger.info("MiniQMT连接成功")
 
         except ImportError as e:
-            logger.error(f"❌ 无法导入xtdata模块: {e}")
-            logger.error("请确保已安装MiniQMT并配置Python环境")
+            MiniQMTConnectionGuard.log_connection_error(f"无法导入xtdata模块: {e}")
+            MiniQMTConnectionGuard.mark_unavailable()
             self.connected = False
         except Exception as e:
-            logger.error(f"❌ 连接MiniQMT失败: {e}")
+            MiniQMTConnectionGuard.log_connection_error(f"连接失败: {e}")
+            MiniQMTConnectionGuard.mark_unavailable()
             self.connected = False
 
     # ==================== 1. 历史数据下载 ====================

@@ -16,6 +16,7 @@ const AlertManager = lazy(() => import('@/pages/Monitor/AlertManager'))
 const ComponentManager = lazy(() => import('@/pages/Monitor/ComponentManager'))
 const DataExplorer = lazy(() => import('@/pages/DataSource/Explorer'))
 const CapabilityMatrix = lazy(() => import('@/pages/DataSource/CapabilityMatrix'))
+const DataPlayground = lazy(() => import('@/pages/Playground/DataPlayground'))
 const NotFound = lazy(() => import('@/pages/NotFound'))
 
 const PageLoading: React.FC = () => (
@@ -95,6 +96,19 @@ const routes: RouteObject[] = [
       {
         path: 'datasource/matrix',
         element: <RouteWrapper element={CapabilityMatrix} />
+      },
+      {
+        path: 'dev/playground',
+        element: <RouteWrapper element={DataPlayground} />
+      },
+      {
+        // 保留旧路由，重定向到统一入口
+        path: 'dev/miniqmt',
+        element: <Navigate to="/dev/playground" replace />
+      },
+      {
+        path: 'dev/amazingdata',
+        element: <Navigate to="/dev/playground" replace />
       },
       {
         path: '*',

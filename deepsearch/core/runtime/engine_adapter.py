@@ -180,6 +180,8 @@ class ComponentAdapter(IComponent):
                 try:
                     loop = asyncio.get_running_loop()
                 except RuntimeError:
+                    # 创建临时事件循环但不设置为默认循环
+                    # 避免关闭后影响其他异步操作
                     loop = asyncio.new_event_loop()
                     try:
                         return str(loop.run_until_complete(result))

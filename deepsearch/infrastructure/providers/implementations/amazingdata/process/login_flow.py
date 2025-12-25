@@ -68,14 +68,25 @@ async def perform_login(
                 timeout=max(timeout_value, 5.0),
                 api_mode=provider._login_api_mode,
             )
-            logger.debug(
-                "AmazingData login request datasource={} host={} port={} timeout={:.2f}s api_mode={}",
-                provider._datasource_id,
-                login_request.host,
-                login_request.port,
-                login_request.timeout,
-                provider._login_api_mode or "default",
+            # [TGW参数检查] 使用INFO级别确保始终可见
+            tgw_params_msg = (
+                f"[TGW登录参数] datasource={provider._datasource_id} "
+                f"username={login_request.username!r} host={login_request.host!r} "
+                f"port={login_request.port} timeout={login_request.timeout:.2f}s "
+                f"api_mode={provider._login_api_mode or 'default'} "
+                f"password={'***' if login_request.password else '(空)'}"
             )
+            logger.info(tgw_params_msg)
+            # 同时写入文件日志，避免被TUI覆盖
+            try:
+                from pathlib import Path
+                log_dir = Path("data/logs/datasource")
+                log_dir.mkdir(parents=True, exist_ok=True)
+                with open(log_dir / "tgw_login.log", "a", encoding="utf-8") as f:
+                    from datetime import datetime
+                    f.write(f"{datetime.now().isoformat()} {tgw_params_msg}\n")
+            except Exception:
+                pass  # 文件日志失败不影响主流程
             login_start = perf_counter()
             response = await adapter.login(login_request)
             performed_login = True

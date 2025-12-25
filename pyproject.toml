@@ -69,6 +69,8 @@ dependencies = [
     "tigeropen>=3.4.4",
     "python-docx>=1.2.0",
     "tables>=3.10.2",
+    "pypinyin>=0.55.0",
+    "apscheduler>=3.11.1",
 ]
 
 [project.optional-dependencies]
@@ -124,8 +126,8 @@ python-preference = "only-system"
 compile-bytecode = true
 
 [tool.uv.sources]
-amazingdata = { url = "https://bahbai.com/packages/AmazingData-1.0.23-cp313-none-any.whl" }
-tgw = { url = "https://bahbai.com/packages/tgw-1.0.8.4-py3-none-any.whl" }
+amazingdata = { path = "packages/AmazingData-1.0.23-cp313-none-any.whl" }
+tgw = { path = "packages/tgw-1.0.8.4-py3-none-any.whl" }
 
 [tool.uv.pip]
 index-url = "https://pypi.org/simple"

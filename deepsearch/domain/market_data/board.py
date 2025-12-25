@@ -250,11 +250,28 @@ class BoardUniverse:
             self._boards[board] = tuple(sorted(codes))
 
     def resolve_codes(self, board: str) -> Sequence[str]:
-        """Return codes belonging to the given board."""
+        """Return codes belonging to the given board.
 
+        If the board is not found directly, attempts to resolve it through
+        canonical aliases (e.g., "北证" -> "北交所").
+        """
         if not board:
             return ()
-        return self._boards.get(board, ())
+
+        # Direct lookup first
+        result = self._boards.get(board)
+        if result:
+            return result
+
+        # Try canonical alias resolution
+        aliases = _derive_board_aliases(board)
+        for alias in aliases:
+            if alias != board:
+                result = self._boards.get(alias)
+                if result:
+                    return result
+
+        return ()
 
     def boards(self) -> Sequence[str]:
         """Return available board identifiers."""

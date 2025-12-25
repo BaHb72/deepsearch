@@ -139,6 +139,38 @@ temp_block.txt
 *qmt_config.json
 debug_api.py
 
+# ==================== One-off Scripts & Patches ====================
+/modify_*.py
+/apply_*.py
+/*.patch
+/stock.md.txt
+/_tmp_*.py
+/_tmp_*.txt
+/_tmp_*.log
+/_tmp_*.json
+
+# ==================== Root Level Test/Temp Files ====================
+# 根目录临时测试文件
+/test_*.py
+/verify_*.py
+/check_*.py
+/_tmp_*.json
+/test_request.json
+/verify_result.json
+/verify_output.txt
+/*_test_results.json
+
+# scripts目录下的输出文件
+scripts/*_output.txt
+scripts/*_test_full.txt
+
+# tests目录下的日志文件
+tests/*_log.txt
+tests/*_test_log.txt
+
+# packages目录（如果是临时的npm包）
+/packages/
+
 # ==================== Project Automation ====================
 runtime/interpreters/
 worker/

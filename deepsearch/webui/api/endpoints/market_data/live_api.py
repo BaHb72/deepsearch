@@ -13,7 +13,7 @@ from loguru import logger
 from pydantic import BaseModel
 from starlette import status
 
-from deepsearch.webui.server import (
+from deepsearch.webui.services.market_data_runtime import (
     bind_market_data_handle,
     ensure_market_data_runtime,
     refresh_market_data_once,

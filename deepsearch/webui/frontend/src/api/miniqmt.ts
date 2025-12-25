@@ -298,6 +298,13 @@ export const sectorApi = {
         }),
 }
 
+/** 资金流向数据 */
+export const capitalFlowApi = {
+    /** 获取板块资金流向排名 */
+    getSectorCapitalFlow: (params?: { indicator?: string; sector_type?: string }) =>
+        request.get<ApiResponse>(`${MINIQMT_PATH}/xtdata/sector-capital-flow`, { params }),
+}
+
 /** 合约信息 */
 export const instrumentApi = {
     /** 获取单个合约信息 */
@@ -441,6 +448,7 @@ export const miniqmtApi = {
     realtime: realtimeApi,
     history: historyApi,
     sector: sectorApi,
+    capitalFlow: capitalFlowApi,
     instrument: instrumentApi,
     calendar: calendarApi,
     financial: financialApi,

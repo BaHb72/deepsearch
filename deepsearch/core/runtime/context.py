@@ -34,6 +34,7 @@ class ApplicationContext:
 
         # 组件相关
         self._component_manager: Optional[ComponentManager] = None
+        self._component_overrides: Dict[str, Component] = {}  # 组件覆盖（用于 lifespan 注入）
         self._engine: Optional["MainEngine"] = None
 
         # 服务相关
@@ -102,6 +103,9 @@ class ApplicationContext:
         """
         获取组件
 
+        优先返回通过 override_component 设置的组件（lifespan 初始化的），
+        否则从组件管理器获取。
+
         Args:
             name: 组件名称
 
@@ -111,6 +115,11 @@ class ApplicationContext:
         Raises:
             ValueError: 如果组件不存在
         """
+        # 优先返回覆盖的组件（lifespan 中创建的正确事件循环绑定的组件）
+        with self._lock:
+            if name in self._component_overrides:
+                return self._component_overrides[name]
+        
         manager = self.get_component_manager()
         if not manager.has_component(name):
             raise ValueError(f"组件不存在: {name}")
@@ -118,6 +127,33 @@ class ApplicationContext:
         if component is None:
             raise ValueError(f"组件未注册: {name}")
         return component
+
+    def override_component(self, name: str, component: Component) -> None:
+        """
+        覆盖组件
+        
+        用于 lifespan 中设置正确事件循环绑定的组件，
+        后续 get_component 会优先返回覆盖的组件。
+
+        Args:
+            name: 组件名称
+            component: 组件实例
+        """
+        with self._lock:
+            self._component_overrides[name] = component
+            self._logger.info(f"组件已覆盖: {name}")
+
+    def clear_component_override(self, name: str) -> None:
+        """
+        清除组件覆盖
+
+        Args:
+            name: 组件名称
+        """
+        with self._lock:
+            if name in self._component_overrides:
+                del self._component_overrides[name]
+                self._logger.debug(f"组件覆盖已清除: {name}")
 
     # ==================== 引擎管理 ====================
 

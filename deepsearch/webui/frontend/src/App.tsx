@@ -19,7 +19,8 @@ const ConceptMonitor = lazy(() => import('./pages/ConceptMonitor'))
 
 const DataExplorer = lazy(() => import('./pages/DataSource/Explorer'))
 const StrategyGenerator = lazy(() => import('./pages/Strategy/Generator'))
-const AmazingDataPlayground = lazy(() => import('./pages/Playground/AmazingData'))
+const DataPlayground = lazy(() => import('./pages/Playground/DataPlayground'))
+const TTradingPage = lazy(() => import('./pages/Trading/TTradingPage'))
 
 const Loading: React.FC = () => (
   <div
@@ -53,6 +54,7 @@ const App: React.FC = () => {
 
           <Route path="datasource/explorer" element={<DataExplorer />} />
           <Route path="strategy/generator" element={<StrategyGenerator />} />
+          <Route path="trading/ttrading" element={<TTradingPage />} />
 
           <Route path="monitor/market" element={<MarketMonitor />} />
           <Route path="monitor/datasource" element={<MarketMonitor />} />
@@ -63,7 +65,9 @@ const App: React.FC = () => {
           <Route path="monitor/concept" element={<ConceptMonitor />} />
 
           {/* Playground 页面 */}
-          <Route path="dev/amazingdata" element={<AmazingDataPlayground />} />
+          <Route path="dev/playground" element={<DataPlayground />} />
+          <Route path="dev/amazingdata" element={<Navigate to="/dev/playground" replace />} />
+          <Route path="dev/miniqmt" element={<Navigate to="/dev/playground" replace />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

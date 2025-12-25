@@ -867,30 +867,8 @@ async def get_long_hu_bang(code_list: List[str] = Body(..., description="股票�
         logger.error(f"获取龙虎榜数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# block-trading 端点已移至 margin.py 模块
 
-@router.post("/block-trading", summary="��ȡ���ڽ�������")
-async def get_block_trading_data(request: BlockTradingRequest) -> AmazingDataResponse:
-    """
-    3.5.9.2 ���ڽ���
-    ��ȡָ����Ʊ�б��Ĵ��ڽ�������
-    """
-    try:
-        provider = await get_amazingdata_provider()
-        result = await provider.get_block_trading(
-            request.code_list,
-            local_path=_resolve_local_path(request.local_path),
-            is_local=request.is_local,
-            begin_date=request.begin_date,
-            end_date=request.end_date,
-        )
-        return {
-            "status": "success",
-            "data": dataframe_to_dict(result),
-            "message": "���ڽ�������ȡ�ɹ�",
-        }
-    except Exception as e:
-        logger.error(f"��ȡ���ڽ�������ʧ��: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 # ================== 9. 实时行情订阅接口 ==================
 
 # 保存订阅管理器

@@ -174,6 +174,9 @@ async def get_income(request: FinancialReportRequest) -> JSONDict:
             local_path=local_path,
             is_local=request.is_local,
         )
+        # DEBUG: 记录raw_result类型用于排查序列化问题
+        import logging
+        logging.getLogger(__name__).info(f"[DEBUG] get_income raw_result type: {type(raw_result).__name__}")
         filtered_df = ensure_dataframe(raw_result)
         if filtered_df is not None and request.report_date is not None:
             filtered_df = filter_dataframe_by_dates(
@@ -189,8 +192,20 @@ async def get_income(request: FinancialReportRequest) -> JSONDict:
                 columns=("report_type", "REPORT_TYPE", "type", "TYPE"),
             )
 
+        # 确保payload_source是已处理的数据，如果filtered_df为None则使用raw_result
         payload_source: object = filtered_df if filtered_df is not None else raw_result
-        payload = dataframe_to_dict(payload_source)
+        # 强制确保所有DataFrame都被转换为可序列化格式
+        if isinstance(payload_source, pd.DataFrame):
+            payload = dataframe_to_dict(payload_source)
+        else:
+            payload = dataframe_to_dict(payload_source)
+        
+        # DEBUG: 记录payload类型和内容结构
+        import logging as _log
+        _log.getLogger(__name__).info(f"[DEBUG] payload type: {type(payload).__name__}")
+        if isinstance(payload, dict):
+            for k, v in payload.items():
+                _log.getLogger(__name__).info(f"[DEBUG] payload[{k}] type: {type(v).__name__}")
 
         return format_response(
             success=True,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, TYPE_CHECKING
 
 from loguru import logger
 
@@ -15,7 +15,12 @@ from deepsearch.config.models.market_data import (
     MarketModuleFallbackConfig,
 )
 from deepsearch.config.settings import Settings
-from deepsearch.application.market_data.orchestrator import RealtimeDataOrchestrator, RealtimeRuntimeHandle
+
+if TYPE_CHECKING:
+    from deepsearch.application.market_data.orchestrator import (
+        RealtimeDataOrchestrator,
+        RealtimeRuntimeHandle,
+    )
 
 
 def _iso_now() -> str:
@@ -36,6 +41,8 @@ class ModuleFallbackManager:
     """Coordinates module-level fallback fetches without disturbing primary runtime."""
 
     def __init__(self, settings: Settings) -> None:
+        from deepsearch.application.market_data.orchestrator import RealtimeDataOrchestrator
+        
         self._settings = settings
         self._orchestrator = RealtimeDataOrchestrator(settings)
         self._locks: Dict[Tuple[str, str], asyncio.Lock] = {}

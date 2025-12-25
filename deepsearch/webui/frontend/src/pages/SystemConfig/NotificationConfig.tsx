@@ -601,10 +601,13 @@ const NotificationConfig: React.FC = () => {
       <Modal
         title="发送测试通知"
         open={testVisible}
-        onCancel={() => setTestVisible(false)}
+        onCancel={() => {
+          testForm.resetFields()
+          setTestVisible(false)
+        }}
         onOk={handleSendTest}
         okText="发送"
-        destroyOnClose
+        forceRender
       >
         <Form form={testForm} layout="vertical">
           <Form.Item

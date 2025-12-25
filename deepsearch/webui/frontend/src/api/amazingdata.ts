@@ -400,7 +400,7 @@ export const marginApi = {
         begin_date?: number
         end_date?: number
     }) =>
-        request.post<ApiResponse<DataFrameResult>>(`${BASE_PATH}/block-trading`, data),
+        request.post<ApiResponse<DataFrameResult>>(`${BASE_PATH}/margin/block-trading`, data),
 }
 
 // ============= 股东信息 API =============

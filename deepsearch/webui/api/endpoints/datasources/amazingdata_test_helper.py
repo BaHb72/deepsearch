@@ -6,8 +6,23 @@ AmazingData测试辅助模块
 
 import time
 from typing import Any, Dict, Optional, TypedDict
+from types import ModuleType
 
 from loguru import logger
+
+# SDK导入候选列表（已安装: amazingdata, tgw）
+_SDK_CANDIDATES = ("amazingdata", "tgw", "AmazingData", "amazingdata_sdk")
+
+
+def _import_amazingdata_sdk() -> Optional[ModuleType]:
+    """尝试导入AmazingData SDK，返回模块或None"""
+    for name in _SDK_CANDIDATES:
+        try:
+            return __import__(name)
+        except ImportError:
+            continue
+    return None
+
 
 class LogoutResult(TypedDict):
     success: bool
@@ -75,8 +90,11 @@ def safe_logout(username: str) -> bool:
     def logout_in_thread():
         """在独立线程中执行logout"""
         try:
-            # 导入AmazingData模块
-            import AmazingData as ad
+            # 导入AmazingData模块（动态尝试多个包名）
+            ad = _import_amazingdata_sdk()
+            if ad is None:
+                logger.error("[HELPER] 无法导入AmazingData SDK")
+                return
 
             # 执行logout
             ad.logout(username)
@@ -173,7 +191,9 @@ def test_amazingdata_connection(
             logger.warning("[HELPER] 降级到直接SDK调用模式（有崩溃风险）")
 
             try:
-                import AmazingData as ad
+                ad = _import_amazingdata_sdk()
+                if ad is None:
+                    raise ImportError(f"无法导入AmazingData SDK，尝试了: {_SDK_CANDIDATES}")
 
                 logger.info("[HELPER] AmazingData SDK导入成功")
 

@@ -25,6 +25,14 @@ from deepsearch.infrastructure.providers.interfaces.base import (
 )
 from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
 
+# 模块级别导入 xtquant，避免在每个函数中重复导入（会导致重复的连接消息）
+try:
+    from xtquant import xtdata
+    XTDATA_AVAILABLE = True
+except ImportError:
+    xtdata = None  # type: ignore
+    XTDATA_AVAILABLE = False
+
 
 class MiniQMTProvider(DataProvider):
     """
@@ -368,35 +376,33 @@ class MiniQMTProvider(DataProvider):
         Returns:
             股票信息字典，失败返回 None
         """
-        try:
-            # 尝试使用 xtquant SDK 直接获取
-            from xtquant import xtdata
-
-            # 获取合约详情
-            detail = xtdata.get_instrument_detail(symbol)
-
-            if detail:
-                return {
-                    "symbol": symbol,
-                    "name": detail.get("InstrumentName", ""),
-                    "exchange": detail.get("ExchangeID", ""),
-                    "open_date": detail.get("OpenDate", ""),
-                    "expire_date": detail.get("ExpireDate"),
-                    "prev_close": float(detail.get("PreClose", 0) or 0),
-                    "up_limit": float(detail.get("UpStopPrice", 0) or 0),
-                    "down_limit": float(detail.get("DownStopPrice", 0) or 0),
-                    "float_volume": float(detail.get("FloatVolume", 0) or 0),
-                    "total_volume": float(detail.get("TotalVolume", 0) or 0),
-                    "price_tick": float(detail.get("PriceTick", 0.01) or 0.01),
-                    "volume_multiple": int(detail.get("VolumeMultiple", 1) or 1),
-                    "is_trading": detail.get("IsTrading", False),
-                    "source": "miniqmt",
-                }
-
-        except ImportError:
+        if not XTDATA_AVAILABLE:
             logger.warning("xtquant SDK 未安装，回退到 socket 连接")
-        except Exception as e:
-            logger.error(f"获取股票信息失败: {e}")
+        else:
+            try:
+                # 获取合约详情
+                detail = xtdata.get_instrument_detail(symbol)
+
+                if detail:
+                    return {
+                        "symbol": symbol,
+                        "name": detail.get("InstrumentName", ""),
+                        "exchange": detail.get("ExchangeID", ""),
+                        "open_date": detail.get("OpenDate", ""),
+                        "expire_date": detail.get("ExpireDate"),
+                        "prev_close": float(detail.get("PreClose", 0) or 0),
+                        "up_limit": float(detail.get("UpStopPrice", 0) or 0),
+                        "down_limit": float(detail.get("DownStopPrice", 0) or 0),
+                        "float_volume": float(detail.get("FloatVolume", 0) or 0),
+                        "total_volume": float(detail.get("TotalVolume", 0) or 0),
+                        "price_tick": float(detail.get("PriceTick", 0.01) or 0.01),
+                        "volume_multiple": int(detail.get("VolumeMultiple", 1) or 1),
+                        "is_trading": detail.get("IsTrading", False),
+                        "source": "miniqmt",
+                    }
+
+            except Exception as e:
+                logger.error(f"获取股票信息失败: {e}")
 
         # 如果 xtquant 不可用，使用 socket 连接
         if not self.connected:
@@ -445,8 +451,6 @@ class MiniQMTProvider(DataProvider):
             资金流向数据列表，失败返回 None
         """
         try:
-            from xtquant import xtdata
-
             # 映射周期参数
             period_map = {
                 "1d": "transactioncount1d",
@@ -482,8 +486,7 @@ class MiniQMTProvider(DataProvider):
                         })
                     return result
 
-        except ImportError:
-            logger.warning("xtquant SDK 未安装，资金流向功能不可用")
+        # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
             logger.error(f"获取资金流向失败: {e}")
 
@@ -511,8 +514,6 @@ class MiniQMTProvider(DataProvider):
             龙虎榜数据列表，失败返回 None
         """
         try:
-            from xtquant import xtdata
-
             # 如果没有指定股票，获取沪深A股
             if not symbols:
                 symbols = xtdata.get_stock_list_in_sector("沪深A股")[:100]
@@ -525,8 +526,7 @@ class MiniQMTProvider(DataProvider):
             # 返回空列表表示功能可用但无数据
             return []
 
-        except ImportError:
-            logger.warning("xtquant SDK 未安装，龙虎榜功能不可用")
+        # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
             logger.error(f"获取龙虎榜失败: {e}")
 
@@ -552,8 +552,6 @@ class MiniQMTProvider(DataProvider):
             北向资金数据列表，失败返回 None
         """
         try:
-            from xtquant import xtdata
-
             # 获取北向资金交易日历
             trading_dates = xtdata.get_trading_dates(
                 market=market,
@@ -566,8 +564,7 @@ class MiniQMTProvider(DataProvider):
                 return [{"date": d, "market": market, "source": "miniqmt"} 
                         for d in trading_dates[-30:]]  # 最近30个交易日
 
-        except ImportError:
-            logger.warning("xtquant SDK 未安装，北向资金功能不可用")
+        # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
             logger.error(f"获取北向资金失败: {e}")
 
@@ -595,8 +592,6 @@ class MiniQMTProvider(DataProvider):
             交易日列表，失败返回 None
         """
         try:
-            from xtquant import xtdata
-
             trading_dates = xtdata.get_trading_dates(
                 market=market,
                 start_time=start_date or "",
@@ -615,8 +610,7 @@ class MiniQMTProvider(DataProvider):
                         result.append(str(ts))
                 return result
 
-        except ImportError:
-            logger.warning("xtquant SDK 未安装，交易日历功能不可用")
+        # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
             logger.error(f"获取交易日历失败: {e}")
 
@@ -640,14 +634,11 @@ class MiniQMTProvider(DataProvider):
             股票代码列表，失败返回 None
         """
         try:
-            from xtquant import xtdata
-
             stocks = xtdata.get_stock_list_in_sector(sector_name)
             if stocks:
                 return list(stocks)
 
-        except ImportError:
-            logger.warning("xtquant SDK 未安装，板块成分股功能不可用")
+        # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
             logger.error(f"获取板块成分股失败: {e}")
 
@@ -676,8 +667,6 @@ class MiniQMTProvider(DataProvider):
             财务数据字典，失败返回 None
         """
         try:
-            from xtquant import xtdata
-
             # 财务数据需要 VIP 权限
             logger.info(f"财务数据查询: symbol={symbol}, type={report_type}")
 
@@ -690,8 +679,7 @@ class MiniQMTProvider(DataProvider):
                 "note": "财务数据需要 VIP 权限",
             }
 
-        except ImportError:
-            logger.warning("xtquant SDK 未安装，财务数据功能不可用")
+        # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
             logger.error(f"获取财务数据失败: {e}")
 
@@ -715,14 +703,11 @@ class MiniQMTProvider(DataProvider):
             字典，key 为成分股代码，value 为权重
         """
         try:
-            from xtquant import xtdata
-
             weight = xtdata.get_index_weight(index_code)
             if weight:
                 return dict(weight)
 
-        except ImportError:
-            logger.warning("xtquant SDK 未安装，指数权重功能不可用")
+        # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
             logger.error(f"获取指数权重失败: {e}")
 
@@ -744,14 +729,11 @@ class MiniQMTProvider(DataProvider):
             板块名称列表
         """
         try:
-            from xtquant import xtdata
-
             sectors = xtdata.get_sector_list()
             if sectors:
                 return list(sectors)
 
-        except ImportError:
-            logger.warning("xtquant SDK 未安装，板块列表功能不可用")
+        # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
             logger.error(f"获取板块列表失败: {e}")
 
@@ -782,8 +764,6 @@ class MiniQMTProvider(DataProvider):
             订单流数据列表
         """
         try:
-            from xtquant import xtdata
-
             period_map = {"1m": "orderflow1m", "1d": "orderflow1d"}
             xt_period = period_map.get(period, "orderflow1m")
 
@@ -799,8 +779,7 @@ class MiniQMTProvider(DataProvider):
                 if not df.empty:
                     return df.reset_index().to_dict("records")
 
-        except ImportError:
-            logger.warning("xtquant SDK 未安装，订单流功能不可用")
+        # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
             logger.error(f"获取订单流数据失败: {e}")
 
@@ -816,14 +795,11 @@ class MiniQMTProvider(DataProvider):
             是否下载成功
         """
         try:
-            from xtquant import xtdata
-
             xtdata.download_sector_data()
             logger.info("板块分类数据下载完成")
             return True
 
-        except ImportError:
-            logger.warning("xtquant SDK 未安装，无法下载板块数据")
+        # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
             logger.error(f"下载板块数据失败: {e}")
 

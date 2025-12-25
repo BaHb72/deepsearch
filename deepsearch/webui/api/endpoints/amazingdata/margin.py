@@ -7,6 +7,7 @@ from typing import List, Optional, Sequence, cast
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
+from loguru import logger
 
 from .base import (
     JSONDict,
@@ -148,6 +149,53 @@ async def get_long_hu_bang(
             code=code,
             date=date,
             reason=reason,
+            limit=limit,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/block-trading", summary="获取大宗交易数据")
+async def get_block_trading(
+    code: Optional[str] = Query(None, description="证券代码，示例 SH.600000"),
+    start_date: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    limit: int = Query(100, description="返回记录上限"),
+) -> JSONDict:
+    """
+    获取大宗交易数据
+    
+    查询指定证券的大宗交易记录，支持日期过滤
+    """
+    try:
+        logger.error("[block-trading] *** ENDPOINT HIT ***")
+        provider = await get_amazingdata_provider()
+        logger.error(f"[block-trading] Provider type: {type(provider).__name__}")
+        logger.error(f"[block-trading] has get_block_trading: {hasattr(provider, 'get_block_trading')}")
+        logger.warning(f"[block-trading] Provider type: {type(provider).__name__}")
+        # 如果指定了code则按单个代码查询，否则查询全市场
+        code_list = [code] if code else []
+        logger.error(f"[block-trading] Calling provider.get_block_trading with code_list={code_list}")
+        raw = await provider.get_block_trading(code_list)
+        logger.warning(f"[block-trading] Result type: {type(raw).__name__}, is None: {raw is None}")
+        if isinstance(raw, pd.DataFrame):
+            logger.warning(f"[block-trading] DataFrame: empty={raw.empty}, shape={raw.shape}")
+        filtered = raw
+        if isinstance(filtered, pd.DataFrame):
+            filtered = _apply_date_filter(filtered, start_date, end_date, _DATE_COLUMNS_MARGIN)
+            if limit > 0 and isinstance(filtered, pd.DataFrame):
+                filtered = filtered.head(limit)
+        # DEBUG: 在format_response前打印
+        data_result = dataframe_to_dict(filtered)
+        logger.warning(f"[block-trading] BEFORE RESPONSE: data_result is None: {data_result is None}, type: {type(data_result).__name__}")
+        return format_response(
+            success=True,
+            data=data_result,
+            code=code,
+            start_date=start_date,
+            end_date=end_date,
             limit=limit,
         )
     except HTTPException:

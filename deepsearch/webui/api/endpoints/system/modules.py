@@ -11,15 +11,19 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from deepsearch.core.managers.component_manager import ComponentManager
 from deepsearch.core.utils.exceptions import ComponentError
+
 from deepsearch.webui.api.services.system_data_service import (
     ComponentNotFoundError,
     EngineUnavailableError,
     get_system_data_service,
 )
-from deepsearch.webui.server import app_state
 
 router = APIRouter(prefix="/modules", tags=["SystemModules"])
 system_data_service = get_system_data_service()
+
+def _get_app_state():
+    from deepsearch.webui.server import app_state
+    return app_state
 
 MAX_MODULE_EVENTS = 100
 
@@ -31,7 +35,7 @@ def _now_iso() -> str:
 def _ensure_state_locked(module_id: str) -> Dict[str, Any]:
     return cast(
         Dict[str, Any],
-        app_state.module_settings.setdefault(
+        _get_app_state().module_settings.setdefault(
             module_id,
             {
                 "auto_start": True,
@@ -47,6 +51,7 @@ def _ensure_state_locked(module_id: str) -> Dict[str, Any]:
 
 def _ensure_states(module_ids: Iterable[str]) -> None:
     module_ids = list(module_ids)
+    app_state = _get_app_state()
     with app_state.module_settings_lock:
         existing = set(app_state.module_settings.keys())
         for module_id in module_ids:
@@ -57,19 +62,19 @@ def _ensure_states(module_ids: Iterable[str]) -> None:
 
 
 def _get_state_snapshot(module_id: str) -> Dict[str, Any]:
-    with app_state.module_settings_lock:
+    with _get_app_state().module_settings_lock:
         state = _ensure_state_locked(module_id)
         return dict(state)
 
 
 def _set_state_field(module_id: str, field: str, value: Any) -> None:
-    with app_state.module_settings_lock:
+    with _get_app_state().module_settings_lock:
         state = _ensure_state_locked(module_id)
         state[field] = value
 
 
 def _clear_last_error_message(module_id: str) -> None:
-    with app_state.module_settings_lock:
+    with _get_app_state().module_settings_lock:
         state = _ensure_state_locked(module_id)
         state["last_error_message"] = None
 
@@ -78,7 +83,7 @@ def _record_event(module_id: str, level: str, message: str) -> None:
     level_normalized = level.lower()
     event = {"timestamp": _now_iso(), "level": level_normalized, "message": message}
 
-    with app_state.module_settings_lock:
+    with _get_app_state().module_settings_lock:
         state = _ensure_state_locked(module_id)
         events: List[Dict[str, Any]] = state.setdefault("events", [])
         events.append(event)
@@ -97,7 +102,7 @@ def _update_component_error_state(module_id: str, error_message: Optional[str]) 
         _clear_last_error_message(module_id)
         return
 
-    with app_state.module_settings_lock:
+    with _get_app_state().module_settings_lock:
         state = _ensure_state_locked(module_id)
         last_message = state.get("last_error_message")
 
@@ -179,7 +184,7 @@ def _build_module_payload(module_id: str, component_data: Dict[str, Any]) -> Dic
 
 
 def _get_component_manager() -> ComponentManager:
-    engine = app_state.engine
+    engine = _get_app_state().engine
     if not engine:
         raise HTTPException(status_code=503, detail="ϵͳδ��ʼ��")
 
@@ -341,7 +346,7 @@ async def get_module_logs(
     except ComponentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"模块不存在: {module_id}") from exc
 
-    with app_state.module_settings_lock:
+    with _get_app_state().module_settings_lock:
         events = list(_ensure_state_locked(module_id).get("events", []))
 
     if limit < len(events):

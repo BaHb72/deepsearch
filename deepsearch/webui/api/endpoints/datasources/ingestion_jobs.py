@@ -1,29 +1,23 @@
-"""数据源后台取数作业接口。"""
+"""数据源后台取数作业接口。
+
+使用 FastAPI 依赖注入模式管理服务生命周期，
+遵循最佳实践确保数据库连接在正确的事件循环中初始化。
+"""
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Optional, Sequence
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from deepsearch.application.services.data_sources import (
     DataSourceIngestionService,
     IngestionJobSummary,
 )
+from deepsearch.webui.api.deps import get_optional_ingestion_service
 
 router = APIRouter(prefix="/api/data-sources/jobs", tags=["DataSource Jobs"])
-
-# 延迟初始化服务实例，避免模块导入时组件管理器未设置的问题
-_ingestion_service: DataSourceIngestionService | None = None
-
-
-def _get_ingestion_service() -> DataSourceIngestionService:
-    """延迟获取 ingestion 服务实例。"""
-    global _ingestion_service
-    if _ingestion_service is None:
-        _ingestion_service = DataSourceIngestionService()
-    return _ingestion_service
 
 
 class JobSummaryPayload(BaseModel):
@@ -75,39 +69,58 @@ class JobListResponse(BaseModel):
 async def list_ingestion_jobs(
     job_type: str = Query("prefetch_stock_basics", description="过滤的作业类型"),
     limit: int = Query(20, ge=1, le=100),
+    service: Optional[DataSourceIngestionService] = Depends(get_optional_ingestion_service),
 ) -> JobListResponse:
+    """
+    列出数据源取数作业。
+    
+    使用可选的服务依赖，当数据库不可用时返回空列表。
+    """
     if job_type != "prefetch_stock_basics":
         raise HTTPException(status_code=400, detail="暂不支持的作业类型")
     
-    # 添加防护检查：如果组件管理器未设置，返回空列表
-    try:
-        from deepsearch.core.runtime.context import get_context
-        context = get_context()
-        # 检查组件管理器是否已设置
-        if context._component_manager is None:
-            return JobListResponse(jobs=[])
-    except Exception:
+    # 如果服务不可用（数据库未连接），返回空列表
+    if service is None:
         return JobListResponse(jobs=[])
     
     try:
-        jobs = await _get_ingestion_service().list_jobs(limit=limit)
+        jobs = await service.list_jobs(limit=limit)
         return JobListResponse(jobs=[JobSummaryPayload.from_summary(job) for job in jobs])
-    except RuntimeError as e:
-        # 如果是组件未初始化的错误，返回空列表
-        if "组件" in str(e) or "未设置" in str(e) or "未初始化" in str(e):
+    except Exception as e:
+        # 捕获事件循环或数据库连接相关错误，返回空列表
+        error_msg = str(e)
+        if "Event loop is closed" in error_msg or "connection" in error_msg.lower():
             return JobListResponse(jobs=[])
         raise
 
 
 @router.post("/prefetch-stock-basics", response_model=JobSummaryPayload)
-async def trigger_prefetch_job(payload: PrefetchRequest) -> JobSummaryPayload:
-    summary = await _get_ingestion_service().ensure_stock_list_job(force=payload.force)
+async def trigger_prefetch_job(
+    payload: PrefetchRequest,
+    service: Optional[DataSourceIngestionService] = Depends(get_optional_ingestion_service),
+) -> JobSummaryPayload:
+    """
+    触发股票列表预取作业。
+    """
+    if service is None:
+        raise HTTPException(status_code=503, detail="数据库服务不可用")
+    
+    summary = await service.ensure_stock_list_job(force=payload.force)
     return JobSummaryPayload.from_summary(summary)
 
 
 @router.post("/{job_id}/cancel")
-async def cancel_job(job_id: str) -> dict[str, bool]:
-    success = await _get_ingestion_service().cancel_job(job_id)
+async def cancel_job(
+    job_id: str,
+    service: Optional[DataSourceIngestionService] = Depends(get_optional_ingestion_service),
+) -> dict[str, bool]:
+    """
+    取消指定作业。
+    """
+    if service is None:
+        raise HTTPException(status_code=503, detail="数据库服务不可用")
+    
+    success = await service.cancel_job(job_id)
     if not success:
         raise HTTPException(status_code=404, detail="作业不存在或已经完成")
     return {"success": True}

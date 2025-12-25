@@ -928,7 +928,7 @@ class AmazingDataQueryManager:
             if effective_local_path:
                 Path(str(effective_local_path)).mkdir(parents=True, exist_ok=True)
 
-            block_method = getattr(sdk.InfoData, "block_trading", None)
+            block_method = getattr(sdk.InfoData, "get_block_trading", None)
             if block_method is None:
                 raise DataProviderError("AmazingData SDK δ�ṩ block_trading �ӿ�")
 

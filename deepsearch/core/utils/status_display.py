@@ -114,7 +114,8 @@ class RichStatusDisplay:
             return
 
         self._initialized = True
-        self._enabled = RICH_AVAILABLE
+        # 默认禁用rich状态面板，避免刷屏。需要时可以手动调用 enable() 启用
+        self._enabled = False  # RICH_AVAILABLE 改为 False，不再自动启用
         self._console = Console() if RICH_AVAILABLE else None
         self._live: Optional[Live] = None
         self._metrics = StatusMetrics()

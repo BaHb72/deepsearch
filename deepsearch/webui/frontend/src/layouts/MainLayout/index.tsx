@@ -13,6 +13,7 @@ import {
   MoonOutlined,
   SettingOutlined,
   SunOutlined,
+  SwapOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { ProLayout } from '@ant-design/pro-components'
@@ -49,6 +50,11 @@ const MainLayout: React.FC = () => {
         path: '/strategy/generator',
         name: '策略生成',
         icon: <FlagOutlined />,
+      },
+      {
+        path: '/trading/ttrading',
+        name: '日内做T',
+        icon: <SwapOutlined />,
       },
       {
         path: '/monitor/market',
@@ -118,6 +124,10 @@ const MainLayout: React.FC = () => {
           {
             path: '/dev/amazingdata',
             name: 'AmazingData Playground',
+          },
+          {
+            path: '/dev/miniqmt',
+            name: 'MiniQMT Playground',
           },
         ]
       },

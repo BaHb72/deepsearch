@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, List
 import pandas as pd
 
 from deepsearch.observability import get_logger
+from deepsearch.core.utils.status_display import get_status_display
 
 logger = get_logger(__name__)
 
@@ -49,6 +50,7 @@ class FreeQMTAdapter:
     def __init__(self):
         """初始化适配器"""
         self.xtdata = None
+        self._status = get_status_display()
         self._init_xtdata()
 
     def _init_xtdata(self):
@@ -147,7 +149,10 @@ class FreeQMTAdapter:
                     for col in ["open", "high", "low", "close"]:
                         df[col] = df[col] * factor
 
-                logger.info(f"✅ 获取到 {len(df)} 条K线数据")
+                # 使用动态状态更新而不是日志
+                self._status.update_source(
+                    "MiniQMT", request=True, success=True
+                )
                 return df
             else:
                 logger.warning("未获取到数据")
@@ -208,7 +213,8 @@ class FreeQMTAdapter:
                         "ask1_volume": tick.get("askVol1", 0),
                     }
 
-            logger.info(f"✅ 获取到 {len(result)} 只股票的实时行情")
+            # 使用动态状态更新
+            self._status.update_source("MiniQMT", request=True, success=True)
             return result
 
         except Exception as e:
@@ -249,7 +255,8 @@ class FreeQMTAdapter:
                         callback=callback,
                     )
                     success_count += 1
-                    logger.info(f"✅ 订阅 {symbol} 成功")
+                    # 动态状态更新
+                    self._status.update_source(\"MiniQMT\", request=True, success=True)
                 except Exception as e:
                     logger.error(f"订阅 {symbol} 失败: {e}")
 
@@ -349,7 +356,7 @@ class FreeQMTAdapter:
             # 去重
             stock_list = list(set(stock_list))
 
-            logger.info(f"✅ 获取到 {len(stock_list)} 只股票")
+            logger.debug(f"获取到 {len(stock_list)} 只股票")
             return stock_list
 
         except Exception as e:
@@ -366,7 +373,7 @@ class FreeQMTAdapter:
             tick = self.xtdata.get_full_tick([test_symbol])
 
             if tick and test_symbol in tick:
-                logger.info("✅ 连接测试成功")
+                logger.debug("连接测试成功")
                 return True
             else:
                 logger.warning("⚠️ 连接测试失败：无数据返回")

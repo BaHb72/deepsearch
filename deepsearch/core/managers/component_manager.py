@@ -325,9 +325,9 @@ class ComponentManager:
                         # 跳过健康检查，避免运行时警告
                         pass
                     except RuntimeError:
-                        # 没有运行的事件循环，创建新的
+                        # 没有运行的事件循环，创建临时循环但不设置为默认循环
+                        # 避免关闭后影响其他异步操作
                         loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
                         try:
                             healthy = loop.run_until_complete(info.health_check())
                             if not healthy:
@@ -384,9 +384,9 @@ class ComponentManager:
                             # 返回假定健康状态以避免阻塞
                             results[name] = True
                         except RuntimeError:
-                            # 没有运行的事件循环，创建新的
+                            # 没有运行的事件循环，创建临时循环但不设置为默认循环
+                            # 避免关闭后影响其他异步操作
                             loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
                             try:
                                 health_result = loop.run_until_complete(info.health_check())
                                 results[name] = (

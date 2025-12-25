@@ -35,8 +35,10 @@ from deepsearch.observability import get_logger
 from deepsearch.observability.decorators.decorators import monitor_data_source
 from deepsearch.ports.data_sources import DataAccessType
 from deepsearch.ports.data_sources import DataSourceType as MonitorDataSourceType
+from deepsearch.core.utils.status_display import get_status_display
 
 logger = get_logger(__name__)
+_status_display = get_status_display()
 
 
 class QMTQuotePayload(TypedDict, total=False):
@@ -365,7 +367,8 @@ class UnifiedQMTProvider(DataProvider):
         cache_key = f"kline_{symbol}_{period}_{start_date}_{end_date}_{adjust}"
         cached_data = self.cache_manager.get(cache_key)
         if cached_data is not None:
-            logger.info(f"📦 使用缓存数据: {symbol}")
+            # 使用动态状态更新而不是日志
+            _status_display.update_source("MiniQMT", cache_hit=True)
             return cast(pd.DataFrame, cached_data)
 
         # 调用后端获取数据
@@ -522,13 +525,21 @@ class MiniQMTBackend(QMTBackend):
 
     async def initialize(self) -> bool:
         """初始化MiniQMT连接"""
+        from .connection_guard import MiniQMTConnectionGuard
+
+        # 检查是否应该尝试连接
+        if not MiniQMTConnectionGuard.should_attempt_connection():
+            return False
+
         try:
             self.xtdata = importlib.import_module("xtquant.xtdata")
             self.connected = True
-            logger.info("✅ MiniQMT后端初始化成功")
+            MiniQMTConnectionGuard.mark_available()
+            logger.info("MiniQMT后端初始化成功")
             return True
         except ImportError:
-            logger.error("❌ 无法导入xtdata模块")
+            MiniQMTConnectionGuard.log_connection_error("无法导入xtdata模块")
+            MiniQMTConnectionGuard.mark_unavailable()
             return False
 
     async def get_kline(
@@ -800,7 +811,7 @@ class StandardQMTBackend(QMTBackend):
                 self._callback_thread.start()
                 logger.debug(f"Started callback processor for {len(symbols)} symbols")
 
-            logger.info(f"QMT subscribed {len(symbols)} symbols with callback")
+            logger.debug(f"QMT subscribed {len(symbols)} symbols with callback")
             return True
 
         except Exception as e:

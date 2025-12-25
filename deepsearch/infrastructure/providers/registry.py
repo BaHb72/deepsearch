@@ -379,6 +379,17 @@ class DataProviderRegistry:
                             target["password"] = fallback_password
 
                 def _validate_connection(source: str, data: Dict[str, Any]) -> None:
+                    # Sanitize types before validation
+                    if "username" in data and isinstance(data["username"], (int, float)):
+                        data["username"] = str(data["username"])
+                    if "password" in data and isinstance(data["password"], (int, float)):
+                        data["password"] = str(data["password"])
+                    if "port" in data:
+                        try:
+                            data["port"] = int(data["port"])
+                        except (ValueError, TypeError):
+                            pass  # Let Pydantic handle validation error if conversion fails
+
                     candidate = SettingsAmazingDataConnectionConfig.model_validate(data)
                     errors = candidate._collect_activation_errors()
                     if errors:

@@ -10,7 +10,7 @@ Date: 2025-09-18
 
 import asyncio
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import ModuleType
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Union, cast
 
@@ -105,6 +105,41 @@ def _safe_dataframe(payload: Any) -> pd.DataFrame:
         return pd.DataFrame(payload)
     return pd.DataFrame([payload])
 
+
+def _get_default_date_range(
+    begin_date: Optional[int] = None,
+    end_date: Optional[int] = None,
+    default_days: int = 30
+) -> tuple[int, int]:
+    """
+    获取日期范围的默认值
+    
+    根据SDK文档要求，begin_date和end_date是必填参数。
+    当参数为None时，提供合理的默认值：
+    - end_date 默认为今天
+    - begin_date 默认为end_date往前推default_days天
+    
+    Args:
+        begin_date: 开始日期（YYYYMMDD格式整数），可选
+        end_date: 结束日期（YYYYMMDD格式整数），可选
+        default_days: 默认天数范围，默认30天
+        
+    Returns:
+        tuple[int, int]: (begin_date, end_date)
+    """
+    today = datetime.now()
+    
+    if end_date is None:
+        end_date = int(today.strftime("%Y%m%d"))
+    
+    if begin_date is None:
+        # 从end_date往前推default_days天
+        end_dt = datetime.strptime(str(end_date), "%Y%m%d")
+        begin_dt = end_dt - timedelta(days=default_days)
+        begin_date = int(begin_dt.strftime("%Y%m%d"))
+    
+    return begin_date, end_date
+
 class AmazingDataExtended(AmazingDataProvider):
     """AmazingData 扩展实现，包含所有35个API接口"""
 
@@ -115,12 +150,115 @@ class AmazingDataExtended(AmazingDataProvider):
         self._info_data: Any = None
         self._market_data: Any = None
         self._initialized_objects = False
+        
+        # 进程隔离后端，防止SDK调用sys.exit()导致主进程崩溃
+        self._process_backend: Optional["ProcessIsolatedAmazingDataProvider"] = None
+        # 是否启用进程隔离模式（默认启用）
+        self._use_process_isolation: bool = True
+
+    async def initialize(self) -> bool:
+        """
+        初始化AmazingDataExtended，使用进程隔离后端
+        
+        重写父类方法，确保进程隔离后端在Provider创建后立即初始化，
+        而不是等到API方法调用时。这样可以在get_amazingdata_provider
+        检查_connected状态时返回正确的值。
+        
+        注意：始终使用进程隔离模式，跳过父类的initialize()调用，
+        因为父类会尝试直接SDK登录导致阻塞或主进程崩溃。
+        """
+        # 进程隔离模式：只使用进程隔离后端登录，跳过父类的直接SDK登录
+        # 父类initialize()会执行_initialize_source()和_start_source()，
+        # 这些方法内部会调用_perform_login()进行直接SDK登录，
+        # 在主进程中调用SDK可能导致阻塞或崩溃
+        logger.info("[AmazingDataExtended] 使用进程隔离后端初始化")
+        await self._ensure_process_isolated_objects()
+        logger.info(
+            f"[AmazingDataExtended] initialize完成: "
+            f"_connected={self._connected}, _sdk_available={self._sdk_available}"
+        )
+        
+        return True
 
     async def _ensure_data_objects(self):
         """确保数据对象已初始化"""
+        # 如果启用进程隔离模式，使用代理对象
+        if self._use_process_isolation:
+            await self._ensure_process_isolated_objects()
+            return
+        
+        # 以下是原有的直接SDK调用逻辑（作为fallback，不推荐使用）
+        await self._ensure_data_objects_direct()
+    
+    async def _ensure_process_isolated_objects(self):
+        """使用进程隔离代理初始化SDK对象（安全模式）"""
+        if self._initialized_objects:
+            return
+        
+        logger.debug("[ProcessIsolation] 开始初始化进程隔离SDK对象...")
+        
+        try:
+            from .sdk_proxy import ProcessIsolatedSDKProxySync
+            from .process import ProcessIsolatedAmazingDataProvider
+            
+            # 初始化进程隔离后端
+            if self._process_backend is None:
+                logger.debug("[ProcessIsolation] 创建ProcessIsolatedAmazingDataProvider...")
+                self._process_backend = ProcessIsolatedAmazingDataProvider(self.config)
+            
+            # 调用_ensure_ready()等待登录完成（而不是只调用initialize）
+            # _ensure_ready会启动worker进程并执行登录，登录成功后会设置_connected=True
+            logger.debug("[ProcessIsolation] 等待TGW登录完成...")
+            await self._process_backend._ensure_ready()
+            logger.debug("[ProcessIsolation] TGW登录流程完成")
+            
+            # 同步连接状态
+            self._connected = self._process_backend.is_connected()
+            self._sdk_available = getattr(self._process_backend, '_sdk_available', True)
+            
+            logger.debug(f"[ProcessIsolation] 连接状态: _connected={self._connected}")
+            
+            if not self._connected:
+                # 获取详细错误信息
+                last_error = getattr(self._process_backend, '_last_error', None)
+                error_msg = (
+                    f"AmazingData 进程隔离后端登录失败。"
+                    f"状态: _connected={self._connected}。"
+                    f"详情: {last_error or '未知错误'}。"
+                    "请检查: 1) TGW配置是否正确 2) 网络是否连通"
+                )
+                logger.error(f"[ProcessIsolation] {error_msg}")
+                raise TGWError(error_msg, error_code="TGW_NOT_CONNECTED", is_recoverable=True)
+            
+            # 创建同步代理对象替代直接的SDK对象
+            # 使用同步代理(ProcessIsolatedSDKProxySync)以兼容run_in_executor调用模式
+            # 这些代理会将所有方法调用转发到子进程执行
+            logger.debug("[ProcessIsolation] 创建SDK同步代理对象...")
+            self._base_data = ProcessIsolatedSDKProxySync("BaseData", self._process_backend)
+            self._info_data = ProcessIsolatedSDKProxySync("InfoData", self._process_backend)
+            self._market_data = ProcessIsolatedSDKProxySync("MarketData", self._process_backend)
+            
+            self._initialized_objects = True
+            logger.info("[ProcessIsolation] SDK同步代理初始化成功，所有SDK调用将在子进程中安全执行")
+            
+        except TGWError:
+            raise
+        except Exception as e:
+            error_str = str(e)
+            logger.error(f"[ProcessIsolation] 初始化失败: {e}")
+            if _is_tgw_connection_error(error_str):
+                raise TGWError(
+                    f"TGW进程隔离初始化失败: {e}",
+                    error_code="TGW_PROCESS_INIT_FAILED",
+                    is_recoverable=True
+                )
+            raise DataProviderError(f"Failed to initialize process-isolated SDK objects: {e}")
+    
+    async def _ensure_data_objects_direct(self):
+        """直接初始化SDK对象（不安全，可能导致主进程崩溃）"""
         # 添加详细调试日志
         logger.debug(
-            f"[DEBUG] _ensure_data_objects called: "
+            f"[DEBUG] _ensure_data_objects_direct called: "
             f"_initialized_objects={self._initialized_objects}, "
             f"_connected={self._connected}, "
             f"_degraded_mode={self._degraded_mode}, "
@@ -253,8 +391,10 @@ class AmazingDataExtended(AmazingDataProvider):
             # 识别TGW相关错误
             if _is_tgw_connection_error(error_str):
                 raise TGWError(f"获取证券信息时TGW连接失败: {e}", error_code="TGW_CONNECTION_FAILED")
+            import traceback
             logger.error(f"获取证券信息失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_calendar(
         self, data_type: str = "str", market: str = "SH"
@@ -350,8 +490,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取股票基础信息失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_backward_factor(
         self,
@@ -377,16 +519,22 @@ class AmazingDataExtended(AmazingDataProvider):
             local_path = self._prepare_local_path(local_path)
 
             loop = asyncio.get_event_loop()
+            # 使用lambda包装以支持关键字参数，避免与worker端enforced_kwargs冲突
             result = await loop.run_in_executor(
-                None, self._base_data.get_backward_factor, code_list, local_path, is_local
+                None, 
+                lambda: self._base_data.get_backward_factor(
+                    code_list, local_path, is_local=is_local
+                )
             )
 
             logger.info("成功获取后复权因子数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取后复权因子失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_adj_factor(
         self,
@@ -412,16 +560,22 @@ class AmazingDataExtended(AmazingDataProvider):
             local_path = self._prepare_local_path(local_path)
 
             loop = asyncio.get_event_loop()
+            # 使用lambda包装以支持关键字参数，避免与worker端enforced_kwargs冲突
             result = await loop.run_in_executor(
-                None, self._base_data.get_adj_factor, code_list, local_path, is_local
+                None, 
+                lambda: self._base_data.get_adj_factor(
+                    code_list, local_path, is_local=is_local
+                )
             )
 
             logger.info("成功获取单次复权因子数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取单次复权因子失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_history_stock_status(
         self,
@@ -447,16 +601,22 @@ class AmazingDataExtended(AmazingDataProvider):
             local_path = self._prepare_local_path(local_path)
 
             loop = asyncio.get_event_loop()
+            # 使用lambda包装以支持关键字参数，避免与worker端enforced_kwargs冲突
             result = await loop.run_in_executor(
-                None, self._info_data.get_history_stock_status, code_list, local_path, is_local
+                None, 
+                lambda: self._info_data.get_history_stock_status(
+                    code_list, local_path, is_local=is_local
+                )
             )
 
             logger.info("成功获取历史证券状态信息")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取历史证券状态失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_hist_code_list(
         self,
@@ -577,8 +737,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取北交所代码映射失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     # ================== 历史行情接口 ==================
 
@@ -837,26 +999,39 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 处理local_path，确保传递必填参数
+            local_path = self._prepare_local_path(local_path)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=90)
             
-            result = await loop.run_in_executor(
-                None, 
-                lambda: self._info_data.get_profit_express(code_list, **kwargs)
-            )
+            kwargs = {
+                "local_path": local_path,
+                "is_local": is_local,
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+            if self._use_process_isolation and self._process_backend is not None:
+                # 代理对象返回的是异步方法，直接await
+                result = await self._info_data.get_profit_express(code_list, **kwargs)
+            else:
+                # 直接SDK对象是同步的，需要使用run_in_executor
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self._info_data.get_profit_express(code_list, **kwargs)
+                )
 
             logger.info("成功获取业绩快报数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取业绩快报失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_profit_notice(
         self,
@@ -892,26 +1067,39 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 处理local_path，确保传递必填参数
+            local_path = self._prepare_local_path(local_path)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=90)
             
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_profit_notice(code_list, **kwargs)
-            )
+            kwargs = {
+                "local_path": local_path,
+                "is_local": is_local,
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+            if self._use_process_isolation and self._process_backend is not None:
+                # 代理对象返回的是异步方法，直接await
+                result = await self._info_data.get_profit_notice(code_list, **kwargs)
+            else:
+                # 直接SDK对象是同步的，需要使用run_in_executor
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self._info_data.get_profit_notice(code_list, **kwargs)
+                )
 
             logger.info("成功获取业绩预告数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取业绩预告失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_balance_sheet(
         self,
@@ -934,16 +1122,29 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_balance_sheet, code_list)
+            # 处理local_path，确保传递必填参数
+            local_path = self._prepare_local_path(local_path)
+            
+            # 检查是否使用进程隔离代理
+            if self._use_process_isolation and self._process_backend is not None:
+                # 代理对象返回的是异步方法，直接await
+                result = await self._info_data.get_balance_sheet(code_list, local_path=local_path, is_local=is_local)
+            else:
+                # 直接SDK对象是同步的，需要使用run_in_executor
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None, 
+                    lambda: self._info_data.get_balance_sheet(code_list, local_path=local_path, is_local=is_local)
+                )
 
             logger.info("成功获取资产负债表数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取资产负债表失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 不要掩盖错误，向上传播以便API返回 success: false
 
     async def get_cash_flow(
         self,
@@ -966,16 +1167,29 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_cash_flow, code_list)
+            # 处理local_path，确保传递必填参数
+            local_path = self._prepare_local_path(local_path)
+            
+            # 检查是否使用进程隔离代理
+            if self._use_process_isolation and self._process_backend is not None:
+                # 代理对象返回的是异步方法，直接await
+                result = await self._info_data.get_cash_flow(code_list, local_path=local_path, is_local=is_local)
+            else:
+                # 直接SDK对象是同步的，需要使用run_in_executor
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None, 
+                    lambda: self._info_data.get_cash_flow(code_list, local_path=local_path, is_local=is_local)
+                )
 
             logger.info("成功获取现金流量表数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取现金流量表失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_income(
         self,
@@ -998,15 +1212,29 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_income, code_list)
+            # 处理local_path，确保传递必填参数
+            local_path = self._prepare_local_path(local_path)
+            
+            # 检查是否使用进程隔离代理
+            if self._use_process_isolation and self._process_backend is not None:
+                # 代理对象返回的是异步方法，直接await
+                result = await self._info_data.get_income(code_list, local_path=local_path, is_local=is_local)
+            else:
+                # 直接SDK对象是同步的，需要使用run_in_executor
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None, 
+                    lambda: self._info_data.get_income(code_list, local_path=local_path, is_local=is_local)
+                )
 
             logger.info("成功获取利润表数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取利润表失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     # ================== 股东股本数据接口 ==================
 
@@ -1046,26 +1274,44 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=365)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
-            
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_share_holder(code_list, **kwargs)
-            )
+            kwargs = {
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+
+            if self._use_process_isolation and self._process_backend is not None:
+
+                # 代理对象返回的是异步方法，直接await
+
+                result = await self._info_data.get_share_holder(code_list, **kwargs)
+
+            else:
+
+                # 直接SDK对象是同步的，需要使用run_in_executor
+
+                loop = asyncio.get_event_loop()
+
+                result = await loop.run_in_executor(
+
+                    None,
+
+                    lambda: self._info_data.get_share_holder(code_list, **kwargs)
+
+                )
 
             logger.info("成功获取十大股东数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取十大股东数据失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_holder_num(
         self,
@@ -1097,26 +1343,44 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=365)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
-            
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_holder_num(code_list, **kwargs)
-            )
+            kwargs = {
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+
+            if self._use_process_isolation and self._process_backend is not None:
+
+                # 代理对象返回的是异步方法，直接await
+
+                result = await self._info_data.get_holder_num(code_list, **kwargs)
+
+            else:
+
+                # 直接SDK对象是同步的，需要使用run_in_executor
+
+                loop = asyncio.get_event_loop()
+
+                result = await loop.run_in_executor(
+
+                    None,
+
+                    lambda: self._info_data.get_holder_num(code_list, **kwargs)
+
+                )
 
             logger.info("成功获取股东人数数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取股东人数失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_equity_structure(
         self,
@@ -1156,26 +1420,44 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=365)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
-            
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_equity_structure(code_list, **kwargs)
-            )
+            kwargs = {
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+
+            if self._use_process_isolation and self._process_backend is not None:
+
+                # 代理对象返回的是异步方法，直接await
+
+                result = await self._info_data.get_equity_structure(code_list, **kwargs)
+
+            else:
+
+                # 直接SDK对象是同步的，需要使用run_in_executor
+
+                loop = asyncio.get_event_loop()
+
+                result = await loop.run_in_executor(
+
+                    None,
+
+                    lambda: self._info_data.get_equity_structure(code_list, **kwargs)
+
+                )
 
             logger.info("成功获取股本结构数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取股本结构失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_equity_pledge_freeze(
         self,
@@ -1212,26 +1494,44 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=365)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
-            
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_equity_pledge_freeze(code_list, **kwargs)
-            )
+            kwargs = {
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+
+            if self._use_process_isolation and self._process_backend is not None:
+
+                # 代理对象返回的是异步方法，直接await
+
+                result = await self._info_data.get_equity_pledge_freeze(code_list, **kwargs)
+
+            else:
+
+                # 直接SDK对象是同步的，需要使用run_in_executor
+
+                loop = asyncio.get_event_loop()
+
+                result = await loop.run_in_executor(
+
+                    None,
+
+                    lambda: self._info_data.get_equity_pledge_freeze(code_list, **kwargs)
+
+                )
 
             logger.info("成功获取股权质押/冻结数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取股权质押/冻结失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_equity_restricted(
         self,
@@ -1266,26 +1566,44 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=365)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
-            
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_equity_restricted(code_list, **kwargs)
-            )
+            kwargs = {
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+
+            if self._use_process_isolation and self._process_backend is not None:
+
+                # 代理对象返回的是异步方法，直接await
+
+                result = await self._info_data.get_equity_restricted(code_list, **kwargs)
+
+            else:
+
+                # 直接SDK对象是同步的，需要使用run_in_executor
+
+                loop = asyncio.get_event_loop()
+
+                result = await loop.run_in_executor(
+
+                    None,
+
+                    lambda: self._info_data.get_equity_restricted(code_list, **kwargs)
+
+                )
 
             logger.info("成功获取限售股解禁数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取限售股解禁失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     # ================== 股东权益数据接口 ==================
 
@@ -1326,26 +1644,44 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=365)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
-            
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_dividend(code_list, **kwargs)
-            )
+            kwargs = {
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+
+            if self._use_process_isolation and self._process_backend is not None:
+
+                # 代理对象返回的是异步方法，直接await
+
+                result = await self._info_data.get_dividend(code_list, **kwargs)
+
+            else:
+
+                # 直接SDK对象是同步的，需要使用run_in_executor
+
+                loop = asyncio.get_event_loop()
+
+                result = await loop.run_in_executor(
+
+                    None,
+
+                    lambda: self._info_data.get_dividend(code_list, **kwargs)
+
+                )
 
             logger.info("成功获取分红数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取分红数据失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_right_issue(
         self,
@@ -1403,26 +1739,44 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=365)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
-            
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_right_issue(code_list, **kwargs)
-            )
+            kwargs = {
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+
+            if self._use_process_isolation and self._process_backend is not None:
+
+                # 代理对象返回的是异步方法，直接await
+
+                result = await self._info_data.get_right_issue(code_list, **kwargs)
+
+            else:
+
+                # 直接SDK对象是同步的，需要使用run_in_executor
+
+                loop = asyncio.get_event_loop()
+
+                result = await loop.run_in_executor(
+
+                    None,
+
+                    lambda: self._info_data.get_right_issue(code_list, **kwargs)
+
+                )
 
             logger.info("成功获取配股数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取配股数据失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     # ================== 融资融券接口 ==================
 
@@ -1456,26 +1810,39 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 处理local_path，确保传递必填参数
+            local_path = self._prepare_local_path(local_path)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=30)
             
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_margin_summary(**kwargs)
-            )
+            kwargs = {
+                "local_path": local_path,
+                "is_local": is_local,
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+            if self._use_process_isolation and self._process_backend is not None:
+                # 代理对象返回的是异步方法，直接await
+                result = await self._info_data.get_margin_summary(**kwargs)
+            else:
+                # 直接SDK对象是同步的，需要使用run_in_executor
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self._info_data.get_margin_summary(**kwargs)
+                )
 
             logger.info("成功获取融资融券汇总数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取融资融券汇总失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_margin_detail(
         self,
@@ -1513,26 +1880,39 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 处理local_path，确保传递必填参数
+            local_path = self._prepare_local_path(local_path)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=30)
             
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_margin_detail(code_list, **kwargs)
-            )
+            kwargs = {
+                "local_path": local_path,
+                "is_local": is_local,
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+            if self._use_process_isolation and self._process_backend is not None:
+                # 代理对象返回的是异步方法，直接await
+                result = await self._info_data.get_margin_detail(code_list, **kwargs)
+            else:
+                # 直接SDK对象是同步的，需要使用run_in_executor
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self._info_data.get_margin_detail(code_list, **kwargs)
+                )
 
             logger.info("成功获取融资融券明细数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取融资融券明细失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     # ================== 市场异动数据接口 ==================
 
@@ -1573,26 +1953,39 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 处理local_path，确保传递必填参数
+            local_path = self._prepare_local_path(local_path)
             
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=30)
             
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_long_hu_bang(code_list, **kwargs)
-            )
+            kwargs = {
+                "local_path": local_path,
+                "is_local": is_local,
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
+
+            # 检查是否使用进程隔离代理
+            if self._use_process_isolation and self._process_backend is not None:
+                # 代理对象返回的是异步方法，直接await
+                result = await self._info_data.get_long_hu_bang(code_list, **kwargs)
+            else:
+                # 直接SDK对象是同步的，需要使用run_in_executor
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self._info_data.get_long_hu_bang(code_list, **kwargs)
+                )
 
             logger.info("成功获取龙虎榜数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取龙虎榜数据失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_block_trading(
             self,
@@ -1629,35 +2022,32 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             local_path = self._prepare_local_path(local_path)
+            logger.info(f"[get_block_trading] code_list={code_list}, local_path={local_path}")
+            
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=30)
+            
+            kwargs = {
+                "local_path": local_path,
+                "is_local": is_local,
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
 
-            block_method = getattr(self._info_data, "block_trading", None)
-            if block_method is None:
-                logger.error("AmazingData SDK 未提供 block_trading 接口")
-                return pd.DataFrame()
+            # 检查是否使用进程隔离代理
+            if self._use_process_isolation and self._process_backend is not None:
+                # 代理对象返回的是异步方法，直接await
+                logger.info(f"[get_block_trading] Using process isolation, calling block_trading with kwargs={kwargs}")
+                result = await self._info_data.get_block_trading(code_list, **kwargs)
+                logger.info(f"[get_block_trading] Result type: {type(result).__name__}, is None: {result is None}")
+            else:
+                # 直接SDK对象是同步的，需要使用run_in_executor
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self._info_data.get_block_trading(code_list, **kwargs)
+                )
 
-            loop = asyncio.get_event_loop()
-
-            def _invoke():
-                try:
-                    return block_method(
-                        code_list,
-                        local_path=local_path,
-                        is_local=is_local,
-                        begin_date=begin_date,
-                        end_date=end_date,
-                    )
-                except TypeError:
-                    args: list[object] = [code_list]
-                    if local_path is not None:
-                        args.append(local_path)
-                        args.append(is_local)
-                        if begin_date is not None:
-                            args.append(begin_date)
-                            if end_date is not None:
-                                args.append(end_date)
-                    return block_method(*args)
-
-            result = await loop.run_in_executor(None, _invoke)
             if result is None:
                 logger.info("未获取到大宗交易数据")
                 return pd.DataFrame()
@@ -1713,8 +2103,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return df
 
         except Exception as e:
+            import traceback
             logger.error(f"获取大宗交易数据失败: {e}")
-            return None
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
 
     # ================== 期权相关接口 ==================
@@ -1791,8 +2183,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取期权基本资料失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_option_std_ctr_specs(
         self,
@@ -1849,8 +2243,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取期权合约属性失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_option_mon_ctr_spcon(
         self,
@@ -1896,8 +2292,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取期权月合约属性变动失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     # ================== ETF 相关接口 ==================
 
@@ -1931,8 +2329,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取ETF申赎清单失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_fund_share(
         self,
@@ -1964,8 +2364,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取ETF份额数据失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_fund_iopv(
         self,
@@ -1997,8 +2399,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取ETF IOPV失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     # ================== 指数相关接口 ==================
 
@@ -2032,8 +2436,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取指数成分股失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_index_weight(
         self,
@@ -2065,8 +2471,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取指数成分股权重失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_industry_daily(
         self,
@@ -2092,26 +2500,44 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=30)
+            
+            kwargs = {
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
 
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
+            # 检查是否使用进程隔离代理
 
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_industry_daily(industry_code, **kwargs)
-            )
+            if self._use_process_isolation and self._process_backend is not None:
+
+                # 代理对象返回的是异步方法，直接await
+
+                result = await self._info_data.get_industry_daily(industry_code, **kwargs)
+
+            else:
+
+                # 直接SDK对象是同步的，需要使用run_in_executor
+
+                loop = asyncio.get_event_loop()
+
+                result = await loop.run_in_executor(
+
+                    None,
+
+                    lambda: self._info_data.get_industry_daily(industry_code, **kwargs)
+
+                )
 
             logger.info("成功获取行业指数日行情数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取行业指数日行情数据失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_industry_constituent(
         self,
@@ -2143,8 +2569,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取行业成分股失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_industry_base_info(
         self,
@@ -2188,8 +2616,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取行业指数基本信息失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     async def get_industry_weight(
         self,
@@ -2220,26 +2650,44 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            _ = self._prepare_local_path(local_path)
-            loop = asyncio.get_event_loop()
+            # 获取默认日期范围（SDK要求begin_date和end_date必填）
+            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=30)
+            
+            kwargs = {
+                "begin_date": begin_date,
+                "end_date": end_date,
+            }
 
-            kwargs = {}
-            if begin_date is not None:
-                kwargs['begin_date'] = begin_date
-            if end_date is not None:
-                kwargs['end_date'] = end_date
+            # 检查是否使用进程隔离代理
 
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._info_data.get_industry_weight(code_list, **kwargs)
-            )
+            if self._use_process_isolation and self._process_backend is not None:
+
+                # 代理对象返回的是异步方法，直接await
+
+                result = await self._info_data.get_industry_weight(code_list, **kwargs)
+
+            else:
+
+                # 直接SDK对象是同步的，需要使用run_in_executor
+
+                loop = asyncio.get_event_loop()
+
+                result = await loop.run_in_executor(
+
+                    None,
+
+                    lambda: self._info_data.get_industry_weight(code_list, **kwargs)
+
+                )
 
             logger.info("成功获取行业指数成分股权重数据")
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取行业指数成分股权重数据失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     # ================== 其他接口 ==================
 
@@ -2277,8 +2725,10 @@ class AmazingDataExtended(AmazingDataProvider):
             return _safe_dataframe(result)
 
         except Exception as e:
+            import traceback
             logger.error(f"获取国债收益率失败: {e}")
-            return pd.DataFrame()
+            logger.error(f"详细错误: {traceback.format_exc()}")
+            raise  # 向上传播错误
 
     # ================== 实时订阅接口 ==================
 
@@ -2399,6 +2849,7 @@ except Exception:  # Safe fallbacks for test environments without SDK
 ad: Optional[ModuleType] = _loader_ad
 
 # Candidate real SDK module names to import lazily
+# 注意: AmazingData 和 tgw 的 login 函数签名不同！优先使用 AmazingData
 _SDK_CANDIDATES = ("AmazingData", "amazingdata", "tgw", "amazingdata_sdk")
 
 __sdk_mod = None  # cache loaded SDK module
@@ -2408,18 +2859,22 @@ def _load_sdk():
     global __sdk_mod
     if __sdk_mod is not None:
         return __sdk_mod
-    if "AmazingData" in sys.modules:
-        __sdk_mod = sys.modules["AmazingData"]
-        return __sdk_mod
+    
+    # 优先尝试直接导入 AmazingData（有正确的 login 签名）
+    # 不优先使用 sys.modules 缓存，因为可能缓存了错误的 tgw 模块
     last_exc = None
     for name in _SDK_CANDIDATES:
         try:
             import importlib
-
-            __sdk_mod = importlib.import_module(name)
-            return __sdk_mod
+            mod = importlib.import_module(name)
+            # 验证模块有 login 函数
+            if hasattr(mod, 'login') and callable(getattr(mod, 'login', None)):
+                __sdk_mod = mod
+                return __sdk_mod
         except Exception as e:  # pragma: no cover - import errors are environment-specific
             last_exc = e
+            continue
+    
     raise RuntimeError(
         f"Cannot import AmazingData SDK; tried {_SDK_CANDIDATES}. Last error: {last_exc!r}"
     )

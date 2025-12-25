@@ -17,7 +17,8 @@ timeout /t 2 /nobreak >nul
 echo.
 echo [2/3] 启动后端服务（开发模式）...
 echo 配置文件: settings.dev.yaml
-start "DeepSearch Backend [DEV]" cmd /k "set APP__ENV=dev && python -m deepsearch run --no-frontend --log-level DEBUG"
+:: 使用虚拟环境的Python以确保正确加载依赖
+start "DeepSearch Backend [DEV]" cmd /k "call .venv\Scripts\activate.bat && set APP__ENV=dev && python -m deepsearch run --no-frontend --log-level DEBUG"
 
 :: 等待后端启动
 echo 等待后端服务启动（10秒）...

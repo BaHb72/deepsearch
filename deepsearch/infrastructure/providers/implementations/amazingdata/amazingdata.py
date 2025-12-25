@@ -169,19 +169,26 @@ class AmazingDataProvider(DataProvider):
             result_holder: dict[str, object | None] = {"result": None, "exception": None}
 
             def login_in_thread() -> None:
+                # [TGW参数检查] 使用INFO级别确保始终可见
+                logger.info(
+                    f"[TGW登录参数] username={self.config.username!r}, "
+                    f"host={self.config.host!r}, port={self.config.port}, "
+                    f"password={'***' if self.config.password else '(空)'}"
+                )
                 logger.debug(
                     f"[DEBUG] login_in_thread 开始: "
                     f"username={self.config.username}, host={self.config.host}, port={self.config.port}"
                 )
                 try:
-                    logger.debug("[DEBUG] 调用 sdk.login()...")
+                    logger.info("[TGW] 正在调用 sdk.login()...")
+                    # 使用关键字参数匹配SDK文档
                     result = sdk.login(
-                        self.config.username,
-                        self.config.password,
-                        self.config.host,
-                        self.config.port,
+                        username=self.config.username,
+                        password=self.config.password,
+                        host=self.config.host,
+                        port=self.config.port,
                     )
-                    logger.debug(f"[DEBUG] sdk.login() 返回: {result}")
+                    logger.info(f"[TGW] sdk.login() 返回: {result}")
                     result_holder["result"] = result
                 except SystemExit as exc:
                     logger.critical(

@@ -122,9 +122,9 @@ wheels = [
 [[package]]
 name = "amazingdata"
 version = "1.0.23"
-source = { url = "https://bahbai.com/packages/AmazingData-1.0.23-cp313-none-any.whl" }
+source = { path = "packages/AmazingData-1.0.23-cp313-none-any.whl" }
 wheels = [
-    { url = "https://bahbai.com/packages/AmazingData-1.0.23-cp313-none-any.whl", hash = "sha256:5afa141b1a57e8f121a887c106da533c177dccdc44b3780c9a3043efea9f7d3b" },
+    { filename = "amazingdata-1.0.23-cp313-none-any.whl", hash = "sha256:5afa141b1a57e8f121a887c106da533c177dccdc44b3780c9a3043efea9f7d3b" },
 ]
 
 [[package]]
@@ -156,6 +156,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/35/5d/752690df9ef5b76e169e68d6a129fa6d08a7100ca7f754c89495db3c6019/appnope-0.1.4.tar.gz", hash = "sha256:1de3860566df9caf38f01f86f65e0e13e379af54f9e4bee1e66b48f2efffd1ee", size = 4170, upload-time = "2024-02-06T09:43:11.258Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/29/5ecc3a15d5a33e31b26c11426c45c501e439cb865d0bff96315d86443b78/appnope-0.1.4-py2.py3-none-any.whl", hash = "sha256:502575ee11cd7a28c0205f379b525beefebab9d161b7c964670864014ed7213c", size = 4321, upload-time = "2024-02-06T09:43:09.663Z" },
+]
+
+[[package]]
+name = "apscheduler"
+version = "3.11.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tzlocal" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d0/81/192db4f8471de5bc1f0d098783decffb1e6e69c4f8b4bc6711094691950b/apscheduler-3.11.1.tar.gz", hash = "sha256:0db77af6400c84d1747fe98a04b8b58f0080c77d11d338c4f507a9752880f221", size = 108044, upload-time = "2025-10-31T18:55:42.819Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/58/9f/d3c76f76c73fcc959d28e9def45b8b1cc3d7722660c5003b19c1022fd7f4/apscheduler-3.11.1-py3-none-any.whl", hash = "sha256:6162cb5683cb09923654fa9bdd3130c4be4bfda6ad8990971c9597ecd52965d2", size = 64278, upload-time = "2025-10-31T18:55:41.186Z" },
 ]
 
 [[package]]
@@ -649,6 +661,7 @@ dependencies = [
     { name = "akshare" },
     { name = "amazingdata" },
     { name = "anyio" },
+    { name = "apscheduler" },
     { name = "asyncpg" },
     { name = "backtrader" },
     { name = "black" },
@@ -669,6 +682,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pypinyin" },
     { name = "python-dateutil" },
     { name = "python-docx" },
     { name = "python-dotenv" },
@@ -730,8 +744,9 @@ requires-dist = [
     { name = "aioredis", specifier = ">=2.0.1" },
     { name = "aiosqlite", specifier = ">=0.20.0" },
     { name = "akshare", specifier = "==1.17.65" },
-    { name = "amazingdata", url = "https://bahbai.com/packages/AmazingData-1.0.23-cp313-none-any.whl" },
+    { name = "amazingdata", path = "packages/AmazingData-1.0.23-cp313-none-any.whl" },
     { name = "anyio", specifier = ">=4.11.0" },
+    { name = "apscheduler", specifier = ">=3.11.1" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "backtrader", specifier = ">=1.9.78.123" },
     { name = "black", specifier = "==25.9.0" },
@@ -756,6 +771,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.10" },
     { name = "pydantic", specifier = ">=2.12.2" },
     { name = "pydantic-settings", specifier = ">=2.11.0" },
+    { name = "pypinyin", specifier = ">=0.55.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.10" },
@@ -780,7 +796,7 @@ requires-dist = [
     { name = "ta-lib", specifier = ">=0.6.7" },
     { name = "tables", specifier = ">=3.10.2" },
     { name = "tabulate", specifier = ">=0.9.0" },
-    { name = "tgw", url = "https://bahbai.com/packages/tgw-1.0.8.4-py3-none-any.whl" },
+    { name = "tgw", path = "packages/tgw-1.0.8.4-py3-none-any.whl" },
     { name = "tigeropen", specifier = ">=3.4.4" },
     { name = "twisted", specifier = ">=25.5.0" },
     { name = "types-pywin32", specifier = ">=311.0.0.20251008" },
@@ -2364,6 +2380,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pypinyin"
+version = "0.55.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/a4/784cf98c09e0dc22776b0d7d8a4a5b761218bcae4608c2416ce1e167c8af/pypinyin-0.55.0.tar.gz", hash = "sha256:b5711b3a0c6f76e67408ec6b2e3c4987a3a806b7c528076e7c7b86fcf0eaa66b", size = 839836, upload-time = "2025-07-20T12:01:50.657Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b9/7b/4cabc76fcc21c3c7d5c671d8783984d30ac9d3bb387c4ba784fca3cdfa3a/pypinyin-0.55.0-py2.py3-none-any.whl", hash = "sha256:d53b1e8ad2cdb815fb2cb604ed3123372f5a28c6f447571244aca36fc62a286f", size = 840203, upload-time = "2025-07-20T12:01:48.535Z" },
+]
+
+[[package]]
 name = "pyproject-hooks"
 version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3074,12 +3099,12 @@ wheels = [
 [[package]]
 name = "tgw"
 version = "1.0.8.4"
-source = { url = "https://bahbai.com/packages/tgw-1.0.8.4-py3-none-any.whl" }
+source = { path = "packages/tgw-1.0.8.4-py3-none-any.whl" }
 dependencies = [
     { name = "pandas" },
 ]
 wheels = [
-    { url = "https://bahbai.com/packages/tgw-1.0.8.4-py3-none-any.whl", hash = "sha256:ea8eeaa7c2106b8f7763830379dcf49be0767d75e51d73459a235249ca3da954" },
+    { filename = "tgw-1.0.8.4-py3-none-any.whl", hash = "sha256:ea8eeaa7c2106b8f7763830379dcf49be0767d75e51d73459a235249ca3da954" },
 ]
 
 [package.metadata]

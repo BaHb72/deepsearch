@@ -5,6 +5,7 @@ MiniQMT API 端点
 """
 
 from datetime import datetime
+import asyncio
 from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
 from fastapi import APIRouter, HTTPException, Query
@@ -402,10 +403,18 @@ async def reconnect() -> Dict[str, Any]:
     """
     重新连接 MiniQMT
 
+    会重置连接状态守卫，强制尝试重新连接。
+
     Returns:
         重连结果
     """
     try:
+        # 重置连接守卫状态
+        from deepsearch.infrastructure.providers.implementations.qmt.connection_guard import (
+            MiniQMTConnectionGuard,
+        )
+        MiniQMTConnectionGuard.reset()
+
         provider = get_miniqmt_provider()
 
         # 先断开
@@ -419,10 +428,16 @@ async def reconnect() -> Dict[str, Any]:
                 "success": True,
                 "message": "成功重新连接到 MiniQMT",
                 "status": provider.get_connection_status(),
+                "guard_status": MiniQMTConnectionGuard.get_status(),
                 "timestamp": datetime.now().isoformat(),
             }
         else:
-            raise HTTPException(status_code=503, detail="重新连接失败")
+            return {
+                "success": False,
+                "message": "MiniQMT 客户端未运行，请先启动 MiniQMT",
+                "guard_status": MiniQMTConnectionGuard.get_status(),
+                "timestamp": datetime.now().isoformat(),
+            }
 
     except HTTPException:
         raise
@@ -475,6 +490,38 @@ async def get_statistics() -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"获取统计信息失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/connection-guard")
+async def get_connection_guard_status() -> Dict[str, Any]:
+    """
+    获取连接守卫状态
+
+    返回连接状态管理器的当前状态，包括：
+    - 服务是否可用
+    - 上次检测时间
+    - 连续失败次数
+    - 被抑制的日志数量
+
+    Returns:
+        连接守卫状态信息
+    """
+    try:
+        from deepsearch.infrastructure.providers.implementations.qmt.connection_guard import (
+            MiniQMTConnectionGuard,
+        )
+
+        status = MiniQMTConnectionGuard.get_status()
+
+        return {
+            "success": True,
+            "guard_status": status,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    except Exception as e:
+        logger.error(f"获取连接守卫状态失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1315,4 +1362,215 @@ async def get_period_list() -> Dict[str, Any]:
         raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
     except Exception as e:
         logger.error(f"获取周期列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 板块资金流向端点 ====================
+
+@router.get("/xtdata/sector-capital-flow")
+async def get_sector_capital_flow(
+        indicator: str = Query("今日", description="时间周期: 今日, 5日, 10日"),
+        sector_type: str = Query("行业资金流", description="板块类型: 行业资金流, 概念资金流, 地域资金流"),
+) -> Dict[str, Any]:
+    """
+    获取板块资金流向排名
+    
+    使用 akshare 的 stock_sector_fund_flow_rank 接口获取数据
+    
+    Args:
+        indicator: 时间周期 (今日/5日/10日)
+        sector_type: 板块类型 (行业资金流/概念资金流/地域资金流)
+    
+    Returns:
+        板块资金流向排名数据
+    """
+    try:
+        import akshare as ak
+        import pandas as pd
+
+        # 调用 akshare 接口获取板块资金流向排名
+        df = ak.stock_sector_fund_flow_rank(indicator=indicator, sector_type=sector_type)
+
+        if df is None or df.empty:
+            return {
+                "success": False,
+                "message": "未获取到板块资金流向数据",
+                "data": [],
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        # 转换 DataFrame 为列表
+        # 处理 NaN 和 Infinity 值
+        df = df.replace([float('inf'), float('-inf')], None)
+        df = df.where(pd.notnull(df), None)
+
+        # 转换为 JSON 可序列化格式
+        records = df.to_dict("records")
+
+        # 清理 None 值和格式化数字
+        cleaned_records = []
+        for record in records:
+            cleaned = {}
+            for k, v in record.items():
+                if v is None or (isinstance(v, float) and (pd.isna(v) or pd.isnull(v))):
+                    cleaned[k] = None
+                elif isinstance(v, float):
+                    cleaned[k] = round(v, 4)
+                else:
+                    cleaned[k] = v
+            cleaned_records.append(cleaned)
+
+        return {
+            "success": True,
+            "indicator": indicator,
+            "sector_type": sector_type,
+            "data": cleaned_records,
+            "count": len(cleaned_records),
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    except ImportError:
+        raise HTTPException(status_code=503, detail="akshare 未安装，请运行: pip install akshare")
+    except Exception as e:
+        logger.error(f"获取板块资金流向失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/xtdata/stock-list")
+async def get_stock_list(
+        sector: str = Query("沪深A股", description="板块名称，默认沪深A股"),
+        limit: int = Query(0, description="返回数量限制，0表示全部"),
+        refresh: bool = Query(False, description="是否强制刷新缓存"),
+) -> Dict[str, Any]:
+    """
+    获取股票列表（含名称和拼音首字母）
+    
+    从缓存读取，响应速度快。若缓存不存在则触发后台刷新。
+    
+    Args:
+        sector: 板块名称，默认"沪深A股"
+        limit: 返回数量限制，0表示全部
+        refresh: 是否强制刷新缓存
+    
+    Returns:
+        股票列表，包含 symbol, name, pinyin 字段
+    """
+    from deepsearch.webui.api.services.stock_cache import (
+        get_stock_list_from_cache,
+        refresh_stock_cache,
+        ensure_stock_cache,
+    )
+    
+    try:
+        # 强制刷新
+        if refresh:
+            logger.info(f"[StockList] 收到刷新请求: {sector}")
+            # 异步刷新，不阻塞响应
+            asyncio.create_task(refresh_stock_cache(sector))
+            return {
+                "success": True,
+                "message": f"缓存刷新任务已启动，请稍后重试获取",
+                "sector": sector,
+                "data": [],
+                "count": 0,
+                "refreshing": True,
+                "timestamp": datetime.now().isoformat(),
+            }
+        
+        # 从缓存读取
+        cached = get_stock_list_from_cache(sector, limit)
+        
+        if cached is not None:
+            return {
+                "success": True,
+                "sector": sector,
+                "data": cached if limit <= 0 else cached[:limit],
+                "count": len(cached) if limit <= 0 else min(limit, len(cached)),
+                "cached": True,
+                "timestamp": datetime.now().isoformat(),
+            }
+        
+        # 缓存不存在，触发异步刷新并返回空
+        logger.info(f"[StockList] 缓存不存在，触发刷新: {sector}")
+        asyncio.create_task(refresh_stock_cache(sector))
+        
+        return {
+            "success": True,
+            "message": "缓存正在初始化，请稍后重试",
+            "sector": sector,
+            "data": [],
+            "count": 0,
+            "refreshing": True,
+            "timestamp": datetime.now().isoformat(),
+        }
+        
+    except Exception as e:
+        logger.error(f"获取股票列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/xtdata/sector/stocks-with-names")
+async def get_sector_stocks_with_names(
+        sector: str = Query(..., description="板块名称"),
+) -> Dict[str, Any]:
+    """
+    获取板块成分股（含股票名称）
+    
+    Args:
+        sector: 板块名称
+    
+    Returns:
+        成分股列表，包含 symbol 和 name
+    """
+    try:
+        from xtquant import xtdata
+        
+        # 获取板块内股票列表
+        stock_list = xtdata.get_stock_list_in_sector(sector)
+        
+        if not stock_list:
+            return {
+                "success": False,
+                "message": f"未获取到 {sector} 板块的成分股",
+                "data": [],
+                "count": 0,
+                "timestamp": datetime.now().isoformat(),
+            }
+        
+        # 批量获取股票名称
+        result = []
+        for symbol in stock_list:
+            try:
+                detail = xtdata.get_instrument_detail(symbol)
+                name = detail.get("InstrumentName", symbol) if detail else symbol
+                
+                # 处理编码问题
+                if name and isinstance(name, str):
+                    try:
+                        name = name.encode('latin1').decode('gbk')
+                    except (UnicodeDecodeError, UnicodeEncodeError):
+                        pass
+                
+                result.append({
+                    "symbol": symbol,
+                    "name": name or symbol,
+                })
+            except Exception:
+                result.append({
+                    "symbol": symbol,
+                    "name": symbol,
+                })
+        
+        return {
+            "success": True,
+            "sector": sector,
+            "data": result,
+            "count": len(result),
+            "timestamp": datetime.now().isoformat(),
+        }
+    
+    except ImportError:
+        raise HTTPException(status_code=503, detail="xtquant 未安装或未连接")
+    except Exception as e:
+        logger.error(f"获取板块成分股失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

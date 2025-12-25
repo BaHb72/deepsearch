@@ -1,6 +1,6 @@
-import {createLogger, defineConfig} from 'vite'
+import { createLogger, defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import {fileURLToPath, URL} from 'node:url'
+import { fileURLToPath, URL } from 'node:url'
 
 const proxyLogger = createLogger('info', { prefix: '[proxy]' })
 
@@ -21,14 +21,14 @@ export default defineConfig({
             },
         },
     },
-    
+
     // ESBuild 配置 - 支持 TypeScript
     esbuild: {
         loader: 'tsx',  // 默认使用 tsx loader
         include: /src\/.*\.[tj]sx?$/,  // 包含所有 ts/tsx/js/jsx 文件
         exclude: [],
     },
-    
+
     // 解析配置
     resolve: {
         extensions: ['.tsx', '.ts', '.jsx', '.js', '.json'],  // 文件扩展名解析顺序
@@ -43,29 +43,30 @@ export default defineConfig({
         }
     },
     server: {
+        host: '127.0.0.1',
         port: 3000,
         proxy: {
             // 代理日志WebSocket
             '/api/logs/ws': {
-                target: 'ws://localhost:8000',
+                target: 'ws://127.0.0.1:8000',
                 ws: true,
                 changeOrigin: true
             },
             '/api/system/logs/ws': {
-                target: 'ws://localhost:8000',
+                target: 'ws://127.0.0.1:8000',
                 ws: true,
                 changeOrigin: true
             },
 
             // 数据源日志 WebSocket
             '/api/data-source/logs': {
-                target: 'ws://localhost:8000',
+                target: 'ws://127.0.0.1:8000',
                 ws: true,
                 changeOrigin: true
             },
             // 代理 API 请求到后端
             '/api': {
-                target: 'http://localhost:8000',
+                target: 'http://127.0.0.1:8000',
                 changeOrigin: true,
                 timeout: 30000,
                 proxyTimeout: 30000,
@@ -80,7 +81,7 @@ export default defineConfig({
             },
             // 代理监控WebSocket
             '/ws': {
-                target: 'ws://localhost:8000',
+                target: 'ws://127.0.0.1:8000',
                 ws: true,
                 changeOrigin: true
             }

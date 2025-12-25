@@ -16,7 +16,7 @@ from datetime import datetime, timezone, timedelta, time as time_cls
 from enum import Enum
 from pathlib import Path
 from types import ModuleType
-from typing import Any, ClassVar, Dict, Optional, Tuple, TypeVar, cast
+from typing import Any, ClassVar, Dict, List, Optional, Tuple, TypeVar, cast
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -290,6 +290,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         self._login_api_mode: str | None = None
         self._set_login_api_mode(self._resolve_initial_api_mode())
         self._connected: bool = False
+        # 对于进程隔离Provider，SDK可用性由子进程管理，这里默认True表示会尝试加载
+        self._sdk_available: bool = True
+        self._degraded_mode: bool = False
         self._connected_since: datetime | None = None
         self._last_disconnect_at: datetime | None = None
         self._last_error: str | None = None
@@ -1672,6 +1675,83 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             **kwargs: Any,
     ) -> bool:
         return await self.unsubscribe_quote(symbols, **kwargs)
+
+    async def get_block_trading(
+            self,
+            code_list: List[str],
+            local_path: Optional[str] = None,
+            is_local: bool = True,
+            begin_date: Optional[int] = None,
+            end_date: Optional[int] = None,
+            **kwargs: Any,
+    ) -> pd.DataFrame:
+        """
+        获取大宗交易数据
+        
+        Args:
+            code_list: 股票代码列表
+            local_path: 本地存储路径
+            is_local: 是否使用本地存储
+            begin_date: 交易日期开始筛选(格式: YYYYMMDD)
+            end_date: 交易日期结束筛选(格式: YYYYMMDD)
+            
+        Returns:
+            DataFrame: 大宗交易数据
+        """
+        # 解析本地缓存路径
+        resolved_path = resolve_local_cache_path(self.config, local_path)
+        
+        # 构建关键字参数（不包含symbols，因为它是位置参数）
+        call_kwargs: Dict[str, Any] = {}
+        if resolved_path:
+            call_kwargs["local_path"] = resolved_path
+            call_kwargs["is_local"] = is_local
+        if begin_date is not None:
+            call_kwargs["begin_date"] = begin_date
+        if end_date is not None:
+            call_kwargs["end_date"] = end_date
+        
+        logger.warning(f"[get_block_trading] Calling InfoData.get_block_trading with args={code_list}, kwargs={call_kwargs}")
+        
+        try:
+            result = await self._execute(
+                ProcessCommand[Any](
+                    method="InfoData.get_block_trading",
+                    args=(code_list,),  # symbols作为第一个位置参数
+                    kwargs=call_kwargs,
+                )
+            )
+            
+            logger.warning(f"[get_block_trading] Result type: {type(result).__name__}, is None: {result is None}")
+            
+            if result is None:
+                return pd.DataFrame()
+            
+            if isinstance(result, pd.DataFrame):
+                return result
+            elif isinstance(result, dict):
+                # 如果返回的是字典，尝试转换为DataFrame
+                frames: list[pd.DataFrame] = []
+                for symbol, payload in result.items():
+                    if isinstance(payload, pd.DataFrame):
+                        item_df = payload.copy()
+                    else:
+                        item_df = pd.DataFrame(payload) if payload else pd.DataFrame()
+                    if not item_df.empty and "symbol" not in item_df.columns:
+                        item_df["symbol"] = symbol
+                    frames.append(item_df)
+                return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+            elif isinstance(result, (list, tuple)):
+                return pd.DataFrame(result)
+            else:
+                return pd.DataFrame([result])
+                
+        except DataProviderError as exc:
+            logger.error(f"[get_block_trading] SDK调用失败: {exc}")
+            return pd.DataFrame()
+        except Exception as exc:
+            logger.error(f"[get_block_trading] 未知错误: {exc}")
+            return pd.DataFrame()
 
     async def close(self) -> None:
         await self._subscription.shutdown()

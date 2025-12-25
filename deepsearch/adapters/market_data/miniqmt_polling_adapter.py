@@ -335,7 +335,7 @@ class MiniQMTBoardUniversePort(BoardUniversePort):
 
         try:
             # Get A-share stock list from multiple sectors
-            sectors = ["沪深A股", "北交所"]
+            sectors = ["沪深A股", "BJ"]
             all_symbols: set[str] = set()
 
             for sector in sectors:

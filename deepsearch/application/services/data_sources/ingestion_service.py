@@ -145,11 +145,20 @@ class DataSourceIngestionService:
             return None
         return IngestionJobSummary.from_row(rows[0])
 
+    _PROVIDER_WAIT_SECONDS = 15  # 等待数据源适配器就绪的最大时间
+
     async def _run_prefetch_job(self, job_id: str) -> None:
         try:
-            provider = self._manager.get_provider(self._job_data_source)
+            provider = await self._wait_for_provider()
             if provider is None:
-                raise RuntimeError("未找到可用的数据源适配器")
+                logger.warning("等待数据源适配器超时，跳过本次预取任务 job_id=%s", job_id)
+                await self._store().update_job_status(
+                    job_id,
+                    status="failed",
+                    error_message="数据源适配器未就绪",
+                    completed=True,
+                )
+                return
             board_source = build_board_source(
                 provider,
                 record_store=self._store(),
@@ -174,6 +183,17 @@ class DataSourceIngestionService:
             )
         finally:
             self._tasks.pop(job_id, None)
+
+    async def _wait_for_provider(self):
+        """等待数据源适配器就绪，最多等待 _PROVIDER_WAIT_SECONDS 秒。"""
+        for i in range(self._PROVIDER_WAIT_SECONDS):
+            provider = self._manager.get_provider(self._job_data_source)
+            if provider is not None:
+                if i > 0:
+                    logger.info("数据源适配器就绪，等待了 %d 秒", i)
+                return provider
+            await asyncio.sleep(1)
+        return None
 
     def _store(self) -> DataSourceRecordPersistence:
         if self._record_store is None:

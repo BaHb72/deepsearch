@@ -1265,6 +1265,7 @@ class AmazingDataProcessProxy:
 
         logged_in_username = None
         login_errors: list[str] = []
+        login_method_name: Optional[str] = None  # 记录检测到的login方法名 (login或Login)
 
         while True:
             request: ProxyRequest | None = None
@@ -1283,19 +1284,39 @@ class AmazingDataProcessProxy:
                     break
 
                 if not sdk_imported:
-                    try:
-                        import AmazingData as ad_module
-
-                        ad = cast(Any, ad_module)
-                        sdk_imported = True
-                        logger.info("AmazingData SDK imported in worker process")
-                    except Exception as exc:
-                        logger.warning(f"AmazingData SDK 导入失败，进入降级模式: {exc}")
+                    # 尝试多个可能的SDK包名
+                    # 注意: AmazingData 和 tgw 的 login 函数签名不同！优先使用 AmazingData
+                    # 注意: tgw 模块使用 Login (大写L)，而 AmazingData 使用 login (小写l)
+                    sdk_candidates = ("AmazingData", "amazingdata", "tgw", "amazingdata_sdk")
+                    detected_method_name: Optional[str] = None
+                    for sdk_name in sdk_candidates:
+                        try:
+                            ad_module = __import__(sdk_name)
+                            # 验证模块有正确的 login 函数 (检查两种大小写)
+                            if hasattr(ad_module, 'login') and callable(getattr(ad_module, 'login', None)):
+                                ad = cast(Any, ad_module)
+                                sdk_imported = True
+                                detected_method_name = 'login'
+                                login_method_name = 'login'
+                                logger.info(f"AmazingData SDK imported in worker process (package: {sdk_name}, login_method: login)")
+                                break
+                            elif hasattr(ad_module, 'Login') and callable(getattr(ad_module, 'Login', None)):
+                                ad = cast(Any, ad_module)
+                                sdk_imported = True
+                                detected_method_name = 'Login'
+                                login_method_name = 'Login'
+                                logger.info(f"AmazingData SDK imported in worker process (package: {sdk_name}, login_method: Login)")
+                                break
+                        except ImportError:
+                            continue
+                    
+                    if not sdk_imported:
+                        logger.warning(f"AmazingData SDK 导入失败，尝试了: {sdk_candidates}")
                         response = ProxyResponse(
                             request_id=request.request_id,
                             success=False,
-                            error=f"AmazingData SDK 导入失败: {exc}",
-                            error_type=type(exc).__name__,
+                            error=f"AmazingData SDK 导入失败，尝试了: {sdk_candidates}",
+                            error_type="ImportError",
                         )
                         response.timestamp = time.time()
                         response_queue.put(pickle.dumps(response.to_payload()))
@@ -1313,7 +1334,11 @@ class AmazingDataProcessProxy:
 
                 if request.request_type == RequestType.LOGIN:
                     try:
-                        result = ad.login(*request.args, **request.kwargs)
+                        # 使用检测到的login方法名 (login或Login)
+                        login_func = getattr(ad, login_method_name or 'login', None) or getattr(ad, 'Login', None)
+                        if login_func is None:
+                            raise AttributeError(f"SDK module has no login/Login method (method_name={login_method_name})")
+                        result = login_func(*request.args, **request.kwargs)
                     except SystemExit as exc:  # pragma: no cover - SDK behaviour
                         exit_code = getattr(exc, "code", None)
                         logger.critical(f"SDK called SystemExit during login: {exit_code}")
@@ -1439,6 +1464,21 @@ class AmazingDataProcessProxy:
                             )
                         try:
                             result = target(*tuple(call_args), **enforced_kwargs)
+                            if inspect.iscoroutine(result):
+                                # SDK方法返回了协程，需要执行它
+                                # 由于worker loop看起来是同步的，我们需要创建一个临时的事件循环来运行它
+                                # 或者简单的使用 asyncio.run (created new loop)
+                                try:
+                                    result = asyncio.run(result)
+                                except RuntimeError:
+                                    # 如果已经有运行中的loop (不太可能，因为这是在multiprocessing target中)，尝试其他方法
+                                    loop = asyncio.new_event_loop()
+                                    try:
+                                        asyncio.set_event_loop(loop)
+                                        result = loop.run_until_complete(result)
+                                    finally:
+                                        loop.close()
+
                             duration = time.perf_counter() - call_started
                             if should_log_category:
                                 logger.info(

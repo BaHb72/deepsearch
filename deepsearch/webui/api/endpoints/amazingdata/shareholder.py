@@ -62,7 +62,10 @@ async def get_share_holder(
     report_date: Optional[str] = Body(None, description="报告日期 YYYY-MM-DD，可选"),
     top_n: int = Body(10, description="返回前 N 位股东，默认 10"),
 ) -> JSONDict:
-    """查询上市公司十大股东信息并支持按日期过滤"""
+    """
+    3.5.7.1 股东户数
+    获取股东户数和前十大股东数据
+    """
     try:
         provider = await get_amazingdata_provider()
         raw = await provider.get_share_holder([code])
