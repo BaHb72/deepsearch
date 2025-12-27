@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from deepsearch.core.errors import AuthenticationError, RateLimitError
 from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
@@ -68,6 +68,7 @@ def __getattr__(name: str):
 
     if name in _LAZY_IMPORTS:
         import importlib
+
         module_path = _LAZY_IMPORTS[name]
         module = importlib.import_module(module_path)
         return getattr(module, name)
@@ -86,4 +87,3 @@ __all__ = [
     "RateLimitError",
     "DataProviderError",
 ]
-

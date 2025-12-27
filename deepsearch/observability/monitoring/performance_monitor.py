@@ -26,6 +26,7 @@ class MetricType(Enum):
     WORKER_HEALTH = "worker_health"
     BATCH_EFFICIENCY = "batch_efficiency"
 
+
 MAX_METRICS_PER_TYPE = 10000
 
 
@@ -91,8 +92,7 @@ class AlertRecord(TypedDict):
     stats: PerformanceSnapshot
 
 
-
-def _create_metric_buffer() -> Deque['PerformanceMetric']:
+def _create_metric_buffer() -> Deque["PerformanceMetric"]:
     return deque(maxlen=MAX_METRICS_PER_TYPE)
 
 
@@ -118,7 +118,9 @@ class PerformanceMonitor:
     4. 触发告警
     """
 
-    def __init__(self, window_size: int = 3600, alert_enabled: bool = True) -> None:  # 监控窗口大小（秒）
+    def __init__(
+        self, window_size: int = 3600, alert_enabled: bool = True
+    ) -> None:  # 监控窗口大小（秒）
         """
         初始化性能监控器
 
@@ -130,7 +132,9 @@ class PerformanceMonitor:
         self.alert_enabled = alert_enabled
 
         # 指标存储 {metric_type: deque of PerformanceMetric}
-        self.metrics: DefaultDict[MetricType, Deque[PerformanceMetric]] = defaultdict(_create_metric_buffer)
+        self.metrics: DefaultDict[MetricType, Deque[PerformanceMetric]] = defaultdict(
+            _create_metric_buffer
+        )
 
         # 统计数据
         self.stats: PerformanceStats = {
@@ -234,7 +238,9 @@ class PerformanceMonitor:
 
         self._add_metric(metric)
 
-    def record_worker_status(self, worker_url: str, healthy: bool, latency: Optional[float] = None) -> None:
+    def record_worker_status(
+        self, worker_url: str, healthy: bool, latency: Optional[float] = None
+    ) -> None:
         """
         记录Worker状态
 
@@ -364,7 +370,10 @@ class PerformanceMonitor:
 
         # 检查延迟
         latency_stats = stats["latency"]
-        if latency_stats is not None and latency_stats["p99"] > self.alert_thresholds["latency_p99"]:
+        if (
+            latency_stats is not None
+            and latency_stats["p99"] > self.alert_thresholds["latency_p99"]
+        ):
             self._trigger_alert("HIGH_LATENCY", f"P99延迟过高: {latency_stats['p99']:.2f}s")
 
         # 检查缓存命中率
@@ -467,6 +476,3 @@ def get_monitor() -> PerformanceMonitor:
     if _monitor is None:
         _monitor = PerformanceMonitor()
     return _monitor
-
-
-

@@ -13,7 +13,7 @@ updated: 2025-11-17
 
 接口: stock_fund_flow_individual
 
-目标地址: https://data.10jqka.com.cn/funds/ggzjl/#refCountId=data_55f13c2c_254
+目标地址: <https://data.10jqka.com.cn/funds/ggzjl/#refCountId=data_55f13c2c_254>
 
 描述: 同花顺-数据中心-资金流向-个股资金流
 
@@ -110,7 +110,7 @@ print(stock_fund_flow_individual_df)
 
 接口: stock_fund_flow_concept
 
-目标地址: https://data.10jqka.com.cn/funds/gnzjl/#refCountId=data_55f13c2c_254
+目标地址: <https://data.10jqka.com.cn/funds/gnzjl/#refCountId=data_55f13c2c_254>
 
 描述: 同花顺-数据中心-资金流向-概念资金流
 
@@ -209,7 +209,7 @@ print(stock_fund_flow_concept_df)
 
 接口: stock_fund_flow_industry
 
-目标地址: http://data.10jqka.com.cn/funds/hyzjl/#refCountId=data_55f13c2c_254
+目标地址: <http://data.10jqka.com.cn/funds/hyzjl/#refCountId=data_55f13c2c_254>
 
 描述: 同花顺-数据中心-资金流向-行业资金流
 
@@ -308,7 +308,7 @@ print(stock_fund_flow_industry_df)
 
 接口: stock_fund_flow_big_deal
 
-目标地址: https://data.10jqka.com.cn/funds/ddzz
+目标地址: <https://data.10jqka.com.cn/funds/ddzz>
 
 描述: 同花顺-数据中心-资金流向-大单追踪
 
@@ -367,7 +367,7 @@ print(stock_fund_flow_big_deal_df)
 
 接口: stock_individual_fund_flow
 
-目标地址: https://data.eastmoney.com/zjlx/detail.html
+目标地址: <https://data.eastmoney.com/zjlx/detail.html>
 
 描述: 东方财富网-数据中心-个股资金流向
 
@@ -429,7 +429,7 @@ print(stock_individual_fund_flow_df)
 
 接口: stock_individual_fund_flow_rank
 
-目标地址: http://data.eastmoney.com/zjlx/detail.html
+目标地址: <http://data.eastmoney.com/zjlx/detail.html>
 
 描述: 东方财富网-数据中心-资金流向-排名
 
@@ -669,7 +669,7 @@ print(stock_individual_fund_flow_rank_df)
 
 接口: stock_market_fund_flow
 
-目标地址: https://data.eastmoney.com/zjlx/dpzjlx.html
+目标地址: <https://data.eastmoney.com/zjlx/dpzjlx.html>
 
 描述: 东方财富网-数据中心-资金流向-大盘
 
@@ -732,7 +732,7 @@ print(stock_market_fund_flow_df)
 
 接口: stock_sector_fund_flow_rank
 
-目标地址: https://data.eastmoney.com/bkzj/hy.html
+目标地址: <https://data.eastmoney.com/bkzj/hy.html>
 
 描述: 东方财富网-数据中心-资金流向-板块资金流-排名
 
@@ -795,7 +795,7 @@ print(stock_sector_fund_flow_rank_df)
 
 接口: stock_main_fund_flow
 
-目标地址: https://data.eastmoney.com/zjlx/list.html
+目标地址: <https://data.eastmoney.com/zjlx/list.html>
 
 描述: 东方财富网-数据中心-资金流向-主力净流入排名
 
@@ -825,7 +825,6 @@ print(stock_sector_fund_flow_rank_df)
 | 10日排行榜-10日排名 | int64   | -       |
 | 10日排行榜-10日涨跌 | float64 | 注意单位: % |
 | 所属板块         | object  | -       |
-
 
 接口示例
 
@@ -858,7 +857,7 @@ print(stock_main_fund_flow_df)
 
 接口: stock_sector_fund_flow_summary
 
-目标地址: https://data.eastmoney.com/bkzj/BK1034.html
+目标地址: <https://data.eastmoney.com/bkzj/BK1034.html>
 
 描述: 东方财富网-数据中心-资金流向-行业资金流-xx行业个股资金流
 
@@ -940,7 +939,7 @@ print(stock_sector_fund_flow_summary_df)
 
 接口: stock_sector_fund_flow_hist
 
-目标地址: https://data.eastmoney.com/bkzj/BK1034.html
+目标地址: <https://data.eastmoney.com/bkzj/BK1034.html>
 
 描述: 东方财富网-数据中心-资金流向-行业资金流-行业历史资金流
 
@@ -999,7 +998,7 @@ print(stock_sector_fund_flow_hist_df)
 
 接口: stock_concept_fund_flow_hist
 
-目标地址: https://data.eastmoney.com/bkzj/BK0574.html
+目标地址: <https://data.eastmoney.com/bkzj/BK0574.html>
 
 描述: 东方财富网-数据中心-资金流向-概念资金流-概念历史资金流
 

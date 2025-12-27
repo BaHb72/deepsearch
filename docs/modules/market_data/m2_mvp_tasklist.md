@@ -4,9 +4,9 @@
 
 - 打通从 AmazingData 实时订阅 → 指标计算 → Redis 缓存 → FastAPI 输出的最小链路。
 - 覆盖以下 API：
-    - `/api/market/live/strength`
-    - `/api/market/live/order-imbalance`
-    - `/api/market/live/auction-quality`
+  - `/api/market/live/strength`
+  - `/api/market/live/order-imbalance`
+  - `/api/market/live/auction-quality`
 - 提供基础监控与日志，确保核心指标在盘中持续返回。
 
 ## 2. 任务拆解

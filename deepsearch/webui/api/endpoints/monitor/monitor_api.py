@@ -708,8 +708,6 @@ async def get_slow_events(
             if duration_int >= threshold_ms:
                 filtered_events.append(event)
 
-
-
         # 限制返回数量
         result_events = filtered_events[:limit]
 

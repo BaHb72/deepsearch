@@ -10,10 +10,8 @@ from deepsearch.core.components.data_components import DatabaseComponent
 from deepsearch.infrastructure.persistence.database import DatabaseService
 from deepsearch.infrastructure.persistence.ingestion_records import DataSourceRecordPersistence
 from deepsearch.ports.data_sources import DataSourceType
-from deepsearch.ports.market_data import (
-    MarketDataPortRegistry,
-    MarketStreamPort,
-)
+from deepsearch.ports.market_data import MarketDataPortRegistry, MarketStreamPort
+
 from .amazingdata import AmazingDataProvider
 from .board_source import AmazingDataBoardSource
 from .market_stream_adapter import AmazingDataMarketStreamAdapter
@@ -60,9 +58,9 @@ class AmazingDataMarketDataRegistry(MarketDataPortRegistry):
 
 
 def build_market_data_registry(
-        provider: AmazingDataProvider,
-        *,
-        retention: timedelta,
+    provider: AmazingDataProvider,
+    *,
+    retention: timedelta,
 ) -> AmazingDataMarketDataRegistry:
     """Construct a MarketDataPortRegistry backed by AmazingData subscriptions."""
 
@@ -93,16 +91,18 @@ def _resolve_default_record_store() -> DataSourceRecordPersistence | None:
 
 
 def build_board_source(
-        provider: AmazingDataProvider,
-        *,
-        record_store: DataSourceRecordPersistence | None = None,
-        cache_ttl: timedelta | None = None,
+    provider: AmazingDataProvider,
+    *,
+    record_store: DataSourceRecordPersistence | None = None,
+    cache_ttl: timedelta | None = None,
 ) -> AmazingDataBoardSource:
     """Create board source helper bound to the given AmazingData provider."""
 
     store = record_store or _resolve_default_record_store()
     ttl = cache_ttl or timedelta(minutes=30)
-    return AmazingDataBoardSource(provider, record_store=store, cache_ttl=ttl, data_source=DataSourceType.AMAZINGDATA)
+    return AmazingDataBoardSource(
+        provider, record_store=store, cache_ttl=ttl, data_source=DataSourceType.AMAZINGDATA
+    )
 
 
 __all__ = [

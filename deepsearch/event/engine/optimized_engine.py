@@ -17,10 +17,10 @@ import queue
 import threading
 import time
 from collections import defaultdict, deque
-from importlib import import_module
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from importlib import import_module
 from types import ModuleType
 from typing import Any, Callable, DefaultDict, Deque, Dict, List, Optional, Tuple, cast
 
@@ -44,7 +44,9 @@ def _fallback_hash_factory() -> Any:
     return hashlib.md5()
 
 
-HASH_FUNC: HashFactory = cast(HashFactory, _xxhash_module.xxh64) if _xxhash_module else _fallback_hash_factory
+HASH_FUNC: HashFactory = (
+    cast(HashFactory, _xxhash_module.xxh64) if _xxhash_module else _fallback_hash_factory
+)
 
 
 @dataclass

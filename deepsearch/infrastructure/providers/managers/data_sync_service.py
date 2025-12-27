@@ -38,7 +38,6 @@ class DataSyncService:
         """设置 PostgreSQL 数据源组件"""
         self._database_component = database_component
 
-
     @staticmethod
     def _coerce_dataframe(payload: Any) -> pd.DataFrame:
         """将任意负载转换为 DataFrame，用于统一写入 DuckDB。"""
@@ -164,9 +163,7 @@ class DataSyncService:
             return
 
         try:
-            await self._analytics_db.import_from_dataframe(
-                df, "kline_history", if_exists="replace"
-            )
+            await self._analytics_db.import_from_dataframe(df, "kline_history", if_exists="replace")
             self._last_sync_time["kline_history"] = datetime.now()
             logger.info("同步了 {} 条K线数据", len(df))
         except Exception as import_error:

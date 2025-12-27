@@ -4,7 +4,9 @@ class Config:
     app: Any
     host: str
     port: int
-    def __init__(self, app: Any, host: str = ..., port: int = ..., log_config: Any = ..., **kwargs: Any) -> None: ...
+    def __init__(
+        self, app: Any, host: str = ..., port: int = ..., log_config: Any = ..., **kwargs: Any
+    ) -> None: ...
 
 class Server:
     config: Config

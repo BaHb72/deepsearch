@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, cast
 import yaml
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.expression import Executable
 
 from deepsearch.observability.logger import logger
 
@@ -77,7 +78,7 @@ $$
                       """
 
 SQL_DROP_TRIGGER = """
-DROP TRIGGER IF EXISTS trigger_update_module_source_configs_updated_at 
+DROP TRIGGER IF EXISTS trigger_update_module_source_configs_updated_at
     ON module_source_configs
 """
 
@@ -104,7 +105,9 @@ def load_yaml_config() -> Optional[Dict[str, Any]]:
                 with open(path, "r", encoding="utf-8") as f:
                     config = yaml.safe_load(f)
                     logger.info(f"加载 YAML 配置: {path}")
-                    return config
+                    if isinstance(config, dict):
+                        return cast(Dict[str, Any], config)
+                    return None
             except Exception as e:
                 logger.warning(f"加载 {path} 失败: {e}")
 
@@ -113,10 +116,10 @@ def load_yaml_config() -> Optional[Dict[str, Any]]:
 
 async def run_migration(migrate_data: bool = True) -> bool:
     """执行完整迁移。
-    
+
     Args:
         migrate_data: 是否迁移现有数据
-        
+
     Returns:
         迁移是否成功
     """
@@ -138,20 +141,20 @@ async def run_migration(migrate_data: bool = True) -> bool:
             db_session: AsyncSession = cast(AsyncSession, session)
 
             # 分别执行每条SQL
-            await db_session.execute(text(SQL_CREATE_TABLE))
+            await db_session.execute(cast(Executable, text(SQL_CREATE_TABLE)))
             logger.debug("表结构创建完成")
 
-            await db_session.execute(text(SQL_CREATE_INDEX_MODULE))
+            await db_session.execute(cast(Executable, text(SQL_CREATE_INDEX_MODULE)))
             logger.debug("module_name 索引创建完成")
 
-            await db_session.execute(text(SQL_CREATE_INDEX_CATEGORY))
+            await db_session.execute(cast(Executable, text(SQL_CREATE_INDEX_CATEGORY)))
             logger.debug("category 索引创建完成")
 
-            await db_session.execute(text(SQL_CREATE_FUNCTION))
+            await db_session.execute(cast(Executable, text(SQL_CREATE_FUNCTION)))
             logger.debug("更新函数创建完成")
 
-            await db_session.execute(text(SQL_DROP_TRIGGER))
-            await db_session.execute(text(SQL_CREATE_TRIGGER))
+            await db_session.execute(cast(Executable, text(SQL_DROP_TRIGGER)))
+            await db_session.execute(cast(Executable, text(SQL_CREATE_TRIGGER)))
             logger.debug("触发器创建完成")
 
             await db_session.commit()
@@ -166,6 +169,7 @@ async def run_migration(migrate_data: bool = True) -> bool:
                     logger.info(f"发现 {len(modules_cfg)} 个模块配置待迁移")
 
                     import json
+
                     migrated = 0
                     async with db_service.get_session() as session:
                         db_session = cast(AsyncSession, session)
@@ -174,10 +178,16 @@ async def run_migration(migrate_data: bool = True) -> bool:
                             try:
                                 # 检查是否已存在
                                 result = await db_session.execute(
-                                    text("SELECT id FROM module_source_configs WHERE module_name = :name"),
-                                    {"name": module_name}
+                                    cast(
+                                        Executable,
+                                        text(
+                                            "SELECT id FROM module_source_configs WHERE module_name = :name"
+                                        ),
+                                    ),
+                                    {"name": module_name},
                                 )
-                                existing = result.fetchone()
+                                cursor_result = result.mappings()
+                                existing = cursor_result.first()
 
                                 if existing:
                                     logger.debug(f"模块 {module_name} 已存在，跳过")
@@ -189,18 +199,26 @@ async def run_migration(migrate_data: bool = True) -> bool:
                                 if isinstance(fallback, str):
                                     fallback = [fallback]
 
-                                insert_sql = text("""
+                                insert_sql = cast(
+                                    Executable,
+                                    text(
+                                        """
                                                   INSERT INTO module_source_configs
                                                       (module_name, primary_source, fallback_sources, category)
                                                   VALUES (:module_name, :primary, :fallback::jsonb, :category)
-                                                  """)
+                                                  """
+                                    ),
+                                )
 
-                                await db_session.execute(insert_sql, {
-                                    "module_name": module_name,
-                                    "primary": primary,
-                                    "fallback": json.dumps(fallback),
-                                    "category": cfg.get("category", "general"),
-                                })
+                                await db_session.execute(
+                                    insert_sql,
+                                    {
+                                        "module_name": module_name,
+                                        "primary": primary,
+                                        "fallback": json.dumps(fallback),
+                                        "category": cfg.get("category", "general"),
+                                    },
+                                )
 
                                 migrated += 1
                                 logger.info(f"  迁移: {module_name}")
@@ -221,6 +239,7 @@ async def run_migration(migrate_data: bool = True) -> bool:
     except Exception as e:
         logger.error(f"迁移失败: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:

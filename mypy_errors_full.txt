@@ -1,0 +1,332 @@
+
+> deepsearch\adapters\__init__.py:3: error: Need type annotation for "__all__"
+  (hint: "__all__: list[<type>] = ...")  [var-annotated]
+> deepsearch\infrastructure\providers\managers\mixins\circuit_breaker.py:368: error:
+  Incompatible types in assignment (expression has type
+> deepsearch\webui\api\middleware\rate_limit.py:122: error: Argument 1 to
+  "__init__" of "BaseHTTPMiddleware" has incompatible type
+> deepsearch\core\scheduler\storage\db_store.py:185: error: Returning Any from
+  function declared to return "list[dict[str, Any]] | None"  [no-any-return]
+> deepsearch\memory\smart_memory.py:103: error: "None" object is not iterable
+  [misc]
+> deepsearch\infrastructure\providers\managers\mixins\health_check.py:376: error:
+  Returning Any from function declared to return "bool"  [no-any-return]
+> deepsearch\webui\api\middleware\deduplication.py:246: error: Argument 1 to
+  "__init__" of "BaseHTTPMiddleware" has incompatible type
+> deepsearch\infrastructure\trading\ttrading_service.py:62: error: Module
+  "deepsearch.config.loader" has no attribute "get_config"  [attr-defined]
+> deepsearch\infrastructure\trading\ttrading_service.py:118: error:
+  "TTradingStrategy" has no attribute "model_dump_json"  [attr-defined]
+> deepsearch\infrastructure\trading\ttrading_service.py:120: error: "Redis" has
+  no attribute "sadd"  [attr-defined]
+> deepsearch\infrastructure\trading\ttrading_service.py:132: error: Returning Any
+  from function declared to return "TTradingStrategy | None"  [no-any-return]
+> deepsearch\infrastructure\trading\ttrading_service.py:132: error:
+  "type[TTradingStrategy]" has no attribute "model_validate_json"  [attr-defined]
+> deepsearch\infrastructure\trading\ttrading_service.py:138: error: "Redis" has
+  no attribute "smembers"  [attr-defined]
+> deepsearch\infrastructure\trading\ttrading_service.py:167: error:
+  "TTradingStrategy" has no attribute "model_dump_json"  [attr-defined]
+> deepsearch\infrastructure\trading\ttrading_service.py:178: error: "Redis" has
+  no attribute "srem"  [attr-defined]
+> deepsearch\infrastructure\trading\ttrading_service.py:208: error:
+  "TTradingStrategy" has no attribute "model_dump_json"  [attr-defined]
+> deepsearch\infrastructure\trading\ttrading_service.py:225: error:
+  "TTradingStrategy" has no attribute "model_dump_json"  [attr-defined]
+> deepsearch\infrastructure\trading\ttrading_service.py:248: error:
+  "TTradingStrategy" has no attribute "model_dump_json"  [attr-defined]
+> deepsearch\infrastructure\trading\ttrading_service.py:291: error:
+  "TTradingStrategy" has no attribute "model_dump_json"  [attr-defined]
+> deepsearch\webui\api\services\stock_cache.py:42: error: Module has no attribute
+  "get_stock_list_in_sector"  [attr-defined]
+> deepsearch\webui\api\services\stock_cache.py:55: error: Module has no attribute
+  "get_instrument_detail"  [attr-defined]
+> deepsearch\webui\api\services\stock_cache.py:155: error: Returning Any from
+  function declared to return "list[dict[str, str]] | None"  [no-any-return]
+> deepsearch\webui\api\services\stock_cache.py:156: error: Returning Any from
+  function declared to return "list[dict[str, str]] | None"  [no-any-return]
+> deepsearch\infrastructure\providers\managers\manager.py:201: error: "Settings"
+  has no attribute "get"  [attr-defined]
+> deepsearch\infrastructure\providers\managers\manager.py:331: error:
+  "DataProvider" has no attribute "status"  [attr-defined]
+> deepsearch\infrastructure\providers\managers\manager.py:350: error:
+  "DataProvider" has no attribute "status"  [attr-defined]
+> deepsearch\infrastructure\providers\managers\manager.py:352: error:
+  "DataProvider" has no attribute "status"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:186: error:
+  Returning Any from function declared to return "list[dict[str, Any]] | None"
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:187: error:
+  Returning Any from function declared to return "list[dict[str, Any]] | None"
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:237: error:
+  Invalid index type "slice" for "dict[str, Any]"; expected type "str"  [index]
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:239: error:
+  Incompatible return value type (got "dict[str, Any]", expected
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:384: error:
+  Module has no attribute "get_instrument_detail"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:422: error:
+  Returning Any from function declared to return "dict[str, Any] | None"
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:462: error:
+  Module has no attribute "get_market_data_ex"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:519: error:
+  Module has no attribute "get_stock_list_in_sector"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:556: error:
+  Module has no attribute "get_trading_dates"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:595: error:
+  Module has no attribute "get_trading_dates"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:637: error:
+  Module has no attribute "get_stock_list_in_sector"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:706: error:
+  Module has no attribute "get_index_weight"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:732: error:
+  Module has no attribute "get_sector_list"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:770: error:
+  Module has no attribute "get_market_data_ex"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:780: error:
+  Returning Any from function declared to return "list[dict[str, Any]] | None"
+> deepsearch\infrastructure\providers\implementations\qmt\miniqmt.py:798: error:
+  Module has no attribute "download_sector_data"  [attr-defined]
+> deepsearch\core\utils\status_display.py:145: error: Returning Any from function
+  declared to return "bool"  [no-any-return]
+> deepsearch\core\utils\status_display.py:154: error: Unexpected keyword argument
+  "transient" for "Live"  [call-arg]
+> deepsearch\core\utils\status_display.py:160: error: "Live" has no attribute
+  "start"  [attr-defined]
+> deepsearch\core\utils\status_display.py:170: error: "Live" has no attribute
+  "stop"  [attr-defined]
+> deepsearch\core\utils\status_display.py:32: error: Unused "type: ignore"
+  comment  [unused-ignore]
+> deepsearch\core\utils\status_display.py:232: error: Unused "type: ignore"
+  comment  [unused-ignore]
+> deepsearch\core\scheduler\tasks\stock_list.py:50: error: Module has no
+  attribute "get_stock_list_in_sector"  [attr-defined]
+> deepsearch\core\scheduler\tasks\stock_list.py:70: error: Module has no
+  attribute "get_instrument_detail"  [attr-defined]
+> deepsearch\infrastructure\providers\managers\data_sync_pipeline.py:197: error:
+  "BaseException" object is not iterable  [misc]
+> deepsearch\infrastructure\providers\managers\data_sync_pipeline.py:208: error:
+  Incompatible types in assignment (expression has type "SyncResult", variable has
+> deepsearch\infrastructure\providers\managers\data_sync_pipeline.py:209: error:
+  Incompatible types in assignment (expression has type
+> deepsearch\infrastructure\persistence\ingestion_records.py:129: error:
+  Incompatible return value type (got "PersistedRecordSetEnvelope", expected
+> deepsearch\infrastructure\persistence\ingestion_records.py:137: error: No
+  overload variant of "int" matches argument type "object"  [call-overload]
+> deepsearch\infrastructure\persistence\ingestion_records.py:220: error:
+  "Result[Any]" has no attribute "scalar_one"  [attr-defined]
+> deepsearch\infrastructure\persistence\ingestion_records.py:301: error:
+  Incompatible return value type (got "PersistedRecordSetEnvelope", expected
+> deepsearch\core\components\data_components.py:492: error: "AsyncConnection" has
+  no attribute "exec_driver_sql"  [attr-defined]
+> deepsearch\infrastructure\providers\managers\mixins\cacheable.py:116: error:
+  Incompatible types in assignment (expression has type "SmartCacheManager",
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_refactored.py:284: error:
+  Unused "type: ignore" comment  [unused-ignore]
+> deepsearch\infrastructure\providers\managers\pipeline_setup.py:109: error: Dict
+  entry 0 has incompatible type "str": "str"; expected "str": "SyncResult"
+> deepsearch\infrastructure\providers\implementations\amazingdata\process\login_flow.py:70: error:
+  Cannot determine type of "_login_api_mode"  [has-type]
+> deepsearch\infrastructure\providers\implementations\amazingdata\process\login_flow.py:77: error:
+  Cannot determine type of "_login_api_mode"  [has-type]
+> deepsearch\infrastructure\providers\implementations\amazingdata\process\login_flow.py:117: error:
+  Cannot determine type of "_login_api_mode"  [has-type]
+> deepsearch\infrastructure\providers\implementations\amazingdata\amazingdata_optimized.py:518: error:
+  "list[Any]" has no attribute "intersection"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\amazingdata\amazingdata.py:884: error:
+  Incompatible return value type (got "list[StockListItem]", expected
+> deepsearch\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:354: error:
+  Incompatible types in assignment (expression has type "StockListRecord",
+> deepsearch\domain\concept_engine.py:93: error: Item "None" of
+  "DataFrame | None" has no attribute "empty"  [union-attr]
+> deepsearch\domain\concept_engine.py:96: error: Item "None" of
+  "DataFrame | None" has no attribute "columns"  [union-attr]
+> deepsearch\domain\concept_engine.py:97: error: Value of type "DataFrame | None"
+  is not indexable  [index]
+> deepsearch\domain\concept_engine.py:209: error: Argument "key" to "sort" of
+  "list" has incompatible type "Callable[[dict[str, object]], object]"; expected
+> deepsearch\domain\concept_engine.py:209: error: Incompatible return value type
+  (got "object", expected "SupportsDunderLT[Any] | SupportsDunderGT[Any]")
+> deepsearch\domain\concept_engine.py:232: error: "Sequence[str]" has no
+  attribute "append"  [attr-defined]
+> deepsearch\domain\concept_engine.py:243: error: Incompatible return value type
+  (got "ConceptLinkageEngine | None", expected "ConceptLinkageEngine")
+> deepsearch\infrastructure\providers\managers\data_source_manager.py:210: error:
+  Name "records" already defined on line 197  [no-redef]
+> deepsearch\infrastructure\providers\managers\data_source_manager.py:220: error:
+  "Sequence[StockListRecord]" has no attribute "append"  [attr-defined]
+> deepsearch\infrastructure\providers\managers\data_source_manager.py:242: error:
+  "Sequence[StockListRecord]" has no attribute "append"  [attr-defined]
+> deepsearch\infrastructure\providers\managers\data_source_manager.py:356: error:
+  Not all arguments converted during string formatting  [str-format]
+> deepsearch\infrastructure\providers\managers\data_source_manager.py:1518: error:
+  Incompatible types in assignment (expression has type "IDataSource | None",
+> deepsearch\infrastructure\providers\managers\data_source_manager.py:2313: error:
+  TypedDict "SourceStatusEntry" has no key "pending_reactivation"
+> deepsearch\infrastructure\providers\managers\data_source_manager.py:2475: error:
+  Returning Any from function declared to return "DataSourceManager"
+> deepsearch\infrastructure\providers\managers\data_source_manager.py:235: error:
+  Unused "type: ignore" comment  [unused-ignore]
+> deepsearch\backtest\adapters\unified_backtrader_adapter.py:275: error:
+  Returning Any from function declared to return "DataFrame"  [no-any-return]
+> deepsearch\webui\api\endpoints\trading\backtest_api.py:257: error: Incompatible
+  types in assignment (expression has type "dict[str, Any]", variable has type
+> deepsearch\infrastructure\persistence\module_source_repository.py:10: error:
+  Module "sqlalchemy" has no attribute "delete"  [attr-defined]
+> deepsearch\infrastructure\providers\managers\module_registry.py:87: error:
+  Cannot determine type of "_initialized"  [has-type]
+> deepsearch\infrastructure\providers\managers\module_registry.py:91: error:
+  Cannot determine type of "_initialized"  [has-type]
+> deepsearch\application\market_data\factory.py:306: error: Argument 4 to
+  "TradingSessionGuard" has incompatible type "**dict[str, object]"; expected
+> deepsearch\application\market_data\factory.py:306: error: Argument 4 to
+  "TradingSessionGuard" has incompatible type "**dict[str, object]"; expected
+> deepsearch\application\market_data\factory.py:306: error: Argument 4 to
+  "TradingSessionGuard" has incompatible type "**dict[str, object]"; expected
+> deepsearch\application\market_data\factory.py:306: error: Argument 4 to
+  "TradingSessionGuard" has incompatible type "**dict[str, object]"; expected
+> deepsearch\application\market_data\factory.py:306: error: Argument 4 to
+  "TradingSessionGuard" has incompatible type "**dict[str, object]"; expected
+> deepsearch\infrastructure\providers\unified_proxy.py:192: error:
+  "DataAccessProxy" has no attribute "_get_source_priority"  [attr-defined]
+> deepsearch\infrastructure\providers\unified_proxy.py:272: error:
+  "DataAccessProxy" has no attribute "_get_source_priority"  [attr-defined]
+> deepsearch\infrastructure\providers\unified_proxy.py:321: error:
+  "DataAccessProxy" has no attribute "_get_source_priority"  [attr-defined]
+> deepsearch\webui\api\endpoints\amazingdata\concept.py:15: error: Incompatible
+  default for argument "error" (default has type "None", argument has type "str")
+>     ...se(success: bool, data: Any = None, error: str = None) -> Dict[str, An...
+                                                          ^~~~
+> deepsearch\webui\api\endpoints\amazingdata\concept.py:21: error: Incompatible
+  types in assignment (expression has type "str", target has type "bool")
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:546: error: Module has no
+  attribute "get_full_tick"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:610: error: Module has no
+  attribute "get_full_tick"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:678: error: Module has no
+  attribute "download_history_data"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:682: error: Module has no
+  attribute "get_market_data"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:772: error: Module has no
+  attribute "isnan"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:773: error: Module has no
+  attribute "isnan"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:774: error: Module has no
+  attribute "isnan"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:775: error: Module has no
+  attribute "isnan"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:776: error: Module has no
+  attribute "isnan"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:777: error: Module has no
+  attribute "isnan"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:827: error: Module has no
+  attribute "get_full_tick"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:869: error: Module has no
+  attribute "get_sector_list"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:918: error: Module has no
+  attribute "get_stock_list_in_sector"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:959: error: Module has no
+  attribute "get_instrument_detail"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1003: error: Module has no
+  attribute "get_instrument_detail_list"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1049: error: Module has no
+  attribute "get_trading_dates"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1097: error: Module has no
+  attribute "get_holidays"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1144: error: Module has no
+  attribute "download_financial_data"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1148: error: Module has no
+  attribute "get_financial_data"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1193: error: Module has no
+  attribute "download_etf_info"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1197: error: Module has no
+  attribute "get_etf_info"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1239: error: Module has no
+  attribute "download_index_weight"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1243: error: Module has no
+  attribute "get_index_weight"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1285: error: Module has no
+  attribute "get_divid_factors"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1322: error: Module has no
+  attribute "get_markets"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1348: error: Module has no
+  attribute "get_period_list"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1387: error: Module has no
+  attribute "stock_sector_fund_flow_rank"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1408: error: Need type annotation
+  for "cleaned" (hint: "cleaned: dict[<type>, <type>] = ...")  [var-annotated]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1410: error: Module has no
+  attribute "isnull"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1523: error: Module has no
+  attribute "get_stock_list_in_sector"  [attr-defined]
+> deepsearch\webui\api\endpoints\qmt\miniqmt.py:1538: error: Module has no
+  attribute "get_instrument_detail"  [attr-defined]
+> deepsearch\webui\api\endpoints\amazingdata\base.py:349: error: Unused
+  "type: ignore" comment  [unused-ignore]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:621: error:
+  Incompatible return value type (got "Any | BaseException", expected
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:649: error:
+  Item "None" of "PandasModule | None" has no attribute "DataFrame"  [union-attr]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:1237: error:
+  "AkshareModule" has no attribute "stock_board_concept_name_em"; maybe
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:1312: error:
+  "AkshareModule" has no attribute "stock_board_industry_name_em"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:1402: error:
+  "AkshareModule" has no attribute "stock_board_concept_cons_em"; maybe
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:1404: error:
+  "AkshareModule" has no attribute "stock_board_industry_cons_em"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:1491: error:
+  "AkshareModule" has no attribute "stock_individual_fund_flow"; maybe
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:1583: error:
+  "AkshareModule" has no attribute "stock_sector_fund_flow_rank"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:1668: error:
+  "AkshareModule" has no attribute "stock_margin_sse"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:1749: error:
+  "AkshareModule" has no attribute "stock_dzjy_mrmx"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:1837: error:
+  "AkshareModule" has no attribute "stock_hsgt_hist_em"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:1921: error:
+  "AkshareModule" has no attribute "stock_zt_pool_em"; maybe "stock_zh_a_spot_em"?
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:1998: error:
+  "AkshareModule" has no attribute "stock_zt_pool_dtgc_em"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:2082: error:
+  "AkshareModule" has no attribute "stock_yjbb_em"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:2084: error:
+  "AkshareModule" has no attribute "stock_yjkb_em"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:2086: error:
+  "AkshareModule" has no attribute "stock_yjyg_em"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:2195: error:
+  "AkshareModule" has no attribute "tool_trade_date_hist_sina"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:2278: error:
+  "AkshareModule" has no attribute "stock_lhb_detail_em"  [attr-defined]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:2362: error:
+  "AkshareModule" has no attribute "stock_zh_a_hist_min_em"; maybe
+> deepsearch\webui\api\endpoints\system\modules.py:192: error: Returning Any from
+  function declared to return "ComponentManager"  [no-any-return]
+> deepsearch\webui\api\endpoints\data\data_source_monitor_api.py:245: error:
+  "DataAccessProxy" has no attribute "reset_circuit_breaker"; maybe
+> deepsearch\webui\api\endpoints\data\data_source_monitor_api.py:248: error:
+  "DataAccessProxy" has no attribute "reset_circuit_breaker"; maybe
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_adapter.py:168: error:
+  Returning Any from function declared to return "list[dict[str, Any]] | None"
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_adapter.py:190: error:
+  Missing return statement  [return]
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_adapter.py:206: error:
+  Returning Any from function declared to return "list[dict[str, Any]] | None"
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_adapter.py:272: error:
+  Returning Any from function declared to return "list[dict[str, Any]] | None"
+> deepsearch\infrastructure\providers\implementations\akshare\akshare_adapter.py:380: error:
+  Name "result" already defined on line 365  [no-redef]
+> deepsearch\application\services\data_sources\ingestion_service.py:52: error:
+  Argument "queued_at" to "IngestionJobSummary" has incompatible type
+> deepsearch\webui\api\endpoints\amazingdata\financial.py:48: error: Name
+  "start_date" already defined on line 45  [no-redef]
+> deepsearch\webui\api\endpoints\amazingdata\financial.py:49: error: Name
+  "end_date" already defined on line 46  [no-redef]
+> deepsearch\webui\api\endpoints\amazingdata\financial.py:50: error: Name
+  "is_local" already defined on line 47  [no-redef]
+> UnicodeEncodeError: 'gbk' codec can't encode character '\ufffd' in position 69: illegal multibyte sequence
+> deepsearch\webui\api\endpoints\market_data\live_api.py:14: error: Module
+  "starlette" has no attribute "status"  [attr-defined]
+> deepsearch\webui\api\endpoints\market_data\live_api.py:162: error: Returning
+  Any from function declared to return "dict[str, Any] | None"  [no-any-return]
+> deepsearch\webui\api\endpoints\market_data\live_api.py:411: error: Unexpected
+  keyword argument "alias" for "Query"  [call-arg]

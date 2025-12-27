@@ -30,7 +30,7 @@ class MyStrategy(BaseStrategy):
     def __init__(self, params=None):
         super().__init__(params)
         # 初始化策略参数
-        
+
     def on_bar(self, bar):
         # 处理K线数据
         if condition_to_buy:
@@ -85,6 +85,7 @@ print(report)
 回测引擎，负责执行回测流程。
 
 **主要方法：**
+
 - `configure()`: 配置回测参数
 - `run()`: 同步运行回测
 - `run_async()`: 异步运行回测
@@ -95,6 +96,7 @@ print(report)
 策略基类，定义了策略的标准接口。
 
 **需要实现的方法：**
+
 - `on_init()`: 策略初始化
 - `on_start()`: 策略启动
 - `on_bar()`: 处理K线数据
@@ -104,6 +106,7 @@ print(report)
 - `on_stop()`: 策略停止
 
 **内置方法：**
+
 - `buy()`: 买入订单
 - `sell()`: 卖出订单
 - `cancel_order()`: 取消订单
@@ -114,6 +117,7 @@ print(report)
 数据适配器，将 DeepSearch 的数据转换为 Backtrader 格式。
 
 **支持的数据源：**
+
 - AkShare 数据
 - QMT 数据
 - 数据库历史数据
@@ -125,6 +129,7 @@ print(report)
 回测结果类，包含所有性能指标。
 
 **主要指标：**
+
 - 总收益率
 - 夏普比率
 - 最大回撤
@@ -137,6 +142,7 @@ print(report)
 性能分析器，提供深度分析功能。
 
 **分析功能：**
+
 - 风险指标计算
 - 滚动指标分析
 - 对比分析
@@ -154,19 +160,19 @@ class SimpleMovingAverageStrategy(BaseStrategy):
         self.long_period = self.params.get('long_period', 30)
         self.prices = []
         self.in_position = False
-        
+
     def on_bar(self, bar):
         self.prices.append(bar['close'])
-        
+
         if len(self.prices) >= self.long_period:
             short_ma = sum(self.prices[-self.short_period:]) / self.short_period
             long_ma = sum(self.prices[-self.long_period:]) / self.long_period
-            
+
             # 金叉买入
             if short_ma > long_ma and not self.in_position:
                 self.buy('default', size=100)
                 self.in_position = True
-                
+
             # 死叉卖出
             elif short_ma < long_ma and self.in_position:
                 self.sell('default', size=100)
@@ -181,11 +187,11 @@ class MomentumStrategy(BaseStrategy):
         super().__init__(params)
         self.lookback = self.params.get('lookback', 20)
         self.threshold = self.params.get('threshold', 0.05)
-        
+
     def on_bar(self, bar):
         if len(self.prices) >= self.lookback:
             momentum = (self.prices[-1] - self.prices[-self.lookback]) / self.prices[-self.lookback]
-            
+
             if momentum > self.threshold:
                 self.buy('default', size=100)
             elif momentum < -self.threshold:
@@ -262,17 +268,20 @@ def handle_query_response(event):
 ## 性能指标说明
 
 ### 收益指标
+
 - **总收益率**: (最终资金 - 初始资金) / 初始资金
 - **年化收益**: 将总收益率年化后的值
 - **日收益率**: 每日的收益率序列
 
 ### 风险指标
+
 - **夏普比率**: 风险调整后的收益率，越高越好
 - **索提诺比率**: 只考虑下行风险的夏普比率
 - **最大回撤**: 最大的资金回撤百分比
 - **波动率**: 收益率的标准差
 
 ### 交易指标
+
 - **胜率**: 盈利交易占总交易的比例
 - **盈亏比**: 总盈利 / 总亏损
 - **平均盈利/亏损**: 单笔交易的平均盈亏
@@ -289,6 +298,7 @@ def handle_query_response(event):
 ### Q: 如何使用真实数据？
 
 连接数据提供者：
+
 ```python
 from deepsearch.infrastructure.providers import AkShareProxyProvider
 from deepsearch.infrastructure.providers.datafeed import AkShareDataFeed

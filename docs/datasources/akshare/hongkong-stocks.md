@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_hk_spot_em
 
-目标地址: http://quote.eastmoney.com/center/gridlist.html#hk_stocks
+目标地址: <http://quote.eastmoney.com/center/gridlist.html#hk_stocks>
 
 描述: 所有港股的实时行情数据; 该数据有 15 分钟延时
 
@@ -70,7 +70,7 @@ print(stock_hk_spot_em_df)
 
 接口: stock_hk_main_board_spot_em
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#hk_mainboard
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#hk_mainboard>
 
 描述: 港股主板的实时行情数据; 该数据有 15 分钟延时
 
@@ -129,7 +129,7 @@ print(stock_hk_main_board_spot_em_df)
 
 接口: stock_hk_spot
 
-目标地址: https://vip.stock.finance.sina.com.cn/mkt/#qbgg_hk
+目标地址: <https://vip.stock.finance.sina.com.cn/mkt/#qbgg_hk>
 
 描述: 获取所有港股的实时行情数据 15 分钟延时
 
@@ -193,7 +193,7 @@ print(stock_hk_spot_df)
 
 接口: stock_individual_basic_info_hk_xq
 
-目标地址: https://xueqiu.com/S/00700
+目标地址: <https://xueqiu.com/S/00700>
 
 描述: 雪球-个股-公司概况-公司简介
 
@@ -253,7 +253,7 @@ print(stock_individual_basic_info_hk_xq_df)
 
 接口: stock_hk_hist_min_em
 
-目标地址: http://quote.eastmoney.com/hk/00948.html
+目标地址: <http://quote.eastmoney.com/hk/00948.html>
 
 描述: 东方财富网-行情首页-港股-每日分时行情
 
@@ -358,7 +358,7 @@ print(stock_hk_hist_min_em_df)
 
 接口: stock_hk_hist
 
-目标地址: https://quote.eastmoney.com/hk/08367.html
+目标地址: <https://quote.eastmoney.com/hk/08367.html>
 
 描述: 港股-历史行情数据, 可以选择返回复权后数据, 更新频率为日频
 
@@ -507,7 +507,7 @@ print(stock_hk_hist_hfq_df)
 
 接口: stock_hk_daily
 
-目标地址: http://stock.finance.sina.com.cn/hkstock/quotes/01336.html(个例)
+目标地址: <http://stock.finance.sina.com.cn/hkstock/quotes/01336.html(个例)>
 
 描述:港股-历史行情数据, 可以选择返回复权后数据,更新频率为日频
 
@@ -642,7 +642,7 @@ print(stock_hk_daily_hfq_factor_df)
 
 接口: stock_hk_famous_spot_em
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#hk_wellknown
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#hk_wellknown>
 
 描述: 东方财富网-行情中心-港股市场-知名港股实时行情数据
 
@@ -702,7 +702,7 @@ print(stock_hk_famous_spot_em_df)
 
 接口: stock_hk_security_profile_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/CompanyProfile
+目标地址: <https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/CompanyProfile>
 
 描述: 东方财富-港股-证券资料
 
@@ -753,7 +753,7 @@ print(stock_hk_security_profile_em_df)
 
 接口: stock_hk_company_profile_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/CompanyProfile
+目标地址: <https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/CompanyProfile>
 
 描述: 东方财富-港股-公司资料
 
@@ -807,7 +807,7 @@ print(stock_hk_company_profile_em_df)
 
 接口: stock_hk_financial_indicator_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/CoreReading
+目标地址: <https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/CoreReading>
 
 描述: 东方财富-港股-核心必读-最新指标
 
@@ -862,12 +862,11 @@ print(stock_hk_financial_indicator_em_df)
 [1 rows x 21 columns]
 ```
 
-
 #### 分红派息
 
 接口: stock_hk_dividend_payout_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/CoreReading
+目标地址: <https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/CoreReading>
 
 描述: 东方财富-港股-核心必读-分红派息
 
@@ -926,14 +925,13 @@ print(stock_hk_dividend_payout_em_df)
 [19 rows x 7 columns]
 ```
 
-
 #### 行业对比
 
 ##### 成长性对比
 
 接口: stock_hk_growth_comparison_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/IndustryComparison
+目标地址: <https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/IndustryComparison>
 
 描述: 东方财富-港股-行业对比-成长性对比
 
@@ -980,7 +978,7 @@ print(stock_hk_growth_comparison_em_df)
 
 接口: stock_hk_valuation_comparison_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/IndustryComparison
+目标地址: <https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/IndustryComparison>
 
 描述: 东方财富-港股-行业对比-估值对比
 
@@ -1032,12 +1030,11 @@ print(stock_hk_valuation_comparison_em_df)
 [1 rows x 18 columns]
 ```
 
-
 ##### 规模对比
 
 接口: stock_hk_scale_comparison_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/IndustryComparison
+目标地址: <https://emweb.securities.eastmoney.com/PC_HKF10/pages/home/index.html?code=03900&type=web&color=w#/IndustryComparison>
 
 描述: 东方财富-港股-行业对比-规模对比
 

@@ -4,7 +4,7 @@ AmazingData 概念资金流向API
 使用延迟导入避免模块加载时的依赖问题
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Query
 from loguru import logger
@@ -12,9 +12,9 @@ from loguru import logger
 router = APIRouter(tags=["AmazingData-概念资金"])
 
 
-def format_response(success: bool, data: Any = None, error: str = None) -> Dict[str, Any]:
+def format_response(success: bool, data: Any = None, error: Optional[str] = None) -> Dict[str, Any]:
     """格式化API响应"""
-    response = {"success": success}
+    response: Dict[str, Any] = {"success": success}
     if data is not None:
         response["data"] = data
     if error is not None:
@@ -44,33 +44,82 @@ async def get_concept_velocity(
     """
     logger.info(f"[velocity] 请求开始 limit={limit}")
     import asyncio
-    
+
     # 模拟数据作为降级方案
     def get_mock_data():
         mock_concepts = [
-            {"concept_code": "BK0001", "name": "人工智能", "velocity": 1500000000, "lead_stock": "科大讯飞", "lead_change": 0.05},
-            {"concept_code": "BK0002", "name": "新能源汽车", "velocity": 1200000000, "lead_stock": "比亚迪", "lead_change": 0.03},
-            {"concept_code": "BK0003", "name": "半导体", "velocity": 900000000, "lead_stock": "中芯国际", "lead_change": 0.04},
-            {"concept_code": "BK0004", "name": "医药生物", "velocity": 800000000, "lead_stock": "恒瑞医药", "lead_change": 0.02},
-            {"concept_code": "BK0005", "name": "光伏", "velocity": 700000000, "lead_stock": "隆基绿能", "lead_change": 0.01},
-            {"concept_code": "BK0006", "name": "锂电池", "velocity": 650000000, "lead_stock": "宁德时代", "lead_change": 0.025},
-            {"concept_code": "BK0007", "name": "消费电子", "velocity": 600000000, "lead_stock": "立讯精密", "lead_change": 0.015},
-            {"concept_code": "BK0008", "name": "白酒", "velocity": 550000000, "lead_stock": "贵州茅台", "lead_change": 0.008},
+            {
+                "concept_code": "BK0001",
+                "name": "人工智能",
+                "velocity": 1500000000,
+                "lead_stock": "科大讯飞",
+                "lead_change": 0.05,
+            },
+            {
+                "concept_code": "BK0002",
+                "name": "新能源汽车",
+                "velocity": 1200000000,
+                "lead_stock": "比亚迪",
+                "lead_change": 0.03,
+            },
+            {
+                "concept_code": "BK0003",
+                "name": "半导体",
+                "velocity": 900000000,
+                "lead_stock": "中芯国际",
+                "lead_change": 0.04,
+            },
+            {
+                "concept_code": "BK0004",
+                "name": "医药生物",
+                "velocity": 800000000,
+                "lead_stock": "恒瑞医药",
+                "lead_change": 0.02,
+            },
+            {
+                "concept_code": "BK0005",
+                "name": "光伏",
+                "velocity": 700000000,
+                "lead_stock": "隆基绿能",
+                "lead_change": 0.01,
+            },
+            {
+                "concept_code": "BK0006",
+                "name": "锂电池",
+                "velocity": 650000000,
+                "lead_stock": "宁德时代",
+                "lead_change": 0.025,
+            },
+            {
+                "concept_code": "BK0007",
+                "name": "消费电子",
+                "velocity": 600000000,
+                "lead_stock": "立讯精密",
+                "lead_change": 0.015,
+            },
+            {
+                "concept_code": "BK0008",
+                "name": "白酒",
+                "velocity": 550000000,
+                "lead_stock": "贵州茅台",
+                "lead_change": 0.008,
+            },
         ]
         return mock_concepts[:limit]
-    
+
     ConceptLinkageEngine, get_concept_engine, get_amazingdata_provider = _get_engine_lazy()
 
     # 尝试使用ConceptLinkageEngine (带超时)
     if ConceptLinkageEngine is not None and get_concept_engine is not None:
         try:
+
             async def fetch_from_engine():
                 provider = await get_amazingdata_provider()
                 engine = get_concept_engine(provider)
                 if not engine._initialized:
                     await engine.initialize_graph()
                 return engine.get_sector_velocity_map()
-            
+
             data = await asyncio.wait_for(fetch_from_engine(), timeout=10.0)
             if data:
                 return format_response(success=True, data=data[:limit])
@@ -81,17 +130,19 @@ async def get_concept_velocity(
 
     # 备用方案：使用AkShare获取板块资金流向数据 (带超时)
     try:
+
         async def fetch_from_akshare():
             from deepsearch.infrastructure.providers.implementations.akshare.akshare_direct import (
                 AKShareDirectProvider,
             )
+
             provider = AKShareDirectProvider()
             await provider.initialize()
             return await provider.get_sector_capital_flow_rank(
                 indicator="今日",
                 sector_type="概念资金流",
             )
-        
+
         data = await asyncio.wait_for(fetch_from_akshare(), timeout=10.0)
 
         if data:
@@ -125,7 +176,7 @@ async def get_concept_linkage(
     用于构建 'Spiderweb' 蛛网图
     """
     import asyncio
-    
+
     # 模拟数据作为降级方案
     def get_mock_linkage():
         return {
@@ -134,20 +185,21 @@ async def get_concept_linkage(
                 {"code": "BK0001", "name": "人工智能", "peers": ["000001", "000002", "000003"]},
                 {"code": "BK0002", "name": "大数据", "peers": ["000004", "000005"]},
                 {"code": "BK0003", "name": "云计算", "peers": ["000006", "000007", "000008"]},
-            ]
+            ],
         }
-    
+
     ConceptLinkageEngine, get_concept_engine, get_amazingdata_provider = _get_engine_lazy()
 
     if ConceptLinkageEngine is not None and get_concept_engine is not None:
         try:
+
             async def fetch_linkage():
                 provider = await get_amazingdata_provider()
                 engine = get_concept_engine(provider)
                 if not engine._initialized:
                     await engine.initialize_graph()
                 return engine.get_linkage(stock_code)
-            
+
             data = await asyncio.wait_for(fetch_linkage(), timeout=10.0)
             if data and data.get("concepts"):
                 return format_response(success=True, data=data)

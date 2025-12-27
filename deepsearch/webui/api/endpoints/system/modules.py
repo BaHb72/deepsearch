@@ -11,7 +11,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from deepsearch.core.managers.component_manager import ComponentManager
 from deepsearch.core.utils.exceptions import ComponentError
-
 from deepsearch.webui.api.services.system_data_service import (
     ComponentNotFoundError,
     EngineUnavailableError,
@@ -21,9 +20,12 @@ from deepsearch.webui.api.services.system_data_service import (
 router = APIRouter(prefix="/modules", tags=["SystemModules"])
 system_data_service = get_system_data_service()
 
+
 def _get_app_state():
     from deepsearch.webui.server import app_state
+
     return app_state
+
 
 MAX_MODULE_EVENTS = 100
 
@@ -189,7 +191,7 @@ def _get_component_manager() -> ComponentManager:
         raise HTTPException(status_code=503, detail="ϵͳδ��ʼ��")
 
     try:
-        return engine.get_component_manager()
+        return engine.get_component_manager()  # type: ignore[no-any-return]
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail="���������δ��ʼ��") from exc
 
@@ -385,4 +387,3 @@ async def batch_module_operation(payload: BatchOperationPayload) -> Dict[str, An
         "modules": module_ids,
         "timestamp": _now_iso(),
     }
-

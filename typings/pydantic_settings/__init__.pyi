@@ -6,7 +6,6 @@ T = TypeVar("T", bound="BaseSettings")
 SettingsSourceCallable = Callable[[], Dict[str, Any]]
 SettingsConfigDict = Dict[str, Any]
 
-
 class BaseSettings(BaseModel):
     model_config: ClassVar[SettingsConfigDict]
 

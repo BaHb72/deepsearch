@@ -117,18 +117,12 @@ class ConfigManager(metaclass=Singleton):
         except Exception as e:
             logger.error(f"加载环境配置失败: {e}")
 
-    def _deep_merge(
-        self, base: Mapping[str, Any], override: Mapping[str, Any]
-    ) -> ConfigDict:
+    def _deep_merge(self, base: Mapping[str, Any], override: Mapping[str, Any]) -> ConfigDict:
         """深度合并两个字典"""
         result: ConfigDict = dict(base)
 
         for key, value in override.items():
-            if (
-                key in result
-                and isinstance(result[key], dict)
-                and isinstance(value, Mapping)
-            ):
+            if key in result and isinstance(result[key], dict) and isinstance(value, Mapping):
                 nested_base = cast(Mapping[str, Any], result[key])
                 result[key] = self._deep_merge(nested_base, value)
             else:

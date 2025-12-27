@@ -9,6 +9,7 @@
 **接口位置**: `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py`
 
 **方法签名**:
+
 ```python
 async def get_long_hu_bang(
     self,
@@ -23,6 +24,7 @@ async def get_long_hu_bang(
 **功能说明**: 获取指定股票的龙虎榜数据
 
 **参数**:
+
 - `code_list`: 股票代码列表
 - `local_path`: 本地存储路径
 - `is_local`: 是否使用本地存储
@@ -30,6 +32,7 @@ async def get_long_hu_bang(
 - `end_date`: 交易日期结束筛选(格式: YYYYMMDD)，可选
 
 **返回字段**:
+
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | MARKET_CODE | string | 证券代码 |
@@ -52,6 +55,7 @@ async def get_long_hu_bang(
 **接口位置**: `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py`
 
 **方法签名**:
+
 ```python
 async def get_block_trading(
     self,
@@ -66,6 +70,7 @@ async def get_block_trading(
 **功能说明**: 获取指定股票列表的大宗交易数据
 
 **参数**:
+
 - `code_list`: 股票代码列表
 - `local_path`: 本地存储路径
 - `is_local`: 是否使用本地存储
@@ -73,6 +78,7 @@ async def get_block_trading(
 - `end_date`: 交易日期结束筛选(格式: YYYYMMDD)，可选
 
 **返回字段**:
+
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | MARKET_CODE | string | 证券代码 |
@@ -92,6 +98,7 @@ async def get_block_trading(
 **接口位置**: `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py`
 
 **方法签名**:
+
 ```python
 async def get_option_basic_info(
     self,
@@ -104,11 +111,13 @@ async def get_option_basic_info(
 **功能说明**: 获取期权基本资料(沪深交易所的ETF期权)
 
 **参数**:
+
 - `code_list`: 期权代码列表
 - `local_path`: 本地存储路径
 - `is_local`: 是否使用本地存储
 
 **返回字段**:
+
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | CONTRACT_FULL_NAME | string | 合约全称 |
@@ -135,6 +144,7 @@ async def get_option_basic_info(
 **接口位置**: `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py`
 
 **方法签名**:
+
 ```python
 async def get_option_std_ctr_specs(
     self,
@@ -147,11 +157,13 @@ async def get_option_std_ctr_specs(
 **功能说明**: 获取沪深期权标准合约的结构属性(沪深交易所的ETF期权)
 
 **参数**:
+
 - `code_list`: 期权代码列表(支持深沪ETF期权的代码列表，如159919.SZ、159915.SZ、159922.SZ等)
 - `local_path`: 本地存储路径
 - `is_local`: 是否使用本地存储
 
 **返回字段**:
+
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | EXERCISE_DATE | string | 期权行权日 |
@@ -247,11 +259,13 @@ data = await provider.get_option_std_ctr_specs(
 **脚本路径**: `scripts/test_amazingdata_extended_apis.py`
 
 **运行方法**:
+
 ```bash
 python scripts/test_amazingdata_extended_apis.py
 ```
 
 该脚本会依次测试以上四个接口，并显示：
+
 - 接口调用是否成功
 - 返回的数据量
 - 返回的字段列表
@@ -280,6 +294,7 @@ python scripts/test_amazingdata_extended_apis.py
 ### 2025-12-16
 
 **更新内容**:
+
 1. 为 `get_long_hu_bang` 补充了完整的字段文档，基于API文档3.5.9.1
 2. 为 `get_block_trading` 补充了完整的字段文档，基于API文档3.5.9.2
 3. 为 `get_option_basic_info` 补充了完整的字段文档，基于API文档3.5.10.1
@@ -287,9 +302,11 @@ python scripts/test_amazingdata_extended_apis.py
 5. 创建了专门的测试脚本 `test_amazingdata_extended_apis.py`
 
 **文件修改**:
+
 - `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py`
 
 **新增文件**:
+
 - `scripts/test_amazingdata_extended_apis.py`
 - `docs/amazingdata_extended_interfaces.md` (本文档)
 
@@ -298,4 +315,4 @@ python scripts/test_amazingdata_extended_apis.py
 ## 相关文档
 
 - AmazingData SDK 官方文档: 根据用户提供的截图
-- 中泰数据平台数据字典: https://dict.thinktrader.net/dictionary
+- 中泰数据平台数据字典: <https://dict.thinktrader.net/dictionary>

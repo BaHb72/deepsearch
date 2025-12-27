@@ -5,12 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from .protocols import (
-    AuctionQualityPort,
-    CapitalPulsePort,
-    MarketStreamPort,
-    OrderImbalancePort,
-)
+from .protocols import AuctionQualityPort, CapitalPulsePort, MarketStreamPort, OrderImbalancePort
 from .stocks import StockListRecordRepositoryPort
 
 
@@ -39,14 +34,14 @@ class RealtimeAdapterCapabilities:
     order_imbalance: bool = False
 
     def satisfies(
-            self,
-            *,
-            streaming: bool | None = None,
-            snapshot: bool | None = None,
-            board_universe: bool | None = None,
-            capital_pulse: bool | None = None,
-            auction: bool | None = None,
-            order_imbalance: bool | None = None,
+        self,
+        *,
+        streaming: bool | None = None,
+        snapshot: bool | None = None,
+        board_universe: bool | None = None,
+        capital_pulse: bool | None = None,
+        auction: bool | None = None,
+        order_imbalance: bool | None = None,
     ) -> bool:
         """Check if current capability set matches requirements."""
 
@@ -103,8 +98,7 @@ class RealtimeAdapter(Protocol):
     name: str
 
     @property
-    def capabilities(self) -> RealtimeAdapterCapabilities:
-        ...
+    def capabilities(self) -> RealtimeAdapterCapabilities: ...
 
     async def start(self) -> RealtimePortBundle:
         """Initialize underlying provider and return port bundle."""

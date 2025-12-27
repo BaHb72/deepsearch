@@ -17,7 +17,7 @@ import zlib
 from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
@@ -30,18 +30,16 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
+from deepsearch.application.market_data.fallback_manager import ModuleFallbackManager
 from deepsearch.config import Settings, get_config
 from deepsearch.core.runtime.engine import MainEngine
 from deepsearch.debug.diagnostics import diagnostic_logger, log_diagnostic
 from deepsearch.observability.monitoring.event_monitor import EventSystemMonitor
 from deepsearch.observability.monitoring.monitor_api import MonitorAPI
-from deepsearch.application.market_data.fallback_manager import ModuleFallbackManager
 
 if TYPE_CHECKING:
+    from deepsearch.application.market_data.orchestrator import RealtimeDataOrchestrator
     from deepsearch.event.engine.engine import EventEngine
-    from deepsearch.application.market_data.orchestrator import (
-        RealtimeDataOrchestrator,
-    )
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -168,7 +166,9 @@ class WebSocketManager:
         # 批处理和压缩配置
         self.enable_compression: bool = enable_compression
         self.enable_batching: bool = enable_batching
-        self.message_batcher: Optional[MessageBatcher] = MessageBatcher() if enable_batching else None
+        self.message_batcher: Optional[MessageBatcher] = (
+            MessageBatcher() if enable_batching else None
+        )
         self.compression_threshold: int = 1024  # 压缩阈值（1KB）
 
         # 统计信息
@@ -252,13 +252,14 @@ class WebSocketManager:
 
         await asyncio.gather(*tasks, return_exceptions=True)
 
-
         # 清理失败的连接
         for conn in failed_connections:
             await self.remove_connection(conn)
             self.stats["connection_errors"] += 1
 
-    async def _send_to_connection(self, conn: WebSocket, message: str, failed_list: list[WebSocket]) -> None:
+    async def _send_to_connection(
+        self, conn: WebSocket, message: str, failed_list: list[WebSocket]
+    ) -> None:
         """发送消息到单个连接（带超时控制）"""
         try:
             # 使用超时控制，避免慢连接阻塞
@@ -523,41 +524,11 @@ log_diagnostic(
 )
 
 
-
 # 市场数据运行时函数已迁移到 services.market_data_runtime 模块
 from deepsearch.webui.services.market_data_runtime import (
     ensure_market_data_runtime,
     shutdown_market_data_runtime,
 )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def create_startup_handler(app_state: AppState) -> Callable[[], Awaitable[None]]:
@@ -572,19 +543,19 @@ def create_startup_handler(app_state: AppState) -> Callable[[], Awaitable[None]]
             try:
                 from deepsearch.core.scheduler import get_scheduler
                 from deepsearch.core.scheduler.tasks.stock_list import StockListTask
-                
+
                 scheduler = get_scheduler()
                 scheduler.register_task(StockListTask())
-                
+
                 # 从数据库恢复缓存
                 await scheduler.restore_from_db()
-                
+
                 # 启动调度器
                 await scheduler.start()
-                
+
                 # 检查并刷新过期的缓存（适用于非凌晨启动的情况）
                 await scheduler.check_and_refresh_stale()
-                
+
                 logger.info("定时缓存系统已启动")
             except Exception as e:
                 logger.warning(f"定时缓存系统启动失败（非致命）: {e}")
@@ -596,14 +567,13 @@ def create_startup_handler(app_state: AppState) -> Callable[[], Awaitable[None]]
             # 注意：DatabaseComponent 现在在 lifespan 中初始化，避免重复创建
             # 这里暂时跳过 Repository 初始化，待后续重构使用 app.state.db_service
             try:
-                
+
                 # 由于 Repository 需要 db_service，而 db_service 在 lifespan yield 后才可用
                 # 这里暂时跳过初始化，将在后续请求中延迟初始化
                 logger.debug("模块数据源 Repository 将在首次请求时延迟初始化")
             except Exception as e:
                 logger.warning(f"初始化模块数据源 Repository 失败: {e}")
-            
-            
+
             # 检查是否已经设置了引擎
             if not app_state.engine:
                 logger.warning("No engine set, WebUI running in limited mode")
@@ -638,6 +608,7 @@ def create_shutdown_handler(app_state: AppState) -> Callable[[], Awaitable[None]
             # 停止定时缓存系统
             try:
                 from deepsearch.core.scheduler import get_scheduler
+
                 scheduler = get_scheduler()
                 await scheduler.stop()
                 logger.info("定时缓存系统已停止")
@@ -675,7 +646,7 @@ def create_shutdown_handler(app_state: AppState) -> Callable[[], Awaitable[None]
 async def lifespan(app: FastAPI):
     """
     FastAPI lifespan 上下文管理器
-    
+
     确保数据库连接池在 Uvicorn 的事件循环中初始化，
     避免 Event loop is closed 错误。
     """
@@ -685,22 +656,22 @@ async def lifespan(app: FastAPI):
         logger.debug(f"Lifespan 启动，事件循环 ID: {id(current_loop)}")
     except RuntimeError:
         logger.warning("Lifespan 启动时无运行中的事件循环")
-    
+
     # === STARTUP ===
     # 首先初始化数据库组件（确保在正确的事件循环中）
     try:
         from deepsearch.core.component_factory import DatabaseComponentFactory
         from deepsearch.core.runtime.context import get_context
         from deepsearch.infrastructure.persistence.database import DatabaseService
-        
+
         # 创建并初始化数据库组件（现在在 Uvicorn 的事件循环中）
         db_component = DatabaseComponentFactory.create()
         await db_component.initialize_async()
-        
+
         # 将正确的数据库组件注册到 ApplicationContext
         # 这样所有通过 get_context().get_component("database") 的调用都会使用这个组件
         get_context().override_component("database", db_component)
-        
+
         # 存储到 app.state 供依赖注入使用
         app.state.db_component = db_component
         app.state.db_service = DatabaseService(db_component)
@@ -709,23 +680,62 @@ async def lifespan(app: FastAPI):
         logger.warning(f"lifespan 中初始化数据库失败: {e}")
         app.state.db_component = None
         app.state.db_service = None
-    
+
     # 然后执行其他启动逻辑
     startup_handler = create_startup_handler(app_state)
     await startup_handler()
-    
+
+    # 初始化通知推送服务
+    try:
+        from deepsearch.config.models.notifications import NotificationsConfig
+        from deepsearch.core.runtime.context import get_context as get_ctx
+        from deepsearch.infrastructure.notifications import (
+            NotificationQuotaGuard,
+            NotificationService,
+        )
+
+        settings = get_config()
+        notifications_config = getattr(settings, "notifications", None)
+        if notifications_config is None:
+            notifications_config = NotificationsConfig()
+        elif not isinstance(notifications_config, NotificationsConfig):
+            notifications_config = NotificationsConfig.model_validate(notifications_config)
+
+        notification_service = NotificationService(
+            notifications_config,
+            quota_guard=NotificationQuotaGuard(),
+        )
+        get_ctx().register_service("notifications", notification_service)
+        logger.info("通知推送服务已初始化")
+    except Exception as e:
+        logger.warning(f"通知推送服务初始化失败（非致命）: {e}")
+
     yield  # 应用运行中
-    
+
     # === SHUTDOWN ===
     # 先清理数据库连接池
-    db_component = getattr(app.state, "db_component", None)
-    if db_component is not None:
+    db_component_raw = getattr(app.state, "db_component", None)
+    if db_component_raw is not None and hasattr(db_component_raw, "disconnect_async"):
         try:
-            await db_component.disconnect_async()
+            await db_component_raw.disconnect_async()
             logger.info("数据库连接池已在 lifespan 中关闭")
         except Exception as e:
             logger.warning(f"关闭数据库连接池失败: {e}")
-    
+
+    # 关闭通知推送服务
+    try:
+        from deepsearch.core.runtime.context import get_context as get_ctx
+        from deepsearch.infrastructure.notifications import NotificationService
+
+        context = get_ctx()
+        if context.has_service("notifications"):
+            service = context.get_service("notifications")
+            if isinstance(service, NotificationService):
+                await service.shutdown()
+                logger.info("通知推送服务已关闭")
+    except Exception as e:
+        logger.warning(f"关闭通知推送服务失败: {e}")
+
     shutdown_handler = create_shutdown_handler(app_state)
     await shutdown_handler()
 
@@ -827,15 +837,24 @@ def create_app() -> FastAPI:
     # 导入并注册所有路由
     from deepsearch.webui.api.database import router as database_router
     from deepsearch.webui.api.endpoints.data.akshare_apis import router as akshare_apis_router
-    from deepsearch.webui.api.endpoints.data.data_source import router as data_source_endpoints_router
-    from deepsearch.webui.api.endpoints.data.data_unified import router as data_unified_router
     from deepsearch.webui.api.endpoints.data.data import router as data_router
+    from deepsearch.webui.api.endpoints.data.data_source import (
+        router as data_source_endpoints_router,
+    )
+    from deepsearch.webui.api.endpoints.data.data_unified import router as data_unified_router
+    from deepsearch.webui.api.endpoints.market_data.live_api import router as market_live_router
     from deepsearch.webui.api.endpoints.monitor.monitor_api import router as monitor_api_router
-    from deepsearch.webui.api.endpoints.monitoring.analytics import router as monitoring_analytics_router
-    from deepsearch.webui.api.endpoints.monitoring.cache_api import router as monitoring_cache_router
+    from deepsearch.webui.api.endpoints.monitoring.analytics import (
+        router as monitoring_analytics_router,
+    )
+    from deepsearch.webui.api.endpoints.monitoring.cache_api import (
+        router as monitoring_cache_router,
+    )
     from deepsearch.webui.api.endpoints.notifications.push import router as notification_push_router
     from deepsearch.webui.api.endpoints.qmt.qmt import router as qmt_router
-    from deepsearch.webui.api.endpoints.qmt.qmt_subscription import router as qmt_subscription_router
+    from deepsearch.webui.api.endpoints.qmt.qmt_subscription import (
+        router as qmt_subscription_router,
+    )
 
     # AmazingData API已移动到第819行单独注册，避免重复注册
     # from deepsearch.webui.api.endpoints.amazingdata import router as amazingdata_api
@@ -847,8 +866,9 @@ def create_app() -> FastAPI:
     from deepsearch.webui.api.endpoints.system.system_info import router as system_info_router
     from deepsearch.webui.api.endpoints.trading.chart import router as trading_chart_router
     from deepsearch.webui.api.endpoints.trading.market import router as trading_market_router
-    from deepsearch.webui.api.endpoints.trading.market_overview import router as trading_market_overview_router
-    from deepsearch.webui.api.endpoints.market_data.live_api import router as market_live_router
+    from deepsearch.webui.api.endpoints.trading.market_overview import (
+        router as trading_market_overview_router,
+    )
     from deepsearch.webui.api.errors import router as frontend_errors_router
     from deepsearch.webui.api.proxy import router as workers_proxy_router
     from deepsearch.webui.api.stock_comment import router as stock_comment_router
@@ -859,19 +879,29 @@ def create_app() -> FastAPI:
     app.include_router(system_info_router)  # 系统信息路由
     app.include_router(system_logs_router, prefix="/api/system/logs", tags=["Logs"])
 
-    app.include_router(data_source_endpoints_router, tags=["DataSource"])  # 已包含 /api/data-source 前缀
+    app.include_router(
+        data_source_endpoints_router, tags=["DataSource"]
+    )  # 已包含 /api/data-source 前缀
     app.include_router(database_router, prefix="/api/database", tags=["Database"])
     app.include_router(monitoring_cache_router, prefix="/api/cache", tags=["Cache"])
     app.include_router(system_health_router, prefix="/api/health", tags=["Health"])
     app.include_router(frontend_errors_router, prefix="/api/frontend", tags=["Frontend Errors"])
     app.include_router(workers_proxy_router, tags=["Workers Proxy"])  # 已包含 /api/workers 前缀
-    app.include_router(trading_market_router, tags=["Market"])  # 市场数据路由，已包含 /api/market 前缀
+    app.include_router(
+        trading_market_router, tags=["Market"]
+    )  # 市场数据路由，已包含 /api/market 前缀
     app.include_router(trading_chart_router, tags=["Chart"])  # 图表数据路由，已包含 /api/chart 前缀
     app.include_router(qmt_router, tags=["QMT"])  # QMT数据路由，已包含 /api/qmt 前缀
     app.include_router(qmt_subscription_router, tags=["QMT Subscription"])  # QMT订阅管理路由
-    app.include_router(data_unified_router, tags=["UnifiedData"])  # 统一数据API，已包含 /api/data 前缀
-    app.include_router(data_router, prefix="/api/data", tags=["Data"])  # 基础数据API，提供 /stocks、/kline 等
-    app.include_router(monitoring_analytics_router, tags=["Analytics"])  # 分析API，已包含 /api/analytics 前缀
+    app.include_router(
+        data_unified_router, tags=["UnifiedData"]
+    )  # 统一数据API，已包含 /api/data 前缀
+    app.include_router(
+        data_router, prefix="/api/data", tags=["Data"]
+    )  # 基础数据API，提供 /stocks、/kline 等
+    app.include_router(
+        monitoring_analytics_router, tags=["Analytics"]
+    )  # 分析API，已包含 /api/analytics 前缀
     app.include_router(trading_market_overview_router, tags=["MarketOverview"])  # 市场总貌API
     app.include_router(market_live_router, tags=["MarketLive"])  # 市场实时行情API
     app.include_router(stock_comment_router, tags=["StockComment"])  # 千股千评API
@@ -930,7 +960,9 @@ def create_app() -> FastAPI:
     try:
         from deepsearch.webui.api.endpoints.qmt.miniqmt import router as miniqmt_router
 
-        app.include_router(miniqmt_router, tags=["MiniQMT"])  # MiniQMT数据路由，已包含 /api/miniqmt 前缀
+        app.include_router(
+            miniqmt_router, tags=["MiniQMT"]
+        )  # MiniQMT数据路由，已包含 /api/miniqmt 前缀
     except ImportError:
         logger.warning("MiniQMT API 模块未找到，跳过注册")
 
@@ -1005,14 +1037,18 @@ def create_app() -> FastAPI:
     try:
         from deepsearch.webui.api.endpoints.trading.ttrading import router as ttrading_router
 
-        app.include_router(ttrading_router, tags=["T-Trading"])  # 日内做T API，已包含 /api/ttrading 前缀
+        app.include_router(
+            ttrading_router, tags=["T-Trading"]
+        )  # 日内做T API，已包含 /api/ttrading 前缀
         logger.info("日内做T API已注册")
     except ImportError as e:
         logger.warning(f"日内做T API模块加载失败: {e}")
 
     # Data Source Monitor API
     try:
-        from deepsearch.webui.api.monitor.data_source_api import router as monitor_data_source_router
+        from deepsearch.webui.api.monitor.data_source_api import (
+            router as monitor_data_source_router,
+        )
 
         app.include_router(monitor_data_source_router, tags=["DataSourceMonitor"])  # 数据源监控API
         logger.info("数据源监控API已注册")
@@ -1072,10 +1108,12 @@ def create_app() -> FastAPI:
     # 注册AmazingData API (P4级新增)
     try:
         # 直接导入避免延迟加载掩盖错误
-        from deepsearch.webui.api.endpoints.amazingdata.router import router as amazingdata_main_router
+        from deepsearch.webui.api.endpoints.amazingdata.router import (
+            router as amazingdata_main_router,
+        )
 
         app.include_router(amazingdata_main_router, tags=["AmazingData"])
-        logger.info(f"AmazingData API已注册（包含 {len(amazingdata_main_router.routes)} 个路由）")
+        logger.info("AmazingData API已注册")
     except ImportError as e:
         logger.warning(f"AmazingData API模块加载失败 (ImportError): {e}")
     except Exception as e:
@@ -1202,7 +1240,6 @@ async def report_frontend_error(error: Dict[str, Any]) -> Dict[str, Any]:
     return {"success": True, "message": "Error reported"}
 
 
-
 # 向后兼容的函数
 def set_engine(engine: MainEngine) -> None:
     """设置引擎实例（向后兼容）"""
@@ -1239,10 +1276,3 @@ if __name__ == "__main__":
         reload=config.webui.reload,
         log_level="info",
     )
-
-
-
-
-
-
-

@@ -9,7 +9,7 @@ AmazingData 基础数据 API 测试脚本
 import asyncio
 import sys
 from datetime import datetime
-from typing import Any, Callable
+from typing import Callable
 
 # 添加项目路径
 sys.path.insert(0, "d:/Stock/code/deepsearch")
@@ -20,7 +20,9 @@ from deepsearch.webui.api.endpoints.amazingdata.base import get_amazingdata_prov
 class TestResult:
     """测试结果类"""
 
-    def __init__(self, api_name: str, success: bool, data_count: int, error: str = "", elapsed: float = 0):
+    def __init__(
+        self, api_name: str, success: bool, data_count: int, error: str = "", elapsed: float = 0
+    ):
         self.api_name = api_name
         self.success = success
         self.data_count = data_count
@@ -77,7 +79,7 @@ async def test_api(api_name: str, func: Callable, *args, **kwargs) -> TestResult
 
     except Exception as e:
         elapsed = (datetime.now() - start).total_seconds()
-        print(f"状态: 异常")
+        print("状态: 异常")
         print(f"错误: {str(e)}")
         return TestResult(api_name, False, 0, str(e), elapsed)
 
@@ -103,7 +105,10 @@ async def run_basic_data_tests():
     # ==================== 1. get_code_info ====================
     async def test_get_code_info():
         data = await provider.get_code_info(security_type="EXTRA_STOCK_A")
-        return {"success": data is not None, "data": data.to_dict("records") if hasattr(data, "to_dict") else data}
+        return {
+            "success": data is not None,
+            "data": data.to_dict("records") if hasattr(data, "to_dict") else data,
+        }
 
     results.append(await test_api("get_code_info (每日最新证券信息)", test_get_code_info))
 
@@ -131,7 +136,10 @@ async def run_basic_data_tests():
     # ==================== 5. get_stock_basic ====================
     async def test_get_stock_basic():
         data = await provider.get_stock_basic(test_codes)
-        return {"success": data is not None, "data": data.to_dict("records") if hasattr(data, "to_dict") else data}
+        return {
+            "success": data is not None,
+            "data": data.to_dict("records") if hasattr(data, "to_dict") else data,
+        }
 
     results.append(await test_api("get_stock_basic (证券基础信息)", test_get_stock_basic))
 
@@ -140,7 +148,10 @@ async def run_basic_data_tests():
         data = await provider.get_backward_factor(
             code_list=test_codes, begin_date=20241201, end_date=20241210
         )
-        return {"success": data is not None, "data": data.to_dict("records") if hasattr(data, "to_dict") else data}
+        return {
+            "success": data is not None,
+            "data": data.to_dict("records") if hasattr(data, "to_dict") else data,
+        }
 
     results.append(await test_api("get_backward_factor (后复权因子)", test_get_backward_factor))
 
@@ -149,7 +160,10 @@ async def run_basic_data_tests():
         data = await provider.get_adj_factor(
             code_list=test_codes, begin_date=20241201, end_date=20241210
         )
-        return {"success": data is not None, "data": data.to_dict("records") if hasattr(data, "to_dict") else data}
+        return {
+            "success": data is not None,
+            "data": data.to_dict("records") if hasattr(data, "to_dict") else data,
+        }
 
     results.append(await test_api("get_adj_factor (前复权因子)", test_get_adj_factor))
 
@@ -158,9 +172,14 @@ async def run_basic_data_tests():
         data = await provider.get_history_stock_status(
             code_list=test_codes, begin_date=20241201, end_date=20241210
         )
-        return {"success": data is not None, "data": data.to_dict("records") if hasattr(data, "to_dict") else data}
+        return {
+            "success": data is not None,
+            "data": data.to_dict("records") if hasattr(data, "to_dict") else data,
+        }
 
-    results.append(await test_api("get_history_stock_status (历史证券状态)", test_get_history_stock_status))
+    results.append(
+        await test_api("get_history_stock_status (历史证券状态)", test_get_history_stock_status)
+    )
 
     # ==================== 9. get_hist_code_list ====================
     async def test_get_hist_code_list():
@@ -174,7 +193,10 @@ async def run_basic_data_tests():
     # ==================== 10. get_bj_code_mapping ====================
     async def test_get_bj_code_mapping():
         data = await provider.get_bj_code_mapping()
-        return {"success": data is not None, "data": data.to_dict("records") if hasattr(data, "to_dict") else data}
+        return {
+            "success": data is not None,
+            "data": data.to_dict("records") if hasattr(data, "to_dict") else data,
+        }
 
     results.append(await test_api("get_bj_code_mapping (北交所代码映射)", test_get_bj_code_mapping))
 

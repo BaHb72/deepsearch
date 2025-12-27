@@ -9,7 +9,6 @@ from typing import Any, Dict, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from loguru import logger
-
 from pydantic import BaseModel
 
 from deepsearch.config import get_config

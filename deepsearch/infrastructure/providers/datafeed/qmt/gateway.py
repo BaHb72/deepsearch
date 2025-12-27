@@ -17,6 +17,7 @@ from deepsearch.infrastructure.providers.datafeed.qmt.models import OrderBook, T
 from deepsearch.infrastructure.providers.interfaces.payloads import ReceiverStats
 from deepsearch.messaging.bus import MessageBus
 from deepsearch.messaging.types import MessageEnvelope
+
 from .receiver import QMTReceiver
 
 # 定义QMT相关事件类型
@@ -169,6 +170,7 @@ class QMTGateway:
             },
             "receiver": receiver_stats,
         }
+
     async def _handle_tick_data(self, client_id: str, msg: MessageEnvelope) -> None:
         """处理Tick数据"""
         try:

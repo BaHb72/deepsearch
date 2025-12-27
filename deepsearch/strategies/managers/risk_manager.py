@@ -33,8 +33,6 @@ class OrderRecord(TypedDict):
     risk_check: RiskCheckResult
 
 
-
-
 def _coerce_float(value: Any, default: float = 0.0) -> float:
     """Safely convert arbitrary values to float."""
     try:
@@ -65,21 +63,41 @@ class RiskManager:
         config = config or {}
 
         # Position limits
-        self.max_position_size: float = _coerce_float(config.get("max_position_size", 10000), 10000.0)  # Max shares per position
-        self.max_position_value: float = _coerce_float(config.get("max_position_value", 100000), 100000.0)  # Max value per position
-        self.max_total_exposure: float = _coerce_float(config.get("max_total_exposure", 500000), 500000.0)  # Max total exposure
-        self.max_positions: int = int(_coerce_float(config.get("max_positions", 10), 10.0))  # Max number of positions
+        self.max_position_size: float = _coerce_float(
+            config.get("max_position_size", 10000), 10000.0
+        )  # Max shares per position
+        self.max_position_value: float = _coerce_float(
+            config.get("max_position_value", 100000), 100000.0
+        )  # Max value per position
+        self.max_total_exposure: float = _coerce_float(
+            config.get("max_total_exposure", 500000), 500000.0
+        )  # Max total exposure
+        self.max_positions: int = int(
+            _coerce_float(config.get("max_positions", 10), 10.0)
+        )  # Max number of positions
 
         # Risk limits
-        self.max_drawdown: float = _coerce_float(config.get("max_drawdown", 0.20), 0.20)  # 20% max drawdown
-        self.daily_loss_limit: float = _coerce_float(config.get("daily_loss_limit", 0.05), 0.05)  # 5% daily loss limit
-        self.stop_loss_pct: float = _coerce_float(config.get("stop_loss_pct", 0.02), 0.02)  # 2% stop loss
-        self.position_size_pct: float = _coerce_float(config.get("position_size_pct", 0.1), 0.1)  # 10% of capital per position
+        self.max_drawdown: float = _coerce_float(
+            config.get("max_drawdown", 0.20), 0.20
+        )  # 20% max drawdown
+        self.daily_loss_limit: float = _coerce_float(
+            config.get("daily_loss_limit", 0.05), 0.05
+        )  # 5% daily loss limit
+        self.stop_loss_pct: float = _coerce_float(
+            config.get("stop_loss_pct", 0.02), 0.02
+        )  # 2% stop loss
+        self.position_size_pct: float = _coerce_float(
+            config.get("position_size_pct", 0.1), 0.1
+        )  # 10% of capital per position
 
         # Order limits
         self.max_order_size: float = _coerce_float(config.get("max_order_size", 5000), 5000.0)
-        self.max_orders_per_minute: int = int(_coerce_float(config.get("max_orders_per_minute", 10), 10.0))
-        self.max_orders_per_symbol: int = int(_coerce_float(config.get("max_orders_per_symbol", 5), 5.0))
+        self.max_orders_per_minute: int = int(
+            _coerce_float(config.get("max_orders_per_minute", 10), 10.0)
+        )
+        self.max_orders_per_symbol: int = int(
+            _coerce_float(config.get("max_orders_per_symbol", 5), 5.0)
+        )
 
         # Tracking
         self.positions: DefaultDict[str, Dict[str, PositionSnapshot]] = defaultdict(dict)
@@ -168,7 +186,11 @@ class RiskManager:
         if self.daily_pnl[strategy_id] < loss_threshold:
             warnings.append("Approaching daily loss limit")
 
-        order_record: OrderRecord = {"order": order, "timestamp": datetime.now(), "risk_check": result}
+        order_record: OrderRecord = {
+            "order": order,
+            "timestamp": datetime.now(),
+            "risk_check": result,
+        }
         self.order_history[strategy_id].append(order_record)
 
         return result
@@ -432,7 +454,3 @@ class RiskManager:
             }
             for strategy_id, positions in self.positions.items()
         }
-
-
-
-

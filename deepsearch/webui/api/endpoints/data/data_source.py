@@ -228,4 +228,3 @@ async def refresh_workers(provider=Depends(get_akshare_provider)):
         "healthy_count": sum(1 for h in provider.worker_health.values() if h),
         "total_count": len(provider.worker_urls),
     }
-

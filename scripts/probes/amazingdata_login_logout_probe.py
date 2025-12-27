@@ -26,10 +26,7 @@ from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
     get_global_pool,
 )
-from deepsearch.ports.amazingdata_process import (
-    AmazingDataLoginRequest,
-    AmazingDataLogoutRequest,
-)
+from deepsearch.ports.amazingdata_process import AmazingDataLoginRequest, AmazingDataLogoutRequest
 
 DEFAULT_USERNAME = "212200038719"
 DEFAULT_PASSWORD = "212200038719@2025"
@@ -209,9 +206,9 @@ async def wait_for_process_exit(proxy: Any, timeout: float) -> Dict[str, Any]:
 
 
 def build_summary(
-        report: Dict[str, Any],
-        events: List[Dict[str, Any]],
-        last_crash: Optional[str],
+    report: Dict[str, Any],
+    events: List[Dict[str, Any]],
+    last_crash: Optional[str],
 ) -> Dict[str, Any]:
     stages = report.get("stages", {})
     login_info = report.get("login", {})
@@ -231,7 +228,7 @@ def build_summary(
     }
 
     summary["login_crash_detected"] = (
-            not summary["login_success"] or not summary["worker_alive_after_login"]
+        not summary["login_success"] or not summary["worker_alive_after_login"]
     )
 
     logout_crash = not summary["logout_success"] or summary["worker_alive_after_logout_wait"]
@@ -256,8 +253,8 @@ async def execute_probe(args: argparse.Namespace) -> Dict[str, Any]:
     proxy_config = build_proxy_config(args)
     cleanup_delay = max(args.cleanup_delay, 1.0)
     datasource_id = (
-            args.datasource_id
-            or f"probe::{args.username}@{args.host}:{args.port}:{int(time.time() * 1000)}"
+        args.datasource_id
+        or f"probe::{args.username}@{args.host}:{args.port}:{int(time.time() * 1000)}"
     )
 
     proxy = await asyncio.to_thread(

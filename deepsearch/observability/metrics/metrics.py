@@ -126,7 +126,3 @@ class MetricsCollector:
 
         while metrics and metrics[0].timestamp < cutoff_time:
             metrics.popleft()
-
-
-
-

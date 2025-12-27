@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from deepsearch.config import Settings, get_config
 from deepsearch.application.market_data.fallback_manager import ModuleFallbackManager
+from deepsearch.config import Settings, get_config
 
 if TYPE_CHECKING:
     from deepsearch.application.market_data.orchestrator import (
@@ -79,7 +79,9 @@ async def bind_market_data_handle(
             await asyncio.wait_for(service.refresh_board_universe(), timeout=30.0)
             try:
                 await cache_writer.write_board_universe(service.board_universe.snapshot())
-                logger.info("板块数据预热完成，已缓存 {} 个板块", len(service.board_universe.boards()))
+                logger.info(
+                    "板块数据预热完成，已缓存 {} 个板块", len(service.board_universe.boards())
+                )
             except Exception as cache_exc:
                 logger.debug("写入板块缓存失败: {}", cache_exc)
         except asyncio.TimeoutError:
@@ -103,7 +105,9 @@ async def bind_market_data_handle(
         logger.info("市场数据实时组件已初始化，当前配置为后台轮询模式")
 
 
-async def ensure_market_data_runtime(app_state: "AppState", settings: Settings | None = None) -> None:
+async def ensure_market_data_runtime(
+    app_state: "AppState", settings: Settings | None = None
+) -> None:
     """确保市场数据实时运行态已初始化。"""
 
     if getattr(app_state, "market_data_service", None) is not None:
@@ -125,7 +129,7 @@ async def ensure_market_data_runtime(app_state: "AppState", settings: Settings |
         orchestrator = getattr(app_state, "market_data_orchestrator", None)
         if orchestrator is None or orchestrator.settings is not config_obj:
             from deepsearch.application.market_data.orchestrator import RealtimeDataOrchestrator
-            
+
             orchestrator = RealtimeDataOrchestrator(config_obj)
             app_state.market_data_orchestrator = orchestrator
 
@@ -151,6 +155,7 @@ async def refresh_market_data_once(app_state: "AppState") -> None:
     """在后台任务停摆时执行一次实时刷新。"""
     from datetime import time as time_type
     from zoneinfo import ZoneInfo
+
     from deepsearch.application.market_data.trading_guard import PhaseState
 
     pipeline = getattr(app_state, "market_data_pipeline", None)

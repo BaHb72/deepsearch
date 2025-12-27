@@ -135,8 +135,7 @@ async def get_market_overview() -> Dict[str, Any]:
                         "change_pct": data.get("change_pct", 0),
                         "volume": data.get("volume", 0),
                         "amount": data.get("amount", 0),
-                        "timestamp": data.get("timestamp")
-                        or datetime.utcnow().isoformat() + "Z",
+                        "timestamp": data.get("timestamp") or datetime.utcnow().isoformat() + "Z",
                     }
                     continue
             except Exception as e:

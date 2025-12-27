@@ -340,7 +340,9 @@ class AsyncComponent(Component, StatisticsProvider, ABC, Generic[T]):
 
         return stats
 
-    def _execute_async_callable(self, coroutine_factory: Callable[[], Coroutine[Any, Any, TReturn]]) -> TReturn:
+    def _execute_async_callable(
+        self, coroutine_factory: Callable[[], Coroutine[Any, Any, TReturn]]
+    ) -> TReturn:
         """在同步上下文中安全执行协程调用。"""
 
         def _runner() -> TReturn:

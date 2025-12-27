@@ -10,7 +10,19 @@ import struct
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Dict, Mapping, Optional, Sequence, Set, Tuple, TypedDict, cast
+from typing import (
+    Any,
+    Callable,
+    Coroutine,
+    Dict,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    TypedDict,
+    cast,
+)
 
 from loguru import logger
 
@@ -104,11 +116,16 @@ MessagePayload = Dict[str, object]
 class QMTReceiver:
     """QMT数据接收器"""
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 9999,
-                 auth_enabled: bool = False, auth_token: str = ""):
+    def __init__(
+        self,
+        host: str = "0.0.0.0",
+        port: int = 9999,
+        auth_enabled: bool = False,
+        auth_token: str = "",
+    ):
         """
         初始化接收器
-        
+
         Args:
             host: 监听地址
             port: 监听端口
@@ -130,7 +147,9 @@ class QMTReceiver:
         self.client_writers: Dict[str, asyncio.StreamWriter] = {}
 
         # 数据处理回调
-        self.data_handlers: Dict[str, Callable[[str, MessagePayload], Coroutine[Any, Any, None]]] = {}
+        self.data_handlers: Dict[
+            str, Callable[[str, MessagePayload], Coroutine[Any, Any, None]]
+        ] = {}
 
         # 订阅管理器（延迟导入）
         self._subscription_manager: Any | None = None
@@ -146,7 +165,7 @@ class QMTReceiver:
     ) -> None:
         """
         注册消息处理器
-        
+
         Args:
             msg_type: 消息类型
             handler: 处理函数
@@ -162,11 +181,7 @@ class QMTReceiver:
 
         try:
             # 创建服务器
-            self.server = await asyncio.start_server(
-                self._handle_client,
-                self.host,
-                self.port
-            )
+            self.server = await asyncio.start_server(self._handle_client, self.host, self.port)
 
             self.running = True
             self.stats.start_time = time.time()
@@ -209,20 +224,19 @@ class QMTReceiver:
 
         logger.info("QMT接收服务已停止")
 
-    async def _handle_client(self, reader: asyncio.StreamReader,
-                             writer: asyncio.StreamWriter):
+    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """处理客户端连接"""
-        addr = writer.get_extra_info('peername')
+        addr = writer.get_extra_info("peername")
         client_id = f"{addr[0]}:{addr[1]}"
 
         logger.info(f"新客户端连接: {client_id}")
 
         # 记录客户端信息
         self.clients[client_id] = {
-            'writer': writer,
-            'address': addr,
-            'connected_time': time.time(),
-            'authenticated': False
+            "writer": writer,
+            "address": addr,
+            "connected_time": time.time(),
+            "authenticated": False,
         }
 
         try:
@@ -259,7 +273,7 @@ class QMTReceiver:
                 # 文本格式（换行符分隔的JSON）
                 # 读取直到换行符
                 line = bytearray(peek_data)
-                while b'\n' not in line:
+                while b"\n" not in line:
                     chunk = await reader.read(1024)
                     if not chunk:
                         break
@@ -267,11 +281,11 @@ class QMTReceiver:
 
                 # 解析JSON
                 if line:
-                    newline_index = line.find(b'\n')
+                    newline_index = line.find(b"\n")
                     payload_bytes = bytes(
                         line[: newline_index + 1] if newline_index != -1 else line
                     )
-                    json_str = payload_bytes.rstrip(b'\n').decode('utf-8')
+                    json_str = payload_bytes.rstrip(b"\n").decode("utf-8")
                     raw_msg = json.loads(json_str)
                     if not isinstance(raw_msg, dict):
                         logger.warning(f"忽略非字典格式的文本消息: {raw_msg!r}")
@@ -284,13 +298,13 @@ class QMTReceiver:
                     return msg
             else:
                 # 二进制格式（长度前缀）
-                length = struct.unpack('!I', peek_data)[0]
+                length = struct.unpack("!I", peek_data)[0]
 
                 # 读取消息内容
                 data = await reader.readexactly(length)
 
                 # 解析JSON
-                raw_msg = json.loads(data.decode('utf-8'))
+                raw_msg = json.loads(data.decode("utf-8"))
                 if not isinstance(raw_msg, dict):
                     logger.warning(f"忽略非字典格式的二进制消息: {raw_msg!r}")
                     return None
@@ -312,10 +326,10 @@ class QMTReceiver:
         """发送消息到客户端（使用文本格式，换行符分隔）"""
         try:
             # 序列化消息为JSON，添加换行符
-            data = json.dumps(msg, ensure_ascii=False) + '\n'
+            data = json.dumps(msg, ensure_ascii=False) + "\n"
 
             # 发送文本消息（不使用长度前缀）
-            writer.write(data.encode('utf-8'))
+            writer.write(data.encode("utf-8"))
             await writer.drain()
 
             logger.debug(f"发送消息: {msg.get('type', 'UNKNOWN')}")
@@ -325,19 +339,19 @@ class QMTReceiver:
 
     async def _process_message(self, client_id: str, msg: MessagePayload) -> None:
         """处理接收到的消息"""
-        raw_type = msg.get('type')
-        msg_type = raw_type if isinstance(raw_type, str) else 'UNKNOWN'
+        raw_type = msg.get("type")
+        msg_type = raw_type if isinstance(raw_type, str) else "UNKNOWN"
 
         # 对于LEVEL2数据，记录更详细的信息
-        if msg_type == 'LEVEL2':
-            maybe_mapping = msg.get('data')
+        if msg_type == "LEVEL2":
+            maybe_mapping = msg.get("data")
             level2_data: Mapping[str, object] = (
                 maybe_mapping if isinstance(maybe_mapping, Mapping) else {}
             )
-            symbol_obj = level2_data.get('symbol', 'UNKNOWN')
+            symbol_obj = level2_data.get("symbol", "UNKNOWN")
             symbol = symbol_obj if isinstance(symbol_obj, str) else str(symbol_obj)
-            bid_prices = level2_data.get('bid_price')
-            ask_prices = level2_data.get('ask_price')
+            bid_prices = level2_data.get("bid_price")
+            ask_prices = level2_data.get("ask_price")
             bid_count = (
                 len(bid_prices)
                 if isinstance(bid_prices, Sequence) and not isinstance(bid_prices, (str, bytes))
@@ -349,7 +363,8 @@ class QMTReceiver:
                 else 0
             )
             logger.info(
-                f"[RECEIVER] 收到LEVEL2消息: symbol={symbol}, bid_levels={bid_count}, ask_levels={ask_count}, from {client_id}")
+                f"[RECEIVER] 收到LEVEL2消息: symbol={symbol}, bid_levels={bid_count}, ask_levels={ask_count}, from {client_id}"
+            )
         else:
             logger.info(f"[RECEIVER] 收到消息: {msg_type} from {client_id}")
 
@@ -358,48 +373,51 @@ class QMTReceiver:
 
         # 认证检查
         if self.auth_enabled and client_id not in self.authenticated_clients:
-            if msg_type != 'AUTH':
+            if msg_type != "AUTH":
                 await self._send_auth_required(client_id)
                 return
 
             # 处理认证
             if await self._handle_auth(client_id, msg):
                 self.authenticated_clients.add(client_id)
-                self.clients[client_id]['authenticated'] = True
+                self.clients[client_id]["authenticated"] = True
             else:
                 await self._disconnect_client(client_id)
                 return
-        elif not self.auth_enabled and msg_type == 'AUTH':
+        elif not self.auth_enabled and msg_type == "AUTH":
             # 即使认证关闭，也要处理AUTH消息，以便注册客户端
             logger.info(f"处理AUTH消息（认证已关闭）: {client_id}")
 
             # 保存writer以便后续推送
-            writer = self.clients[client_id]['writer']
+            writer = self.clients[client_id]["writer"]
             self.client_writers[client_id] = writer
 
             # 检查是否支持动态订阅
-            capabilities_value = msg.get('capabilities', [])
+            capabilities_value = msg.get("capabilities", [])
             supports_dynamic = (
                 isinstance(capabilities_value, Sequence)
                 and not isinstance(capabilities_value, (str, bytes))
-                and 'dynamic_subscription' in capabilities_value
+                and "dynamic_subscription" in capabilities_value
             )
 
             # 记录客户端信息
-            self.clients[client_id]['supports_dynamic'] = supports_dynamic
-            client_type = msg.get('client', 'Unknown')
+            self.clients[client_id]["supports_dynamic"] = supports_dynamic
+            client_type = msg.get("client", "Unknown")
             if not isinstance(client_type, str):
-                client_type = 'Unknown'
-            self.clients[client_id]['client_type'] = client_type
-            self.clients[client_id]['authenticated'] = True
+                client_type = "Unknown"
+            self.clients[client_id]["client_type"] = client_type
+            self.clients[client_id]["authenticated"] = True
 
             # 发送认证成功响应
-            await self._send_message(writer, {
-                'type': 'AUTH_RESPONSE',
-                'status': 'OK',
-                'message': 'Authentication successful (auth disabled)',
-                'client_id': client_id
-            })
+            await self._send_message(
+                writer,
+                {
+                    "type": "AUTH_RESPONSE",
+                    "status": "OK",
+                    "message": "Authentication successful (auth disabled)",
+                    "client_id": client_id,
+                },
+            )
 
             # 如果支持动态订阅，注册到订阅管理器
             if supports_dynamic:
@@ -418,50 +436,53 @@ class QMTReceiver:
                 logger.error(f"[RECEIVER] 处理消息失败 {msg_type}: {e}")
 
         # 处理特殊消息类型
-        if msg_type == 'HEARTBEAT':
+        if msg_type == "HEARTBEAT":
             await self._handle_heartbeat(client_id, msg)
-        elif msg_type == 'DISCONNECT':
+        elif msg_type == "DISCONNECT":
             await self._disconnect_client(client_id)
-        elif msg_type == 'BATCH':
+        elif msg_type == "BATCH":
             await self._handle_batch(client_id, msg)
-        elif msg_type == 'GET_SUBSCRIPTION':
+        elif msg_type == "GET_SUBSCRIPTION":
             await self._handle_get_subscription(client_id, msg)
 
     async def _handle_auth(self, client_id: str, msg: MessagePayload) -> bool:
         """处理认证消息"""
-        token_value = msg.get('token')
-        token = token_value if isinstance(token_value, str) else ''
+        token_value = msg.get("token")
+        token = token_value if isinstance(token_value, str) else ""
 
         if token == self.auth_token:
             # 认证成功
             logger.info(f"客户端 {client_id} 认证成功")
 
             # 保存writer以便后续推送
-            writer = self.clients[client_id]['writer']
+            writer = self.clients[client_id]["writer"]
             self.client_writers[client_id] = writer
 
             # 检查是否支持动态订阅
-            capabilities_value = msg.get('capabilities', [])
+            capabilities_value = msg.get("capabilities", [])
             supports_dynamic = (
                 isinstance(capabilities_value, Sequence)
                 and not isinstance(capabilities_value, (str, bytes))
-                and 'dynamic_subscription' in capabilities_value
+                and "dynamic_subscription" in capabilities_value
             )
 
             # 记录客户端信息
-            self.clients[client_id]['supports_dynamic'] = supports_dynamic
-            client_type = msg.get('client', 'Unknown')
+            self.clients[client_id]["supports_dynamic"] = supports_dynamic
+            client_type = msg.get("client", "Unknown")
             if not isinstance(client_type, str):
-                client_type = 'Unknown'
-            self.clients[client_id]['client_type'] = client_type
+                client_type = "Unknown"
+            self.clients[client_id]["client_type"] = client_type
 
             # 发送认证成功响应，包含客户端ID
-            await self._send_message(writer, {
-                'type': 'AUTH_RESPONSE',
-                'status': 'OK',
-                'message': 'Authentication successful',
-                'client_id': client_id
-            })
+            await self._send_message(
+                writer,
+                {
+                    "type": "AUTH_RESPONSE",
+                    "status": "OK",
+                    "message": "Authentication successful",
+                    "client_id": client_id,
+                },
+            )
 
             # 如果支持动态订阅，注册到订阅管理器
             if supports_dynamic:
@@ -472,39 +493,40 @@ class QMTReceiver:
             # 认证失败
             logger.warning(f"客户端 {client_id} 认证失败")
 
-            writer = self.clients[client_id]['writer']
-            await self._send_message(writer, {
-                'type': 'AUTH_RESPONSE',
-                'status': 'FAILED',
-                'message': 'Authentication failed'
-            })
+            writer = self.clients[client_id]["writer"]
+            await self._send_message(
+                writer,
+                {"type": "AUTH_RESPONSE", "status": "FAILED", "message": "Authentication failed"},
+            )
             return False
 
     async def _send_auth_required(self, client_id: str):
         """发送需要认证的响应"""
-        writer = self.clients[client_id]['writer']
-        await self._send_message(writer, {
-            'type': 'AUTH_REQUIRED',
-            'message': 'Please authenticate first'
-        })
+        writer = self.clients[client_id]["writer"]
+        await self._send_message(
+            writer, {"type": "AUTH_REQUIRED", "message": "Please authenticate first"}
+        )
 
     async def _handle_heartbeat(self, client_id: str, msg: MessagePayload) -> None:
         """处理心跳消息"""
-        writer = self.clients[client_id]['writer']
+        writer = self.clients[client_id]["writer"]
 
         # 回复心跳
-        await self._send_message(writer, {
-            'type': 'HEARTBEAT_RESPONSE',
-            'timestamp': time.time(),
-            'server_stats': self.get_stats()
-        })
+        await self._send_message(
+            writer,
+            {
+                "type": "HEARTBEAT_RESPONSE",
+                "timestamp": time.time(),
+                "server_stats": self.get_stats(),
+            },
+        )
 
         # 更新客户端最后活动时间
-        self.clients[client_id]['last_heartbeat'] = time.time()
+        self.clients[client_id]["last_heartbeat"] = time.time()
 
     async def _handle_batch(self, client_id: str, msg: MessagePayload) -> None:
         """处理批量消息"""
-        data_value = msg.get('data', [])
+        data_value = msg.get("data", [])
         batch_items = (
             data_value
             if isinstance(data_value, Sequence) and not isinstance(data_value, (str, bytes))
@@ -524,8 +546,8 @@ class QMTReceiver:
 
         # 关闭连接
         try:
-            client['writer'].close()
-            await client['writer'].wait_closed()
+            client["writer"].close()
+            await client["writer"].wait_closed()
         except Exception:
             pass
 
@@ -538,6 +560,7 @@ class QMTReceiver:
             del self.client_writers[client_id]
             try:
                 from deepsearch.webui.api.endpoints.qmt.qmt_subscription import subscription_manager
+
                 subscription_manager.remove_client(client_id)
             except Exception:
                 pass
@@ -556,18 +579,12 @@ class QMTReceiver:
             running=self.running,
             uptime=uptime,
             clients={
-                'connected': len(self.clients),
-                'authenticated': len(self.authenticated_clients)
+                "connected": len(self.clients),
+                "authenticated": len(self.authenticated_clients),
             },
-            messages={
-                'total': total_messages,
-                'types': dict(self.stats.message_types)
-            },
-            data={
-                'total_bytes': self.stats.total_bytes,
-                'rate': rate
-            },
-            errors=self.stats.errors
+            messages={"total": total_messages, "types": dict(self.stats.message_types)},
+            data={"total_bytes": self.stats.total_bytes, "rate": rate},
+            errors=self.stats.errors,
         )
 
     def get_client_info(self) -> Dict[str, ClientOverview]:
@@ -576,19 +593,17 @@ class QMTReceiver:
         for client_id, client in self.clients.items():
             client_stats = self.stats.client_stats[client_id]
             info[client_id] = ClientOverview(
-                address=client['address'],
-                connected_time=client['connected_time'],
-                authenticated=client['authenticated'],
-                last_heartbeat=client.get('last_heartbeat'),
-                stats=ClientStats(
-                    messages=client_stats['messages'],
-                    bytes=client_stats['bytes']
-                ),
-                supports_dynamic=bool(client.get('supports_dynamic', False)),
+                address=client["address"],
+                connected_time=client["connected_time"],
+                authenticated=client["authenticated"],
+                last_heartbeat=client.get("last_heartbeat"),
+                stats=ClientStats(messages=client_stats["messages"], bytes=client_stats["bytes"]),
+                supports_dynamic=bool(client.get("supports_dynamic", False)),
                 client_type=(
-                    client_type_value if isinstance(client_type_value := client.get('client_type'), str)
-                    else 'Unknown'
-                )
+                    client_type_value
+                    if isinstance(client_type_value := client.get("client_type"), str)
+                    else "Unknown"
+                ),
             )
         return info
 
@@ -599,16 +614,16 @@ class QMTReceiver:
             from deepsearch.webui.api.endpoints.qmt.qmt_subscription import subscription_manager
 
             # 添加客户端到订阅管理器
-            client_type = msg.get('client', 'QMT')
+            client_type = msg.get("client", "QMT")
             if not isinstance(client_type, str):
-                client_type = 'QMT'
-            version = msg.get('version', 'Unknown')
+                client_type = "QMT"
+            version = msg.get("version", "Unknown")
             if not isinstance(version, str):
-                version = 'Unknown'
+                version = "Unknown"
             client_info = {
-                'client_type': client_type,
-                'version': version,
-                'connected_time': time.time()
+                "client_type": client_type,
+                "version": version,
+                "connected_time": time.time(),
             }
             subscription_manager.add_client(client_id, client_info)
 
@@ -619,19 +634,19 @@ class QMTReceiver:
             if writer:
                 if symbols:
                     # 发送订阅列表
-                    await self._send_message(writer, {
-                        'type': 'SUBSCRIPTION_LIST',
-                        'symbols': symbols,
-                        'timestamp': time.time()
-                    })
-                    logger.info(f"注册动态订阅客户端 {client_id}，发送初始订阅 {len(symbols)} 只股票: {symbols}")
+                    await self._send_message(
+                        writer,
+                        {"type": "SUBSCRIPTION_LIST", "symbols": symbols, "timestamp": time.time()},
+                    )
+                    logger.info(
+                        f"注册动态订阅客户端 {client_id}，发送初始订阅 {len(symbols)} 只股票: {symbols}"
+                    )
                 else:
                     # 即使没有股票也发送空列表，让客户端知道状态
-                    await self._send_message(writer, {
-                        'type': 'SUBSCRIPTION_LIST',
-                        'symbols': [],
-                        'timestamp': time.time()
-                    })
+                    await self._send_message(
+                        writer,
+                        {"type": "SUBSCRIPTION_LIST", "symbols": [], "timestamp": time.time()},
+                    )
                     logger.info(f"注册动态订阅客户端 {client_id}，当前无订阅")
             else:
                 logger.warning(f"客户端 {client_id} 注册成功但无法发送订阅列表 - writer不存在")
@@ -650,11 +665,10 @@ class QMTReceiver:
             # 发送订阅列表
             writer = self.client_writers.get(client_id)
             if writer:
-                await self._send_message(writer, {
-                    'type': 'SUBSCRIPTION_LIST',
-                    'symbols': symbols,
-                    'timestamp': time.time()
-                })
+                await self._send_message(
+                    writer,
+                    {"type": "SUBSCRIPTION_LIST", "symbols": symbols, "timestamp": time.time()},
+                )
 
             logger.debug(f"向客户端 {client_id} 发送订阅列表: {len(symbols)} 只股票")
 
@@ -674,7 +688,7 @@ class QMTReceiver:
                         continue
 
                     # 只推送给支持动态订阅的客户端
-                    if not self.clients[client_id].get('supports_dynamic', False):
+                    if not self.clients[client_id].get("supports_dynamic", False):
                         continue
 
                     # 获取待推送更新
@@ -708,10 +722,10 @@ class QMTReceiverComponent:
         """初始化组件"""
         # 创建接收器
         self.receiver = QMTReceiver(
-            host=self.config.get('host', '0.0.0.0'),
-            port=self.config.get('tcp_port', 9999),
-            auth_enabled=self.config.get('enable_auth', False),
-            auth_token=self.config.get('token', '')
+            host=self.config.get("host", "0.0.0.0"),
+            port=self.config.get("tcp_port", 9999),
+            auth_enabled=self.config.get("enable_auth", False),
+            auth_token=self.config.get("token", ""),
         )
 
         logger.info("QMT接收器组件初始化完成")
@@ -743,8 +757,8 @@ class QMTReceiverComponent:
         """获取组件状态"""
         if self.receiver:
             return {
-                'running': self.receiver.running,
-                'stats': self.receiver.get_stats(),
-                'clients': self.receiver.get_client_info()
+                "running": self.receiver.running,
+                "stats": self.receiver.get_stats(),
+                "clients": self.receiver.get_client_info(),
             }
-        return {'running': False}
+        return {"running": False}

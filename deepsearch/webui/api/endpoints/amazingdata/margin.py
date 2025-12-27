@@ -29,7 +29,9 @@ _MARKET_COLUMNS = ("market", "MARKET", "exchange", "EXCHANGE")
 _REASON_COLUMNS = ("reason", "REASON", "desc", "DESC")
 
 
-def _apply_date_filter(data: Optional[pd.DataFrame], start: Optional[str], end: Optional[str], columns) -> Optional[pd.DataFrame]:
+def _apply_date_filter(
+    data: Optional[pd.DataFrame], start: Optional[str], end: Optional[str], columns
+) -> Optional[pd.DataFrame]:
     if data is None or data.empty:
         return data
     start_int = normalize_date_int(start) if start else None
@@ -166,18 +168,22 @@ async def get_block_trading(
 ) -> JSONDict:
     """
     获取大宗交易数据
-    
+
     查询指定证券的大宗交易记录，支持日期过滤
     """
     try:
         logger.error("[block-trading] *** ENDPOINT HIT ***")
         provider = await get_amazingdata_provider()
         logger.error(f"[block-trading] Provider type: {type(provider).__name__}")
-        logger.error(f"[block-trading] has get_block_trading: {hasattr(provider, 'get_block_trading')}")
+        logger.error(
+            f"[block-trading] has get_block_trading: {hasattr(provider, 'get_block_trading')}"
+        )
         logger.warning(f"[block-trading] Provider type: {type(provider).__name__}")
         # 如果指定了code则按单个代码查询，否则查询全市场
         code_list = [code] if code else []
-        logger.error(f"[block-trading] Calling provider.get_block_trading with code_list={code_list}")
+        logger.error(
+            f"[block-trading] Calling provider.get_block_trading with code_list={code_list}"
+        )
         raw = await provider.get_block_trading(code_list)
         logger.warning(f"[block-trading] Result type: {type(raw).__name__}, is None: {raw is None}")
         if isinstance(raw, pd.DataFrame):
@@ -189,7 +195,9 @@ async def get_block_trading(
                 filtered = filtered.head(limit)
         # DEBUG: 在format_response前打印
         data_result = dataframe_to_dict(filtered)
-        logger.warning(f"[block-trading] BEFORE RESPONSE: data_result is None: {data_result is None}, type: {type(data_result).__name__}")
+        logger.warning(
+            f"[block-trading] BEFORE RESPONSE: data_result is None: {data_result is None}, type: {type(data_result).__name__}"
+        )
         return format_response(
             success=True,
             data=data_result,

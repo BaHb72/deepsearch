@@ -90,11 +90,11 @@ class IDataSourceManager(Protocol):
         ...
 
     async def get_data(
-            self,
-            data_type: str,
-            symbol: str,
-            preferred_source: Optional[DataSourceType] = None,
-            **kwargs: Any,
+        self,
+        data_type: str,
+        symbol: str,
+        preferred_source: Optional[DataSourceType] = None,
+        **kwargs: Any,
     ) -> Optional[Dict[str, Any]]:
         """统一的数据获取接口
 
@@ -145,11 +145,11 @@ class ISelectionStrategy(ABC):
 
     @abstractmethod
     def select(
-            self,
-            available_sources: List[DataSourceType],
-            preferred_source: Optional[DataSourceType] = None,
-            access_type: Optional[DataAccessType] = None,
-            module: Optional[str] = None,
+        self,
+        available_sources: List[DataSourceType],
+        preferred_source: Optional[DataSourceType] = None,
+        access_type: Optional[DataAccessType] = None,
+        module: Optional[str] = None,
     ) -> List[DataSourceType]:
         """选择数据源顺序
 
@@ -186,10 +186,10 @@ class PrioritySelectionStrategy(ISelectionStrategy):
     """
 
     def __init__(
-            self,
-            priorities: Dict[DataSourceType, int],
-            module_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
-            access_type_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
+        self,
+        priorities: Dict[DataSourceType, int],
+        module_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
+        access_type_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         """初始化策略
 
@@ -203,11 +203,11 @@ class PrioritySelectionStrategy(ISelectionStrategy):
         self._access_type_overrides = access_type_overrides or {}
 
     def select(
-            self,
-            available_sources: List[DataSourceType],
-            preferred_source: Optional[DataSourceType] = None,
-            access_type: Optional[DataAccessType] = None,
-            module: Optional[str] = None,
+        self,
+        available_sources: List[DataSourceType],
+        preferred_source: Optional[DataSourceType] = None,
+        access_type: Optional[DataAccessType] = None,
+        module: Optional[str] = None,
     ) -> List[DataSourceType]:
         """选择数据源顺序"""
         result: List[DataSourceType] = []
@@ -241,9 +241,7 @@ class PrioritySelectionStrategy(ISelectionStrategy):
             remaining.remove(preferred_source)
 
         # 4. 按优先级排序剩余数据源
-        sorted_remaining = sorted(
-            remaining, key=lambda x: self._priorities.get(x, 999)
-        )
+        sorted_remaining = sorted(remaining, key=lambda x: self._priorities.get(x, 999))
         result.extend(sorted_remaining)
 
         return result

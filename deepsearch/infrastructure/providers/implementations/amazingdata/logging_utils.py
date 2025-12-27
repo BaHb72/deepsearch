@@ -29,12 +29,12 @@ class LogContext:
 
 
 def _log(
-        level: str,
-        message: str,
-        *,
-        action: str = "general",
-        symbol: str | None = None,
-        metadata: Mapping[str, Any] | None = None,
+    level: str,
+    message: str,
+    *,
+    action: str = "general",
+    symbol: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> None:
     suffix = LogContext(action=action, symbol=symbol, metadata=metadata).render_suffix()
     getattr(datasource_logger, level)(f"{message}{suffix}")
@@ -52,78 +52,78 @@ def _format_message(message: str, args: Sequence[object]) -> str:
 
 
 def log_debug(
-        message: str,
-        *args: object,
-        action: str = "general",
-        symbol: str | None = None,
-        metadata: Mapping[str, Any] | None = None,
+    message: str,
+    *args: object,
+    action: str = "general",
+    symbol: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> None:
     formatted = _format_message(message, args)
     _log("debug", formatted, action=action, symbol=symbol, metadata=metadata)
 
 
 def log_info(
-        message: str,
-        *args: object,
-        action: str = "general",
-        symbol: str | None = None,
-        metadata: Mapping[str, Any] | None = None,
+    message: str,
+    *args: object,
+    action: str = "general",
+    symbol: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> None:
     formatted = _format_message(message, args)
     _log("info", formatted, action=action, symbol=symbol, metadata=metadata)
 
 
 def log_warning(
-        message: str,
-        *args: object,
-        action: str = "general",
-        symbol: str | None = None,
-        metadata: Mapping[str, Any] | None = None,
+    message: str,
+    *args: object,
+    action: str = "general",
+    symbol: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> None:
     formatted = _format_message(message, args)
     _log("warning", formatted, action=action, symbol=symbol, metadata=metadata)
 
 
 def log_error(
-        message: str,
-        *args: object,
-        action: str = "general",
-        symbol: str | None = None,
-        metadata: Mapping[str, Any] | None = None,
+    message: str,
+    *args: object,
+    action: str = "general",
+    symbol: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> None:
     formatted = _format_message(message, args)
     _log("error", formatted, action=action, symbol=symbol, metadata=metadata)
 
 
 def log_critical(
-        message: str,
-        *args: object,
-        action: str = "general",
-        symbol: str | None = None,
-        metadata: Mapping[str, Any] | None = None,
+    message: str,
+    *args: object,
+    action: str = "general",
+    symbol: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> None:
     formatted = _format_message(message, args)
     _log("critical", formatted, action=action, symbol=symbol, metadata=metadata)
 
 
 def log_exception(
-        message: str,
-        *,
-        action: str = "general",
-        symbol: str | None = None,
-        metadata: Mapping[str, Any] | None = None,
+    message: str,
+    *,
+    action: str = "general",
+    symbol: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> None:
     suffix = LogContext(action=action, symbol=symbol, metadata=metadata).render_suffix()
     datasource_logger.exception(f"{message}{suffix}")
 
 
 def log_iterable(
-        level: str,
-        items: Iterable[str],
-        *,
-        action: str = "general",
-        symbol: str | None = None,
-        metadata: Mapping[str, Any] | None = None,
+    level: str,
+    items: Iterable[str],
+    *,
+    action: str = "general",
+    symbol: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> None:
     _log(level, ", ".join(items), action=action, symbol=symbol, metadata=metadata)
 
@@ -169,11 +169,11 @@ class ProcessLoggerAdapter:
             return " ".join([message, *(str(arg) for arg in args)])
 
     def _emit(
-            self,
-            emitter: Callable[..., None],
-            message: str,
-            args: tuple[Any, ...],
-            kwargs: dict[str, Any],
+        self,
+        emitter: Callable[..., None],
+        message: str,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
     ) -> None:
         action = kwargs.pop("action", self.action)
         metadata = kwargs.pop("metadata", None)

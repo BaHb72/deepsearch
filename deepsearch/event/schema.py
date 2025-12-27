@@ -265,7 +265,9 @@ class AccountSchema(TradingSchema):
 # ==============================================================================
 
 
-def schema_validated(event_type: str, schema: Type[BaseModel]) -> Callable[[HandlerFunc], HandlerFunc]:
+def schema_validated(
+    event_type: str, schema: Type[BaseModel]
+) -> Callable[[HandlerFunc], HandlerFunc]:
     """Decorator to add schema validation to event handlers"""
 
     def decorator(func: HandlerFunc) -> HandlerFunc:
@@ -459,11 +461,11 @@ This module provides comprehensive schema validation for the event system:
 
 Usage Example:
     from deepsearch.event.schema import schema_registry, schema_validated, TickSchema
-    
+
     # Validate event data
     tick_data = {"symbol": "BTCUSDT", "exchange": "Binance", ...}
     validated = schema_registry.validate(EVENT_TICK, tick_data)
-    
+
     # Use decorator for automatic validation
     @schema_validated(EVENT_TICK, TickSchema)
     def handle_tick(event: Event):

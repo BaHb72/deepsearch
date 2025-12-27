@@ -223,7 +223,9 @@ async def get_stock_info(
                 response.headers["X-Data-Source"] = source_label
                 try:
                     payload = json.dumps(result, sort_keys=True, ensure_ascii=False).encode("utf-8")
-                    etag = hashlib.md5(payload, usedforsecurity=False).hexdigest()  # nosec B324 - 仅用于缓存 ETag
+                    etag = hashlib.md5(
+                        payload, usedforsecurity=False
+                    ).hexdigest()  # nosec B324 - 仅用于缓存 ETag
                     response.headers["ETag"] = f'W/"{etag}"'
                 except Exception as header_error:
                     logger.debug(f"生成ETag失败: {header_error}")

@@ -6,8 +6,8 @@
 """
 
 import asyncio
-import json
 import inspect
+import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -53,7 +53,6 @@ DataTypeConfigMap = Dict[str, DataTypeConfig]
 
 @dataclass
 class DataSourceConfig:
-
     """数据源配置"""
 
     # 基础配置
@@ -327,7 +326,9 @@ class DataSourceConfigManager:
                             if isinstance(dt_value, dict):
                                 if dt_key in self.config.data_types:
                                     for field_key, field_value in dt_value.items():
-                                        setattr(self.config.data_types[dt_key], field_key, field_value)
+                                        setattr(
+                                            self.config.data_types[dt_key], field_key, field_value
+                                        )
                                 else:
                                     self.config.data_types[dt_key] = DataTypeConfig(**dt_value)
                     else:

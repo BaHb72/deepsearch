@@ -130,10 +130,10 @@ class TestAPIWithMockData:
     @pytest.mark.asyncio
     async def test_api_endpoint_with_mock(self, mock_config):
         """测试 API 工厂在测试环境返回可用的数据源实例"""
-        from deepsearch.webui.api.providers import DataProviderFactory
         from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
             AmazingDataProvider,
         )
+        from deepsearch.webui.api.providers import DataProviderFactory
 
         # 清除现有实例
         DataProviderFactory.clear_all()

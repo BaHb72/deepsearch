@@ -33,8 +33,6 @@ class _SessionCloseProxy:
         return getattr(self._session, item)
 
 
-
-
 class WorkerInfo(TypedDict):
     """Worker 节点的状态记录结构"""
 
@@ -332,9 +330,15 @@ class WorkerManager:
         worker_details: Dict[str, Dict[str, Any]] = {}
         stats: Dict[str, Any] = {
             "total_workers": len(self.workers),
-            "healthy_workers": sum(1 for w in self.workers.values() if w["state"] == WorkerState.HEALTHY),
-            "suspicious_workers": sum(1 for w in self.workers.values() if w["state"] == WorkerState.SUSPICIOUS),
-            "unhealthy_workers": sum(1 for w in self.workers.values() if w["state"] == WorkerState.UNHEALTHY),
+            "healthy_workers": sum(
+                1 for w in self.workers.values() if w["state"] == WorkerState.HEALTHY
+            ),
+            "suspicious_workers": sum(
+                1 for w in self.workers.values() if w["state"] == WorkerState.SUSPICIOUS
+            ),
+            "unhealthy_workers": sum(
+                1 for w in self.workers.values() if w["state"] == WorkerState.UNHEALTHY
+            ),
             "workers": worker_details,
         }
 

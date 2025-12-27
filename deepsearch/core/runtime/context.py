@@ -119,7 +119,7 @@ class ApplicationContext:
         with self._lock:
             if name in self._component_overrides:
                 return self._component_overrides[name]
-        
+
         manager = self.get_component_manager()
         if not manager.has_component(name):
             raise ValueError(f"组件不存在: {name}")
@@ -131,7 +131,7 @@ class ApplicationContext:
     def override_component(self, name: str, component: Component) -> None:
         """
         覆盖组件
-        
+
         用于 lifespan 中设置正确事件循环绑定的组件，
         后续 get_component 会优先返回覆盖的组件。
 

@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_sgt_settlement_exchange_rate_szse
 
-目标地址: https://www.szse.cn/szhk/hkbussiness/exchangerate/index.html
+目标地址: <https://www.szse.cn/szhk/hkbussiness/exchangerate/index.html>
 
 描述: 深港通-港股通业务信息-结算汇率
 
@@ -62,7 +62,7 @@ print(stock_sgt_settlement_exchange_rate_szse_df)
 
 接口: stock_sgt_settlement_exchange_rate_sse
 
-目标地址: http://www.sse.com.cn/services/hkexsc/disclo/ratios
+目标地址: <http://www.sse.com.cn/services/hkexsc/disclo/ratios>
 
 描述: 沪港通-港股通信息披露-结算汇兑
 
@@ -113,7 +113,7 @@ print(stock_sgt_settlement_exchange_rate_sse_df)
 
 接口: stock_sgt_reference_exchange_rate_szse
 
-目标地址: https://www.szse.cn/szhk/hkbussiness/exchangerate/index.html
+目标地址: <https://www.szse.cn/szhk/hkbussiness/exchangerate/index.html>
 
 描述: 深港通-港股通业务信息-参考汇率
 
@@ -164,7 +164,7 @@ print(stock_sgt_reference_exchange_rate_szse_df)
 
 接口: stock_sgt_reference_exchange_rate_sse
 
-目标地址: http://www.sse.com.cn/services/hkexsc/disclo/ratios/
+目标地址: <http://www.sse.com.cn/services/hkexsc/disclo/ratios/>
 
 描述: 沪港通-港股通信息披露-参考汇率
 
@@ -216,7 +216,7 @@ print(stock_sgt_reference_exchange_rate_sse_df)
 
 接口: stock_hk_ggt_components_em
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#hk_components
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#hk_components>
 
 描述: 东方财富网-行情中心-港股市场-港股通成份股
 
@@ -276,7 +276,7 @@ print(stock_hk_ggt_components_em_df)
 
 接口: stock_hsgt_fund_min_em
 
-目标地址: https://data.eastmoney.com/hsgt/hsgtDetail/scgk.html
+目标地址: <https://data.eastmoney.com/hsgt/hsgtDetail/scgk.html>
 
 描述: 东方财富-数据中心-沪深港通-市场概括-分时数据
 
@@ -366,7 +366,7 @@ print(stock_hsgt_fund_min_em_df)
 
 接口: stock_hsgt_board_rank_em
 
-目标地址: https://data.eastmoney.com/hsgtcg/bk.html
+目标地址: <https://data.eastmoney.com/hsgtcg/bk.html>
 
 描述: 东方财富网-数据中心-沪深港通持股-板块排行
 
@@ -432,7 +432,7 @@ print(stock_hsgt_board_rank_em_df)
 
 接口: stock_hsgt_hold_stock_em
 
-目标地址: https://data.eastmoney.com/hsgtcg/list.html
+目标地址: <https://data.eastmoney.com/hsgtcg/list.html>
 
 描述: 东方财富网-数据中心-沪深港通持股-个股排行
 
@@ -497,7 +497,7 @@ print(stock_em_hsgt_hold_stock_df)
 
 接口: stock_hsgt_stock_statistics_em
 
-目标地址: http://data.eastmoney.com/hsgtcg/StockStatistics.aspx
+目标地址: <http://data.eastmoney.com/hsgtcg/StockStatistics.aspx>
 
 描述: 东方财富网-数据中心-沪深港通-沪深港通持股-每日个股统计
 
@@ -557,7 +557,7 @@ print(stock_hsgt_stock_statistics_em_df)
 
 接口: stock_hsgt_institution_statistics_em
 
-目标地址: http://data.eastmoney.com/hsgtcg/InstitutionStatistics.aspx
+目标地址: <http://data.eastmoney.com/hsgtcg/InstitutionStatistics.aspx>
 
 描述: 东方财富网-数据中心-沪深港通-沪深港通持股-机构排行
 
@@ -613,7 +613,7 @@ print(stock_hsgt_institution_statistics_em_df)
 
 接口: stock_hsgt_sh_hk_spot_em
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#hk_sh_stocks
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#hk_sh_stocks>
 
 描述: 东方财富网-行情中心-沪深港通-港股通(沪>港)-股票；按股票代码排序
 
@@ -673,7 +673,7 @@ print(stock_hsgt_sh_hk_spot_em_df)
 
 接口: stock_hsgt_hist_em
 
-目标地址: https://data.eastmoney.com/hsgt/index.html
+目标地址: <https://data.eastmoney.com/hsgt/index.html>
 
 描述: 东方财富网-数据中心-资金流向-沪深港通资金流向-沪深港通历史数据
 
@@ -779,7 +779,7 @@ print(stock_hsgt_hist_em_df)
 
 接口: stock_hsgt_individual_em
 
-目标地址: https://data.eastmoney.com/hsgt/StockHdDetail/002008.html
+目标地址: <https://data.eastmoney.com/hsgt/StockHdDetail/002008.html>
 
 描述: 东方财富网-数据中心-沪深港通-沪深港通持股-具体股票
 
@@ -850,7 +850,7 @@ print(stock_hsgt_individual_em_df)
 
 接口: stock_hsgt_individual_detail_em
 
-目标地址: http://data.eastmoney.com/hsgtcg/StockHdStatistics/002008.html(示例)
+目标地址: <http://data.eastmoney.com/hsgtcg/StockHdStatistics/002008.html(示例)>
 
 描述: 东方财富网-数据中心-沪深港通-沪深港通持股-具体股票-个股详情
 
@@ -885,9 +885,9 @@ print(stock_hsgt_individual_em_df)
 import akshare as ak
 
 stock_hsgt_individual_detail_em_df = ak.stock_hsgt_individual_detail_em(
-	symbol="002008",
-	start_date="20210830",
-	end_date="20211026"
+ symbol="002008",
+ start_date="20210830",
+ end_date="20211026"
 )
 print(stock_hsgt_individual_detail_em_df)
 ```

@@ -14,25 +14,26 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from deepsearch.constants import LOG_DIR
+
 from .loader import load_yaml_config
 from .models import (
     AmazingDataConfig,
     AppConfig,
-    MarketDataConfig,
     CloudflareWorkersConfig,
-    DataSourcePrefetchConfig,
-    DataSourcesConfig,
     DatabaseConfig,
     DatabaseConnectionConfigModel,
+    DataSourcePrefetchConfig,
+    DataSourcesConfig,
     DebugConfig,
     HealthCheckConfig,
     LogConfig,
+    MarketDataConfig,
     MessageBusConfig,
     MonitoringConfig,
     NotificationsConfig,
     PerformanceConfig,
-    RuntimeConfig,
     QmtConfig,
+    RuntimeConfig,
     SecurityConfig,
     WebUIConfig,
     ZeroMQConfig,
@@ -113,4 +114,3 @@ class Settings(BaseSettings):
             yaml_settings,  # 只使用 YAML 配置
             init_settings,
         )
-

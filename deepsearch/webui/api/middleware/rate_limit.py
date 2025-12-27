@@ -40,9 +40,7 @@ class RateLimitCounters:
     total_requests: int = 0
     rejected_requests: int = 0
     cloudflare_requests: int = 0
-    priority_rejections: DefaultDict[str, int] = field(
-        default_factory=lambda: defaultdict(int)
-    )
+    priority_rejections: DefaultDict[str, int] = field(default_factory=lambda: defaultdict(int))
 
     def increment_total(self) -> None:
         self.total_requests += 1
@@ -191,9 +189,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if now.date() != self.last_reset_day:
             self.daily_requests = 0
             self.last_reset_day = now.date()
-            logger.info(
-                f"每日请求计数已重置，昨日总请求: {self._counters.total_requests}"
-            )
+            logger.info(f"每日请求计数已重置，昨日总请求: {self._counters.total_requests}")
 
         # 每小时重置
         if now.hour != self.last_reset_hour:
@@ -271,9 +267,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.request_times.append(now)
         return True
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """
         处理请求
 
@@ -297,9 +291,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         test_mode_active = test_mode_active or bool(
             getattr(app_state, "rate_limit_test_mode", False)
         )
-        test_mode_active = test_mode_active or os.getenv(
-            "DEEPSEARCH_TEST_MODE", ""
-        ).lower() == "true"
+        test_mode_active = (
+            test_mode_active or os.getenv("DEEPSEARCH_TEST_MODE", "").lower() == "true"
+        )
 
         if test_mode_active:
             bypass_response: Response = await call_next(request)
@@ -397,9 +391,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # 添加限流信息到响应头
         downstream_headers = cast(MutableMapping[str, str], downstream_response.headers)
         downstream_headers["X-RateLimit-Limit"] = str(self.daily_limit)
-        downstream_headers["X-RateLimit-Remaining"] = str(
-            self.daily_limit - self.daily_requests
-        )
+        downstream_headers["X-RateLimit-Remaining"] = str(self.daily_limit - self.daily_requests)
         downstream_headers["X-RateLimit-Reset"] = str(
             int(
                 (datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)).timestamp()
@@ -414,7 +406,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         """生成符合 Response 类型的 JSON 响应，避免 mypy 误判"""
 
-        return cast(Response, JSONResponse(status_code=status_code, content=payload, headers=headers))
+        return cast(
+            Response, JSONResponse(status_code=status_code, content=payload, headers=headers)
+        )
 
     def get_stats(self) -> RateLimitStats:
         """获取限流统计信息快照"""

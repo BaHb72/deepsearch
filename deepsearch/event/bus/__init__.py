@@ -9,14 +9,9 @@ This file provides backward compatibility imports.
 
 import warnings
 
-from deepsearch.messaging import (
-    BusName,
-    InMemoryMessageBus,
-)
+from deepsearch.messaging import BusName, InMemoryMessageBus
 from deepsearch.messaging import MessageBus as AbstractMessageBus
-from deepsearch.messaging import (
-    ZeroMQMessageBus,
-)
+from deepsearch.messaging import ZeroMQMessageBus
 from deepsearch.messaging.bus import CompositeMessageBus
 
 # TimeSeriesZeroMQBus will remain here temporarily as it has storage dependencies

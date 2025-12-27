@@ -129,7 +129,7 @@ class TestMiniQMTAPIStatistics:
 
 class TestMiniQMTAPIWithMock:
     """使用 Mock 的 MiniQMT API 测试
-    
+
     这些测试通过模拟 Provider 来验证 API 逻辑，不需要真实的 MiniQMT 连接
     """
 
@@ -153,8 +153,8 @@ class TestMiniQMTAPIWithMock:
     def test_status_with_mock(self, client: TestClient, mock_provider):
         """使用 Mock 测试状态接口"""
         with patch(
-                "deepsearch.webui.api.endpoints.qmt.miniqmt.get_miniqmt_provider",
-                return_value=mock_provider,
+            "deepsearch.webui.api.endpoints.qmt.miniqmt.get_miniqmt_provider",
+            return_value=mock_provider,
         ):
             response = client.get("/api/miniqmt/status")
 

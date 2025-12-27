@@ -78,7 +78,9 @@ class TestMiniQMTRealConnection:
         assert "000001.SZ" in result
 
         tick_data = result["000001.SZ"]
-        print(f"Tick 数据字段: {list(tick_data.keys()) if isinstance(tick_data, dict) else type(tick_data)}")
+        print(
+            f"Tick 数据字段: {list(tick_data.keys()) if isinstance(tick_data, dict) else type(tick_data)}"
+        )
 
     def test_get_multiple_stocks_tick(self, miniqmt_connection_check):
         """测试获取多只股票的 Tick 数据"""
@@ -119,7 +121,7 @@ class TestMiniQMTHistoryData:
             )
 
             if data:
-                print(f"成功获取日线数据")
+                print("成功获取日线数据")
                 assert data is not None
         except Exception as e:
             pytest.skip(f"下载历史数据失败: {e}")
@@ -139,7 +141,7 @@ class TestMiniQMTHistoryData:
             )
 
             if data:
-                print(f"成功获取5分钟数据")
+                print("成功获取5分钟数据")
                 assert data is not None
         except Exception as e:
             pytest.skip(f"下载分钟数据失败: {e}")

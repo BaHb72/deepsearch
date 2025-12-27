@@ -13,7 +13,7 @@ updated: 2025-11-17
 
 接口: stock_zh_b_spot_em
 
-目标地址: http://quote.eastmoney.com/center/gridlist.html#hs_b_board
+目标地址: <http://quote.eastmoney.com/center/gridlist.html#hs_b_board>
 
 描述: 东方财富网-实时行情数据
 
@@ -83,7 +83,7 @@ print(stock_zh_b_spot_em_df)
 
 接口: stock_zh_b_spot
 
-目标地址: http://vip.stock.finance.sina.com.cn/mkt/#hs_b
+目标地址: <http://vip.stock.finance.sina.com.cn/mkt/#hs_b>
 
 描述: B 股数据是从新浪财经获取的数据, 重复运行本函数会被新浪暂时封 IP, 建议增加时间间隔
 
@@ -145,7 +145,7 @@ print(stock_zh_b_spot_df)
 
 接口: stock_zh_b_daily
 
-目标地址: https://finance.sina.com.cn/realstock/company/sh900901/nc.shtml
+目标地址: <https://finance.sina.com.cn/realstock/company/sh900901/nc.shtml>
 
 描述: B 股数据是从新浪财经获取的数据, 历史数据按日频率更新
 
@@ -332,7 +332,7 @@ print(hfq_factor_df)
 
 接口: stock_zh_b_minute
 
-目标地址: http://finance.sina.com.cn/realstock/company/sh900901/nc.shtml
+目标地址: <http://finance.sina.com.cn/realstock/company/sh900901/nc.shtml>
 
 描述: 新浪财经 B 股股票或者指数的分时数据，目前可以获取 1, 5, 15, 30, 60 分钟的数据频率, 可以指定是否复权
 

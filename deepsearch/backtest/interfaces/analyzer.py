@@ -269,9 +269,9 @@ class PerformanceAnalyzer:
 
         returns_series = pd.Series(returns_values, index=returns_index)
         rolling_return = np.asarray(returns_series.rolling(window).mean(), dtype=float) * 252.0
-        rolling_volatility = (
-            np.asarray(returns_series.rolling(window).std(), dtype=float) * np.sqrt(252.0)
-        )
+        rolling_volatility = np.asarray(
+            returns_series.rolling(window).std(), dtype=float
+        ) * np.sqrt(252.0)
 
         with np.errstate(divide="ignore", invalid="ignore"):
             rolling_sharpe = np.divide(
@@ -388,13 +388,9 @@ class PerformanceAnalyzer:
         avg_trade_value = result.initial_cash * 0.1
 
         # 双边交易成本（买入+卖出）
-        commission_cost = float(
-            avg_trade_value * result.commission * 2 * result.total_trades
-        )
+        commission_cost = float(avg_trade_value * result.commission * 2 * result.total_trades)
 
         # 滑点成本
-        slippage_cost = float(
-            avg_trade_value * result.slippage * 2 * result.total_trades
-        )
+        slippage_cost = float(avg_trade_value * result.slippage * 2 * result.total_trades)
 
         return float(commission_cost + slippage_cost)

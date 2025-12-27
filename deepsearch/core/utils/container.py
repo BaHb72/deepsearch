@@ -8,7 +8,19 @@
 import asyncio
 import inspect
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union, cast, get_args, get_origin
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+)
 
 from loguru import logger
 

@@ -13,7 +13,6 @@ import pandas as pd
 
 from deepsearch.observability.logger import logger
 
-
 if TYPE_CHECKING:
     from duckdb import DuckDBPyConnection
 else:  # pragma: no cover - runtime fallback for typing only
@@ -29,7 +28,7 @@ class AnalyticsDB:
         return bool(re.match(pattern, table_name))
 
     """DuckDB 分析数据库
-    
+
     用于存储和分析日级别的市场数据
     """
 
@@ -315,7 +314,7 @@ class AnalyticsDB:
         # 构建查询语句
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         query = f"""
-            SELECT * FROM market_daily 
+            SELECT * FROM market_daily
             {where_clause}
             ORDER BY symbol, date
         """
@@ -341,7 +340,7 @@ class AnalyticsDB:
 
         query = f"""
             WITH lagged_data AS (
-                SELECT 
+                SELECT
                     date,
                     symbol,
                     close,
@@ -349,7 +348,7 @@ class AnalyticsDB:
                 FROM market_daily
                 WHERE symbol IN ({','.join(['?' for _ in symbols])})
             )
-            SELECT 
+            SELECT
                 date,
                 symbol,
                 close,
@@ -412,7 +411,7 @@ class AnalyticsDB:
 
         self.conn.execute(
             f"""
-            INSERT OR REPLACE INTO {table_name} 
+            INSERT OR REPLACE INTO {table_name}
             SELECT * FROM read_parquet('{file_path}')
         """
         )
@@ -459,7 +458,9 @@ class AnalyticsDB:
                                          FROM market_daily
                                          """
         ).fetchone()
-        stats["symbol_count"] = int(symbol_row[0]) if symbol_row and symbol_row[0] is not None else 0
+        stats["symbol_count"] = (
+            int(symbol_row[0]) if symbol_row and symbol_row[0] is not None else 0
+        )
 
         # 获取数据库文件大小
         if os.path.exists(self.db_path):

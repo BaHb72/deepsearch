@@ -16,20 +16,20 @@
 ### 已定位的主要硬编码位置（示例）
 
 - `deepsearch/infrastructure/providers/implementations/amazingdata/common.py:13`
-    - `DEFAULT_LOCAL_DATA_PATH = "D://AmazingData_local_data//"`
+  - `DEFAULT_LOCAL_DATA_PATH = "D://AmazingData_local_data//"`
 - `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata.py:819`
-    - `get_block_trading(..., local_path: str = DEFAULT_LOCAL_DATA_PATH, ...)`
+  - `get_block_trading(..., local_path: str = DEFAULT_LOCAL_DATA_PATH, ...)`
 - `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py`
-    - `:190-:195` `get_backward_factor(..., local_path: str = "D://AmazingData_local_data//", ...)`
-    - `:226-:231` `get_adj_factor(..., local_path: str = "D://AmazingData_local_data//", ...)`
-    - `:262-:267` `get_history_stock_status(..., local_path: str = "D://AmazingData_local_data//", ...)`
-    - `:298-:304` `get_hist_code_list(..., local_path: str = "D://AmazingData_local_data//", ...)`
-    - `:393-:395` `get_bj_code_mapping(..., local_path: str = "D://AmazingData_local_data//", ...)`
-    - 注：文件后续仍有多处同类定义，实际改造时需统一检索。
+  - `:190-:195` `get_backward_factor(..., local_path: str = "D://AmazingData_local_data//", ...)`
+  - `:226-:231` `get_adj_factor(..., local_path: str = "D://AmazingData_local_data//", ...)`
+  - `:262-:267` `get_history_stock_status(..., local_path: str = "D://AmazingData_local_data//", ...)`
+  - `:298-:304` `get_hist_code_list(..., local_path: str = "D://AmazingData_local_data//", ...)`
+  - `:393-:395` `get_bj_code_mapping(..., local_path: str = "D://AmazingData_local_data//", ...)`
+  - 注：文件后续仍有多处同类定义，实际改造时需统一检索。
 - `.env.example:38`
-    - `AMAZINGDATA_LOCAL_PATH=D://AmazingData_local_data//`
+  - `AMAZINGDATA_LOCAL_PATH=D://AmazingData_local_data//`
 - `deepsearch/infrastructure/providers/implementations/amazingdata/config.py:108`
-    - `resolve_local_cache_path(...)` 在缺省情况下直接回退到 `DEFAULT_LOCAL_DATA_PATH`，未考虑环境变量或平台默认路径。
+  - `resolve_local_cache_path(...)` 在缺省情况下直接回退到 `DEFAULT_LOCAL_DATA_PATH`，未考虑环境变量或平台默认路径。
 
 ---
 
@@ -92,9 +92,9 @@ def get_default_local_data_path() -> str:
 ```
 
 - 常量兼容策略：
-    - `DEFAULT_LOCAL_DATA_PATH = get_default_local_data_path()`（仅作兼容别名，代码中不再直接引用此常量，未来可标记为
+  - `DEFAULT_LOCAL_DATA_PATH = get_default_local_data_path()`（仅作兼容别名，代码中不再直接引用此常量，未来可标记为
       deprecated）。
-    - 注释说明：「请使用统一解析器，不再直接依赖该常量」。
+  - 注释说明：「请使用统一解析器，不再直接依赖该常量」。
 
 ### 第 2 步：增强统一解析逻辑
 
@@ -139,13 +139,13 @@ Path(local_path).mkdir(parents=True, exist_ok=True)
 ```
 
 - 需覆盖的位置：
-    - `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata.py:819`
-    - `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py:190-:195`
-    - `:226-:231`
-    - `:262-:267`
-    - `:298-:304`
-    - `:393-:395`
-    - 以及该文件内其他所有 `local_path: str = "D://AmazingData_local_data//"` 定义（建议统一检索确认）。
+  - `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata.py:819`
+  - `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py:190-:195`
+  - `:226-:231`
+  - `:262-:267`
+  - `:298-:304`
+  - `:393-:395`
+  - 以及该文件内其他所有 `local_path: str = "D://AmazingData_local_data//"` 定义（建议统一检索确认）。
 
 ### 第 4 步：目录创建与路径规范化
 
@@ -187,41 +187,41 @@ providers:
 
 - 若 `AMAZINGDATA_LOCAL_PATH` 或配置中已指定旧目录（例如 `D://AmazingData_local_data//`），系统会直接使用该路径，不影响旧环境。
 - 可选增强：当使用平台默认路径且检测到旧目录仍存在时，输出一次性提示日志，建议用户迁移或者通过配置显式指向旧路径。
-    - 示例日志：
-        - `datasource=amazingdata 使用本地缓存目录: C:\Users\...\AmazingData`
-        - `检测到历史目录 D://AmazingData_local_data//。如需复用旧数据，请设置 AMAZINGDATA_LOCAL_PATH 或迁移数据。`
+  - 示例日志：
+    - `datasource=amazingdata 使用本地缓存目录: C:\Users\...\AmazingData`
+    - `检测到历史目录 D://AmazingData_local_data//。如需复用旧数据，请设置 AMAZINGDATA_LOCAL_PATH 或迁移数据。`
 
 ### 第 7 步：测试与验证（执行阶段再落实）
 
 - 单元测试：
-    - `resolve_local_cache_path` 覆盖 candidate/config/env/默认路径四种场景。
+  - `resolve_local_cache_path` 覆盖 candidate/config/env/默认路径四种场景。
 - 集成测试：
-    - 在 Windows、macOS、Linux 分别验证路径解析与目录创建行为。
+  - 在 Windows、macOS、Linux 分别验证路径解析与目录创建行为。
 - 回归测试：
-    - 核心接口如 `get_hist_code_list`、`get_history_stock_status`、`get_bj_code_mapping`、`get_block_trading` 等需覆盖本地缓存读写流程。
+  - 核心接口如 `get_hist_code_list`、`get_history_stock_status`、`get_bj_code_mapping`、`get_block_trading` 等需覆盖本地缓存读写流程。
 
 ---
 
 ## 兼容性与回滚策略
 
 - **向后兼容**：
-    - 方法签名参数名保持不变，仅将默认值移入解析器内部，调用方无需修改。
-    - 若调用方显式传入旧路径或通过配置/环境变量指定路径，将被优先使用。
+  - 方法签名参数名保持不变，仅将默认值移入解析器内部，调用方无需修改。
+  - 若调用方显式传入旧路径或通过配置/环境变量指定路径，将被优先使用。
 - **回滚方案**：
-    - 如需临时代码层面回滚，可将 `resolve_local_cache_path` 的最终回退改回 `DEFAULT_LOCAL_DATA_PATH`（不推荐）。
-    - 运维侧可通过环境变量或配置快速恢复到任意路径，避免影响业务。
+  - 如需临时代码层面回滚，可将 `resolve_local_cache_path` 的最终回退改回 `DEFAULT_LOCAL_DATA_PATH`（不推荐）。
+  - 运维侧可通过环境变量或配置快速恢复到任意路径，避免影响业务。
 
 ---
 
 ## 测试计划与验收标准（说明性）
 
 - **单元测试**
-    - 新增/更新适配器层测试文件，验证不同优先级来源的解析结果是否符合预期。
+  - 新增/更新适配器层测试文件，验证不同优先级来源的解析结果是否符合预期。
 - **跨平台手测**
-    - 分别在 Windows / macOS / Linux 上执行典型数据拉取流程，确认默认路径与目录创建行为正常。
+  - 分别在 Windows / macOS / Linux 上执行典型数据拉取流程，确认默认路径与目录创建行为正常。
 - **验收标准**
-    - 在不设置任何配置和环境变量的前提下，三大平台均应工作正常，且不会抛出硬编码路径相关错误。
-    - 设置 `.env` 或 `settings.<env>.yaml` 后，实际使用的路径需与预期一致，并在日志中可见。
+  - 在不设置任何配置和环境变量的前提下，三大平台均应工作正常，且不会抛出硬编码路径相关错误。
+  - 设置 `.env` 或 `settings.<env>.yaml` 后，实际使用的路径需与预期一致，并在日志中可见。
 
 ---
 
@@ -232,10 +232,10 @@ providers:
     2. `settings.<env>.yaml` 中配置 `providers.amazingdata.local.path`。
     3. `.env` 中设置 `AMAZINGDATA_LOCAL_PATH=/data/amazingdata`。
 - **容器化建议**：
-    - 将解析器返回的目录映射到持久卷，避免容器重建导致数据丢失。
-    - 确保目标目录具备读写权限。
+  - 将解析器返回的目录映射到持久卷，避免容器重建导致数据丢失。
+  - 确保目标目录具备读写权限。
 - **权限问题排查**：
-    - 如遇写入失败，根据日志提示检查目录权限或改用具备写权限的路径。
+  - 如遇写入失败，根据日志提示检查目录权限或改用具备写权限的路径。
 
 ---
 
@@ -252,18 +252,18 @@ providers:
 ## 计划中的变更清单（尚未实施）
 
 - 常量与解析
-    - `deepsearch/infrastructure/providers/implementations/amazingdata/common.py:13`
-        - 新增 `get_default_local_data_path()`，调整 `DEFAULT_LOCAL_DATA_PATH` 定义。
+  - `deepsearch/infrastructure/providers/implementations/amazingdata/common.py:13`
+    - 新增 `get_default_local_data_path()`，调整 `DEFAULT_LOCAL_DATA_PATH` 定义。
 - 解析流程增强
-    - `deepsearch/infrastructure/providers/implementations/amazingdata/config.py:108`
-        - `resolve_local_cache_path` 增加环境变量读取与平台默认路径回退。
+  - `deepsearch/infrastructure/providers/implementations/amazingdata/config.py:108`
+    - `resolve_local_cache_path` 增加环境变量读取与平台默认路径回退。
 - 方法默认参数改造（示例）
-    - `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata.py:819`
-    - `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py:190-:395` 及其他同类方法。
+  - `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata.py:819`
+  - `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py:190-:395` 及其他同类方法。
 - 示例配置
-    - `.env.example:38` 更新注释及跨平台示例。
+  - `.env.example:38` 更新注释及跨平台示例。
 - 文档
-    - 本文档即为改造执行与回归的详细参考。
+  - 本文档即为改造执行与回归的详细参考。
 
 ---
 

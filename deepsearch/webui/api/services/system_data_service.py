@@ -497,7 +497,8 @@ class SystemDataService:
         return value.isoformat()
 
 
-_SYSTEM_DATA_SERVICE: Optional['SystemDataService'] = None
+_SYSTEM_DATA_SERVICE: Optional["SystemDataService"] = None
+
 
 def get_system_data_service() -> SystemDataService:
     """单例访问器，便于在路由间共享。"""

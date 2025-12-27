@@ -1,11 +1,34 @@
 import React from 'react'
-import { Button, Card, Col, Divider, Form, Input, InputNumber, message, Row, Space, Spin, Switch, Typography } from 'antd'
-import { ApartmentOutlined, FolderOpenOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons'
+import {
+    Button,
+    Card,
+    Col,
+    Form,
+    InputNumber,
+    message,
+    Row,
+    Select,
+    Slider,
+    Space,
+    Spin,
+    Switch,
+    TimePicker,
+    Typography
+} from 'antd'
+import {
+    ApartmentOutlined,
+    ClockCircleOutlined,
+    FileZipOutlined,
+    ReloadOutlined,
+    SaveOutlined,
+    SettingOutlined
+} from '@ant-design/icons'
+import dayjs from 'dayjs'
 
 import systemAPI from '@/api/system'
 import type { LogSettings } from '@/types/systemConfig'
 
-const { Paragraph } = Typography
+const { Text, Title } = Typography
 
 const DEFAULT_LOG_CONFIG: LogSettings = {
     level: 'INFO',
@@ -26,6 +49,23 @@ const DEFAULT_LOG_CONFIG: LogSettings = {
         rotation: '00:00',
         retention_days: null
     }
+}
+
+const LOG_LEVELS = [
+    { value: 'DEBUG', label: 'DEBUG', color: '#8c8c8c' },
+    { value: 'INFO', label: 'INFO', color: '#1890ff' },
+    { value: 'WARNING', label: 'WARNING', color: '#faad14' },
+    { value: 'ERROR', label: 'ERROR', color: '#ff4d4f' },
+    { value: 'CRITICAL', label: 'CRITICAL', color: '#cf1322' }
+]
+
+const RETENTION_MARKS: Record<number, string> = {
+    1: '1天',
+    7: '7天',
+    14: '14天',
+    30: '30天',
+    60: '60天',
+    90: '90天'
 }
 
 const normalizePayload = (values: LogSettings): LogSettings => {
@@ -55,6 +95,17 @@ const normalizePayload = (values: LogSettings): LogSettings => {
     }
 }
 
+const cardStyle: React.CSSProperties = {
+    borderRadius: 12,
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+    marginBottom: 16
+}
+
+const cardHeadStyle: React.CSSProperties = {
+    borderBottom: 'none',
+    paddingBottom: 0
+}
+
 const LogConfig: React.FC = () => {
     const [form] = Form.useForm<LogSettings>()
     const [loading, setLoading] = React.useState<boolean>(true)
@@ -62,6 +113,7 @@ const LogConfig: React.FC = () => {
 
     const archiveEnabled = Form.useWatch(['archive', 'enabled'], form)
     const modulesEnabled = Form.useWatch(['modules', 'enabled'], form)
+    const currentLevel = Form.useWatch('level', form)
 
     const loadConfig = React.useCallback(async () => {
         setLoading(true)
@@ -115,19 +167,29 @@ const LogConfig: React.FC = () => {
         }
     }
 
+    const levelColor = LOG_LEVELS.find(l => l.value === currentLevel)?.color ?? '#1890ff'
+
     return (
         <Spin spinning={loading}>
-            <Card
-                title="日志与归档配置"
-                bordered={false}
-                extra={
+            <div style={{ padding: '0 0 24px 0' }}>
+                {/* Header */}
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 24
+                }}>
+                    <div>
+                        <Title level={4} style={{ margin: 0 }}>日志配置</Title>
+                        <Text type="secondary">配置系统日志保存策略、归档行为和模块化输出</Text>
+                    </div>
                     <Space>
                         <Button
                             icon={<ReloadOutlined />}
                             onClick={loadConfig}
                             disabled={saving}
                         >
-                            重新加载
+                            刷新
                         </Button>
                         <Button
                             type="primary"
@@ -138,210 +200,265 @@ const LogConfig: React.FC = () => {
                             保存配置
                         </Button>
                     </Space>
-                }
-            >
-                <Paragraph>
-                    配置系统日志的保存策略、归档行为以及按模块拆分的日志输出目录。修改后会实时刷新运行时日志系统，无需重启。
-                </Paragraph>
+                </div>
 
                 <Form
                     form={form}
                     layout="vertical"
                     initialValues={DEFAULT_LOG_CONFIG}
                 >
-                    <Row gutter={24}>
-                        <Col xs={24} sm={12} md={8}>
-                            <Form.Item
-                                label="日志级别"
-                                name="level"
-                                rules={[{ required: true, message: '请选择日志级别' }]}
-                            >
-                                <Input placeholder="INFO / DEBUG / WARNING / ERROR" />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} sm={12} md={8}>
-                            <Form.Item
-                                label="每日轮转时间 (HH:MM)"
-                                name="rotation"
-                                tooltip="每天在指定时间切换日志文件"
-                                rules={[
-                                    { required: true, message: '请输入轮转时间，例如 00:00' }
-                                ]}
-                            >
-                                <Input placeholder="00:00" />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} sm={12} md={8}>
-                            <Form.Item
-                                label="原始日志保留天数"
-                                name="retention_days"
-                                rules={[{ required: true, message: '请输入保留天数' }]}
-                            >
-                                <InputNumber min={1} precision={0} style={{ width: '100%' }} />
-                            </Form.Item>
-                        </Col>
-                    </Row>
+                    {/* Card 1: 基础配置 */}
+                    <Card
+                        style={cardStyle}
+                        headStyle={cardHeadStyle}
+                        title={
+                            <Space>
+                                <SettingOutlined style={{ color: '#1890ff' }} />
+                                <span>基础配置</span>
+                            </Space>
+                        }
+                    >
+                        <Row gutter={[24, 16]}>
+                            <Col xs={24} sm={12} md={6}>
+                                <Form.Item
+                                    label="日志级别"
+                                    name="level"
+                                    rules={[{ required: true, message: '请选择日志级别' }]}
+                                >
+                                    <Select
+                                        options={LOG_LEVELS.map(level => ({
+                                            value: level.value,
+                                            label: (
+                                                <Space>
+                                                    <span style={{
+                                                        display: 'inline-block',
+                                                        width: 8,
+                                                        height: 8,
+                                                        borderRadius: '50%',
+                                                        backgroundColor: level.color
+                                                    }} />
+                                                    {level.label}
+                                                </Space>
+                                            )
+                                        }))}
+                                    />
+                                </Form.Item>
+                            </Col>
+                            <Col xs={24} sm={12} md={6}>
+                                <Form.Item
+                                    label="每日轮转时间"
+                                    name="rotation"
+                                    rules={[{ required: true, message: '请选择轮转时间' }]}
+                                    getValueProps={(value) => ({
+                                        value: value ? dayjs(value, 'HH:mm') : undefined
+                                    })}
+                                    getValueFromEvent={(time) => time?.format('HH:mm') ?? '00:00'}
+                                >
+                                    <TimePicker
+                                        format="HH:mm"
+                                        style={{ width: '100%' }}
+                                        placeholder="选择时间"
+                                        suffixIcon={<ClockCircleOutlined />}
+                                    />
+                                </Form.Item>
+                            </Col>
+                            <Col xs={24} sm={12} md={6}>
+                                <Form.Item
+                                    label="启用 JSON 格式"
+                                    name="enable_json"
+                                    valuePropName="checked"
+                                >
+                                    <Switch checkedChildren="开" unCheckedChildren="关" />
+                                </Form.Item>
+                            </Col>
+                        </Row>
 
-                    <Row gutter={24}>
-                        <Col xs={24} sm={12} md={8}>
-                            <Form.Item
-                                label="启用 JSON 日志输出"
-                                name="enable_json"
-                                valuePropName="checked"
-                            >
-                                <Switch />
-                            </Form.Item>
-                        </Col>
-                    </Row>
+                        <Form.Item
+                            label="日志保留天数"
+                            name="retention_days"
+                            rules={[{ required: true, message: '请选择保留天数' }]}
+                            style={{ marginBottom: 0, marginTop: 8 }}
+                        >
+                            <Slider
+                                min={1}
+                                max={90}
+                                marks={RETENTION_MARKS}
+                                tooltip={{ formatter: (value) => `${value} 天` }}
+                            />
+                        </Form.Item>
+                    </Card>
 
-                    <Divider orientation="left">
-                        <Space>
-                            <FolderOpenOutlined />
-                            归档策略
-                        </Space>
-                    </Divider>
-
-                    <Row gutter={24}>
-                        <Col xs={24} sm={12} md={6}>
+                    {/* Card 2: 归档策略 */}
+                    <Card
+                        style={{
+                            ...cardStyle,
+                            opacity: archiveEnabled ? 1 : 0.85,
+                            transition: 'opacity 0.3s'
+                        }}
+                        headStyle={cardHeadStyle}
+                        title={
+                            <Space>
+                                <FileZipOutlined style={{ color: archiveEnabled ? '#52c41a' : '#8c8c8c' }} />
+                                <span>归档策略</span>
+                            </Space>
+                        }
+                        extra={
                             <Form.Item
-                                label="启用归档"
                                 name={['archive', 'enabled']}
                                 valuePropName="checked"
+                                style={{ marginBottom: 0 }}
                             >
-                                <Switch />
+                                <Switch checkedChildren="启用" unCheckedChildren="禁用" />
                             </Form.Item>
-                        </Col>
-                        <Col xs={24} sm={12} md={6}>
-                            <Form.Item
-                                label="归档目录"
-                                name={['archive', 'directory']}
-                                rules={[{ required: true, message: '请输入归档目录' }]}
-                            >
-                                <Input disabled={!archiveEnabled} placeholder="archive" />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} sm={12} md={6}>
-                            <Form.Item
-                                label="压缩格式"
-                                name={['archive', 'format']}
-                                rules={[{ required: true, message: '请输入压缩格式' }]}
-                            >
-                                <Input disabled placeholder="zip" />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} sm={12} md={6}>
-                            <Form.Item
-                                label="归档阈值 (天)"
-                                name={['archive', 'archive_after_days']}
-                                rules={[{ required: true, message: '请输入归档天数' }]}
-                            >
-                                <InputNumber
-                                    min={1}
-                                    precision={0}
-                                    disabled={!archiveEnabled}
-                                    style={{ width: '100%' }}
-                                />
-                            </Form.Item>
-                        </Col>
-                    </Row>
+                        }
+                    >
+                        <div style={{
+                            opacity: archiveEnabled ? 1 : 0.5,
+                            pointerEvents: archiveEnabled ? 'auto' : 'none',
+                            transition: 'opacity 0.3s'
+                        }}>
+                            <Row gutter={[24, 16]}>
+                                <Col xs={24} sm={12} md={6}>
+                                    <Form.Item
+                                        label="归档阈值"
+                                        name={['archive', 'archive_after_days']}
+                                        rules={[{ required: true, message: '请输入归档天数' }]}
+                                    >
+                                        <InputNumber
+                                            min={1}
+                                            max={365}
+                                            precision={0}
+                                            style={{ width: '100%' }}
+                                            addonAfter="天后归档"
+                                        />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} sm={12} md={6}>
+                                    <Form.Item
+                                        label="清理阈值"
+                                        name={['archive', 'purge_after_days']}
+                                        tooltip="留空则永不自动清理"
+                                    >
+                                        <InputNumber
+                                            min={1}
+                                            max={365}
+                                            precision={0}
+                                            style={{ width: '100%' }}
+                                            addonAfter="天后清理"
+                                            placeholder="可选"
+                                        />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} sm={12} md={6}>
+                                    <Form.Item
+                                        label="压缩格式"
+                                        name={['archive', 'format']}
+                                    >
+                                        <Select
+                                            options={[
+                                                { value: 'zip', label: 'ZIP' },
+                                                { value: 'gz', label: 'GZIP' },
+                                                { value: 'tar.gz', label: 'TAR.GZ' }
+                                            ]}
+                                        />
+                                    </Form.Item>
+                                </Col>
+                            </Row>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                日志超出归档阈值后自动压缩，超出清理阈值后删除旧归档文件
+                            </Text>
+                        </div>
+                    </Card>
 
-                    <Row gutter={24}>
-                        <Col xs={24} sm={12} md={6}>
+                    {/* Card 3: 模块化日志 */}
+                    <Card
+                        style={{
+                            ...cardStyle,
+                            opacity: modulesEnabled ? 1 : 0.85,
+                            transition: 'opacity 0.3s',
+                            marginBottom: 0
+                        }}
+                        headStyle={cardHeadStyle}
+                        title={
+                            <Space>
+                                <ApartmentOutlined style={{ color: modulesEnabled ? '#722ed1' : '#8c8c8c' }} />
+                                <span>模块化日志</span>
+                            </Space>
+                        }
+                        extra={
                             <Form.Item
-                                label="归档清理阈值 (天, 可选)"
-                                name={['archive', 'purge_after_days']}
-                            >
-                                <InputNumber
-                                    min={1}
-                                    precision={0}
-                                    disabled={!archiveEnabled}
-                                    style={{ width: '100%' }}
-                                />
-                            </Form.Item>
-                        </Col>
-                    </Row>
-
-                    <Paragraph type="secondary">
-                        启用归档后，系统会在日志超出“归档阈值”天数时自动压缩为 ZIP 文件，并根据“归档清理阈值”清理较旧的压缩包。
-                    </Paragraph>
-
-                    <Divider orientation="left">
-                        <Space>
-                            <ApartmentOutlined />
-                            模块化日志
-                        </Space>
-                    </Divider>
-
-                    <Row gutter={24}>
-                        <Col xs={24} sm={12} md={6}>
-                            <Form.Item
-                                label="启用按模块拆分"
                                 name={['modules', 'enabled']}
                                 valuePropName="checked"
+                                style={{ marginBottom: 0 }}
                             >
-                                <Switch />
+                                <Switch checkedChildren="启用" unCheckedChildren="禁用" />
                             </Form.Item>
-                        </Col>
-                        <Col xs={24} sm={12} md={6}>
-                            <Form.Item
-                                label="模块日志目录"
-                                name={['modules', 'directory']}
-                                rules={[{ required: true, message: '请输入目录名称' }]}
-                            >
-                                <Input disabled={!modulesEnabled} placeholder="modules" />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} sm={12} md={6}>
-                            <Form.Item
-                                label="模块层级深度"
-                                name={['modules', 'max_depth']}
-                                rules={[{ required: true, message: '请输入层级深度' }]}
-                            >
-                                <InputNumber
-                                    min={1}
-                                    precision={0}
-                                    disabled={!modulesEnabled}
-                                    style={{ width: '100%' }}
-                                />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} sm={12} md={6}>
-                            <Form.Item
-                                label="模块日志轮转时间"
-                                name={['modules', 'rotation']}
-                            >
-                                <Input
-                                    disabled={!modulesEnabled}
-                                    placeholder="继承主配置，例：00:00"
-                                />
-                            </Form.Item>
-                        </Col>
-                    </Row>
-
-                    <Row gutter={24}>
-                        <Col xs={24} sm={12} md={6}>
-                            <Form.Item
-                                label="模块日志保留天数"
-                                name={['modules', 'retention_days']}
-                            >
-                                <InputNumber
-                                    min={1}
-                                    precision={0}
-                                    disabled={!modulesEnabled}
-                                    style={{ width: '100%' }}
-                                />
-                            </Form.Item>
-                        </Col>
-                    </Row>
-
-                    <Paragraph type="secondary">
-                        开启后将根据 Logger 名称自动创建子目录（受“模块层级深度”限制），便于定位不同子系统的日志。
-                    </Paragraph>
+                        }
+                    >
+                        <div style={{
+                            opacity: modulesEnabled ? 1 : 0.5,
+                            pointerEvents: modulesEnabled ? 'auto' : 'none',
+                            transition: 'opacity 0.3s'
+                        }}>
+                            <Row gutter={[24, 16]}>
+                                <Col xs={24} sm={12} md={6}>
+                                    <Form.Item
+                                        label="模块层级深度"
+                                        name={['modules', 'max_depth']}
+                                        rules={[{ required: true, message: '请输入层级深度' }]}
+                                        tooltip="根据 Logger 名称的点号分隔层级"
+                                    >
+                                        <InputNumber
+                                            min={1}
+                                            max={5}
+                                            precision={0}
+                                            style={{ width: '100%' }}
+                                        />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} sm={12} md={6}>
+                                    <Form.Item
+                                        label="模块日志保留天数"
+                                        name={['modules', 'retention_days']}
+                                        tooltip="留空则继承主配置"
+                                    >
+                                        <InputNumber
+                                            min={1}
+                                            max={365}
+                                            precision={0}
+                                            style={{ width: '100%' }}
+                                            placeholder="继承主配置"
+                                        />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} sm={12} md={6}>
+                                    <Form.Item
+                                        label="模块轮转时间"
+                                        name={['modules', 'rotation']}
+                                        tooltip="留空则继承主配置"
+                                        getValueProps={(value) => ({
+                                            value: value ? dayjs(value, 'HH:mm') : undefined
+                                        })}
+                                        getValueFromEvent={(time) => time?.format('HH:mm') ?? null}
+                                    >
+                                        <TimePicker
+                                            format="HH:mm"
+                                            style={{ width: '100%' }}
+                                            placeholder="继承主配置"
+                                            allowClear
+                                        />
+                                    </Form.Item>
+                                </Col>
+                            </Row>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                开启后根据 Logger 名称自动创建子目录，便于定位不同子系统的日志输出
+                            </Text>
+                        </div>
+                    </Card>
                 </Form>
-            </Card>
+            </div>
         </Spin>
     )
 }
 
 export default LogConfig
-

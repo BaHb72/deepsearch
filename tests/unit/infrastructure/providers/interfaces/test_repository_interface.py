@@ -18,7 +18,9 @@ def test_query_options_normalizes_inputs() -> None:
 
 
 def test_query_options_preserves_explicit_settings() -> None:
-    options = QueryOptions(filters={"market": "US"}, limit=50, skip=10, sort_by="symbol", sort_desc=True)
+    options = QueryOptions(
+        filters={"market": "US"}, limit=50, skip=10, sort_by="symbol", sort_desc=True
+    )
 
     assert options.limit == 50
     assert options.skip == 10

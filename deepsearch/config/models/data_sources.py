@@ -16,15 +16,9 @@ class CircuitBreakerConfig(BaseModel):
     """数据源熔断器配置。"""
 
     enabled: bool = Field(default=True, description="是否启用熔断")
-    failure_threshold: int = Field(
-        default=5, ge=1, description="连续失败阈值，触发熔断"
-    )
-    recovery_timeout: int = Field(
-        default=60, ge=1, description="熔断后的恢复等待时间（秒）"
-    )
-    half_open_attempts: int = Field(
-        default=3, ge=1, description="半开状态下的重试次数"
-    )
+    failure_threshold: int = Field(default=5, ge=1, description="连续失败阈值，触发熔断")
+    recovery_timeout: int = Field(default=60, ge=1, description="熔断后的恢复等待时间（秒）")
+    half_open_attempts: int = Field(default=3, ge=1, description="半开状态下的重试次数")
 
 
 class FailoverConfig(BaseModel):
@@ -36,9 +30,7 @@ class FailoverConfig(BaseModel):
     backoff_factor: float = Field(
         default=2.0, gt=0, description="指数退避因子（每次重试乘以该因子）"
     )
-    jitter: Optional[float] = Field(
-        default=None, ge=0, description="可选的随机抖动，用于避免雪崩"
-    )
+    jitter: Optional[float] = Field(default=None, ge=0, description="可选的随机抖动，用于避免雪崩")
 
 
 class DataSourceProviderConfig(BaseModel):
@@ -48,35 +40,19 @@ class DataSourceProviderConfig(BaseModel):
 
     enabled: bool = Field(default=True, description="是否启用该数据源")
     priority: int = Field(default=100, ge=0, description="优先级，值越小越优先")
-    timeout: Optional[float] = Field(
-        default=None, gt=0, description="覆盖默认的超时时间（秒）"
-    )
-    retry_count: Optional[int] = Field(
-        default=None, ge=0, description="覆盖默认的重试次数"
-    )
+    timeout: Optional[float] = Field(default=None, gt=0, description="覆盖默认的超时时间（秒）")
+    retry_count: Optional[int] = Field(default=None, ge=0, description="覆盖默认的重试次数")
     fallback_enabled: bool = Field(default=False, description="是否为该源启用兜底")
-    fallback_sources: List[str] = Field(
-        default_factory=list, description="该源可回退的数据源列表"
-    )
-    has_saved_credential: Optional[bool] = Field(
-        default=None, description="后端是否已保存凭据"
-    )
-    provider_name: Optional[str] = Field(
-        default=None, description="覆盖注册表中的 provider 名称"
-    )
+    fallback_sources: List[str] = Field(default_factory=list, description="该源可回退的数据源列表")
+    has_saved_credential: Optional[bool] = Field(default=None, description="后端是否已保存凭据")
+    provider_name: Optional[str] = Field(default=None, description="覆盖注册表中的 provider 名称")
     type: Optional[str] = Field(default=None, description="显式声明的数据源类型")
-    config: Dict[str, Any] = Field(
-        default_factory=dict, description="提供者特定的嵌套配置"
-    )
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="用于 UI 展示的附加元信息"
-    )
+    config: Dict[str, Any] = Field(default_factory=dict, description="提供者特定的嵌套配置")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="用于 UI 展示的附加元信息")
 
     @field_validator("fallback_sources", mode="after")
     @classmethod
-    def _normalise_fallback_sources(
-            cls, value: Iterable[str] | None
-    ) -> List[str]:
+    def _normalise_fallback_sources(cls, value: Iterable[str] | None) -> List[str]:
         """去重并清洗兜底数据源列表。"""
         if not value:
             return []
@@ -185,25 +161,19 @@ class DataSourcesConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    default: Optional[str] = Field(
-        default="amazingdata", description="默认首选数据源"
-    )
+    default: Optional[str] = Field(default="amazingdata", description="默认首选数据源")
     fallback_order: List[str] = Field(
         default_factory=lambda: ["amazingdata", "cloudflare", "akshare"],
         description="全局回退顺序",
     )
-    circuit_breaker: CircuitBreakerConfig = Field(
-        default_factory=CircuitBreakerConfig
-    )
+    circuit_breaker: CircuitBreakerConfig = Field(default_factory=CircuitBreakerConfig)
     failover: FailoverConfig = Field(default_factory=FailoverConfig)
     providers: Dict[str, DataSourceProviderConfig] = Field(
         default_factory=dict, description="已声明的数据源提供者集合"
     )
     realtime: Optional[RealtimeDataSourceConfig] = Field(
-        default=None,
-        description="ʵʱ����Դ orchestrator ���á�"
+        default=None, description="ʵʱ����Դ orchestrator ���á�"
     )
-
 
     @field_validator("fallback_order", mode="after")
     @classmethod

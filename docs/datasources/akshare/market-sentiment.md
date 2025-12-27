@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_market_activity_legu
 
-目标地址: https://www.legulegu.com/stockdata/market-activity
+目标地址: <https://www.legulegu.com/stockdata/market-activity>
 
 描述: 乐咕乐股网-赚钱效应分析数据
 

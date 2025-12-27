@@ -33,7 +33,9 @@ class DataSourcePrefetchScheduler:
         time_checker: Optional[Callable[[], bool]] = None,
     ) -> None:
         settings = get_config()
-        resolved_config = config or getattr(settings, "data_source_prefetch", None) or DataSourcePrefetchConfig()
+        resolved_config = (
+            config or getattr(settings, "data_source_prefetch", None) or DataSourcePrefetchConfig()
+        )
         self._config = resolved_config
 
         expires = timedelta(minutes=self._config.max_job_age_minutes)
@@ -57,7 +59,9 @@ class DataSourcePrefetchScheduler:
 
         self._stop_event = asyncio.Event()
         interval = max(1.0, float(self._config.interval_seconds))
-        self._task = asyncio.create_task(self._run_loop(interval), name="data-source-prefetch-scheduler")
+        self._task = asyncio.create_task(
+            self._run_loop(interval), name="data-source-prefetch-scheduler"
+        )
         if run_immediate:
             await self.run_once()
         self._logger.info(
@@ -163,21 +167,17 @@ class DataSourcePrefetchScheduler:
         summary: IngestionJobSummary | None = None,
         error: Exception | None = None,
     ) -> None:
-        payload = {
+        payload: dict[str, object] = {
             "scheduler": "data_source_prefetch",
             "action": action,
             "reason": reason,
         }
         if summary is not None:
-            payload.update(
-                {
-                    "job_id": summary.job_id,
-                    "status": summary.status,
-                    "expires_at": self._fmt_ts(summary.expires_at),
-                    "completed_at": self._fmt_ts(summary.completed_at),
-                    "record_count": summary.record_count,
-                }
-            )
+            payload["job_id"] = summary.job_id
+            payload["status"] = summary.status
+            payload["expires_at"] = self._fmt_ts(summary.expires_at)
+            payload["completed_at"] = self._fmt_ts(summary.completed_at)
+            payload["record_count"] = summary.record_count
         if error is not None:
             self._logger.error("%s", payload, exc_info=error)
         else:
@@ -191,4 +191,3 @@ class DataSourcePrefetchScheduler:
 
 
 __all__ = ["DataSourcePrefetchScheduler"]
-

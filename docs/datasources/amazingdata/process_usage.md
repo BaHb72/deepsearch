@@ -56,9 +56,9 @@ await perform_login(provider, adapter)
 ```
 
 - 能力：
-    - 登录并发节流（全局锁 + 池级序列化）
-    - 自动识别 `TGW push init failed`/`SystemExit` 并切换 `api_mode`
-    - 成功/失败埋点写入进程池状态
+  - 登录并发节流（全局锁 + 池级序列化）
+  - 自动识别 `TGW push init failed`/`SystemExit` 并切换 `api_mode`
+  - 成功/失败埋点写入进程池状态
 
 ## 3. 告警与日志片段（alert_utils）
 

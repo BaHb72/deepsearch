@@ -7,15 +7,16 @@ import time
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Tuple, cast
 
 import pandas as pd
 
 from deepsearch.infrastructure.providers.interfaces.base import (
+    DataProviderError,
     DataRequest,
     DataResponse,
-    DataProviderError,
 )
+
 from .amazingdata_types import DragonTigerRecord, ShareholderSeat, ShareholderSnapshot
 from .config import resolve_local_cache_path
 from .helpers import (
@@ -89,24 +90,24 @@ PERIOD_MAPPING: Dict[str, str] = {
 
 def _resolve_period_value(sdk: Any, period_str: str) -> Any:
     """将用户输入的period字符串解析为SDK的Period枚举值.
-    
+
     按开发手册4.1.6节，需要使用 Period.xxx.value 形式的枚举值。
     """
     # 获取SDK的Period枚举
     constant = getattr(sdk, "constant", None)
     period_enum = getattr(constant, "Period", None) if constant else None
-    
+
     # 标准化输入
     normalized = period_str.lower().strip()
     sdk_attr_name = PERIOD_MAPPING.get(normalized, normalized)
-    
+
     # 尝试从枚举获取值
     if period_enum is not None:
         period_attr = getattr(period_enum, sdk_attr_name, None)
         if period_attr is not None:
             # 返回枚举的.value
             return getattr(period_attr, "value", period_attr)
-    
+
     # 回退：直接返回字符串
     return sdk_attr_name
 
@@ -171,11 +172,15 @@ class AmazingDataQueryManager:
         try:
             data, metadata = await handler(request)
         except DataProviderError as exc:
-            return DataResponse(success=False, data=None, error=str(exc), metadata={"data_type": route_key})
+            return DataResponse(
+                success=False, data=None, error=str(exc), metadata={"data_type": route_key}
+            )
         except Exception as exc:  # noqa: BLE001
             self._safe_increment_error()
             log_error(f"AmazingData 查询 {route_key} 失败: {exc}")
-            return DataResponse(success=False, data=None, error=str(exc), metadata={"data_type": route_key})
+            return DataResponse(
+                success=False, data=None, error=str(exc), metadata={"data_type": route_key}
+            )
 
         merged_metadata: dict[str, object] = {"data_type": route_key}
         if metadata:
@@ -237,10 +242,10 @@ class AmazingDataQueryManager:
         collected: List[str] = []
 
         for candidate in (
-                request.symbols,
-                extra.get("symbols"),
-                request.symbol,
-                request.params.get("symbols") if isinstance(request.params, dict) else None,
+            request.symbols,
+            extra.get("symbols"),
+            request.symbol,
+            request.params.get("symbols") if isinstance(request.params, dict) else None,
         ):
             if candidate is None:
                 continue
@@ -281,10 +286,10 @@ class AmazingDataQueryManager:
         return default
 
     def _resolve_str_param(
-            self,
-            request: DataRequest,
-            *keys: str,
-            default: Optional[str] = None,
+        self,
+        request: DataRequest,
+        *keys: str,
+        default: Optional[str] = None,
     ) -> Optional[str]:
         extra = self._extra(request)
         for key in keys:
@@ -306,7 +311,9 @@ class AmazingDataQueryManager:
     # ------------------------------------------------------------------
     # 路由处理器
     # ------------------------------------------------------------------
-    async def _handle_kline_request(self, request: DataRequest) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    async def _handle_kline_request(
+        self, request: DataRequest
+    ) -> Tuple[pd.DataFrame, Dict[str, object]]:
         symbol = self._resolve_symbol(request)
         if not symbol:
             raise DataProviderError("AmazingData K 线查询缺少 symbol 参数")
@@ -315,7 +322,9 @@ class AmazingDataQueryManager:
         start_date = self._resolve_str_param(request, "start_date", default=request.start_date)
         end_date = self._resolve_str_param(request, "end_date", default=request.end_date)
         count = self._resolve_int_param(request, "count", "limit", default=0)
-        adjust = self._resolve_str_param(request, "adjust", default=request.adjust or "none") or "none"
+        adjust = (
+            self._resolve_str_param(request, "adjust", default=request.adjust or "none") or "none"
+        )
 
         dataframe = await self.fetch_kline(
             symbol=symbol,
@@ -327,7 +336,9 @@ class AmazingDataQueryManager:
         )
         return dataframe, {"symbol": symbol, "period": period}
 
-    async def _handle_realtime_request(self, request: DataRequest) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    async def _handle_realtime_request(
+        self, request: DataRequest
+    ) -> Tuple[pd.DataFrame, Dict[str, object]]:
         symbols = self._resolve_symbols(request)
         if not symbols:
             raise DataProviderError("AmazingData 实时行情缺少 symbols 参数")
@@ -340,12 +351,17 @@ class AmazingDataQueryManager:
         dataframe.index.name = "symbol"
         return dataframe, {"symbols": symbols}
 
-    async def _handle_financial_request(self, request: DataRequest) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    async def _handle_financial_request(
+        self, request: DataRequest
+    ) -> Tuple[pd.DataFrame, Dict[str, object]]:
         symbol = self._resolve_symbol(request)
         if not symbol:
             raise DataProviderError("AmazingData 财务数据缺少 symbol 参数")
 
-        report_type = self._resolve_str_param(request, "report_type", default="balance_sheet") or "balance_sheet"
+        report_type = (
+            self._resolve_str_param(request, "report_type", default="balance_sheet")
+            or "balance_sheet"
+        )
         date_hint = request.extra_params.get("date")
         date_default = date_hint if isinstance(date_hint, str) else None
         report_date = self._resolve_str_param(request, "report_date", default=date_default)
@@ -355,11 +371,15 @@ class AmazingDataQueryManager:
             report_type=report_type,
             report_date=report_date,
         )
-        return dataframe, {"symbol": symbol, "report_type": report_type, "report_date": report_date or ""}
+        return dataframe, {
+            "symbol": symbol,
+            "report_type": report_type,
+            "report_date": report_date or "",
+        }
 
     async def _handle_key_indicators_request(
-            self,
-            request: DataRequest,
+        self,
+        request: DataRequest,
     ) -> Tuple[pd.DataFrame, Dict[str, object]]:
         symbol = self._resolve_symbol(request)
         if not symbol:
@@ -370,8 +390,8 @@ class AmazingDataQueryManager:
         return dataframe, {"symbol": symbol, "report_date": report_date or ""}
 
     async def _handle_shareholder_request(
-            self,
-            request: DataRequest,
+        self,
+        request: DataRequest,
     ) -> Tuple[ShareholderSnapshot | None, Dict[str, object]]:
         symbol = self._resolve_symbol(request)
         if not symbol:
@@ -382,8 +402,8 @@ class AmazingDataQueryManager:
         return snapshot, {"symbol": symbol, "report_date": report_date or ""}
 
     async def _handle_dragon_tiger_request(
-            self,
-            request: DataRequest,
+        self,
+        request: DataRequest,
     ) -> Tuple[List[DragonTigerRecord], Dict[str, object]]:
         symbol = self._resolve_symbol(request)
         if not symbol:
@@ -391,12 +411,18 @@ class AmazingDataQueryManager:
 
         start_date = self._resolve_str_param(request, "start_date")
         end_date = self._resolve_str_param(request, "end_date")
-        records = await self.fetch_dragon_tiger(symbol=symbol, start_date=start_date, end_date=end_date)
-        return records, {"symbol": symbol, "start_date": start_date or "", "end_date": end_date or ""}
+        records = await self.fetch_dragon_tiger(
+            symbol=symbol, start_date=start_date, end_date=end_date
+        )
+        return records, {
+            "symbol": symbol,
+            "start_date": start_date or "",
+            "end_date": end_date or "",
+        }
 
     async def _handle_margin_trading_request(
-            self,
-            request: DataRequest,
+        self,
+        request: DataRequest,
     ) -> Tuple[pd.DataFrame, Dict[str, object]]:
         symbol = self._resolve_symbol(request)
         if not symbol:
@@ -404,12 +430,18 @@ class AmazingDataQueryManager:
 
         start_date = self._resolve_str_param(request, "start_date")
         end_date = self._resolve_str_param(request, "end_date")
-        dataframe = await self.fetch_margin_trading(symbol=symbol, start_date=start_date, end_date=end_date)
-        return dataframe, {"symbol": symbol, "start_date": start_date or "", "end_date": end_date or ""}
+        dataframe = await self.fetch_margin_trading(
+            symbol=symbol, start_date=start_date, end_date=end_date
+        )
+        return dataframe, {
+            "symbol": symbol,
+            "start_date": start_date or "",
+            "end_date": end_date or "",
+        }
 
     async def _handle_block_trading_request(
-            self,
-            request: DataRequest,
+        self,
+        request: DataRequest,
     ) -> Tuple[pd.DataFrame, Dict[str, object]]:
         symbols = self._resolve_symbols(request)
         if not symbols:
@@ -426,15 +458,22 @@ class AmazingDataQueryManager:
             symbols=symbols,
             local_path=resolved_path,
             is_local=bool(is_local) if is_local is not None else True,
-            begin_date=int(begin_date) if isinstance(begin_date, (int, float, str)) and str(
-                begin_date).isdigit() else None,
-            end_date=int(end_date) if isinstance(end_date, (int, float, str)) and str(end_date).isdigit() else None,
+            begin_date=(
+                int(begin_date)
+                if isinstance(begin_date, (int, float, str)) and str(begin_date).isdigit()
+                else None
+            ),
+            end_date=(
+                int(end_date)
+                if isinstance(end_date, (int, float, str)) and str(end_date).isdigit()
+                else None
+            ),
         )
         return dataframe, {"symbols": symbols}
 
     async def _handle_north_flow_request(
-            self,
-            request: DataRequest,
+        self,
+        request: DataRequest,
     ) -> Tuple[pd.DataFrame, Dict[str, object]]:
         start_date = self._resolve_str_param(request, "start_date")
         end_date = self._resolve_str_param(request, "end_date")
@@ -442,8 +481,8 @@ class AmazingDataQueryManager:
         return dataframe, {"start_date": start_date or "", "end_date": end_date or ""}
 
     async def _handle_stock_list_request(
-            self,
-            request: DataRequest,
+        self,
+        request: DataRequest,
     ) -> Tuple[Optional[List[dict[str, Any]]], Dict[str, object]]:
         limit = self._resolve_int_param(request, "limit", default=0)
         extra = self._extra(request)
@@ -461,14 +500,14 @@ class AmazingDataQueryManager:
     # 具体查询实现
     # ------------------------------------------------------------------
     async def fetch_kline(
-            self,
-            *,
-            symbol: str,
-            period: str,
-            start_date: Optional[str],
-            end_date: Optional[str],
-            count: int,
-            adjust: str,
+        self,
+        *,
+        symbol: str,
+        period: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        count: int,
+        adjust: str,
     ) -> pd.DataFrame:
         owner = self._owner
         owner._before_query()
@@ -535,7 +574,9 @@ class AmazingDataQueryManager:
         owner = self._owner
         owner._before_query()
         sdk = owner._require_sdk()
-        normalized = [symbol.strip() for symbol in symbols if isinstance(symbol, str) and symbol.strip()]
+        normalized = [
+            symbol.strip() for symbol in symbols if isinstance(symbol, str) and symbol.strip()
+        ]
         if not normalized:
             return {}
 
@@ -544,11 +585,7 @@ class AmazingDataQueryManager:
         async def _call() -> Any:
             def _invoke() -> Any:
                 market = _create_market_data_instance(sdk)
-                candidates = (
-                    getattr(market, "query_snapshot", None),
-                    getattr(market, "get_snapshot", None),
-                    getattr(market, "get_realtime_quote", None),
-                )
+                candidates = (getattr(market, "query_snapshot", None),)
                 for method in candidates:
                     if not callable(method):
                         continue
@@ -567,11 +604,11 @@ class AmazingDataQueryManager:
         return self.format_realtime_payload(raw, normalized)
 
     async def fetch_financial_data(
-            self,
-            *,
-            symbol: str,
-            report_type: str,
-            report_date: Optional[str],
+        self,
+        *,
+        symbol: str,
+        report_type: str,
+        report_date: Optional[str],
     ) -> pd.DataFrame:
         owner = self._owner
         owner._before_query()
@@ -619,7 +656,9 @@ class AmazingDataQueryManager:
             return pd.DataFrame()
         return pd.DataFrame(raw)
 
-    async def fetch_key_indicators(self, *, symbol: str, report_date: Optional[str]) -> pd.DataFrame:
+    async def fetch_key_indicators(
+        self, *, symbol: str, report_date: Optional[str]
+    ) -> pd.DataFrame:
         owner = self._owner
         try:
             owner._before_query()
@@ -658,10 +697,10 @@ class AmazingDataQueryManager:
             raise DataProviderError(f"��ȡ��Ҫָ��ʧ��: {exc}") from exc
 
     async def fetch_shareholder_info(
-            self,
-            *,
-            symbol: str,
-            report_date: Optional[str],
+        self,
+        *,
+        symbol: str,
+        report_date: Optional[str],
     ) -> Optional[ShareholderSnapshot]:
         owner = self._owner
         try:
@@ -699,11 +738,20 @@ class AmazingDataQueryManager:
                     if isinstance(holder, Mapping):
                         top10_holders_list.append(
                             {
-                                "name": str(_coalesce(holder.get("holder_name"), holder.get("HOLDER_NAME"), "")),
+                                "name": str(
+                                    _coalesce(
+                                        holder.get("holder_name"), holder.get("HOLDER_NAME"), ""
+                                    )
+                                ),
                                 "holding": _ensure_float(
-                                    _coalesce(holder.get("hold_num"), holder.get("HOLDER_QUANTITY"))),
-                                "ratio": _ensure_float(_coalesce(holder.get("hold_ratio"), holder.get("HOLDER_PCT"))),
-                                "change": _ensure_float(_coalesce(holder.get("change"), holder.get("HOLDER_CHANGE"))),
+                                    _coalesce(holder.get("hold_num"), holder.get("HOLDER_QUANTITY"))
+                                ),
+                                "ratio": _ensure_float(
+                                    _coalesce(holder.get("hold_ratio"), holder.get("HOLDER_PCT"))
+                                ),
+                                "change": _ensure_float(
+                                    _coalesce(holder.get("change"), holder.get("HOLDER_CHANGE"))
+                                ),
                             }
                         )
 
@@ -712,11 +760,20 @@ class AmazingDataQueryManager:
                     if isinstance(holder, Mapping):
                         top10_tradable_list.append(
                             {
-                                "name": str(_coalesce(holder.get("holder_name"), holder.get("HOLDER_NAME"), "")),
+                                "name": str(
+                                    _coalesce(
+                                        holder.get("holder_name"), holder.get("HOLDER_NAME"), ""
+                                    )
+                                ),
                                 "holding": _ensure_float(
-                                    _coalesce(holder.get("hold_num"), holder.get("HOLDER_QUANTITY"))),
-                                "ratio": _ensure_float(_coalesce(holder.get("hold_ratio"), holder.get("HOLDER_PCT"))),
-                                "change": _ensure_float(_coalesce(holder.get("change"), holder.get("HOLDER_CHANGE"))),
+                                    _coalesce(holder.get("hold_num"), holder.get("HOLDER_QUANTITY"))
+                                ),
+                                "ratio": _ensure_float(
+                                    _coalesce(holder.get("hold_ratio"), holder.get("HOLDER_PCT"))
+                                ),
+                                "change": _ensure_float(
+                                    _coalesce(holder.get("change"), holder.get("HOLDER_CHANGE"))
+                                ),
                             }
                         )
 
@@ -741,10 +798,15 @@ class AmazingDataQueryManager:
                         _coalesce(holder_info.get("avg_hold"), holder_info.get("AVG_HOLD"))
                     )
                     result["institution_ratio"] = _ensure_float(
-                        _coalesce(holder_info.get("institution_ratio"), holder_info.get("INSTITUTION_RATIO"))
+                        _coalesce(
+                            holder_info.get("institution_ratio"),
+                            holder_info.get("INSTITUTION_RATIO"),
+                        )
                     )
                     result["concentration"] = _ensure_float(
-                        _coalesce(holder_info.get("concentration"), holder_info.get("CONCENTRATION"))
+                        _coalesce(
+                            holder_info.get("concentration"), holder_info.get("CONCENTRATION")
+                        )
                     )
 
             return result
@@ -755,11 +817,11 @@ class AmazingDataQueryManager:
             return None
 
     async def fetch_dragon_tiger(
-            self,
-            *,
-            symbol: str,
-            start_date: Optional[str],
-            end_date: Optional[str],
+        self,
+        *,
+        symbol: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
     ) -> list[DragonTigerRecord]:
         owner = self._owner
         try:
@@ -784,9 +846,7 @@ class AmazingDataQueryManager:
                 else:
                     raw_items = [data]
             elif isinstance(data, Sequence):
-                raw_items = [
-                    item for item in data if isinstance(item, Mapping)
-                ]
+                raw_items = [item for item in data if isinstance(item, Mapping)]
             else:
                 return []
 
@@ -840,11 +900,11 @@ class AmazingDataQueryManager:
             return []
 
     async def fetch_margin_trading(
-            self,
-            *,
-            symbol: str,
-            start_date: Optional[str],
-            end_date: Optional[str],
+        self,
+        *,
+        symbol: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
     ) -> pd.DataFrame:
         owner = self._owner
         try:
@@ -899,13 +959,13 @@ class AmazingDataQueryManager:
             raise DataProviderError(f"��ȡ������ȯ����ʧ��: {exc}") from exc
 
     async def fetch_block_trading(
-            self,
-            *,
-            symbols: Sequence[str],
-            local_path: str,
-            is_local: bool,
-            begin_date: Optional[int],
-            end_date: Optional[int],
+        self,
+        *,
+        symbols: Sequence[str],
+        local_path: str,
+        is_local: bool,
+        begin_date: Optional[int],
+        end_date: Optional[int],
     ) -> pd.DataFrame:
         owner = self._owner
         try:
@@ -939,7 +999,9 @@ class AmazingDataQueryManager:
                     call_kwargs: dict[str, object] = {}
                     if local_mode and effective_local_path:
                         call_kwargs["local_path"] = effective_local_path
-                        call_kwargs["is_local"] = True if effective_is_local is None else effective_is_local
+                        call_kwargs["is_local"] = (
+                            True if effective_is_local is None else effective_is_local
+                        )
                     else:
                         if effective_begin is not None:
                             call_kwargs["begin_date"] = effective_begin
@@ -1009,10 +1071,10 @@ class AmazingDataQueryManager:
             raise DataProviderError(f"��ȡ���ڽ�������ʧ��: {exc}") from exc
 
     async def fetch_north_flow(
-            self,
-            *,
-            start_date: Optional[str],
-            end_date: Optional[str],
+        self,
+        *,
+        start_date: Optional[str],
+        end_date: Optional[str],
     ) -> pd.DataFrame:
         owner = self._owner
         try:
@@ -1081,10 +1143,10 @@ class AmazingDataQueryManager:
             raise DataProviderError(f"��ȡ�����ʽ�����ʧ��: {exc}") from exc
 
     async def fetch_stock_list(
-            self,
-            *,
-            limit: Optional[int],
-            **kwargs: Any,
+        self,
+        *,
+        limit: Optional[int],
+        **kwargs: Any,
     ) -> Optional[List[dict[str, Any]]]:
         owner = self._owner
 
@@ -1259,8 +1321,8 @@ class AmazingDataQueryManager:
     @staticmethod
     @staticmethod
     def format_realtime_payload(
-            raw: Any,
-            symbols: Sequence[str],
+        raw: Any,
+        symbols: Sequence[str],
     ) -> Dict[str, Dict[str, Any]]:
         if raw is None:
             return {}
@@ -1301,8 +1363,8 @@ class AmazingDataQueryManager:
 
     @staticmethod
     def _format_snapshot_map(
-            normalized_targets: Sequence[str],
-            rows: Sequence[Mapping[str, Any]],
+        normalized_targets: Sequence[str],
+        rows: Sequence[Mapping[str, Any]],
     ) -> Dict[str, Dict[str, Any]]:
         formatted: Dict[str, Dict[str, Any]] = {}
         for row in rows:
@@ -1324,7 +1386,9 @@ class AmazingDataQueryManager:
     @staticmethod
     def _format_snapshot_quote(symbol_code: str, row: Mapping[str, Any]) -> Dict[str, Any]:
         name = _coalesce(row.get("name"), row.get("SECURITY_NAME"), row.get("security_name"), "")
-        last_value = _coalesce(row.get("last"), row.get("close"), row.get("last_price"), row.get("price"))
+        last_value = _coalesce(
+            row.get("last"), row.get("close"), row.get("last_price"), row.get("price")
+        )
         open_value = _coalesce(row.get("open"), row.get("open_price"))
         high_value = row.get("high")
         low_value = row.get("low")

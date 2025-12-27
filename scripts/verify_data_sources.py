@@ -6,7 +6,7 @@
 import asyncio
 import traceback
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from loguru import logger
 
@@ -59,7 +59,10 @@ async def test_akshare_direct_provider():
             "get_sector_stocks",
             lambda: provider.get_sector_stocks(sector_name="融资融券", sector_type="concept"),
         ),
-        ("get_individual_capital_flow", lambda: provider.get_individual_capital_flow("600519", market="sh")),
+        (
+            "get_individual_capital_flow",
+            lambda: provider.get_individual_capital_flow("600519", market="sh"),
+        ),
         ("get_sector_capital_flow_rank", lambda: provider.get_sector_capital_flow_rank()),
         (
             "get_margin_trading",
@@ -195,7 +198,11 @@ async def main():
     print("\n=== AKShareDirectProvider ===")
     success_count = sum(1 for r in akshare_results.values() if r.get("success"))
     total_count = len(akshare_results)
-    print(f"成功率: {success_count}/{total_count} ({success_count / total_count * 100:.1f}%)" if total_count > 0 else "无测试结果")
+    print(
+        f"成功率: {success_count}/{total_count} ({success_count / total_count * 100:.1f}%)"
+        if total_count > 0
+        else "无测试结果"
+    )
     for test_name, result in akshare_results.items():
         status = "[PASS]" if result.get("success") else "[FAIL]"
         error = result.get("error", "")
@@ -204,7 +211,11 @@ async def main():
     print("\n=== DataSourceManager ===")
     success_count = sum(1 for r in manager_results.values() if r.get("success"))
     total_count = len(manager_results)
-    print(f"成功率: {success_count}/{total_count} ({success_count / total_count * 100:.1f}%)" if total_count > 0 else "无测试结果")
+    print(
+        f"成功率: {success_count}/{total_count} ({success_count / total_count * 100:.1f}%)"
+        if total_count > 0
+        else "无测试结果"
+    )
     for test_name, result in manager_results.items():
         status = "[PASS]" if result.get("success") else "[FAIL]"
         error = result.get("error", "")

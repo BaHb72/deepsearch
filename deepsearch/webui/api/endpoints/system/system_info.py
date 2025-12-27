@@ -3,6 +3,7 @@
 
 �ṩϵͳ���ú�����ʱ��Ϣ��ѯ�ӿ�
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -111,7 +112,9 @@ def _ensure_float(value: object) -> float:
 
 
 @router.get("/info", response_model=SystemInfoResponse)
-async def get_system_info(engine: MainEngine | None = Depends(get_engine_optional)) -> SystemInfoResponse:
+async def get_system_info(
+    engine: MainEngine | None = Depends(get_engine_optional),
+) -> SystemInfoResponse:
     """
     ��ȡϵͳ��Ϣ
 
@@ -133,8 +136,7 @@ async def get_system_info(engine: MainEngine | None = Depends(get_engine_optiona
             if bus_cfg.enabled
         ]
         message_routes = [
-            [_normalize_bus_name(bus) for bus in route.buses]
-            for route in bus_config.routes
+            [_normalize_bus_name(bus) for bus in route.buses] for route in bus_config.routes
         ]
 
         configured_port = config.webui.backend_port
@@ -206,7 +208,9 @@ async def get_webui_port(engine: MainEngine = Depends(get_engine)) -> WebUIPortR
 
 
 @router.post("/notify_port_change", response_model=NotifyPortChangeResponse)
-async def notify_port_change(port: int, engine: MainEngine = Depends(get_engine)) -> NotifyPortChangeResponse:
+async def notify_port_change(
+    port: int, engine: MainEngine = Depends(get_engine)
+) -> NotifyPortChangeResponse:
     """
     ֪ͨ�˿ڱ�����ڲ�ʹ�ã�
 

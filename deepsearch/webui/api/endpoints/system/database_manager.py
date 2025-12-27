@@ -450,7 +450,7 @@ def _apply_password_mask(payload: Dict[str, Any], password_value: Optional[str])
 
 
 def _resolve_password_submission(
-        submitted: Optional[str], existing: Optional[str]
+    submitted: Optional[str], existing: Optional[str]
 ) -> Optional[str]:
     """根据提交值与已保存值计算最终入库密码。"""
     if submitted is None:
@@ -578,7 +578,9 @@ def _load_connections_from_storage() -> bool:
     return True
 
 
-def _update_connection_test_metadata(connection_id: int, success: bool, message: Optional[str]) -> None:
+def _update_connection_test_metadata(
+    connection_id: int, success: bool, message: Optional[str]
+) -> None:
     """更新连接的最近测试信息并持久化。"""
     with _connections_lock:
         connection = database_connections.get(connection_id)
@@ -741,7 +743,6 @@ def initialize_connection_store() -> None:
 
 # 初始化连接配置
 initialize_connection_store()
-
 
 
 @router.get("/connections")
@@ -984,9 +985,7 @@ async def create_connection(connection: DatabaseConnection):
             database_connections[connection.id] = connection
             connection_id = connection.id
 
-        activation_state: ActivationStateLiteral = (
-            "active" if connection.enabled else "inactive"
-        )
+        activation_state: ActivationStateLiteral = "active" if connection.enabled else "inactive"
         _save_activation_state(connection_id, activation_state, connection.enabled)
         if activation_state != "active":
             _save_connectivity_state(connection_id, "disconnected")
@@ -1228,10 +1227,7 @@ async def update_connection(connection_id: int, connection: DatabaseConnection):
             connection.password = resolved_password
             database_connections[connection_id] = connection
 
-
-        activation_state: ActivationStateLiteral = (
-            "active" if connection.enabled else "inactive"
-        )
+        activation_state: ActivationStateLiteral = "active" if connection.enabled else "inactive"
         _save_activation_state(connection_id, activation_state, connection.enabled)
         if activation_state != "active":
             _save_connectivity_state(connection_id, "disconnected")
@@ -1440,7 +1436,9 @@ async def _execute_connection_test(request: TestConnectionRequest) -> Dict[str, 
                     )
                     client.ping()
                     info_result = client.info()
-                    info_data = await info_result if inspect.isawaitable(info_result) else info_result
+                    info_data = (
+                        await info_result if inspect.isawaitable(info_result) else info_result
+                    )
                     client.close()
                     result["success"] = True
                     result["message"] = "连接成功"
@@ -1607,5 +1605,3 @@ def register_database_connection_monitor(app: FastAPI) -> None:
 
     app.add_event_handler("startup", _startup)
     app.add_event_handler("shutdown", _shutdown)
-
-

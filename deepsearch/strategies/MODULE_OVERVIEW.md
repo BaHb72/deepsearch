@@ -7,22 +7,22 @@
 ## 核心结构
 
 - **interfaces/**
-    - `base.py`：定义抽象基类 `BaseStrategy`，包含生命周期钩子 (
+  - `base.py`：定义抽象基类 `BaseStrategy`，包含生命周期钩子 (
       `on_init/on_start/on_bar/on_tick/on_order/on_trade/on_stop`)、订单/持仓管理、事件引擎集成、指标统计等通用逻辑。
-    - `protocols.py`：约束策略引擎、风险控制、信号生成等服务的接口。
-    - `types.py`：集中定义策略数据结构（`StrategyParams`, `StrategyOrder`, `MarketBarData`, `TickData`, `StrategyMetrics`
+  - `protocols.py`：约束策略引擎、风险控制、信号生成等服务的接口。
+  - `types.py`：集中定义策略数据结构（`StrategyParams`, `StrategyOrder`, `MarketBarData`, `TickData`, `StrategyMetrics`
       等）。
 - **managers/**
-    - `manager.py`：统一策略管理器，负责策略注册、参数装载、状态跟踪、指标回报，提供批量管理 API。
-    - `engine.py`：协调策略执行与事件分发，可在回测或实时模式下运行；处理调度、行情分发、订单/成交回报。
-    - `signal_generator.py`：封装常用指标/信号计算（移动平均、动量、布林带等），供策略复用。
-    - `risk_manager.py`：定义基础风控规则，如最大回撤、仓位限制、风控告警。
+  - `manager.py`：统一策略管理器，负责策略注册、参数装载、状态跟踪、指标回报，提供批量管理 API。
+  - `engine.py`：协调策略执行与事件分发，可在回测或实时模式下运行；处理调度、行情分发、订单/成交回报。
+  - `signal_generator.py`：封装常用指标/信号计算（移动平均、动量、布林带等），供策略复用。
+  - `risk_manager.py`：定义基础风控规则，如最大回撤、仓位限制、风控告警。
 - **services/**
-    - `backtest_service.py`：桥接策略框架与 `backtest` 模块，实现策略回测执行、参数传递、结果收集。
+  - `backtest_service.py`：桥接策略框架与 `backtest` 模块，实现策略回测执行、参数传递、结果收集。
 - **events/**
-    - 定义策略事件载体（如策略状态变化、信号事件），供消息总线或事件引擎使用。
+  - 定义策略事件载体（如策略状态变化、信号事件），供消息总线或事件引擎使用。
 - **implementations/**
-    - 提供示例策略：`moving_average.py`、`mean_reversion.py`、`momentum.py`、`simple_ma.py`、`turtle_trading.py` 等，演示如何继承
+  - 提供示例策略：`moving_average.py`、`mean_reversion.py`、`momentum.py`、`simple_ma.py`、`turtle_trading.py` 等，演示如何继承
       `BaseStrategy` 并复用 signal/risk 组件。
 
 ## 运行流程

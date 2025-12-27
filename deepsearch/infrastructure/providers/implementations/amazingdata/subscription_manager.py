@@ -5,20 +5,24 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from datetime import datetime
-from typing import Any, Callable, Mapping, Sequence, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence, cast
 
 from deepsearch.infrastructure.providers.interfaces.base import DataProvider, DataProviderError
+
 from .logging_utils import log_debug, log_error, log_info, log_warning
 from .subscription import SubscriptionInfo, SubscriptionRegistry
 
 if TYPE_CHECKING:
     from .amazingdata import AmazingDataProvider
 
+
 class AmazingDataSubscriptionManager:
     """Manage AmazingData SubscribeData lifecycle and callback dispatch."""
 
     def __init__(self, owner: "AmazingDataProvider") -> None:
-        from .amazingdata import AmazingDataProvider  # Local import to avoid circular import at module load time.
+        from .amazingdata import (  # Local import to avoid circular import at module load time.
+            AmazingDataProvider,
+        )
 
         if not isinstance(owner, AmazingDataProvider):
             if not isinstance(owner, DataProvider):
@@ -68,10 +72,10 @@ class AmazingDataSubscriptionManager:
     # Public operations
     # ------------------------------------------------------------------
     async def subscribe(
-            self,
-            symbols: Sequence[str],
-            callback: Callable[[Any], Any],
-            data_type: str = "snapshot",
+        self,
+        symbols: Sequence[str],
+        callback: Callable[[Any], Any],
+        data_type: str = "snapshot",
     ) -> bool:
         if not symbols:
             log_warning("订阅请求缺少股票代码", action="subscription")
@@ -88,7 +92,11 @@ class AmazingDataSubscriptionManager:
         if subscription_data is None:
             raise DataProviderError("SubscribeData 初始化失败，无法订阅")
 
-        normalized = [symbol.strip().upper() for symbol in symbols if isinstance(symbol, str) and symbol.strip()]
+        normalized = [
+            symbol.strip().upper()
+            for symbol in symbols
+            if isinstance(symbol, str) and symbol.strip()
+        ]
         if not normalized:
             log_warning("经标准化后订阅列表为空，忽略", action="subscription")
             return False
@@ -111,7 +119,11 @@ class AmazingDataSubscriptionManager:
         return True
 
     async def unsubscribe(self, symbols: Sequence[str]) -> bool:
-        normalized = [symbol.strip().upper() for symbol in symbols if isinstance(symbol, str) and symbol.strip()]
+        normalized = [
+            symbol.strip().upper()
+            for symbol in symbols
+            if isinstance(symbol, str) and symbol.strip()
+        ]
         if not normalized:
             return True
         async with self._lock:
@@ -181,10 +193,10 @@ class AmazingDataSubscriptionManager:
         return len(self._registry)
 
     async def _handle_subscription_event(
-            self,
-            data: Any,
-            period: int,
-            callback: Callable[[Any], Any],
+        self,
+        data: Any,
+        period: int,
+        callback: Callable[[Any], Any],
     ) -> None:
         try:
             converted = self._convert_subscription_data(data, period)
@@ -224,7 +236,10 @@ class AmazingDataSubscriptionManager:
                 period = getattr(period, attr)
             return getattr(period, "value", period)
         except AttributeError:
-            log_warning(f"AmazingData 常量 {attr_path} 缺失，回退为 {fallback}", action="subscription_period")
+            log_warning(
+                f"AmazingData 常量 {attr_path} 缺失，回退为 {fallback}",
+                action="subscription_period",
+            )
             return fallback
 
     def _convert_subscription_data(self, data: Any, period: int) -> dict[str, Any]:

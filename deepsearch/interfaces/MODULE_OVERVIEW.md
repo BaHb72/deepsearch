@@ -8,10 +8,10 @@ provider 实现。
 ## 主要内容
 
 - `data/__init__.py`：
-    - 从 `infrastructure.providers.implementations.amazingdata` 导出 `AmazingDataConfig`, `AmazingDataProvider` 以及枚举类型
+  - 从 `infrastructure.providers.implementations.amazingdata` 导出 `AmazingDataConfig`, `AmazingDataProvider` 以及枚举类型
       `AmazingDataAdjust`, `AmazingDataPeriod`, `AmazingDataSecurityType`。
-    - 定义 `DataCache` 数据类，描述缓存策略（TTL、内存容量、Redis 配置、元数据），提供 `to_dict()` 便于序列化。
-    - 重新导出常见异常类型：`AuthenticationError`, `RateLimitError`, `DataProviderError`，使上层代码只需依赖
+  - 定义 `DataCache` 数据类，描述缓存策略（TTL、内存容量、Redis 配置、元数据），提供 `to_dict()` 便于序列化。
+  - 重新导出常见异常类型：`AuthenticationError`, `RateLimitError`, `DataProviderError`，使上层代码只需依赖
       `deepsearch.interfaces.data` 即可捕获数据源相关异常。
 
 ## 使用说明

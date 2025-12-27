@@ -6,7 +6,7 @@
 
 import asyncio
 import time
-from typing import Dict, List, Optional, Tuple, TypedDict, Literal
+from typing import Dict, List, Literal, Optional, Tuple, TypedDict
 
 import aiohttp
 from loguru import logger
@@ -119,7 +119,9 @@ class ProxyValidator:
             async with session.get(self.ANONYMITY_CHECK_URL) as response:
                 await response.json()
 
-            async with session.get(self.ANONYMITY_CHECK_URL, proxy=proxy_url, ssl=False) as response:
+            async with session.get(
+                self.ANONYMITY_CHECK_URL, proxy=proxy_url, ssl=False
+            ) as response:
                 proxy_headers = await response.json()
 
             headers = proxy_headers.get("headers", {})

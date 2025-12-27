@@ -3,6 +3,7 @@
 
 提供自动内存监控、清理和优化
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -84,7 +85,6 @@ class MemoryAnalysis(TypedDict):
     recommendations: list[MemoryRecommendation]
 
 
-
 class _UnixResourceLimiter:
     """使用 resource 模块在类 Unix 系统上设置内存限制。"""
 
@@ -100,6 +100,8 @@ class _UnixResourceLimiter:
             return
 
         self._original_limits = self._resource.getrlimit(self._resource.RLIMIT_AS)
+        if self._original_limits is None:
+            return
         soft, hard = self._original_limits
         new_soft = self.limit_bytes
         if hard != self._resource.RLIM_INFINITY:

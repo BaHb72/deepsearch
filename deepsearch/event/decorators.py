@@ -174,9 +174,7 @@ def validated_handler(
                 return None
 
         # Apply event_handler decorator
-        return cast(
-            F, event_handler(event_type, priority=priority, async_flag=async_flag)(wrapper)
-        )
+        return cast(F, event_handler(event_type, priority=priority, async_flag=async_flag)(wrapper))
 
     return decorator
 
@@ -657,15 +655,15 @@ This module provides a rich set of decorators for enhanced developer experience:
 Usage Example:
     from deepsearch.event.decorators import event_handler, set_engine, robust_handler
     from deepsearch.event.schema import TickSchema
-    
+
     # Set global engine
     set_engine(event_engine)
-    
+
     # Simple handler
     @event_handler("TICK", priority=10, async_flag=True)
     def handle_tick(event: Event):
         print(f"Price: {event.data['price']}")
-    
+
     # Robust handler with all features
     @robust_handler(
         "TICK",

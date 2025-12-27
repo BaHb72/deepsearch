@@ -56,34 +56,47 @@ deepsearch/
 > ⚠️ 默认在 **Windows PowerShell/CMD** 中运行 `uv`、`python`、`npm` 等命令；WSL 仅允许只读操作（如查看文件、grep），所有依赖安装必须在 Windows 环境执行。
 
 1. 克隆仓库并进入目录：
+
    ```powershell
    git clone https://github.com/BaHb/deepsearch.git
    cd deepsearch
    ```
+
 2. 安装 [uv](https://github.com/astral-sh/uv)（尚未安装时）：
+
    ```powershell
    python -m pip install --upgrade uv
    ```
+
 3. 创建或复用仓库虚拟环境（版本见 `.python-version`）：
+
    ```powershell
    uv venv --python (Get-Content .python-version)
    . .\.venv\Scripts\Activate.ps1
    ```
+
 4. 安装后端依赖（含所有 extra）：
+
    ```powershell
    uv sync --all-extras
    ```
+
    > 📌 **提示**：默认 `uv sync` 仅安装基础依赖。若需运行单元测试或调试 CLI，请追加 `--dev` 以同步 `pytest`、`coverage` 等开发套件：
+>
    > ```powershell
    > uv sync --all-extras --dev
    > ```
-   > 若执行测试仍提示缺少 `pandas`、`pydantic`、`fastapi`、`psutil` 等模块，请确认是否遗漏以上同步步骤。仓库已在 `pyproject.toml` 中声明这些依赖，缺失通常意味着当前虚拟环境尚未安装。 
+>
+   > 若执行测试仍提示缺少 `pandas`、`pydantic`、`fastapi`、`psutil` 等模块，请确认是否遗漏以上同步步骤。仓库已在 `pyproject.toml` 中声明这些依赖，缺失通常意味着当前虚拟环境尚未安装。
+
 5. 安装 WebUI 依赖：
+
    ```powershell
    cd deepsearch/webui/frontend
    npm install
    cd ..\..\..
    ```
+
    > 📎 **注意**：仓库约定不提交 `package-lock.json`。在 Windows 终端执行 `npm install` 后，请确认未将该文件纳入提交；如已生成，请运行
    > `Remove-Item package-lock.json` 或手动删除。
 6. AmazingData 现使用共享的 Python 3.13 外部环境：请参考 `docs/datasources/amazingdata/README.md` 指南确认系统 Python 3.13 安装路径，并在
@@ -99,16 +112,19 @@ deepsearch/
 **开发模式 (推荐)**
 
 以开发模式启动完整后端服务，并开启调试日志：
+
 ```powershell
 uv run deepsearch run dev --log-level DEBUG
 ```
 
 **生产模式**
+
 ```powershell
 uv run deepsearch run
 ```
 
 **其他启动模式**
+
 ```powershell
 # 仅运行事件引擎
 uv run deepsearch run dev --mode engine
@@ -118,6 +134,7 @@ uv run deepsearch run dev --mode webui
 ```
 
 **系统自检**
+
 ```powershell
 # 端口自检
 uv run deepsearch check-ports
@@ -135,8 +152,8 @@ npm run dev
 
 ### 访问入口
 
-- WebUI（开发环境）：http://localhost:3000
-- API 文档（FastAPI）：http://localhost:8000/docs
+- WebUI（开发环境）：<http://localhost:3000>
+- API 文档（FastAPI）：<http://localhost:8000/docs>
 
 ## 配置管理
 
@@ -144,7 +161,6 @@ npm run dev
 - 非必要情况下不要依赖环境变量覆盖配置，确需调整时务必同步更新示例文件并保持结构一致。
 - 涉及敏感字段使用占位符（如 `your_database_password`），真实凭据仅保存在本地未纳入 Git。
 - 提交前执行 `git grep -i "password\|secret\|token" -- ':(exclude)*.example'` 自检，确保未泄露真实凭据。
-
 
 ### 实时数据源编排
 
@@ -217,8 +233,8 @@ uv run bandit -r deepsearch
 
 ## 联系方式
 
-- GitHub Issues: https://github.com/BaHb/deepsearch/issues
-- 团队邮箱（示例）：team@deepsearch.local
+- GitHub Issues: <https://github.com/BaHb/deepsearch/issues>
+- 团队邮箱（示例）：<team@deepsearch.local>
 
 ## 文档导航补充
 

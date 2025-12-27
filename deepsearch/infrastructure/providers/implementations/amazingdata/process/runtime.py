@@ -12,28 +12,25 @@ import threading
 import time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone, timedelta, time as time_cls
+from datetime import datetime
+from datetime import time as time_cls
+from datetime import timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from types import ModuleType
 from typing import Any, ClassVar, Dict, List, Optional, Tuple, TypeVar, cast
 from zoneinfo import ZoneInfo
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-from deepsearch.infrastructure.providers.interfaces.base import (
-    DataProvider,
-    DataProviderError,
-)
+from deepsearch.infrastructure.providers.interfaces.base import DataProvider, DataProviderError
 from deepsearch.ports.amazingdata_process import (
     AmazingDataLogoutRequest,
     ProcessCallResult,
     ProcessCommand,
 )
-from .alert_utils import collect_tgw_log_snippet, read_tgw_tail_lines, trigger_alert
-from .login_flow import perform_login
-from .subscription_tasks import ProcessSubscriptionCoordinator
+
 from ..amazingdata_process_adapter import AmazingDataProcessAdapter
 from ..amazingdata_process_pool import AmazingDataProcessPool, get_global_pool
 from ..amazingdata_types import AmazingDataSecurityType
@@ -58,7 +55,69 @@ from ..param_guards import (
     normalize_security_type,
     validate_security_period,
 )
+from .alert_utils import collect_tgw_log_snippet, read_tgw_tail_lines, trigger_alert
+from .login_flow import perform_login
+from .subscription_tasks import ProcessSubscriptionCoordinator
 
+# 安全导入SDK常量模块（仅包含枚举定义，不触发SDK初始化）
+try:
+    from AmazingData import constant as ad_constant
+
+    _SDK_PERIOD_AVAILABLE = True
+except ImportError:
+    ad_constant = None  # type: ignore[assignment]
+    _SDK_PERIOD_AVAILABLE = False
+
+
+# 字符串到Period枚举的映射（用于IPC传递）
+def _get_period_enum_map() -> Dict[str, Any]:
+    """构建字符串到SDK Period枚举的映射表"""
+    if not _SDK_PERIOD_AVAILABLE or ad_constant is None:
+        return {}
+    Period = ad_constant.Period
+    return {
+        # 日线
+        "1d": Period.day,
+        "day": Period.day,
+        "daily": Period.day,
+        # 周线
+        "1w": Period.week,
+        "week": Period.week,
+        "weekly": Period.week,
+        # 月线
+        "1M": Period.month,
+        "month": Period.month,
+        "monthly": Period.month,
+        # 分钟线
+        "1m": Period.min1,
+        "min1": Period.min1,
+        "3m": Period.min3,
+        "min3": Period.min3,
+        "5m": Period.min5,
+        "min5": Period.min5,
+        "10m": Period.min10,
+        "min10": Period.min10,
+        "15m": Period.min15,
+        "min15": Period.min15,
+        "30m": Period.min30,
+        "min30": Period.min30,
+        "60m": Period.min60,
+        "min60": Period.min60,
+        "1h": Period.min60,
+        "120m": Period.min120,
+        "min120": Period.min120,
+        "2h": Period.min120,
+        # 季度/年
+        "season": Period.season,
+        "quarter": Period.season,
+        "year": Period.year,
+        "1y": Period.year,
+    }
+
+
+PERIOD_ENUM_MAP: Dict[str, Any] = _get_period_enum_map()
+
+# 保留旧的别名映射用于兼容（当SDK不可用时回退）
 PERIOD_ALIASES: Dict[str, str] = {
     "daily": "1d",
     "day": "1d",
@@ -70,6 +129,34 @@ PERIOD_ALIASES: Dict[str, str] = {
     "month": "1M",
     "1month": "1M",
 }
+
+
+def _resolve_period_to_enum(period_str: str) -> int | None:
+    """将字符串period转换为SDK Period枚举值(int)，用于IPC传递
+
+    根据SDK文档4.1.6，period参数类型为int，应传递Period.xxx.value
+    """
+    if not period_str:
+        enum_obj = PERIOD_ENUM_MAP.get("1d") if PERIOD_ENUM_MAP else None
+        return enum_obj.value if enum_obj is not None else None
+
+    normalized = period_str.lower().strip()
+
+    # 优先从枚举映射获取
+    if PERIOD_ENUM_MAP:
+        result = PERIOD_ENUM_MAP.get(normalized)
+        if result is not None:
+            return int(result.value)  # 返回int值
+
+    # 回退：尝试别名转换后再查找
+    alias = PERIOD_ALIASES.get(normalized, normalized)
+    if PERIOD_ENUM_MAP:
+        enum_obj = PERIOD_ENUM_MAP.get(alias)
+        return enum_obj.value if enum_obj is not None else None
+
+    return None
+
+
 from ..query_manager import AmazingDataQueryManager
 from ..subscription import SubscriptionInfo
 
@@ -124,10 +211,10 @@ def _scalar_to_builtin(value: Any) -> Any:
             return value.astimezone(timezone.utc).isoformat()
         return value.isoformat()
     if isinstance(value, pd.Timedelta):
-        value = value.to_pytimedelta()
+        value = value.to_pytimedelta()  # type: ignore[attr-defined]
     if isinstance(value, timedelta):
         return value.total_seconds()
-    if isinstance(value, np.generic):
+    if isinstance(value, np.generic):  # type: ignore[attr-defined]
         return value.item()
     if isinstance(value, float) and pd.isna(value):
         return None
@@ -148,7 +235,8 @@ def _dataframe_to_payload(frame: pd.DataFrame) -> Dict[str, Any]:
         }
 
     records: list[Dict[str, Any]] = []
-    for raw in frame.to_dict(orient="records"):
+    raw_records: list[Dict[str, Any]] = frame.to_dict(orient="records")  # type: ignore[assignment]
+    for raw in raw_records:
         serialized = {key: _scalar_to_builtin(val) for key, val in raw.items()}
         records.append(serialized)
     return {
@@ -169,7 +257,7 @@ class AmazingDataLoginManager:
         self._backoff_base = 2.0
 
     def _next_delay(self) -> float:
-        delay = min(self._initial_delay * (self._backoff_base ** self._backoff_step), self._max_delay)
+        delay = min(self._initial_delay * (self._backoff_base**self._backoff_step), self._max_delay)
         self._backoff_step = min(self._backoff_step + 1, 10)
         return delay
 
@@ -265,7 +353,7 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             alias = cls._API_MODE_ALIASES.get(alias_key)
             return alias or text
         try:
-            numeric = int(value)  # type: ignore[arg-type]
+            numeric = int(value)  # type: ignore[call-overload]
         except (TypeError, ValueError):
             return str(value)
         return str(numeric)
@@ -273,7 +361,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
     def _set_login_api_mode(self, value: object | None) -> None:
         normalized = self._normalize_api_mode(value)
         if normalized is None and value not in (None, ""):
-            logger.warning("AmazingData api_mode %r normalized to None; falling back to default", value)
+            logger.warning(
+                "AmazingData api_mode %r normalized to None; falling back to default", value
+            )
         elif normalized != value:
             logger.debug("AmazingData api_mode adjusted from %r to %r", value, normalized)
         self._login_api_mode = normalized
@@ -287,7 +377,7 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         self._adapter: AmazingDataProcessAdapter | None = None
         self._datasource_id = self._build_datasource_id()
         self._proxy_config = self._build_proxy_config()
-        self._login_api_mode: str | None = None
+        self._login_api_mode: str | None = None  # type: ignore[no-redef]
         self._set_login_api_mode(self._resolve_initial_api_mode())
         self._connected: bool = False
         # 对于进程隔离Provider，SDK可用性由子进程管理，这里默认True表示会尝试加载
@@ -411,10 +501,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
     def _build_proxy_config(self) -> Dict[str, Any]:
         proxy_config: Dict[str, Any] = {}
         # 检查多个可能的配置位置
-        python_candidate = (
-                getattr(self.config, "python_interpreter_path", "")
-                or self.config.config.get("python_interpreter_path")
-        )
+        python_candidate = getattr(
+            self.config, "python_interpreter_path", ""
+        ) or self.config.config.get("python_interpreter_path")
         # 也检查嵌套的 connection 块
         if not python_candidate:
             connection_cfg = self.config.config.get("connection", {})
@@ -572,8 +661,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             self._calendar_cache[market_key] = (set(candidates), now)
         return candidates
 
-    async def get_calendar(self, market: str = "SH", data_type: str = "int") -> list[int] | list[str] | list[
-        datetime] | None:
+    async def get_calendar(
+        self, market: str = "SH", data_type: str = "int"
+    ) -> list[int] | list[str] | list[datetime] | None:
         """Return trading calendar for the given market."""
         trading_days = await self._get_trading_days(market)
         if not trading_days:
@@ -589,12 +679,12 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         return days_sorted
 
     async def _adjust_snapshot_dates(
-            self,
-            begin_date: int | None,
-            end_date: int | None,
-            market: str,
-            *,
-            trading_days: set[int] | None = None,
+        self,
+        begin_date: int | None,
+        end_date: int | None,
+        market: str,
+        *,
+        trading_days: set[int] | None = None,
     ) -> tuple[int, int] | None:
         """���ݽ����г���ѹ�Ʋ�ѯ�����ڣ��򷵻ؿգ�"""
 
@@ -744,7 +834,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
     async def _perform_login(self, adapter: AmazingDataProcessAdapter) -> None:
         await perform_login(self, adapter)
 
-    def _reset_connection_state(self, *, drop_adapter: bool = False, reason: str | None = None) -> None:
+    def _reset_connection_state(
+        self, *, drop_adapter: bool = False, reason: str | None = None
+    ) -> None:
         if reason:
             logger.warning(f"AmazingData process provider will reset connection due to: {reason}")
         self._initialized = False
@@ -785,14 +877,16 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         return collect_tgw_log_snippet(self, max_lines=max_lines)
 
     @staticmethod
-    def _read_tgw_tail_lines(file_path: Path, max_bytes: int = 4096, max_lines: int = 10) -> list[str]:
+    def _read_tgw_tail_lines(
+        file_path: Path, max_bytes: int = 4096, max_lines: int = 10
+    ) -> list[str]:
         return read_tgw_tail_lines(file_path, max_bytes=max_bytes, max_lines=max_lines)
 
     def _is_authentication_error(
-            self,
-            message: str,
-            error_type: str | None,
-            metadata: Mapping[str, object] | None,
+        self,
+        message: str,
+        error_type: str | None,
+        metadata: Mapping[str, object] | None,
     ) -> bool:
         lowered = message.lower()
         if error_type and "auth" in error_type.lower():
@@ -802,7 +896,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                 return True
         if metadata:
             for value in metadata.values():
-                if isinstance(value, str) and any(token in value.lower() for token in self._AUTH_ERROR_KEYWORDS):
+                if isinstance(value, str) and any(
+                    token in value.lower() for token in self._AUTH_ERROR_KEYWORDS
+                ):
                     return True
         return False
 
@@ -904,25 +1000,27 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         return self._last_code_list_security_type
 
     async def get_stock_list(
-            self,
-            limit: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        limit: Optional[int] = None,
+        **kwargs: Any,
     ) -> Optional[list[Dict[str, Any]]]:
         config_section = self.config.config if isinstance(self.config.config, Mapping) else {}
         requested_security_type = (
-                kwargs.get("security_type")
-                or getattr(self.config, "security_type", None)
-                or config_section.get("security_type")
+            kwargs.get("security_type")
+            or getattr(self.config, "security_type", None)
+            or config_section.get("security_type")
         )
-        normalized_security_type = normalize_security_type(
-            requested_security_type) or AmazingDataSecurityType.STOCK_A_SH_SZ.value
+        normalized_security_type = (
+            normalize_security_type(requested_security_type)
+            or AmazingDataSecurityType.STOCK_A_SH_SZ.value
+        )
         self._last_code_list_security_type = normalized_security_type
 
         security_type_candidates: list[str] = []
         for candidate in (
-                normalized_security_type,
-                AmazingDataSecurityType.STOCK_A_SH_SZ.value,
-                AmazingDataSecurityType.STOCK_A.value,
+            normalized_security_type,
+            AmazingDataSecurityType.STOCK_A_SH_SZ.value,
+            AmazingDataSecurityType.STOCK_A.value,
         ):
             if candidate and candidate not in security_type_candidates:
                 security_type_candidates.append(candidate)
@@ -948,8 +1046,14 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             raw_result = None
 
         if raw_result is None:
-            cache_policy = CachePolicy.from_kwargs(context="BaseData.get_hist_code_list", kwargs=kwargs)
-            effective_mode = cache_policy.mode if cache_policy.mode is not CacheParamMode.NONE else CacheParamMode.REMOTE_RANGE
+            cache_policy = CachePolicy.from_kwargs(
+                context="BaseData.get_hist_code_list", kwargs=kwargs
+            )
+            effective_mode = (
+                cache_policy.mode
+                if cache_policy.mode is not CacheParamMode.NONE
+                else CacheParamMode.REMOTE_RANGE
+            )
             begin_candidate = cache_policy.values.get("begin_date")
             end_candidate = cache_policy.values.get("end_date")
 
@@ -963,7 +1067,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             local_path_value: str | None = None
             is_local_flag: bool | None = None
             if effective_mode is CacheParamMode.LOCAL_CACHE:
-                local_path_value = resolve_local_cache_path(self.config, cache_policy.values.get("local_path"))
+                local_path_value = resolve_local_cache_path(
+                    self.config, cache_policy.values.get("local_path")
+                )
                 is_local_flag = bool(cache_policy.values.get("is_local", True))
                 try:
                     Path(local_path_value).mkdir(parents=True, exist_ok=True)
@@ -1015,8 +1121,13 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                 except DataProviderError as fallback_exc:
                     message = str(fallback_exc)
                     fallback_errors.append(f"{hist_security_type}: {message}")
-                    if "unexpected keyword argument 'is_local'" in message and "is_local" in base_params:
-                        logger.info("BaseData.get_hist_code_list 不支持 is_local 参数，自动切换远端模式")
+                    if (
+                        "unexpected keyword argument 'is_local'" in message
+                        and "is_local" in base_params
+                    ):
+                        logger.info(
+                            "BaseData.get_hist_code_list 不支持 is_local 参数，自动切换远端模式"
+                        )
                         compat_params = {k: v for k, v in base_params.items() if k != "is_local"}
                         try:
                             raw_result = await self._execute(
@@ -1036,11 +1147,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                             continue
                     continue
             else:
-                error_message = '; '.join(fallback_errors) if fallback_errors else 'no candidates'
+                error_message = "; ".join(fallback_errors) if fallback_errors else "no candidates"
                 if last_error is not None:
-                    combined = (
-                        f"{last_error}; BaseData.get_hist_code_list fallback failed: {error_message}"
-                    )
+                    combined = f"{last_error}; BaseData.get_hist_code_list fallback failed: {error_message}"
                     raise DataProviderError(combined) from None
                 raise DataProviderError(
                     f"BaseData.get_hist_code_list fallback failed: {error_message}"
@@ -1076,9 +1185,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
 
         # 仅对 A 股品种尝试补全部块信息，避免 ETF/指数等产生无效告警
         if (
-                records
-                and _records_need_board(records)
-                and ("STOCK_A" in (normalized_security_type or "").upper())
+            records
+            and _records_need_board(records)
+            and ("STOCK_A" in (normalized_security_type or "").upper())
         ):
             try:
                 board_metadata = await self._fetch_board_metadata(
@@ -1095,7 +1204,8 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                     )
                 else:
                     sample_symbols = [
-                        _extract_symbol(item) for item in (records[:10] if isinstance(records, list) else [])
+                        _extract_symbol(item)
+                        for item in (records[:10] if isinstance(records, list) else [])
                     ]
                     logger.warning(
                         "Board metadata payload为空，无法补全部块信息 symbols={} security_type={}",
@@ -1163,7 +1273,7 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             logger.debug("InfoData.get_stock_basic 调用失败: {}", exc)
 
         security_type = (
-                self._last_code_list_security_type or AmazingDataSecurityType.STOCK_A_SH_SZ.value
+            self._last_code_list_security_type or AmazingDataSecurityType.STOCK_A_SH_SZ.value
         )
         try:
             code_info_result = await self._execute(
@@ -1187,23 +1297,19 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         return []
 
     async def get_kline_data(
-            self,
-            symbol: str,
-            period: str = "1d",
-            start_date: Optional[str] = None,
-            end_date: Optional[str] = None,
-            limit: int = 100,
-            **kwargs: Any,
+        self,
+        symbol: str,
+        period: str = "1d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: int = 100,
+        **kwargs: Any,
     ) -> Optional[list[Dict[str, Any]]]:
-        normalized_period = period or "1d"
-        if normalized_period:
-            alias = PERIOD_ALIASES.get(str(normalized_period).lower())
-            if alias:
-                if alias != normalized_period:
-                    logger.debug(
-                        "K line period alias applied: %s -> %s", normalized_period, alias
-                    )
-                normalized_period = alias
+        # 将字符串period转换为SDK Period枚举
+        period_enum = _resolve_period_to_enum(period or "1d")
+        if period_enum is None:
+            logger.warning("无法解析period '{}', 使用默认日线", period)
+            period_enum = _resolve_period_to_enum("1d")
 
         begin_date_value = _normalize_date_to_int(start_date)
         end_date_value = _normalize_date_to_int(end_date)
@@ -1214,29 +1320,15 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             base_kwargs["begin_date"] = begin_date_value
         if end_date_value is not None:
             base_kwargs["end_date"] = end_date_value
-        if normalized_period:
-            base_kwargs["period"] = normalized_period
+        if period_enum is not None:
+            base_kwargs["period"] = period_enum  # 传递枚举对象而非字符串
         if adjust_value is not None:
             base_kwargs["adjust"] = adjust_value
-        legacy_arg_tuple = (
-            [symbol],
-            normalized_period,
-            start_date or "",
-            end_date or "",
-            limit,
-            adjust_value,
-            True,
-        )
 
         command = ProcessCommand[Any](
             method="MarketData.query_kline",
             args=([symbol],),
             kwargs=base_kwargs,
-            alt_methods=("MarketData.get_kline_data",),
-            alt_args=(legacy_arg_tuple,),
-            kwargs_patches=(
-                {"__remove__": tuple(base_kwargs.keys())},
-            ),
         )
 
         raw_result = await self._execute(command)
@@ -1254,9 +1346,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         return records
 
     async def get_realtime_quote(
-            self,
-            symbols: Sequence[str] | str,
-            **kwargs: Any,
+        self,
+        symbols: Sequence[str] | str,
+        **kwargs: Any,
     ) -> Optional[Dict[str, Any]]:
         today = self._current_date_int()
         market_code = str(kwargs.get("market") or self._resolve_market_code())
@@ -1293,9 +1385,6 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             method="MarketData.query_snapshot",
             args=(normalized_targets,),
             kwargs={"begin_date": today, "end_date": today},
-            alt_methods=("MarketData.get_snapshot",),
-            alt_args=(normalized_targets,),
-            kwargs_patches=({"__remove__": ("begin_date", "end_date")},),
         )
         raw_result = await self._execute(command)
         result_summary = _summarize_object(raw_result)
@@ -1329,18 +1418,16 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         return formatted
 
     async def query_snapshot(
-            self,
-            code_list: Sequence[str],
-            begin_date: int,
-            end_date: int,
-            *,
-            market: str | None = None,
-            align_policy: SnapshotAlignPolicy | str | None = SnapshotAlignPolicy.NEAREST_PREV,
+        self,
+        code_list: Sequence[str],
+        begin_date: int,
+        end_date: int,
+        *,
+        market: str | None = None,
+        align_policy: SnapshotAlignPolicy | str | None = SnapshotAlignPolicy.NEAREST_PREV,
     ) -> Optional[Dict[str, Dict[str, Any]]]:
         normalized_codes = [
-            code.strip().upper()
-            for code in code_list
-            if isinstance(code, str) and code.strip()
+            code.strip().upper() for code in code_list if isinstance(code, str) and code.strip()
         ]
         if not normalized_codes:
             return {}
@@ -1373,7 +1460,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                 target_day = adjusted_begin
                 needs_previous = False
                 if target_day == today_int:
-                    if target_day not in trading_days or not self._is_within_trading_window(now_local):
+                    if target_day not in trading_days or not self._is_within_trading_window(
+                        now_local
+                    ):
                         needs_previous = True
                 elif target_day not in trading_days:
                     needs_previous = True
@@ -1417,7 +1506,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                 return {}
             adjusted_begin, adjusted_end = adjusted_range
         elif policy is SnapshotAlignPolicy.STRICT:
-            missing_days = [day for day in (adjusted_begin, adjusted_end) if day not in trading_days]
+            missing_days = [
+                day for day in (adjusted_begin, adjusted_end) if day not in trading_days
+            ]
             if missing_days:
                 missing_display = ",".join(str(day) for day in missing_days)
                 logger.info(
@@ -1460,9 +1551,6 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             method="MarketData.query_snapshot",
             args=(normalized_codes,),
             kwargs={"begin_date": adjusted_begin, "end_date": adjusted_end},
-            alt_methods=("MarketData.get_snapshot",),
-            alt_args=(normalized_codes,),
-            kwargs_patches=({"__remove__": ("begin_date", "end_date")},),
         )
         raw_result = await self._execute(command)
         result_summary = _summarize_object(raw_result)
@@ -1502,7 +1590,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                 return fallback
             return fallback
 
-        def _resolve_symbol_from_row(row: Mapping[str, Any], fallback: str | None = None) -> str | None:
+        def _resolve_symbol_from_row(
+            row: Mapping[str, Any], fallback: str | None = None
+        ) -> str | None:
             for key in ("code", "symbol", "SECURITY_CODE", "SECURITYID", "SYMBOL_CODE", "ticker"):
                 value = row.get(key)
                 if value is None:
@@ -1512,8 +1602,17 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                     return resolved
             return fallback
 
-        def _resolve_symbol_from_frame(frame: pd.DataFrame, fallback: str | None = None) -> str | None:
-            for column in ("symbol", "code", "SECURITY_CODE", "SECURITYID", "SYMBOL_CODE", "ticker"):
+        def _resolve_symbol_from_frame(
+            frame: pd.DataFrame, fallback: str | None = None
+        ) -> str | None:
+            for column in (
+                "symbol",
+                "code",
+                "SECURITY_CODE",
+                "SECURITYID",
+                "SYMBOL_CODE",
+                "ticker",
+            ):
                 if column not in frame.columns:
                     continue
                 series = frame[column].dropna()
@@ -1580,7 +1679,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             _visit(raw_result)
         elif isinstance(raw_result, Mapping):
             _visit(raw_result)
-        elif isinstance(raw_result, Sequence) and not isinstance(raw_result, (str, bytes, bytearray)):
+        elif isinstance(raw_result, Sequence) and not isinstance(
+            raw_result, (str, bytes, bytearray)
+        ):
             for item in raw_result:
                 _visit(item)
         else:
@@ -1610,16 +1711,16 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             if len(frames) == 1:
                 combined = frames[0].reset_index(drop=True)
             else:
-                combined = pd.concat(frames, ignore_index=True, sort=False)
+                combined = pd.concat(frames, ignore_index=True, sort=False)  # type: ignore[call-arg]
             serialized[symbol] = _dataframe_to_payload(combined)
         return serialized
 
     async def subscribe_stock_snapshot(
-            self,
-            symbols: list[str],
-            callback: SubscriptionCallback,
-            data_type: str = "snapshot",
-            **kwargs: Any,
+        self,
+        symbols: list[str],
+        callback: SubscriptionCallback,
+        data_type: str = "snapshot",
+        **kwargs: Any,
     ) -> bool:
         return await self._subscription.subscribe_snapshot(
             symbols,
@@ -1629,9 +1730,9 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         )
 
     async def unsubscribe_quote(
-            self,
-            symbols: Sequence[str],
-            **_: Any,
+        self,
+        symbols: Sequence[str],
+        **_: Any,
     ) -> bool:
         return await self._subscription.unsubscribe(symbols)
 
@@ -1648,18 +1749,18 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         await self._subscription.stop_loop()
 
     async def _dispatch_subscription_payloads(
-            self,
-            codes: Sequence[str],
-            callbacks_map: Mapping[str, tuple[SubscriptionCallback, ...]],
+        self,
+        codes: Sequence[str],
+        callbacks_map: Mapping[str, tuple[SubscriptionCallback, ...]],
     ) -> None:
         await self._subscription.dispatch_payloads(codes, callbacks_map)
 
     async def subscribe(
-            self,
-            symbols: list[str],
-            callback: Any,
-            data_type: str = "realtime",
-            **kwargs: Any,
+        self,
+        symbols: list[str],
+        callback: Any,
+        data_type: str = "realtime",
+        **kwargs: Any,
     ) -> bool:
         return await self.subscribe_stock_snapshot(
             symbols,
@@ -1669,38 +1770,38 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
         )
 
     async def unsubscribe(
-            self,
-            symbols: list[str],
-            data_type: str = "realtime",
-            **kwargs: Any,
+        self,
+        symbols: list[str],
+        data_type: str = "realtime",
+        **kwargs: Any,
     ) -> bool:
         return await self.unsubscribe_quote(symbols, **kwargs)
 
     async def get_block_trading(
-            self,
-            code_list: List[str],
-            local_path: Optional[str] = None,
-            is_local: bool = True,
-            begin_date: Optional[int] = None,
-            end_date: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        code_list: List[str],
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
+        **kwargs: Any,
     ) -> pd.DataFrame:
         """
         获取大宗交易数据
-        
+
         Args:
             code_list: 股票代码列表
             local_path: 本地存储路径
             is_local: 是否使用本地存储
             begin_date: 交易日期开始筛选(格式: YYYYMMDD)
             end_date: 交易日期结束筛选(格式: YYYYMMDD)
-            
+
         Returns:
             DataFrame: 大宗交易数据
         """
         # 解析本地缓存路径
         resolved_path = resolve_local_cache_path(self.config, local_path)
-        
+
         # 构建关键字参数（不包含symbols，因为它是位置参数）
         call_kwargs: Dict[str, Any] = {}
         if resolved_path:
@@ -1710,9 +1811,11 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
             call_kwargs["begin_date"] = begin_date
         if end_date is not None:
             call_kwargs["end_date"] = end_date
-        
-        logger.warning(f"[get_block_trading] Calling InfoData.get_block_trading with args={code_list}, kwargs={call_kwargs}")
-        
+
+        logger.warning(
+            f"[get_block_trading] Calling InfoData.get_block_trading with args={code_list}, kwargs={call_kwargs}"
+        )
+
         try:
             result = await self._execute(
                 ProcessCommand[Any](
@@ -1721,12 +1824,14 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                     kwargs=call_kwargs,
                 )
             )
-            
-            logger.warning(f"[get_block_trading] Result type: {type(result).__name__}, is None: {result is None}")
-            
+
+            logger.warning(
+                f"[get_block_trading] Result type: {type(result).__name__}, is None: {result is None}"
+            )
+
             if result is None:
                 return pd.DataFrame()
-            
+
             if isinstance(result, pd.DataFrame):
                 return result
             elif isinstance(result, dict):
@@ -1745,7 +1850,7 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
                 return pd.DataFrame(result)
             else:
                 return pd.DataFrame([result])
-                
+
         except DataProviderError as exc:
             logger.error(f"[get_block_trading] SDK调用失败: {exc}")
             return pd.DataFrame()

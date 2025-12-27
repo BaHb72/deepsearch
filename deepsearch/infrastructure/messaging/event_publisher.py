@@ -24,7 +24,9 @@ class InMemoryEventPublisher:
     """
 
     def __init__(self):
-        self._handlers: DefaultDict[str, List[Callable[[Dict[str, Any]], Awaitable[None]]]] = defaultdict(list)
+        self._handlers: DefaultDict[str, List[Callable[[Dict[str, Any]], Awaitable[None]]]] = (
+            defaultdict(list)
+        )
         self._event_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
 
     async def publish(self, event: Dict[str, Any]) -> None:

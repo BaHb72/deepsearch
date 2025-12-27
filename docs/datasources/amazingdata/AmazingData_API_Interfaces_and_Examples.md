@@ -1,6 +1,6 @@
 ---
 title: AmazingData API Interfaces & Examples
-description: ժ¼�ԡ�AmazingData ���ݽӿ��ֲᡷ��V1.0.14���������Ŀʵ���������ٲ�����۽� SDK ��װ�����õ����������ӿڷ�����ö��ȡֵ��  
+description: ժ¼�ԡ�AmazingData ���ݽӿ��ֲᡷ��V1.0.14���������Ŀʵ���������ٲ�����۽� SDK ��װ�����õ����������ӿڷ�����ö��ȡֵ��
 updated: 2025-11-06
 ---
 
@@ -12,6 +12,7 @@ updated: 2025-11-06
 PowerShell �����������������òֿ��渽���⻷�� `./.venv`��
 
 > **��ʾ**
+>
 > - ������װ��ʼ��ʹ�� `uv`������ֱ��ʹ�� `pip`��
 > - ʾ���е��û������������˿ھ�Ϊռλ��������ݻ��������ļ���д��
 > - ����ʾ��ֻ��ʾ�������̣���������Ӧͨ�� adapters �� ports ��ӵ��á�
@@ -132,4 +133,3 @@ catalog_json = catalog_to_json(ensure_ascii=False)
 2. `api_catalog` �ṹ������
 3. ��Ӧ�� adapters / ports / ��Ԫ����
 4. �汾��¼���� `docs/plans/README.md#amazingdata-provider-重构`
-

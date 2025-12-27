@@ -20,10 +20,7 @@ from deepsearch.domain.market_data import (
     OrderImbalanceCalculator,
     SnapshotBuffer,
 )
-from deepsearch.ports.market_data import (
-    MarketDataPortRegistry,
-    WindowSpec,
-)
+from deepsearch.ports.market_data import MarketDataPortRegistry, WindowSpec
 
 from .cache_writer import MarketDataCacheWriter
 from .pipeline import MarketDataRealtimePipeline
@@ -73,17 +70,16 @@ def _normalize_calendar_market_code(raw: str) -> str:
     return normalized
 
 
-
 def create_realtime_market_data_service(
-        provider: "AmazingDataProvider | None",
-        *,
-        registry: MarketDataPortRegistry | None = None,
-        board_fetcher: BoardStockListFetcher | None = None,
-        data_source_name: str = "amazingdata",
-        stream_retention: timedelta = timedelta(minutes=10),
-        capital_windows: Optional[Sequence[WindowSpec]] = None,
-        order_window: Optional[WindowSpec] = None,
-        auction_window: Optional[WindowSpec] = None,
+    provider: "AmazingDataProvider | None",
+    *,
+    registry: MarketDataPortRegistry | None = None,
+    board_fetcher: BoardStockListFetcher | None = None,
+    data_source_name: str = "amazingdata",
+    stream_retention: timedelta = timedelta(minutes=10),
+    capital_windows: Optional[Sequence[WindowSpec]] = None,
+    order_window: Optional[WindowSpec] = None,
+    auction_window: Optional[WindowSpec] = None,
 ) -> RealTimeMarketDataService:
     """Assemble a RealTimeMarketDataService backed by provided adapter/registry."""
 
@@ -95,6 +91,7 @@ def create_realtime_market_data_service(
         from deepsearch.infrastructure.providers.implementations.amazingdata.ports import (
             build_market_data_registry,
         )
+
         registry = build_market_data_registry(provider, retention=stream_retention)
 
     capital_calc = CapitalPulseCalculator(
@@ -125,6 +122,7 @@ def create_realtime_market_data_service(
         from deepsearch.infrastructure.providers.implementations.amazingdata.ports import (
             build_board_source,
         )
+
         board_source = build_board_source(provider)
         board_fetcher = board_source.fetch_records
 
@@ -143,22 +141,22 @@ def create_realtime_market_data_service(
 
 
 def create_realtime_streaming_pipeline(
-        provider: "AmazingDataProvider | None",
-        *,
-        registry: MarketDataPortRegistry | None = None,
-        board_fetcher: BoardStockListFetcher | None = None,
-        data_source_name: str = "amazingdata",
-        boards: Optional[Sequence[str]] = None,
-        redis_url: Optional[str] = None,
-        stream_retention: timedelta = timedelta(minutes=10),
-        capital_windows: Optional[Sequence[WindowSpec]] = None,
-        capital_limit: int = 50,
-        order_window: Optional[WindowSpec] = None,
-        order_limit: int = 100,
-        auction_window: Optional[WindowSpec] = None,
-        interval_seconds: float = 5.0,
-        realtime_config: Optional[MarketRealtimeConfig] = None,
-        enable_session_guard: bool = True,
+    provider: "AmazingDataProvider | None",
+    *,
+    registry: MarketDataPortRegistry | None = None,
+    board_fetcher: BoardStockListFetcher | None = None,
+    data_source_name: str = "amazingdata",
+    boards: Optional[Sequence[str]] = None,
+    redis_url: Optional[str] = None,
+    stream_retention: timedelta = timedelta(minutes=10),
+    capital_windows: Optional[Sequence[WindowSpec]] = None,
+    capital_limit: int = 50,
+    order_window: Optional[WindowSpec] = None,
+    order_limit: int = 100,
+    auction_window: Optional[WindowSpec] = None,
+    interval_seconds: float = 5.0,
+    realtime_config: Optional[MarketRealtimeConfig] = None,
+    enable_session_guard: bool = True,
 ) -> Tuple[
     RealTimeMarketDataService,
     MarketDataCacheWriter,
@@ -191,7 +189,9 @@ def create_realtime_streaming_pipeline(
     if config and config.order_window:
         order_window_final = _window_spec_from_config(config.order_window)
 
-    auction_window_final = auction_window or WindowSpec(name="auction", duration=timedelta(minutes=5))
+    auction_window_final = auction_window or WindowSpec(
+        name="auction", duration=timedelta(minutes=5)
+    )
     if config and config.auction_window:
         auction_window_final = _window_spec_from_config(config.auction_window)
 
@@ -260,18 +260,27 @@ def create_realtime_streaming_pipeline(
     async def _load_calendar(market_code: str):
         normalized_code = _normalize_calendar_market_code(market_code)
         if provider is None:
-            logger.debug("Adapter missing calendar support, returning empty calendar for {}", normalized_code)
+            logger.debug(
+                "Adapter missing calendar support, returning empty calendar for {}", normalized_code
+            )
             return ()
         calendar_getter = getattr(provider, "get_calendar", None)
         if calendar_getter is None:
-            logger.warning("AmazingData provider 缺失 get_calendar 接口，使用空白日历: {}", normalized_code)
+            logger.warning(
+                "AmazingData provider 缺失 get_calendar 接口，使用空白日历: {}", normalized_code
+            )
             return ()
         try:
-            result = await cast(Callable[..., Awaitable[Sequence[int] | Sequence[str] | None]], calendar_getter)(
-                data_type="int", market=normalized_code)
+            result = await cast(
+                Callable[..., Awaitable[Sequence[int] | Sequence[str] | None]], calendar_getter
+            )(data_type="int", market=normalized_code)
         except Exception as exc:  # pragma: no cover - 调用失败兜底
-            logger.warning("AmazingData get_calendar 调用失败 market_raw={} normalized={} error={}", market_code,
-                           normalized_code, exc)
+            logger.warning(
+                "AmazingData get_calendar 调用失败 market_raw={} normalized={} error={}",
+                market_code,
+                normalized_code,
+                exc,
+            )
             return ()
         return tuple(result or ())
 
@@ -302,8 +311,10 @@ def create_realtime_streaming_pipeline(
         session_guard = TradingSessionGuard(
             calendar_loader=_load_calendar,
             snapshot_supplier=service.snapshot_buffer.latest_snapshot,
-            markets=tuple(config.include_markets) if config and config.include_markets else ("SH", "SZ"),
-            **guard_kwargs,
+            markets=(
+                tuple(config.include_markets) if config and config.include_markets else ("SH", "SZ")
+            ),
+            **guard_kwargs,  # type: ignore[arg-type]
         )
 
     runner = MarketDataStreamingRunner(

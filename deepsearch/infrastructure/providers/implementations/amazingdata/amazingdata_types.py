@@ -7,7 +7,7 @@ AmazingData 数据类型定义
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Mapping, Sequence, TypedDict, TypeAlias, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, TypeAlias, TypedDict, Union
 
 
 class AmazingDataStreamQuote(TypedDict, total=False):
@@ -57,7 +57,6 @@ class AmazingDataStreamPayload(TypedDict, total=False):
 RealtimeQuoteMap: TypeAlias = Mapping[str, AmazingDataStreamQuote]
 
 
-
 class AmazingDataPeriod(Enum):
     """AmazingData 数据周期"""
 
@@ -80,7 +79,6 @@ class AmazingDataPeriod(Enum):
     YEAR = "1Y"
 
 
-
 class AmazingDataAdjust(Enum):
     """复权类型"""
 
@@ -97,7 +95,6 @@ class AmazingDataMarket(Enum):
     BJ = "BJ"  # 北京
     HK = "HK"  # 香港
     US = "US"  # 美股
-
 
 
 class AmazingDataSecurityType(Enum):
@@ -126,7 +123,6 @@ class AmazingDataSecurityType(Enum):
     FUTURE_CZCE = "ZS_FUTURE"
     FUTURE_INE = "SN_FUTURE"
     OPTION = "EXTRA_OPTION"
-
 
 
 class AmazingDataReportType(Enum):
@@ -771,7 +767,6 @@ FIELD_MAPPING = {
 }
 
 
-
 def convert_period(period: str) -> str:
     """
     转换周期格式
@@ -881,4 +876,3 @@ def format_symbol(code: str, market: Optional[str] = None) -> str:
     else:
         _, market = parse_symbol(code)
         return f"{code}.{market}"
-

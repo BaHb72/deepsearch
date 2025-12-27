@@ -25,12 +25,17 @@ router = APIRouter(prefix="/api/stock-comment", tags=["stock_comment"])
 # 线程池执行器用于运行同步的akshare函数
 executor = ThreadPoolExecutor(max_workers=4)
 
+
 class CacheEntry(TypedDict):
     data: pd.DataFrame | None
     time: datetime | None
 
+
 # 缓存数据
-cache: dict[str, CacheEntry] = {"stock_comment": {"data": None, "time": None}, "fund_flow": {"data": None, "time": None}}
+cache: dict[str, CacheEntry] = {
+    "stock_comment": {"data": None, "time": None},
+    "fund_flow": {"data": None, "time": None},
+}
 CACHE_DURATION = 300  # 缓存5分钟
 
 

@@ -8,7 +8,11 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 
-from deepsearch.core.managers.component_manager import ComponentManager, ComponentStatus, ComponentType
+from deepsearch.core.managers.component_manager import (
+    ComponentManager,
+    ComponentStatus,
+    ComponentType,
+)
 from deepsearch.core.runtime.engine import MainEngine
 from deepsearch.core.utils.exceptions import ComponentError
 from deepsearch.core.utils.status_display import get_status_display
@@ -19,11 +23,10 @@ from deepsearch.webui.api.services.system_data_service import (
     get_system_data_service,
 )
 from deepsearch.webui.auth import require_auth
+
 from .modules import router as modules_router
 
 system_data_service = get_system_data_service()
-
-
 
 
 def _ensure_engine() -> MainEngine:
@@ -67,6 +70,7 @@ def get_standalone_manager(request: Request) -> Optional[Any]:
     if app_state is None:
         return None
     return getattr(app_state, "standalone_manager", None)
+
 
 def _resolve_provider_connected(provider: Any) -> bool:
     if provider is None:
@@ -172,6 +176,7 @@ async def get_system_status(request: Request) -> Dict[str, Any]:
 
     return _ok(overview)
 
+
 @router.get("/metrics")
 async def get_system_metrics() -> Dict[str, Any]:
     """
@@ -260,8 +265,6 @@ async def start_system(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"启动失败: {str(exc)}")
 
 
-
-
 @router.post("/stop")
 async def stop_system(
     request: Request, auth: Dict[str, Any] = Depends(require_auth)
@@ -312,8 +315,6 @@ async def stop_system(
         raise HTTPException(status_code=500, detail=f"停止失败: {str(exc)}")
 
 
-
-
 @router.post("/restart")
 async def restart_system(
     request: Request, auth: Dict[str, Any] = Depends(require_auth)
@@ -362,8 +363,6 @@ async def restart_system(
     except Exception as exc:
         logger.error(f"重启系统失败: {exc}")
         raise HTTPException(status_code=500, detail=f"重启失败: {str(exc)}")
-
-
 
 
 @router.get("/logs/recent")
@@ -563,8 +562,6 @@ async def start_component(component_name: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"启动失败: {str(exc)}") from exc
 
 
-
-
 @router.post("/components/{component_name}/stop")
 async def stop_component(component_name: str) -> Dict[str, Any]:
     """停止指定组件。"""
@@ -592,8 +589,6 @@ async def stop_component(component_name: str) -> Dict[str, Any]:
     except Exception as exc:
         logger.error(f"停止组件失败: {exc}")
         raise HTTPException(status_code=500, detail=f"停止失败: {str(exc)}") from exc
-
-
 
 
 @router.get("/components/{component_name}/health")

@@ -4,7 +4,9 @@
 快速验证 AmazingData SDK 登录和基础数据获取
 """
 import sys
+
 sys.path.insert(0, ".")
+
 
 def main():
     print("=" * 60)
@@ -15,33 +17,34 @@ def main():
     print("\n[1] 加载配置...")
     try:
         from deepsearch.config import get_config
+
         config = get_config()
-        
+
         # 获取 AmazingData 配置
         data_sources = config.data_sources if hasattr(config, "data_sources") else None
         if data_sources is None:
             print("[ERROR] 未找到 data_sources 配置")
             return False
-        
+
         # 从 Pydantic model 中提取配置
         if hasattr(data_sources, "model_dump"):
             ds_dict = data_sources.model_dump()
         else:
             ds_dict = dict(data_sources)
-        
+
         providers = ds_dict.get("providers", {})
         ad_config = providers.get("amazingdata", {})
-        
+
         if not ad_config:
             print("[ERROR] 未找到 amazingdata 配置")
             return False
-            
+
         conn = ad_config.get("config", {}).get("connection", {})
         username = conn.get("username", "")
         password = conn.get("password", "")
         host = conn.get("host", "")
         port = conn.get("port", 8600)
-        
+
         print(f"  用户名: {username}")
         print(f"  服务器: {host}:{port}")
         print(f"  密码长度: {len(password)}")
@@ -49,6 +52,7 @@ def main():
     except Exception as e:
         print(f"[ERROR] 加载配置失败: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -56,6 +60,7 @@ def main():
     print("\n[2] 导入 AmazingData SDK...")
     try:
         import AmazingData as ad
+
         print(f"[OK] SDK 版本: {getattr(ad, '__version__', 'unknown')}")
     except Exception as e:
         print(f"[ERROR] SDK 导入失败: {e}")
@@ -73,6 +78,7 @@ def main():
     except Exception as e:
         print(f"[ERROR] 登录异常: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

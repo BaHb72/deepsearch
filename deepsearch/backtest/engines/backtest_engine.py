@@ -17,7 +17,6 @@ from deepsearch.backtest.adapters.unified_backtrader_adapter import UnifiedBackt
 from deepsearch.backtest.data.data_bridge import DataBridge
 from deepsearch.observability import get_logger
 
-
 # 使用非交互式后端，兼容服务器环境
 matplotlib.use("Agg")  # 必须在导入 pyplot 之前设置
 
@@ -788,7 +787,6 @@ class BacktestEngine:
             "equity_curve": self.get_equity_curve().to_dict(orient="records"),
         }
 
-
         if format == "json":
             return json.dumps(data, indent=2, default=str)
         if format == "csv":
@@ -804,7 +802,6 @@ class BacktestEngine:
                 pd.DataFrame(equity_records).to_excel(writer, sheet_name="Equity", index=False)
             return "backtest_results.xlsx"
         raise ValueError(f"Unsupported export format: {format}")
-
 
 
 # 创建全局实例

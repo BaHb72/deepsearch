@@ -6,7 +6,7 @@ API路由适配器
 目的: 创建路由映射和适配器，解决前端请求路径与后端实际路由的不匹配问题
 """
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 # 创建路由适配器

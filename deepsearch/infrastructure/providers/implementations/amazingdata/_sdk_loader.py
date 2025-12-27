@@ -52,4 +52,3 @@ else:
     ad, HAS_AMAZINGDATA, IMPORT_ERROR = _load_sdk()
 
 __all__ = ["ad", "HAS_AMAZINGDATA", "IMPORT_ERROR"]
-

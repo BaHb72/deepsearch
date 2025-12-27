@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_zh_a_st_em
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#st_board
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#st_board>
 
 描述: 东方财富网-行情中心-沪深个股-风险警示板
 

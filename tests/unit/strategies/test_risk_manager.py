@@ -4,8 +4,8 @@ from typing import cast
 
 import pytest
 
-from deepsearch.strategies.managers.risk_manager import RiskManager
 from deepsearch.strategies.interfaces.types import StrategyOrder
+from deepsearch.strategies.managers.risk_manager import RiskManager
 
 
 @pytest.fixture
@@ -44,6 +44,14 @@ def test_check_order_success_path(risk_manager: RiskManager) -> None:
 def test_calculate_risk_metrics_shape(risk_manager: RiskManager) -> None:
     metrics = risk_manager.calculate_risk_metrics([0.01, -0.02, 0.015, -0.005, 0.011])
 
-    expected_keys = {"volatility", "downside_deviation", "max_drawdown", "var_95", "cvar_95", "sharpe_ratio", "sortino_ratio"}
+    expected_keys = {
+        "volatility",
+        "downside_deviation",
+        "max_drawdown",
+        "var_95",
+        "cvar_95",
+        "sharpe_ratio",
+        "sortino_ratio",
+    }
     assert expected_keys == set(metrics)
     assert all(isinstance(value, float) for value in metrics.values())

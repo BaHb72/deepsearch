@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from .price import Price
 
@@ -13,7 +13,7 @@ from .price import Price
 class Stock:
     """描述股票基础信息与交易状态。"""
 
-    symbol: str
+    symbol: Any  # 可以是str或Symbol对象
     name: str
     market: str = ""
     industry: Optional[str] = None
@@ -22,6 +22,34 @@ class Stock:
     halt_reason: Optional[str] = None
     current_price: Optional[Price] = None
     last_updated: Optional[datetime] = None
+    # 以下属性用于兼容 stock_repository.py
+    previous_close: Optional[Price] = None
+    open_price: Optional[Price] = None
+    high_price: Optional[Price] = None
+    low_price: Optional[Price] = None
+    volume: int = 0
+    turnover: Any = None  # 可能是Decimal或None
+    market_cap: Any = None
+    pe_ratio: Any = None
+    pb_ratio: Any = None
+    updated_at: Optional[datetime] = None
+
+    # 向后兼容的私有属性访问器
+    @property
+    def _turnover(self) -> Any:
+        return self.turnover
+
+    @property
+    def _market_cap(self) -> Any:
+        return self.market_cap
+
+    @property
+    def _pe_ratio(self) -> Any:
+        return self.pe_ratio
+
+    @property
+    def _pb_ratio(self) -> Any:
+        return self.pb_ratio
 
     def halt_trading(self, reason: Optional[str] = None) -> None:
         """标记股票停牌并记录原因。"""
@@ -44,7 +72,11 @@ class Stock:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Stock):
             return NotImplemented
-        return self.symbol == other.symbol
+        # symbol可能是str或有value属性的对象
+        my_symbol = getattr(self.symbol, "value", self.symbol)
+        other_symbol = getattr(other.symbol, "value", other.symbol)
+        return bool(str(my_symbol) == str(other_symbol))
 
     def __hash__(self) -> int:
-        return hash(self.symbol)
+        symbol_value = getattr(self.symbol, "value", self.symbol)
+        return hash(str(symbol_value))

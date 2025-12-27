@@ -10,7 +10,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from threading import Lock
-from typing import Any, ClassVar, Deque, DefaultDict, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, ClassVar, DefaultDict, Deque, Dict, List, Optional, Tuple, TypedDict
 
 from loguru import logger
 
@@ -20,10 +20,12 @@ _HIDDEN_SOURCES = {DataSourceType.DEFAULT, DataSourceType.CUSTOM}
 
 DEFAULT_MODULE_KEY = "unknown"
 
+
 class SourceSummary(TypedDict):
     count: int
     success: int
     error: int
+
 
 class AccessStatistics(TypedDict):
     time_window: int
@@ -33,12 +35,15 @@ class AccessStatistics(TypedDict):
     hot_symbols: List[Tuple[str, int]]
     module_stats: Dict[str, Dict[str, int]]
 
+
 def _build_source_summary() -> SourceSummary:
     return {"count": 0, "success": 0, "error": 0}
+
 
 def _build_int_counter() -> DefaultDict[str, int]:
     """Create a defaultdict for counting occurrences."""
     return defaultdict(int)
+
 
 @dataclass
 class AccessRecord:
@@ -55,6 +60,7 @@ class AccessRecord:
     error_message: Optional[str] = None
     data_size: int = 0  # 返回数据大小（字节）
     metadata: Dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass
 class SourceMetrics:
@@ -125,6 +131,7 @@ class SourceMetrics:
             if p95_index < len(sorted_latencies)
             else sorted_latencies[-1]
         )
+
 
 class DataSourceMonitor:
     """数据源监控中心"""
@@ -355,8 +362,7 @@ class DataSourceMonitor:
         # 热点股票TOP10
         hot_symbols_top10 = sorted(self.hot_symbols.items(), key=lambda x: x[1], reverse=True)[:10]
         module_stats_snapshot = {
-            module_name: dict(stats)
-            for module_name, stats in self.module_stats.items()
+            module_name: dict(stats) for module_name, stats in self.module_stats.items()
         }
 
         return {
@@ -524,8 +530,10 @@ class DataSourceMonitor:
             ],
         }
 
+
 # 全局监控实例
 data_source_monitor = DataSourceMonitor()
+
 
 def get_monitor() -> DataSourceMonitor:
     """获取全局监控实例"""

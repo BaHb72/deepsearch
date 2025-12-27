@@ -1,3 +1,3 @@
 """Adapters package for bridging external services."""
 
-__all__ = []
+__all__: list[str] = []

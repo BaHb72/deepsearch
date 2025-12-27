@@ -436,9 +436,7 @@ async def save_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
 
             # 清理空值，避免写入冗余字段
             save_security = {
-                key: value
-                for key, value in save_security.items()
-                if value not in (None, "")
+                key: value for key, value in save_security.items() if value not in (None, "")
             }
 
             if save_security:
@@ -795,4 +793,3 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Redis 连接测试失败：{e}")
         return {"success": False, "message": f"Redis 连接失败: {str(e)}"}
-

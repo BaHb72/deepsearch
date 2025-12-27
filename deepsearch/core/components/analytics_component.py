@@ -10,4 +10,3 @@ from __future__ import annotations
 from .analytics_components import AnalyticsComponent
 
 __all__ = ["AnalyticsComponent"]
-

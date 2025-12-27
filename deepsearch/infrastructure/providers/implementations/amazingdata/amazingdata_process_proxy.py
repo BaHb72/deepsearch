@@ -28,7 +28,19 @@ from enum import Enum
 from multiprocessing import connection
 from multiprocessing.context import BaseContext
 from pathlib import Path
-from typing import IO, Any, Callable, Dict, Mapping, Optional, Protocol, Sequence, Sized, TypedDict, cast
+from typing import (
+    IO,
+    Any,
+    Callable,
+    Dict,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Sized,
+    TypedDict,
+    cast,
+)
 
 
 class _MsvcrtModule(Protocol):
@@ -57,9 +69,9 @@ else:  # pragma: no cover - 平台相关
     fcntl: _FcntlModule = cast(_FcntlModule, _fcntl)
 
 
+from loguru import logger
 
 from .param_guards import CachePolicy
-from loguru import logger
 
 _WORKER_FILE_SINK_ATTACHED = False
 
@@ -75,6 +87,7 @@ class RequestType(Enum):
     HEALTH_CHECK = "health_check"
     SHUTDOWN = "shutdown"
 
+
 class ProxyRequestPayload(TypedDict):
     """IPC 请求序列化结构"""
 
@@ -88,6 +101,7 @@ class ProxyRequestPayload(TypedDict):
     alt_args: tuple[tuple[Any, ...], ...]
     kwargs_patches: tuple[Dict[str, Any], ...]
 
+
 class ProxyResponsePayload(TypedDict):
     """IPC 响应序列化结构"""
 
@@ -97,6 +111,7 @@ class ProxyResponsePayload(TypedDict):
     error: Optional[str]
     error_type: Optional[str]
     timestamp: float
+
 
 class WorkerQueue(Protocol):
     """统一进程间队列接口"""
@@ -125,7 +140,9 @@ def _attach_worker_file_sink(level: str) -> None:
     global _WORKER_FILE_SINK_ATTACHED
     if _WORKER_FILE_SINK_ATTACHED:
         return
-    log_dir = Path(os.environ.get("DEEPSEARCH_WORKER_LOG_DIR") or (Path("data") / "logs" / "datasource"))
+    log_dir = Path(
+        os.environ.get("DEEPSEARCH_WORKER_LOG_DIR") or (Path("data") / "logs" / "datasource")
+    )
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / f"amazingdata_worker_{datetime.now():%Y%m%d}.log"
@@ -251,6 +268,7 @@ class ProxyRequest:
             kwargs_patches=tuple(dict(patch) for patch in payload.get("kwargs_patches", ())),
         )
 
+
 @dataclass
 class ProxyResponse:
     """代理响应数据结构"""
@@ -282,6 +300,7 @@ class ProxyResponse:
             error_type=payload["error_type"],
             timestamp=payload["timestamp"],
         )
+
 
 class AmazingDataProcessProxy:
     """
@@ -362,7 +381,6 @@ class AmazingDataProcessProxy:
     @staticmethod
     def _ensure_worker_file_logger(level: str = "INFO") -> None:
         _attach_worker_file_sink(level)
-
 
     # ------------------------------------------------------------------
     # 初始化 / 启动
@@ -467,14 +485,15 @@ class AmazingDataProcessProxy:
         remaining = self._next_restart_time - time.time()
         if remaining > 0:
             self._last_start_failure = (
-                    self._last_start_failure
-                    or f"Worker restart delayed for {remaining:.1f}s (reason={self._pending_restart_reason or 'backoff'})"
+                self._last_start_failure
+                or f"Worker restart delayed for {remaining:.1f}s (reason={self._pending_restart_reason or 'backoff'})"
             )
             self._last_start_failure_type = self._last_start_failure_type or "RestartBackoff"
             self.stats["next_restart_seconds"] = remaining
             return True, remaining
         self._reset_restart_backoff()
         return False, 0.0
+
     def start(self) -> bool:
         """启动 Worker 进程"""
 
@@ -702,7 +721,7 @@ class AmazingDataProcessProxy:
 
     def _stop_local_worker(self, timeout: float, force: bool, with_logout: bool) -> bool:
         process_obj = self.worker_process
-        if process_obj is None or not hasattr(process_obj, 'is_alive'):
+        if process_obj is None or not hasattr(process_obj, "is_alive"):
             self.is_running = False
             self._reset_local_queues()
             self._release_worker_lock()
@@ -831,9 +850,9 @@ class AmazingDataProcessProxy:
         *args,
         request_type: RequestType = RequestType.GET_DATA,
         timeout: float = 30.0,
-            alt_methods: Sequence[str] | None = None,
-            alt_args: Sequence[Sequence[Any]] | None = None,
-            kwargs_patches: Sequence[Mapping[str, Any]] | None = None,
+        alt_methods: Sequence[str] | None = None,
+        alt_args: Sequence[Sequence[Any]] | None = None,
+        kwargs_patches: Sequence[Mapping[str, Any]] | None = None,
         **kwargs,
     ) -> ProxyResponse:
         if not self.is_running or not self._is_worker_alive():
@@ -1024,14 +1043,14 @@ class AmazingDataProcessProxy:
                 summary["signal"] = -exit_code
         return {key: value for key, value in summary.items() if value is not None}
 
-    def _handle_worker_crash(self, request_id: str, request: Optional["ProxyRequest"] = None) -> ProxyResponse:
+    def _handle_worker_crash(
+        self, request_id: str, request: Optional["ProxyRequest"] = None
+    ) -> ProxyResponse:
         crash_details = self._summarize_worker_exit()
         request_label = (
             f"{request.request_type.name}:{request.method}"
             if request and request.method
-            else request.request_type.name
-            if request
-            else "unknown"
+            else request.request_type.name if request else "unknown"
         )
         exit_code = crash_details.get("exitcode") if crash_details else None
         restart_required = self.restart_on_crash
@@ -1174,7 +1193,7 @@ class AmazingDataProcessProxy:
             return False
         if self.python_executable:
             return cast(subprocess.Popen[bytes], process).poll() is None
-        if hasattr(process, 'is_alive'):
+        if hasattr(process, "is_alive"):
             return cast(mp.Process, process).is_alive()
         return False
 
@@ -1209,7 +1228,7 @@ class AmazingDataProcessProxy:
                 external_process = cast(subprocess.Popen[bytes], process)
                 external_process.wait(timeout=timeout)
                 return external_process.poll() is not None
-            if hasattr(process, 'join'):
+            if hasattr(process, "join"):
                 local_process = cast(mp.Process, process)
                 local_process.join(timeout=timeout)
                 return not local_process.is_alive()
@@ -1292,21 +1311,29 @@ class AmazingDataProcessProxy:
                         try:
                             ad_module = __import__(sdk_name)
                             # 验证模块有正确的 login 函数 (检查两种大小写)
-                            if hasattr(ad_module, 'login') and callable(getattr(ad_module, 'login', None)):
+                            if hasattr(ad_module, "login") and callable(
+                                getattr(ad_module, "login", None)
+                            ):
                                 ad = cast(Any, ad_module)
                                 sdk_imported = True
-                                login_method_name = 'login'
-                                logger.info(f"AmazingData SDK imported in worker process (package: {sdk_name}, login_method: login)")
+                                login_method_name = "login"
+                                logger.info(
+                                    f"AmazingData SDK imported in worker process (package: {sdk_name}, login_method: login)"
+                                )
                                 break
-                            elif hasattr(ad_module, 'Login') and callable(getattr(ad_module, 'Login', None)):
+                            elif hasattr(ad_module, "Login") and callable(
+                                getattr(ad_module, "Login", None)
+                            ):
                                 ad = cast(Any, ad_module)
                                 sdk_imported = True
-                                login_method_name = 'Login'
-                                logger.info(f"AmazingData SDK imported in worker process (package: {sdk_name}, login_method: Login)")
+                                login_method_name = "Login"
+                                logger.info(
+                                    f"AmazingData SDK imported in worker process (package: {sdk_name}, login_method: Login)"
+                                )
                                 break
                         except ImportError:
                             continue
-                    
+
                     if not sdk_imported:
                         logger.warning(f"AmazingData SDK 导入失败，尝试了: {sdk_candidates}")
                         response = ProxyResponse(
@@ -1332,9 +1359,13 @@ class AmazingDataProcessProxy:
                 if request.request_type == RequestType.LOGIN:
                     try:
                         # 使用检测到的login方法名 (login或Login)
-                        login_func = getattr(ad, login_method_name or 'login', None) or getattr(ad, 'Login', None)
+                        login_func = getattr(ad, login_method_name or "login", None) or getattr(
+                            ad, "Login", None
+                        )
                         if login_func is None:
-                            raise AttributeError(f"SDK module has no login/Login method (method_name={login_method_name})")
+                            raise AttributeError(
+                                f"SDK module has no login/Login method (method_name={login_method_name})"
+                            )
                         result = login_func(*request.args, **request.kwargs)
                     except SystemExit as exc:  # pragma: no cover - SDK behaviour
                         exit_code = getattr(exc, "code", None)
@@ -1359,7 +1390,9 @@ class AmazingDataProcessProxy:
                         if result == 0 or result is True:
                             if request.args:
                                 logged_in_username = request.args[0]
-                                logger.info(f"Login successful, saved username: {logged_in_username}")
+                                logger.info(
+                                    f"Login successful, saved username: {logged_in_username}"
+                                )
                             login_errors = []
                             response = ProxyResponse(
                                 request_id=request.request_id,
@@ -1439,10 +1472,15 @@ class AmazingDataProcessProxy:
                             last_error = f"Method {method_path} not found"
                             continue
                         enforced_kwargs = dict(call_kwargs)
-                        if request.request_type in {RequestType.GET_DATA, RequestType.SUBSCRIBE,
-                                                    RequestType.UNSUBSCRIBE}:
-                            if AmazingDataProcessProxy._method_supports_is_local(method_path, target):
-                                enforced_kwargs.setdefault('is_local', False)
+                        if request.request_type in {
+                            RequestType.GET_DATA,
+                            RequestType.SUBSCRIBE,
+                            RequestType.UNSUBSCRIBE,
+                        }:
+                            if AmazingDataProcessProxy._method_supports_is_local(
+                                method_path, target
+                            ):
+                                enforced_kwargs.setdefault("is_local", False)
                         cache_policy = CachePolicy.from_kwargs(
                             context=method_path,
                             kwargs=enforced_kwargs,
@@ -1505,9 +1543,13 @@ class AmazingDataProcessProxy:
                                 )
                             message = str(exc)
                             message_lower = message.lower()
-                            if 'is_local' in enforced_kwargs and 'is_local' in message_lower and 'unexpected' in message_lower:
+                            if (
+                                "is_local" in enforced_kwargs
+                                and "is_local" in message_lower
+                                and "unexpected" in message_lower
+                            ):
                                 fallback_kwargs = dict(enforced_kwargs)
-                                fallback_kwargs.pop('is_local', None)
+                                fallback_kwargs.pop("is_local", None)
                                 try:
                                     fallback_result = target(*tuple(call_args), **fallback_kwargs)
                                     duration = time.perf_counter() - call_started
@@ -1582,9 +1624,7 @@ class AmazingDataProcessProxy:
                 request_label = (
                     f"{request.request_type.name}:{request.method}"
                     if request and request.method
-                    else request.request_type.name
-                    if request
-                    else "unknown"
+                    else request.request_type.name if request else "unknown"
                 )
                 request_identifier = request.request_id if request else payload_request_id
                 logger.opt(exception=exc).error(
@@ -1609,11 +1649,11 @@ class AmazingDataProcessProxy:
 
     @staticmethod
     def _handle_health_check(
-            request_id: str,
-            ad: Any | None,
-            logged_in_username: Optional[str],
-            sdk_imported: bool,
-            login_errors: Sequence[str] | None = None,
+        request_id: str,
+        ad: Any | None,
+        logged_in_username: Optional[str],
+        sdk_imported: bool,
+        login_errors: Sequence[str] | None = None,
     ) -> ProxyResponse:
         """构建健康检查响应，避免泄露敏感信息。"""
         timestamp = time.time()
@@ -1768,9 +1808,9 @@ class AmazingDataProcessProxy:
 
     @classmethod
     def _method_supports_is_local(
-            cls,
-            method_key: str,
-            callable_obj: Callable[..., Any],
+        cls,
+        method_key: str,
+        callable_obj: Callable[..., Any],
     ) -> bool:
         cached = cls._IS_LOCAL_COMPAT_CACHE.get(method_key)
         if cached is not None:
@@ -1783,10 +1823,14 @@ class AmazingDataProcessProxy:
             supports = False
         else:
             for parameter in signature.parameters.values():
-                if parameter.kind in (
+                if (
+                    parameter.kind
+                    in (
                         inspect.Parameter.POSITIONAL_OR_KEYWORD,
                         inspect.Parameter.KEYWORD_ONLY,
-                ) and parameter.name == "is_local":
+                    )
+                    and parameter.name == "is_local"
+                ):
                     supports = True
                     break
                 if parameter.kind is inspect.Parameter.VAR_KEYWORD:
@@ -1815,7 +1859,9 @@ class AmazingDataProcessProxy:
         except Exception:  # pragma: no cover - external SDK behaviour
             return None
 
-        if not isinstance(raw_calendar, Sequence) or isinstance(raw_calendar, (str, bytes, bytearray)):
+        if not isinstance(raw_calendar, Sequence) or isinstance(
+            raw_calendar, (str, bytes, bytearray)
+        ):
             return None
 
         try:
@@ -1833,14 +1879,10 @@ class AmazingDataProcessProxy:
             return cached
 
         instance: Any | None = None
-        try:
-            instance = class_obj()
-        except TypeError:
-            instance = None
-        except Exception:  # pragma: no cover - SDK constructor failures
-            instance = None
 
-        if instance is None and class_name == "MarketData":
+        # MarketData必须使用calendar创建（SDK要求）
+        # 详见：docs/datasources/amazingdata/query_kline_calendar_requirement.md
+        if class_name == "MarketData":
             calendar = cls._ensure_market_calendar(sdk)
             if calendar is not None:
                 try:
@@ -1853,10 +1895,20 @@ class AmazingDataProcessProxy:
                 except Exception:  # pragma: no cover - depends on SDK
                     instance = None
             if instance is None:
+                # 无calendar时尝试无参创建（可能会在query_kline时报错）
+                logger.warning("未能获取交易日历，MarketData可能无法正常调用query_kline")
                 try:
-                    instance = class_obj(None)
+                    instance = class_obj()
                 except Exception:  # pragma: no cover - depends on SDK
                     instance = None
+        else:
+            # 其他类正常无参创建
+            try:
+                instance = class_obj()
+            except TypeError:
+                instance = None
+            except Exception:  # pragma: no cover - SDK constructor failures
+                instance = None
 
         if instance is None:
             return None

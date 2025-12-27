@@ -25,7 +25,8 @@ class CircularDependencyFixer:
                 if isinstance(raw_report, dict):
                     self.report = raw_report
                 self.circular_deps = [
-                    list(cycle) for cycle in self.report.get("circular_dependencies", [])
+                    list(cycle)
+                    for cycle in self.report.get("circular_dependencies", [])
                     if isinstance(cycle, list)
                 ]
                 raw_module_deps = self.report.get("module_dependencies", {})

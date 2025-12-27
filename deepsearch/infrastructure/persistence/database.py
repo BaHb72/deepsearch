@@ -182,9 +182,7 @@ class DatabaseService(DatabaseServiceProtocol):
                         # 创建超表
                         create_sql = cast(
                             TextClause,
-                            text(
-                                f"SELECT create_hypertable('{table_name}', '{time_column}');"
-                            ),
+                            text(f"SELECT create_hypertable('{table_name}', '{time_column}');"),
                         )
                         await conn.execute(self._as_executable(create_sql))
                         self.logger.info(f"创建超表: {table_name}")
@@ -238,7 +236,7 @@ class DatabaseService(DatabaseServiceProtocol):
                         """
                         CREATE MATERIALIZED VIEW market_5min_agg
                         WITH (timescaledb.continuous) AS
-                        SELECT 
+                        SELECT
                             time_bucket('5 minutes', time) AS time,
                             symbol,
                             first(open, time) as open,
@@ -360,8 +358,8 @@ async def get_connection():
     """获取数据库连接（兼容性函数）"""
     global _database_service
     if _database_service is None:
-        from deepsearch.core.runtime.context import get_context
         from deepsearch.core.components.data_components import DatabaseComponent
+        from deepsearch.core.runtime.context import get_context
 
         try:
             component = get_context().get_component("database")

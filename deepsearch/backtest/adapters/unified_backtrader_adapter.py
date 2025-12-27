@@ -9,12 +9,13 @@ Version: 1.0.0
 import asyncio
 import concurrent.futures
 from datetime import datetime
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import pandas as pd
 from loguru import logger
 
 from deepsearch.infrastructure.providers.managers.data_source_manager import get_data_manager
+
 from ..data.data_bridge import DataBridge
 
 bt: Any
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from backtrader.feeds import PandasData as BacktraderPandasData
 else:
     BacktraderPandasData = Any
+
 
 class UnifiedBacktraderAdapter:
     """
@@ -76,7 +78,7 @@ class UnifiedBacktraderAdapter:
 
     def _run_sync(self, coro):
         """安全地在同步上下文中运行异步协程
-        
+
         基于Python asyncio最佳实践：
         - 如果已有运行中的事件循环，使用线程池避免嵌套循环
         - 如果没有运行中的循环，使用asyncio.run()
@@ -101,7 +103,7 @@ class UnifiedBacktraderAdapter:
 
     def _ensure_dataframe(self, data: Any) -> pd.DataFrame:
         """Ensure the returned payload is a DataFrame.
-        
+
         基于pandas最佳实践，增加异常处理避免意外类型导致崩溃。
         """
         if isinstance(data, pd.DataFrame):
@@ -128,8 +130,16 @@ class UnifiedBacktraderAdapter:
 
         manager = self._require_data_manager()
 
-        start_str = start_date.strftime("%Y%m%d") if isinstance(start_date, datetime) else start_date.replace("-", "")
-        end_str = end_date.strftime("%Y%m%d") if isinstance(end_date, datetime) else end_date.replace("-", "")
+        start_str = (
+            start_date.strftime("%Y%m%d")
+            if isinstance(start_date, datetime)
+            else start_date.replace("-", "")
+        )
+        end_str = (
+            end_date.strftime("%Y%m%d")
+            if isinstance(end_date, datetime)
+            else end_date.replace("-", "")
+        )
 
         cache_key = f"{symbol}_{start_str}_{end_str}_{timeframe}_{adjust}"
         if cache_key in self._cache:
@@ -224,7 +234,7 @@ class UnifiedBacktraderAdapter:
 
     def _resample_to_weekly(self, df: pd.DataFrame) -> pd.DataFrame:
         """将日线数据转换为周线
-        
+
         基于pandas最佳实践，避免使用inplace=True，先复制再修改。
         """
         if df.empty:
@@ -232,7 +242,7 @@ class UnifiedBacktraderAdapter:
 
         # 先复制，避免修改原始数据
         df = df.copy()
-        
+
         if not isinstance(df.index, pd.DatetimeIndex):
             if "date" in df.columns:
                 df = df.set_index("date")  # 不使用inplace
@@ -272,9 +282,7 @@ class UnifiedBacktraderAdapter:
         adjust: str = "qfq",
     ) -> pd.DataFrame:
         """同步获取数据，兼容 Backtrader 引擎调用"""
-        return self._run_sync(
-            self.get_data(symbol, start_date, end_date, timeframe, adjust)
-        )
+        return self._run_sync(self.get_data(symbol, start_date, end_date, timeframe, adjust))  # type: ignore[no-any-return]
 
     async def get_multi_data(
         self,
@@ -290,7 +298,9 @@ class UnifiedBacktraderAdapter:
 
         logger.info(f"批量获取 {len(symbols)} 支股票数据")
 
-        tasks = [self.get_data(symbol, start_date, end_date, timeframe, adjust) for symbol in symbols]
+        tasks = [
+            self.get_data(symbol, start_date, end_date, timeframe, adjust) for symbol in symbols
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         data_dict: Dict[str, pd.DataFrame] = {}
@@ -308,7 +318,12 @@ class UnifiedBacktraderAdapter:
 
     def validate_data(self, df: pd.DataFrame) -> Dict[str, Any]:
         """验证数据完整性"""
-        validation_result: Dict[str, Any] = {"is_valid": True, "errors": [], "warnings": [], "stats": {}}
+        validation_result: Dict[str, Any] = {
+            "is_valid": True,
+            "errors": [],
+            "warnings": [],
+            "stats": {},
+        }
 
         if df.empty:
             validation_result["is_valid"] = False
@@ -324,7 +339,9 @@ class UnifiedBacktraderAdapter:
         if all(f in df.columns for f in required_fields):
             invalid_high = df["high"] < df[["open", "close"]].max(axis=1)
             if invalid_high.any():
-                validation_result["warnings"].append(f"存在 {invalid_high.sum()} 条 high 值异常记录")
+                validation_result["warnings"].append(
+                    f"存在 {invalid_high.sum()} 条 high 值异常记录"
+                )
 
             invalid_low = df["low"] > df[["open", "close"]].min(axis=1)
             if invalid_low.any():
@@ -335,7 +352,7 @@ class UnifiedBacktraderAdapter:
             date_range = f"{df.index[0]} to {df.index[-1]}" if len(df) > 0 else "N/A"
         except (IndexError, KeyError):
             date_range = "N/A"
-        
+
         validation_result["stats"] = {
             "rows": len(df),
             "columns": list(df.columns),

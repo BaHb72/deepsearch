@@ -10,13 +10,59 @@ export interface NotificationCategoryConfigItem {
   channels: NotificationChannel[]
 }
 
+export interface BarkServer {
+  name: string
+  baseUrl: string
+  token: string
+  enabled: boolean
+  group?: string
+  icon?: string
+  sound?: string
+  level?: 'active' | 'timeSensitive' | 'passive' | 'critical'
+}
+
+// ==================== 消息模板类型 ====================
+
+export interface WechatMessageTemplate {
+  name: string
+  titleTemplate: string
+  bodyTemplate: string
+}
+
+export interface BarkMessageTemplate {
+  name: string
+  titleTemplate: string
+  bodyTemplate: string
+  subtitleTemplate?: string
+  useMarkdown?: boolean
+  level?: 'active' | 'timeSensitive' | 'passive' | 'critical'
+  sound?: string
+  icon?: string
+  image?: string
+  group?: string
+  url?: string
+  copy?: string
+  autoCopy?: boolean
+  isArchive?: boolean
+  call?: boolean
+  badge?: number
+}
+
+export interface MessageTemplates {
+  wechat: WechatMessageTemplate[]
+  bark: BarkMessageTemplate[]
+  defaultWechat?: string
+  defaultBark?: string
+}
+
 export interface NotificationConfigResponse {
   enabled: boolean
-  defaultChannel: NotificationChannel
+  defaultChannel: NotificationChannel[] | NotificationChannel
   wechatToken: string
   barkToken: string
   hasWechatToken: boolean
   hasBarkToken: boolean
+  barkServers: BarkServer[]
   requestTimeout: number
   retryAttempts: number
   retryDelay: number
@@ -27,13 +73,15 @@ export interface NotificationConfigResponse {
     bark: string
   }
   categories: NotificationCategoryConfigItem[]
+  templates: MessageTemplates
 }
 
 export interface NotificationConfigUpdatePayload {
   enabled: boolean
-  defaultChannel: NotificationChannel
+  defaultChannel: NotificationChannel[] | NotificationChannel
   wechatToken?: string
   barkToken?: string
+  barkServers?: BarkServer[]
   requestTimeout: number
   retryAttempts: number
   retryDelay: number
@@ -44,6 +92,7 @@ export interface NotificationConfigUpdatePayload {
     bark: string
   }
   categories: NotificationCategoryConfigItem[]
+  templates?: MessageTemplates
 }
 
 export interface NotificationSendPayload {
@@ -52,6 +101,8 @@ export interface NotificationSendPayload {
   channel?: NotificationChannel
   category?: string
   bypass_quota?: boolean
+  barkServerNames?: string[]  // 指定推送的 Bark 服务器名称列表
+  barkTemplateName?: string   // 指定使用的 Bark 模板名称
 }
 
 export interface NotificationSendResult {
@@ -82,26 +133,29 @@ export interface NotificationQuotasResponse {
 }
 
 export const fetchNotificationConfig = async (): Promise<NotificationConfigResponse> => {
-  const response = await request.get<NotificationConfigResponse>('/notification/config')
-  return response.data
+  // 响应拦截器已经返回 response.data，所以这里直接返回
+  const data = await request.get<NotificationConfigResponse>('/notification/config')
+  return data as unknown as NotificationConfigResponse
 }
 
 export const updateNotificationConfig = async (payload: NotificationConfigUpdatePayload): Promise<NotificationConfigResponse> => {
-  const response = await request.put<NotificationConfigResponse>('/notification/config', payload)
-  return response.data
+  // 响应拦截器已经返回 response.data，所以这里直接返回
+  const data = await request.put<NotificationConfigResponse>('/notification/config', payload)
+  return data as unknown as NotificationConfigResponse
 }
 
+
 export const sendNotification = async (payload: NotificationSendPayload): Promise<NotificationSendResult> => {
-  const response = await request.post<NotificationSendResult>('/notification/send', payload)
-  return response.data
+  const data = await request.post<NotificationSendResult>('/notification/send', payload)
+  return data as unknown as NotificationSendResult
 }
 
 export const fetchNotificationQuotas = async (): Promise<NotificationQuotasResponse> => {
-  const response = await request.get<NotificationQuotasResponse>('/notification/quotas')
-  return response.data
+  const data = await request.get<NotificationQuotasResponse>('/notification/quotas')
+  return data as unknown as NotificationQuotasResponse
 }
 
 export const resetNotificationQuotas = async (): Promise<{ success: boolean }> => {
-  const response = await request.post<{ success: boolean }>('/notification/quotas/reset')
-  return response.data
+  const data = await request.post<{ success: boolean }>('/notification/quotas/reset')
+  return data as unknown as { success: boolean }
 }

@@ -296,7 +296,9 @@ def _refresh_wsl_host(
                 wsl_config.distro,
                 ip,
             )
-            echo_fn("\u68c0\u6d4b\u5230 WSL Mirrored \u6a21\u5f0f\uff0c\u6539\u7528 127.0.0.1 \u8bbf\u95ee Redis")
+            echo_fn(
+                "\u68c0\u6d4b\u5230 WSL Mirrored \u6a21\u5f0f\uff0c\u6539\u7528 127.0.0.1 \u8bbf\u95ee Redis"
+            )
             config.host = target_host
         elif ip_changed:
             logger.info("WSL {} Mirrored \u6a21\u5f0f IP \u53d8\u66f4: {}", wsl_config.distro, ip)

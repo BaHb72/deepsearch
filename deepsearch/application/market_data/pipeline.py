@@ -14,6 +14,7 @@ from deepsearch.ports.market_data import (
     OrderImbalanceQuery,
     WindowSpec,
 )
+
 from .cache_writer import MarketDataCacheWriter
 from .service import RealTimeMarketDataService
 from .trading_guard import PhaseState

@@ -473,4 +473,3 @@ class MonitorAPI:
         }
 
         return monitor_stats
-

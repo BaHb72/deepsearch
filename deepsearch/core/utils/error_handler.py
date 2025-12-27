@@ -556,13 +556,37 @@ class EnhancedErrorHandler:
             import subprocess
             import sys
 
+            port = 8000  # 默认端口
+
             if sys.platform == "win32":
-                # Windows
-                subprocess.run("netstat -ano | findstr :8000", shell=True, capture_output=True)
-                # 这里只是示例，实际需要解析输出并结束进程
+                # Windows: 使用netstat获取占用端口的PID
+                result = subprocess.run(
+                    ["netstat", "-ano"],
+                    capture_output=True,
+                    text=True,
+                )
+                for line in result.stdout.splitlines():
+                    if f":{port}" in line and "LISTENING" in line:
+                        parts = line.split()
+                        if parts:
+                            pid = parts[-1]
+                            if pid.isdigit():
+                                logger.info(f"发现占用端口 {port} 的进程: PID={pid}")
+                                # 注意：实际kill需要用户确认，这里只记录
+                                # subprocess.run(["taskkill", "/F", "/PID", pid])
             else:
-                # Linux/Mac
-                subprocess.run("lsof -ti:8000 | xargs kill -9", shell=True)
+                # Linux/Mac: 使用lsof获取占用端口的PID
+                result = subprocess.run(
+                    ["lsof", "-ti", f":{port}"],
+                    capture_output=True,
+                    text=True,
+                )
+                pids = result.stdout.strip().split("\n")
+                for pid in pids:
+                    if pid.strip().isdigit():
+                        logger.info(f"发现占用端口 {port} 的进程: PID={pid}")
+                        # 注意：实际kill需要用户确认，这里只记录
+                        # subprocess.run(["kill", "-9", pid])
 
             time.sleep(1)
             return True

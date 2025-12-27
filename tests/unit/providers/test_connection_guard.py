@@ -27,7 +27,7 @@ class TestConnectionGuardBasic:
     def test_initial_state(self):
         """测试初始状态"""
         status = MiniQMTConnectionGuard.get_status()
-        
+
         assert status["is_available"] is None
         assert status["consecutive_failures"] == 0
         assert status["suppressed_log_count"] == 0
@@ -41,14 +41,14 @@ class TestConnectionGuardBasic:
     def test_mark_available(self):
         """测试标记服务可用"""
         MiniQMTConnectionGuard.mark_available()
-        
+
         assert MiniQMTConnectionGuard.is_available() is True
         assert MiniQMTConnectionGuard.get_status()["consecutive_failures"] == 0
 
     def test_mark_unavailable(self):
         """测试标记服务不可用"""
         MiniQMTConnectionGuard.mark_unavailable()
-        
+
         assert MiniQMTConnectionGuard.is_available() is False
         assert MiniQMTConnectionGuard.get_status()["consecutive_failures"] == 1
 
@@ -56,16 +56,16 @@ class TestConnectionGuardBasic:
         """测试连续失败计数"""
         for i in range(5):
             MiniQMTConnectionGuard.mark_unavailable()
-        
+
         assert MiniQMTConnectionGuard.get_status()["consecutive_failures"] == 5
 
     def test_reset(self):
         """测试状态重置"""
         MiniQMTConnectionGuard.mark_unavailable()
         MiniQMTConnectionGuard.mark_unavailable()
-        
+
         MiniQMTConnectionGuard.reset()
-        
+
         status = MiniQMTConnectionGuard.get_status()
         assert status["is_available"] is None
         assert status["consecutive_failures"] == 0
@@ -87,7 +87,7 @@ class TestConnectionGuardThrottling:
     def test_should_not_attempt_when_unavailable(self):
         """测试服务不可用时不应立即尝试连接"""
         MiniQMTConnectionGuard.mark_unavailable()
-        
+
         # 立即检查应该返回 False
         result = MiniQMTConnectionGuard.should_attempt_connection()
         assert result is False
@@ -95,17 +95,17 @@ class TestConnectionGuardThrottling:
     def test_should_attempt_after_interval(self):
         """测试间隔后应该重新尝试"""
         MiniQMTConnectionGuard.mark_unavailable()
-        
+
         # 等待超过检测间隔 (0.5秒)
         time.sleep(0.6)
-        
+
         result = MiniQMTConnectionGuard.should_attempt_connection()
         assert result is True
 
     def test_should_always_attempt_when_available(self):
         """测试服务可用时总是允许连接"""
         MiniQMTConnectionGuard.mark_available()
-        
+
         for _ in range(10):
             result = MiniQMTConnectionGuard.should_attempt_connection()
             assert result is True
@@ -136,21 +136,21 @@ class TestConnectionGuardLogging:
         # 首次记录
         result1 = MiniQMTConnectionGuard.log_connection_error("错误1")
         assert result1 is True
-        
+
         # 立即再次调用应该被抑制
         result2 = MiniQMTConnectionGuard.log_connection_error("错误2")
         assert result2 is False
-        
+
         # 检查抑制计数
         assert MiniQMTConnectionGuard.get_status()["suppressed_log_count"] == 1
 
     def test_error_logged_after_interval(self):
         """测试间隔后错误会被记录"""
         MiniQMTConnectionGuard.log_connection_error("错误1")
-        
+
         # 等待超过日志间隔 (0.5秒)
         time.sleep(0.6)
-        
+
         result = MiniQMTConnectionGuard.log_connection_error("错误2")
         assert result is True
 
@@ -167,12 +167,12 @@ class TestConnectionGuardRecovery:
         # 模拟连续失败
         for _ in range(3):
             MiniQMTConnectionGuard.mark_unavailable()
-        
+
         assert MiniQMTConnectionGuard.is_available() is False
-        
+
         # 模拟恢复
         MiniQMTConnectionGuard.mark_available()
-        
+
         assert MiniQMTConnectionGuard.is_available() is True
         assert MiniQMTConnectionGuard.get_status()["consecutive_failures"] == 0
 
@@ -187,14 +187,14 @@ class TestConnectionGuardConfiguration:
     def test_set_check_interval_minimum(self):
         """测试检测间隔最小值限制"""
         MiniQMTConnectionGuard.set_check_interval(10)  # 低于30秒最小值
-        
+
         status = MiniQMTConnectionGuard.get_status()
         assert status["check_interval"] == 30  # 应该被限制为30秒
 
     def test_set_check_interval_valid(self):
         """测试设置有效的检测间隔"""
         MiniQMTConnectionGuard.set_check_interval(120)
-        
+
         status = MiniQMTConnectionGuard.get_status()
         assert status["check_interval"] == 120
 

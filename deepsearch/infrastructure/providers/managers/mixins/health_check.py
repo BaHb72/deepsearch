@@ -31,11 +31,9 @@ from loguru import logger
 class _ProviderProtocol(Protocol):
     """提供者协议（用于健康检查）"""
 
-    async def initialize(self) -> None:
-        ...
+    async def initialize(self) -> None: ...
 
-    def is_healthy(self) -> bool:
-        ...
+    def is_healthy(self) -> bool: ...
 
 
 @dataclass
@@ -104,11 +102,11 @@ class HealthCheckMixin:
     _custom_health_checks: Dict[str, Callable[..., Coroutine[Any, Any, bool]]]
 
     def _init_health_check(
-            self,
-            check_interval: float = 60.0,
-            timeout: float = 10.0,
-            failure_threshold: int = 3,
-            history_size: int = 100,
+        self,
+        check_interval: float = 60.0,
+        timeout: float = 10.0,
+        failure_threshold: int = 3,
+        history_size: int = 100,
     ) -> None:
         """初始化健康检查配置
 
@@ -135,9 +133,9 @@ class HealthCheckMixin:
         )
 
     def register_health_check(
-            self,
-            source_name: str,
-            check_func: Callable[..., Coroutine[Any, Any, bool]],
+        self,
+        source_name: str,
+        check_func: Callable[..., Coroutine[Any, Any, bool]],
     ) -> None:
         """注册自定义健康检查函数
 
@@ -257,11 +255,7 @@ class HealthCheckMixin:
         providers = getattr(self, "providers", {})
 
         for source_type, provider in providers.items():
-            source_name = (
-                source_type.value
-                if hasattr(source_type, "value")
-                else str(source_type)
-            )
+            source_name = source_type.value if hasattr(source_type, "value") else str(source_type)
 
             try:
                 result = await self.check_health(source_name, provider)
@@ -320,7 +314,7 @@ class HealthCheckMixin:
 
         # 保持历史记录大小
         if len(history) > self._health_config.history_size:
-            self._health_history[source_name] = history[-self._health_config.history_size:]
+            self._health_history[source_name] = history[-self._health_config.history_size :]
 
     async def start_health_check_loop(self) -> None:
         """启动后台健康检查循环
@@ -373,7 +367,7 @@ class HealthCheckMixin:
         if not status:
             return True  # 未检查过假设健康
 
-        return status.get("healthy", True)
+        return bool(status.get("healthy", True))
 
     def get_health_status(self) -> Dict[str, Dict[str, Any]]:
         """获取所有数据源的健康状态
@@ -386,9 +380,9 @@ class HealthCheckMixin:
         return dict(self._health_status)
 
     def get_health_history(
-            self,
-            source_name: Optional[str] = None,
-            limit: int = 10,
+        self,
+        source_name: Optional[str] = None,
+        limit: int = 10,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """获取健康检查历史
 
@@ -404,9 +398,7 @@ class HealthCheckMixin:
 
         result: Dict[str, List[Dict[str, Any]]] = {}
 
-        sources = (
-            [source_name] if source_name else list(self._health_history.keys())
-        )
+        sources = [source_name] if source_name else list(self._health_history.keys())
 
         for src in sources:
             if src in self._health_history:

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 try:
     import pandas as pd
@@ -8,7 +11,7 @@ try:
     HAS_PANDAS = True
 except ImportError:
     HAS_PANDAS = False
-    pd = None  # type: ignore
+    pd = None  # type: ignore[assignment]
 
 from deepsearch.infrastructure.providers.datafeed.base import IDataFeed, KlineParams
 from deepsearch.infrastructure.providers.datafeed.normalizer import DataNormalizer

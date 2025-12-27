@@ -348,20 +348,20 @@ class OptimizedDataSource:
             max_size=20,  # 增加最大连接数
             keepalive_time=300  # 保持连接5分钟
         )
-        
+
         # 2. 智能缓存
         self.cache = LRUCache(
             max_size=10000,
             ttl=self._adaptive_ttl(avg_latency={avg:.0f})
         )
-        
+
         # 3. 请求批处理
         self.batch_processor = BatchProcessor(
             batch_size=50,
             batch_timeout=0.05,  # 50ms批处理窗口
             max_latency=100  # 目标延迟100ms
         )
-    
+
     def _adaptive_ttl(self, avg_latency):
         """根据延迟动态调整缓存时间"""
         if avg_latency > 200:
@@ -369,12 +369,12 @@ class OptimizedDataSource:
         elif avg_latency > 100:
             return 120  # 中延迟时缓存2分钟
         return 60  # 低延迟时缓存1分钟
-    
+
     async def get_data(self, symbol):
         # 1. 尝试缓存
         if cached := self.cache.get(symbol):
             return cached
-        
+
         # 2. 批处理请求
         return await self.batch_processor.process(symbol)
 '''
@@ -388,13 +388,13 @@ class HighThroughputProcessor:
         # 1. 异步并发处理
         self.semaphore = asyncio.Semaphore(100)  # 限制并发数
         self.executor = ThreadPoolExecutor(max_workers=20)
-        
+
         # 2. 请求合并
         self.request_merger = RequestMerger(
             window_size=0.01,  # 10ms合并窗口
             max_batch=100  # 最大批次大小
         )
-        
+
         # 3. 管道化处理
         self.pipeline = ProcessingPipeline([
             ValidationStage(),
@@ -402,21 +402,21 @@ class HighThroughputProcessor:
             BatchFetchStage(),
             PostProcessStage()
         ])
-    
+
     async def process_requests(self, requests):
         """高吞吐量处理请求"""
         # 1. 请求去重和合并
         merged = self.request_merger.merge(requests)
-        
+
         # 2. 并发处理
         tasks = []
         for batch in self._chunk(merged, 100):
             tasks.append(self._process_batch(batch))
-        
+
         # 3. 等待所有任务完成
         results = await asyncio.gather(*tasks)
         return self._flatten(results)
-    
+
     async def _process_batch(self, batch):
         async with self.semaphore:
             return await self.pipeline.process(batch)
@@ -434,10 +434,10 @@ class TimeoutHandler:
             'historical': 5.0,  # 历史数据5秒
             'batch': 10.0      # 批量请求10秒
         }
-        
+
     async def fetch_with_timeout(self, func, data_type='realtime'):
         timeout = self.timeout_config.get(data_type, 3.0)
-        
+
         try:
             return await asyncio.wait_for(
                 func(),
@@ -448,11 +448,11 @@ class TimeoutHandler:
             if cached := self.cache.get_stale(key):
                 logger.warning(f"使用过期缓存数据")
                 return cached
-            
+
             # 尝试备用数据源
             if self.fallback_source:
                 return await self.fallback_source.fetch()
-            
+
             raise TimeoutError(f"请求超时且无可用备份")
 """
 
@@ -466,10 +466,10 @@ class NetworkErrorHandler:
             max_delay=10.0,
             max_retries=3
         )
-        
+
     async def fetch_with_retry(self, func):
         last_error = None
-        
+
         for attempt in range(self.retry_config.max_retries):
             try:
                 return await func()
@@ -478,7 +478,7 @@ class NetworkErrorHandler:
                 delay = self.retry_config.get_delay(attempt)
                 logger.warning(f"网络错误，{delay:.1f}秒后重试")
                 await asyncio.sleep(delay)
-        
+
         raise last_error
 """
 
@@ -488,16 +488,16 @@ class ErrorHandler:
     async def handle_error(self, error, context):
         # 记录错误
         logger.error(f"Error in {context}: {error}")
-        
+
         # 降级处理
         if self.can_fallback():
             return await self.fallback()
-        
+
         # 熔断保护
         if self.circuit_breaker.should_open():
             self.circuit_breaker.open()
             raise ServiceUnavailable()
-        
+
         raise error
 """
 
@@ -509,18 +509,18 @@ class CPUOptimizer:
     def __init__(self):
         # 1. 使用更高效的数据结构
         self.data_cache = {}  # 替换为 lru_cache
-        
+
         # 2. 避免重复计算
         self.computation_cache = TTLCache(
             maxsize=1000,
             ttl=60
         )
-        
+
     @lru_cache(maxsize=1000)
     def compute_indicators(self, data):
         """缓存计算结果避免重复计算"""
         return expensive_computation(data)
-    
+
     def process_data_batch(self, data_list):
         """批量处理减少开销"""
         # 使用numpy向量化操作
@@ -540,14 +540,14 @@ class MemoryOptimizer:
             factory=DataObject,
             max_size=1000
         )
-        
+
         # 2. 弱引用缓存
         self.weak_cache = weakref.WeakValueDictionary()
-        
+
         # 3. 定期清理
         self.cleanup_interval = 300  # 5分钟
         asyncio.create_task(self._cleanup_loop())
-    
+
     async def _cleanup_loop(self):
         while True:
             await asyncio.sleep(self.cleanup_interval)
@@ -556,7 +556,7 @@ class MemoryOptimizer:
             # 强制垃圾回收
             import gc
             gc.collect()
-    
+
     def _cleanup_expired_data(self):
         """清理过期数据释放内存"""
         current_time = time.time()
@@ -577,26 +577,26 @@ class DiskCleanup:
         self.log_dir = "./logs"
         self.data_dir = "./data"
         self.retention_days = 7
-        
+
     def cleanup_old_files(self):
         """清理旧文件"""
         import os
         from datetime import datetime, timedelta
-        
+
         cutoff = datetime.now() - timedelta(days=self.retention_days)
-        
+
         for root, dirs, files in os.walk(self.log_dir):
             for file in files:
                 filepath = os.path.join(root, file)
                 if os.path.getmtime(filepath) < cutoff.timestamp():
                     os.remove(filepath)
                     logger.info(f"删除旧文件: {filepath}")
-    
+
     def compress_logs(self):
         """压缩日志文件"""
         import gzip
         import shutil
-        
+
         for file in glob.glob(f"{self.log_dir}/*.log"):
             with open(file, 'rb') as f_in:
                 with gzip.open(f"{file}.gz", 'wb') as f_out:

@@ -14,7 +14,6 @@ import redis
 from deepsearch.event.engine.engine import Event
 from deepsearch.infrastructure.persistence.timeseries import RedisTimeSeriesStorage
 
-
 _TIMESERIES_ENV = "REDIS_TIMESERIES_LIB"
 
 
@@ -73,7 +72,9 @@ def redis_env() -> Iterator[redis.Redis]:
 
     if not _has_timeseries_module(client):
         if not _try_load_timeseries_module(client):
-            pytest.skip("RedisTimeSeries module not available. Set REDIS_TIMESERIES_LIB or pre-load the module.")
+            pytest.skip(
+                "RedisTimeSeries module not available. Set REDIS_TIMESERIES_LIB or pre-load the module."
+            )
 
     client.flushdb()
     try:

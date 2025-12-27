@@ -178,6 +178,7 @@ class ProcessHandle:
 # Helper functions
 # ---------------------------------------------------------------------------
 
+
 def _get_worker_process(proxy: AmazingDataProcessProxy) -> WorkerProcess:
     return cast(WorkerProcess, proxy.worker_process)
 
@@ -247,9 +248,9 @@ def _normalise_health_status(raw: Any) -> Dict[str, Any]:
 
 
 def _log_health_transition(
-        datasource_id: str,
-        previous_status: Optional[str],
-        health: Mapping[str, Any],
+    datasource_id: str,
+    previous_status: Optional[str],
+    health: Mapping[str, Any],
 ) -> None:
     """Emit concise log when health status changes."""
     status = str(health.get("status") or "unknown")
@@ -267,9 +268,7 @@ def _log_health_transition(
             summary[key] = health[key]
 
     if status == "ok":
-        logger.info(
-            f"[ProcessPool] Health status for {datasource_id}: {prev} -> ok ({summary})"
-        )
+        logger.info(f"[ProcessPool] Health status for {datasource_id}: {prev} -> ok ({summary})")
     elif status == "degraded":
         logger.warning(
             f"[ProcessPool] Health degraded for {datasource_id}: {prev} -> degraded ({summary})"
@@ -411,9 +410,7 @@ class AmazingDataProcessPool:
                         return proxy
                     logger.warning(f"[ProcessPool] Dead process detected for {datasource_id}")
                 if len(self._handles) >= self.max_processes:
-                    logger.debug(
-                        "[ProcessPool] Max processes reached, attempting idle cleanup"
-                    )
+                    logger.debug("[ProcessPool] Max processes reached, attempting idle cleanup")
 
             if existing_handle:
                 self.stop(datasource_id)
@@ -528,7 +525,7 @@ class AmazingDataProcessPool:
                 current_handle.last_login_error_reason = None
 
     def record_login_result(
-            self, datasource_id: str, success: bool, error: Optional[str] = None
+        self, datasource_id: str, success: bool, error: Optional[str] = None
     ) -> None:
         """Record the outcome of a login attempt for throttle bookkeeping."""
         lock = self._get_datasource_lock(datasource_id)
@@ -717,8 +714,11 @@ class AmazingDataProcessPool:
             # - 进程仍在（无 exitcode/signal），且已登录，多为繁忙/探针超时
             if status_value == "error":
                 logged_in = bool(health.get("loggedIn"))
-                has_exit = ("exitcode" in health) or ("signal" in health) or (
-                            health.get("reason") == "process_not_running")
+                has_exit = (
+                    ("exitcode" in health)
+                    or ("signal" in health)
+                    or (health.get("reason") == "process_not_running")
+                )
                 if logged_in and not has_exit:
                     health["status"] = "degraded"
                     status_value = "degraded"
@@ -746,7 +746,8 @@ class AmazingDataProcessPool:
                         current_handle.health_failure_streak += 1
                     else:
                         current_handle.health_failure_streak = min(
-                            current_handle.health_failure_streak + 1, self._degraded_restart_threshold
+                            current_handle.health_failure_streak + 1,
+                            self._degraded_restart_threshold,
                         )
                     failure_streak = current_handle.health_failure_streak
 
@@ -760,11 +761,15 @@ class AmazingDataProcessPool:
                 errors = health.get("errors") or []
                 # 启动暖身期：未登录且运行时间 < grace 时，不将 degraded 计入重启
                 with self.lock:
-                    handle = self._handles.get(datasource_id)
+                    warmup_handle = self._handles.get(datasource_id)
                     uptime_ok = True
-                    if handle is not None:
-                        uptime_ok = handle.uptime(time.time()) >= self._warmup_grace_seconds
-                if errors and failure_streak >= self._degraded_restart_threshold and (logged_in or uptime_ok):
+                    if warmup_handle is not None:
+                        uptime_ok = warmup_handle.uptime(time.time()) >= self._warmup_grace_seconds
+                if (
+                    errors
+                    and failure_streak >= self._degraded_restart_threshold
+                    and (logged_in or uptime_ok)
+                ):
                     restart_targets.append((datasource_id, logged_in, failure_streak))
 
         for datasource_id, logged_in, streak in restart_targets:

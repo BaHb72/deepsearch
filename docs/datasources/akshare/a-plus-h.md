@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_zh_ah_spot_em
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#ah_comparison
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#ah_comparison>
 
 描述: 东方财富网-行情中心-沪深港通-AH股比价-实时行情, 延迟 15 分钟更新
 
@@ -69,7 +69,7 @@ print(stock_zh_ah_spot_em_df)
 
 接口: stock_zh_ah_spot
 
-目标地址: https://stockapp.finance.qq.com/mstats/#mod=list&id=hk_ah&module=HK&type=AH
+目标地址: <https://stockapp.finance.qq.com/mstats/#mod=list&id=hk_ah&module=HK&type=AH>
 
 描述: A+H 股数据是从腾讯财经获取的数据, 延迟 15 分钟更新
 
@@ -130,7 +130,7 @@ print(stock_zh_ah_spot_df)
 
 接口: stock_zh_ah_daily
 
-目标地址: https://gu.qq.com/hk02359/gp
+目标地址: <https://gu.qq.com/hk02359/gp>
 
 描述: 腾讯财经-A+H 股数据
 
@@ -187,7 +187,7 @@ print(stock_zh_ah_daily_df)
 
 接口: stock_zh_ah_name
 
-目标地址: https://stockapp.finance.qq.com/mstats/#mod=list&id=hk_ah&module=HK&type=AH
+目标地址: <https://stockapp.finance.qq.com/mstats/#mod=list&id=hk_ah&module=HK&type=AH>
 
 描述: A+H 股数据是从腾讯财经获取的数据, 历史数据按日频率更新
 

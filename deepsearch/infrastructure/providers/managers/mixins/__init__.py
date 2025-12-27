@@ -12,7 +12,7 @@
 """
 
 from .cacheable import CacheableMixin
-from .circuit_breaker import CircuitBreakerMixin, CircuitState, CircuitBreakerConfig
+from .circuit_breaker import CircuitBreakerConfig, CircuitBreakerMixin, CircuitState
 from .health_check import HealthCheckMixin
 
 __all__ = [

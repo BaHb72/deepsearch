@@ -18,8 +18,8 @@ from typing import (
     List,
     Optional,
     Sequence,
-    TypeVar,
     TypedDict,
+    TypeVar,
     Union,
     cast,
 )
@@ -140,7 +140,9 @@ class RequestBatcher(Generic[T, R]):
             if len(self.pending_requests) >= self.batch_size:
                 asyncio.create_task(self._flush_batch())
             elif not self._timer_task or self._timer_task.done():
-                self._timer_task = cast(asyncio.Task[None], asyncio.create_task(self._schedule_flush()))
+                self._timer_task = cast(
+                    asyncio.Task[None], asyncio.create_task(self._schedule_flush())
+                )
 
         try:
             result = await future
@@ -170,7 +172,9 @@ class RequestBatcher(Generic[T, R]):
             async with self._lock:
                 self._processing = False
                 if self.pending_requests and (not self._timer_task or self._timer_task.done()):
-                    self._timer_task = cast(asyncio.Task[None], asyncio.create_task(self._schedule_flush()))
+                    self._timer_task = cast(
+                        asyncio.Task[None], asyncio.create_task(self._schedule_flush())
+                    )
 
     async def _process_batch(self, batch: List[BatchRequest[T, R]]) -> None:
         start_time = time.time()
@@ -264,6 +268,7 @@ class MultiKeyBatcher(Generic[T, R]):
     async def add_request(self, key: str, request_data: T) -> R:
         async with self._lock:
             if key not in self.batchers:
+
                 async def processor(payload: List[T]) -> ProcessorResult:
                     return await self.batch_processor(key, payload)
 

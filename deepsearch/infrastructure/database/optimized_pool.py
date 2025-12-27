@@ -9,12 +9,16 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 import asyncpg
 from asyncpg.pool import Pool
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import QueuePool
 
 from deepsearch.observability import get_logger
@@ -78,7 +82,7 @@ class OptimizedDatabasePool:
         self.config = config
         self.pool: Optional[Pool] = None
         self.engine: Optional[AsyncEngine] = None
-        self.session_factory: Optional[sessionmaker[AsyncSession]] = None
+        self.session_factory: Optional[async_sessionmaker[AsyncSession]] = None
         self.statistics = PoolStatistics()
         self._logger = get_logger("deepsearch.database.pool")
         self._initialized = False
@@ -113,7 +117,7 @@ class OptimizedDatabasePool:
             )
 
             # 创建会话工厂
-            self.session_factory = sessionmaker(
+            self.session_factory = async_sessionmaker(
                 self.engine, class_=AsyncSession, expire_on_commit=False
             )
 
@@ -262,7 +266,7 @@ class OptimizedDatabasePool:
             self._update_query_statistics(query_time)
 
     @asynccontextmanager
-    async def get_session(self) -> AsyncSession:
+    async def get_session(self) -> AsyncIterator[AsyncSession]:
         """
         获取 SQLAlchemy 会话
 

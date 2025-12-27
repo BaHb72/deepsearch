@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_gsrl_gsdt_em
 
-目标地址: https://data.eastmoney.com/gsrl/gsdt.html
+目标地址: <https://data.eastmoney.com/gsrl/gsdt.html>
 
 描述: 东方财富网-数据中心-股市日历-公司动态
 

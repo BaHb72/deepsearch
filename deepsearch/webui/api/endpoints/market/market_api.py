@@ -73,7 +73,7 @@ def _data_unavailable(endpoint: str) -> HTTPException:
 
 @router.get("/overview")
 async def get_market_overview(
-        market: Optional[str] = Query(None, description="市场标识，可选 sh/sz/cyb 等"),
+    market: Optional[str] = Query(None, description="市场标识，可选 sh/sz/cyb 等"),
 ) -> MarketOverviewResponse:
     """市场概览：目前仅在真实数据接入后才能使用。"""
 
@@ -82,9 +82,9 @@ async def get_market_overview(
 
 @router.get("/sectors")
 async def get_market_sectors(
-        sort_by: str = Query("change_percent", description="排序字段"),
-        limit: int = Query(20, description="结果条数", ge=1, le=100),
-        market: Optional[str] = Query(None, description="市场标识"),
+    sort_by: str = Query("change_percent", description="排序字段"),
+    limit: int = Query(20, description="结果条数", ge=1, le=100),
+    market: Optional[str] = Query(None, description="市场标识"),
 ) -> JSONResponse:
     """板块分布：禁止返回模拟数据。"""
 
@@ -94,8 +94,8 @@ async def get_market_sectors(
 @router.get("/rank/{rank_type}")
 async def get_market_ranking(
     rank_type: str,
-        limit: int = Query(20, description="结果条数", ge=1, le=100),
-        market: Optional[str] = Query(None, description="市场标识"),
+    limit: int = Query(20, description="结果条数", ge=1, le=100),
+    market: Optional[str] = Query(None, description="市场标识"),
 ) -> TopListResponse:
     """涨跌幅/成交量榜：未接真实数据前不再返回伪造榜单。"""
 
@@ -104,7 +104,7 @@ async def get_market_ranking(
 
 @router.get("/money-flow")
 async def get_money_flow(
-        period: str = Query("today", description="统计周期"),
+    period: str = Query("today", description="统计周期"),
 ) -> MoneyFlowResponse:
     """市场资金流向：无真实数据时直接返回 503。"""
 
@@ -113,8 +113,8 @@ async def get_money_flow(
 
 @router.get("/hot-stocks")
 async def get_hot_stocks(
-        category: str = Query("all", description="热度分类"),
-        limit: int = Query(10, description="结果条数", ge=1, le=50),
+    category: str = Query("all", description="热度分类"),
+    limit: int = Query(10, description="结果条数", ge=1, le=50),
 ) -> JSONResponse:
     """热门股票榜：禁止返回演示数据。"""
 
@@ -123,7 +123,7 @@ async def get_hot_stocks(
 
 @router.get("/market-calendar")
 async def get_market_calendar(
-        date: Optional[str] = Query(None, description="查询日期 YYYY-MM-DD"),
+    date: Optional[str] = Query(None, description="查询日期 YYYY-MM-DD"),
 ) -> JSONResponse:
     """市场日历：等待真实数据接入。"""
 

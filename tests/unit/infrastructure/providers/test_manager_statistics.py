@@ -68,9 +68,7 @@ class DummyProvider(DataProvider):
     ) -> Optional[List[Dict[str, Any]]]:
         return None
 
-    async def get_realtime_quotes(
-        self, symbols: List[str]
-    ) -> Optional[List[Dict[str, Any]]]:
+    async def get_realtime_quotes(self, symbols: List[str]) -> Optional[List[Dict[str, Any]]]:
         return None
 
     async def get_stock_info(self, symbol: str) -> Optional[Dict[str, Any]]:

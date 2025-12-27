@@ -525,7 +525,7 @@ def generate_html_report(data):
 <body>
     <h1>DeepSearch 调试报告</h1>
     <p>生成时间: {data['timestamp']}</p>
-    
+
     <div class="section">
         <h2>错误统计</h2>
         <div class="metric">
@@ -533,17 +533,17 @@ def generate_html_report(data):
             <div class="metric-label">总错误数</div>
         </div>
     </div>
-    
+
     <div class="section">
         <h2>性能概览</h2>
         <pre>{json.dumps(data['performance'].get('summary', {}), indent=2)}</pre>
     </div>
-    
+
     <div class="section">
         <h2>内存使用</h2>
         <pre>{json.dumps(data['memory'], indent=2)}</pre>
     </div>
-    
+
     <div class="section">
         <h2>数据库性能</h2>
         <pre>{json.dumps(data['database'].get('statistics', {}), indent=2)}</pre>

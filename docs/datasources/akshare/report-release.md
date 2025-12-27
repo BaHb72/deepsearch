@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: news_report_time_baidu
 
-目标地址: https://gushitong.baidu.com/calendar
+目标地址: <https://gushitong.baidu.com/calendar>
 
 描述: 百度股市通-财报发行
 

@@ -9,15 +9,14 @@ from __future__ import annotations
 import asyncio
 import sys
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Optional, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, cast
 
-from uvicorn.config import Config, LOGGING_CONFIG
-from uvicorn.server import Server
 from starlette.types import ASGIApp
+from uvicorn.config import LOGGING_CONFIG, Config
+from uvicorn.server import Server
 
 from deepsearch.observability import get_logger
 from deepsearch.webui.api.models import WebServerConfig
-
 
 if TYPE_CHECKING:
     from asyncio import AbstractEventLoopPolicy as WindowsEventLoopPolicyBase
@@ -121,9 +120,7 @@ class ServerManager:
             "lifespan": config_model.lifespan,
             "timeout_graceful_shutdown": config_model.timeout_graceful_shutdown,
             "reload": config_model.reload,
-            "log_config": (
-                config_model.log_config if log_config_override else LOGGING_CONFIG
-            ),
+            "log_config": (config_model.log_config if log_config_override else LOGGING_CONFIG),
         }
 
         if config_model.ssl_certfile is not None:

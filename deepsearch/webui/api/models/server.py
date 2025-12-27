@@ -80,9 +80,7 @@ class WebServerConfig:
                 self.ssl_certfile = path
             elif key == "ssl_keyfile" and (path := self._normalize_path(value)) is not None:
                 self.ssl_keyfile = path
-            elif key == "ssl_keyfile_password" and (
-                isinstance(value, str) or value is None
-            ):
+            elif key == "ssl_keyfile_password" and (isinstance(value, str) or value is None):
                 self.ssl_keyfile_password = value
             elif key == "headers":
                 normalized = self._normalize_headers(value)

@@ -11,7 +11,7 @@ import inspect
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import AsyncIterator, Awaitable, Callable, Generic, Optional, TypeVar, TypedDict, cast
+from typing import AsyncIterator, Awaitable, Callable, Generic, Optional, TypedDict, TypeVar, cast
 
 from loguru import logger
 
@@ -26,6 +26,7 @@ class ConnectionStats(TypedDict):
     acquire_count: int
     acquire_timeout_count: int
     validation_failures: int
+
 
 class PoolRuntimeStats(TypedDict):
     connections_created: int
@@ -46,7 +47,6 @@ async def _await_maybe(value: Awaitable[T] | T) -> T:
     if inspect.isawaitable(value):
         return cast(T, await cast(Awaitable[T], value))
     return cast(T, value)
-
 
 
 @dataclass
@@ -259,7 +259,9 @@ class ConnectionPool(Generic[TConn]):
 
                 # 等待连接可用
                 try:
-                    conn = cast(Connection[TConn], await asyncio.wait_for(self.pool.get(), timeout=0.1))
+                    conn = cast(
+                        Connection[TConn], await asyncio.wait_for(self.pool.get(), timeout=0.1)
+                    )
                     if await conn.validate():
                         conn.mark_used()
                         self.stats["connections_reused"] += 1
@@ -390,5 +392,3 @@ class ConnectionPool(Generic[TConn]):
             "max_size": self.config.max_size,
         }
         return runtime_stats
-
-

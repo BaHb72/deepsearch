@@ -4,8 +4,8 @@ AmazingData SDK 隔离机制测试用例
 测试SDK退出保护、降级机制、错误处理等功能。
 """
 
-import os
 import asyncio
+import os
 from unittest.mock import patch
 
 import pytest

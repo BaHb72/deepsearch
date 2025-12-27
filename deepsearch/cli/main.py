@@ -194,7 +194,6 @@ def check_ports():
     check_and_report_ports()
 
 
-
 @cli.command(name="check-realtime")
 @click.option("--env", type=click.Choice(["dev", "test", "prod"]), help="指定 settings.<env>.yaml")
 @click.option("--config", type=click.Path(exists=True), help="指定设置文件")

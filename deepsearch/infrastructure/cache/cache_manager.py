@@ -15,8 +15,6 @@ from .strategies.lru import LRUStrategy
 from .strategies.ttl import TTLStrategy
 
 
-
-
 class CacheCounters(TypedDict):
     l1_hits: int
     l2_hits: int
@@ -31,6 +29,7 @@ class CacheStatsReport(CacheCounters, total=False):
     l2_hit_rate: float
     l1_stats: Dict[str, Any]
     l2_stats: Dict[str, Any]
+
 
 class HybridStrategy(ICacheStrategy):
     """

@@ -20,12 +20,12 @@ from .amazingdata_types import (
     RawDataSequence,
     ShareholderSeat,
     ShareholderSnapshot,
-    SnapshotQuote,
-    SnapshotOption,
     SnapshotFuture,
-    SnapshotIndex,
     SnapshotHKT,
+    SnapshotIndex,
+    SnapshotOption,
     SnapshotPayload,
+    SnapshotQuote,
     SubscriptionMessage,
     TickMessage,
 )
@@ -46,6 +46,7 @@ def _coalesce(*values: object | None) -> object | None:
         return value
 
     return None
+
 
 def _ensure_float(value: object | None, default: float = 0.0) -> float:
     """将任意类型转换为 float，无法转换时返回默认值"""
@@ -119,6 +120,7 @@ def _ensure_mapping(data: object) -> Mapping[str, object]:
         return cast(Mapping[str, object], getattr(data, "__dict__", {}))
     return cast(Mapping[str, object], {})
 
+
 def _ensure_int(value: object | None, default: int = 0) -> int:
     """将任意类型转换为 int，无法转换时返回默认值"""
     if value is None:
@@ -138,6 +140,7 @@ def _ensure_int(value: object | None, default: int = 0) -> int:
         except ValueError:
             return default
     return default
+
 
 RawFrameInput = Union[
     RawDataSequence,
@@ -241,7 +244,7 @@ class AmazingDataConverter:
     def convert_snapshot(
         data: SnapshotInput,
         symbols: Optional[Sequence[str]] = None,
-            snapshot_type: str = "level1",
+        snapshot_type: str = "level1",
     ) -> dict[str, SnapshotPayload]:
         """转换快照行情数据"""
 
@@ -261,7 +264,9 @@ class AmazingDataConverter:
                 "hkt": AmazingDataConverter._convert_hkt_snapshot,
                 "snapshot_hkt": AmazingDataConverter._convert_hkt_snapshot,
             }
-            converter = converter_map.get(normalized_type, AmazingDataConverter._convert_single_snapshot)
+            converter = converter_map.get(
+                normalized_type, AmazingDataConverter._convert_single_snapshot
+            )
 
             if isinstance(data, Mapping):
                 for raw_symbol, snapshot in data.items():
@@ -271,7 +276,9 @@ class AmazingDataConverter:
             else:
                 for index, item in enumerate(data):
                     snapshot_mapping = _ensure_mapping(item)
-                    raw_symbol_value = snapshot_mapping.get("code") or snapshot_mapping.get("symbol")
+                    raw_symbol_value = snapshot_mapping.get("code") or snapshot_mapping.get(
+                        "symbol"
+                    )
                     if isinstance(raw_symbol_value, str) and raw_symbol_value:
                         symbol_key = raw_symbol_value
                     elif raw_symbol_value is not None:
@@ -288,25 +295,32 @@ class AmazingDataConverter:
             logger.error(f"快照数据转换失败: {e}")
             return {}
 
-
     @staticmethod
     def _convert_single_snapshot(snapshot: Mapping[str, object], symbol: str) -> SnapshotQuote:
         """转换快照原始数据"""
         try:
             name_value = _coalesce(snapshot.get("name"), snapshot.get("security_name"), "")
             time_value = _coalesce(snapshot.get("trade_time"), snapshot.get("time"), "")
-            last_raw = _coalesce(snapshot.get("last"), snapshot.get("last_price"), snapshot.get("latest_price"), 0)
+            last_raw = _coalesce(
+                snapshot.get("last"), snapshot.get("last_price"), snapshot.get("latest_price"), 0
+            )
             open_raw = _coalesce(snapshot.get("open"), snapshot.get("open_price"))
             high_raw = _coalesce(snapshot.get("high"), snapshot.get("high_price"))
             low_raw = _coalesce(snapshot.get("low"), snapshot.get("low_price"))
             close_raw = _coalesce(snapshot.get("close"), snapshot.get("close_price"))
             prev_close_raw = _coalesce(snapshot.get("pre_close"), snapshot.get("prev_close"))
-            volume_raw = _coalesce(snapshot.get("volume"), snapshot.get("vol"), snapshot.get("trade_volume"))
+            volume_raw = _coalesce(
+                snapshot.get("volume"), snapshot.get("vol"), snapshot.get("trade_volume")
+            )
             amount_raw = _coalesce(snapshot.get("amount"), snapshot.get("trade_amount"))
             turnover_raw = _coalesce(snapshot.get("turnover"), snapshot.get("turnover_value"))
             change_raw = snapshot.get("change")
-            change_percent_raw = _coalesce(snapshot.get("change_rate"), snapshot.get("change_percent"))
-            turnover_rate_raw = _coalesce(snapshot.get("turnover_rate"), snapshot.get("turnoverratio"))
+            change_percent_raw = _coalesce(
+                snapshot.get("change_rate"), snapshot.get("change_percent")
+            )
+            turnover_rate_raw = _coalesce(
+                snapshot.get("turnover_rate"), snapshot.get("turnoverratio")
+            )
             amplitude_raw = snapshot.get("amplitude")
             limit_up_raw = _coalesce(snapshot.get("high_limited"), snapshot.get("limit_up"))
             limit_down_raw = _coalesce(snapshot.get("low_limited"), snapshot.get("limit_down"))
@@ -319,7 +333,9 @@ class AmazingDataConverter:
             )
 
             result: dict[str, object] = {
-                "code": str(_coalesce(snapshot.get("code"), snapshot.get("symbol"), symbol) or symbol),
+                "code": str(
+                    _coalesce(snapshot.get("code"), snapshot.get("symbol"), symbol) or symbol
+                ),
                 "name": str(name_value or ""),
                 "trade_time": _normalize_trade_time(time_value),
                 "last": _ensure_float(last_raw),
@@ -383,17 +399,25 @@ class AmazingDataConverter:
     def _convert_option_snapshot(snapshot: Mapping[str, object], symbol: str) -> SnapshotOption:
         """转化 ETF 期权行情"""
         try:
-            trade_time = _normalize_trade_time(_coalesce(snapshot.get("trade_time"), snapshot.get("time"), ""))
+            trade_time = _normalize_trade_time(
+                _coalesce(snapshot.get("trade_time"), snapshot.get("time"), "")
+            )
             result: dict[str, object] = {
-                "code": str(_coalesce(snapshot.get("code"), snapshot.get("symbol"), symbol) or symbol),
+                "code": str(
+                    _coalesce(snapshot.get("code"), snapshot.get("symbol"), symbol) or symbol
+                ),
                 "trade_time": trade_time,
                 "trading_phase_code": str(_coalesce(snapshot.get("trading_phase_code"), "") or ""),
                 "total_long_position": _ensure_int(
                     _coalesce(snapshot.get("total_long_position"), snapshot.get("open_interest"))
                 ),
                 "volume": _ensure_float(_coalesce(snapshot.get("volume"), snapshot.get("vol"))),
-                "amount": _ensure_float(_coalesce(snapshot.get("amount"), snapshot.get("trade_amount"))),
-                "pre_close": _ensure_float(_coalesce(snapshot.get("pre_close"), snapshot.get("prev_close"))),
+                "amount": _ensure_float(
+                    _coalesce(snapshot.get("amount"), snapshot.get("trade_amount"))
+                ),
+                "pre_close": _ensure_float(
+                    _coalesce(snapshot.get("pre_close"), snapshot.get("prev_close"))
+                ),
                 "pre_settle": _ensure_float(snapshot.get("pre_settle")),
                 "auction_price": _ensure_float(
                     _coalesce(snapshot.get("auction_price"), snapshot.get("callauction_price"))
@@ -405,15 +429,32 @@ class AmazingDataConverter:
                 "open": _ensure_float(_coalesce(snapshot.get("open"), snapshot.get("open_price"))),
                 "high": _ensure_float(_coalesce(snapshot.get("high"), snapshot.get("high_price"))),
                 "low": _ensure_float(_coalesce(snapshot.get("low"), snapshot.get("low_price"))),
-                "close": _ensure_float(_coalesce(snapshot.get("close"), snapshot.get("close_price"))),
-                "settle": _ensure_float(_coalesce(snapshot.get("settle"), snapshot.get("settle_price"))),
-                "high_limited": _ensure_float(_coalesce(snapshot.get("high_limited"), snapshot.get("limit_up"))),
-                "low_limited": _ensure_float(_coalesce(snapshot.get("low_limited"), snapshot.get("limit_down"))),
+                "close": _ensure_float(
+                    _coalesce(snapshot.get("close"), snapshot.get("close_price"))
+                ),
+                "settle": _ensure_float(
+                    _coalesce(snapshot.get("settle"), snapshot.get("settle_price"))
+                ),
+                "high_limited": _ensure_float(
+                    _coalesce(snapshot.get("high_limited"), snapshot.get("limit_up"))
+                ),
+                "low_limited": _ensure_float(
+                    _coalesce(snapshot.get("low_limited"), snapshot.get("limit_down"))
+                ),
                 "contract_type": str(
-                    _coalesce(snapshot.get("contract_type"), snapshot.get("option_type"), snapshot.get("call_put"), "")
+                    _coalesce(
+                        snapshot.get("contract_type"),
+                        snapshot.get("option_type"),
+                        snapshot.get("call_put"),
+                        "",
+                    )
                 ),
                 "expire_date": _ensure_int(
-                    _coalesce(snapshot.get("expire_date"), snapshot.get("expiry_date"), snapshot.get("expiredate"))
+                    _coalesce(
+                        snapshot.get("expire_date"),
+                        snapshot.get("expiry_date"),
+                        snapshot.get("expiredate"),
+                    )
                 ),
                 "underlying_security_code": str(
                     _coalesce(
@@ -424,7 +465,8 @@ class AmazingDataConverter:
                     or ""
                 ),
                 "exercise_price": _ensure_float(
-                    _coalesce(snapshot.get("exercise_price"), snapshot.get("strike_price"))),
+                    _coalesce(snapshot.get("exercise_price"), snapshot.get("strike_price"))
+                ),
             }
             _fill_order_book(snapshot, result)
             return cast(SnapshotOption, result)
@@ -462,13 +504,23 @@ class AmazingDataConverter:
     def _convert_future_snapshot(snapshot: Mapping[str, object], symbol: str) -> SnapshotFuture:
         """转化期货行情"""
         try:
-            trade_time = _normalize_trade_time(_coalesce(snapshot.get("trade_time"), snapshot.get("time"), ""))
+            trade_time = _normalize_trade_time(
+                _coalesce(snapshot.get("trade_time"), snapshot.get("time"), "")
+            )
             result: dict[str, object] = {
-                "code": str(_coalesce(snapshot.get("code"), snapshot.get("symbol"), symbol) or symbol),
+                "code": str(
+                    _coalesce(snapshot.get("code"), snapshot.get("symbol"), symbol) or symbol
+                ),
                 "trade_time": trade_time,
-                "action_day": str(_coalesce(snapshot.get("action_day"), snapshot.get("actionday"), "")),
-                "trading_day": str(_coalesce(snapshot.get("trading_day"), snapshot.get("tradingday"), "")),
-                "pre_close": _ensure_float(_coalesce(snapshot.get("pre_close"), snapshot.get("prev_close"))),
+                "action_day": str(
+                    _coalesce(snapshot.get("action_day"), snapshot.get("actionday"), "")
+                ),
+                "trading_day": str(
+                    _coalesce(snapshot.get("trading_day"), snapshot.get("tradingday"), "")
+                ),
+                "pre_close": _ensure_float(
+                    _coalesce(snapshot.get("pre_close"), snapshot.get("prev_close"))
+                ),
                 "pre_settle": _ensure_float(snapshot.get("pre_settle")),
                 "pre_open_interest": _ensure_int(snapshot.get("pre_open_interest")),
                 "open_interest": _ensure_int(snapshot.get("open_interest")),
@@ -476,13 +528,25 @@ class AmazingDataConverter:
                 "open": _ensure_float(_coalesce(snapshot.get("open"), snapshot.get("open_price"))),
                 "high": _ensure_float(_coalesce(snapshot.get("high"), snapshot.get("high_price"))),
                 "low": _ensure_float(_coalesce(snapshot.get("low"), snapshot.get("low_price"))),
-                "close": _ensure_float(_coalesce(snapshot.get("close"), snapshot.get("close_price"))),
+                "close": _ensure_float(
+                    _coalesce(snapshot.get("close"), snapshot.get("close_price"))
+                ),
                 "volume": _ensure_float(_coalesce(snapshot.get("volume"), snapshot.get("vol"))),
-                "amount": _ensure_float(_coalesce(snapshot.get("amount"), snapshot.get("trade_amount"))),
-                "high_limited": _ensure_float(_coalesce(snapshot.get("high_limited"), snapshot.get("limit_up"))),
-                "low_limited": _ensure_float(_coalesce(snapshot.get("low_limited"), snapshot.get("limit_down"))),
-                "average_price": _ensure_float(_coalesce(snapshot.get("average_price"), snapshot.get("avg_price"))),
-                "settle": _ensure_float(_coalesce(snapshot.get("settle"), snapshot.get("settle_price"))),
+                "amount": _ensure_float(
+                    _coalesce(snapshot.get("amount"), snapshot.get("trade_amount"))
+                ),
+                "high_limited": _ensure_float(
+                    _coalesce(snapshot.get("high_limited"), snapshot.get("limit_up"))
+                ),
+                "low_limited": _ensure_float(
+                    _coalesce(snapshot.get("low_limited"), snapshot.get("limit_down"))
+                ),
+                "average_price": _ensure_float(
+                    _coalesce(snapshot.get("average_price"), snapshot.get("avg_price"))
+                ),
+                "settle": _ensure_float(
+                    _coalesce(snapshot.get("settle"), snapshot.get("settle_price"))
+                ),
             }
             _fill_order_book(snapshot, result)
             return cast(SnapshotFuture, result)
@@ -520,17 +584,32 @@ class AmazingDataConverter:
             return cast(
                 SnapshotIndex,
                 {
-                    "code": str(_coalesce(snapshot.get("code"), snapshot.get("symbol"), symbol) or symbol),
+                    "code": str(
+                        _coalesce(snapshot.get("code"), snapshot.get("symbol"), symbol) or symbol
+                    ),
                     "trade_time": _normalize_trade_time(
-                        _coalesce(snapshot.get("trade_time"), snapshot.get("time"), "")),
-                    "last": _ensure_float(_coalesce(snapshot.get("last"), snapshot.get("last_price"))),
-                    "pre_close": _ensure_float(_coalesce(snapshot.get("pre_close"), snapshot.get("prev_close"))),
-                    "open": _ensure_float(_coalesce(snapshot.get("open"), snapshot.get("open_price"))),
-                    "high": _ensure_float(_coalesce(snapshot.get("high"), snapshot.get("high_price"))),
+                        _coalesce(snapshot.get("trade_time"), snapshot.get("time"), "")
+                    ),
+                    "last": _ensure_float(
+                        _coalesce(snapshot.get("last"), snapshot.get("last_price"))
+                    ),
+                    "pre_close": _ensure_float(
+                        _coalesce(snapshot.get("pre_close"), snapshot.get("prev_close"))
+                    ),
+                    "open": _ensure_float(
+                        _coalesce(snapshot.get("open"), snapshot.get("open_price"))
+                    ),
+                    "high": _ensure_float(
+                        _coalesce(snapshot.get("high"), snapshot.get("high_price"))
+                    ),
                     "low": _ensure_float(_coalesce(snapshot.get("low"), snapshot.get("low_price"))),
-                    "close": _ensure_float(_coalesce(snapshot.get("close"), snapshot.get("close_price"))),
+                    "close": _ensure_float(
+                        _coalesce(snapshot.get("close"), snapshot.get("close_price"))
+                    ),
                     "volume": _ensure_float(_coalesce(snapshot.get("volume"), snapshot.get("vol"))),
-                    "amount": _ensure_float(_coalesce(snapshot.get("amount"), snapshot.get("trade_amount"))),
+                    "amount": _ensure_float(
+                        _coalesce(snapshot.get("amount"), snapshot.get("trade_amount"))
+                    ),
                 },
             )
         except Exception as e:
@@ -556,16 +635,26 @@ class AmazingDataConverter:
         """转化港股通行情"""
         try:
             result: dict[str, object] = {
-                "code": str(_coalesce(snapshot.get("code"), snapshot.get("symbol"), symbol) or symbol),
-                "trade_time": _normalize_trade_time(_coalesce(snapshot.get("trade_time"), snapshot.get("time"), "")),
-                "pre_close": _ensure_float(_coalesce(snapshot.get("pre_close"), snapshot.get("prev_close"))),
+                "code": str(
+                    _coalesce(snapshot.get("code"), snapshot.get("symbol"), symbol) or symbol
+                ),
+                "trade_time": _normalize_trade_time(
+                    _coalesce(snapshot.get("trade_time"), snapshot.get("time"), "")
+                ),
+                "pre_close": _ensure_float(
+                    _coalesce(snapshot.get("pre_close"), snapshot.get("prev_close"))
+                ),
                 "last": _ensure_float(_coalesce(snapshot.get("last"), snapshot.get("last_price"))),
                 "high": _ensure_float(_coalesce(snapshot.get("high"), snapshot.get("high_price"))),
                 "low": _ensure_float(_coalesce(snapshot.get("low"), snapshot.get("low_price"))),
                 "volume": _ensure_float(_coalesce(snapshot.get("volume"), snapshot.get("vol"))),
-                "amount": _ensure_float(_coalesce(snapshot.get("amount"), snapshot.get("trade_amount"))),
+                "amount": _ensure_float(
+                    _coalesce(snapshot.get("amount"), snapshot.get("trade_amount"))
+                ),
                 "nominal_price": _ensure_float(snapshot.get("nominal_price")),
-                "ref_price": _ensure_float(_coalesce(snapshot.get("ref_price"), snapshot.get("reference_price"))),
+                "ref_price": _ensure_float(
+                    _coalesce(snapshot.get("ref_price"), snapshot.get("reference_price"))
+                ),
                 "bid_price_limit_up": _ensure_float(
                     _coalesce(snapshot.get("bid_price_limit_up"), snapshot.get("bidlimit_up"))
                 ),
@@ -578,8 +667,12 @@ class AmazingDataConverter:
                 "offer_price_limit_down": _ensure_float(
                     _coalesce(snapshot.get("offer_price_limit_down"), snapshot.get("asklimit_down"))
                 ),
-                "high_limited": _ensure_float(_coalesce(snapshot.get("high_limited"), snapshot.get("limit_up"))),
-                "low_limited": _ensure_float(_coalesce(snapshot.get("low_limited"), snapshot.get("limit_down"))),
+                "high_limited": _ensure_float(
+                    _coalesce(snapshot.get("high_limited"), snapshot.get("limit_up"))
+                ),
+                "low_limited": _ensure_float(
+                    _coalesce(snapshot.get("low_limited"), snapshot.get("limit_down"))
+                ),
                 "trading_phase_code": str(_coalesce(snapshot.get("trading_phase_code"), "") or ""),
             }
             _fill_order_book(snapshot, result)
@@ -725,7 +818,9 @@ class AmazingDataConverter:
             return pd.DataFrame()
 
     @staticmethod
-    def convert_order_book(data: Mapping[str, object], symbol: Optional[str] = None) -> OrderBookSnapshot:
+    def convert_order_book(
+        data: Mapping[str, object], symbol: Optional[str] = None
+    ) -> OrderBookSnapshot:
         """转换盘口数据（Level2）"""
         try:
             if not data:
@@ -763,20 +858,22 @@ class AmazingDataConverter:
                     ask_prices.append(_ensure_float(ask_price))
                     ask_volumes.append(_ensure_int(ask_volume))
 
-            if "bid_queue" in data and isinstance(data["bid_queue"], Sequence) and not isinstance(
-                data["bid_queue"], (str, bytes)
+            if (
+                "bid_queue" in data
+                and isinstance(data["bid_queue"], Sequence)
+                and not isinstance(data["bid_queue"], (str, bytes))
             ):
                 bid_queue.extend(
-                    _ensure_int(item)
-                    for item in cast(Sequence[object], data["bid_queue"])
+                    _ensure_int(item) for item in cast(Sequence[object], data["bid_queue"])
                 )
 
-            if "ask_queue" in data and isinstance(data["ask_queue"], Sequence) and not isinstance(
-                data["ask_queue"], (str, bytes)
+            if (
+                "ask_queue" in data
+                and isinstance(data["ask_queue"], Sequence)
+                and not isinstance(data["ask_queue"], (str, bytes))
             ):
                 ask_queue.extend(
-                    _ensure_int(item)
-                    for item in cast(Sequence[object], data["ask_queue"])
+                    _ensure_int(item) for item in cast(Sequence[object], data["ask_queue"])
                 )
 
             return result
@@ -838,7 +935,9 @@ class AmazingDataConverter:
             return cast(ShareholderSnapshot, {})
 
     @staticmethod
-    def convert_dragon_tiger(data: DragonTigerInput, symbol: Optional[str] = None) -> list[DragonTigerRecord]:
+    def convert_dragon_tiger(
+        data: DragonTigerInput, symbol: Optional[str] = None
+    ) -> list[DragonTigerRecord]:
         """转换龙虎榜数据"""
         try:
             if not data:
@@ -850,7 +949,9 @@ class AmazingDataConverter:
                 else:
                     raw_items = [cast(Mapping[str, object], data)]
             elif isinstance(data, Sequence):
-                raw_items = [cast(Mapping[str, object], item) for item in data if isinstance(item, Mapping)]
+                raw_items = [
+                    cast(Mapping[str, object], item) for item in data if isinstance(item, Mapping)
+                ]
             else:
                 return []
 
@@ -985,7 +1086,9 @@ class AmazingDataConverter:
                     )
                     or ""
                 )
-                result_dict["data"] = AmazingDataConverter._convert_single_snapshot(payload_map, symbol_value)
+                result_dict["data"] = AmazingDataConverter._convert_single_snapshot(
+                    payload_map, symbol_value
+                )
 
             elif data_type in {"snapshot_option"}:
                 payload_map = _ensure_mapping(data)
@@ -998,7 +1101,9 @@ class AmazingDataConverter:
                     )
                     or ""
                 )
-                result_dict["data"] = AmazingDataConverter._convert_option_snapshot(payload_map, symbol_value)
+                result_dict["data"] = AmazingDataConverter._convert_option_snapshot(
+                    payload_map, symbol_value
+                )
 
             elif data_type in {"snapshot_future"}:
                 payload_map = _ensure_mapping(data)
@@ -1011,7 +1116,9 @@ class AmazingDataConverter:
                     )
                     or ""
                 )
-                result_dict["data"] = AmazingDataConverter._convert_future_snapshot(payload_map, symbol_value)
+                result_dict["data"] = AmazingDataConverter._convert_future_snapshot(
+                    payload_map, symbol_value
+                )
 
             elif data_type in {"snapshot_index"}:
                 payload_map = _ensure_mapping(data)
@@ -1024,7 +1131,9 @@ class AmazingDataConverter:
                     )
                     or ""
                 )
-                result_dict["data"] = AmazingDataConverter._convert_index_snapshot(payload_map, symbol_value)
+                result_dict["data"] = AmazingDataConverter._convert_index_snapshot(
+                    payload_map, symbol_value
+                )
 
             elif data_type in {"snapshot_hkt"}:
                 payload_map = _ensure_mapping(data)
@@ -1037,7 +1146,9 @@ class AmazingDataConverter:
                     )
                     or ""
                 )
-                result_dict["data"] = AmazingDataConverter._convert_hkt_snapshot(payload_map, symbol_value)
+                result_dict["data"] = AmazingDataConverter._convert_hkt_snapshot(
+                    payload_map, symbol_value
+                )
 
             elif data_type == "kline":
                 bar_dict: dict[str, object] = {
@@ -1076,4 +1187,3 @@ class AmazingDataConverter:
         except Exception as e:
             logger.error(f"订阅消息转换失败: {e}")
             return cast(SubscriptionMessage, {"type": data_type, "error": str(e)})
-

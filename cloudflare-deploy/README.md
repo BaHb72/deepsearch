@@ -5,6 +5,7 @@
 DeepSearch 使用 CloudFlare Worker 作为纯 HTTP 代理服务，为 AKShare 数据访问提供可靠的代理层。
 
 ### 主要优势
+
 - 🛡️ 隐藏真实服务器 IP，防止被数据源封禁
 - 🌍 利用 CloudFlare 全球网络加速访问
 - 💾 智能缓存机制，减少重复请求
@@ -14,7 +15,9 @@ DeepSearch 使用 CloudFlare Worker 作为纯 HTTP 代理服务，为 AKShare �
 ## 2. 架构说明
 
 ### 纯代理模式
+
 Worker 作为纯 HTTP 代理，不处理业务逻辑：
+
 - DeepSearch 使用 akshare 库处理数据
 - Worker 只负责代理 HTTP 请求
 - 数据格式统一，由 akshare 处理
@@ -31,6 +34,7 @@ Worker 作为纯 HTTP 代理，不处理业务逻辑：
 ## 3. 功能特性
 
 ### 核心功能
+
 - ✅ 代理访问 50+ 金融数据源网站
 - ✅ 智能缓存机制（实时5秒，分钟60秒，日线300秒）
 - ✅ 支持 CORS 跨域请求
@@ -43,6 +47,7 @@ Worker 作为纯 HTTP 代理，不处理业务逻辑：
 ### 支持的数据源（29个白名单域名）
 
 #### 主要数据源
+
 - **新浪财经**: finance.sina.com.cn, hq.sinajs.cn, money.finance.sina.com.cn
 - **网易财经**: quotes.money.163.com, api.money.126.net
 - **腾讯财经**: qt.gtimg.cn, web.ifzq.gtimg.cn, stock.finance.qq.com
@@ -51,12 +56,14 @@ Worker 作为纯 HTTP 代理，不处理业务逻辑：
 - **雪球**: xueqiu.com, stock.xueqiu.com
 
 #### 官方数据源
-- **上海证券交易所**: www.sse.com.cn, query.sse.com.cn
-- **深圳证券交易所**: www.szse.cn
-- **中国外汇交易中心**: www.chinamoney.com.cn
-- **中证指数**: www.csindex.com.cn
+
+- **上海证券交易所**: <www.sse.com.cn>, query.sse.com.cn
+- **深圳证券交易所**: <www.szse.cn>
+- **中国外汇交易中心**: <www.chinamoney.com.cn>
+- **中证指数**: <www.csindex.com.cn>
 
 #### 新增数据源（2025-08-21）
+
 - **push2ex.eastmoney.com** - 涨停跌停池数据
 - **np-anotice-stock.eastmoney.com** - 股票公告数据
 - **np-listnotice.eastmoney.com** - 公告列表数据
@@ -67,6 +74,7 @@ Worker 作为纯 HTTP 代理，不处理业务逻辑：
 ### 方法1: CloudFlare Dashboard（推荐新手）
 
 1. **登录 CloudFlare**
+
    ```
    https://dash.cloudflare.com/
    ```
@@ -132,7 +140,7 @@ cloudflare:
   workers:
     - "https://akshare-proxy.934073514.workers.dev"  # 你的 Worker URL
   worker_url: "https://akshare-proxy.934073514.workers.dev"
-  
+
 cloudflare_workers:
   url: "https://akshare-proxy.934073514.workers.dev"
   api_key: ""  # 可选，如需认证则设置
@@ -156,7 +164,6 @@ DEBUG = "false"  # 调试模式
 
 生产环境调用时需通过 HTTP 请求头 `X-API-Key` 或查询参数 `api_key` 提供密钥，否则 Worker 会返回 401。
 
-
 ### 设置 API 密钥（可选）
 
 ```bash
@@ -172,6 +179,7 @@ wrangler secret put API_KEY
 ### 缓存策略
 
 根据数据类型自动应用不同缓存时间：
+
 - **实时数据**：5秒缓存
 - **分钟数据**：60秒缓存
 - **日线数据**：300秒缓存
@@ -193,6 +201,7 @@ wrangler secret put API_KEY
 ### 混淆技术（worker.ultra.min.js）
 
 使用多种混淆技术减小体积：
+
 - 变量名混淆：`ALLOWED_HOSTS` → `A`
 - 字符串压缩：数组转字符串分割
 - 函数简化：箭头函数
@@ -202,16 +211,19 @@ wrangler secret put API_KEY
 ## 7. 安全建议
 
 ### 访问控制
+
 1. **设置 API 密钥**：生产环境建议启用认证
 2. **配置速率限制**：防止滥用
 3. **监控使用量**：定期查看分析报告
 
 ### 隐私保护
+
 1. **隐藏 Worker URL**：使用环境变量存储
 2. **定期更新 User-Agent**：保持浏览器版本最新
 3. **备份部署**：多个 Worker 实例分散风险
 
 ### 监控告警
+
 1. 设置异常请求量告警
 2. 监控错误率变化
 3. 跟踪响应时间趋势
@@ -246,6 +258,7 @@ curl "https://your-worker.workers.dev/proxy?url=https://httpbin.org/headers"
 ### 回滚方案
 
 如果新版本出现问题：
+
 1. Dashboard → Workers → 选择 Worker
 2. 点击 **Deployments** 标签
 3. 找到之前的版本
@@ -254,17 +267,20 @@ curl "https://your-worker.workers.dev/proxy?url=https://httpbin.org/headers"
 ## 9. 更新日志
 
 ### v2.0.0 (2025-08-21)
+
 - 新增 4 个东方财富和新浪财经域名
 - 支持涨停池、公告等新 API
 - 优化缓存策略
 - 总白名单域名增至 29 个
 
 ### v1.5.0 (2024-08)
+
 - 简化为纯代理模式
 - 移除复杂的数据处理逻辑
 - 提升性能和稳定性
 
 ### v1.0.0 (2024-06)
+
 - 初始版本发布
 - 支持基础代理功能
 - 实现智能缓存
@@ -272,11 +288,13 @@ curl "https://your-worker.workers.dev/proxy?url=https://httpbin.org/headers"
 ## 10. API 参考
 
 ### 健康检查
+
 ```http
 GET /health
 ```
 
 响应示例：
+
 ```json
 {
   "status": "healthy",
@@ -296,14 +314,17 @@ GET /health
 ```
 
 ### 代理请求
+
 ```http
 GET /proxy?url={target_url}
 ```
 
 参数：
+
 - `url` (必需): 目标 URL，必须在白名单中
 
 示例：
+
 ```bash
 # 获取股票实时数据
 curl "https://worker.workers.dev/proxy?url=https://hq.sinajs.cn/list=sz000001"
@@ -313,11 +334,13 @@ curl "https://worker.workers.dev/proxy?url=https://push2ex.eastmoney.com/getTopi
 ```
 
 ### 统计信息
+
 ```http
 GET /stats
 ```
 
 响应示例：
+
 ```json
 {
   "requests_total": 10000,
@@ -330,11 +353,13 @@ GET /stats
 ## 成本控制
 
 ### CloudFlare 免费版限制
+
 - 100,000 请求/天
 - 10ms CPU 时间/请求
 - 128MB 内存
 
 ### 优化建议
+
 1. 使用 `worker.ultra.min.js` 减少 CPU 时间
 2. 启用缓存减少重复请求
 3. 在 DeepSearch 端做请求合并
@@ -343,6 +368,7 @@ GET /stats
 ## 测试建议
 
 ### 部署后测试清单
+
 - [ ] 健康检查端点正常
 - [ ] 代理请求返回数据
 - [ ] 缓存机制生效
@@ -350,6 +376,7 @@ GET /stats
 - [ ] 错误处理正常
 
 ### 性能测试
+
 ```bash
 # 测试延迟
 time curl "https://worker.workers.dev/health"

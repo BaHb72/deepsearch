@@ -7,16 +7,14 @@ It supports both the socket-based MiniQMTProvider and the xtdata-based MiniQMTCo
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Mapping, MutableSet, Sequence
 
-import time
-
 from loguru import logger
 
 from deepsearch.core.utils.status_display import get_status_display
-
 from deepsearch.domain.market_data import StockListRecord
 from deepsearch.ports.market_data import (
     BoardUniversePort,
@@ -109,10 +107,18 @@ def _build_snapshot(symbol: str, tick_data: Mapping[str, Any]) -> MarketSnapshot
     prev_close = _to_decimal(tick_data.get("pre_close") or tick_data.get("lastClose", 0))
 
     # Parse bid/ask arrays
-    bid_prices = tuple(_to_decimal(p) for p in (tick_data.get("bid_price") or tick_data.get("bidPrice") or [])[:5])
-    bid_volumes = tuple(_to_int(v) for v in (tick_data.get("bid_volume") or tick_data.get("bidVol") or [])[:5])
-    ask_prices = tuple(_to_decimal(p) for p in (tick_data.get("ask_price") or tick_data.get("askPrice") or [])[:5])
-    ask_volumes = tuple(_to_int(v) for v in (tick_data.get("ask_volume") or tick_data.get("askVol") or [])[:5])
+    bid_prices = tuple(
+        _to_decimal(p) for p in (tick_data.get("bid_price") or tick_data.get("bidPrice") or [])[:5]
+    )
+    bid_volumes = tuple(
+        _to_int(v) for v in (tick_data.get("bid_volume") or tick_data.get("bidVol") or [])[:5]
+    )
+    ask_prices = tuple(
+        _to_decimal(p) for p in (tick_data.get("ask_price") or tick_data.get("askPrice") or [])[:5]
+    )
+    ask_volumes = tuple(
+        _to_int(v) for v in (tick_data.get("ask_volume") or tick_data.get("askVol") or [])[:5]
+    )
 
     # Handle timestamp
     ts_value = tick_data.get("time")
@@ -168,6 +174,7 @@ async def _get_or_create_collector():
             from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
                 MiniQMTCollector,
             )
+
             loop = asyncio.get_event_loop()
             _GLOBAL_COLLECTOR = await loop.run_in_executor(None, MiniQMTCollector)
             logger.info("MiniQMTCollector 实例创建成功")
@@ -226,9 +233,7 @@ class MiniQMTPollingStreamPort(RealtimeStreamPort):
         loop = asyncio.get_event_loop()
         for symbol in missing[:20]:  # Limit to avoid blocking
             try:
-                info = await loop.run_in_executor(
-                    None, collector.get_instrument_detail, symbol
-                )
+                info = await loop.run_in_executor(None, collector.get_instrument_detail, symbol)
                 if info and info.get("name"):
                     self._name_cache[symbol] = info["name"]
             except Exception:
@@ -254,7 +259,7 @@ class MiniQMTPollingStreamPort(RealtimeStreamPort):
         start_time = time.time()
 
         for i in range(0, len(target), self._batch_size):
-            batch = target[i:i + self._batch_size]
+            batch = target[i : i + self._batch_size]
             try:
                 # Run synchronous collector call in executor
                 result = await loop.run_in_executor(None, collector.get_full_tick, batch)
@@ -302,7 +307,10 @@ class MiniQMTPollingStreamPort(RealtimeStreamPort):
             self._last_log_time = now
             logger.info(
                 "MiniQMT 数据轮询: 已获取 {}/{} 只股票, 平均延迟 {:.0f}ms, 累计请求 {} 次",
-                len(snapshots), len(target), elapsed_ms, self._fetch_count
+                len(snapshots),
+                len(target),
+                elapsed_ms,
+                self._fetch_count,
             )
 
         return snapshots
@@ -354,7 +362,6 @@ class MiniQMTBoardUniversePort(BoardUniversePort):
                 logger.warning("MiniQMT 返回空股票列表")
                 return ()
 
-
             # Build records directly without fetching names (too slow for 5000+ stocks)
             # Names will be fetched lazily during fetch_latest
             symbols_list = list(all_symbols)
@@ -376,7 +383,6 @@ class MiniQMTBoardUniversePort(BoardUniversePort):
                     status=None,
                 )
                 records.append(record)
-
 
         except Exception as exc:
             logger.warning("MiniQMT fetch stock list failed: {}", exc)

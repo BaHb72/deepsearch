@@ -118,8 +118,11 @@ request.interceptors.request.use(
         customConfig.requestStartTime = Date.now()
 
         const isStatusCheck = config.url === '/system/status' && !customConfig.skipBackendCheck
+        // 白名单：这些 URL 不受后端状态检查影响
+        const bypassUrls = ['/notification/', '/system/config', '/log/']
+        const shouldBypass = bypassUrls.some(url => config.url?.includes(url))
 
-        if (!isStatusCheck && !(backendStatus as { isAvailable?: boolean }).isAvailable) {
+        if (!isStatusCheck && !shouldBypass && !(backendStatus as { isAvailable?: boolean }).isAvailable) {
             debugLog('REQUEST_BLOCKED', `#${requestId} 后端不可用，拒绝请求`, {
                 url: config.url,
                 backendAvailable: false

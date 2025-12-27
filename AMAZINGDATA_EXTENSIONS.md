@@ -60,14 +60,15 @@ uv pip install path/to/AmazingData-xxx.whl
 
 ## 🧪 测试方法
 
-
 ### 快速测试所有新增/更新接口
+
 ```bash
 cd d:\Stock\code\deepsearch
 python scripts/test_amazingdata_new_interfaces.py
 ```
 
 ### 单独测试某个接口
+
 ```bash
 # ETF 基金份额
 python scripts/verify_amazingdata_api.py get_fund_share
@@ -88,6 +89,7 @@ python scripts/verify_amazingdata_api.py get_industry_base_info
 ## 📊 接口使用示例
 
 ### ETF 基金份额（带时间筛选）
+
 ```python
 from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_extended import AmazingDataExtended
 
@@ -103,6 +105,7 @@ fund_share = await provider.get_fund_share(
 ```
 
 ### 指数成分股权重（批量查询）
+
 ```python
 # 批量查询多个指数的权重
 index_weight = await provider.get_index_weight(
@@ -112,6 +115,7 @@ index_weight = await provider.get_index_weight(
 ```
 
 ### 行业指数基本信息
+
 ```python
 # 获取所有行业指数的基本信息
 industry_info = await provider.get_industry_base_info()
@@ -129,5 +133,5 @@ industry_info = await provider.get_industry_base_info()
 
 ---
 
-**扩展完成时间**: 2025-12-16  
+**扩展完成时间**: 2025-12-16
 **扩展人**: DeepSearch AI Agent

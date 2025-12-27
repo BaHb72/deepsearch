@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from helpers import fetch_code_list
 
+
 def test_servers():
     print("\n" + "=" * 60)
     print("AmazingData 多服务器连接测试")

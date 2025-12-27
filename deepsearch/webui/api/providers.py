@@ -15,7 +15,6 @@ from datetime import datetime
 from enum import Enum
 from threading import Lock
 from typing import (
-    TYPE_CHECKING,
     Any,
     Awaitable,
     Literal,
@@ -29,25 +28,15 @@ from typing import (
 
 from loguru import logger
 
-from deepsearch.utils.data_sources import (
-    DataSourceType as RegistryDataSourceType,
-    get_data_source_manager,
-)
+from deepsearch.utils.data_sources import DataSourceType as RegistryDataSourceType
+from deepsearch.utils.data_sources import get_data_source_manager
 
-if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
-    from deepsearch.application.services.market.akshare_direct_service import (
-        AkShareDirectService as AkShareDirectServiceType,
-    )
-    from deepsearch.application.services.market.eastmoney_service import (
-        EastMoneyService as EastMoneyServiceType,
-    )
-    from deepsearch.application.services.market.market_service import (
-        MarketService as MarketServiceType,
-    )
-else:
-    AkShareDirectServiceType = Any
-    EastMoneyServiceType = Any
-    MarketServiceType = Any
+# NOTE: 以下服务类型别名用于动态加载的服务实现
+# 这些服务在运行时通过 _load_symbol 动态加载，无需静态类型定义
+AkShareDirectServiceType = Any
+EastMoneyServiceType = Any
+MarketServiceType = Any
+
 
 def _load_symbol(module_name: str, attr: str) -> Any:
     try:
@@ -57,7 +46,9 @@ def _load_symbol(module_name: str, attr: str) -> Any:
     return getattr(module, attr, None)
 
 
-_MarketServiceImpl = cast(Any, _load_symbol("deepsearch.application.services.market.market_service", "MarketService"))
+_MarketServiceImpl = cast(
+    Any, _load_symbol("deepsearch.application.services.market.market_service", "MarketService")
+)
 _EastMoneyServiceImpl = cast(
     Any,
     _load_symbol("deepsearch.application.services.market.eastmoney_service", "EastMoneyService"),
@@ -322,7 +313,9 @@ class DataProviderFactory:
                                 elif isinstance(data_sources_cfg, dict):
                                     data_sources_payload = dict(data_sources_cfg)
                                 else:
-                                    data_sources_payload = dict(getattr(data_sources_cfg, "__dict__", {}))
+                                    data_sources_payload = dict(
+                                        getattr(data_sources_cfg, "__dict__", {})
+                                    )
                             else:
                                 data_sources_payload = {}
 
@@ -369,6 +362,7 @@ class DataProviderFactory:
                             from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_extended import (
                                 AmazingDataExtended,
                             )
+
                             provider = AmazingDataExtended(provider_config)
                             await provider.initialize()
                             chosen_instance = provider
@@ -381,14 +375,23 @@ class DataProviderFactory:
                             }
                             cls._fallback_status.pop(normalized_type, None)
                         except Exception as legacy_exc:
-                            legacy_reason = fallback_reason or f"Failed to initialize AmazingData provider: {legacy_exc}"
+                            legacy_reason = (
+                                fallback_reason
+                                or f"Failed to initialize AmazingData provider: {legacy_exc}"
+                            )
                             fallback_reason = legacy_reason
                             logger.error(legacy_reason)
                             if "SDK尝试强制退出" in str(legacy_exc):
-                                logger.critical("CRITICAL: AmazingData SDK attempted to exit the process")
-                                cls._record_provider_failure("amazingdata", "SDK_EXIT", str(legacy_exc))
+                                logger.critical(
+                                    "CRITICAL: AmazingData SDK attempted to exit the process"
+                                )
+                                cls._record_provider_failure(
+                                    "amazingdata", "SDK_EXIT", str(legacy_exc)
+                                )
                             else:
-                                cls._record_provider_failure("amazingdata", "INIT_FAILED", str(legacy_exc))
+                                cls._record_provider_failure(
+                                    "amazingdata", "INIT_FAILED", str(legacy_exc)
+                                )
 
                         if not init_success:
                             reason_text = fallback_reason or "unknown failure"
@@ -397,17 +400,25 @@ class DataProviderFactory:
                             try:
                                 manager_for_fallback = get_data_source_manager()
                                 await manager_for_fallback.initialize()
-                                if manager_for_fallback.is_provider_enabled(RegistryDataSourceType.AKSHARE):
-                                    akshare_provider = manager_for_fallback.get_provider(RegistryDataSourceType.AKSHARE)
+                                if manager_for_fallback.is_provider_enabled(
+                                    RegistryDataSourceType.AKSHARE
+                                ):
+                                    akshare_provider = manager_for_fallback.get_provider(
+                                        RegistryDataSourceType.AKSHARE
+                                    )
                                     if akshare_provider is None:
                                         logger.warning(
                                             "AkShare provider configured but unavailable; skip AkShare fallback"
                                         )
                                 else:
-                                    logger.info("AkShare provider disabled in configuration; skip AkShare fallback")
+                                    logger.info(
+                                        "AkShare provider disabled in configuration; skip AkShare fallback"
+                                    )
                             except Exception as akshare_exc:
                                 logger.error(f"Failed to resolve AkShare fallback: {akshare_exc}")
-                                cls._record_provider_failure("akshare", "NOT_AVAILABLE", str(akshare_exc))
+                                cls._record_provider_failure(
+                                    "akshare", "NOT_AVAILABLE", str(akshare_exc)
+                                )
 
                             if akshare_provider:
                                 chosen_instance = akshare_provider
@@ -426,7 +437,9 @@ class DataProviderFactory:
                                     "fallback_reason": reason_text,
                                 }
 
-                                logger.info("Successfully resolved AkShare provider via DataSourceManager")
+                                logger.info(
+                                    "Successfully resolved AkShare provider via DataSourceManager"
+                                )
 
                         if not init_success:
                             reason_text = fallback_reason or "unknown failure"
@@ -636,15 +649,15 @@ async def get_market_service():
             from datetime import datetime
 
             return {
-                'indices': [],
-                'breadth': {},
-                'capital': {},
-                'timestamp': datetime.utcnow().isoformat(),
-                'stale': True,
-                'data_source': 'fallback',
-                'total_market_cap': 0,
-                'total_volume': 0,
-                'market_sentiment': 'unknown',
+                "indices": [],
+                "breadth": {},
+                "capital": {},
+                "timestamp": datetime.utcnow().isoformat(),
+                "stale": True,
+                "data_source": "fallback",
+                "total_market_cap": 0,
+                "total_volume": 0,
+                "market_sentiment": "unknown",
             }
 
         async def get_top_gainers(self, **kwargs):
@@ -723,7 +736,9 @@ async def get_market_service():
             """获取盘口异动"""
             return []
 
-        async def get_sectors(self, sector_type="industry", limit=20, sort_by="change_pct", level=None):
+        async def get_sectors(
+            self, sector_type="industry", limit=20, sort_by="change_pct", level=None
+        ):
             """获取板块数据"""
             return []
 
@@ -731,7 +746,7 @@ async def get_market_service():
             """获取统计信息"""
             return {"requests": 0, "cache_hits": 0, "errors": 0}
 
-    logger.warning('Using fallback MarketService stub; real providers are unavailable')
+    logger.warning("Using fallback MarketService stub; real providers are unavailable")
     return _FallbackMarketService()
 
 

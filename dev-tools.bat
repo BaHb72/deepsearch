@@ -43,19 +43,19 @@ if /i "%1"=="start-safe" (
 
 if /i "%1"=="clean-all" (
     echo 清理所有临时文件...
-    
+
     echo - 清理 Python 缓存
     for /d /r %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d"
-    
+
     echo - 清理 Vite 缓存
     call :clean-vite
-    
+
     echo - 清理日志文件（保留最近7天）
     forfiles /p "logs" /m "*.log" /d -7 /c "cmd /c del @file" 2>nul
-    
+
     echo - 清理监控数据（保留最近7天）
     forfiles /p "data\monitoring" /m "monitor_data_*.json" /d -7 /c "cmd /c del @file" 2>nul
-    
+
     echo [OK] 所有临时文件已清理
     goto :eof
 )

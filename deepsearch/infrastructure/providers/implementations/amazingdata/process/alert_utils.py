@@ -15,11 +15,15 @@ if TYPE_CHECKING:
     from .runtime import ProcessIsolatedAmazingDataProvider  # noqa: F401
 
 
-async def trigger_alert(provider: "ProcessIsolatedAmazingDataProvider", alert_type: str, message: str) -> None:
+async def trigger_alert(
+    provider: "ProcessIsolatedAmazingDataProvider", alert_type: str, message: str
+) -> None:
     """Emit alert via provider health monitor and record TGW snippet if available."""
     try:
         log_snippet = collect_tgw_log_snippet(provider, max_lines=10)
-        final_message = f"{message}\n--- TGW log snippet ---\n{log_snippet}" if log_snippet else message
+        final_message = (
+            f"{message}\n--- TGW log snippet ---\n{log_snippet}" if log_snippet else message
+        )
         logger.critical("[ALERT][{}] {}", alert_type, final_message)
 
         bucket = provider._alerts.setdefault(alert_type, [])
@@ -44,7 +48,9 @@ async def trigger_alert(provider: "ProcessIsolatedAmazingDataProvider", alert_ty
         logger.error("Failed to trigger alert: {}", exc)
 
 
-def collect_tgw_log_snippet(provider: "ProcessIsolatedAmazingDataProvider", max_lines: int = 10) -> Optional[str]:
+def collect_tgw_log_snippet(
+    provider: "ProcessIsolatedAmazingDataProvider", max_lines: int = 10
+) -> Optional[str]:
     """Collect TGW log snippet based on provider configuration."""
     log_path = getattr(provider.config, "tgw_log_path", "") or ""
     if not log_path:

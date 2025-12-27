@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_cyq_em
 
-目标地址: https://quote.eastmoney.com/concept/sz000001.html
+目标地址: <https://quote.eastmoney.com/concept/sz000001.html>
 
 描述: 东方财富网-概念板-行情中心-日K-筹码分布
 

@@ -18,10 +18,11 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Callable, Dict, List, Mapping, Optional, TypedDict, cast, Iterable
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, TypedDict, cast
 
 import pandas as pd
 
+from deepsearch.core.utils.status_display import get_status_display
 from deepsearch.infrastructure.providers.interfaces.base import (
     DataProvider,
     DataProviderConfig,
@@ -35,7 +36,6 @@ from deepsearch.observability import get_logger
 from deepsearch.observability.decorators.decorators import monitor_data_source
 from deepsearch.ports.data_sources import DataAccessType
 from deepsearch.ports.data_sources import DataSourceType as MonitorDataSourceType
-from deepsearch.core.utils.status_display import get_status_display
 
 logger = get_logger(__name__)
 _status_display = get_status_display()
@@ -187,14 +187,12 @@ class UnifiedQMTProvider(DataProvider):
 
         return normalized
 
-
     def _require_backend(self) -> "QMTBackend":
         """确保后端已初始化。"""
 
         if self.backend is None:
             raise RuntimeError("QMT后端未初始化")
         return self.backend
-
 
     def get_capabilities(self) -> set[DataCapability]:
         """返回 Unified QMT 支持的数据能力集合。"""
@@ -846,6 +844,7 @@ class StandardQMTBackend(QMTBackend):
         """获取特殊数据"""
         # 标准QMT的特殊数据实现
         return None
+
 
 CacheEntry = tuple[float, object, int]
 

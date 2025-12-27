@@ -4,7 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceLifecycleStatus
+from deepsearch.infrastructure.providers.managers.data_source_manager import (
+    DataSourceLifecycleStatus,
+)
 from deepsearch.utils.data_sources import DataSourceType
 from deepsearch.webui.api.common.response_format import ErrorCodes
 from deepsearch.webui.api.endpoints.datasources import datasource_manager

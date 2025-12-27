@@ -650,9 +650,8 @@ class CacheComponent(AsyncComponent[Any]):
                     await self._initialize_redis_client(aioredis, current_kwargs, connect_timeout)
                     break
                 except Exception as exc:
-                    if (
-                        not attempted_keepalive_fix
-                        and self._should_disable_keepalive(exc, current_kwargs)
+                    if not attempted_keepalive_fix and self._should_disable_keepalive(
+                        exc, current_kwargs
                     ):
                         attempted_keepalive_fix = True
                         current_kwargs = dict(current_kwargs)
@@ -785,7 +784,6 @@ class CacheComponent(AsyncComponent[Any]):
         errno_value = getattr(error, "errno", None)
         if errno_value == 22:
             return True
-
 
         if isinstance(error, RedisConnectionError):
             cause = getattr(error, "__cause__", None)

@@ -77,9 +77,7 @@ class MiniQMTConnectionGuard:
         if cls._is_available is False:
             time_since_last_check = now - cls._last_check_time
             if time_since_last_check >= cls._check_interval:
-                logger.debug(
-                    f"MiniQMT 重试探测 (距上次检测 {time_since_last_check:.0f} 秒)"
-                )
+                logger.debug(f"MiniQMT 重试探测 (距上次检测 {time_since_last_check:.0f} 秒)")
                 return True
             return False
 

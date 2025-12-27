@@ -75,7 +75,11 @@ async def initialize_data_sources():
 if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
     from deepsearch.infrastructure.providers.managers.data_source_manager import (
         DataSourceConfig as _DataSourceConfig,
+    )
+    from deepsearch.infrastructure.providers.managers.data_source_manager import (
         DataSourceLifecycleStatus as _DataSourceLifecycleStatus,
+    )
+    from deepsearch.infrastructure.providers.managers.data_source_manager import (
         DataSourceManager as _DataSourceManager,
     )
 

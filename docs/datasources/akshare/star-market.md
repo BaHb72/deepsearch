@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_zh_kcb_spot
 
-目标地址: http://vip.stock.finance.sina.com.cn/mkt/#kcb
+目标地址: <http://vip.stock.finance.sina.com.cn/mkt/#kcb>
 
 描述: 新浪财经-科创板股票实时行情数据
 
@@ -77,7 +77,7 @@ print(stock_zh_kcb_spot_df)
 
 接口: stock_zh_kcb_daily
 
-目标地址: https://finance.sina.com.cn/realstock/company/sh688001/nc.shtml(示例)
+目标地址: <https://finance.sina.com.cn/realstock/company/sh688001/nc.shtml(示例)>
 
 描述: 新浪财经-科创板股票历史行情数据
 
@@ -151,7 +151,7 @@ print(stock_zh_kcb_daily_df)
 
 接口: stock_zh_kcb_report_em
 
-目标地址: https://data.eastmoney.com/notices/kcb.html
+目标地址: <https://data.eastmoney.com/notices/kcb.html>
 
 描述: 东方财富-科创板报告数据
 
@@ -173,7 +173,7 @@ print(stock_zh_kcb_daily_df)
 | 公告标题 | object | -                                                                           |
 | 公告类型 | object | -                                                                           |
 | 公告日期 | object | -                                                                           |
-| 公告代码 | object | 本代码可以用来获取公告详情: http://data.eastmoney.com/notices/detail/688595/{替换到此处}.html |
+| 公告代码 | object | 本代码可以用来获取公告详情: <http://data.eastmoney.com/notices/detail/688595/{替换到此处}.html> |
 
 接口示例
 

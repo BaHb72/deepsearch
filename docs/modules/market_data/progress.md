@@ -3,9 +3,9 @@
 - 创建日期：2025-10-21
 - 维护人：待指派
 - 参考文档：
-    - [市场盘面产品规划 V4](../plans/README.md#市场盘面产品规划-v4)
-    - [api_contract_v4.yaml](./api_contract_v4.yaml)
-    - [indicator_spec_v4.md](./indicator_spec_v4.md)
+  - [市场盘面产品规划 V4](../plans/README.md#市场盘面产品规划-v4)
+  - [api_contract_v4.yaml](./api_contract_v4.yaml)
+  - [indicator_spec_v4.md](./indicator_spec_v4.md)
 
 ## 建设目标
 

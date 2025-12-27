@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_news_em
 
-目标地址: https://so.eastmoney.com/news/s?keyword=603777
+目标地址: <https://so.eastmoney.com/news/s?keyword=603777>
 
 描述: 东方财富指定个股的新闻资讯数据
 

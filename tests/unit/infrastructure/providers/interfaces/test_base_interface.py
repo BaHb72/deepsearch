@@ -32,9 +32,7 @@ def test_data_provider_config_normalizes_config_mapping() -> None:
 def test_proxy_config_as_http_url_variants() -> None:
     assert ProxyConfig().as_http_url() is None
 
-    assert (
-        ProxyConfig(host="127.0.0.1", port=8080).as_http_url() == "http://127.0.0.1:8080"
-    )
+    assert ProxyConfig(host="127.0.0.1", port=8080).as_http_url() == "http://127.0.0.1:8080"
     assert (
         ProxyConfig(host="10.0.0.8", port=9000, username="user", password="pass").as_http_url()
         == "http://user:pass@10.0.0.8:9000"

@@ -35,10 +35,12 @@ class JobSummaryPayload(BaseModel):
 
     @classmethod
     def from_summary(cls, summary: IngestionJobSummary) -> "JobSummaryPayload":
+        from datetime import datetime
+
         def _ts(value: object | None) -> str | None:
             if value is None:
                 return None
-            if hasattr(value, "isoformat"):
+            if isinstance(value, datetime):
                 return value.isoformat()
             return str(value)
 
@@ -73,16 +75,16 @@ async def list_ingestion_jobs(
 ) -> JobListResponse:
     """
     列出数据源取数作业。
-    
+
     使用可选的服务依赖，当数据库不可用时返回空列表。
     """
     if job_type != "prefetch_stock_basics":
         raise HTTPException(status_code=400, detail="暂不支持的作业类型")
-    
+
     # 如果服务不可用（数据库未连接），返回空列表
     if service is None:
         return JobListResponse(jobs=[])
-    
+
     try:
         jobs = await service.list_jobs(limit=limit)
         return JobListResponse(jobs=[JobSummaryPayload.from_summary(job) for job in jobs])
@@ -104,7 +106,7 @@ async def trigger_prefetch_job(
     """
     if service is None:
         raise HTTPException(status_code=503, detail="数据库服务不可用")
-    
+
     summary = await service.ensure_stock_list_job(force=payload.force)
     return JobSummaryPayload.from_summary(summary)
 
@@ -119,7 +121,7 @@ async def cancel_job(
     """
     if service is None:
         raise HTTPException(status_code=503, detail="数据库服务不可用")
-    
+
     success = await service.cancel_job(job_id)
     if not success:
         raise HTTPException(status_code=404, detail="作业不存在或已经完成")

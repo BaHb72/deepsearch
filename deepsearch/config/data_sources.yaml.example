@@ -1,7 +1,7 @@
 # ============================================================
 # DeepSearch 数据源配置示例
 # ============================================================
-# 
+#
 # 这是 data_sources.yaml 的示例模板。
 # 复制此文件为 data_sources.yaml 并填入您的实际配置。
 #
@@ -19,19 +19,19 @@ global:
   fallback_order:
     - amazingdata
     - akshare
-  
+
   circuit_breaker:
     enabled: true
     failure_threshold: 5
     recovery_timeout: 60
     half_open_attempts: 3
-  
+
   failover:
     enabled: true
     timeout: 5
     retry_count: 3
     backoff_factor: 2
-  
+
   health_check:
     enabled: true
     interval: 60
@@ -72,7 +72,7 @@ providers:
         enabled: true
         ttl: 300
         max_size: 10000
-  
+
   qmt:
     enabled: true
     priority: 2
@@ -83,7 +83,7 @@ providers:
     retry_count: 3
     config:
       mode: auto
-  
+
   akshare:
     enabled: true
     priority: 3

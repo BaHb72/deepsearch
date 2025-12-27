@@ -37,7 +37,9 @@ _YEAR_COLUMNS = ("year", "YEAR", "report_year", "REPORT_YEAR", "dividend_year", 
 _REPORT_TYPE_COLUMNS = ("report_type", "REPORT_TYPE", "type", "TYPE")
 
 
-def _apply_date_filter(data: Optional[pd.DataFrame], start: Optional[str], end: Optional[str]) -> Optional[pd.DataFrame]:
+def _apply_date_filter(
+    data: Optional[pd.DataFrame], start: Optional[str], end: Optional[str]
+) -> Optional[pd.DataFrame]:
     if data is None or data.empty:
         return data
     start_int = normalize_date_int(start) if start else None
@@ -50,7 +52,9 @@ def _apply_date_filter(data: Optional[pd.DataFrame], start: Optional[str], end: 
     effective_end = end_int or start_int
     if effective_start is None or effective_end is None:
         return data
-    narrowed = filter_dataframe_by_dates(data, effective_start, effective_end, columns=_DATE_COLUMNS_GENERAL)
+    narrowed = filter_dataframe_by_dates(
+        data, effective_start, effective_end, columns=_DATE_COLUMNS_GENERAL
+    )
     if isinstance(narrowed, pd.DataFrame):
         return narrowed
     return data
@@ -204,7 +208,9 @@ async def get_dividend(
             if year is not None:
                 filtered = filter_dataframe_by_value(filtered, str(year), columns=_YEAR_COLUMNS)
             if report_type:
-                filtered = filter_dataframe_by_value(filtered, report_type, columns=_REPORT_TYPE_COLUMNS)
+                filtered = filter_dataframe_by_value(
+                    filtered, report_type, columns=_REPORT_TYPE_COLUMNS
+                )
         return format_response(
             success=True,
             data=dataframe_to_dict(filtered),

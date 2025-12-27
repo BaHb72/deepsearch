@@ -2,6 +2,7 @@
 
 提供行情数据清洗和标准化功能
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -28,7 +29,7 @@ OutlierMethod = Literal["iqr", "zscore", "mad"]
 
 class DataCleaner:
     """数据清洗器
-    
+
     提供各种数据清洗和预处理功能
     """
 
@@ -43,13 +44,13 @@ class DataCleaner:
         remove_auction: bool = True,
     ) -> pd.DataFrame:
         """清洗 Tick 数据
-        
+
         Args:
             df: 原始 Tick 数据
             price_change_limit: 价格变动限制（默认 20%）
             remove_zero_volume: 是否移除零成交量记录
             remove_auction: 是否移除集合竞价数据
-            
+
         Returns:
             清洗后的 DataFrame
         """
@@ -93,9 +94,7 @@ class DataCleaner:
             morning_auction = cast(
                 BoolSeries, (df["hour"] == 9) & (df["minute"] >= 15) & (df["minute"] < 25)
             )
-            afternoon_auction = cast(
-                BoolSeries, (df["hour"] == 14) & (df["minute"] >= 57)
-            )
+            afternoon_auction = cast(BoolSeries, (df["hour"] == 14) & (df["minute"] >= 57))
             valid_trading = cast(BoolSeries, ~(morning_auction | afternoon_auction))
 
             df = df.loc[valid_trading]
@@ -126,13 +125,13 @@ class DataCleaner:
         fill_missing: bool = True,
     ) -> pd.DataFrame:
         """清洗 K 线数据
-        
+
         Args:
             df: 原始 K 线数据
             fix_ohlc: 是否修正 OHLC 关系
             remove_zero_volume: 是否移除零成交量记录
             fill_missing: 是否填充缺失数据
-            
+
         Returns:
             清洗后的 DataFrame
         """
@@ -184,12 +183,12 @@ class DataCleaner:
         method: FillMethod = "ffill",
     ) -> pd.DataFrame:
         """补齐缺失的 K 线数据
-        
+
         Args:
             df: K 线数据
             time_col: 时间列名
             method: 填充方式 ('ffill', 'bfill', 'interpolate')
-        
+
         Returns:
             补完后的 DataFrame
         """
@@ -238,10 +237,10 @@ class DataCleaner:
 
     def _infer_frequency(self, time_series: TimestampSeries) -> str:
         """推断时间序列的频率
-        
+
         Args:
             time_series: 时间序列
-            
+
         Returns:
             频率字符串
         """
@@ -290,13 +289,13 @@ class DataCleaner:
         threshold: float = 3.0,
     ) -> pd.DataFrame:
         """移除异常值
-        
+
         Args:
             df: 数据框
             columns: 要检查的列
             method: 检测方法 ('iqr', 'zscore', 'mad')
             threshold: 阈值
-            
+
         Returns:
             移除异常值后的 DataFrame
         """
@@ -312,7 +311,7 @@ class DataCleaner:
                 continue
             numeric_column = cast(NumericSeries, column.astype(float, copy=False))
 
-            if method == 'iqr':
+            if method == "iqr":
                 # IQR 方法
                 q1 = float(numeric_column.quantile(0.25))
                 q3 = float(numeric_column.quantile(0.75))
@@ -324,7 +323,7 @@ class DataCleaner:
                     mask & (numeric_column >= lower_bound) & (numeric_column <= upper_bound),
                 )
 
-            elif method == 'zscore':
+            elif method == "zscore":
                 # Z-score 方法
                 std = float(numeric_column.std())
                 if std == 0 or pd.isna(std):
@@ -333,7 +332,7 @@ class DataCleaner:
                 z_scores: NumericSeries = ((numeric_column - mean) / std).abs()
                 mask = cast(BoolSeries, mask & (z_scores <= threshold))
 
-            elif method == 'mad':
+            elif method == "mad":
                 # MAD (Median Absolute Deviation) 方法
                 median = float(numeric_column.median())
                 mad = float(np.median(np.abs(numeric_column - median)))
@@ -351,10 +350,10 @@ class DataCleaner:
 
     def standardize_symbols(self, df: pd.DataFrame) -> pd.DataFrame:
         """标准化股票代码格式
-        
+
         Args:
             df: 包含 symbol 列的数据框
-            
+
         Returns:
             标准化后的 DataFrame
         """
@@ -395,12 +394,12 @@ class DataCleaner:
         check_types: bool = True,
     ) -> tuple[bool, list[str]]:
         """验证数据完整性
-        
+
         Args:
             df: 要验证的数据框
             required_columns: 必需的列
             check_types: 是否检查数据类型
-            
+
         Returns:
             (是否有效, 错误信息列表)
         """

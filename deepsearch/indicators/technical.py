@@ -2,6 +2,7 @@
 
 基于 TA-Lib 封装的技术指标计算功能
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -19,12 +20,13 @@ else:
     TALIB_AVAILABLE = True
     TALIB_MODULE = cast(Any, _talib_module)
 
-from deepsearch.observability.logger import logger
 from deepsearch.data.types import NumericSeries
 from deepsearch.indicators.types import FloatArray
+from deepsearch.observability.logger import logger
 
 TrendSignal = Literal["bullish", "bearish", "neutral"]
 MomentumSignal = Literal["bullish", "bearish", "neutral"]
+
 
 class IndicatorSignals(TypedDict):
     trend: TrendSignal
@@ -202,9 +204,7 @@ class TechnicalIndicators:
         """布林带指标"""
         ta = self._talib()
         prices = self._prepare_data(df, price_col)
-        upper, middle, lower = ta.BBANDS(
-            prices, timeperiod=period, nbdevup=nbdev, nbdevdn=nbdev
-        )
+        upper, middle, lower = ta.BBANDS(prices, timeperiod=period, nbdevup=nbdev, nbdevdn=nbdev)
         upper_series = pd.Series(cast(FloatArray, upper), index=df.index, name="BB_Upper")
         middle_series = pd.Series(cast(FloatArray, middle), index=df.index, name="BB_Middle")
         lower_series = pd.Series(cast(FloatArray, lower), index=df.index, name="BB_Lower")

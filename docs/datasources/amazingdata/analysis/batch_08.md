@@ -1,6 +1,7 @@
 # 批次8分析结果：图片71-80
 
 ## 概览
+
 图片71-80包含SubscribeData实时K线回调和快照数据字段详细说明。
 
 ---
@@ -10,6 +11,7 @@
 ### 10. SubscribeData 模块 - K线订阅
 
 #### 10.1 OnKLine - 实时K线回调 (3.5.6.7)
+
 ```python
 def OnKLine(data):
     """实时K线数据回调"""
@@ -21,7 +23,9 @@ ad.SubscribeData.subscribe_kline(
     callback=OnKLine
 )
 ```
+
 **回调参数**:
+
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | code | str | 股票代码 |

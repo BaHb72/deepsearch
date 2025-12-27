@@ -414,4 +414,3 @@ class TestComponentFactory:
                 setattr(obj, parts[-1], value)
 
         return config
-

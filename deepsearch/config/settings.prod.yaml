@@ -286,32 +286,45 @@ message_bus:
     - inmem
     match: '*'
 notifications:
-  bark_token: unit-test-token
+  enabled: true
+  wechat_token: qyKfTFxfXax4OGnGFOIXT7JhC
+  bark_token: qyKfTFxfXax4OGnGFOIXT7JhC
+  bark_servers:
+  - name: 虾推
+    base_url: https://bark.xtuis.cn?xia=qyKfTFxfXax4OGnGFOIXT7JhC
+    token: qyKfTFxfXax4OGnGFOIXT7JhC
+    enabled: false
+  - name: Bark 2
+    base_url: https://api.day.app/S9EYCiNMgBFsc6srU2ABnV
+    token: ''
+    enabled: true
   base_urls:
-    bark: https://bark.xtuis.cn
     wechat: https://wx.xtuis.cn
-  body_template: 最新价格：{price}
+    bark: https://bark.xtuis.cn?xia=qyKfTFxfXax4OGnGFOIXT7JhC
+  default_channel:
+  - wechat
   categories:
     alert:
-      channels:
-      - wechat
       enabled: true
-      max_per_window: 3
-      window_seconds: 180
-    info:
+      max_per_window: 5
+      window_seconds: 300
       channels:
       - wechat
       - bark
-      enabled: true
-      max_per_window: 10
-      window_seconds: 600
-  default_channel: wechat
-  enabled: true
-  request_timeout: 6.5
-  retry_attempts: 2
+  request_timeout: 5.0
+  retry_attempts: 3
   retry_delay: 1.0
-  title_template: 测试默认标题 {symbol}
-  wechat_token: unit-test-token
+  title_template: '[测试] {title}[Test] {title}[Test] {title}'
+  body_template: '{content}'
+  templates:
+    wechat: []
+    bark:
+    - name: DirectCall
+      title_template: '{title}'
+      body_template: '{content}'
+      use_markdown: false
+      auto_copy: false
+      call: false
 runtime:
   mode: full
 webui:

@@ -14,6 +14,7 @@ from enum import Enum
 from typing import Dict, Iterable, Mapping, Tuple
 
 from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
+
 from .amazingdata_types import AmazingDataPeriod, AmazingDataSecurityType, convert_period
 from .logging_utils import log_info, log_warning
 
@@ -66,13 +67,13 @@ class CachePolicy:
 
     @classmethod
     def from_params(
-            cls,
-            *,
-            context: str,
-            local_path: object | None,
-            is_local: object | None,
-            begin_date: object | None,
-            end_date: object | None,
+        cls,
+        *,
+        context: str,
+        local_path: object | None,
+        is_local: object | None,
+        begin_date: object | None,
+        end_date: object | None,
     ) -> "CachePolicy":
         mode, data = sanitize_cache_params(
             local_path=local_path,
@@ -103,12 +104,12 @@ class CachePolicy:
 
 
 def sanitize_cache_params(
-        *,
-        local_path: object | None,
-        is_local: object | None,
-        begin_date: object | None,
-        end_date: object | None,
-        context: str,
+    *,
+    local_path: object | None,
+    is_local: object | None,
+    begin_date: object | None,
+    end_date: object | None,
+    context: str,
 ) -> tuple[CacheParamMode, Dict[str, object | None]]:
     """
     校验并整理本地缓存与远端日期区间参数组合。
@@ -131,8 +132,11 @@ def sanitize_cache_params(
     }
 
     if has_local_group and has_remote_group:
-        log_warning("检测到本地缓存与远程区间参数同时存在，自动切换为远程模式", action="cache_params",
-                    metadata={"context": context})
+        log_warning(
+            "检测到本地缓存与远程区间参数同时存在，自动切换为远程模式",
+            action="cache_params",
+            metadata={"context": context},
+        )
         result["local_path"] = None
         result["is_local"] = None
         return CacheParamMode.REMOTE_RANGE, result
@@ -158,9 +162,9 @@ def sanitize_cache_params(
 
 
 def sanitize_cache_kwargs(
-        kwargs: Mapping[str, object],
-        *,
-        context: str,
+    kwargs: Mapping[str, object],
+    *,
+    context: str,
 ) -> tuple[CacheParamMode, Dict[str, object]]:
     """针对 kwargs 版本的参数整理工具。"""
 
@@ -365,7 +369,8 @@ _DEFAULT_PERIODS: frozenset[str] = frozenset(
 )
 
 _FUTURE_ALLOWED_PERIODS: frozenset[str] = frozenset(
-    (_DEFAULT_PERIODS - {AmazingDataPeriod.SNAPSHOT.value}) | {AmazingDataPeriod.SNAPSHOT_FUTURE.value}
+    (_DEFAULT_PERIODS - {AmazingDataPeriod.SNAPSHOT.value})
+    | {AmazingDataPeriod.SNAPSHOT_FUTURE.value}
 )
 _HKT_ALLOWED_PERIODS: frozenset[str] = frozenset(
     (_DEFAULT_PERIODS - {AmazingDataPeriod.SNAPSHOT.value}) | {AmazingDataPeriod.SNAPSHOT_HKT.value}
@@ -383,10 +388,10 @@ def _resolve_allowed_periods(security_type: str | None) -> Iterable[str]:
 
 
 def validate_security_period(
-        security_type: object | None,
-        period: object | None,
-        *,
-        context: str,
+    security_type: object | None,
+    period: object | None,
+    *,
+    context: str,
 ) -> tuple[str | None, str | None]:
     """
     校验 security_type 与 period 组合是否合法。
@@ -400,12 +405,18 @@ def validate_security_period(
 
     if canonical_security in _HKT_TYPES and canonical_period == AmazingDataPeriod.SNAPSHOT.value:
         canonical_period = AmazingDataPeriod.SNAPSHOT_HKT.value
-        log_info("自动调整 period=snapshot -> snapshot_hkt 以匹配港股通标的", action="period_validation",
-                 metadata={"context": context, "security": _describe_security(canonical_security)})
+        log_info(
+            "自动调整 period=snapshot -> snapshot_hkt 以匹配港股通标的",
+            action="period_validation",
+            metadata={"context": context, "security": _describe_security(canonical_security)},
+        )
     if canonical_security in _FUTURE_TYPES and canonical_period == AmazingDataPeriod.SNAPSHOT.value:
         canonical_period = AmazingDataPeriod.SNAPSHOT_FUTURE.value
-        log_info("自动调整 period=snapshot -> snapshot_future 以匹配期货标的", action="period_validation",
-                 metadata={"context": context, "security": _describe_security(canonical_security)})
+        log_info(
+            "自动调整 period=snapshot -> snapshot_future 以匹配期货标的",
+            action="period_validation",
+            metadata={"context": context, "security": _describe_security(canonical_security)},
+        )
 
     allowed_periods = set(_resolve_allowed_periods(canonical_security))
 
@@ -415,13 +426,19 @@ def validate_security_period(
             f"{_describe_security(canonical_security)} 与 {_describe_period(canonical_period)}"
         )
 
-    if canonical_period == AmazingDataPeriod.SNAPSHOT_FUTURE.value and canonical_security not in _FUTURE_TYPES:
+    if (
+        canonical_period == AmazingDataPeriod.SNAPSHOT_FUTURE.value
+        and canonical_security not in _FUTURE_TYPES
+    ):
         raise DataProviderError(
             f"AmazingData {context} 仅允许期货品种使用 period=snapshot_future，当前 security_type="
             f"{_describe_security(canonical_security)}"
         )
 
-    if canonical_period == AmazingDataPeriod.SNAPSHOT_HKT.value and canonical_security not in _HKT_TYPES:
+    if (
+        canonical_period == AmazingDataPeriod.SNAPSHOT_HKT.value
+        and canonical_security not in _HKT_TYPES
+    ):
         raise DataProviderError(
             f"AmazingData {context} 仅允许港股通品种使用 period=snapshot_hkt，当前 security_type="
             f"{_describe_security(canonical_security)}"

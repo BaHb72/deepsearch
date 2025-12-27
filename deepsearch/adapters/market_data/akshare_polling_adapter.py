@@ -205,14 +205,16 @@ class AkSharePollingStreamPort(RealtimeStreamPort):
 
         snapshots: list[MarketSnapshot] = []
         for i in range(0, len(target), self._batch_size):
-            batch = target[i:i + self._batch_size]
+            batch = target[i : i + self._batch_size]
             result = await self._adapter.get_realtime_data(batch)
             for sym in batch:
                 payload = result.get(sym) or result.get(sym.lower()) or {}
                 if not isinstance(payload, Mapping):
                     continue
                 if payload.get("error"):
-                    logger.debug("AkShare polling returned error for {}: {}", sym, payload.get("error"))
+                    logger.debug(
+                        "AkShare polling returned error for {}: {}", sym, payload.get("error")
+                    )
                     continue
                 snapshots.append(_build_snapshot(sym, payload))
         return snapshots
@@ -226,12 +228,12 @@ class AkShareBoardUniversePort(BoardUniversePort):
     """Expose AkShare stock list as board-universe fetcher."""
 
     def __init__(
-            self,
-            adapter: AkShareAdapter,
-            *,
-            record_store: DataSourceRecordPersistence | None,
-            data_source: DataSourceType,
-            job_type: str,
+        self,
+        adapter: AkShareAdapter,
+        *,
+        record_store: DataSourceRecordPersistence | None,
+        data_source: DataSourceType,
+        job_type: str,
     ) -> None:
         self._adapter = adapter
         self._record_store = record_store
@@ -260,10 +262,10 @@ class AkShareBoardUniversePort(BoardUniversePort):
         return tuple(records)
 
     async def _persist_snapshot(
-            self,
-            payloads: Sequence[Mapping[str, Any]],
-            *,
-            captured_at: datetime,
+        self,
+        payloads: Sequence[Mapping[str, Any]],
+        *,
+        captured_at: datetime,
     ) -> None:
         if self._record_store is None:
             return
@@ -287,11 +289,11 @@ class AkSharePollingAdapter(RealtimeAdapter):
     """RealtimeAdapter implementation backed by AkShare polling."""
 
     def __init__(
-            self,
-            *,
-            name: str = "akshare",
-            use_proxy: bool = False,
-            batch_size: int = 20,
+        self,
+        *,
+        name: str = "akshare",
+        use_proxy: bool = False,
+        batch_size: int = 20,
     ) -> None:
         self.name = name
         self._adapter = AkShareAdapter(use_proxy=use_proxy)

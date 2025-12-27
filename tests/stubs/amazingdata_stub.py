@@ -76,8 +76,7 @@ def _board_for_code(code: str) -> str:
 
 
 class BaseData:
-    def __init__(self) -> None:
-        ...
+    def __init__(self) -> None: ...
 
     def get_code_list(self, security_type: str = "EXTRA_STOCK_A") -> List[str]:
         return list(STOCK_CODES)
@@ -98,11 +97,11 @@ class BaseData:
         ]
 
     def get_hist_code_list(
-            self,
-            security_type: str = "EXTRA_STOCK_A",
-            start_date: int | None = None,
-            end_date: int | None = None,
-            local_path: str | None = None,
+        self,
+        security_type: str = "EXTRA_STOCK_A",
+        start_date: int | None = None,
+        end_date: int | None = None,
+        local_path: str | None = None,
     ) -> List[str]:
         return [f"{code}.SH" if code.startswith("6") else f"{code}.SZ" for code in STOCK_CODES]
 
@@ -131,13 +130,13 @@ class MarketData:
         self._calendar = list(calendar) if calendar else []
 
     def query_snapshot(
-            self,
-            code_list: Sequence[str],
-            *,
-            begin_date: int | None = None,
-            end_date: int | None = None,
-            begin_time: int | None = None,
-            end_time: int | None = None,
+        self,
+        code_list: Sequence[str],
+        *,
+        begin_date: int | None = None,
+        end_date: int | None = None,
+        begin_time: int | None = None,
+        end_time: int | None = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
         result: Dict[str, List[Dict[str, Any]]] = {}
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -154,17 +153,14 @@ class MarketData:
             result[code] = [payload]
         return result
 
-    def get_snapshot(self, code_list: Sequence[str]) -> Dict[str, Dict[str, Any]]:
-        return {code: data[0] for code, data in self.query_snapshot(code_list).items()}
-
     def query_kline(
-            self,
-            code_list: Sequence[str],
-            *,
-            begin_date: int | None = None,
-            end_date: int | None = None,
-            period: str | None = None,
-            adjust: str | None = None,
+        self,
+        code_list: Sequence[str],
+        *,
+        begin_date: int | None = None,
+        end_date: int | None = None,
+        period: Any = None,  # 支持枚举或字符串
+        adjust: str | None = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
         result: Dict[str, List[Dict[str, Any]]] = {}
         for code in code_list:
@@ -181,18 +177,6 @@ class MarketData:
             ]
         return result
 
-    def get_kline_data(
-            self,
-            code_list: Sequence[str],
-            period: str,
-            start_date: str | None = None,
-            end_date: str | None = None,
-            count: int | None = None,
-            adjust: str | None = None,
-            include_suspend: bool = True,
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        return self.query_kline(code_list, period=period)
-
 
 class SubscribeData:
     def __init__(self) -> None:
@@ -200,7 +184,9 @@ class SubscribeData:
 
     def register(self, *, code_list: Sequence[str], period: Any) -> Any:
         def decorator(func: Any) -> Any:
-            self._registrations.append({"codes": list(code_list), "period": period, "callback": func})
+            self._registrations.append(
+                {"codes": list(code_list), "period": period, "callback": func}
+            )
             return func
 
         return decorator
@@ -224,7 +210,7 @@ def login(
     password: str | None = None,
     host: str | None = None,
     port: int | None = None,
-        api_mode: str | None = None,
+    api_mode: str | None = None,
 ) -> int:
     _logged_in_users.add(username or "anonymous")
     return 0

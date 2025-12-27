@@ -11,8 +11,9 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from .base import JSONDict, format_response, get_amazingdata_provider, handle_api_error
 from deepsearch.domain.concept_engine import get_concept_engine
+
+from .base import JSONDict, format_response, get_amazingdata_provider, handle_api_error
 
 # 创建路由器
 router = APIRouter(tags=["AmazingData-实时行情"])
@@ -416,9 +417,7 @@ async def subscribe_kline(request: KlineSubscribeRequest) -> JSONDict:
             period=request.period,
         )
 
-        await provider.subscribe_kline(
-            code_list=request.code_list, callback=on_kline
-        )
+        await provider.subscribe_kline(code_list=request.code_list, callback=on_kline)
 
         return format_response(
             success=True,
@@ -518,30 +517,33 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                 await websocket.send_json({"type": "subscription_confirmed", "codes": code_list})
 
             elif message.get("action") == "subscribe_concept_flow":
-                 engine = get_concept_engine(await get_amazingdata_provider())
-                 await engine.start()
-                 
-                 async def push_loop():
-                     try:
-                         while True:
-                             if client_id not in subscription_manager.websockets:
-                                 break
-                             data = engine.get_sector_velocity_map()
-                             await websocket.send_json({"type": "concept_flow", "data": data})
-                             await asyncio.sleep(3)
-                     except Exception as e:
-                         logger.error(f"Push loop error: {e}")
+                engine = get_concept_engine(await get_amazingdata_provider())
+                if engine is not None:
+                    await engine.start()
 
-                 task = asyncio.create_task(push_loop())
-                 sub_id = f"{client_id}_concept_flow"
-                 subscription_manager.active_tasks[sub_id] = task
-                 subscription_manager.subscriptions[sub_id] = {
-                     "client_id": client_id,
-                     "type": "concept_flow",
-                     "code_list": [],
-                     "status": "active"
-                 }
-                 await websocket.send_json({"type": "subscription_confirmed", "subtype": "concept_flow"})
+                async def push_loop():
+                    try:
+                        while True:
+                            if client_id not in subscription_manager.websockets:
+                                break
+                            data = engine.get_sector_velocity_map()
+                            await websocket.send_json({"type": "concept_flow", "data": data})
+                            await asyncio.sleep(3)
+                    except Exception as e:
+                        logger.error(f"Push loop error: {e}")
+
+                task = asyncio.create_task(push_loop())
+                sub_id = f"{client_id}_concept_flow"
+                subscription_manager.active_tasks[sub_id] = task
+                subscription_manager.subscriptions[sub_id] = {
+                    "client_id": client_id,
+                    "type": "concept_flow",
+                    "code_list": [],
+                    "status": "active",
+                }
+                await websocket.send_json(
+                    {"type": "subscription_confirmed", "subtype": "concept_flow"}
+                )
 
             elif message.get("action") == "unsubscribe":
                 # 取消订阅

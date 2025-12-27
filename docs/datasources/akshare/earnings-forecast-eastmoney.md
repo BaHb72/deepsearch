@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_profit_forecast_em
 
-目标地址: http://data.eastmoney.com/report/profitforecast.jshtml
+目标地址: <http://data.eastmoney.com/report/profitforecast.jshtml>
 
 描述: 东方财富网-数据中心-研究报告-盈利预测; 该数据源网页端返回数据有异常, 本接口已修复该异常
 

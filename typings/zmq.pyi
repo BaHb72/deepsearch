@@ -1,9 +1,7 @@
 from typing import Any, Iterable, Sequence
 
-
 class ZMQError(Exception):
     errno: int
-
 
 class Socket:
     def bind(self, address: str) -> None: ...
@@ -14,17 +12,14 @@ class Socket:
     def setsockopt(self, option: int, value: Any) -> None: ...
     def setsockopt_string(self, option: int, value: str) -> None: ...
 
-
 class Context:
     def socket(self, socket_type: int) -> Socket: ...
     def term(self) -> None: ...
-
 
 class Poller:
     def register(self, socket: Socket, flags: int) -> None: ...
     def unregister(self, socket: Socket) -> None: ...
     def poll(self, timeout: int | None = None) -> list[tuple[Socket, int]]: ...
-
 
 PUB: int
 SUB: int

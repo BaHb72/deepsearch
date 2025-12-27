@@ -26,7 +26,9 @@ def _record_to_legacy(record: StockListRecord) -> dict[str, object]:
     return legacy
 
 
-def _normalize_stock_records(payload: Any) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+def _normalize_stock_records(
+    payload: Any,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     if payload is None:
         return [], []
 
@@ -157,7 +159,9 @@ async def get_stock_info(
                 pass
 
         manager = get_data_source_manager()
-        result_raw = await manager.fetch_stock_info(symbol=symbol, preferred_source=preferred_source)
+        result_raw = await manager.fetch_stock_info(
+            symbol=symbol, preferred_source=preferred_source
+        )
         result: Dict[str, Any] = dict(result_raw) if isinstance(result_raw, dict) else {}
 
         # 确保返回正确的股票名称
@@ -182,7 +186,6 @@ async def get_stock_info(
 
 
 @router.get("/stock/list")
-
 async def get_stock_list(source: Optional[str] = Query(None, description="指定数据源")):
     """
     获取股票列表，返回并行的领域结构与旧结构映射。
@@ -251,8 +254,9 @@ async def get_stock_list(source: Optional[str] = Query(None, description="指定
 
 
 @router.get("/stocks")
-async def get_stock_list_legacy(source: Optional[str] = Query(None, description="指定数据源")) -> list[
-    dict[str, object]]:
+async def get_stock_list_legacy(
+    source: Optional[str] = Query(None, description="指定数据源")
+) -> list[dict[str, object]]:
     """旧版 /api/data/stocks 兼容输出，仅返回 legacy 列表。"""
 
     service = data_module.get_data_service()
@@ -280,21 +284,24 @@ async def get_source_status(request: Request):
     if request.headers.get("X-Test-Mode", "").lower() == "true":
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=404, detail="endpoint deprecated; use /api/data-sources/status")
+        raise HTTPException(
+            status_code=404, detail="endpoint deprecated; use /api/data-sources/status"
+        )
 
     try:
         manager = get_data_source_manager()
         active_source = None
-        if hasattr(manager, 'get_active_source'):
+        if hasattr(manager, "get_active_source"):
             active = manager.get_active_source()
-            active_source = getattr(active, 'value', active)
+            active_source = getattr(active, "value", active)
     except Exception:
         active_source = None
 
     return {
-        'sources': [],
-        'active': active_source,
+        "sources": [],
+        "active": active_source,
     }
+
 
 @router.post("/source/check")
 async def check_data_sources():

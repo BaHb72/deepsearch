@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, func
 
 from .base import Base
 
 
 class ModuleSourceConfig(Base):
     """模块数据源配置表。
-    
+
     存储每个功能模块的数据源选择配置，支持运行时动态更新。
     """
 
@@ -22,7 +21,7 @@ class ModuleSourceConfig(Base):
     description = Column(String(512), nullable=True)
     category = Column(String(32), nullable=True, default="general")
     primary_source = Column(String(32), nullable=True)
-    fallback_sources = Column(JSONB, nullable=True, default=list)
+    fallback_sources = Column(JSON, nullable=True, default=list)
     enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(

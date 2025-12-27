@@ -2,6 +2,7 @@
 AmazingData 历史行情 API 模块
 覆盖历史快照与 K 线查询接口
 """
+
 from collections.abc import Mapping
 from typing import Dict, List, Optional
 
@@ -10,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from deepsearch.infrastructure.providers.implementations.amazingdata import SnapshotAlignPolicy
+
 from .base import (
     JSONDict,
     dataframe_to_dict,
@@ -32,6 +34,7 @@ class QuerySnapshotRequest(BaseModel):
         default=SnapshotAlignPolicy.NEAREST_PREV,
         description="对齐策略：nearest_prev/strict/passthrough",
     )
+
 
 class QueryKlineRequest(BaseModel):
     """历史 K 线查询参数"""
@@ -105,7 +108,9 @@ async def query_kline(request: QueryKlineRequest) -> JSONDict:
         "monthly",
     }
     if request.period not in valid_periods:
-        raise HTTPException(status_code=400, detail=f"Invalid period. Must be one of: {sorted(valid_periods)}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid period. Must be one of: {sorted(valid_periods)}"
+        )
 
     try:
         provider = await get_amazingdata_provider()
@@ -146,7 +151,9 @@ async def batch_query_kline(requests: List[QueryKlineRequest]) -> JSONDict:
 
         for idx, request in enumerate(requests):
             if not validate_date_range(request.begin_date, request.end_date):
-                errors.append({"index": idx, "codes": request.code_list, "error": "Invalid date range"})
+                errors.append(
+                    {"index": idx, "codes": request.code_list, "error": "Invalid date range"}
+                )
                 continue
 
             valid_periods = {

@@ -16,10 +16,7 @@ from deepsearch.config.models.data_sources import (
     RealtimeAdapterSpec,
     RealtimeDataSourceConfig,
 )
-from deepsearch.ports.market_data import (
-    RealtimeAdapterCapabilities,
-    RealtimePortBundle,
-)
+from deepsearch.ports.market_data import RealtimeAdapterCapabilities, RealtimePortBundle
 
 
 class _DummyWriter:

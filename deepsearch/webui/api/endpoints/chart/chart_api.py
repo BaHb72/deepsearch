@@ -367,12 +367,14 @@ async def get_realtime_data(
         realtime_data = await data_manager.get_realtime_quote(symbol)
         if not realtime_data:
             raise _data_unavailable("chart.realtime")
-        return JSONResponse({
-            "success": True,
-            "symbol": symbol,
-            "data": realtime_data,
-            "timestamp": datetime.now().isoformat(),
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "symbol": symbol,
+                "data": realtime_data,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:

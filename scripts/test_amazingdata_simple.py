@@ -4,11 +4,12 @@
 
 运行方式: uv run python scripts/test_amazingdata_simple.py
 """
+
 import asyncio
 from datetime import datetime
 
 print("=" * 60)
-print(f"AmazingData SDK 直接连接测试")
+print("AmazingData SDK 直接连接测试")
 print(f"测试时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 print("=" * 60)
 
@@ -18,28 +19,29 @@ async def test_amazingdata():
     print("\n[1] 初始化数据源系统...")
     try:
         from deepsearch.utils.data_sources import (
+            DataSourceType,
             get_data_source_manager,
             initialize_data_sources,
-            DataSourceType,
         )
 
         await initialize_data_sources()
         manager = get_data_source_manager()
-        print(f"    DataSourceManager 初始化成功")
-        
+        print("    DataSourceManager 初始化成功")
+
         # 查看可用的数据源
         print(f"    已注册的 providers: {list(manager.providers.keys())}")
-        
+
         provider = manager.get_provider(DataSourceType.AMAZINGDATA)
         if provider is None:
             print("    [警告] AmazingData provider 未找到")
         else:
             print(f"    获取到 AmazingData provider: {type(provider).__name__}")
             print(f"    连接状态: {getattr(provider, '_connected', 'unknown')}")
-            
+
     except Exception as e:
         print(f"    [错误] {e}")
         import traceback
+
         traceback.print_exc()
         return
 
@@ -76,7 +78,7 @@ async def test_amazingdata():
                     snap = await provider.get_realtime_quote([code])
                 else:
                     snap = None
-                    print(f"    [警告] provider 没有快照获取方法")
+                    print("    [警告] provider 没有快照获取方法")
                     break
 
                 if snap:

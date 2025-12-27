@@ -75,9 +75,9 @@ database:
     startup_arguments: []
     startup_command: []  # 可选：例如 ['wsl.exe', '-d', 'Ubuntu', '-u', 'root', 'service', 'redis-server', 'start']
     wsl:
-      enabled: 
-      distro: 
-      auto_resolve_ip: 
+      enabled:
+      distro:
+      auto_resolve_ip:
       service_name: redis-server  # 可选：WSL 中 service 命令对应的 Redis 服务名
       user: root  # 可选：执行命令时使用的 WSL 用户 (传递给 -u)
 
@@ -98,7 +98,7 @@ data_sources:
     timeout: 5
     retry_count: 3
     backoff_factor: 2
-  
+
   # 模块级数据源覆盖配置
   # 允许不同模块使用不同的数据源优先级
   module_overrides:
@@ -109,7 +109,7 @@ data_sources:
   # historical_sync:
   #   primary: akshare
   #   fallback: []
-  
+
   # 按数据访问类型覆盖配置
   access_type_overrides:
   # 按访问类型覆盖（示例）
@@ -119,7 +119,7 @@ data_sources:
   # historical_kline:
   #   primary: akshare
   #   fallback: [amazingdata]
-  
+
   providers:
     amazingdata:
       enabled: true
@@ -278,7 +278,7 @@ performance:
 
   threading:
     max_workers: ${MAX_WORKERS:10}
-    thread_pool_size: 
+    thread_pool_size:
 
 data_source_prefetch:
   enabled: true
@@ -398,4 +398,3 @@ market_data:
             - DATA_SOURCE_OFFLINE
           cache_ttl_seconds: 45
           min_interval_seconds: 10
-

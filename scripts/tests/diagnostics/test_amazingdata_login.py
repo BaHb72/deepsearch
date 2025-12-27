@@ -19,15 +19,13 @@ os.environ.setdefault("APP__ENV", "dev")
 
 
 async def _run() -> None:
-    from deepsearch.ports.data_sources import DataSourceType
     from deepsearch.utils.data_sources import initialize_data_sources
 
     logger.info("加载 dev 配置并初始化数据源管理器...")
     manager = await initialize_data_sources()
 
     status: Dict[str, Any] = {
-        source_type.value: snapshot
-        for source_type, snapshot in manager.get_status_report().items()
+        source_type.value: snapshot for source_type, snapshot in manager.get_status_report().items()
     }
     logger.info("数据源状态快照:\n{}", json.dumps(status, ensure_ascii=False, indent=2))
 

@@ -4,14 +4,13 @@ QMT DataFeed 实现
 实现 IDataFeed 接口，提供统一的数据访问接口
 """
 
-from typing import Any, Dict, List, Union, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Union, cast
 
 from loguru import logger
 
 from deepsearch.infrastructure.providers.datafeed.base import IDataFeed, KlineParams
 
 from .provider import QMTDataProvider
-
 
 if TYPE_CHECKING:
     from pandas import DataFrame
@@ -20,6 +19,7 @@ else:
 
 try:
     import pandas as pd
+
     HAS_PANDAS = True
 except ImportError:  # pragma: no cover
     pd = cast(Any, None)

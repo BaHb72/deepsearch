@@ -17,16 +17,16 @@ from typing import (
     Final,
     Iterable,
     List,
+    Literal,
     Mapping,
+    NotRequired,
     Optional,
+    Required,
     Sequence,
     Tuple,
+    TypedDict,
     Union,
     cast,
-    Literal,
-    TypedDict,
-    NotRequired,
-    Required,
 )
 
 import pandas as pd
@@ -188,6 +188,8 @@ class DataProviderManager:
         """初始化管理器"""
         self._providers: Dict[str, DataProvider] = {}
         self._initialized = False
+        # 优先级覆盖映射，允许测试或运行时调整提供者优先级
+        self._provider_priority: Dict[str, int] = {}
 
     async def initialize(self) -> None:
         """初始化所有数据提供者"""
@@ -198,7 +200,7 @@ class DataProviderManager:
         from deepsearch.config import get_config
 
         config = get_config()
-        provider_configs = config.get("providers", [])
+        provider_configs = config.get("providers", [])  # type: ignore[attr-defined]
 
         for provider_config in provider_configs:
             if provider_config.get("enabled", False):
@@ -231,14 +233,14 @@ class DataProviderManager:
 
     def _create_provider(self, config: Dict[str, Any]) -> Optional[DataProvider]:
         """根据配置创建提供者实例
-        
+
         支持两种方式：
         1. 动态导入：使用 module_path 和 class_name 配置
         2. 默认映射：使用 source_type 查找预定义的提供者类
-        
+
         Args:
             config: 提供者配置字典
-            
+
         Returns:
             创建的提供者实例，失败返回 None
         """
@@ -328,7 +330,7 @@ class DataProviderManager:
                 config=config.get("config", {}),
             )
             if not hasattr(provider, "status"):
-                provider.status = "initialized"
+                provider.status = "initialized"  # type: ignore[union-attr]
         return provider
 
     async def _init_provider(self, name: str, provider: DataProvider) -> None:
@@ -347,9 +349,9 @@ class DataProviderManager:
             start_async = getattr(provider, "start_async", None)
             if callable(start_async):
                 await start_async()
-            provider.status = "running"
+            provider.status = "running"  # type: ignore[attr-defined]
         except Exception as e:
-            provider.status = "error"
+            provider.status = "error"  # type: ignore[attr-defined]
             logger.error(f"初始化提供者 {name} 失败: {e}")
             raise
 
@@ -406,7 +408,9 @@ class DataProviderManager:
             extras=extras,
         )
 
-    def _build_runtime_status(self, name: ProviderName, provider: DataProvider) -> ProviderRuntimeStatus:
+    def _build_runtime_status(
+        self, name: ProviderName, provider: DataProvider
+    ) -> ProviderRuntimeStatus:
         config_snapshot = self._build_config_snapshot(provider)
         status_attr = getattr(provider, "status", None)
         if isinstance(status_attr, Enum):
@@ -435,7 +439,8 @@ class DataProviderManager:
             except Exception:
                 pass
 
-        effective_priority = provider.config.priority
+        # 使用优先级覆盖（如有），否则使用配置优先级
+        effective_priority = self._provider_priority.get(name, provider.config.priority)
 
         return ProviderRuntimeStatus(
             resolved_name=name,
@@ -518,12 +523,16 @@ class DataProviderManager:
         if dataframe is not None:
             return dataframe
 
-        metadata_source = response.metadata.get("source") if isinstance(response.metadata, dict) else None
+        metadata_source = (
+            response.metadata.get("source") if isinstance(response.metadata, dict) else None
+        )
         source_label = f"[{metadata_source}] " if metadata_source else ""
         error_message = response.error or "无有效数据返回"
         raise DataProviderError(f"{context}失败: {source_label}{error_message}")
 
-    async def _fetch_with_provider(self, provider: DataProvider, request: DataRequest) -> DataResponse:
+    async def _fetch_with_provider(
+        self, provider: DataProvider, request: DataRequest
+    ) -> DataResponse:
         """调用具体提供者获取数据，并包装为 DataResponse。"""
 
         provider_name = provider.config.name or provider.__class__.__name__
@@ -546,7 +555,9 @@ class DataProviderManager:
 
         return self._normalize_response(raw_result, provider, request)
 
-    def _normalize_response(self, raw_result: object, provider: DataProvider, request: DataRequest) -> DataResponse:
+    def _normalize_response(
+        self, raw_result: object, provider: DataProvider, request: DataRequest
+    ) -> DataResponse:
         """将原始返回值统一转换为 DataResponse。"""
 
         source_name = provider.config.name or provider.__class__.__name__
@@ -654,7 +665,11 @@ class DataProviderManager:
         raise DataProviderError(f"获取数据失败: {response.error}")
 
     async def get_stock_minute(
-        self, symbol: str, date: Optional[str] = None, period: str = "1m", source: SourceSelector = "auto"
+        self,
+        symbol: str,
+        date: Optional[str] = None,
+        period: str = "1m",
+        source: SourceSelector = "auto",
     ) -> pd.DataFrame:
         """
         获取股票分钟数据
@@ -683,7 +698,9 @@ class DataProviderManager:
 
         raise DataProviderError(f"获取数据失败: {response.error}")
 
-    async def get_realtime_quotes(self, symbols: List[str], source: SourceSelector = "auto") -> pd.DataFrame:
+    async def get_realtime_quotes(
+        self, symbols: List[str], source: SourceSelector = "auto"
+    ) -> pd.DataFrame:
         """
         获取实时行情
 
@@ -707,7 +724,9 @@ class DataProviderManager:
 
         raise DataProviderError(f"获取数据失败: {response.error}")
 
-    async def _get_data(self, request: DataRequest, source: SourceSelector = "auto") -> DataResponse:
+    async def _get_data(
+        self, request: DataRequest, source: SourceSelector = "auto"
+    ) -> DataResponse:
         """
         获取数据（内部方法）
 
@@ -731,14 +750,20 @@ class DataProviderManager:
         else:
             provider = self._resolve_provider(provider_selector)
             selector_label = (
-                provider_selector.value if isinstance(provider_selector, DataSourceType) else str(provider_selector)
+                provider_selector.value
+                if isinstance(provider_selector, DataSourceType)
+                else str(provider_selector)
             )
             if provider is None:
-                return DataResponse(success=False, error=f"数据提供者 {selector_label} 不存在或未启用")
+                return DataResponse(
+                    success=False, error=f"数据提供者 {selector_label} 不存在或未启用"
+                )
             if not provider.config.enabled:
                 return DataResponse(success=False, error=f"数据提供者 {selector_label} 已被禁用")
             if not self._is_provider_running(provider):
-                return DataResponse(success=False, error=f"数据提供者 {selector_label} 未处于运行状态")
+                return DataResponse(
+                    success=False, error=f"数据提供者 {selector_label} 未处于运行状态"
+                )
             providers = [provider]
 
         if not providers:

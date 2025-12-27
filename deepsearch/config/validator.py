@@ -148,14 +148,17 @@ class ConfigValidator:
                 validated_amazing_configs.add(id(amazing_cfg_model))
                 if amazing_cfg_model.enabled:
                     enabled_count += 1
-                self._validate_amazingdata_settings(
-                    amazing_cfg_model, "data_sources.amazingdata"
-                )
+                self._validate_amazingdata_settings(amazing_cfg_model, "data_sources.amazingdata")
 
             top_level_enabled = self._validate_top_level_amazingdata(validated_amazing_configs)
 
-            if enabled_count == 0 and not top_level_enabled and (
-                not hasattr(self.config, "qmt") or not getattr(self.config.qmt, "enabled", False)
+            if (
+                enabled_count == 0
+                and not top_level_enabled
+                and (
+                    not hasattr(self.config, "qmt")
+                    or not getattr(self.config.qmt, "enabled", False)
+                )
             ):
                 self.results.append(
                     ValidationResult(
@@ -225,8 +228,10 @@ class ConfigValidator:
             )
 
         top_level_enabled = self._validate_top_level_amazingdata(validated_amazing_configs)
-        if enabled_count == 0 and not top_level_enabled and (
-            not hasattr(self.config, "qmt") or not getattr(self.config.qmt, "enabled", False)
+        if (
+            enabled_count == 0
+            and not top_level_enabled
+            and (not hasattr(self.config, "qmt") or not getattr(self.config.qmt, "enabled", False))
         ):
             self.results.append(
                 ValidationResult(
@@ -277,7 +282,6 @@ class ConfigValidator:
             )
             return None
 
-
     def _validate_amazingdata_settings(
         self, config_model: AmazingDataConfigModel, component: str
     ) -> None:
@@ -301,7 +305,6 @@ class ConfigValidator:
                     suggestion="请在 settings.<env>.yaml 的 amazingdata.connection 中填写合法的凭证与主机信息",
                 )
             )
-
 
     def _validate_top_level_amazingdata(self, validated_ids: Set[int]) -> bool:
         """校验顶层 AmazingData 配置，避免重复记录错误。"""

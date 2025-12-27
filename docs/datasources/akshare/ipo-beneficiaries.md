@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_ipo_benefit_ths
 
-目标地址: https://data.10jqka.com.cn/ipo/syg/
+目标地址: <https://data.10jqka.com.cn/ipo/syg/>
 
 描述: 同花顺-数据中心-新股数据-IPO受益股
 

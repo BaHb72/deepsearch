@@ -65,9 +65,7 @@ class OptimizedCloudFlareProxy:
                 print(f"[FAIL] 健康检查失败: {e}")
                 return False
 
-    async def fetch_with_cache(
-        self, url: str, params: Dict[str, Any] | None = None
-    ) -> Any:
+    async def fetch_with_cache(self, url: str, params: Dict[str, Any] | None = None) -> Any:
         """带缓存的请求"""
         # 生成缓存键
         cache_key = f"{url}:{json.dumps(params or {}, sort_keys=True)}"

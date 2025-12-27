@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional
 
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from deepsearch.infrastructure.persistence.models.module_source import ModuleSourceConfig
@@ -19,13 +19,13 @@ if TYPE_CHECKING:
 
 class ModuleSourceRepository:
     """模块数据源配置 Repository。
-    
+
     封装对 module_source_configs 表的所有数据库操作。
     """
 
     def __init__(self, db_service: "DatabaseService") -> None:
         """初始化 Repository。
-        
+
         Args:
             db_service: 数据库服务实例
         """
@@ -33,14 +33,16 @@ class ModuleSourceRepository:
 
     async def get_all(self) -> List[Dict]:
         """获取所有模块配置。
-        
+
         Returns:
             模块配置字典列表
         """
         try:
             async with self._db.get_session() as session:
                 result = await session.execute(
-                    select(ModuleSourceConfig).order_by(ModuleSourceConfig.category, ModuleSourceConfig.module_name)
+                    select(ModuleSourceConfig).order_by(
+                        ModuleSourceConfig.category, ModuleSourceConfig.module_name
+                    )
                 )
                 configs = result.scalars().all()
                 return [config.to_dict() for config in configs]
@@ -50,10 +52,10 @@ class ModuleSourceRepository:
 
     async def get_by_module(self, module_name: str) -> Optional[Dict]:
         """获取指定模块的配置。
-        
+
         Args:
             module_name: 模块名称
-            
+
         Returns:
             模块配置字典，不存在则返回 None
         """
@@ -69,18 +71,18 @@ class ModuleSourceRepository:
             return None
 
     async def upsert(
-            self,
-            module_name: str,
-            *,
-            label: Optional[str] = None,
-            description: Optional[str] = None,
-            category: Optional[str] = None,
-            primary_source: Optional[str] = None,
-            fallback_sources: Optional[List[str]] = None,
-            enabled: bool = True,
+        self,
+        module_name: str,
+        *,
+        label: Optional[str] = None,
+        description: Optional[str] = None,
+        category: Optional[str] = None,
+        primary_source: Optional[str] = None,
+        fallback_sources: Optional[List[str]] = None,
+        enabled: bool = True,
     ) -> bool:
         """创建或更新模块配置。
-        
+
         Args:
             module_name: 模块名称
             label: 显示名称
@@ -89,7 +91,7 @@ class ModuleSourceRepository:
             primary_source: 主数据源
             fallback_sources: 回退数据源列表
             enabled: 是否启用
-            
+
         Returns:
             操作是否成功
         """
@@ -130,10 +132,10 @@ class ModuleSourceRepository:
 
     async def delete(self, module_name: str) -> bool:
         """删除模块配置。
-        
+
         Args:
             module_name: 模块名称
-            
+
         Returns:
             操作是否成功
         """
@@ -151,10 +153,10 @@ class ModuleSourceRepository:
 
     async def bulk_upsert(self, configs: List[Dict]) -> int:
         """批量创建或更新模块配置。
-        
+
         Args:
             configs: 配置字典列表，每个字典应包含 module_name 等字段
-            
+
         Returns:
             成功更新的配置数量
         """
@@ -180,10 +182,10 @@ class ModuleSourceRepository:
 
     async def get_by_category(self, category: str) -> List[Dict]:
         """获取指定分类的所有模块配置。
-        
+
         Args:
             category: 分类名称
-            
+
         Returns:
             模块配置字典列表
         """

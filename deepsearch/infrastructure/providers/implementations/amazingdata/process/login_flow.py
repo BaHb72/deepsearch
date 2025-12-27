@@ -8,8 +8,9 @@ from typing import TYPE_CHECKING
 
 from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
 from deepsearch.ports.amazingdata_process import AmazingDataLoginRequest
-from .alert_utils import trigger_alert
+
 from ..logging_utils import ProcessLoggerAdapter
+from .alert_utils import trigger_alert
 
 logger = ProcessLoggerAdapter(action="process")
 
@@ -19,8 +20,8 @@ if TYPE_CHECKING:
 
 
 async def perform_login(
-        provider: "ProcessIsolatedAmazingDataProvider",
-        adapter: "AmazingDataProcessAdapter",
+    provider: "ProcessIsolatedAmazingDataProvider",
+    adapter: "AmazingDataProcessAdapter",
 ) -> None:
     """Execute login flow with reuse, throttling and alert handling."""
     pool = provider._pool
@@ -80,10 +81,12 @@ async def perform_login(
             # 同时写入文件日志，避免被TUI覆盖
             try:
                 from pathlib import Path
+
                 log_dir = Path("data/logs/datasource")
                 log_dir.mkdir(parents=True, exist_ok=True)
                 with open(log_dir / "tgw_login.log", "a", encoding="utf-8") as f:
                     from datetime import datetime
+
                     f.write(f"{datetime.now().isoformat()} {tgw_params_msg}\n")
             except Exception:
                 pass  # 文件日志失败不影响主流程

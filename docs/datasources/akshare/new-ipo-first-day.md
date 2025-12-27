@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_xgsr_ths
 
-目标地址: https://data.10jqka.com.cn/ipo/xgsr/
+目标地址: <https://data.10jqka.com.cn/ipo/xgsr/>
 
 描述: 同花顺-数据中心-新股数据-新股上市首日
 

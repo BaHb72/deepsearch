@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Type
 
 from deepsearch.observability import get_logger
+
 from ..adapters.unified_backtrader_adapter import (
     UnifiedBacktraderAdapter as BacktraderStrategyAdapter,
 )
@@ -26,6 +27,7 @@ try:
 except ImportError:
     HAS_BACKTRADER = False
     bt = None
+
 
 class BacktestEngine:
     """

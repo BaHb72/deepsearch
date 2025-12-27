@@ -1,0 +1,402 @@
+Bytecode compiled 11107 files in 936ms
+deepsearch\webui\api\endpoints\qmt\qmt_subscription.py:49: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\qmt\qmt_subscription.py:50: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\qmt\qmt_subscription.py:56: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\qmt\qmt_subscription.py:59: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\base\provider_base.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\base\provider_base.py:148: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\config\manager.py:36: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\config\manager.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\config\manager.py:38: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\config\manager.py:39: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\scheduler\tasks\base.py:40: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\scheduler\tasks\base.py:41: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\scheduler\tasks\base.py:42: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\data\data_source_capability_api.py:311: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\data\data_source_capability_api.py:320: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\data\data_source_capability_api.py:347: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\datafeed\qmt\validator.py:20: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\datafeed\qmt\validator.py:28: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\data\data_feed.py:58: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\event\engine\optimized_engine.py:187: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\errors.py:126: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\status_display.py:120: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\status_display.py:124: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\statistics.py:63: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\statistics.py:64: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\statistics.py:65: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\statistics.py:66: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\statistics.py:68: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\container.py:196: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\container.py:197: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:91: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:95: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:98: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:99: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:100: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:103: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\messaging\implementations\inmemory.py:29: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\messaging\implementations\inmemory.py:30: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\messaging\implementations\inmemory.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\messaging\implementations\inmemory.py:32: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server_manager.py:48: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server_manager.py:49: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server_manager.py:51: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\trading\market_overview.py:33: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\trading\market_overview.py:35: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\data\data_source_config_api.py:49: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\tools\datasource_diagnostics\connectivity_tester.py:52: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:351: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:354: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:355: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:359: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:362: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:363: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:364: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:367: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:375: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:376: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\persistence\query_optimizer.py:150: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\persistence\query_optimizer.py:151: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\persistence\query_optimizer.py:153: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\persistence\query_optimizer.py:154: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\persistence\query_optimizer.py:155: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\messaging\event_publisher.py:27: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\messaging\event_publisher.py:30: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\debug\performance_profiler.py:126: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\debug\performance_profiler.py:129: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\debug\performance_profiler.py:141: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\component_manager.py:55: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\component_manager.py:56: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\component_manager.py:57: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\interfaces\strategy.py:520: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\interfaces\strategy.py:557: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\interfaces\strategy.py:591: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\interfaces\strategy.py:622: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\strategies\managers\manager.py:41: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\strategies\managers\manager.py:42: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\strategies\managers\manager.py:43: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\strategies\managers\manager.py:44: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:521: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:666: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:667: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:668: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\event\schema.py:405: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\scheduler\cache_scheduler.py:28: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\ui_components.py:34: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\ui_components.py:35: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\ui_components.py:36: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\data_components.py:109: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\data_components.py:110: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\data_components.py:111: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\data_components.py:113: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\implementations\akshare\akshare_refactored.py:92: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\component_factory.py:45: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\component_factory.py:46: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\component_factory.py:47: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\component_factory.py:48: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\qmt_gateway_component.py:469: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:32: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:33: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:34: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:35: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:386: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:389: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:390: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:391: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:392: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:395: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:401: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:680: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:1521: error:
+Incompatible types in assignment (expression has type "IDataSource | None",
+variable has type "IDataSource")  [assignment]
+                    provider = self.providers.get(source_type)
+                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\providers\managers\data_source_manager.py:2472: error:
+Returning Any from function declared to return "DataSourceManager"
+[no-any-return]
+        return await initialize_data_sources()
+        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\backtest\adapters\unified_backtrader_adapter.py:285: error:
+Returning Any from function declared to return "DataFrame"  [no-any-return]
+            return self._run_sync(self.get_data(symbol, start_date, end_da...
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+deepsearch\backtest\engines\engine.py:75: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\engines\backtest_engine.py:105: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:38: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:39: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:40: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:41: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:42: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:44: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\backtest_components.py:25: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\backtest_components.py:26: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\backtest_components.py:27: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\backtest_components.py:28: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\backtest_components.py:34: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\module_registry.py:89: error:
+Cannot determine type of "_initialized"  [has-type]
+                cls._instance._initialized = False
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\providers\managers\module_registry.py:93: error:
+Cannot determine type of "_initialized"  [has-type]
+            if self._initialized:
+               ^~~~~~~~~~~~~~~~~
+deepsearch\core\runtime\context.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\context.py:36: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\context.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\context.py:38: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\context.py:41: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\application\market_data\factory.py:317: error: Argument 4 to
+"TradingSessionGuard" has incompatible type "**dict[str, object]"; expected
+"ZoneInfo"  [arg-type]
+                **guard_kwargs,
+                  ^~~~~~~~~~~~
+deepsearch\application\market_data\factory.py:317: error: Argument 4 to
+"TradingSessionGuard" has incompatible type "**dict[str, object]"; expected
+"timedelta"  [arg-type]
+                **guard_kwargs,
+                  ^~~~~~~~~~~~
+deepsearch\application\market_data\factory.py:317: error: Argument 4 to
+"TradingSessionGuard" has incompatible type "**dict[str, object]"; expected
+"dict[PhaseState, float]"  [arg-type]
+                **guard_kwargs,
+                  ^~~~~~~~~~~~
+deepsearch\application\market_data\factory.py:317: error: Argument 4 to
+"TradingSessionGuard" has incompatible type "**dict[str, object]"; expected
+"TradingScheduleConfig | None"  [arg-type]
+                **guard_kwargs,
+                  ^~~~~~~~~~~~
+deepsearch\application\market_data\factory.py:317: error: Argument 4 to
+"TradingSessionGuard" has incompatible type "**dict[str, object]"; expected
+"tuple[tuple[time, time], ...]"  [arg-type]
+                **guard_kwargs,
+                  ^~~~~~~~~~~~
+deepsearch\webui\api\endpoints\system\modules.py:194: error: Returning Any from
+function declared to return "ComponentManager"  [no-any-return]
+            return engine.get_component_manager()
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\webui\api\endpoints\data\data_source_monitor_api.py:272: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:625: error:
+Incompatible return value type (got "Any | BaseException", expected
+"list[dict[str, Any]] | None")  [return-value]
+                return result
+                       ^~~~~~
+deepsearch\infrastructure\providers\implementations\akshare\akshare_direct.py:653: error:
+Item "None" of "PandasModule | None" has no attribute "DataFrame"  [union-attr]
+                        if isinstance(row, pd.DataFrame):
+                                           ^~~~~~~~~~~~
+deepsearch\core\components\gateway_components.py:30: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\amazingdata\realtime.py:46: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\amazingdata\realtime.py:47: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\amazingdata\realtime.py:48: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\amazingdata\realtime.py:521: error: Item "None"
+of "ConceptLinkageEngine | None" has no attribute "start"  [union-attr]
+                    await engine.start()
+                          ^~~~~~~~~~~~
+deepsearch\webui\api\endpoints\amazingdata\financial.py:48: error: Name
+"start_date" already defined on line 45  [no-redef]
+        start_date: Optional[int] = Field(None, description="开始日期")
+        ^~~~~~~~~~
+deepsearch\webui\api\endpoints\amazingdata\financial.py:49: error: Name
+"end_date" already defined on line 46  [no-redef]
+        end_date: Optional[int] = Field(None, description="结束日期")
+        ^~~~~~~~
+deepsearch\webui\api\endpoints\amazingdata\financial.py:50: error: Name
+"is_local" already defined on line 47  [no-redef]
+        is_local: bool = Field(True, description="是否使用本地存储")
+        ^~~~~~~~
+deepsearch\infrastructure\providers\implementations\akshare\akshare_adapter.py:172: error:
+Returning Any from function declared to return "list[dict[str, Any]] | None"
+[no-any-return]
+                return await fetcher(limit=limit, **kwargs)
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\providers\implementations\akshare\akshare_adapter.py:194: error:
+Missing return statement  [return]
+        async def get_kline_data(
+        ^
+deepsearch\infrastructure\providers\implementations\akshare\akshare_adapter.py:213: error:
+Returning Any from function declared to return "list[dict[str, Any]] | None"
+[no-any-return]
+                return await fetcher(
+                ^
+deepsearch\infrastructure\providers\implementations\akshare\akshare_adapter.py:280: error:
+Returning Any from function declared to return "list[dict[str, Any]] | None"
+[no-any-return]
+                        return result
+                        ^~~~~~~~~~~~~
+deepsearch\infrastructure\providers\implementations\akshare\akshare_adapter.py:388: error:
+Name "result" already defined on line 373  [no-redef]
+            result: Dict[str, Any] = {}
+            ^~~~~~
+deepsearch\application\services\data_sources\ingestion_service.py:55: error:
+Argument "queued_at" to "IngestionJobSummary" has incompatible type
+"Any | None"; expected "datetime"  [arg-type]
+                queued_at=row.get("queued_at"),
+                          ^~~~~~~~~~~~~~~~~~~~
+deepsearch\application\services\data_sources\schedulers\prefetch.py:180: error:
+Dict entry 2 has incompatible type "str": "str | None"; expected "str": "str"
+[dict-item]
+                        "expires_at": self._fmt_ts(summary.expires_at),
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\application\services\data_sources\schedulers\prefetch.py:181: error:
+Dict entry 3 has incompatible type "str": "str | None"; expected "str": "str"
+[dict-item]
+                        "completed_at": self._fmt_ts(summary.completed_at)...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\application\services\data_sources\schedulers\prefetch.py:182: error:
+Dict entry 4 has incompatible type "str": "int | None"; expected "str": "str"
+[dict-item]
+                        "record_count": summary.record_count,
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\webui\server.py:415: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:416: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:417: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:418: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:419: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:427: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:429: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:430: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:433: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:717: error: Incompatible types in assignment
+(expression has type "Any | None", variable has type "DatabaseComponent")
+[assignment]
+        db_component = getattr(app.state, "db_component", None)
+                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\webui\server.py:1116: error: "APIRouter" has no attribute "routes"
+[attr-defined]
+    ...er.info(f"AmazingData API已注册（包含 {len(amazingdata_main_router.routes)} ...
+                                                        ^~~~~~~~~~~~~~~~~~~~~...
+deepsearch\application\market_data\orchestrator.py:155: error: Returning Any
+from function declared to return "Iterable[str]"  [no-any-return]
+                return ds_cfg.fallback_order
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\webui\api\endpoints\notifications\push.py:399: error: Argument 2 to
+"_categories_to_dict" has incompatible type "list[str]"; expected "str"
+[arg-type]
+            default_channel_value,
+            ^~~~~~~~~~~~~~~~~~~~~
+deepsearch\webui\api\endpoints\datasources\ingestion_jobs.py:42: error:
+Returning Any from function declared to return "str | None"  [no-any-return]
+                    return value.isoformat()
+                    ^~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\webui\api\endpoints\datasources\datasource_manager.py:313: error:
+Name "latency_ms" already defined on line 284  [no-redef]
+            latency_ms: float
+            ^~~~~~~~~~
+deepsearch\webui\api\endpoints\datasources\datasource_manager.py:935: error:
+Name "error_detail" already defined on line 907  [no-redef]
+        error_detail: str | None = None
+        ^~~~~~~~~~~~
+deepsearch\webui\api\endpoints\datasources\datasource_manager.py:967: error:
+Incompatible types in assignment (expression has type
+"dict[str, float | str | bool | Any | None]", variable has type
+"DataSourceTestRequest | None")  [assignment]
+        payload = {
+                  ^
+deepsearch\webui\api\endpoints\datasources\datasource_manager.py:974: error:
+Unsupported target for indexed assignment ("DataSourceTestRequest | None")
+[index]
+            payload["error"] = error_detail
+            ^~~~~~~~~~~~~~~~
+deepsearch\webui\api\endpoints\datasources\datasource_manager.py:978: error:
+Incompatible types in assignment (expression has type
+"DataSourceTestRequest | None", variable has type "dict[str, object]")
+[assignment]
+        response_payload = payload
+                           ^~~~~~~
+deepsearch\webui\api\endpoints\datasources\datasource_manager.py:1297: error:
+Argument 1 to "float" has incompatible type "object"; expected
+"str | Buffer | SupportsFloat | SupportsIndex"  [arg-type]
+        last_fail_ts = float(entry.get("self_test_last_fail_ts") or 0.0)
+                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\webui\api\endpoints\datasources\datasource_manager.py:1298: error:
+No overload variant of "int" matches argument type "object"  [call-overload]
+        failure_count = int(entry.get("self_test_fail_count") or 0)
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\webui\api\endpoints\datasources\datasource_manager.py:1298: note: Possible overload variants:
+deepsearch\webui\api\endpoints\datasources\datasource_manager.py:1298: note:     def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+deepsearch\webui\api\endpoints\datasources\datasource_manager.py:1298: note:     def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
+deepsearch\webui\api\endpoints\amazingdata\amazingdata_api.py:181: error: Item
+"None" of "Any | None" has no attribute "model_dump"  [union-attr]
+                            providers_map = data_sources_section.model_dum...
+                                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:107: error:
+Returning Any from function declared to return "dict[str, Any] | None"
+[no-any-return]
+                        return config
+                        ^~~~~~~~~~~~~
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:141: error:
+No overload variant of "execute" of "AsyncSession" matches argument type "text"
+[call-overload]
+                await db_session.execute(text(SQL_CREATE_TABLE))
+                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:141: note: Possible overload variants:
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:141: note:     def [_T: Any] execute(self, statement: TypedReturnsRows[_T], params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[_T]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:141: note:     def execute(self, statement: Executable, params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[Any]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:144: error:
+No overload variant of "execute" of "AsyncSession" matches argument type "text"
+[call-overload]
+                await db_session.execute(text(SQL_CREATE_INDEX_MODULE))
+                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:144: note: Possible overload variants:
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:144: note:     def [_T: Any] execute(self, statement: TypedReturnsRows[_T], params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[_T]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:144: note:     def execute(self, statement: Executable, params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[Any]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:147: error:
+No overload variant of "execute" of "AsyncSession" matches argument type "text"
+[call-overload]
+                await db_session.execute(text(SQL_CREATE_INDEX_CATEGORY))
+                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:147: note: Possible overload variants:
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:147: note:     def [_T: Any] execute(self, statement: TypedReturnsRows[_T], params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[_T]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:147: note:     def execute(self, statement: Executable, params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[Any]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:150: error:
+No overload variant of "execute" of "AsyncSession" matches argument type "text"
+[call-overload]
+                await db_session.execute(text(SQL_CREATE_FUNCTION))
+                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:150: note: Possible overload variants:
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:150: note:     def [_T: Any] execute(self, statement: TypedReturnsRows[_T], params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[_T]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:150: note:     def execute(self, statement: Executable, params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[Any]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:153: error:
+No overload variant of "execute" of "AsyncSession" matches argument type "text"
+[call-overload]
+                await db_session.execute(text(SQL_DROP_TRIGGER))
+                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:153: note: Possible overload variants:
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:153: note:     def [_T: Any] execute(self, statement: TypedReturnsRows[_T], params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[_T]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:153: note:     def execute(self, statement: Executable, params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[Any]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:154: error:
+No overload variant of "execute" of "AsyncSession" matches argument type "text"
+[call-overload]
+                await db_session.execute(text(SQL_CREATE_TRIGGER))
+                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:154: note: Possible overload variants:
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:154: note:     def [_T: Any] execute(self, statement: TypedReturnsRows[_T], params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[_T]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:154: note:     def execute(self, statement: Executable, params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[Any]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:177: error:
+No overload variant of "execute" of "AsyncSession" matches argument types
+"text", "dict[str, Any]"  [call-overload]
+                                    result = await db_session.execute(
+                                                   ^
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:177: note: Possible overload variants:
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:177: note:     def [_T: Any] execute(self, statement: TypedReturnsRows[_T], params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[_T]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:177: note:     def execute(self, statement: Executable, params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[Any]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:203: error:
+No overload variant of "execute" of "AsyncSession" matches argument types
+"text", "dict[str, Any]"  [call-overload]
+                                    await db_session.execute(
+                                          ^
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:203: note: Possible overload variants:
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:203: note:     def [_T: Any] execute(self, statement: TypedReturnsRows[_T], params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[_T]]
+deepsearch\infrastructure\persistence\migrations\migration_module_sources.py:203: note:     def execute(self, statement: Executable, params: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _OrmKnownExecutionOptions | Mapping[str, Any] = ..., bind_arguments: dict[str, Any] | None = ..., _parent_execute_state: Any | None = ..., _add_event: Any | None = ...) -> Coroutine[Any, Any, Result[Any]]
+deepsearch\infrastructure\di\container.py:92: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\di\container.py:93: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\engine_adapter.py:83: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\async_runner.py:28: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\async_runner.py:30: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\async_runner.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+Found 48 errors in 18 files (checked 535 source files)

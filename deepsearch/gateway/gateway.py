@@ -9,13 +9,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Callable, Optional
 
-from deepsearch.constants import (
-    EVENT_ERROR,
-    EVENT_LOG,
-    EVENT_ORDER,
-    EVENT_TICK,
-    EVENT_TRADE,
-)
+from deepsearch.constants import EVENT_ERROR, EVENT_LOG, EVENT_ORDER, EVENT_TICK, EVENT_TRADE
 from deepsearch.event.engine.engine import Event
 from deepsearch.messaging.bus import MessageBus
 from deepsearch.observability import get_logger
@@ -299,9 +293,9 @@ class BaseGateway(ABC):
             try:
                 if self._heartbeat_bus_handler:
                     self.message_bus.unsubscribe(
-                    topic=HEARTBEAT_EVENT_TYPE,
-                    handler=self._heartbeat_bus_handler,
-                )
+                        topic=HEARTBEAT_EVENT_TYPE,
+                        handler=self._heartbeat_bus_handler,
+                    )
             except Exception as e:
                 self.logger.debug(f"取消心跳订阅失败：{e}")
 

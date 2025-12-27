@@ -127,7 +127,7 @@ class RealTimeMarketDataService:
         return entries
 
     async def compute_auction_quality(
-            self, query: AuctionQualityQuery
+        self, query: AuctionQualityQuery
     ) -> Sequence[AuctionQualityEntry]:
         await self._ensure_boards(query.boards)
 
@@ -156,8 +156,8 @@ class RealTimeMarketDataService:
         return entries
 
     async def compute_order_imbalance(
-            self,
-            query: OrderImbalanceQuery,
+        self,
+        query: OrderImbalanceQuery,
     ) -> Sequence[OrderImbalanceEntry]:
         codes: Set[str] = set(query.codes or ())
 
@@ -226,7 +226,7 @@ class RealTimeMarketDataService:
 
     async def ensure_subscription(self, boards: Sequence[str]) -> None:
         if not boards:
-            logger.debug('实时数据 ensure_subscription 发现 boards 为空')
+            logger.debug("实时数据 ensure_subscription 发现 boards 为空")
             return
         phase_start = perf_counter()
         await self._ensure_boards(boards)
@@ -234,19 +234,19 @@ class RealTimeMarketDataService:
         for board in boards:
             board_codes = self.board_universe.resolve_codes(board)
             if not board_codes:
-                logger.warning('Board {} has no mapped constituents', board)
+                logger.warning("Board {} has no mapped constituents", board)
                 continue
             codes.update(board_codes)
         logger.debug(
-            '实时数据 ensure_subscription 汇总板块 boards={} codes={} duration={:.3f}s',
+            "实时数据 ensure_subscription 汇总板块 boards={} codes={} duration={:.3f}s",
             len(boards),
             len(codes),
             perf_counter() - phase_start,
         )
         if not codes:
             logger.debug(
-                '实时数据 ensure_subscription 汇总结果为空 boards={}',
-                ','.join(boards),
+                "实时数据 ensure_subscription 汇总结果为空 boards={}",
+                ",".join(boards),
             )
             return
         stream_port = self.registry.resolve_market_stream()
@@ -264,12 +264,13 @@ class RealTimeMarketDataService:
                 self._subscribed_codes.discard(code)
 
         logger.debug(
-            '实时数据 ensure_subscription subscribe_delta={} unsubscribe_delta={} duration={:.3f}s total={:.3f}s',
+            "实时数据 ensure_subscription subscribe_delta={} unsubscribe_delta={} duration={:.3f}s total={:.3f}s",
             len(new_codes),
             len(removed_codes),
             perf_counter() - subscribe_start,
             perf_counter() - phase_start,
         )
+
     async def refresh_board_universe(self) -> None:
         if self.stock_list_fetcher is None:
             logger.debug("实时行情 refresh_board_universe 跳过：stock_list_fetcher 未配置")

@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from deepsearch.config import get_config, reload_config
 from deepsearch.config.models.notifications import (
+    BarkServerConfig,
+    MessageTemplates,
     NotificationBaseUrls,
     NotificationCategoryConfig,
     NotificationsConfig,
@@ -38,7 +40,29 @@ class NotificationBaseUrlsPayload(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     wechat: str = Field(default="https://wx.xtuis.cn", description="Wechat push base url")
-    bark: str = Field(default="https://bark.xtuis.cn", description="Bark push base url")
+    bark: str = Field(
+        default="https://bark.xtuis.cn", description="Bark push base url (deprecated)"
+    )
+
+
+class BarkServerPayload(BaseModel):
+    """Bark server configuration payload"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str = Field(..., description="Server display name", min_length=1)
+    base_url: str = Field(..., alias="baseUrl", description="Server URL", min_length=1)
+    token: str = Field(
+        default="", description="Device key (optional for official Bark with key in URL)"
+    )
+    enabled: bool = Field(default=True, description="Whether this server is enabled")
+    group: Optional[str] = Field(default=None, description="Default notification group")
+    icon: Optional[str] = Field(default=None, description="Default icon URL (iOS 15+)")
+    sound: Optional[str] = Field(default=None, description="Default notification sound")
+    level: Optional[str] = Field(
+        default=None,
+        description="Default notification level: active/timeSensitive/passive/critical",
+    )
 
 
 class NotificationCategoryPayload(BaseModel):
@@ -91,7 +115,7 @@ class NotificationConfigUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     enabled: bool = Field(..., description="Whether notification service is enabled")
-    default_channel: str = Field(..., alias="defaultChannel", description="Default channel")
+    default_channel: List[str] = Field(..., alias="defaultChannel", description="Default channels")
     wechat_token: Optional[str] = Field(None, alias="wechatToken", description="Wechat token")
     bark_token: Optional[str] = Field(None, alias="barkToken", description="Bark token")
     request_timeout: float = Field(
@@ -108,8 +132,14 @@ class NotificationConfigUpdate(BaseModel):
     base_urls: Optional[NotificationBaseUrlsPayload] = Field(
         None, alias="baseUrls", description="Channel base urls"
     )
+    bark_servers: List[BarkServerPayload] = Field(
+        default_factory=list, alias="barkServers", description="Bark server configurations"
+    )
     categories: List[NotificationCategoryPayload] = Field(
         default_factory=list, alias="categories", description="Quota categories"
+    )
+    templates: Optional[Dict[str, Any]] = Field(
+        default=None, description="Message templates configuration"
     )
 
 
@@ -121,6 +151,23 @@ class NotificationPayload(BaseModel):
     channel: Optional[str] = Field(default=None, description="Target channel")
     category: str = Field(default="default", description="Quota category")
     bypass_quota: bool = Field(default=False, description="Bypass quota guard")
+    # Bark specific parameters
+    url: Optional[str] = Field(default=None, description="Bark: click to open URL")
+    group: Optional[str] = Field(default=None, description="Bark: notification group")
+    icon: Optional[str] = Field(default=None, description="Bark: custom icon URL")
+    sound: Optional[str] = Field(default=None, description="Bark: notification sound")
+    call: bool = Field(default=False, description="Bark: repeat sound for 30s")
+    level: Optional[str] = Field(
+        default=None, description="Bark: notification level (active/timeSensitive/passive/critical)"
+    )
+    bark_server_names: Optional[List[str]] = Field(
+        default=None,
+        alias="barkServerNames",
+        description="Specific Bark servers to push (names). None = all enabled",
+    )
+    bark_template_name: Optional[str] = Field(
+        default=None, alias="barkTemplateName", description="Bark template name to use"
+    )
 
 
 # ==================== Helpers ====================
@@ -175,13 +222,35 @@ def _build_notification_response(config: NotificationsConfig) -> Dict[str, Any]:
         else NotificationBaseUrls()
     )
 
+    # default_channel 可能是字符串或列表，统一返回列表格式
+    default_ch = config.default_channel or ["wechat"]
+    if isinstance(default_ch, str):
+        default_ch = [default_ch]
+
+    # 构建 bark_servers 响应 - 返回明文 token
+    bark_servers_data: List[Dict[str, Any]] = []
+    for server in config.bark_servers:
+        bark_servers_data.append(
+            {
+                "name": server.name,
+                "baseUrl": server.base_url,
+                "token": server.token or "",  # 明文显示
+                "enabled": server.enabled,
+                "group": server.group,
+                "icon": server.icon,
+                "sound": server.sound,
+                "level": server.level,
+            }
+        )
+
     return {
         "enabled": bool(config.enabled),
-        "defaultChannel": config.default_channel or "wechat",
-        "wechatToken": "***" if config.wechat_token else "",
-        "barkToken": "***" if config.bark_token else "",
+        "defaultChannel": default_ch,
+        "wechatToken": config.wechat_token or "",  # 明文显示
+        "barkToken": config.bark_token or "",  # 明文显示
         "hasWechatToken": bool(config.wechat_token),
-        "hasBarkToken": bool(config.bark_token),
+        "hasBarkToken": bool(config.bark_token) or bool(config.bark_servers),
+        "barkServers": bark_servers_data,
         "requestTimeout": config.request_timeout,
         "retryAttempts": config.retry_attempts,
         "retryDelay": config.retry_delay,
@@ -192,6 +261,40 @@ def _build_notification_response(config: NotificationsConfig) -> Dict[str, Any]:
             "bark": base_urls.bark,
         },
         "categories": categories,
+        # 消息模板
+        "templates": {
+            "wechat": [
+                {
+                    "name": t.name,
+                    "titleTemplate": t.title_template,
+                    "bodyTemplate": t.body_template,
+                }
+                for t in config.templates.wechat
+            ],
+            "bark": [
+                {
+                    "name": t.name,
+                    "titleTemplate": t.title_template,
+                    "bodyTemplate": t.body_template,
+                    "subtitleTemplate": t.subtitle_template,
+                    "useMarkdown": t.use_markdown,
+                    "level": t.level,
+                    "sound": t.sound,
+                    "icon": t.icon,
+                    "image": t.image,
+                    "group": t.group,
+                    "url": t.url,
+                    "copy": t.copy,
+                    "autoCopy": t.auto_copy,
+                    "isArchive": t.is_archive,
+                    "call": t.call,
+                    "badge": t.badge,
+                }
+                for t in config.templates.bark
+            ],
+            "defaultWechat": config.templates.default_wechat,
+            "defaultBark": config.templates.default_bark,
+        },
     }
 
 
@@ -204,26 +307,20 @@ def _normalize_token(new_value: Optional[str], existing: Optional[str]) -> Optio
     return stripped
 
 
-
-
 def _categories_to_dict(
-    items: Sequence[NotificationCategoryPayload], default_channel: str
+    items: Sequence[NotificationCategoryPayload], default_channels: List[str]
 ) -> Dict[str, NotificationCategoryConfig]:
     defaults = NotificationCategoryConfig()
     result: Dict[str, NotificationCategoryConfig] = {}
     for item in items:
-        channels = item.channels or [default_channel]
+        channels = item.channels or default_channels
         result[item.name] = NotificationCategoryConfig(
             enabled=item.enabled,
             max_per_window=(
-                item.max_per_window
-                if item.max_per_window is not None
-                else defaults.max_per_window
+                item.max_per_window if item.max_per_window is not None else defaults.max_per_window
             ),
             window_seconds=(
-                item.window_seconds
-                if item.window_seconds is not None
-                else defaults.window_seconds
+                item.window_seconds if item.window_seconds is not None else defaults.window_seconds
             ),
             channels=channels,
         )
@@ -251,20 +348,22 @@ async def get_notification_config() -> Dict[str, Any]:
     return _build_notification_response(config)
 
 
-
 @router.put("/config")
 async def update_notification_config(payload: NotificationConfigUpdate) -> Dict[str, Any]:
     """Persist notification configuration"""
-
     cfg_path = _get_config_path()
     existing_config = _notifications_from_settings()
     defaults = NotificationsConfig()
 
-    default_channel_value = (
-        payload.default_channel
-        or existing_config.default_channel
-        or defaults.default_channel
-    ).lower()
+    # 默认渠道列表
+    default_channels = payload.default_channel
+    if not default_channels:
+        existing_ch = existing_config.default_channel
+        if isinstance(existing_ch, str):
+            default_channels = [existing_ch] if existing_ch else ["wechat"]
+        else:
+            default_channels = existing_ch or ["wechat"]
+    default_channel_value = [ch.lower() for ch in default_channels]
 
     base_urls_data = payload.base_urls or NotificationBaseUrlsPayload(
         wechat=(
@@ -311,11 +410,47 @@ async def update_notification_config(payload: NotificationConfigUpdate) -> Dict[
         else (existing_config.body_template or defaults.body_template)
     )
 
+    # 处理 bark_servers
+    bark_servers_list: List[BarkServerConfig] = []
+    if payload.bark_servers:
+        for srv in payload.bark_servers:
+            bark_servers_list.append(
+                BarkServerConfig(
+                    name=srv.name,
+                    base_url=srv.base_url,
+                    token=(
+                        srv.token
+                        if srv.token != "***"
+                        else next(
+                            (s.token for s in existing_config.bark_servers if s.name == srv.name),
+                            srv.token,
+                        )
+                    ),
+                    enabled=srv.enabled,
+                    group=srv.group,
+                    icon=srv.icon,
+                    sound=srv.sound,
+                    level=srv.level,
+                )
+            )
+    else:
+        bark_servers_list = list(existing_config.bark_servers)
+
+    # 处理 templates
+    templates_config = existing_config.templates
+    if payload.templates:
+        try:
+            templates_config = MessageTemplates.model_validate(payload.templates)
+        except Exception:
+            # 如果验证失败，保持现有配置
+            pass
+
     new_config = NotificationsConfig(
         enabled=payload.enabled,
         default_channel=default_channel_value,
         wechat_token=_normalize_token(payload.wechat_token, existing_config.wechat_token),
         bark_token=_normalize_token(payload.bark_token, existing_config.bark_token),
+        bark_servers=bark_servers_list,
         base_urls=NotificationBaseUrls(
             wechat=base_urls_data.wechat,
             bark=base_urls_data.bark,
@@ -326,6 +461,7 @@ async def update_notification_config(payload: NotificationConfigUpdate) -> Dict[
         title_template=title_template,
         body_template=body_template,
         categories=categories_dict,
+        templates=templates_config,
     )
 
     backup = cfg_path.read_text(encoding=YAML_ENCODING) if cfg_path.exists() else None
@@ -348,7 +484,6 @@ async def update_notification_config(payload: NotificationConfigUpdate) -> Dict[
             cfg_path.write_text(backup, encoding=YAML_ENCODING)
             reload_config()
         raise HTTPException(status_code=500, detail=f"保存通知配置失败: {exc}") from exc
-
 
 
 # ==================== Send & quota endpoints ====================
@@ -380,6 +515,15 @@ async def send_notification(
             channel=payload.channel,
             category=payload.category,
             bypass_quota=payload.bypass_quota,
+            # Bark specific parameters
+            url=payload.url,
+            group=payload.group,
+            icon=payload.icon,
+            sound=payload.sound,
+            call=payload.call,
+            level=payload.level,
+            bark_server_names=payload.bark_server_names,
+            bark_template_name=payload.bark_template_name,
         )
     except ChannelNotConfiguredError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

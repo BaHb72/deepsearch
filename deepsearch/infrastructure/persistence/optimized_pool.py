@@ -16,14 +16,25 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, TypedDict, cast
+from typing import Any, Optional, TypedDict, cast
 
 import asyncpg
 from asyncpg.pool import Pool
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.engine.row import RowMapping
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
-from deepsearch.infrastructure.persistence.types import DatabaseSessionManager, DatabaseSessionProtocol, RowDict, SQLParams
+from deepsearch.infrastructure.persistence.types import (
+    DatabaseSessionManager,
+    DatabaseSessionProtocol,
+    RowDict,
+    SQLParams,
+)
 from deepsearch.observability import get_logger
 
 logger = get_logger(__name__)
@@ -342,7 +353,9 @@ class OptimizedDatabasePool:
         async with self.acquire() as conn:
             return await asyncio.wait_for(conn.execute(query, *args), timeout=timeout)
 
-    async def fetch(self, query: str, *args, timeout: Optional[float] = None) -> list[asyncpg.Record]:
+    async def fetch(
+        self, query: str, *args, timeout: Optional[float] = None
+    ) -> list[asyncpg.Record]:
         """获取查询结果"""
         timeout = timeout or self.config.command_timeout
 
@@ -366,7 +379,9 @@ class OptimizedDatabasePool:
         async with self.acquire() as conn:
             return await asyncio.wait_for(conn.fetchrow(query, *args), timeout=timeout)
 
-    async def execute_batch(self, queries: Sequence[tuple[object, ...]]) -> list[list[asyncpg.Record] | None]:
+    async def execute_batch(
+        self, queries: Sequence[tuple[object, ...]]
+    ) -> list[list[asyncpg.Record] | None]:
         """批量执行查询"""
         results: list[list[asyncpg.Record] | None] = []
 
@@ -487,14 +502,18 @@ class SQLAlchemyOptimizedPool:
         self.statistics = PoolStatistics()
 
     @staticmethod
-    def _normalize_params(params: SQLParams | None) -> SQLParams:
+    def _normalize_params(params: SQLParams | None) -> Mapping[str, Any]:
         """统一 SQL 参数结构。"""
-        return {} if params is None else params
+        if params is None:
+            return {}
+        if isinstance(params, Mapping):
+            return cast(Mapping[str, Any], params)
+        return {}  # 对于Sequence类型，返回空字典作为安全默认值
 
     @staticmethod
-    def _row_to_dict(row: Mapping[str, object]) -> RowDict:
+    def _row_to_dict(row: RowMapping) -> RowDict:
         """将查询结果转换为普通字典。"""
-        normalized: RowDict = {key: row[key] for key in row}
+        normalized: RowDict = {key: row[key] for key in row.keys()}
         return normalized
 
     def _ensure_engine(self) -> AsyncEngine:
@@ -551,7 +570,7 @@ class SQLAlchemyOptimizedPool:
     async def _session_scope(self) -> AsyncIterator[DatabaseSessionProtocol]:
         """Yield a typed SQLAlchemy session bound to the optimized pool."""
         if not self.session_factory:
-            raise RuntimeError('Session factory is not initialized')
+            raise RuntimeError("Session factory is not initialized")
 
         session_factory = self.session_factory
         async with session_factory() as session:
@@ -577,7 +596,7 @@ class SQLAlchemyOptimizedPool:
         """执行SQL语句"""
         engine = self._ensure_engine()
         async with engine.begin() as conn:
-            result = await conn.execute(text(sql), self._normalize_params(params))
+            result = await conn.exec_driver_sql(sql, self._normalize_params(params))
             rowcount = result.rowcount
             return int(rowcount or 0)
 
@@ -585,14 +604,14 @@ class SQLAlchemyOptimizedPool:
         """获取所有结果"""
         engine = self._ensure_engine()
         async with engine.begin() as conn:
-            result = await conn.execute(text(sql), self._normalize_params(params))
+            result = await conn.exec_driver_sql(sql, self._normalize_params(params))
             return [self._row_to_dict(row) for row in result.mappings().all()]
 
     async def fetch_one(self, sql: str, params: SQLParams | None = None) -> Optional[RowDict]:
         """获取单条结果"""
         engine = self._ensure_engine()
         async with engine.begin() as conn:
-            result = await conn.execute(text(sql), self._normalize_params(params))
+            result = await conn.exec_driver_sql(sql, self._normalize_params(params))
             mapping = result.mappings().first()
             if mapping is None:
                 return None

@@ -6,11 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from deepsearch.constants import (
-    DEFAULT_BATCH_SIZE,
-    DEFAULT_MAX_WORKERS,
-    DEFAULT_QUEUE_SIZE,
-)
+from deepsearch.constants import DEFAULT_BATCH_SIZE, DEFAULT_MAX_WORKERS, DEFAULT_QUEUE_SIZE
 
 
 class EventEngineConfig(BaseModel):

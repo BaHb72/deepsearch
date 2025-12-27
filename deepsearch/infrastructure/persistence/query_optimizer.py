@@ -105,6 +105,7 @@ class OptimizationReport(TypedDict):
     index_suggestions: list[IndexSuggestion]
     statistics: QueryStatisticsSnapshot
 
+
 class QueryStats:
     """查询统计"""
 
@@ -388,8 +389,8 @@ class QueryOptimizer:
             if engine.dialect.name == "postgresql":
                 query = text(
                     """
-                    SELECT 1 FROM pg_indexes 
-                    WHERE tablename = :table 
+                    SELECT 1 FROM pg_indexes
+                    WHERE tablename = :table
                     AND indexdef LIKE :column
                 """
                 )
@@ -400,8 +401,8 @@ class QueryOptimizer:
             elif engine.dialect.name == "mysql":
                 query = text(
                     """
-                    SELECT 1 FROM information_schema.statistics 
-                    WHERE table_name = :table 
+                    SELECT 1 FROM information_schema.statistics
+                    WHERE table_name = :table
                     AND column_name = :column
                 """
                 )

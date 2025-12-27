@@ -1,7 +1,12 @@
 from typing import Any, Awaitable, Callable, Protocol
 
 class ASGIApp(Protocol):
-    async def __call__(self, scope: Any, receive: Callable[[], Awaitable[Any]], send: Callable[[Any], Awaitable[None]]) -> None: ...
+    async def __call__(
+        self,
+        scope: Any,
+        receive: Callable[[], Awaitable[Any]],
+        send: Callable[[Any], Awaitable[None]],
+    ) -> None: ...
 
 class RequestResponseEndpoint(Protocol):
     async def __call__(self, request: Any) -> Any: ...

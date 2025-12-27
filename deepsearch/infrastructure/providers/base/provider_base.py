@@ -170,4 +170,3 @@ class BaseDataProvider(ABC):
             "success_count": self.success_count,
             "performance": self.get_performance_stats(),
         }
-

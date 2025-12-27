@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, Mapping, Sequence, TypedDict, TypeAlias, NotRequired
+from typing import TYPE_CHECKING, Dict, Mapping, NotRequired, Sequence, TypeAlias, TypedDict
 
 if TYPE_CHECKING:
     import pandas as pd

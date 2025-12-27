@@ -7,14 +7,14 @@
 ## 核心组件
 
 - `performance_profiler.py`：实现单例 `PerformanceProfiler`。
-    - 通过 `@profile_performance` 装饰器、`profiler.profile()` 上下文在同步/异步函数执行前后自动采集耗时与内存差值。
-    - `PerformanceMetrics` 保存最近 N 次测量，支持统计均值、分位数（p95/p99）、标准差，并计算慢操作数量。
-    - 额外提供系统级指标（CPU、内存、线程数），并能生成建议 (`auto_optimize_suggestions`)。
-    - 支持 JSON 报告导出、不同操作对比、阈值动态调整、启停控制。
+  - 通过 `@profile_performance` 装饰器、`profiler.profile()` 上下文在同步/异步函数执行前后自动采集耗时与内存差值。
+  - `PerformanceMetrics` 保存最近 N 次测量，支持统计均值、分位数（p95/p99）、标准差，并计算慢操作数量。
+  - 额外提供系统级指标（CPU、内存、线程数），并能生成建议 (`auto_optimize_suggestions`)。
+  - 支持 JSON 报告导出、不同操作对比、阈值动态调整、启停控制。
 - `diagnostics.py`：实现 `DiagnosticLogger`，将方法调用的入参、返回值、异常栈写入 `diagnostic_log.json`。
-    - `diagnostic_method` 装饰器会记录调用耗时、线程信息、异常详情。
-    - `diagnostic_class` 可批量包装类的公开方法，实现透明诊断。
-    - 提供 `log_diagnostic` 便捷函数供外部模块手动写入自定义事件。
+  - `diagnostic_method` 装饰器会记录调用耗时、线程信息、异常详情。
+  - `diagnostic_class` 可批量包装类的公开方法，实现透明诊断。
+  - 提供 `log_diagnostic` 便捷函数供外部模块手动写入自定义事件。
 
 ## 使用流程
 

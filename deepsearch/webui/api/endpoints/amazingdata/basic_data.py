@@ -9,8 +9,8 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from .base import (
-    JSONDict,
     DEFAULT_LOCAL_PATH,
+    JSONDict,
     dataframe_to_dict,
     ensure_dataframe,
     filter_dataframe_by_dates,
@@ -21,8 +21,6 @@ from .base import (
 )
 
 router = APIRouter(tags=["AmazingData-基础数据"])
-
-
 
 
 class StockBasicRequest(BaseModel):
@@ -298,4 +296,3 @@ async def get_bj_code_mapping() -> JSONDict:
         return format_response(success=True, data=dataframe_to_dict(result))
     except Exception as exc:  # pragma: no cover
         return format_response(success=False, error=str(exc))
-

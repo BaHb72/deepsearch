@@ -7,16 +7,16 @@
 ## 核心组件
 
 - `bus.py`：
-    - `MessageBus` 抽象类定义 `publish`、`subscribe`、`unsubscribe` 等基础接口。
-    - `CompositeMessageBus` 聚合多个子总线，可基于路由规则（`RouteConfig`）决定消息流向，支持压缩（大于 1KB 使用 zlib）、去重（
+  - `MessageBus` 抽象类定义 `publish`、`subscribe`、`unsubscribe` 等基础接口。
+  - `CompositeMessageBus` 聚合多个子总线，可基于路由规则（`RouteConfig`）决定消息流向，支持压缩（大于 1KB 使用 zlib）、去重（
       `MessageDeduplicator`）与性能统计。
-    - 提供同步与异步订阅包装：`subscribe_async` 将 async handler 通过事件循环调度执行。
-    - 内置监控数据结构 `PerformanceStats`，记录发布量、压缩率、路由分布、错误计数。
+  - 提供同步与异步订阅包装：`subscribe_async` 将 async handler 通过事件循环调度执行。
+  - 内置监控数据结构 `PerformanceStats`，记录发布量、压缩率、路由分布、错误计数。
 - `types.py`：定义 `MessageEnvelope`（包含 payload、timestamp、compression flag、headers 等）和 `BusName` 枚举等结构，统一消息格式。
 - `factory.py`：根据配置构建 Composite 总线，自动注册默认实现（内存、ZeroMQ），并管理生命周期。
 - `implementations/`：
-    - `inmemory.py`：轻量级队列实现，适合测试或本地模式。
-    - `zeromq.py`：封装 ZeroMQ PUB/SUB 模式，支持多线程安全发布、心跳与自动重连。
+  - `inmemory.py`：轻量级队列实现，适合测试或本地模式。
+  - `zeromq.py`：封装 ZeroMQ PUB/SUB 模式，支持多线程安全发布、心跳与自动重连。
 
 ## 运行流程
 

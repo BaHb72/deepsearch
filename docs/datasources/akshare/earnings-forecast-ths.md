@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_profit_forecast_ths
 
-目标地址: http://basic.10jqka.com.cn/new/600519/worth.html
+目标地址: <http://basic.10jqka.com.cn/new/600519/worth.html>
 
 描述: 同花顺-盈利预测
 

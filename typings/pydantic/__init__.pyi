@@ -1,4 +1,16 @@
-from typing import Any, Callable, ClassVar, Dict, Generic, Iterable, Mapping, Optional, Sequence, Type, TypeVar
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    Generic,
+    Iterable,
+    Mapping,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+)
 
 _T = TypeVar("_T", bound="BaseModel")
 
@@ -19,7 +31,9 @@ class BaseModel:
     @classmethod
     def model_validate(cls: Type[_T], obj: Any, *, strict: bool | None = ...) -> _T: ...
     @classmethod
-    def model_construct(cls: Type[_T], _fields_set: Optional[Iterable[str]] = ..., **data: Any) -> _T: ...
+    def model_construct(
+        cls: Type[_T], _fields_set: Optional[Iterable[str]] = ..., **data: Any
+    ) -> _T: ...
 
 class BaseSettings(BaseModel):
     pass
@@ -38,14 +52,13 @@ class ValidationError(Exception):
     errors: Callable[[], Sequence[Mapping[str, Any]]]
     def __init__(self, errors: Sequence[Mapping[str, Any]], model: Type[BaseModel]) -> None: ...
 
-class ConfigDict(dict[str, Any]):
-    ...
-
-class PositiveInt(int):
-    ...
+class ConfigDict(dict[str, Any]): ...
+class PositiveInt(int): ...
 
 class _ValidatorDescriptor:
-    def __call__(self, *fields: str, **kwargs: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]: ...
+    def __call__(
+        self, *fields: str, **kwargs: Any
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]: ...
 
 field_validator = _ValidatorDescriptor()
 model_validator = _ValidatorDescriptor()

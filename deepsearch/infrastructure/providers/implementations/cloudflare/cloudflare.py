@@ -11,11 +11,7 @@ from urllib.parse import urlparse
 import aiohttp
 from loguru import logger
 
-from deepsearch.infrastructure.providers.interfaces.base import (
-    DataProviderConfig,
-    DataSourceType,
-)
-
+from deepsearch.infrastructure.providers.interfaces.base import DataProviderConfig, DataSourceType
 
 # from deepsearch.application.services.cache.stock_info_cache import get_stock_info_cache
 
@@ -86,7 +82,9 @@ class ProxyDataProvider:
             self.worker_url = str(connection["worker_url"]).rstrip("/")
 
         configured_timeout = timeout if timeout is not None else connection.get("timeout")
-        self._timeout_seconds = float(configured_timeout) if configured_timeout is not None else 30.0
+        self._timeout_seconds = (
+            float(configured_timeout) if configured_timeout is not None else 30.0
+        )
         self._healthcheck_timeout = min(max(self._timeout_seconds, 0.5), 5.0)
 
         configured_retry = retry_count if retry_count is not None else connection.get("retry_count")
@@ -150,7 +148,7 @@ class ProxyDataProvider:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                        f"{self.worker_url}/health", timeout=self._healthcheck_timeout
+                    f"{self.worker_url}/health", timeout=self._healthcheck_timeout
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -487,7 +485,9 @@ class ProxyDataProvider:
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    url, params=params, timeout=self._make_timeout(10),
+                    url,
+                    params=params,
+                    timeout=self._make_timeout(10),
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -588,6 +588,7 @@ class ProxyDataProvider:
         try:
             # 并发获取所有股票的实时行情
             import asyncio
+
             tasks = [self.get_realtime_quote(symbol) for symbol in symbols]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -788,8 +789,6 @@ class ProxyDataProvider:
             "exchange": self._map_exchange(payload.get("f13")),
         }
         return entry
-
-
 
     async def fetch_stock_list(self) -> list:
         """

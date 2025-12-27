@@ -10,7 +10,7 @@ import json
 import time
 from datetime import datetime
 from types import ModuleType
-from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from loguru import logger
 

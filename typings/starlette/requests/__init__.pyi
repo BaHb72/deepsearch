@@ -7,12 +7,11 @@ class Request:
     query_params: Mapping[str, Any]
     headers: Mapping[str, str]
     async def body(self) -> bytes: ...
-
     def __init__(
-            self,
-            scope: Mapping[str, Any],
-            receive: Callable[[], Awaitable[Any]],
-            send: Optional[Callable[[Mapping[str, Any]], Awaitable[None]]] = ...,
+        self,
+        scope: Mapping[str, Any],
+        receive: Callable[[], Awaitable[Any]],
+        send: Optional[Callable[[Mapping[str, Any]], Awaitable[None]]] = ...,
     ) -> None: ...
 
 __all__ = ["Request"]

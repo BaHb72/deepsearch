@@ -3,17 +3,17 @@ FastAPI 依赖注入
 
 提供 FastAPI 应用的依赖注入功能。
 """
-from __future__ import annotations
 
+from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, status
 
-from deepsearch.core.runtime.engine import MainEngine
 from deepsearch.core.interfaces.component import Component, ComponentStatus
 from deepsearch.core.managers.component_manager import ComponentManager
 from deepsearch.core.runtime.context import ApplicationContext, get_context
+from deepsearch.core.runtime.engine import MainEngine
 from deepsearch.infrastructure.notifications import NotificationService
 
 if TYPE_CHECKING:
@@ -51,7 +51,9 @@ def get_engine(context: ApplicationContext = Depends(get_app_context)) -> MainEn
         )
 
 
-def get_engine_optional(context: ApplicationContext = Depends(get_app_context)) -> MainEngine | None:
+def get_engine_optional(
+    context: ApplicationContext = Depends(get_app_context),
+) -> MainEngine | None:
     """
     获取可选引擎依赖：当引擎未初始化时返回 None，而不是抛出 503。
 
@@ -172,7 +174,8 @@ def get_websocket_manager(
         WebSocket 管理器实例
     """
     # 从全局 app_state 获取（向后兼容）
-    from .server import WebSocketManager as _WebSocketManager, app_state
+    from .server import WebSocketManager as _WebSocketManager
+    from .server import app_state
 
     manager = getattr(app_state, "websocket_manager", None)
     if manager is None:
@@ -230,4 +233,3 @@ def get_service(service_name: str):
             )
 
     return _get_service
-

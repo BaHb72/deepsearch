@@ -69,7 +69,7 @@ pytest tests/test_event.py -v  # 运行特定测试
 ```python
 class DatabaseComponent(BaseComponent):
     """数据库组件 - 管理 PostgreSQL 连接和数据访问。
-    
+
     该组件负责：
     - 数据库连接池管理
     - 健康检查
@@ -78,7 +78,7 @@ class DatabaseComponent(BaseComponent):
 
     async def initialize(self):
         """初始化数据库连接。
-        
+
         如果配置了 TimescaleDB，会尝试创建扩展。
         """
         pass

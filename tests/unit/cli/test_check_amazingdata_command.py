@@ -6,9 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from deepsearch.config.models.amazingdata import AmazingDataConfig as SettingsAmazingDataConfig
-from deepsearch.config.models.amazingdata import (
-    AmazingDataConnectionConfig,
-)
+from deepsearch.config.models.amazingdata import AmazingDataConnectionConfig
 
 cli_main = import_module("deepsearch.cli.main")
 cli = cli_main.cli

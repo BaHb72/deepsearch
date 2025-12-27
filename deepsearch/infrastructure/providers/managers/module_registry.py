@@ -7,18 +7,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, TypeVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar
 
 from loguru import logger
 
 from deepsearch.infrastructure.providers.managers.module_source_config import (
     ModuleSourceConfig as ModuleSourceConfigDTO,
-    ModuleSourceResolver,
 )
+from deepsearch.infrastructure.providers.managers.module_source_config import ModuleSourceResolver
 from deepsearch.ports.data_sources import DataSourceType
 
 if TYPE_CHECKING:
-    from deepsearch.infrastructure.persistence.module_source_repository import ModuleSourceRepository
+    from deepsearch.infrastructure.persistence.module_source_repository import (
+        ModuleSourceRepository,
+    )
 
 
 @dataclass
@@ -72,7 +74,7 @@ DEFAULT_CATEGORIES = {
 class ModuleRegistry:
     """
     模块注册中心 - 单例模式。
-    
+
     负责：
     - 模块自注册（装饰器方式）
     - 通过数据库访问配置（支持热更新）
@@ -80,6 +82,7 @@ class ModuleRegistry:
     """
 
     _instance: Optional["ModuleRegistry"] = None
+    _initialized: bool
 
     def __new__(cls) -> "ModuleRegistry":
         if cls._instance is None:
@@ -193,15 +196,15 @@ class ModuleRegistry:
         return result
 
     async def update_module_config(
-            self,
-            module_name: str,
-            *,
-            label: Optional[str] = None,
-            description: Optional[str] = None,
-            category: Optional[str] = None,
-            primary_source: Optional[str] = None,
-            fallback_sources: Optional[List[str]] = None,
-            enabled: bool = True,
+        self,
+        module_name: str,
+        *,
+        label: Optional[str] = None,
+        description: Optional[str] = None,
+        category: Optional[str] = None,
+        primary_source: Optional[str] = None,
+        fallback_sources: Optional[List[str]] = None,
+        enabled: bool = True,
     ) -> bool:
         """更新模块数据源配置（写入数据库，立即生效）。"""
         if not self._repository:
@@ -281,16 +284,16 @@ T = TypeVar("T")
 
 
 def data_module(
-        name: str,
-        label: str,
-        description: str = "",
-        category: str = "general",
-        default_source: DataSourceType = DataSourceType.AMAZINGDATA,
-        default_fallback: Optional[List[DataSourceType]] = None,
+    name: str,
+    label: str,
+    description: str = "",
+    category: str = "general",
+    default_source: DataSourceType = DataSourceType.AMAZINGDATA,
+    default_fallback: Optional[List[DataSourceType]] = None,
 ) -> Callable[[T], T]:
     """
     装饰器：注册数据模块。
-    
+
     用法:
         @data_module(
             name="block_trade_detector",

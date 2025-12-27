@@ -1,6 +1,7 @@
 # 数据源文档索引
 
 ## AmazingData 文档与版本说明
+
 - [快速上手](./amazingdata/quick_start.md)
 - [环境配置指南](./amazingdata/setup.md)
 - [API 使用手册](./amazingdata/api_guide.md)
@@ -18,9 +19,9 @@
 ### 当前依赖版本
 
 - 项目运行时依赖 `amazingdata==1.0.18`，wheel
-  地址：https://bahbai.com/packages/AmazingData-1.0.18-cp313-none-any.whl。所有依赖请统一使用 `uv` 管理，禁止直接调用
+  地址：<https://bahbai.com/packages/AmazingData-1.0.18-cp313-none-any.whl。所有依赖请统一使用> `uv` 管理，禁止直接调用
   `pip`。
-- 配套依赖 `tgw==1.0.8.1`（wheel：https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl），用于底层行情链路。
+- 配套依赖 `tgw==1.0.8.1`（wheel：<https://bahbai.com/packages/tgw-1.0.8.1-py3-none-any.whl），用于底层行情链路。>
 - 如需在本地验证 wheel，可按需执行（确保已激活 `./.venv` 或显式指定解释器）：
 
 ```powershell
@@ -77,4 +78,3 @@ sub_data.run()
 - 领域建模与测试样例：参考 `tests/unit/infrastructure/providers/market_data/test_amazingdata_*`
 
 > AkShare 等备选数据源文档集中于 `docs/archive/datasources/`，默认不启用；仅当 AmazingData 不满足场景需求时，按流程提交流程申请并同步更新该目录。
-

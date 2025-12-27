@@ -13,7 +13,6 @@ from typing import Any, Awaitable, Callable, Dict, Optional, TypeVar, Union, cas
 
 from loguru import logger
 
-from deepsearch.ports.data_sources import DataAccessType, DataSourceType as ProviderDataSourceType
 from deepsearch.observability.analyzers.error_analyzer import get_error_analyzer
 from deepsearch.observability.decorators.enhanced_decorators import (
     monitor_batch_process,
@@ -31,11 +30,13 @@ from deepsearch.observability.logging.monitoring_logger import (
     get_monitor_logger,
 )
 from deepsearch.observability.metrics.collectors.metrics_collector import get_metrics_collector
+from deepsearch.observability.monitoring.data_source_monitor import DataSourceMonitor
 from deepsearch.observability.monitoring.data_source_monitor import (
-    DataSourceMonitor,
     DataSourceType as MonitorDataSourceType,
-    get_monitor,
 )
+from deepsearch.observability.monitoring.data_source_monitor import get_monitor
+from deepsearch.ports.data_sources import DataAccessType
+from deepsearch.ports.data_sources import DataSourceType as ProviderDataSourceType
 
 ProviderClass = TypeVar("ProviderClass", bound=type[Any])
 
@@ -43,7 +44,9 @@ ProviderClass = TypeVar("ProviderClass", bound=type[Any])
 class MonitoringIntegration:
     """监控集成类"""
 
-    def __init__(self, source_type: Union[MonitorDataSourceType, ProviderDataSourceType, str]) -> None:
+    def __init__(
+        self, source_type: Union[MonitorDataSourceType, ProviderDataSourceType, str]
+    ) -> None:
         """
         初始化监控集成
 
@@ -51,7 +54,9 @@ class MonitoringIntegration:
             source_type: 数据源类型
         """
         self.source_type: MonitorDataSourceType = self._normalize_source_type(source_type)
-        self.provider_source_type: Optional[ProviderDataSourceType] = self._extract_provider_source_type(source_type)
+        self.provider_source_type: Optional[ProviderDataSourceType] = (
+            self._extract_provider_source_type(source_type)
+        )
         self.monitor: DataSourceMonitor = get_monitor()
         self.monitor_logger = get_monitor_logger()
         self.metrics_collector = get_metrics_collector()
@@ -358,7 +363,9 @@ class MonitoringIntegration:
         else:
             return ErrorType.UNKNOWN_ERROR
 
-    def record_custom_metric(self, operation: str, latency_ms: float, success: bool, **metadata: Any) -> None:
+    def record_custom_metric(
+        self, operation: str, latency_ms: float, success: bool, **metadata: Any
+    ) -> None:
         """
         记录自定义指标
 
@@ -401,7 +408,8 @@ class MonitoringIntegration:
 
 
 def inject_monitoring(
-    provider_class: ProviderClass, source_type: Union[MonitorDataSourceType, ProviderDataSourceType, str]
+    provider_class: ProviderClass,
+    source_type: Union[MonitorDataSourceType, ProviderDataSourceType, str],
 ) -> ProviderClass:
     """
     注入监控能力到数据提供者类
@@ -464,7 +472,3 @@ __all__ = [
     "monitor_batch_process",
     "monitor_circuit_breaker",
 ]
-
-
-
-

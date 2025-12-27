@@ -66,7 +66,7 @@ Event Categories:
    - EVENT_TICK: Market tick data
    - EVENT_ORDER: Order status updates
    - EVENT_TRADE: Trade execution reports
-   
+
 3. System Events:
    - EVENT_TIMER: Timer events for scheduled tasks
    - EVENT_ERROR: Error notifications
@@ -74,7 +74,7 @@ Event Categories:
 
 Usage:
     from deepsearch.event.const import EVENT_TICK, EVENT_ORDER
-    
+
     # Publish a tick event
     event = Event(EVENT_TICK, tick_data)
     message_bus.publish(EVENT_TICK, event)

@@ -13,9 +13,7 @@ from loguru import logger
 from deepsearch.adapters.market_data.akshare_polling_adapter import AkSharePollingAdapter
 from deepsearch.config.models.data_sources import RealtimeAdapterSpec
 from deepsearch.config.settings import Settings
-from deepsearch.infrastructure.providers.implementations.amazingdata.ports import (
-    build_board_source,
-)
+from deepsearch.infrastructure.providers.implementations.amazingdata.ports import build_board_source
 from deepsearch.ports.market_data import (
     MarketDataPortRegistry,
     MarketStreamPort,
@@ -24,6 +22,7 @@ from deepsearch.ports.market_data import (
     RealtimePortBundle,
 )
 from deepsearch.webui.api.providers import DataProviderFactory, DataSourceType
+
 from .cache_reader import MarketDataCacheReader
 from .cache_writer import MarketDataCacheWriter
 from .factory import create_realtime_streaming_pipeline
@@ -146,16 +145,14 @@ class RealtimeDataOrchestrator:
                 last_error = exc
                 self._record_failure(adapter_name, exc)
                 logger.warning("Realtime adapter {} failed: {}", adapter_name, exc)
-        raise RuntimeError(
-            f"no realtime adapter available; last_error={last_error}"
-        )
+        raise RuntimeError(f"no realtime adapter available; last_error={last_error}")
 
     def _adapter_sequence(self) -> Iterable[str]:
         if self._configured_order:
             return self._configured_order
         ds_cfg = getattr(self._settings, "data_sources", None)
         if ds_cfg and ds_cfg.fallback_order:
-            return ds_cfg.fallback_order
+            return tuple(ds_cfg.fallback_order)
         return ("amazingdata", "akshare", "cloudflare")
 
     def _load_realtime_specs(self) -> tuple[Dict[str, RealtimeAdapterSpec], Tuple[str, ...]]:
@@ -308,7 +305,10 @@ class RealtimeDataOrchestrator:
             raise RuntimeError("market_data.realtime config missing")
 
         try:
-            from deepsearch.adapters.market_data.miniqmt_polling_adapter import MiniQMTPollingAdapter
+            from deepsearch.adapters.market_data.miniqmt_polling_adapter import (
+                MiniQMTPollingAdapter,
+            )
+
             adapter = MiniQMTPollingAdapter(name=adapter_alias or "miniqmt")
             return await self._start_polling_adapter(adapter)
         except ImportError as exc:

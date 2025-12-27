@@ -420,7 +420,7 @@ class DuckDBAnalytics:
 
         # 使用 DuckDB 的时间窗口函数进行高效聚合
         sql = f"""
-            SELECT 
+            SELECT
                 symbol,
                 time_bucket(INTERVAL '{interval_str}', time) as time,
                 first(open) as open,
@@ -449,8 +449,8 @@ class DuckDBAnalytics:
         def _export():
             self.conn.execute(
                 f"""
-                COPY {table_name} 
-                TO '{output_path}' 
+                COPY {table_name}
+                TO '{output_path}'
                 (FORMAT PARQUET, COMPRESSION 'SNAPPY')
             """
             )

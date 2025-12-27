@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_dxsyl_em
 
-目标地址: https://data.eastmoney.com/xg/xg/dxsyl.html
+目标地址: <https://data.eastmoney.com/xg/xg/dxsyl.html>
 
 描述: 东方财富网-数据中心-新股申购-打新收益率
 
@@ -75,7 +75,7 @@ print(stock_dxsyl_em_df)
 
 接口: stock_xgsglb_em
 
-目标地址: https://data.eastmoney.com/xg/xg/default_2.html
+目标地址: <https://data.eastmoney.com/xg/xg/default_2.html>
 
 描述: 东方财富网-数据中心-新股数据-新股申购-新股申购与中签查询
 

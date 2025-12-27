@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_board_change_em
 
-目标地址: https://quote.eastmoney.com/changes/
+目标地址: <https://quote.eastmoney.com/changes/>
 
 描述: 东方财富-行情中心-当日板块异动详情
 

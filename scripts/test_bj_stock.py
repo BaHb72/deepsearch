@@ -1,4 +1,5 @@
 """测试 MiniQMT 是否支持北交所数据"""
+
 import xtquant.xtdata as xtdata
 
 # 测试获取板块列表
@@ -37,8 +38,12 @@ try:
     count = len(stocks) if stocks else 0
     print(f"   '沪深A股': {count} 只股票")
     # 检查是否包含北交所股票（4/8开头）
-    bj_stocks = [s for s in (stocks or []) if s.endswith(".BJ") or 
-                 (s.split(".")[0].startswith(("4", "8")) and len(s.split(".")[0]) == 6)]
+    bj_stocks = [
+        s
+        for s in (stocks or [])
+        if s.endswith(".BJ")
+        or (s.split(".")[0].startswith(("4", "8")) and len(s.split(".")[0]) == 6)
+    ]
     print(f"   其中北交所股票: {len(bj_stocks)} 只")
     if bj_stocks:
         print(f"   示例: {bj_stocks[:5]}")

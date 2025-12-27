@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_zygc_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HSF10/BusinessAnalysis/Index?type=web&code=SH688041#
+目标地址: <https://emweb.securities.eastmoney.com/PC_HSF10/BusinessAnalysis/Index?type=web&code=SH688041#>
 
 描述: 东方财富网-个股-主营构成
 

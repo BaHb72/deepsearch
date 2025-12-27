@@ -18,4 +18,3 @@ __all__ = [
     "RawProviderPayload",
     "ModuleSourceConfig",
 ]
-

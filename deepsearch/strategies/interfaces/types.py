@@ -158,6 +158,7 @@ class StrategyBusEnvelope(TypedDict, total=False):
     payload: StrategyBusPayload
     data: StrategyBusPayload
 
+
 OrderRequestPayload: TypeAlias = StrategyOrder
 StrategyCancelPayload: TypeAlias = CancelRequestPayload
 StrategyMessageHandler: TypeAlias = Callable[[StrategyBusEnvelope], Awaitable[None] | None]

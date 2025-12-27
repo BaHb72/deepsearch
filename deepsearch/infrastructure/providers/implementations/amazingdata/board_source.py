@@ -19,14 +19,14 @@ class AmazingDataBoardSource:
     """Fetch stock list data to hydrate the board universe."""
 
     def __init__(
-            self,
-            provider: AmazingDataProvider,
-            *,
-            board_fields: Sequence[str] = DEFAULT_BOARD_FIELDS,
-            record_store: DataSourceRecordPersistence | None = None,
-            job_type: str = "prefetch_stock_basics",
-            cache_ttl: timedelta = timedelta(minutes=30),
-            data_source: DataSourceType = DataSourceType.AMAZINGDATA,
+        self,
+        provider: AmazingDataProvider,
+        *,
+        board_fields: Sequence[str] = DEFAULT_BOARD_FIELDS,
+        record_store: DataSourceRecordPersistence | None = None,
+        job_type: str = "prefetch_stock_basics",
+        cache_ttl: timedelta = timedelta(minutes=30),
+        data_source: DataSourceType = DataSourceType.AMAZINGDATA,
     ) -> None:
         self._provider = provider
         self._board_fields: Tuple[str, ...] = tuple(board_fields)
@@ -35,11 +35,17 @@ class AmazingDataBoardSource:
         self._cache_ttl = cache_ttl
         self._data_source = data_source
 
-    async def fetch_records(self, *, use_cache: bool = True, job_id: str | None = None) -> Sequence[StockListRecord]:
+    async def fetch_records(
+        self, *, use_cache: bool = True, job_id: str | None = None
+    ) -> Sequence[StockListRecord]:
         if use_cache:
             cached = await self._load_cached_records()
             if cached:
-                logger.debug("AmazingData board source 命中持久化快照 job_type={} size={}", self._job_type, len(cached))
+                logger.debug(
+                    "AmazingData board source 命中持久化快照 job_type={} size={}",
+                    self._job_type,
+                    len(cached),
+                )
                 return cached
 
         records = await self._fetch_from_provider()
@@ -58,7 +64,9 @@ class AmazingDataBoardSource:
                     if isinstance(entry, StockListRecord):
                         record = entry
                     elif isinstance(entry, Mapping):
-                        record = StockListRecord.from_payload(entry, board_fields=self._board_fields)
+                        record = StockListRecord.from_payload(
+                            entry, board_fields=self._board_fields
+                        )
                     else:
                         continue
                     if record.symbol:
@@ -102,7 +110,9 @@ class AmazingDataBoardSource:
                 materialized.append(record)
         return tuple(materialized)
 
-    async def _persist_records(self, records: Sequence[StockListRecord], *, job_id: str | None = None) -> None:
+    async def _persist_records(
+        self, records: Sequence[StockListRecord], *, job_id: str | None = None
+    ) -> None:
         if self._record_store is None or not records:
             return
         expires_in = self._cache_ttl * 2 if self._cache_ttl > timedelta(0) else None
@@ -118,7 +128,9 @@ class AmazingDataBoardSource:
                 job_id=job_id,
             )
         except Exception as exc:  # pragma: no cover - 写入失败仅日志
-            logger.warning("写入板块快照失败 job_type={} size={} error={}", self._job_type, len(records), exc)
+            logger.warning(
+                "写入板块快照失败 job_type={} size={} error={}", self._job_type, len(records), exc
+            )
 
     async def fetch_stock_list(self) -> Sequence[StockListRecord]:
         """Backward compatible alias for existing call sites."""

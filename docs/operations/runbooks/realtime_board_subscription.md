@@ -8,9 +8,9 @@
 - 应用日志中出现 `实时行情 _ensure_boards 存在未解析板块`，同一周期内伴随 `Boards still unresolved after refresh`。
 - `providers` 模块日志提示 `BaseData.get_code_list` 调用失败，或最终回退至 `BaseData.get_hist_code_list` 仍返回空。
 - 新增 #67545（2025-10-30 起）之后，可额外关注以下日志：
-    - `AmazingData execute attempt=... context=...` / `AmazingData execute 失败`：显示子进程调用出错的具体参数。
-    - `AmazingData 股票列表获取完成 branch=... count=...`：确认成功命中的调用分支与返回条数。
-    - `AmazingData 登录失败/成功 datasource=...`：识别登录环节是否异常、耗时是否异常。
+  - `AmazingData execute attempt=... context=...` / `AmazingData execute 失败`：显示子进程调用出错的具体参数。
+  - `AmazingData 股票列表获取完成 branch=... count=...`：确认成功命中的调用分支与返回条数。
+  - `AmazingData 登录失败/成功 datasource=...`：识别登录环节是否异常、耗时是否异常。
 
 ## 快速止血
 

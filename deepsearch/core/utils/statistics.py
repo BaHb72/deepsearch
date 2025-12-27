@@ -106,7 +106,13 @@ class StatisticsCollector:
         with self._lock:
             cached_snapshot = self._cache
             if use_cache and cached_snapshot is not None and self._is_cache_valid():
-                return cast(CollectorSnapshot, {"timestamp": cached_snapshot["timestamp"], "providers": dict(cached_snapshot["providers"])} )
+                return cast(
+                    CollectorSnapshot,
+                    {
+                        "timestamp": cached_snapshot["timestamp"],
+                        "providers": dict(cached_snapshot["providers"]),
+                    },
+                )
 
             providers: ProvidersMap = {}
 
@@ -117,8 +123,14 @@ class StatisticsCollector:
                     self._logger.error(f"Error collecting statistics from {name}: {exc}")
                     providers[name] = {"error": str(exc), "status": "error"}
 
-            snapshot: CollectorSnapshot = {"timestamp": datetime.now().isoformat(), "providers": providers}
-            self._cache = cast(CollectorSnapshot, {"timestamp": snapshot["timestamp"], "providers": dict(providers)})
+            snapshot: CollectorSnapshot = {
+                "timestamp": datetime.now().isoformat(),
+                "providers": providers,
+            }
+            self._cache = cast(
+                CollectorSnapshot,
+                {"timestamp": snapshot["timestamp"], "providers": dict(providers)},
+            )
             self._cache_timestamp = time.time()
             return snapshot
 
@@ -162,9 +174,7 @@ class StatisticsCollector:
 
             return cast(
                 Dict[str, Any],
-                loop.run_until_complete(
-                    asyncio.wait_for(result, timeout=self._provider_timeout)
-                ),
+                loop.run_until_complete(asyncio.wait_for(result, timeout=self._provider_timeout)),
             )
 
         return cast(Dict[str, Any], result)

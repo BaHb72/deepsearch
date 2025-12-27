@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_account_statistics_em
 
-目标地址: https://data.eastmoney.com/cjsj/gpkhsj.html
+目标地址: <https://data.eastmoney.com/cjsj/gpkhsj.html>
 
 描述: 东方财富网-数据中心-特色数据-股票账户统计
 

@@ -455,6 +455,8 @@ def fix_encoding_in_directory(
         "skipped_files": skipped_files,
         "failed_files": failed_files,
     }
+
+
 def read_text(file_path: Union[str, Path], **kwargs) -> str:
     """便捷的文本读取函数"""
     return SafeFileHandler.read_file(file_path, **kwargs)

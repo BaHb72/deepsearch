@@ -9,15 +9,26 @@ from __future__ import annotations
 import asyncio
 import functools
 import time
-from typing import Any, Awaitable, Callable, Dict, Optional, TypedDict, TypeVar, Union, cast, ParamSpec
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Optional,
+    ParamSpec,
+    TypedDict,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from loguru import logger
 
 from deepsearch.infrastructure.providers.interfaces.base import (
     DataSourceType as ProviderDataSourceType,
 )
-
 from deepsearch.ports.data_sources import DataAccessType, DataSourceType
+
 from ..monitoring.data_source_monitor import get_monitor
 from ..monitoring.decorators import SymbolExtractor, monitor_access
 

@@ -29,7 +29,9 @@ class ThsDirectProvider:
     ):
         self.name = "ths_direct"
         self.display_name = "同花顺直连"
-        self._akshare: Optional[AkshareModule] = akshare_module if akshare_module is not None else ak
+        self._akshare: Optional[AkshareModule] = (
+            akshare_module if akshare_module is not None else ak
+        )
         self._pandas: Optional[PandasModule] = pandas_module if pandas_module is not None else pd
 
         if self._akshare is None:

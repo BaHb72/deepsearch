@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_gddh_em
 
-目标地址: https://data.eastmoney.com/gddh/
+目标地址: <https://data.eastmoney.com/gddh/>
 
 描述: 东方财富网-数据中心-股东大会
 
@@ -71,7 +71,7 @@ print(stock_gddh_em_df)
 
 接口: stock_zdhtmx_em
 
-目标地址: https://data.eastmoney.com/zdht/mx.html
+目标地址: <https://data.eastmoney.com/zdht/mx.html>
 
 描述: 东方财富网-数据中心-重大合同-重大合同明细
 
@@ -135,7 +135,7 @@ print(stock_zdhtmx_em_df)
 
 接口: stock_research_report_em
 
-目标地址: https://data.eastmoney.com/report/stock.jshtml
+目标地址: <https://data.eastmoney.com/report/stock.jshtml>
 
 描述: 东方财富网-数据中心-研究报告-个股研报
 
@@ -199,7 +199,7 @@ print(stock_research_report_em_df)
 
 接口: stock_notice_report
 
-目标地址: https://data.eastmoney.com/notices/hsa/5.html
+目标地址: <https://data.eastmoney.com/notices/hsa/5.html>
 
 描述: 东方财富网-数据中心-公告大全-沪深京 A 股公告
 
@@ -254,7 +254,7 @@ print(stock_notice_report_df)
 
 接口: stock_financial_report_sina
 
-目标地址: https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_FinanceSummary/stockid/600600/displaytype/4.phtml?source=fzb&qq-pf-to=pcqq.group
+目标地址: <https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_FinanceSummary/stockid/600600/displaytype/4.phtml?source=fzb&qq-pf-to=pcqq.group>
 
 描述: 新浪财经-财务报表-三大报表
 
@@ -312,7 +312,7 @@ print(stock_financial_report_sina_df)
 
 接口: stock_balance_sheet_by_report_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0
+目标地址: <https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0>
 
 描述: 东方财富-股票-财务分析-资产负债表-按报告期
 
@@ -361,7 +361,7 @@ print(stock_balance_sheet_by_report_em_df)
 
 接口: stock_balance_sheet_by_yearly_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0
+目标地址: <https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0>
 
 描述: 东方财富-股票-财务分析-资产负债表-按年度
 
@@ -424,7 +424,7 @@ print(stock_balance_sheet_by_yearly_em_df)
 
 接口: stock_profit_sheet_by_report_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0
+目标地址: <https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0>
 
 描述: 东方财富-股票-财务分析-利润表-报告期
 
@@ -473,7 +473,7 @@ print(stock_profit_sheet_by_report_em_df)
 
 接口: stock_profit_sheet_by_yearly_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0
+目标地址: <https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0>
 
 描述: 东方财富-股票-财务分析-利润表-按年度
 
@@ -536,7 +536,7 @@ print(stock_profit_sheet_by_yearly_em_df)
 
 接口: stock_profit_sheet_by_quarterly_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0
+目标地址: <https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0>
 
 描述: 东方财富-股票-财务分析-利润表-按单季度
 
@@ -585,7 +585,7 @@ print(stock_profit_sheet_by_quarterly_em_df)
 
 接口: stock_cash_flow_sheet_by_report_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0
+目标地址: <https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0>
 
 描述: 东方财富-股票-财务分析-现金流量表-按报告期
 
@@ -634,7 +634,7 @@ print(stock_cash_flow_sheet_by_report_em_df)
 
 接口: stock_cash_flow_sheet_by_yearly_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0
+目标地址: <https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0>
 
 描述: 东方财富-股票-财务分析-现金流量表-按年度
 
@@ -692,7 +692,7 @@ print(stock_cash_flow_sheet_by_yearly_em_df)
 
 接口: stock_cash_flow_sheet_by_quarterly_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0
+目标地址: <https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/Index?type=web&code=sh600519#lrb-0>
 
 描述: 东方财富-股票-财务分析-现金流量表-按单季度
 
@@ -743,7 +743,7 @@ print(stock_cash_flow_sheet_by_quarterly_em_df)
 
 接口: stock_financial_debt_ths
 
-目标地址: https://basic.10jqka.com.cn/new/000063/finance.html
+目标地址: <https://basic.10jqka.com.cn/new/000063/finance.html>
 
 描述: 同花顺-财务指标-资产负债表
 
@@ -811,7 +811,7 @@ print(stock_financial_debt_ths_df)
 
 接口: stock_financial_benefit_ths
 
-目标地址: https://basic.10jqka.com.cn/new/000063/finance.html
+目标地址: <https://basic.10jqka.com.cn/new/000063/finance.html>
 
 描述: 同花顺-财务指标-利润表
 
@@ -861,7 +861,7 @@ print(stock_financial_benefit_ths_df)
 
 接口: stock_financial_cash_ths
 
-目标地址: https://basic.10jqka.com.cn/new/000063/finance.html
+目标地址: <https://basic.10jqka.com.cn/new/000063/finance.html>
 
 描述: 同花顺-财务指标-现金流量表
 
@@ -913,7 +913,7 @@ print(stock_financial_cash_ths_df)
 
 接口: stock_balance_sheet_by_report_delisted_em
 
-目标地址: https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=SZ000013#/cwfx/zcfzb
+目标地址: <https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=SZ000013#/cwfx/zcfzb>
 
 描述: 东方财富-股票-财务分析-资产负债表-已退市股票-按报告期
 
@@ -989,7 +989,7 @@ print(stock_balance_sheet_by_report_delisted_em_df)
 
 接口: stock_profit_sheet_by_report_delisted_em
 
-目标地址: https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=SZ000013#/cwfx/lrb
+目标地址: <https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=SZ000013#/cwfx/lrb>
 
 描述: 东方财富-股票-财务分析-利润表-已退市股票-按报告期
 
@@ -1066,7 +1066,7 @@ print(stock_profit_sheet_by_report_delisted_em_df)
 
 接口: stock_cash_flow_sheet_by_report_delisted_em
 
-目标地址: https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=SZ000013#/cwfx/xjllb
+目标地址: <https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=SZ000013#/cwfx/xjllb>
 
 描述: 东方财富-股票-财务分析-现金流量表-已退市股票-按报告期
 
@@ -1125,7 +1125,7 @@ print(stock_cash_flow_sheet_by_report_delisted_em_df)
 
 接口: stock_financial_hk_report_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HKF10/FinancialAnalysis/index?type=web&code=00700
+目标地址: <https://emweb.securities.eastmoney.com/PC_HKF10/FinancialAnalysis/index?type=web&code=00700>
 
 描述: 东方财富-港股-财务报表-三大报表
 
@@ -1184,7 +1184,7 @@ print(stock_financial_hk_report_em_df)
 
 接口: stock_financial_us_report_em
 
-目标地址: https://emweb.eastmoney.com/PC_USF10/pages/index.html?code=TSLA&type=web&color=w#/cwfx/zyzb
+目标地址: <https://emweb.eastmoney.com/PC_USF10/pages/index.html?code=TSLA&type=web&color=w#/cwfx/zyzb>
 
 描述: 东方财富-美股-财务分析-三大报表
 
@@ -1211,7 +1211,6 @@ print(stock_financial_hk_report_em_df)
 | STD_ITEM_CODE      | object  | -  |
 | AMOUNT             | float64 | -  |
 | ITEM_NAME          | object  | -  |
-
 
 ```python
 import akshare as ak
@@ -1242,7 +1241,7 @@ print(stock_financial_us_report_em_df)
 
 接口: stock_financial_abstract
 
-目标地址: https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_FinanceSummary/stockid/600004.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_FinanceSummary/stockid/600004.phtml>
 
 描述: 新浪财经-财务报表-关键指标
 
@@ -1292,7 +1291,7 @@ print(stock_financial_abstract_df)
 
 接口: stock_financial_abstract_ths
 
-目标地址: https://basic.10jqka.com.cn/new/000063/finance.html
+目标地址: <https://basic.10jqka.com.cn/new/000063/finance.html>
 
 描述: 同花顺-财务指标-主要指标
 
@@ -1366,7 +1365,7 @@ print(stock_financial_abstract_ths_df)
 
 接口: stock_financial_analysis_indicator_em
 
-目标地址: https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=SZ301389&color=b#/cwfx
+目标地址: <https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=SZ301389&color=b#/cwfx>
 
 描述: 东方财富-A股-财务分析-主要指标
 
@@ -1469,7 +1468,7 @@ print(stock_financial_analysis_indicator_em_df)
 
 接口: stock_financial_analysis_indicator
 
-目标地址: https://money.finance.sina.com.cn/corp/go.php/vFD_FinancialGuideLine/stockid/600004/ctrl/2019/displaytype/4.phtml
+目标地址: <https://money.finance.sina.com.cn/corp/go.php/vFD_FinancialGuideLine/stockid/600004/ctrl/2019/displaytype/4.phtml>
 
 描述: 新浪财经-财务分析-财务指标
 
@@ -1610,7 +1609,7 @@ print(stock_financial_analysis_indicator_df)
 
 接口: stock_financial_hk_analysis_indicator_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HKF10/NewFinancialAnalysis/index?type=web&code=00700
+目标地址: <https://emweb.securities.eastmoney.com/PC_HKF10/NewFinancialAnalysis/index?type=web&code=00700>
 
 描述: 东方财富-港股-财务分析-主要指标
 
@@ -1693,7 +1692,7 @@ print(stock_financial_hk_analysis_indicator_em_df)
 
 接口: stock_financial_us_analysis_indicator_em
 
-目标地址: https://emweb.eastmoney.com/PC_USF10/pages/index.html?code=TSLA&type=web&color=w#/cwfx/zyzb
+目标地址: <https://emweb.eastmoney.com/PC_USF10/pages/index.html?code=TSLA&type=web&color=w#/cwfx/zyzb>
 
 描述: 东方财富-美股-财务分析-主要指标
 
@@ -1798,7 +1797,7 @@ print(stock_financial_us_analysis_indicator_em_df)
 
 接口: stock_history_dividend
 
-目标地址: http://vip.stock.finance.sina.com.cn/q/go.php/vInvestConsult/kind/lsfh/index.phtml
+目标地址: <http://vip.stock.finance.sina.com.cn/q/go.php/vInvestConsult/kind/lsfh/index.phtml>
 
 描述: 新浪财经-发行与分配-历史分红
 
@@ -1854,7 +1853,7 @@ print(stock_history_dividend_df)
 
 接口: stock_gdfx_free_top_10_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HSF10/ShareholderResearch/Index?type=web&code=SH688686#sdltgd-0
+目标地址: <https://emweb.securities.eastmoney.com/PC_HSF10/ShareholderResearch/Index?type=web&code=SH688686#sdltgd-0>
 
 描述: 东方财富网-个股-十大流通股东
 
@@ -1910,7 +1909,7 @@ print(stock_gdfx_free_top_10_em_df)
 
 接口: stock_gdfx_top_10_em
 
-目标地址: https://emweb.securities.eastmoney.com/PC_HSF10/ShareholderResearch/Index?type=web&code=SH688686#sdltgd-0
+目标地址: <https://emweb.securities.eastmoney.com/PC_HSF10/ShareholderResearch/Index?type=web&code=SH688686#sdltgd-0>
 
 描述: 东方财富网-个股-十大股东
 
@@ -1964,7 +1963,7 @@ print(stock_gdfx_top_10_em_df)
 
 接口: stock_gdfx_free_holding_change_em
 
-目标地址: https://data.eastmoney.com/gdfx/HoldingAnalyse.html
+目标地址: <https://data.eastmoney.com/gdfx/HoldingAnalyse.html>
 
 描述: 东方财富网-数据中心-股东分析-股东持股变动统计-十大流通股东
 
@@ -2021,7 +2020,7 @@ print(stock_gdfx_free_holding_change_em_df)
 
 接口: stock_gdfx_holding_change_em
 
-目标地址: https://data.eastmoney.com/gdfx/HoldingAnalyse.html
+目标地址: <https://data.eastmoney.com/gdfx/HoldingAnalyse.html>
 
 描述: 东方财富网-数据中心-股东分析-股东持股变动统计-十大股东
 
@@ -2078,7 +2077,7 @@ print(stock_gdfx_holding_change_em_df)
 
 接口: stock_management_change_ths
 
-目标地址: https://basic.10jqka.com.cn/new/688981/event.html
+目标地址: <https://basic.10jqka.com.cn/new/688981/event.html>
 
 描述: 同花顺-公司大事-高管持股变动
 
@@ -2131,7 +2130,7 @@ print(stock_management_change_ths_df)
 
 接口: stock_shareholder_change_ths
 
-目标地址: https://basic.10jqka.com.cn/new/688981/event.html
+目标地址: <https://basic.10jqka.com.cn/new/688981/event.html>
 
 描述: 同花顺-公司大事-股东持股变动
 
@@ -2182,7 +2181,7 @@ print(stock_shareholder_change_ths_df)
 
 接口: stock_gdfx_free_holding_analyse_em
 
-目标地址: https://data.eastmoney.com/gdfx/HoldingAnalyse.html
+目标地址: <https://data.eastmoney.com/gdfx/HoldingAnalyse.html>
 
 描述: 东方财富网-数据中心-股东分析-股东持股分析-十大流通股东
 
@@ -2245,7 +2244,7 @@ print(stock_gdfx_free_holding_analyse_em_df)
 
 接口: stock_gdfx_holding_analyse_em
 
-目标地址: https://data.eastmoney.com/gdfx/HoldingAnalyse.html
+目标地址: <https://data.eastmoney.com/gdfx/HoldingAnalyse.html>
 
 描述: 东方财富网-数据中心-股东分析-股东持股分析-十大股东
 
@@ -2307,7 +2306,7 @@ print(stock_gdfx_holding_analyse_em_df)
 
 接口: stock_gdfx_free_holding_detail_em
 
-目标地址: https://data.eastmoney.com/gdfx/HoldingAnalyse.html
+目标地址: <https://data.eastmoney.com/gdfx/HoldingAnalyse.html>
 
 描述: 东方财富网-数据中心-股东分析-股东持股明细-十大流通股东
 
@@ -2366,7 +2365,7 @@ print(stock_gdfx_free_holding_detail_em_df)
 
 接口: stock_gdfx_holding_detail_em
 
-目标地址: https://data.eastmoney.com/gdfx/HoldingAnalyse.html
+目标地址: <https://data.eastmoney.com/gdfx/HoldingAnalyse.html>
 
 描述: 东方财富网-数据中心-股东分析-股东持股明细-十大股东
 
@@ -2429,7 +2428,7 @@ print(stock_gdfx_holding_detail_em_df)
 
 接口: stock_gdfx_free_holding_statistics_em
 
-目标地址: https://data.eastmoney.com/gdfx/HoldingAnalyse.html
+目标地址: <https://data.eastmoney.com/gdfx/HoldingAnalyse.html>
 
 描述: 东方财富网-数据中心-股东分析-股东持股统计-十大股东
 
@@ -2490,7 +2489,7 @@ print(stock_gdfx_free_holding_statistics_em_df)
 
 接口: stock_gdfx_holding_statistics_em
 
-目标地址: https://data.eastmoney.com/gdfx/HoldingAnalyse.html
+目标地址: <https://data.eastmoney.com/gdfx/HoldingAnalyse.html>
 
 描述: 东方财富网-数据中心-股东分析-股东持股统计-十大股东
 
@@ -2551,7 +2550,7 @@ print(stock_gdfx_holding_statistics_em_df)
 
 接口: stock_gdfx_free_holding_teamwork_em
 
-目标地址: https://data.eastmoney.com/gdfx/HoldingAnalyse.html
+目标地址: <https://data.eastmoney.com/gdfx/HoldingAnalyse.html>
 
 描述: 东方财富网-数据中心-股东分析-股东协同-十大流通股东
 
@@ -2606,7 +2605,7 @@ print(stock_gdfx_free_holding_teamwork_em_df)
 
 接口: stock_gdfx_holding_teamwork_em
 
-目标地址: https://data.eastmoney.com/gdfx/HoldingAnalyse.html
+目标地址: <https://data.eastmoney.com/gdfx/HoldingAnalyse.html>
 
 描述: 东方财富网-数据中心-股东分析-股东协同-十大股东
 
@@ -2661,7 +2660,7 @@ print(stock_gdfx_holding_teamwork_em_df)
 
 接口: stock_zh_a_gdhs
 
-目标地址: http://data.eastmoney.com/gdhs/
+目标地址: <http://data.eastmoney.com/gdhs/>
 
 描述: 东方财富网-数据中心-特色数据-股东户数数据
 
@@ -2725,7 +2724,7 @@ print(stock_zh_a_gdhs_df)
 
 接口: stock_zh_a_gdhs_detail_em
 
-目标地址: https://data.eastmoney.com/gdhs/detail/000002.html
+目标地址: <https://data.eastmoney.com/gdhs/detail/000002.html>
 
 描述: 东方财富网-数据中心-特色数据-股东户数详情
 
@@ -2831,7 +2830,7 @@ print(stock_zh_a_gdhs_detail_em_df)
 
 接口: stock_history_dividend_detail
 
-目标地址: https://vip.stock.finance.sina.com.cn/corp/go.php/vISSUE_ShareBonus/stockid/300670.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/corp/go.php/vISSUE_ShareBonus/stockid/300670.phtml>
 
 描述: 新浪财经-发行与分配-分红配股
 
@@ -3033,7 +3032,7 @@ print(stock_history_dividend_detail_df)
 
 接口: stock_dividend_cninfo
 
-目标地址: http://webapi.cninfo.com.cn/#/company?companyid=600009
+目标地址: <http://webapi.cninfo.com.cn/#/company?companyid=600009>
 
 描述: 巨潮资讯-个股-历史分红
 
@@ -3106,7 +3105,7 @@ print(stock_dividend_cninfo_df)
 
 接口: stock_ipo_info
 
-目标地址: https://vip.stock.finance.sina.com.cn/corp/go.php/vISSUE_NewStock/stockid/600004.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/corp/go.php/vISSUE_NewStock/stockid/600004.phtml>
 
 描述: 新浪财经-发行与分配-新股发行
 
@@ -3161,7 +3160,7 @@ print(stock_ipo_info_df)
 
 接口: stock_add_stock
 
-目标地址: https://vip.stock.finance.sina.com.cn/corp/go.php/vISSUE_AddStock/stockid/600004.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/corp/go.php/vISSUE_AddStock/stockid/600004.phtml>
 
 描述: 新浪财经-发行与分配-增发
 
@@ -3208,7 +3207,7 @@ print(stock_add_stock_df)
 
 接口: stock_restricted_release_queue_sina
 
-目标地址: https://vip.stock.finance.sina.com.cn/q/go.php/vInvestConsult/kind/xsjj/index.phtml?symbol=sh600000
+目标地址: <https://vip.stock.finance.sina.com.cn/q/go.php/vInvestConsult/kind/xsjj/index.phtml?symbol=sh600000>
 
 描述: 新浪财经-发行分配-限售解禁
 
@@ -3259,7 +3258,7 @@ print(stock_restricted_release_queue_sina_df)
 
 接口: stock_restricted_release_summary_em
 
-目标地址: https://data.eastmoney.com/dxf/marketStatistics.html?type=day&startdate=2022-11-08&enddate=2022-12-19
+目标地址: <https://data.eastmoney.com/dxf/marketStatistics.html?type=day&startdate=2022-11-08&enddate=2022-12-19>
 
 描述: 东方财富网-数据中心-特色数据-限售股解禁
 
@@ -3329,7 +3328,7 @@ print(stock_restricted_release_summary_em_df)
 
 接口: stock_restricted_release_detail_em
 
-目标地址: https://data.eastmoney.com/dxf/detail.html
+目标地址: <https://data.eastmoney.com/dxf/detail.html>
 
 描述: 东方财富网-数据中心-限售股解禁-解禁详情一览
 
@@ -3393,7 +3392,7 @@ print(stock_restricted_release_detail_em_df)
 
 接口: stock_restricted_release_queue_em
 
-目标地址: https://data.eastmoney.com/dxf/q/600000.html
+目标地址: <https://data.eastmoney.com/dxf/q/600000.html>
 
 描述: 东方财富网-数据中心-个股限售解禁-解禁批次
 
@@ -3447,7 +3446,7 @@ print(stock_restricted_release_queue_em_df)
 
 接口: stock_restricted_release_stockholder_em
 
-目标地址: https://data.eastmoney.com/dxf/q/600000.html
+目标地址: <https://data.eastmoney.com/dxf/q/600000.html>
 
 描述: 东方财富网-数据中心-个股限售解禁-解禁股东
 
@@ -3495,7 +3494,7 @@ print(stock_restricted_release_stockholder_em_df)
 
 接口: stock_circulate_stock_holder
 
-目标地址: https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_CirculateStockHolder/stockid/600000.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_CirculateStockHolder/stockid/600000.phtml>
 
 描述: 新浪财经-股东股本-流通股东
 
@@ -3549,7 +3548,7 @@ print(stock_circulate_stock_holder_df)
 
 接口: stock_sector_spot
 
-目标地址: http://finance.sina.com.cn/stock/sl/
+目标地址: <http://finance.sina.com.cn/stock/sl/>
 
 描述: 新浪行业-板块行情
 
@@ -3647,7 +3646,7 @@ print(stock_industry_sina_df)
 
 接口: stock_sector_detail
 
-目标地址: http://finance.sina.com.cn/stock/sl/#area_1
+目标地址: <http://finance.sina.com.cn/stock/sl/#area_1>
 
 描述: 新浪行业-板块行情-成份详情, 由于新浪网页提供的统计数据有误, 部分行业数量大于统计数
 
@@ -3766,7 +3765,7 @@ print(stock_info_a_code_name_df)
 
 接口: stock_info_sh_name_code
 
-目标地址: https://www.sse.com.cn/assortment/stock/list/share/
+目标地址: <https://www.sse.com.cn/assortment/stock/list/share/>
 
 描述: 上海证券交易所股票代码和简称数据
 
@@ -3818,7 +3817,7 @@ print(stock_info_sh_name_code_df)
 
 接口: stock_info_sz_name_code
 
-目标地址: https://www.szse.cn/market/product/stock/list/index.html
+目标地址: <https://www.szse.cn/market/product/stock/list/index.html>
 
 描述: 深证证券交易所股票代码和股票简称数据
 
@@ -3873,7 +3872,7 @@ print(stock_info_sz_name_code_df)
 
 接口: stock_info_bj_name_code
 
-目标地址: https://www.bse.cn/nq/listedcompany.html
+目标地址: <https://www.bse.cn/nq/listedcompany.html>
 
 描述: 北京证券交易所股票代码和简称数据
 
@@ -3929,7 +3928,7 @@ print(stock_info_bj_name_code_df)
 
 接口: stock_info_sz_delist
 
-目标地址: https://www.szse.cn/market/stock/suspend/index.html
+目标地址: <https://www.szse.cn/market/stock/suspend/index.html>
 
 描述: 深证证券交易所终止/暂停上市股票
 
@@ -3981,7 +3980,7 @@ print(stock_info_sz_delist_df)
 
 接口: stock_staq_net_stop
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#staq_net_board
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#staq_net_board>
 
 描述: 东方财富网-行情中心-沪深个股-两网及退市
 
@@ -4032,7 +4031,7 @@ print(stock_staq_net_stop_df)
 
 接口: stock_info_sh_delist
 
-目标地址: https://www.sse.com.cn/assortment/stock/list/delisting/
+目标地址: <https://www.sse.com.cn/assortment/stock/list/delisting/>
 
 描述: 上海证券交易所暂停/终止上市股票
 
@@ -4084,7 +4083,7 @@ print(stock_info_sh_delist_df)
 
 接口: stock_info_change_name
 
-目标地址: https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_CorpInfo/stockid/300378.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_CorpInfo/stockid/300378.phtml>
 
 描述: 新浪财经-股票曾用名
 
@@ -4129,7 +4128,7 @@ print(stock_info_change_name_list)
 
 接口: stock_info_sz_change_name
 
-目标地址: https://www.szse.cn/www/market/stock/changename/index.html
+目标地址: <https://www.szse.cn/www/market/stock/changename/index.html>
 
 描述: 深证证券交易所-市场数据-股票数据-名称变更
 
@@ -4182,7 +4181,7 @@ print(stock_info_sz_change_name_df)
 
 接口: stock_fund_stock_holder
 
-目标地址: https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_FundStockHolder/stockid/600004.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_FundStockHolder/stockid/600004.phtml>
 
 描述: 新浪财经-股本股东-基金持股
 
@@ -4236,7 +4235,7 @@ print(stock_fund_stock_holder_df)
 
 接口: stock_main_stock_holder
 
-目标地址: https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_StockHolder/stockid/600004.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/corp/go.php/vCI_StockHolder/stockid/600004.phtml>
 
 描述: 新浪财经-股本股东-主要股东
 
@@ -4296,7 +4295,7 @@ print(stock_main_stock_holder_df)
 
 接口: stock_institute_hold
 
-目标地址: https://vip.stock.finance.sina.com.cn/q/go.php/vComStockHold/kind/jgcg/index.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/q/go.php/vComStockHold/kind/jgcg/index.phtml>
 
 描述: 新浪财经-机构持股-机构持股一览表
 
@@ -4352,7 +4351,7 @@ print(stock_institute_hold_df)
 
 接口: stock_institute_hold_detail
 
-目标地址: http://vip.stock.finance.sina.com.cn/q/go.php/vComStockHold/kind/jgcg/index.phtml
+目标地址: <http://vip.stock.finance.sina.com.cn/q/go.php/vComStockHold/kind/jgcg/index.phtml>
 
 描述: 新浪财经-机构持股-机构持股详情
 
@@ -4420,7 +4419,7 @@ print(stock_institute_hold_detail_df)
 
 接口: stock_institute_recommend
 
-目标地址: http://stock.finance.sina.com.cn/stock/go.php/vIR_RatingNewest/index.phtml
+目标地址: <http://stock.finance.sina.com.cn/stock/go.php/vIR_RatingNewest/index.phtml>
 
 描述: 新浪财经-机构推荐池-具体指标的数据
 
@@ -4468,7 +4467,7 @@ print(stock_institute_recommend_df)
 
 接口: stock_institute_recommend_detail
 
-目标地址: http://stock.finance.sina.com.cn/stock/go.php/vIR_StockSearch/key/sz000001.phtml
+目标地址: <http://stock.finance.sina.com.cn/stock/go.php/vIR_StockSearch/key/sz000001.phtml>
 
 描述: 新浪财经-机构推荐池-股票评级记录
 
@@ -4523,7 +4522,7 @@ print(stock_institute_recommend_detail_df)
 
 接口: stock_rank_forecast_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/thematicStatistics
+目标地址: <https://webapi.cninfo.com.cn/#/thematicStatistics>
 
 描述: 巨潮资讯-数据中心-评级预测-投资评级
 
@@ -4582,7 +4581,7 @@ print(stock_rank_forecast_cninfo_df)
 
 接口: stock_industry_clf_hist_sw
 
-目标地址: http://www.swhyresearch.com/institute_sw/allIndex/downloadCenter/industryType
+目标地址: <http://www.swhyresearch.com/institute_sw/allIndex/downloadCenter/industryType>
 
 描述: 申万宏源研究-行业分类-全部行业分类
 
@@ -4634,7 +4633,7 @@ print(stock_industry_clf_hist_sw_df)
 
 接口: stock_industry_pe_ratio_cninfo
 
-目标地址: http://webapi.cninfo.com.cn/#/thematicStatistics
+目标地址: <http://webapi.cninfo.com.cn/#/thematicStatistics>
 
 描述: 巨潮资讯-数据中心-行业分析-行业市盈率
 
@@ -4695,7 +4694,7 @@ print(stock_industry_pe_ratio_cninfo_df)
 
 接口: stock_new_gh_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/xinguList
+目标地址: <https://webapi.cninfo.com.cn/#/xinguList>
 
 描述: 巨潮资讯-数据中心-新股数据-新股过会
 
@@ -4748,7 +4747,7 @@ print(stock_new_gh_cninfo_df)
 
 接口: stock_new_ipo_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/xinguList
+目标地址: <https://webapi.cninfo.com.cn/#/xinguList>
 
 描述: 巨潮资讯-数据中心-新股数据-新股发行
 
@@ -4809,7 +4808,7 @@ print(stock_new_ipo_cninfo_df)
 
 接口: stock_share_hold_change_sse
 
-目标地址: http://www.sse.com.cn/disclosure/credibility/supervision/change/
+目标地址: <http://www.sse.com.cn/disclosure/credibility/supervision/change/>
 
 描述: 上海证券交易所-披露-监管信息公开-公司监管-董董监高人员股份变动
 
@@ -4886,7 +4885,7 @@ print(stock_share_hold_change_sse_df)
 
 接口: stock_share_hold_change_szse
 
-目标地址: http://www.szse.cn/disclosure/supervision/change/index.html
+目标地址: <http://www.szse.cn/disclosure/supervision/change/index.html>
 
 描述: 深圳证券交易所-信息披露-监管信息公开-董监高人员股份变动
 
@@ -4944,7 +4943,7 @@ print(stock_share_hold_change_szse_df)
 
 接口: stock_share_hold_change_bse
 
-目标地址: https://www.bse.cn/disclosure/djg_sharehold_change.html
+目标地址: <https://www.bse.cn/disclosure/djg_sharehold_change.html>
 
 描述: 北京证券交易所-信息披露-监管信息-董监高及相关人员持股变动
 
@@ -4998,7 +4997,7 @@ print(stock_share_hold_change_bse_df)
 
 接口: stock_hold_num_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/thematicStatistics
+目标地址: <https://webapi.cninfo.com.cn/#/thematicStatistics>
 
 描述: 巨潮资讯-数据中心-专题统计-股东股本-股东人数及持股集中度
 
@@ -5055,7 +5054,7 @@ print(stock_hold_num_cninfo_df)
 
 接口: stock_hold_change_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/thematicStatistics
+目标地址: <https://webapi.cninfo.com.cn/#/thematicStatistics>
 
 描述: 巨潮资讯-数据中心-专题统计-股东股本-股本变动
 
@@ -5113,7 +5112,7 @@ print(stock_hold_change_cninfo_df)
 
 接口: stock_hold_control_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/thematicStatistics
+目标地址: <https://webapi.cninfo.com.cn/#/thematicStatistics>
 
 描述: 巨潮资讯-数据中心-专题统计-股东股本-实际控制人持股变动
 
@@ -5169,7 +5168,7 @@ print(stock_hold_control_cninfo_df)
 
 接口: stock_hold_management_detail_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/thematicStatistics
+目标地址: <https://webapi.cninfo.com.cn/#/thematicStatistics>
 
 描述: 巨潮资讯-数据中心-专题统计-股东股本-高管持股变动明细
 
@@ -5233,7 +5232,7 @@ print(stock_hold_management_detail_cninfo_df)
 
 接口: stock_hold_management_detail_em
 
-目标地址: https://data.eastmoney.com/executive/list.html
+目标地址: <https://data.eastmoney.com/executive/list.html>
 
 描述: 东方财富网-数据中心-特色数据-高管持股-董监高及相关人员持股变动明细
 
@@ -5297,7 +5296,7 @@ print(stock_hold_management_detail_em_df)
 
 接口: stock_hold_management_person_em
 
-目标地址: https://data.eastmoney.com/executive/personinfo.html?name=%E5%90%B4%E8%BF%9C&code=001308
+目标地址: <https://data.eastmoney.com/executive/personinfo.html?name=%E5%90%B4%E8%BF%9C&code=001308>
 
 描述: 东方财富网-数据中心-特色数据-高管持股-人员增减持股变动明细
 
@@ -5354,7 +5353,7 @@ print(stock_hold_management_person_em_df)
 
 接口: stock_cg_guarantee_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/thematicStatistics
+目标地址: <https://webapi.cninfo.com.cn/#/thematicStatistics>
 
 描述: 巨潮资讯-数据中心-专题统计-公司治理-对外担保
 
@@ -5411,7 +5410,7 @@ print(stock_corporate_governance_guarantee_df)
 
 接口: stock_cg_lawsuit_cninfo
 
-目标地址: http://webapi.cninfo.com.cn/#/thematicStatistics
+目标地址: <http://webapi.cninfo.com.cn/#/thematicStatistics>
 
 描述: 巨潮资讯-数据中心-专题统计-公司治理-公司诉讼
 
@@ -5465,7 +5464,7 @@ print(stock_cg_lawsuit_cninfo_df)
 
 接口: stock_cg_equity_mortgage_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/thematicStatistics
+目标地址: <https://webapi.cninfo.com.cn/#/thematicStatistics>
 
 描述: 巨潮资讯-数据中心-专题统计-公司治理-股权质押
 
@@ -5566,7 +5565,7 @@ print(stock_cg_equity_mortgage_cninfo_df)
 
 接口: stock_price_js
 
-目标地址: https://www.ushknews.com/report.html
+目标地址: <https://www.ushknews.com/report.html>
 
 描述: 美港电讯-美港目标价数据
 
@@ -5619,7 +5618,7 @@ print(stock_price_js_df)
 
 接口: stock_qsjy_em
 
-目标地址: http://data.eastmoney.com/other/qsjy.html
+目标地址: <http://data.eastmoney.com/other/qsjy.html>
 
 描述: 东方财富网-数据中心-特色数据-券商业绩月报
 
@@ -5707,7 +5706,7 @@ print(stock_qsjy_em_df)
 
 接口: stock_a_gxl_lg
 
-目标地址: https://legulegu.com/stockdata/guxilv
+目标地址: <https://legulegu.com/stockdata/guxilv>
 
 描述: 乐咕乐股-股息率-A 股股息率
 
@@ -5757,7 +5756,7 @@ print(stock_a_gxl_lg_df)
 
 接口: stock_hk_gxl_lg
 
-目标地址: https://legulegu.com/stockdata/market/hk/dv/hsi
+目标地址: <https://legulegu.com/stockdata/market/hk/dv/hsi>
 
 描述: 乐咕乐股-股息率-恒生指数股息率
 
@@ -5807,7 +5806,7 @@ print(stock_hk_gxl_lg_df)
 
 接口: stock_a_congestion_lg
 
-目标地址: https://legulegu.com/stockdata/ashares-congestion
+目标地址: <https://legulegu.com/stockdata/ashares-congestion>
 
 描述: 乐咕乐股-大盘拥挤度
 
@@ -5858,7 +5857,7 @@ print(stock_a_congestion_lg_df)
 
 接口: stock_ebs_lg
 
-目标地址: https://legulegu.com/stockdata/equity-bond-spread
+目标地址: <https://legulegu.com/stockdata/equity-bond-spread>
 
 描述: 乐咕乐股-股债利差
 
@@ -5910,7 +5909,7 @@ print(stock_ebs_lg_df)
 
 接口: stock_buffett_index_lg
 
-目标地址: https://legulegu.com/stockdata/marketcap-gdp
+目标地址: <https://legulegu.com/stockdata/marketcap-gdp>
 
 描述: 乐估乐股-底部研究-巴菲特指标
 
@@ -5964,7 +5963,7 @@ print(stock_buffett_index_lg_df)
 
 接口: stock_a_ttm_lyr
 
-目标地址: https://www.legulegu.com/stockdata/a-ttm-lyr
+目标地址: <https://www.legulegu.com/stockdata/a-ttm-lyr>
 
 描述: 乐咕乐股-A 股等权重市盈率与中位数市盈率
 
@@ -6026,7 +6025,7 @@ print(stock_a_ttm_lyr_df)
 
 接口: stock_a_all_pb
 
-目标地址: https://www.legulegu.com/stockdata/all-pb
+目标地址: <https://www.legulegu.com/stockdata/all-pb>
 
 描述: 乐咕乐股-A 股等权重与中位数市净率
 
@@ -6082,7 +6081,7 @@ print(stock_a_all_pb_df)
 
 接口: stock_market_pe_lg
 
-目标地址: https://legulegu.com/stockdata/shanghaiPE
+目标地址: <https://legulegu.com/stockdata/shanghaiPE>
 
 描述: 乐咕乐股-主板市盈率
 
@@ -6168,7 +6167,7 @@ print(stock_market_pe_lg_df)
 
 接口: stock_index_pe_lg
 
-目标地址: https://legulegu.com/stockdata/sz50-ttm-lyr
+目标地址: <https://legulegu.com/stockdata/sz50-ttm-lyr>
 
 描述: 乐咕乐股-指数市盈率
 
@@ -6224,7 +6223,7 @@ print(stock_index_pe_lg_df)
 
 接口: stock_market_pb_lg
 
-目标地址: https://legulegu.com/stockdata/shanghaiPB
+目标地址: <https://legulegu.com/stockdata/shanghaiPB>
 
 描述: 乐咕乐股-主板市净率
 
@@ -6277,7 +6276,7 @@ print(stock_market_pb_lg_df)
 
 接口: stock_index_pb_lg
 
-目标地址: https://legulegu.com/stockdata/sz50-pb
+目标地址: <https://legulegu.com/stockdata/sz50-pb>
 
 描述: 乐咕乐股-指数市净率
 
@@ -6330,7 +6329,7 @@ print(stock_index_pb_lg_df)
 
 接口: stock_zh_valuation_baidu
 
-目标地址: https://gushitong.baidu.com/stock/ab-002044
+目标地址: <https://gushitong.baidu.com/stock/ab-002044>
 
 描述: 百度股市通-A 股-财务报表-估值数据
 
@@ -6382,7 +6381,7 @@ print(stock_zh_valuation_baidu_df)
 
 接口: stock_value_em
 
-目标地址: https://data.eastmoney.com/gzfx/detail/300766.html
+目标地址: <https://data.eastmoney.com/gzfx/detail/300766.html>
 
 描述: 东方财富网-数据中心-估值分析-每日互动-每日互动-估值分析
 
@@ -6443,7 +6442,7 @@ print(stock_value_em_df)
 
 接口: stock_zh_vote_baidu
 
-目标地址: https://gushitong.baidu.com/index/ab-000001
+目标地址: <https://gushitong.baidu.com/index/ab-000001>
 
 描述: 百度股市通- A 股或指数-股评-投票
 
@@ -6491,7 +6490,7 @@ P.S. 该数据源暂未更新数据
 
 接口: stock_hk_indicator_eniu
 
-目标地址: https://eniu.com/gu/hk01093/roe
+目标地址: <https://eniu.com/gu/hk01093/roe>
 
 描述: 亿牛网-港股个股指标: 市盈率, 市净率, 股息率, ROE, 市值
 
@@ -6540,7 +6539,7 @@ print(stock_hk_indicator_eniu_df)
 
 接口: stock_hk_valuation_baidu
 
-目标地址: https://gushitong.baidu.com/stock/hk-06969
+目标地址: <https://gushitong.baidu.com/stock/hk-06969>
 
 描述: 百度股市通-港股-财务报表-估值数据
 
@@ -6592,7 +6591,7 @@ print(stock_hk_valuation_baidu_df)
 
 接口: stock_a_high_low_statistics
 
-目标地址: https://www.legulegu.com/stockdata/high-low-statistics
+目标地址: <https://www.legulegu.com/stockdata/high-low-statistics>
 
 描述: 不同市场的创新高和新低的股票数量
 
@@ -6648,7 +6647,7 @@ print(stock_a_high_low_statistics_df)
 
 接口: stock_a_below_net_asset_statistics
 
-目标地址: https://www.legulegu.com/stockdata/below-net-asset-statistics
+目标地址: <https://www.legulegu.com/stockdata/below-net-asset-statistics>
 
 描述: 乐咕乐股-A 股破净股统计数据
 
@@ -6736,7 +6735,7 @@ print(stock_a_below_net_asset_statistics_df)
 
 接口: stock_report_fund_hold
 
-目标地址: http://data.eastmoney.com/zlsj/2020-06-30-1-2.html
+目标地址: <http://data.eastmoney.com/zlsj/2020-06-30-1-2.html>
 
 描述: 东方财富网-数据中心-主力数据-基金持仓
 
@@ -6793,7 +6792,7 @@ print(stock_report_fund_hold_df)
 
 接口: stock_report_fund_hold_detail
 
-目标地址: http://data.eastmoney.com/zlsj/ccjj/2020-12-31-008286.html
+目标地址: <http://data.eastmoney.com/zlsj/ccjj/2020-12-31-008286.html>
 
 描述: 东方财富网-数据中心-主力数据-基金持仓-基金持仓明细表
 
@@ -6847,7 +6846,7 @@ print(stock_report_fund_hold_detail_df)
 
 接口: stock_lhb_detail_em
 
-目标地址: https://data.eastmoney.com/stock/tradedetail.html
+目标地址: <https://data.eastmoney.com/stock/tradedetail.html>
 
 描述: 东方财富网-数据中心-龙虎榜单-龙虎榜详情
 
@@ -6916,7 +6915,7 @@ print(stock_lhb_detail_em_df)
 
 接口: stock_lhb_stock_statistic_em
 
-目标地址: https://data.eastmoney.com/stock/tradedetail.html
+目标地址: <https://data.eastmoney.com/stock/tradedetail.html>
 
 描述: 东方财富网-数据中心-龙虎榜单-个股上榜统计
 
@@ -6984,7 +6983,7 @@ print(stock_lhb_stock_statistic_em_df)
 
 接口: stock_lhb_jgmmtj_em
 
-目标地址: https://data.eastmoney.com/stock/jgmmtj.html
+目标地址: <https://data.eastmoney.com/stock/jgmmtj.html>
 
 描述: 东方财富网-数据中心-龙虎榜单-机构买卖每日统计
 
@@ -7049,7 +7048,7 @@ print(stock_lhb_jgmmtj_em_df)
 
 接口: stock_lhb_jgstatistic_em
 
-目标地址: https://data.eastmoney.com/stock/jgstatistic.html
+目标地址: <https://data.eastmoney.com/stock/jgstatistic.html>
 
 描述: 东方财富网-数据中心-龙虎榜单-机构席位追踪
 
@@ -7113,7 +7112,7 @@ print(stock_lhb_jgstatistic_em_df)
 
 接口: stock_lhb_hyyyb_em
 
-目标地址: https://data.eastmoney.com/stock/hyyyb.html
+目标地址: <https://data.eastmoney.com/stock/hyyyb.html>
 
 描述: 东方财富网-数据中心-龙虎榜单-每日活跃营业部
 
@@ -7171,7 +7170,7 @@ print(stock_lhb_hyyyb_em_df)
 
 接口: stock_lhb_yyb_detail_em
 
-目标地址: https://data.eastmoney.com/stock/lhb/yyb/10188715.html
+目标地址: <https://data.eastmoney.com/stock/lhb/yyb/10188715.html>
 
 描述: 东方财富网-数据中心-龙虎榜单-营业部历史交易明细-营业部交易明细
 
@@ -7238,7 +7237,7 @@ print(stock_lhb_yyb_detail_em_df)
 
 接口: stock_lhb_yybph_em
 
-目标地址: https://data.eastmoney.com/stock/yybph.html
+目标地址: <https://data.eastmoney.com/stock/yybph.html>
 
 描述: 东方财富网-数据中心-龙虎榜单-营业部排行
 
@@ -7303,7 +7302,7 @@ print(stock_lhb_yybph_em_df)
 
 接口: stock_lhb_traderstatistic_em
 
-目标地址: https://data.eastmoney.com/stock/traderstatistic.html
+目标地址: <https://data.eastmoney.com/stock/traderstatistic.html>
 
 描述: 东方财富网-数据中心-龙虎榜单-营业部统计
 
@@ -7359,7 +7358,7 @@ print(stock_lhb_traderstatistic_em_df)
 
 接口: stock_lhb_stock_detail_em
 
-目标地址: https://data.eastmoney.com/stock/lhb/600077.html
+目标地址: <https://data.eastmoney.com/stock/lhb/600077.html>
 
 描述: 东方财富网-数据中心-龙虎榜单-个股龙虎榜详情
 
@@ -7412,7 +7411,7 @@ print(stock_lhb_stock_detail_em_df)
 
 接口: stock_lh_yyb_most
 
-目标地址: https://data.10jqka.com.cn/market/longhu/
+目标地址: <https://data.10jqka.com.cn/market/longhu/>
 
 描述: 龙虎榜-营业部排行-上榜次数最多
 
@@ -7467,7 +7466,7 @@ print(stock_lh_yyb_most_df)
 
 接口: stock_lh_yyb_capital
 
-目标地址: https://data.10jqka.com.cn/market/longhu/
+目标地址: <https://data.10jqka.com.cn/market/longhu/>
 
 描述: 龙虎榜-营业部排行-资金实力最强
 
@@ -7522,7 +7521,7 @@ print(stock_lh_yyb_capital_df)
 
 接口: stock_lh_yyb_control
 
-目标地址: https://data.10jqka.com.cn/market/longhu/
+目标地址: <https://data.10jqka.com.cn/market/longhu/>
 
 描述: 龙虎榜-营业部排行-抱团操作实力
 
@@ -7576,7 +7575,7 @@ print(stock_lh_yyb_control_df)
 
 接口: stock_lhb_detail_daily_sina
 
-目标地址: https://vip.stock.finance.sina.com.cn/q/go.php/vInvestConsult/kind/lhb/index.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/q/go.php/vInvestConsult/kind/lhb/index.phtml>
 
 描述: 新浪财经-龙虎榜-每日详情
 
@@ -7676,7 +7675,7 @@ print(stock_lhb_detail_daily_sina_df)
 
 接口: stock_lhb_ggtj_sina
 
-目标地址: https://vip.stock.finance.sina.com.cn/q/go.php/vLHBData/kind/ggtj/index.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/q/go.php/vLHBData/kind/ggtj/index.phtml>
 
 描述: 新浪财经-龙虎榜-个股上榜统计
 
@@ -7732,7 +7731,7 @@ print(stock_lhb_ggtj_sina_df)
 
 接口: stock_lhb_yytj_sina
 
-目标地址: https://vip.stock.finance.sina.com.cn/q/go.php/vLHBData/kind/yytj/index.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/q/go.php/vLHBData/kind/yytj/index.phtml>
 
 描述: 新浪财经-龙虎榜-营业上榜统计
 
@@ -7787,7 +7786,7 @@ print(stock_lhb_yytj_sina_df)
 
 接口: stock_lhb_jgzz_sina
 
-目标地址: https://vip.stock.finance.sina.com.cn/q/go.php/vLHBData/kind/jgzz/index.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/q/go.php/vLHBData/kind/jgzz/index.phtml>
 
 描述: 新浪财经-龙虎榜-机构席位追踪
 
@@ -7842,7 +7841,7 @@ print(stock_lhb_jgzz_sina_df)
 
 接口: stock_lhb_jgmx_sina
 
-目标地址: https://vip.stock.finance.sina.com.cn/q/go.php/vLHBData/kind/jgzz/index.phtml
+目标地址: <https://vip.stock.finance.sina.com.cn/q/go.php/vLHBData/kind/jgzz/index.phtml>
 
 描述: 新浪财经-龙虎榜-机构席位成交明细
 
@@ -7896,7 +7895,7 @@ print(stock_lhb_jgmx_sina_df)
 
 接口: stock_ipo_declare
 
-目标地址: https://data.eastmoney.com/xg/xg/sbqy.html
+目标地址: <https://data.eastmoney.com/xg/xg/sbqy.html>
 
 描述: 东方财富网-数据中心-新股申购-首发申报信息-首发申报企业信息
 
@@ -7954,7 +7953,7 @@ print(stock_ipo_declare_df)
 
 接口: stock_register_kcb
 
-目标地址: https://data.eastmoney.com/xg/ipo/
+目标地址: <https://data.eastmoney.com/xg/ipo/>
 
 描述: 东方财富网-数据中心-新股数据-IPO审核信息-科创板
 
@@ -8038,7 +8037,7 @@ print(stock_register_kcb_df)
 
 接口: stock_register_cyb
 
-目标地址: https://data.eastmoney.com/xg/ipo/
+目标地址: <https://data.eastmoney.com/xg/ipo/>
 
 描述: 东方财富网-数据中心-新股数据-IPO审核信息-创业板
 
@@ -8122,7 +8121,7 @@ print(stock_register_cyb_df)
 
 接口: stock_register_sh
 
-目标地址: https://data.eastmoney.com/xg/ipo/
+目标地址: <https://data.eastmoney.com/xg/ipo/>
 
 描述: 东方财富网-数据中心-新股数据-IPO审核信息-上海主板
 
@@ -8206,7 +8205,7 @@ print(stock_register_sh_df)
 
 接口: stock_register_sz
 
-目标地址: https://data.eastmoney.com/xg/ipo/
+目标地址: <https://data.eastmoney.com/xg/ipo/>
 
 描述: 东方财富网-数据中心-新股数据-IPO审核信息-深圳主板
 
@@ -8290,7 +8289,7 @@ print(stock_register_sz_df)
 
 接口: stock_register_bj
 
-目标地址: https://data.eastmoney.com/xg/ipo/
+目标地址: <https://data.eastmoney.com/xg/ipo/>
 
 描述: 东方财富网-数据中心-新股数据-IPO审核信息-北交所
 
@@ -8374,7 +8373,7 @@ print(stock_register_bj_df)
 
 接口: stock_register_db
 
-目标地址: https://data.eastmoney.com/xg/cyb/
+目标地址: <https://data.eastmoney.com/xg/cyb/>
 
 描述: 东方财富网-数据中心-新股数据-注册制审核-达标企业
 
@@ -8434,7 +8433,7 @@ print(stock_register_db_df)
 
 接口: stock_qbzf_em
 
-目标地址: https://data.eastmoney.com/other/gkzf.html
+目标地址: <https://data.eastmoney.com/other/gkzf.html>
 
 描述: 东方财富网-数据中心-新股数据-增发-全部增发
 
@@ -8493,7 +8492,7 @@ print(stock_qbzf_em_df)
 
 接口: stock_pg_em
 
-目标地址: https://data.eastmoney.com/xg/pg/
+目标地址: <https://data.eastmoney.com/xg/pg/>
 
 描述: 东方财富网-数据中心-新股数据-配股
 
@@ -8554,7 +8553,7 @@ print(stock_pg_em_df)
 
 接口: stock_repurchase_em
 
-目标地址: https://data.eastmoney.com/gphg/hglist.html
+目标地址: <https://data.eastmoney.com/gphg/hglist.html>
 
 描述: 东方财富网-数据中心-股票回购-股票回购数据
 
@@ -8619,7 +8618,7 @@ print(stock_repurchase_em_df)
 
 接口: stock_zh_a_gbjg_em
 
-目标地址: https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html#/gbjg
+目标地址: <https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html#/gbjg>
 
 描述: 东方财富-A股数据-股本结构
 

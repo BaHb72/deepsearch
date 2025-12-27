@@ -7,7 +7,7 @@ Unified strategy base class that supports both backtesting and live trading.
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, Optional, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Dict, Optional, cast
 
 from loguru import logger
 

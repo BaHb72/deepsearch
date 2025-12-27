@@ -15,10 +15,12 @@
 **位置**: `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py`
 
 **新增参数**:
+
 - `begin_date: Optional[int]` - 公告日期开始筛选(格式: YYYYMMDD)
 - `end_date: Optional[int]` - 公告日期结束筛选(格式: YYYYMMDD)
 
 **返回字段** (新增详细说明):
+
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | MARKET_CODE | string | 证券代码 |
@@ -53,6 +55,7 @@
 | EXPECTED_FUND_RAISING | double | 预计募集资金(元) |
 
 **使用示例**:
+
 ```python
 # 查询最近2年的配股记录
 end_date = 20251216
@@ -72,17 +75,20 @@ data = await provider.get_right_issue(
 **位置**: `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py`
 
 **接口修改**:
+
 - 原接口不需要 `code_list` 参数（全市场汇总数据）
 - 添加 `local_path`、`is_local` 参数
 - 添加 `begin_date`、`end_date` 参数
 
 **新增参数**:
+
 - `local_path: Optional[str]` - 本地存储路径
 - `is_local: bool` - 是否使用本地存储
 - `begin_date: Optional[int]` - 交易日期开始筛选(格式: YYYYMMDD)
 - `end_date: Optional[int]` - 交易日期结束筛选(格式: YYYYMMDD)
 
 **返回字段** (新增详细说明):
+
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | TRADE_DATE | string | 交易日期 |
@@ -94,6 +100,7 @@ data = await provider.get_right_issue(
 | SUM_MARGIN_TRADE_BALANCE | float | 融资融券余额(元) |
 
 **使用示例**:
+
 ```python
 # 查询最近30天的融资融券汇总
 end_date = 20251216
@@ -112,12 +119,14 @@ data = await provider.get_margin_summary(
 **位置**: `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py`
 
 **新增参数**:
+
 - `local_path: Optional[str]` - 本地存储路径
 - `is_local: bool` - 是否使用本地存储
 - `begin_date: Optional[int]` - 交易日期开始筛选(格式: YYYYMMDD)
 - `end_date: Optional[int]` - 交易日期结束筛选(格式: YYYYMMDD)
 
 **返回字段** (新增详细说明):
+
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | MARKET_CODE | string | 证券代码 |
@@ -133,6 +142,7 @@ data = await provider.get_margin_summary(
 | MARGIN_TRADE_BALANCE | float | 融资融券余额(元) |
 
 **使用示例**:
+
 ```python
 # 查询最近30天的某只股票融资融券数据
 end_date = 20251216
@@ -152,12 +162,14 @@ data = await provider.get_margin_detail(
 **位置**: `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py`
 
 **新增参数**:
+
 - `local_path: Optional[str]` - 本地存储路径
 - `is_local: bool` - 是否使用本地存储
 - `begin_date: Optional[int]` - 交易日期开始筛选(格式: YYYYMMDD)
 - `end_date: Optional[int]` - 交易日期结束筛选(格式: YYYYMMDD)
 
 **返回字段** (新增详细说明):
+
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | MARKET_CODE | string | 证券代码 |
@@ -174,6 +186,7 @@ data = await provider.get_margin_detail(
 | SELL_AMOUNT | float | 卖出额(元) |
 
 **使用示例**:
+
 ```python
 # 查询最近30天的龙虎榜记录
 end_date = 20251216
@@ -190,12 +203,14 @@ data = await provider.get_long_hu_bang(
 
 ## 累计扩展接口总览
 
-### 第一批扩展（已完成）:
+### 第一批扩展（已完成）
+
 1. `get_equity_pledge_freeze` - 股权质押/冻结
 2. `get_equity_restricted` - 限售股解禁
 3. `get_dividend` - 分红数据
 
-### 第二批扩展（本次）:
+### 第二批扩展（本次）
+
 4. `get_right_issue` - 配股数据
 5. `get_margin_summary` - 融资融券交易汇总
 6. `get_margin_detail` - 融资融券标的明细
@@ -208,6 +223,7 @@ data = await provider.get_long_hu_bang(
 ## 文件变更清单
 
 ### 主要实现文件
+
 1. **`amazingdata_extended.py`**
    - 更新了 `get_right_issue` 方法（添加日期参数+完整字段文档）
    - 更新了 `get_margin_summary` 方法（添加日期参数+完整字段文档）
@@ -215,6 +231,7 @@ data = await provider.get_long_hu_bang(
    - 更新了 `get_long_hu_bang` 方法（添加日期参数+完整字段文档）
 
 ### 测试文件
+
 2. **`verify_amazingdata_api.py`**
    - 更新了 `test_get_right_issue` 测试函数
    - 更新了 `test_get_margin_summary` 测试函数
@@ -227,12 +244,15 @@ data = await provider.get_long_hu_bang(
 ## 技术特点
 
 ### 1. **一致的接口设计**
+
 所有扩展接口都遵循相同的设计模式：
+
 - 可选的 `begin_date` 和 `end_date` 参数
 - 统一的日期格式（YYYYMMDD 整数）
 - 完全向后兼容，不影响现有代码
 
 ### 2. **灵活的参数组合**
+
 ```python
 # 不带日期筛选（返回全部数据）
 data = info.get_right_issue(["000001.SZ"])
@@ -252,14 +272,18 @@ data = info.get_right_issue(
 ```
 
 ### 3. **详尽的字段文档**
+
 每个接口都包含：
+
 - 30+个字段的完整列表
 - 每个字段的数据类型
 - 每个字段的业务含义
 - 特殊枚举值的说明
 
 ### 4. **完善的测试覆盖**
+
 每个接口都有对应的测试函数，包括：
+
 - 日期范围参数测试
 - 返回数据验证
 - 字段范围输出
@@ -270,6 +294,7 @@ data = info.get_right_issue(
 ## 测试指南
 
 ### 运行单个接口测试
+
 ```bash
 # 测试配股数据
 python scripts/verify_amazingdata_api.py get_right_issue
@@ -285,6 +310,7 @@ python scripts/verify_amazingdata_api.py get_long_hu_bang
 ```
 
 ### 预期输出示例
+
 ```
 [1/4] 测试 get_right_issue (配股数据)
       参数: code_list=['000001.SZ'], begin_date=20231216, end_date=20251216
@@ -304,18 +330,21 @@ python scripts/verify_amazingdata_api.py get_long_hu_bang
 ## 数据特点说明
 
 ### 融资融券数据特点
+
 - **汇总数据** (`get_margin_summary`): 全市场级别，不需要指定股票代码
 - **明细数据** (`get_margin_detail`): 个股级别，需要指定具体股票
 - **数据频率**: 通常每个交易日更新一次
 - **历史深度**: 通常可以查询近几年的数据
 
 ### 龙虎榜数据特点
+
 - 只有上榜的股票才有数据
 - 上榜原因包括：涨跌幅、换手率、振幅等异常波动
 - 包含营业部买卖明细
 - 不是每天都有数据（取决于市场波动）
 
 ### 配股数据特点
+
 - 不是每只股票都有配股记录
 - 配股进度包含多个阶段：预案、股东大会、证监会核准、实施等
 - 可能包含历史配股和未来配股计划
@@ -325,6 +354,7 @@ python scripts/verify_amazingdata_api.py get_long_hu_bang
 ## 参考文档
 
 本次扩展基于以下官方文档：
+
 - 中泰数据交易平台数据字典说明 v3.5.7.2 (配股数据)
 - 中泰数据交易平台数据字典说明 v3.5.8.1 (融资融券交易汇总)
 - 中泰数据交易平台数据字典说明 v3.5.8.2 (融资融券交易明细)

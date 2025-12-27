@@ -11,12 +11,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from .base import (
-    JSONDict,
-    dataframe_to_dict,
-    format_response,
-    get_amazingdata_provider,
-)
+from .base import JSONDict, dataframe_to_dict, format_response, get_amazingdata_provider
 
 router = APIRouter(tags=["AmazingData-ETF数据"])
 
@@ -65,7 +60,7 @@ async def get_etf_pcf(request: EtfPcfRequest) -> JSONDict:
         # 如果返回的是元组 (etf_pcf_info, etf_pcf_constituent)
         if isinstance(result, tuple) and len(result) == 2:
             etf_pcf_info, etf_pcf_constituent = result
-            
+
             # 转换成分股字典
             constituent_data: Dict[str, Any] = {}
             if isinstance(etf_pcf_constituent, dict):

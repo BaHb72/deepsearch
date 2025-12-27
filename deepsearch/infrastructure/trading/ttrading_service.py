@@ -10,13 +10,12 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import datetime
-from typing import Any, Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
+import redis.asyncio as aioredis
 from loguru import logger
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
-
-import redis.asyncio as aioredis
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis as AsyncRedis
@@ -59,7 +58,8 @@ async def _get_redis_client() -> "AsyncRedis":
     if _redis_client is None:
         # 尝试从配置获取 Redis 连接信息，默认使用本地连接
         try:
-            from deepsearch.config.loader import get_config
+            from deepsearch.config import get_config
+
             config = get_config()
             cache_config = getattr(config, "database", None)
             if cache_config:
@@ -78,7 +78,7 @@ async def _get_redis_client() -> "AsyncRedis":
                     return _redis_client
         except Exception as e:
             logger.debug(f"从配置加载 Redis 连接失败，使用默认配置: {e}")
-        
+
         # 默认连接
         _redis_client = aioredis.from_url(
             "redis://localhost:6379/0",
@@ -115,7 +115,7 @@ class TTradingService:
         key = f"{self.REDIS_KEY_PREFIX}{strategy.id}"
 
         # 存储策略 JSON
-        await redis.set(key, strategy.model_dump_json())
+        await redis.set(key, strategy.model_dump_json())  # type: ignore[attr-defined]
         # 添加到策略列表
         await redis.sadd(self.REDIS_LIST_KEY, strategy.id)
 
@@ -129,7 +129,7 @@ class TTradingService:
         data = await redis.get(key)
 
         if data:
-            return TTradingStrategy.model_validate_json(data)
+            return TTradingStrategy.model_validate_json(data)  # type: ignore[attr-defined, no-any-return]
         return None
 
     async def list_strategies(self) -> list[TTradingStrategy]:
@@ -164,7 +164,7 @@ class TTradingService:
 
         redis = await self._get_redis()
         key = f"{self.REDIS_KEY_PREFIX}{strategy_id}"
-        await redis.set(key, strategy.model_dump_json())
+        await redis.set(key, strategy.model_dump_json())  # type: ignore[attr-defined]
 
         self._logger.info(f"更新策略: {strategy_id}")
         return strategy
@@ -205,13 +205,11 @@ class TTradingService:
 
         redis = await self._get_redis()
         key = f"{self.REDIS_KEY_PREFIX}{strategy_id}"
-        await redis.set(key, strategy.model_dump_json())
+        await redis.set(key, strategy.model_dump_json())  # type: ignore[attr-defined]
 
         return strategy
 
-    async def remove_signal(
-        self, strategy_id: str, signal_id: str
-    ) -> Optional[TTradingStrategy]:
+    async def remove_signal(self, strategy_id: str, signal_id: str) -> Optional[TTradingStrategy]:
         """移除买卖点信号"""
         strategy = await self.get_strategy(strategy_id)
         if not strategy:
@@ -222,7 +220,7 @@ class TTradingService:
 
         redis = await self._get_redis()
         key = f"{self.REDIS_KEY_PREFIX}{strategy_id}"
-        await redis.set(key, strategy.model_dump_json())
+        await redis.set(key, strategy.model_dump_json())  # type: ignore[attr-defined]
 
         return strategy
 
@@ -245,15 +243,13 @@ class TTradingService:
 
         redis = await self._get_redis()
         key = f"{self.REDIS_KEY_PREFIX}{strategy_id}"
-        await redis.set(key, strategy.model_dump_json())
+        await redis.set(key, strategy.model_dump_json())  # type: ignore[attr-defined]
 
         return strategy
 
     # ==================== 价格监控 ====================
 
-    async def check_signals(
-        self, strategy_id: str, current_price: float
-    ) -> list[TradingSignal]:
+    async def check_signals(self, strategy_id: str, current_price: float) -> list[TradingSignal]:
         """检查策略中的信号是否触发"""
         strategy = await self.get_strategy(strategy_id)
         if not strategy or strategy.status != "active":
@@ -288,14 +284,12 @@ class TTradingService:
             # 更新策略
             redis = await self._get_redis()
             key = f"{self.REDIS_KEY_PREFIX}{strategy_id}"
-            await redis.set(key, strategy.model_dump_json())
+            await redis.set(key, strategy.model_dump_json())  # type: ignore[attr-defined]
 
             # 发送通知
             if strategy.notify_enabled and self._notification_callback:
                 for signal in triggered_signals:
-                    await self._send_signal_notification(
-                        strategy, signal, current_price
-                    )
+                    await self._send_signal_notification(strategy, signal, current_price)
 
         return triggered_signals
 
@@ -355,9 +349,7 @@ def get_ttrading_service() -> TTradingService:
     return _ttrading_service
 
 
-def set_ttrading_notification_callback(
-    callback: Callable[[str, str], Any]
-) -> None:
+def set_ttrading_notification_callback(callback: Callable[[str, str], Any]) -> None:
     """设置通知回调函数"""
     service = get_ttrading_service()
     service._notification_callback = callback

@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Iterable, Mapping, MutableMapping, Sequence, Union
 
-from .stock_record import StockListRecord, DEFAULT_BOARD_FIELDS
+from .stock_record import DEFAULT_BOARD_FIELDS, StockListRecord
 
 _BOARD_SPLIT_PATTERN = re.compile(r"[;,/|]+")
 
@@ -166,7 +166,7 @@ def _derive_board_aliases(raw_board: str) -> set[str]:
             continue
 
         if name_obj == "主板" and any(
-                _keyword_hit(normalized, board_lower, forbidden) for forbidden in _MAIN_BOARD_EXCLUDES
+            _keyword_hit(normalized, board_lower, forbidden) for forbidden in _MAIN_BOARD_EXCLUDES
         ):
             continue
         aliases.add(name_obj)
@@ -181,7 +181,6 @@ def _derive_board_aliases(raw_board: str) -> set[str]:
 
         for implied_name in implied_names:
             aliases.add(implied_name)
-
 
     # 防止过度补全：若存在“港股创业板”，确保港股/创业板已添加
     if "港股创业板" in aliases:
@@ -215,10 +214,10 @@ class BoardUniverse:
     _boards: MutableMapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     def update_from_records(
-            self,
-            records: Iterable[Union[StockListRecord, Mapping[str, object]]],
-            *,
-            board_fields: Sequence[str] = DEFAULT_BOARD_FIELDS,
+        self,
+        records: Iterable[Union[StockListRecord, Mapping[str, object]]],
+        *,
+        board_fields: Sequence[str] = DEFAULT_BOARD_FIELDS,
     ) -> None:
         """Refresh board membership based on stock list records."""
 

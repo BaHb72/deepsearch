@@ -24,10 +24,8 @@ from typing import Any, Callable, Dict, List, Optional, cast
 
 import pandas as pd
 
-from deepsearch.infrastructure.providers.interfaces.base import (
-    DataProvider,
-    DataProviderError,
-)
+from deepsearch.infrastructure.providers.interfaces.base import DataProvider, DataProviderError
+
 # AmazingData SDK
 from ._sdk_loader import HAS_AMAZINGDATA, ad
 from .config import (
@@ -42,6 +40,7 @@ from .query_manager import AmazingDataQueryManager
 from .types import AmazingDataSDKProtocol
 
 logger = ProcessLoggerAdapter(action="optimized")
+
 
 class ErrorCode(Enum):
     """错误代码枚举"""
@@ -759,7 +758,9 @@ class OptimizedAmazingDataProvider(DataProvider):
             result = await self._login()
             if result:
                 # 启动心跳
-                self._heartbeat_task = cast(asyncio.Task[None], asyncio.create_task(self.heartbeat.heartbeat_loop()))
+                self._heartbeat_task = cast(
+                    asyncio.Task[None], asyncio.create_task(self.heartbeat.heartbeat_loop())
+                )
                 logger.info("AmazingData 优化版本连接成功")
                 return True
             return False
@@ -1082,4 +1083,3 @@ class OptimizedAmazingDataProvider(DataProvider):
         except Exception as e:
             logger.error(f"获取K线数据失败: {e}")
             return None
-

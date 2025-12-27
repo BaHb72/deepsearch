@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_board_industry_summary_ths
 
-目标地址: https://q.10jqka.com.cn/thshy/
+目标地址: <https://q.10jqka.com.cn/thshy/>
 
 描述: 同花顺-同花顺行业一览表
 
@@ -71,7 +71,7 @@ print(stock_board_industry_summary_ths_df)
 
 接口: stock_board_industry_index_ths
 
-目标地址: https://q.10jqka.com.cn/thshy/detail/code/881270/
+目标地址: <https://q.10jqka.com.cn/thshy/detail/code/881270/>
 
 描述: 同花顺-板块-行业板块-指数日频率数据
 
@@ -128,7 +128,7 @@ print(stock_board_industry_index_ths_df)
 
 接口: stock_board_industry_name_em
 
-目标地址: https://quote.eastmoney.com/center/boardlist.html#industry_board
+目标地址: <https://quote.eastmoney.com/center/boardlist.html#industry_board>
 
 描述: 东方财富-沪深京板块-行业板块
 
@@ -188,7 +188,7 @@ print(stock_board_industry_name_em_df)
 
 接口: stock_board_industry_spot_em
 
-目标地址: https://quote.eastmoney.com/bk/90.BK1027.html
+目标地址: <https://quote.eastmoney.com/bk/90.BK1027.html>
 
 描述: 东方财富网-沪深板块-行业板块-实时行情
 
@@ -236,7 +236,7 @@ print(stock_board_industry_spot_em_df)
 
 接口: stock_board_industry_cons_em
 
-目标地址: https://data.eastmoney.com/bkzj/BK1027.html
+目标地址: <https://data.eastmoney.com/bkzj/BK1027.html>
 
 描述: 东方财富-沪深板块-行业板块-板块成份
 
@@ -326,7 +326,7 @@ print(stock_board_industry_cons_em_df)
 
 接口: stock_board_industry_hist_em
 
-目标地址: https://quote.eastmoney.com/bk/90.BK1027.html
+目标地址: <https://quote.eastmoney.com/bk/90.BK1027.html>
 
 描述: 东方财富-沪深板块-行业板块-历史行情数据
 
@@ -389,7 +389,7 @@ print(stock_board_industry_hist_em_df)
 
 接口: stock_board_industry_hist_min_em
 
-目标地址: http://quote.eastmoney.com/bk/90.BK1027.html
+目标地址: <http://quote.eastmoney.com/bk/90.BK1027.html>
 
 描述: 东方财富-沪深板块-行业板块-分时历史行情数据
 

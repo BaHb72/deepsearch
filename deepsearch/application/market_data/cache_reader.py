@@ -97,13 +97,13 @@ class MarketDataCacheReader:
         expires_at: str | None
 
     async def fetch_strength(
-            self,
-            windows: Sequence[str],
-            *,
-            boards: Sequence[str] | None = None,
-            limit: int | None = None,
-            module: str = "strength",
-            source: str | None = None,
+        self,
+        windows: Sequence[str],
+        *,
+        boards: Sequence[str] | None = None,
+        limit: int | None = None,
+        module: str = "strength",
+        source: str | None = None,
     ) -> CacheResult:
         """Load capital strength aggregations for specified windows."""
 
@@ -129,12 +129,12 @@ class MarketDataCacheReader:
         return self._build_result(items, envelopes)
 
     async def fetch_order_imbalance(
-            self,
-            window: str,
-            *,
-            limit: int | None = None,
-            module: str = "order_imbalance",
-            source: str | None = None,
+        self,
+        window: str,
+        *,
+        limit: int | None = None,
+        module: str = "order_imbalance",
+        source: str | None = None,
     ) -> CacheResult:
         """Load order imbalance rankings for a window."""
 
@@ -153,11 +153,11 @@ class MarketDataCacheReader:
         return self._build_result(entries, [envelope])
 
     async def fetch_auction_quality(
-            self,
-            boards: Sequence[str],
-            *,
-            module: str = "auction_quality",
-            source: str | None = None,
+        self,
+        boards: Sequence[str],
+        *,
+        module: str = "auction_quality",
+        source: str | None = None,
     ) -> CacheResult:
         """Load auction quality snapshot per board."""
 
@@ -177,10 +177,10 @@ class MarketDataCacheReader:
         return self._build_result(results, envelopes)
 
     async def fetch_board_universe(
-            self,
-            *,
-            module: str = "boards",
-            source: str | None = None,
+        self,
+        *,
+        module: str = "boards",
+        source: str | None = None,
     ) -> tuple[dict[str, tuple[str, ...]], CacheEnvelope | None]:
         """Load cached board membership snapshot if available."""
 
@@ -279,9 +279,9 @@ class MarketDataCacheReader:
         )
 
     def _build_result(
-            self,
-            items: list[Mapping[str, Any]],
-            envelopes: Sequence[CacheEnvelope],
+        self,
+        items: list[Mapping[str, Any]],
+        envelopes: Sequence[CacheEnvelope],
     ) -> CacheResult:
         now = datetime.now(timezone.utc)
         as_of_dt: datetime | None = None

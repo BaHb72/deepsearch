@@ -1,4 +1,5 @@
 from typing import Any
+
 from ...hashes import HashAlgorithm
 
 class PBKDF2HMAC:
@@ -9,7 +10,6 @@ class PBKDF2HMAC:
         salt: bytes,
         iterations: int,
     ) -> None: ...
-
     def derive(self, data: bytes) -> bytes: ...
 
 __all__ = ["PBKDF2HMAC"]

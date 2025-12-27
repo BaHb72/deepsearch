@@ -11,9 +11,11 @@ AmazingData SDK 单接口测试
 """
 
 import sys
+
 sys.path.insert(0, "d:/Stock/code/deepsearch")
 
 from datetime import datetime, timedelta
+
 import pandas as pd
 
 # ========== 配置 ==========
@@ -21,7 +23,7 @@ CONFIG = {
     "username": "212200038719",
     "password": "212200038719@2025",
     "host": "101.230.159.234",
-    "port": 8600
+    "port": 8600,
 }
 LOCAL_PATH = "D://AmazingData_local_data//"
 
@@ -36,6 +38,7 @@ def get_sdk():
     global _ad
     if _ad is None:
         import AmazingData as ad
+
         _ad = ad
     return _ad
 
@@ -80,6 +83,7 @@ def get_calendar_cached():
 
 # ========== 单接口测试函数 ==========
 
+
 def test_get_calendar():
     """测试 BaseData.get_calendar"""
     login()
@@ -95,7 +99,7 @@ def test_get_calendar():
 def test_get_code_list():
     """测试 BaseData.get_code_list"""
     login()
-    codes = get_base().get_code_list(security_type='EXTRA_STOCK_A')
+    codes = get_base().get_code_list(security_type="EXTRA_STOCK_A")
     if codes and len(codes) > 0:
         print(f"[OK] get_code_list: {len(codes)}条")
         print(f"     样本: {list(codes)[:5]}")
@@ -107,7 +111,7 @@ def test_get_code_list():
 def test_get_code_info():
     """测试 BaseData.get_code_info"""
     login()
-    info = get_base().get_code_info(security_type='EXTRA_STOCK_A')
+    info = get_base().get_code_info(security_type="EXTRA_STOCK_A")
     if info is not None and len(info) > 0:
         print(f"[OK] get_code_info: {len(info)}条")
         return True
@@ -152,11 +156,7 @@ def test_get_backward_factor():
     """测试 BaseData.get_backward_factor (后复权因子)"""
     login()
     base = get_base()
-    data = base.get_backward_factor(
-        code_list=["000001.SZ"],
-        local_path=LOCAL_PATH,
-        is_local=False
-    )
+    data = base.get_backward_factor(code_list=["000001.SZ"], local_path=LOCAL_PATH, is_local=False)
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_backward_factor: {len(data)}行 x {len(data.columns)}列")
         print(f"     日期范围: {data.index[0]} ~ {data.index[-1]}")
@@ -172,11 +172,7 @@ def test_get_adj_factor():
     """测试 BaseData.get_adj_factor (前复权因子)"""
     login()
     base = get_base()
-    data = base.get_adj_factor(
-        code_list=["000001.SZ"],
-        local_path=LOCAL_PATH,
-        is_local=False
-    )
+    data = base.get_adj_factor(code_list=["000001.SZ"], local_path=LOCAL_PATH, is_local=False)
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_adj_factor: {len(data)}行 x {len(data.columns)}列")
         print(f"     日期范围: {data.index[0]} ~ {data.index[-1]}")
@@ -195,12 +191,12 @@ def test_get_hist_code_list():
     # 查询最近1年的历史代码
     end_date = int(datetime.now().strftime("%Y%m%d"))
     start_date = int((datetime.now() - timedelta(days=365)).strftime("%Y%m%d"))
-    
+
     code_list = base.get_hist_code_list(
-        security_type='EXTRA_STOCK_A_SH_SZ',
+        security_type="EXTRA_STOCK_A_SH_SZ",
         start_date=start_date,
         end_date=end_date,
-        local_path=LOCAL_PATH
+        local_path=LOCAL_PATH,
     )
     if code_list and len(code_list) > 0:
         print(f"[OK] get_hist_code_list: {len(code_list)}个历史代码")
@@ -219,7 +215,7 @@ def test_get_future_code_info():
     futures = base.get_future_code_list()
     if futures and len(futures) > 0:
         test_code = futures[0]  # 只测试第1个期货
-        data = base.get_future_code_info(security_type='EXTRA_FUTURE')
+        data = base.get_future_code_info(security_type="EXTRA_FUTURE")
         if isinstance(data, pd.DataFrame) and not data.empty:
             print(f"[OK] get_future_code_info: {len(data)}行 x {len(data.columns)}列")
             print(f"     字段: {list(data.columns)[:5]}")
@@ -238,10 +234,7 @@ def test_query_kline():
     cal = get_calendar_cached()
     market = ad.MarketData(cal)
     kline = market.query_kline(
-        code_list=["000001.SZ"],
-        begin_date=20241201,
-        end_date=20241213,
-        period=10008  # day
+        code_list=["000001.SZ"], begin_date=20241201, end_date=20241213, period=10008  # day
     )
     if kline and "000001.SZ" in kline:
         data = kline["000001.SZ"]
@@ -259,10 +252,7 @@ def test_query_kline_min():
     market = ad.MarketData(cal)
     today = int(datetime.now().strftime("%Y%m%d"))
     kline = market.query_kline(
-        code_list=["000001.SZ"],
-        begin_date=today,
-        end_date=today,
-        period=10000  # min1
+        code_list=["000001.SZ"], begin_date=today, end_date=today, period=10000  # min1
     )
     if kline and "000001.SZ" in kline:
         data = kline["000001.SZ"]
@@ -279,11 +269,7 @@ def test_query_snapshot():
     cal = get_calendar_cached()
     market = ad.MarketData(cal)
     today = int(datetime.now().strftime("%Y%m%d"))
-    snapshot = market.query_snapshot(
-        code_list=["000001.SZ"],
-        begin_date=today,
-        end_date=today
-    )
+    snapshot = market.query_snapshot(code_list=["000001.SZ"], begin_date=today, end_date=today)
     if snapshot:
         keys = list(snapshot.keys())
         print(f"[OK] query_snapshot: {len(keys)}条, keys={keys[:3]}")
@@ -323,19 +309,21 @@ def test_get_share_holder():
     # 测试带时间范围筛选
     end_date = int(datetime.now().strftime("%Y%m%d"))
     begin_date = int((datetime.now() - timedelta(days=365)).strftime("%Y%m%d"))  # 最近1年
-    
+
     data = info.get_share_holder(
-        ["000001.SZ"], 
-        local_path=LOCAL_PATH, 
+        ["000001.SZ"],
+        local_path=LOCAL_PATH,
         is_local=False,
         begin_date=begin_date,
-        end_date=end_date
+        end_date=end_date,
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_share_holder: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ {end_date}")
-        if 'HOLDER_ENDDATE' in data.columns:
-            print(f"     截止日期范围: {data['HOLDER_ENDDATE'].min()} ~ {data['HOLDER_ENDDATE'].max()}")
+        if "HOLDER_ENDDATE" in data.columns:
+            print(
+                f"     截止日期范围: {data['HOLDER_ENDDATE'].min()} ~ {data['HOLDER_ENDDATE'].max()}"
+            )
         return True
     elif data and len(data) > 0:
         print(f"[OK] get_share_holder: {len(data)}条")
@@ -351,10 +339,7 @@ def test_get_long_hu_bang():
     end_date = int(datetime.now().strftime("%Y%m%d"))
     begin_date = int((datetime.now() - timedelta(days=30)).strftime("%Y%m%d"))
     data = info.get_long_hu_bang(
-        ["000001.SZ", "600519.SH"],
-        local_path=LOCAL_PATH,
-        begin_date=begin_date,
-        end_date=end_date
+        ["000001.SZ", "600519.SH"], local_path=LOCAL_PATH, begin_date=begin_date, end_date=end_date
     )
     if isinstance(data, pd.DataFrame):
         if not data.empty:
@@ -392,18 +377,18 @@ def test_get_margin_detail():
     # 测试带时间范围筛选
     end_date = int(datetime.now().strftime("%Y%m%d"))
     begin_date = int((datetime.now() - timedelta(days=30)).strftime("%Y%m%d"))  # 最近30天
-    
+
     data = info.get_margin_detail(
-        ["000001.SZ"], 
-        local_path=LOCAL_PATH, 
+        ["000001.SZ"],
+        local_path=LOCAL_PATH,
         is_local=False,
         begin_date=begin_date,
-        end_date=end_date
+        end_date=end_date,
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_margin_detail: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ {end_date}")
-        if 'TRADE_DATE' in data.columns:
+        if "TRADE_DATE" in data.columns:
             print(f"     交易日期范围: {data['TRADE_DATE'].min()} ~ {data['TRADE_DATE'].max()}")
         return True
     elif data and len(data) > 0:
@@ -443,20 +428,22 @@ def test_get_profit_express():
     info = get_sdk().InfoData()
     # 测试带时间范围筛选
     end_date = int(datetime.now().strftime("%Y%m%d"))
-    begin_date = int((datetime.now() - timedelta(days=365*2)).strftime("%Y%m%d"))  # 最近2年
-    
+    begin_date = int((datetime.now() - timedelta(days=365 * 2)).strftime("%Y%m%d"))  # 最近2年
+
     data = info.get_profit_express(
-        ["000001.SZ"], 
-        local_path=LOCAL_PATH, 
+        ["000001.SZ"],
+        local_path=LOCAL_PATH,
         is_local=False,
         begin_date=begin_date,
-        end_date=end_date
+        end_date=end_date,
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_profit_express: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ {end_date}")
-        if 'REPORTING_PERI' in data.columns:
-            print(f"     报告期范围: {data['REPORTING_PERI'].min()} ~ {data['REPORTING_PERI'].max()}")
+        if "REPORTING_PERI" in data.columns:
+            print(
+                f"     报告期范围: {data['REPORTING_PERI'].min()} ~ {data['REPORTING_PERI'].max()}"
+            )
         return True
     elif data and len(data) > 0:
         print(f"[OK] get_profit_express: {len(data)}条")
@@ -471,20 +458,22 @@ def test_get_profit_notice():
     info = get_sdk().InfoData()
     # 测试带时间范围筛选
     end_date = int(datetime.now().strftime("%Y%m%d"))
-    begin_date = int((datetime.now() - timedelta(days=365*2)).strftime("%Y%m%d"))  # 最近2年
-    
+    begin_date = int((datetime.now() - timedelta(days=365 * 2)).strftime("%Y%m%d"))  # 最近2年
+
     data = info.get_profit_notice(
-        ["000001.SZ"], 
-        local_path=LOCAL_PATH, 
+        ["000001.SZ"],
+        local_path=LOCAL_PATH,
         is_local=False,
         begin_date=begin_date,
-        end_date=end_date
+        end_date=end_date,
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_profit_notice: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ {end_date}")
-        if 'REPORTING_PERIOD' in data.columns:
-            print(f"     报告期范围: {data['REPORTING_PERIOD'].min()} ~ {data['REPORTING_PERIOD'].max()}")
+        if "REPORTING_PERIOD" in data.columns:
+            print(
+                f"     报告期范围: {data['REPORTING_PERIOD'].min()} ~ {data['REPORTING_PERIOD'].max()}"
+            )
         return True
     elif data and len(data) > 0:
         print(f"[OK] get_profit_notice: {len(data)}条")
@@ -499,20 +488,22 @@ def test_get_dividend():
     info = get_sdk().InfoData()
     # 测试带时间范围筛选
     end_date = int(datetime.now().strftime("%Y%m%d"))
-    begin_date = int((datetime.now() - timedelta(days=365*2)).strftime("%Y%m%d"))  # 最近2年
-    
+    begin_date = int((datetime.now() - timedelta(days=365 * 2)).strftime("%Y%m%d"))  # 最近2年
+
     data = info.get_dividend(
-        ["000001.SZ"], 
-        local_path=LOCAL_PATH, 
+        ["000001.SZ"],
+        local_path=LOCAL_PATH,
         is_local=False,
         begin_date=begin_date,
-        end_date=end_date
+        end_date=end_date,
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_dividend: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ {end_date}")
-        if 'DATE_DVD_ANN' in data.columns:
-            print(f"     分红公告日期范围: {data['DATE_DVD_ANN'].min()} ~ {data['DATE_DVD_ANN'].max()}")
+        if "DATE_DVD_ANN" in data.columns:
+            print(
+                f"     分红公告日期范围: {data['DATE_DVD_ANN'].min()} ~ {data['DATE_DVD_ANN'].max()}"
+            )
         return True
     elif data and len(data) > 0:
         print(f"[OK] get_dividend: {len(data)}条")
@@ -543,17 +534,14 @@ def test_get_margin_summary():
     # 测试带时间范围筛选
     end_date = int(datetime.now().strftime("%Y%m%d"))
     begin_date = int((datetime.now() - timedelta(days=30)).strftime("%Y%m%d"))  # 最近30天
-    
+
     data = info.get_margin_summary(
-        local_path=LOCAL_PATH, 
-        is_local=False,
-        begin_date=begin_date,
-        end_date=end_date
+        local_path=LOCAL_PATH, is_local=False, begin_date=begin_date, end_date=end_date
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_margin_summary: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ {end_date}")
-        if 'TRADE_DATE' in data.columns:
+        if "TRADE_DATE" in data.columns:
             print(f"     交易日期范围: {data['TRADE_DATE'].min()} ~ {data['TRADE_DATE'].max()}")
         return True
     elif data and len(data) > 0:
@@ -584,19 +572,19 @@ def test_get_equity_restricted():
     info = get_sdk().InfoData()
     # 测试带时间范围筛选
     end_date = int(datetime.now().strftime("%Y%m%d"))
-    begin_date = int((datetime.now() - timedelta(days=365*2)).strftime("%Y%m%d"))  # 最近2年
-    
+    begin_date = int((datetime.now() - timedelta(days=365 * 2)).strftime("%Y%m%d"))  # 最近2年
+
     data = info.get_equity_restricted(
-        ["000001.SZ"], 
-        local_path=LOCAL_PATH, 
+        ["000001.SZ"],
+        local_path=LOCAL_PATH,
         is_local=False,
         begin_date=begin_date,
-        end_date=end_date
+        end_date=end_date,
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_equity_restricted: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ {end_date}")
-        if 'LIST_DATE' in data.columns:
+        if "LIST_DATE" in data.columns:
             print(f"     解禁日期范围: {data['LIST_DATE'].min()} ~ {data['LIST_DATE'].max()}")
         return True
     elif data and len(data) > 0:
@@ -612,19 +600,19 @@ def test_get_right_issue():
     info = get_sdk().InfoData()
     # 测试带时间范围筛选
     end_date = int(datetime.now().strftime("%Y%m%d"))
-    begin_date = int((datetime.now() - timedelta(days=365*2)).strftime("%Y%m%d"))  # 最近2年
-    
+    begin_date = int((datetime.now() - timedelta(days=365 * 2)).strftime("%Y%m%d"))  # 最近2年
+
     data = info.get_right_issue(
-        ["000001.SZ"], 
-        local_path=LOCAL_PATH, 
+        ["000001.SZ"],
+        local_path=LOCAL_PATH,
         is_local=False,
         begin_date=begin_date,
-        end_date=end_date
+        end_date=end_date,
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_right_issue: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ {end_date}")
-        if 'ANN_DATE' in data.columns:
+        if "ANN_DATE" in data.columns:
             print(f"     公告日期范围: {data['ANN_DATE'].min()} ~ {data['ANN_DATE'].max()}")
         return True
     elif data and len(data) > 0:
@@ -669,18 +657,18 @@ def test_get_fund_share():
     # 测试带时间范围筛选
     end_date = int(datetime.now().strftime("%Y%m%d"))
     begin_date = int((datetime.now() - timedelta(days=90)).strftime("%Y%m%d"))  # 最近90天
-    
+
     data = info.get_fund_share(
-        ["510300.SH"], 
-        local_path=LOCAL_PATH, 
+        ["510300.SH"],
+        local_path=LOCAL_PATH,
         is_local=False,
         begin_date=begin_date,
-        end_date=end_date
+        end_date=end_date,
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_fund_share: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ {end_date}")
-        if 'CHANGE_DATE' in data.columns:
+        if "CHANGE_DATE" in data.columns:
             print(f"     变动日期范围: {data['CHANGE_DATE'].min()} ~ {data['CHANGE_DATE'].max()}")
         return True
     elif data and len(data) > 0:
@@ -688,7 +676,6 @@ def test_get_fund_share():
         return True
     print("[FAIL] get_fund_share: 无数据")
     return False
-
 
 
 def test_get_option_basic_info():
@@ -716,17 +703,14 @@ def test_get_index_weight():
     info = get_sdk().InfoData()
     # 测试带时间范围筛选
     begin_date = int((datetime.now() - timedelta(days=30)).strftime("%Y%m%d"))  # 最近30天
-    
+
     data = info.get_index_weight(
-        ["000300.SH"], 
-        local_path=LOCAL_PATH, 
-        is_local=False,
-        begin_date=begin_date
+        ["000300.SH"], local_path=LOCAL_PATH, is_local=False, begin_date=begin_date
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_index_weight: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ 现在")
-        if 'TRADE_DATE' in data.columns:
+        if "TRADE_DATE" in data.columns:
             print(f"     交易日期范围: {data['TRADE_DATE'].min()} ~ {data['TRADE_DATE'].max()}")
         return True
     elif data and len(data) > 0:
@@ -734,7 +718,6 @@ def test_get_index_weight():
         return True
     print("[FAIL] get_index_weight: 无数据")
     return False
-
 
 
 def test_get_industry_daily():
@@ -771,18 +754,18 @@ def test_get_fund_iopv():
     # 测试带时间范围筛选
     end_date = int(datetime.now().strftime("%Y%m%d"))
     begin_date = int((datetime.now() - timedelta(days=90)).strftime("%Y%m%d"))  # 最近90天
-    
+
     data = info.get_fund_iopv(
-        ["510300.SH"], 
-        local_path=LOCAL_PATH, 
+        ["510300.SH"],
+        local_path=LOCAL_PATH,
         is_local=False,
         begin_date=begin_date,
-        end_date=end_date
+        end_date=end_date,
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_fund_iopv: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ {end_date}")
-        if 'PRICE_DATE' in data.columns:
+        if "PRICE_DATE" in data.columns:
             print(f"     日期范围: {data['PRICE_DATE'].min()} ~ {data['PRICE_DATE'].max()}")
         return True
     elif data and len(data) > 0:
@@ -792,26 +775,25 @@ def test_get_fund_iopv():
     return False
 
 
-
 def test_get_equity_pledge_freeze():
     """测试 InfoData.get_equity_pledge_freeze (股权质押/冻结) - 仅1个标的"""
     login()
     info = get_sdk().InfoData()
     # 测试带时间范围筛选
     end_date = int(datetime.now().strftime("%Y%m%d"))
-    begin_date = int((datetime.now() - timedelta(days=365*2)).strftime("%Y%m%d"))  # 最近2年
-    
+    begin_date = int((datetime.now() - timedelta(days=365 * 2)).strftime("%Y%m%d"))  # 最近2年
+
     data = info.get_equity_pledge_freeze(
-        ["000001.SZ"], 
-        local_path=LOCAL_PATH, 
+        ["000001.SZ"],
+        local_path=LOCAL_PATH,
         is_local=False,
         begin_date=begin_date,
-        end_date=end_date
+        end_date=end_date,
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_equity_pledge_freeze: {len(data)}条")
         print(f"     时间范围: {begin_date} ~ {end_date}")
-        if 'ANN_DATE' in data.columns:
+        if "ANN_DATE" in data.columns:
             print(f"     公告日期范围: {data['ANN_DATE'].min()} ~ {data['ANN_DATE'].max()}")
         return True
     elif data and len(data) > 0:
@@ -829,11 +811,11 @@ def test_get_history_stock_status():
     end_date = int(datetime.now().strftime("%Y%m%d"))
     start_date = int((datetime.now() - timedelta(days=365)).strftime("%Y%m%d"))
     data = info.get_history_stock_status(
-        ["000001.SZ"], 
-        local_path=LOCAL_PATH, 
+        ["000001.SZ"],
+        local_path=LOCAL_PATH,
         is_local=False,
         begin_date=start_date,
-        end_date=end_date
+        end_date=end_date,
     )
     if isinstance(data, pd.DataFrame) and not data.empty:
         print(f"[OK] get_history_stock_status: {len(data)}条")
@@ -852,7 +834,9 @@ def test_get_treasury_yield():
     # InfoData.get_treasury_yield 需要 code_list 参数
     # 国债代码格式可能需要确认
     try:
-        data = info.get_treasury_yield(code_list=["019623.SH"], local_path=LOCAL_PATH, is_local=False)
+        data = info.get_treasury_yield(
+            code_list=["019623.SH"], local_path=LOCAL_PATH, is_local=False
+        )
         if isinstance(data, pd.DataFrame) and not data.empty:
             print(f"[OK] get_treasury_yield: {len(data)}条")
             return True
@@ -1102,13 +1086,38 @@ def list_apis():
     """列出所有可测试接口"""
     print("可测试接口列表:\n")
     print("BaseData:")
-    for api in ["get_calendar", "get_code_list", "get_code_info", "get_etf_pcf", "get_option_code_list", "get_future_code_list", "get_backward_factor", "get_adj_factor", "get_hist_code_list", "get_future_code_info"]:
+    for api in [
+        "get_calendar",
+        "get_code_list",
+        "get_code_info",
+        "get_etf_pcf",
+        "get_option_code_list",
+        "get_future_code_list",
+        "get_backward_factor",
+        "get_adj_factor",
+        "get_hist_code_list",
+        "get_future_code_info",
+    ]:
         print(f"  - {api}")
     print("\nMarketData:")
     for api in ["query_kline", "query_kline_min", "query_snapshot"]:
         print(f"  - {api}")
     print("\nInfoData:")
-    for api in ["get_balance_sheet", "get_income", "get_cash_flow", "get_profit_express", "get_profit_notice", "get_share_holder", "get_dividend", "get_holder_num", "get_long_hu_bang", "get_block_trading", "get_margin_detail", "get_margin_summary", "get_index_constituent"]:
+    for api in [
+        "get_balance_sheet",
+        "get_income",
+        "get_cash_flow",
+        "get_profit_express",
+        "get_profit_notice",
+        "get_share_holder",
+        "get_dividend",
+        "get_holder_num",
+        "get_long_hu_bang",
+        "get_block_trading",
+        "get_margin_detail",
+        "get_margin_summary",
+        "get_index_constituent",
+    ]:
         print(f"  - {api}")
     print(f"\n共 {len(API_TESTS)} 个接口")
 
@@ -1119,13 +1128,13 @@ def main():
         print("      python verify_amazingdata_api.py list  # 列出所有接口")
         print("      python verify_amazingdata_api.py all   # 测试全部")
         return
-    
+
     api_name = sys.argv[1].lower()
-    
+
     if api_name == "list":
         list_apis()
         return
-    
+
     if api_name == "all":
         print(f"测试全部 {len(API_TESTS)} 个接口\n")
         passed = 0
@@ -1138,12 +1147,12 @@ def main():
         logout()
         print(f"\n总计: {passed}/{len(API_TESTS)} 通过")
         return
-    
+
     if api_name not in API_TESTS:
         print(f"未知接口: {api_name}")
         print("使用 'list' 查看所有可用接口")
         return
-    
+
     print(f"测试接口: {api_name}\n")
     try:
         API_TESTS[api_name]()

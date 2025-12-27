@@ -12,7 +12,6 @@ _DEFAULT_HOSTS = {"localhost", "127.0.0.1"}
 _DEFAULT_PORT = 8888
 
 
-
 class AmazingDataProviderConfigPayload(TypedDict, total=False):
     """AmazingData Provider 构造参数的类型定义。"""
 
@@ -159,7 +158,6 @@ class AmazingDataConfig(BaseModel):
         default_factory=AmazingDataMonitoringConfig, description="监控配置"
     )
 
-
     def to_provider_payload(self) -> AmazingDataProviderConfigPayload:
         """将 Pydantic 配置转换为 AmazingDataProvider 构造参数"""
 
@@ -187,8 +185,6 @@ class AmazingDataConfig(BaseModel):
             payload["tgw_log_path"] = self.connection.tgw_log_path
 
         return payload
-
-
 
     @model_validator(mode="after")
     def _validate_connection_when_enabled(self) -> "AmazingDataConfig":

@@ -10,6 +10,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 class Base(DeclarativeBase):
     """SQLAlchemy ORM 基类，供遗留模型复用。"""
+
     pass
 
 
@@ -28,6 +29,4 @@ class StockInfo(Base):
     total_shares = Column(Numeric(18, 2), nullable=True)
     float_shares = Column(Numeric(18, 2), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
-    )
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

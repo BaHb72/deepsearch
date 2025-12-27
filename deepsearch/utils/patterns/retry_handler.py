@@ -21,8 +21,8 @@ from typing import (
     Dict,
     Optional,
     Tuple,
-    TypeVar,
     TypedDict,
+    TypeVar,
     Union,
     cast,
 )
@@ -101,6 +101,7 @@ class RetryConfig:
                 504: RetryOverride(max_retries=2, base_delay=1.0),  # Gateway timeout
             }
 
+
 _ADAPTIVE_DELAY_PROFILES: Dict[int, AdaptiveDelayProfile] = {
     429: AdaptiveDelayProfile(multiplier=5.0, growth=2.0, cap=60.0),
     503: AdaptiveDelayProfile(multiplier=2.0, growth=1.5, cap=30.0),
@@ -146,10 +147,24 @@ class RetryHandler:
         """计算下一次重试的延迟"""
         override = self._get_override(error_code)
 
-        base_delay = float(override.get("base_delay", self.config.base_delay)) if override else self.config.base_delay
-        max_delay = float(override.get("max_delay", self.config.max_delay)) if override else self.config.max_delay
-        strategy = override.get("strategy", self.config.strategy) if override else self.config.strategy
-        exponential_base = float(override.get("exponential_base", self.config.exponential_base)) if override else self.config.exponential_base
+        base_delay = (
+            float(override.get("base_delay", self.config.base_delay))
+            if override
+            else self.config.base_delay
+        )
+        max_delay = (
+            float(override.get("max_delay", self.config.max_delay))
+            if override
+            else self.config.max_delay
+        )
+        strategy = (
+            override.get("strategy", self.config.strategy) if override else self.config.strategy
+        )
+        exponential_base = (
+            float(override.get("exponential_base", self.config.exponential_base))
+            if override
+            else self.config.exponential_base
+        )
 
         if strategy == RetryStrategy.EXPONENTIAL:
             delay = min(base_delay * (exponential_base**attempt), max_delay)
@@ -160,7 +175,9 @@ class RetryHandler:
         else:
             delay = self._adaptive_delay(attempt, error_code)
 
-        jitter_enabled = bool(override.get("jitter", self.config.jitter)) if override else self.config.jitter
+        jitter_enabled = (
+            bool(override.get("jitter", self.config.jitter)) if override else self.config.jitter
+        )
         if jitter_enabled:
             delay *= 0.5 + random()
 
@@ -372,4 +389,3 @@ async def retry_async(func: Callable[..., Awaitable[T]], *args: Any, **kwargs: A
 def retry_sync(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     """便捷的同步重试函数"""
     return global_retry_handler.retry_sync(func, *args, **kwargs)
-

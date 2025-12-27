@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
+from collections.abc import Mapping as MappingABC
+from collections.abc import Sequence as SequenceABC
 from types import MappingProxyType
 from typing import Callable, Mapping, TypeVar, cast
 
@@ -17,11 +18,8 @@ from deepsearch.ports.amazingdata_process import (
     ProcessCommand,
     ProcessCommandType,
 )
-from .amazingdata_process_proxy import (
-    AmazingDataProcessProxy,
-    ProxyResponse,
-    RequestType,
-)
+
+from .amazingdata_process_proxy import AmazingDataProcessProxy, ProxyResponse, RequestType
 
 TExec = TypeVar("TExec")
 

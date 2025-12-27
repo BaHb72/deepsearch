@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from helpers import fetch_code_list
 
+
 def test_passwords():
     print("\n" + "=" * 60)
     print("AmazingData 密码格式测试")

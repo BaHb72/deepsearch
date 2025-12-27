@@ -17,13 +17,13 @@ from typing import (
     Callable,
     Dict,
     List,
+    Literal,
     Optional,
+    ParamSpec,
     Tuple,
     TypedDict,
     TypeVar,
-    Literal,
     cast,
-    ParamSpec,
 )
 
 from deepsearch.observability.monitoring.data_source_monitor import DataSourceMonitor, get_monitor
@@ -307,7 +307,9 @@ def monitor_access(
 
             @functools.wraps(func)
             async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-                context = _prepare_context(func, source_type, access_type, extract_symbol, args, kwargs)
+                context = _prepare_context(
+                    func, source_type, access_type, extract_symbol, args, kwargs
+                )
                 async_func = cast(Callable[P, Awaitable[Any]], func)
                 try:
                     async with context:

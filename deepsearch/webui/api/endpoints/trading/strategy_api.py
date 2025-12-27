@@ -10,14 +10,14 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from deepsearch.strategies.implementations.mean_reversion import MeanReversionStrategy
+from deepsearch.strategies.implementations.momentum import MomentumStrategy
+from deepsearch.strategies.implementations.moving_average import MovingAverageStrategy
 from deepsearch.strategies.managers.manager import get_strategy_manager
 from deepsearch.strategies.services.backtest_service import (
     StrategyComparisonConfig,
     get_backtest_service,
 )
-from deepsearch.strategies.implementations.mean_reversion import MeanReversionStrategy
-from deepsearch.strategies.implementations.momentum import MomentumStrategy
-from deepsearch.strategies.implementations.moving_average import MovingAverageStrategy
 
 # API Router
 router = APIRouter(prefix="/api/strategy", tags=["strategy"])

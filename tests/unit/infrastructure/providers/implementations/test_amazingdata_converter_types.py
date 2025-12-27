@@ -53,10 +53,20 @@ def test_coalesce_filters_blank_and_preserves_falsey(module):
                     "institution_ratio": 12.3,
                     "concentration": 45.6,
                     "top10_holders": [
-                        {"holder_name": "AgencyA", "hold_num": 1000, "hold_ratio": 2.1, "change": 10},
+                        {
+                            "holder_name": "AgencyA",
+                            "hold_num": 1000,
+                            "hold_ratio": 2.1,
+                            "change": 10,
+                        },
                     ],
                     "top10_tradable": [
-                        {"holder_name": "AgencyB", "hold_num": 800, "hold_ratio": 1.5, "change": -5},
+                        {
+                            "holder_name": "AgencyB",
+                            "hold_num": 800,
+                            "hold_ratio": 1.5,
+                            "change": -5,
+                        },
                     ],
                 }
             },

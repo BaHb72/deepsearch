@@ -10,14 +10,13 @@ from typing import Any, Mapping, Sequence
 from loguru import logger
 
 from deepsearch.core.components.data_components import DatabaseComponent
+from deepsearch.core.runtime.context import get_context
 from deepsearch.infrastructure.persistence.database import DatabaseService
 from deepsearch.infrastructure.persistence.ingestion_records import DataSourceRecordPersistence
 from deepsearch.infrastructure.providers.implementations.amazingdata.ports import build_board_source
 from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 from deepsearch.utils.data_sources import DataSourceManager, get_data_source_manager
 
-
-from deepsearch.core.runtime.context import get_context
 
 def _get_database_service() -> DatabaseService:
     component = get_context().get_component("database")
@@ -41,18 +40,39 @@ class IngestionJobSummary:
     error_message: str | None
     metadata: Mapping[str, Any]
 
+    @staticmethod
+    def _parse_datetime(value: Any) -> datetime | None:
+        """将值转换为datetime类型。"""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError:
+                return None
+        return None
+
     @classmethod
     def from_row(cls, row: Mapping[str, Any]) -> "IngestionJobSummary":
+        queued_at_val = cls._parse_datetime(row.get("queued_at"))
+        if queued_at_val is None:
+            queued_at_val = datetime.now()
         return cls(
             job_id=str(row["id"]),
             job_type=str(row.get("job_type") or ""),
-            data_source=DataSourceType(str(row.get("data_source") or DataSourceType.AMAZINGDATA.value)),
-            access_type=DataAccessType(str(row.get("access_type") or DataAccessType.STOCK_LIST.value)),
+            data_source=DataSourceType(
+                str(row.get("data_source") or DataSourceType.AMAZINGDATA.value)
+            ),
+            access_type=DataAccessType(
+                str(row.get("access_type") or DataAccessType.STOCK_LIST.value)
+            ),
             status=str(row.get("status") or "queued"),
-            queued_at=row.get("queued_at"),
-            started_at=row.get("started_at"),
-            completed_at=row.get("completed_at"),
-            expires_at=row.get("expires_at"),
+            queued_at=queued_at_val,
+            started_at=cls._parse_datetime(row.get("started_at")),
+            completed_at=cls._parse_datetime(row.get("completed_at")),
+            expires_at=cls._parse_datetime(row.get("expires_at")),
             record_count=row.get("record_count"),
             error_message=row.get("error_message"),
             metadata=row.get("job_metadata") or {},

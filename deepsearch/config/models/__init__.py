@@ -40,8 +40,8 @@ from .market_data import (
 )
 from .monitoring import MonitoringConfig
 from .notifications import NotificationBaseUrls, NotificationCategoryConfig, NotificationsConfig
-from .prefetch import DataSourcePrefetchConfig
 from .performance import PerformanceConfig
+from .prefetch import DataSourcePrefetchConfig
 from .qmt import QmtConfig
 from .runtime import RuntimeConfig, RuntimeModeSetting
 from .security import SecurityConfig
@@ -114,4 +114,3 @@ __all__ = [
     # Data source schedulers
     "DataSourcePrefetchConfig",
 ]
-

@@ -28,9 +28,10 @@ from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapa
 # 模块级别导入 xtquant，避免在每个函数中重复导入（会导致重复的连接消息）
 try:
     from xtquant import xtdata
+
     XTDATA_AVAILABLE = True
 except ImportError:
-    xtdata = None  # type: ignore
+    xtdata = None  # type: ignore[assignment]
     XTDATA_AVAILABLE = False
 
 
@@ -80,7 +81,9 @@ class MiniQMTProvider(DataProvider):
 
         # 订阅管理
         self.subscribed_symbols: set[str] = set()
-        self.symbol_callbacks: dict[str, list[Callable[[Dict[str, Any]], Awaitable[None] | None]]] = {}
+        self.symbol_callbacks: dict[
+            str, list[Callable[[Dict[str, Any]], Awaitable[None] | None]]
+        ] = {}
 
         # 心跳管理
         self.last_heartbeat = time.time()
@@ -93,7 +96,7 @@ class MiniQMTProvider(DataProvider):
 
     def get_capabilities(self) -> set[DataCapability]:
         """返回 MiniQMT 支持的数据能力集合。
-        
+
         基于 xtquant SDK 官方文档，MiniQMT 支持以下能力：
         - 实时行情：tick数据、分钟数据、快照等
         - 历史行情：K线数据、历史行情
@@ -183,8 +186,8 @@ class MiniQMTProvider(DataProvider):
             if response and "data" in response:
                 data = response["data"]
                 if limit and limit > 0:
-                    return data[:limit]
-                return data
+                    return cast(List[Dict[str, Any]], data[:limit])
+                return cast(List[Dict[str, Any]], data)
 
         except asyncio.TimeoutError:
             logger.error("获取股票列表超时")
@@ -230,7 +233,7 @@ class MiniQMTProvider(DataProvider):
                 return None
 
             # 转换 DataFrame 为字典列表
-            records = df.reset_index().to_dict("records")
+            records = cast(List[Dict[str, Any]], df.reset_index().to_dict("records"))
 
             # 应用限制
             if limit and limit > 0:
@@ -282,21 +285,23 @@ class MiniQMTProvider(DataProvider):
                 # 标准化返回格式
                 result = []
                 for item in data:
-                    result.append({
-                        "symbol": item.get("code", ""),
-                        "name": item.get("name", ""),
-                        "price": float(item.get("lastPrice", 0) or 0),
-                        "open": float(item.get("open", 0) or 0),
-                        "high": float(item.get("high", 0) or 0),
-                        "low": float(item.get("low", 0) or 0),
-                        "prev_close": float(item.get("lastClose", 0) or 0),
-                        "volume": float(item.get("volume", 0) or 0),
-                        "amount": float(item.get("amount", 0) or 0),
-                        "bid_price": float(item.get("bidPrice", 0) or 0),
-                        "ask_price": float(item.get("askPrice", 0) or 0),
-                        "timestamp": item.get("time", ""),
-                        "source": "miniqmt",
-                    })
+                    result.append(
+                        {
+                            "symbol": item.get("code", ""),
+                            "name": item.get("name", ""),
+                            "price": float(item.get("lastPrice", 0) or 0),
+                            "open": float(item.get("open", 0) or 0),
+                            "high": float(item.get("high", 0) or 0),
+                            "low": float(item.get("low", 0) or 0),
+                            "prev_close": float(item.get("lastClose", 0) or 0),
+                            "volume": float(item.get("volume", 0) or 0),
+                            "amount": float(item.get("amount", 0) or 0),
+                            "bid_price": float(item.get("bidPrice", 0) or 0),
+                            "ask_price": float(item.get("askPrice", 0) or 0),
+                            "timestamp": item.get("time", ""),
+                            "source": "miniqmt",
+                        }
+                    )
                 return result
 
         except asyncio.TimeoutError:
@@ -419,7 +424,7 @@ class MiniQMTProvider(DataProvider):
                 self._wait_for_response("STOCK_INFO"), timeout=self.config.timeout
             )
             if response and "data" in response:
-                return response["data"]
+                return cast(Dict[str, Any], response["data"])
         except asyncio.TimeoutError:
             logger.error("获取股票信息超时")
 
@@ -460,6 +465,7 @@ class MiniQMTProvider(DataProvider):
 
             # 获取资金流向数据
             data = xtdata.get_market_data_ex(
+                fields=[],
                 stock_list=[symbol],
                 period=xt_period,
                 start_time=start_date or "",
@@ -473,17 +479,19 @@ class MiniQMTProvider(DataProvider):
                     # 标准化返回格式
                     result = []
                     for item in records:
-                        result.append({
-                            "symbol": symbol,
-                            "date": item.get("time", item.get("index", "")),
-                            "large_inflow": float(item.get("largeInflow", 0) or 0),
-                            "large_outflow": float(item.get("largeOutflow", 0) or 0),
-                            "medium_inflow": float(item.get("mediumInflow", 0) or 0),
-                            "medium_outflow": float(item.get("mediumOutflow", 0) or 0),
-                            "small_inflow": float(item.get("smallInflow", 0) or 0),
-                            "small_outflow": float(item.get("smallOutflow", 0) or 0),
-                            "source": "miniqmt",
-                        })
+                        result.append(
+                            {
+                                "symbol": symbol,
+                                "date": item.get("time", item.get("index", "")),
+                                "large_inflow": float(item.get("largeInflow", 0) or 0),
+                                "large_outflow": float(item.get("largeOutflow", 0) or 0),
+                                "medium_inflow": float(item.get("mediumInflow", 0) or 0),
+                                "medium_outflow": float(item.get("mediumOutflow", 0) or 0),
+                                "small_inflow": float(item.get("smallInflow", 0) or 0),
+                                "small_outflow": float(item.get("smallOutflow", 0) or 0),
+                                "source": "miniqmt",
+                            }
+                        )
                     return result
 
         # xtquant SDK 检查已在模块导入时完成
@@ -520,8 +528,10 @@ class MiniQMTProvider(DataProvider):
 
             # 龙虎榜数据需要通过内置 Python 调用
             # 这里提供占位实现，实际需要在 QMT 终端内部执行
-            logger.info(f"龙虎榜查询: symbols={len(symbols) if symbols else 0}, "
-                       f"start={start_date}, end={end_date}")
+            logger.info(
+                f"龙虎榜查询: symbols={len(symbols) if symbols else 0}, "
+                f"start={start_date}, end={end_date}"
+            )
 
             # 返回空列表表示功能可用但无数据
             return []
@@ -561,8 +571,9 @@ class MiniQMTProvider(DataProvider):
 
             if trading_dates:
                 # 返回交易日期列表
-                return [{"date": d, "market": market, "source": "miniqmt"} 
-                        for d in trading_dates[-30:]]  # 最近30个交易日
+                return [
+                    {"date": d, "market": market, "source": "miniqmt"} for d in trading_dates[-30:]
+                ]  # 最近30个交易日
 
         # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
@@ -601,6 +612,7 @@ class MiniQMTProvider(DataProvider):
             if trading_dates:
                 # 转换时间戳为日期字符串
                 from datetime import datetime
+
                 result = []
                 for ts in trading_dates:
                     if isinstance(ts, int):
@@ -768,6 +780,7 @@ class MiniQMTProvider(DataProvider):
             xt_period = period_map.get(period, "orderflow1m")
 
             data = xtdata.get_market_data_ex(
+                fields=[],
                 stock_list=[symbol],
                 period=xt_period,
                 start_time=start_date or "",
@@ -777,7 +790,7 @@ class MiniQMTProvider(DataProvider):
             if data and symbol in data:
                 df = data[symbol]
                 if not df.empty:
-                    return df.reset_index().to_dict("records")
+                    return cast(List[Dict[str, Any]], df.reset_index().to_dict("records"))
 
         # xtquant SDK 检查已在模块导入时完成
         except Exception as e:

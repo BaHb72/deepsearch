@@ -4,8 +4,8 @@ MiniQMT API 端点
 提供 MiniQMT 数据源的 REST API 接口
 """
 
-from datetime import datetime
 import asyncio
+from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
 from fastapi import APIRouter, HTTPException, Query
@@ -13,13 +13,14 @@ from loguru import logger
 from pydantic import BaseModel
 
 from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTProvider
+
 # 兼容新旧管理器
 from deepsearch.infrastructure.providers.managers.manager import DataProviderManager
 
 try:
     from deepsearch.utils.data_sources import DataSourceManager
 except ImportError:
-    DataSourceManager = None  # type: ignore
+    DataSourceManager = None  # type: ignore[assignment, misc]
 
 # 创建 API 路由
 router = APIRouter(prefix="/api/miniqmt", tags=["MiniQMT"])
@@ -70,7 +71,7 @@ def get_miniqmt_provider() -> MiniQMTProvider:
             data_manager = get_context().get_component("data_provider_manager")
             # 兼容检查：支持新旧两种管理器
             if isinstance(data_manager, DataProviderManager) or (
-                    DataSourceManager is not None and isinstance(data_manager, DataSourceManager)
+                DataSourceManager is not None and isinstance(data_manager, DataSourceManager)
             ):
                 provider_candidate = data_manager.get_provider("miniqmt")
                 if isinstance(provider_candidate, MiniQMTProvider):
@@ -90,8 +91,16 @@ def get_miniqmt_provider() -> MiniQMTProvider:
                 async def get_stock_list(self, limit=None, **kwargs):
                     return []
 
-                async def get_kline_data(self, symbol, period="1d", start_date=None,
-                                         end_date=None, limit=100, adjust="none", **kwargs):
+                async def get_kline_data(
+                    self,
+                    symbol,
+                    period="1d",
+                    start_date=None,
+                    end_date=None,
+                    limit=100,
+                    adjust="none",
+                    **kwargs,
+                ):
                     return []
 
             _miniqmt_provider = _DirectMiniQMTProvider()
@@ -244,7 +253,9 @@ async def get_realtime_data(
             elif isinstance(payload, Mapping):
                 data = [dict(payload)]
             elif isinstance(payload, Sequence):
-                data = [dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload]
+                data = [
+                    dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload
+                ]
             else:
                 data = []
 
@@ -309,7 +320,9 @@ async def get_history_data(
             elif isinstance(payload, Mapping):
                 data = [dict(payload)]
             elif isinstance(payload, Sequence):
-                data = [dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload]
+                data = [
+                    dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload
+                ]
             else:
                 data = []
 
@@ -371,7 +384,9 @@ async def get_minute_data(
             elif isinstance(payload, Mapping):
                 data = [dict(payload)]
             elif isinstance(payload, Sequence):
-                data = [dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload]
+                data = [
+                    dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload
+                ]
             else:
                 data = []
 
@@ -409,6 +424,7 @@ async def reconnect() -> Dict[str, Any]:
         from deepsearch.infrastructure.providers.implementations.qmt.connection_guard import (
             MiniQMTConnectionGuard,
         )
+
         MiniQMTConnectionGuard.reset()
 
         provider = get_miniqmt_provider()
@@ -523,16 +539,17 @@ async def get_connection_guard_status() -> Dict[str, Any]:
 
 # ==================== xtdata 直接调用端点 ====================
 
+
 @router.get("/xtdata/tick")
 async def get_xtdata_tick(
-        symbols: str = Query(..., description="股票代码，逗号分隔，如: 000001.SZ,600000.SH")
+    symbols: str = Query(..., description="股票代码，逗号分隔，如: 000001.SZ,600000.SH")
 ) -> Dict[str, Any]:
     """
     直接使用 xtdata 获取 Tick 数据（含五档盘口）
-    
+
     Args:
         symbols: 股票代码列表（逗号分隔）
-    
+
     Returns:
         Tick 数据，包含最新价、涨跌、五档盘口等
     """
@@ -589,14 +606,14 @@ async def get_xtdata_tick(
 
 @router.get("/xtdata/quote")
 async def get_xtdata_quote(
-        symbols: str = Query(..., description="股票代码，逗号分隔")
+    symbols: str = Query(..., description="股票代码，逗号分隔")
 ) -> Dict[str, Any]:
     """
     获取简化的实时行情数据
-    
+
     Args:
         symbols: 股票代码列表
-    
+
     Returns:
         简化的行情数据
     """
@@ -626,18 +643,20 @@ async def get_xtdata_quote(
                 change = last_price - pre_close if last_price and pre_close else 0
                 change_pct = (change / pre_close * 100) if pre_close else 0
 
-                quotes.append({
-                    "symbol": symbol,
-                    "name": symbol,  # 可以后续从其他数据源获取名称
-                    "lastPrice": last_price,
-                    "change": round(change, 2),
-                    "changePct": round(change_pct, 2),
-                    "open": tick.get("open"),
-                    "high": tick.get("high"),
-                    "low": tick.get("low"),
-                    "volume": tick.get("volume"),
-                    "amount": tick.get("amount"),
-                })
+                quotes.append(
+                    {
+                        "symbol": symbol,
+                        "name": symbol,  # 可以后续从其他数据源获取名称
+                        "lastPrice": last_price,
+                        "change": round(change, 2),
+                        "changePct": round(change_pct, 2),
+                        "open": tick.get("open"),
+                        "high": tick.get("high"),
+                        "low": tick.get("low"),
+                        "volume": tick.get("volume"),
+                        "amount": tick.get("amount"),
+                    }
+                )
 
         return {
             "success": True,
@@ -655,18 +674,18 @@ async def get_xtdata_quote(
 
 @router.get("/xtdata/kline")
 async def get_xtdata_kline(
-        symbol: str = Query(..., description="股票代码"),
-        period: str = Query("1d", description="周期: 1m, 5m, 15m, 30m, 60m, 1d"),
-        count: int = Query(100, description="获取条数"),
+    symbol: str = Query(..., description="股票代码"),
+    period: str = Query("1d", description="周期: 1m, 5m, 15m, 30m, 60m, 1d"),
+    count: int = Query(100, description="获取条数"),
 ) -> Dict[str, Any]:
     """
     获取K线历史数据
-    
+
     Args:
         symbol: 股票代码
         period: K线周期
         count: 获取条数
-    
+
     Returns:
         K线数据列表
     """
@@ -705,17 +724,17 @@ async def get_xtdata_kline(
 
         # xtdata 返回的是 DataFrame 格式: {field_name: pd.DataFrame}
         # DataFrame 的结构是: index=时间戳, columns=股票代码
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         try:
             # 获取各字段数据（time字段不需要，时间在columns中）
-            open_df = result.get('open')
-            high_df = result.get('high')
-            low_df = result.get('low')
-            close_df = result.get('close')
-            volume_df = result.get('volume')
-            amount_df = result.get('amount')
+            open_df = result.get("open")
+            high_df = result.get("high")
+            low_df = result.get("low")
+            close_df = result.get("close")
+            volume_df = result.get("volume")
+            amount_df = result.get("amount")
 
             # 检查是否有数据
             if open_df is None or (isinstance(open_df, pd.DataFrame) and open_df.empty):
@@ -746,11 +765,31 @@ async def get_xtdata_kline(
 
                 # 按行提取该股票的数据
                 open_data = open_df.loc[symbol].tolist()
-                high_data = high_df.loc[symbol].tolist() if isinstance(high_df, pd.DataFrame) and symbol in high_df.index else []
-                low_data = low_df.loc[symbol].tolist() if isinstance(low_df, pd.DataFrame) and symbol in low_df.index else []
-                close_data = close_df.loc[symbol].tolist() if isinstance(close_df, pd.DataFrame) and symbol in close_df.index else []
-                volume_data = volume_df.loc[symbol].tolist() if isinstance(volume_df, pd.DataFrame) and symbol in volume_df.index else []
-                amount_data = amount_df.loc[symbol].tolist() if isinstance(amount_df, pd.DataFrame) and symbol in amount_df.index else []
+                high_data = (
+                    high_df.loc[symbol].tolist()
+                    if isinstance(high_df, pd.DataFrame) and symbol in high_df.index
+                    else []
+                )
+                low_data = (
+                    low_df.loc[symbol].tolist()
+                    if isinstance(low_df, pd.DataFrame) and symbol in low_df.index
+                    else []
+                )
+                close_data = (
+                    close_df.loc[symbol].tolist()
+                    if isinstance(close_df, pd.DataFrame) and symbol in close_df.index
+                    else []
+                )
+                volume_data = (
+                    volume_df.loc[symbol].tolist()
+                    if isinstance(volume_df, pd.DataFrame) and symbol in volume_df.index
+                    else []
+                )
+                amount_data = (
+                    amount_df.loc[symbol].tolist()
+                    if isinstance(amount_df, pd.DataFrame) and symbol in amount_df.index
+                    else []
+                )
 
                 # 构建 K 线数据
                 for i, time_str in enumerate(time_columns):
@@ -766,16 +805,42 @@ async def get_xtdata_kline(
                     except Exception:
                         ts = 0
 
-                    klines.append({
-                        "time": ts,
-                        "time_str": str(time_str),
-                        "open": float(open_data[i]) if i < len(open_data) and not np.isnan(open_data[i]) else 0,
-                        "high": float(high_data[i]) if i < len(high_data) and not np.isnan(high_data[i]) else 0,
-                        "low": float(low_data[i]) if i < len(low_data) and not np.isnan(low_data[i]) else 0,
-                        "close": float(close_data[i]) if i < len(close_data) and not np.isnan(close_data[i]) else 0,
-                        "volume": int(volume_data[i]) if i < len(volume_data) and not np.isnan(volume_data[i]) else 0,
-                        "amount": float(amount_data[i]) if i < len(amount_data) and not np.isnan(amount_data[i]) else 0,
-                    })
+                    klines.append(
+                        {
+                            "time": ts,
+                            "time_str": str(time_str),
+                            "open": (
+                                float(open_data[i])
+                                if i < len(open_data) and not np.isnan(open_data[i])
+                                else 0
+                            ),
+                            "high": (
+                                float(high_data[i])
+                                if i < len(high_data) and not np.isnan(high_data[i])
+                                else 0
+                            ),
+                            "low": (
+                                float(low_data[i])
+                                if i < len(low_data) and not np.isnan(low_data[i])
+                                else 0
+                            ),
+                            "close": (
+                                float(close_data[i])
+                                if i < len(close_data) and not np.isnan(close_data[i])
+                                else 0
+                            ),
+                            "volume": (
+                                int(volume_data[i])
+                                if i < len(volume_data) and not np.isnan(volume_data[i])
+                                else 0
+                            ),
+                            "amount": (
+                                float(amount_data[i])
+                                if i < len(amount_data) and not np.isnan(amount_data[i])
+                                else 0
+                            ),
+                        }
+                    )
             else:
                 # 可能是旧版本格式或其他格式
                 return {
@@ -784,7 +849,6 @@ async def get_xtdata_kline(
                     "data": [],
                     "timestamp": datetime.now().isoformat(),
                 }
-
 
         except Exception as parse_error:
             logger.error(f"解析 K 线数据失败: {parse_error}")
@@ -804,7 +868,6 @@ async def get_xtdata_kline(
             "timestamp": datetime.now().isoformat(),
         }
 
-
     except ImportError:
         raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
     except Exception as e:
@@ -816,7 +879,7 @@ async def get_xtdata_kline(
 async def get_xtdata_status() -> Dict[str, Any]:
     """
     获取 xtdata 连接状态
-    
+
     Returns:
         xtdata 可用性状态
     """
@@ -855,11 +918,12 @@ async def get_xtdata_status() -> Dict[str, Any]:
 
 # ==================== 板块和股票列表端点 ====================
 
+
 @router.get("/xtdata/sectors")
 async def get_sectors() -> Dict[str, Any]:
     """
     获取所有板块列表
-    
+
     Returns:
         板块列表，包含板块名称和代码
     """
@@ -901,14 +965,14 @@ async def get_sectors() -> Dict[str, Any]:
 
 @router.get("/xtdata/sector/stocks")
 async def get_sector_stocks(
-        sector: str = Query(..., description="板块名称，如: 沪深A股, 上证50, 中证500")
+    sector: str = Query(..., description="板块名称，如: 沪深A股, 上证50, 中证500")
 ) -> Dict[str, Any]:
     """
     获取板块成分股
-    
+
     Args:
         sector: 板块名称
-    
+
     Returns:
         板块内的股票代码列表
     """
@@ -942,14 +1006,14 @@ async def get_sector_stocks(
 
 @router.get("/xtdata/instrument")
 async def get_instrument_info(
-        symbol: str = Query(..., description="股票代码，如: 000001.SZ")
+    symbol: str = Query(..., description="股票代码，如: 000001.SZ")
 ) -> Dict[str, Any]:
     """
     获取合约/股票详细信息
-    
+
     Args:
         symbol: 股票代码
-    
+
     Returns:
         合约详细信息，包含名称、上市日期、板块等
     """
@@ -982,14 +1046,14 @@ async def get_instrument_info(
 
 @router.get("/xtdata/instruments")
 async def get_instruments_batch(
-        symbols: str = Query(..., description="股票代码列表，逗号分隔")
+    symbols: str = Query(..., description="股票代码列表，逗号分隔")
 ) -> Dict[str, Any]:
     """
     批量获取合约详细信息
-    
+
     Args:
         symbols: 股票代码列表（逗号分隔）
-    
+
     Returns:
         多个合约的详细信息
     """
@@ -1026,20 +1090,21 @@ async def get_instruments_batch(
 
 # ==================== 交易日历端点 ====================
 
+
 @router.get("/xtdata/trading-dates")
 async def get_trading_dates(
-        market: str = Query("SH", description="市场代码: SH, SZ"),
-        start_date: str = Query("", description="开始日期，格式: 20240101"),
-        end_date: str = Query("", description="结束日期，格式: 20241231"),
+    market: str = Query("SH", description="市场代码: SH, SZ"),
+    start_date: str = Query("", description="开始日期，格式: 20240101"),
+    end_date: str = Query("", description="结束日期，格式: 20241231"),
 ) -> Dict[str, Any]:
     """
     获取交易日期列表
-    
+
     Args:
         market: 市场代码
         start_date: 开始日期
         end_date: 结束日期
-    
+
     Returns:
         交易日期列表
     """
@@ -1087,7 +1152,7 @@ async def get_trading_dates(
 async def get_holidays() -> Dict[str, Any]:
     """
     获取节假日列表
-    
+
     Returns:
         节假日日期列表
     """
@@ -1120,19 +1185,22 @@ async def get_holidays() -> Dict[str, Any]:
 
 # ==================== 财务数据端点 ====================
 
+
 @router.get("/xtdata/financial")
 async def get_financial_data(
-        symbol: str = Query(..., description="股票代码"),
-        table: str = Query("Balance",
-                           description="财务表类型: Balance(资产负债表), Income(利润表), CashFlow(现金流量表)"),
+    symbol: str = Query(..., description="股票代码"),
+    table: str = Query(
+        "Balance",
+        description="财务表类型: Balance(资产负债表), Income(利润表), CashFlow(现金流量表)",
+    ),
 ) -> Dict[str, Any]:
     """
     获取财务数据
-    
+
     Args:
         symbol: 股票代码
         table: 财务报表类型
-    
+
     Returns:
         财务数据
     """
@@ -1172,16 +1240,17 @@ async def get_financial_data(
 
 # ==================== ETF 和指数端点 ====================
 
+
 @router.get("/xtdata/etf-info")
 async def get_etf_info(
-        symbol: str = Query(..., description="ETF 代码，如: 510050.SH")
+    symbol: str = Query(..., description="ETF 代码，如: 510050.SH")
 ) -> Dict[str, Any]:
     """
     获取 ETF 信息
-    
+
     Args:
         symbol: ETF 代码
-    
+
     Returns:
         ETF 详细信息
     """
@@ -1220,14 +1289,14 @@ async def get_etf_info(
 
 @router.get("/xtdata/index-weight")
 async def get_index_weight(
-        index: str = Query(..., description="指数代码，如: 000300.SH (沪深300)")
+    index: str = Query(..., description="指数代码，如: 000300.SH (沪深300)")
 ) -> Dict[str, Any]:
     """
     获取指数成分股权重
-    
+
     Args:
         index: 指数代码
-    
+
     Returns:
         指数成分股及其权重
     """
@@ -1266,16 +1335,15 @@ async def get_index_weight(
 
 # ==================== 复权因子端点 ====================
 
+
 @router.get("/xtdata/divid-factors")
-async def get_divid_factors(
-        symbol: str = Query(..., description="股票代码")
-) -> Dict[str, Any]:
+async def get_divid_factors(symbol: str = Query(..., description="股票代码")) -> Dict[str, Any]:
     """
     获取复权因子
-    
+
     Args:
         symbol: 股票代码
-    
+
     Returns:
         复权因子数据
     """
@@ -1308,11 +1376,12 @@ async def get_divid_factors(
 
 # ==================== 市场信息端点 ====================
 
+
 @router.get("/xtdata/markets")
 async def get_markets() -> Dict[str, Any]:
     """
     获取所有市场列表
-    
+
     Returns:
         市场代码列表
     """
@@ -1338,7 +1407,7 @@ async def get_markets() -> Dict[str, Any]:
 async def get_period_list() -> Dict[str, Any]:
     """
     获取支持的 K 线周期列表
-    
+
     Returns:
         周期列表
     """
@@ -1362,20 +1431,23 @@ async def get_period_list() -> Dict[str, Any]:
 
 # ==================== 板块资金流向端点 ====================
 
+
 @router.get("/xtdata/sector-capital-flow")
 async def get_sector_capital_flow(
-        indicator: str = Query("今日", description="时间周期: 今日, 5日, 10日"),
-        sector_type: str = Query("行业资金流", description="板块类型: 行业资金流, 概念资金流, 地域资金流"),
+    indicator: str = Query("今日", description="时间周期: 今日, 5日, 10日"),
+    sector_type: str = Query(
+        "行业资金流", description="板块类型: 行业资金流, 概念资金流, 地域资金流"
+    ),
 ) -> Dict[str, Any]:
     """
     获取板块资金流向排名
-    
+
     使用 akshare 的 stock_sector_fund_flow_rank 接口获取数据
-    
+
     Args:
         indicator: 时间周期 (今日/5日/10日)
         sector_type: 板块类型 (行业资金流/概念资金流/地域资金流)
-    
+
     Returns:
         板块资金流向排名数据
     """
@@ -1396,7 +1468,7 @@ async def get_sector_capital_flow(
 
         # 转换 DataFrame 为列表
         # 处理 NaN 和 Infinity 值
-        df = df.replace([float('inf'), float('-inf')], None)
+        df = df.replace([float("inf"), float("-inf")], None)
         df = df.where(pd.notnull(df), None)
 
         # 转换为 JSON 可序列化格式
@@ -1405,9 +1477,9 @@ async def get_sector_capital_flow(
         # 清理 None 值和格式化数字
         cleaned_records = []
         for record in records:
-            cleaned = {}
+            cleaned: Dict[str, Any] = {}
             for k, v in record.items():
-                if v is None or (isinstance(v, float) and (pd.isna(v) or pd.isnull(v))):
+                if v is None or (isinstance(v, float) and pd.isna(v)):
                     cleaned[k] = None
                 elif isinstance(v, float):
                     cleaned[k] = round(v, 4)
@@ -1433,20 +1505,20 @@ async def get_sector_capital_flow(
 
 @router.get("/xtdata/stock-list")
 async def get_stock_list(
-        sector: str = Query("沪深A股", description="板块名称，默认沪深A股"),
-        limit: int = Query(0, description="返回数量限制，0表示全部"),
-        refresh: bool = Query(False, description="是否强制刷新缓存"),
+    sector: str = Query("沪深A股", description="板块名称，默认沪深A股"),
+    limit: int = Query(0, description="返回数量限制，0表示全部"),
+    refresh: bool = Query(False, description="是否强制刷新缓存"),
 ) -> Dict[str, Any]:
     """
     获取股票列表（含名称和拼音首字母）
-    
+
     从缓存读取，响应速度快。若缓存不存在则触发后台刷新。
-    
+
     Args:
         sector: 板块名称，默认"沪深A股"
         limit: 返回数量限制，0表示全部
         refresh: 是否强制刷新缓存
-    
+
     Returns:
         股票列表，包含 symbol, name, pinyin 字段
     """
@@ -1454,7 +1526,7 @@ async def get_stock_list(
         get_stock_list_from_cache,
         refresh_stock_cache,
     )
-    
+
     try:
         # 强制刷新
         if refresh:
@@ -1470,10 +1542,10 @@ async def get_stock_list(
                 "refreshing": True,
                 "timestamp": datetime.now().isoformat(),
             }
-        
+
         # 从缓存读取
         cached = get_stock_list_from_cache(sector, limit)
-        
+
         if cached is not None:
             return {
                 "success": True,
@@ -1483,11 +1555,11 @@ async def get_stock_list(
                 "cached": True,
                 "timestamp": datetime.now().isoformat(),
             }
-        
+
         # 缓存不存在，触发异步刷新并返回空
         logger.info(f"[StockList] 缓存不存在，触发刷新: {sector}")
         asyncio.create_task(refresh_stock_cache(sector))
-        
+
         return {
             "success": True,
             "message": "缓存正在初始化，请稍后重试",
@@ -1497,7 +1569,7 @@ async def get_stock_list(
             "refreshing": True,
             "timestamp": datetime.now().isoformat(),
         }
-        
+
     except Exception as e:
         logger.error(f"获取股票列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1505,23 +1577,23 @@ async def get_stock_list(
 
 @router.get("/xtdata/sector/stocks-with-names")
 async def get_sector_stocks_with_names(
-        sector: str = Query(..., description="板块名称"),
+    sector: str = Query(..., description="板块名称"),
 ) -> Dict[str, Any]:
     """
     获取板块成分股（含股票名称）
-    
+
     Args:
         sector: 板块名称
-    
+
     Returns:
         成分股列表，包含 symbol 和 name
     """
     try:
         from xtquant import xtdata
-        
+
         # 获取板块内股票列表
         stock_list = xtdata.get_stock_list_in_sector(sector)
-        
+
         if not stock_list:
             return {
                 "success": False,
@@ -1530,31 +1602,35 @@ async def get_sector_stocks_with_names(
                 "count": 0,
                 "timestamp": datetime.now().isoformat(),
             }
-        
+
         # 批量获取股票名称
         result = []
         for symbol in stock_list:
             try:
                 detail = xtdata.get_instrument_detail(symbol)
                 name = detail.get("InstrumentName", symbol) if detail else symbol
-                
+
                 # 处理编码问题
                 if name and isinstance(name, str):
                     try:
-                        name = name.encode('latin1').decode('gbk')
+                        name = name.encode("latin1").decode("gbk")
                     except (UnicodeDecodeError, UnicodeEncodeError):
                         pass
-                
-                result.append({
-                    "symbol": symbol,
-                    "name": name or symbol,
-                })
+
+                result.append(
+                    {
+                        "symbol": symbol,
+                        "name": name or symbol,
+                    }
+                )
             except Exception:
-                result.append({
-                    "symbol": symbol,
-                    "name": symbol,
-                })
-        
+                result.append(
+                    {
+                        "symbol": symbol,
+                        "name": symbol,
+                    }
+                )
+
         return {
             "success": True,
             "sector": sector,
@@ -1562,7 +1638,7 @@ async def get_sector_stocks_with_names(
             "count": len(result),
             "timestamp": datetime.now().isoformat(),
         }
-    
+
     except ImportError:
         raise HTTPException(status_code=503, detail="xtquant 未安装或未连接")
     except Exception as e:

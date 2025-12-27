@@ -37,4 +37,3 @@ async def bootstrap_system() -> None:
             logger.info("数据源后台预取调度器关闭，跳过启动")
     except Exception as exc:
         logger.error(f"系统引导执行失败: {exc}")
-

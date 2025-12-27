@@ -100,9 +100,7 @@ const DatabaseConfigWithStore: React.FC = () => {
     createConnection,
     updateConnection,
     deleteConnection,
-    testConnection,
-    activateConnection,
-    deactivateConnection
+    testConnection
   } = useDatabaseStore()
   const { selectedConnection, selectConnection } = useSelectedConnection()
 
@@ -120,7 +118,6 @@ const DatabaseConfigWithStore: React.FC = () => {
     target: null
   })
 
-  const [toggleLoading, setToggleLoading] = React.useState<Record<number, boolean>>({})
 
   const [form] = Form.useForm()
   const currentType = Form.useWatch('type', form)
@@ -149,17 +146,13 @@ const DatabaseConfigWithStore: React.FC = () => {
     return `${currentType}://${credential}${host}${port}/${database}`
   }, [currentType, databaseValue, hostValue, passwordValue, portValue, usernameValue])
   const overviewMetrics = React.useMemo(() => {
-    const enabled = connections.filter(item => item.activation?.enabled).length
     const connected = connections.filter(item => item.connectivity?.state === 'connected').length
-    const failure = connections.filter(item => item.connectivity?.state === 'error').length
-    const pending = connections.filter(item => item.connectivity?.state === 'connecting' || item.connectivity?.retrying).length
+    const disconnected = connections.filter(item => item.connectivity?.state !== 'connected').length
 
     return {
       total: connections.length,
-      enabled,
       connected,
-      failure,
-      pending,
+      disconnected,
     }
   }, [connections])
 
@@ -277,6 +270,8 @@ const DatabaseConfigWithStore: React.FC = () => {
 
       if (result.success) {
         message.success(result.message || '连接测试成功')
+        // 刷新连接列表以更新状态显示
+        await fetchConnections(true)
       } else {
         message.warning(result.message || '连接测试出现警告')
       }
@@ -303,37 +298,6 @@ const DatabaseConfigWithStore: React.FC = () => {
   }
 
   // 表格列定义
-  const handleToggle = async (record: DatabaseConnection, enabled: boolean) => {
-    if (!record || typeof record.id !== 'number') {
-      return
-    }
-
-    const key = record.id
-    setToggleLoading(prev => ({ ...prev, [key]: true }))
-
-    try {
-      if (enabled) {
-        await activateConnection(record.id, { connectImmediately: false })
-        message.success(`已启用连接：${record.name}`)
-      } else {
-        await deactivateConnection(record.id, { disconnect: true })
-        message.success(`已停用连接：${record.name}`)
-      }
-
-      await fetchConnections(true)
-    } catch (error) {
-      const errorMessage = resolveErrorMessage(error, '启用状态切换失败，请稍后重试')
-      message.error(errorMessage)
-      console.error('启用状态切换失败:', error)
-      await fetchConnections(true)
-    } finally {
-      setToggleLoading(prev => {
-        const next = { ...prev }
-        delete next[key]
-        return next
-      })
-    }
-  }
 
   const columns = [
     {
@@ -372,38 +336,11 @@ const DatabaseConfigWithStore: React.FC = () => {
       )
     },
     {
-      title: '启用状态',
-      dataIndex: 'enabled',
-      key: 'enabled',
-      render: (_: any, record: DatabaseConnection) => {
-        const isEnabled = record.activation?.enabled ?? record.deprecated?.enabled ?? false
-        return (
-          <Switch
-            checked={isEnabled}
-            onChange={value => handleToggle(record, value)}
-            loading={Boolean(toggleLoading[record.id])}
-            disabled={Boolean(toggleLoading[record.id])}
-            checkedChildren="启用"
-            unCheckedChildren="禁用"
-          />
-        )
-      }
-    },
-    {
-      title: '状态',
+      title: '连接状态',
       dataIndex: 'connected',
       key: 'connected',
       render: (_: boolean, record: DatabaseConnection) => {
-        const isEnabled = record.activation?.enabled ?? record.deprecated?.enabled ?? false
-        const connectivityState = record.connectivity?.state ?? (isEnabled ? 'unknown' : 'inactive')
-
-        if (!isEnabled) {
-          return (
-            <Tag icon={<CloseCircleOutlined />} color="default">
-              未启用
-            </Tag>
-          )
-        }
+        const connectivityState = record.connectivity?.state ?? 'unknown'
 
         if (connectivityState === 'connected') {
           return (
@@ -434,41 +371,6 @@ const DatabaseConfigWithStore: React.FC = () => {
             未连接
           </Tag>
         )
-      }
-    },
-    {
-      title: '最近检查',
-      key: 'lastCheck',
-      render: (_: any, record: DatabaseConnection) => (
-        <div>
-          <Text>{formatTimestamp(record.connectivity?.lastSuccessAt ?? record.lastHealthCheck ?? null)}</Text>
-          {record.activation?.updatedAt && (
-            <div>
-              <Text type="secondary">启用更新：{formatTimestamp(record.activation.updatedAt)}</Text>
-            </div>
-          )}
-        </div>
-      )
-    },
-    {
-      title: '状态详情',
-      dataIndex: 'statusDetail',
-      key: 'statusDetail',
-      ellipsis: true,
-      render: (detail: string | undefined, record: DatabaseConnection) => {
-        if (detail) {
-          return <Text type="secondary">{detail}</Text>
-        }
-
-        if (record.error) {
-          return <Text type="danger">{record.error}</Text>
-        }
-
-        if (record.connectivity?.lastError) {
-          return <Text type="danger">{record.connectivity.lastError}</Text>
-        }
-
-        return <Text type="secondary">-</Text>
       }
     },
     {
@@ -515,20 +417,16 @@ const DatabaseConfigWithStore: React.FC = () => {
       value: overviewMetrics.total,
     },
     {
-      key: 'enabled',
-      title: '已启用',
-      value: overviewMetrics.enabled,
-    },
-    {
       key: 'connected',
-      title: '在线连接',
+      title: '已连接',
       value: overviewMetrics.connected,
+      valueStyle: overviewMetrics.connected > 0 ? { color: '#52c41a' } : undefined
     },
     {
-      key: 'failure',
-      title: '告警/失败',
-      value: overviewMetrics.failure,
-      valueStyle: overviewMetrics.failure > 0 ? { color: '#cf1322' } : undefined
+      key: 'disconnected',
+      title: '未连接',
+      value: overviewMetrics.disconnected,
+      valueStyle: overviewMetrics.disconnected > 0 ? { color: '#faad14' } : undefined
     }
   ]
 
@@ -602,11 +500,9 @@ const DatabaseConfigWithStore: React.FC = () => {
               ))}
             </Row>
             <Space size="small" wrap style={{ marginTop: 16 }}>
-              <Tag color="processing">待联机 {overviewMetrics.pending}</Tag>
               <Tag color="success">已连接 {overviewMetrics.connected}</Tag>
-              <Tag color="blue">已启用 {overviewMetrics.enabled}</Tag>
-              {overviewMetrics.failure > 0 && (
-                <Tag color="error">异常 {overviewMetrics.failure}</Tag>
+              {overviewMetrics.disconnected > 0 && (
+                <Tag color="warning">未连接 {overviewMetrics.disconnected}</Tag>
               )}
             </Space>
           </Spin>
@@ -685,21 +581,18 @@ const DatabaseConfigWithStore: React.FC = () => {
               <Descriptions.Item label="连接地址">
                 {formatConnectionAddress(selectedConnection)}
               </Descriptions.Item>
-              <Descriptions.Item label="当前状态">
-                {selectedConnection.connectivity?.state ?? 'unknown'}
+              <Descriptions.Item label="连接状态">
+                {selectedConnection.connectivity?.state === 'connected' ? (
+                  <Tag color="success">已连接</Tag>
+                ) : (
+                  <Tag color="default">未连接</Tag>
+                )}
               </Descriptions.Item>
-              <Descriptions.Item label="最后健康检查">
-                {formatTimestamp(selectedConnection.connectivity?.lastSuccessAt ?? selectedConnection.lastHealthCheck ?? null)}
-              </Descriptions.Item>
-              <Descriptions.Item label="启用状态">
-                {selectedConnection.activation?.enabled ? '已启用' : '未启用'}
-              </Descriptions.Item>
-              <Descriptions.Item label="错误信息">
-                {selectedConnection.connectivity?.lastError || selectedConnection.error || '暂无'}
-              </Descriptions.Item>
-              <Descriptions.Item label="状态详情">
-                {selectedConnection.statusDetail || '暂无'}
-              </Descriptions.Item>
+              {selectedConnection.connectivity?.lastError && (
+                <Descriptions.Item label="错误信息">
+                  {selectedConnection.connectivity.lastError}
+                </Descriptions.Item>
+              )}
             </Descriptions>
             <Space>
               <Button

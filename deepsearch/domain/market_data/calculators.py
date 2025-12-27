@@ -14,6 +14,7 @@ from deepsearch.ports.market_data import (
     OrderImbalanceEntry,
     WindowSpec,
 )
+
 from .buffers import SnapshotBuffer
 
 getcontext().prec = 28
@@ -37,9 +38,9 @@ def _to_decimal(value: object, default: Decimal = Decimal("0")) -> Decimal:
 
 
 def _select_baseline(
-        series: Sequence[MarketSnapshot],
-        prefix: MarketSnapshot | None,
-        start_ts: datetime,
+    series: Sequence[MarketSnapshot],
+    prefix: MarketSnapshot | None,
+    start_ts: datetime,
 ) -> MarketSnapshot:
     first = series[0]
     if prefix is not None and prefix.ts <= start_ts and first.ts > start_ts:
@@ -57,12 +58,12 @@ class CapitalPulseCalculator:
     _last_speed: Dict[tuple[str, str], Decimal] = field(default_factory=dict)
 
     def compute(
-            self,
-            board: str,
-            window: WindowSpec,
-            *,
-            as_of: datetime | None = None,
-            summary_mode: bool = False,
+        self,
+        board: str,
+        window: WindowSpec,
+        *,
+        as_of: datetime | None = None,
+        summary_mode: bool = False,
     ) -> CapitalPulseEntry | None:
         codes = tuple(self.resolve_board_codes(board))
         if not codes:
@@ -83,7 +84,13 @@ class CapitalPulseCalculator:
         if summary_mode:
             # 汇总模式：取当日累计成交额，速度设为 0
             from loguru import logger
-            logger.debug("汇总模式计算 board={} codes_count={} series_map_keys={}", board, len(codes), len(series_map))
+
+            logger.debug(
+                "汇总模式计算 board={} codes_count={} series_map_keys={}",
+                board,
+                len(codes),
+                len(series_map),
+            )
             total_amount = Decimal("0")
             valid_series_count = 0
             for code, payload in series_map.items():
@@ -94,8 +101,12 @@ class CapitalPulseCalculator:
                     total_amount += amt
                     if amt > 0 and valid_series_count <= 3:
                         logger.debug("汇总模式示例 code={} amount={}", code, amt)
-            logger.debug("汇总模式结果 board={} valid_series={} total_amount={}", board, valid_series_count,
-                         total_amount)
+            logger.debug(
+                "汇总模式结果 board={} valid_series={} total_amount={}",
+                board,
+                valid_series_count,
+                total_amount,
+            )
             return CapitalPulseEntry(
                 board=board,
                 window=window,
@@ -152,11 +163,11 @@ class AuctionQualityCalculator:
     phase_codes: Sequence[str] = field(default=("C", "O"))
 
     def compute(
-            self,
-            board: str,
-            window: WindowSpec,
-            *,
-            as_of: datetime | None = None,
+        self,
+        board: str,
+        window: WindowSpec,
+        *,
+        as_of: datetime | None = None,
     ) -> AuctionQualityEntry | None:
         codes = tuple(self.resolve_board_codes(board))
         if not codes:
@@ -239,11 +250,11 @@ class OrderImbalanceCalculator:
     depth: int = 5
 
     def evaluate(
-            self,
-            code: str,
-            window: WindowSpec,
-            *,
-            as_of: datetime | None = None,
+        self,
+        code: str,
+        window: WindowSpec,
+        *,
+        as_of: datetime | None = None,
     ) -> OrderImbalanceEntry | None:
         end_ts = as_of or self.buffer.latest_timestamp((code,))
         if end_ts is None:
@@ -286,10 +297,10 @@ class OrderImbalanceCalculator:
         return Decimal(bid - ask) / Decimal(total)
 
     def _calc_speed(
-            self,
-            baseline: MarketSnapshot,
-            last_snapshot: MarketSnapshot,
-            duration: timedelta,
+        self,
+        baseline: MarketSnapshot,
+        last_snapshot: MarketSnapshot,
+        duration: timedelta,
     ) -> Decimal:
         delta = _to_decimal(last_snapshot.amount) - _to_decimal(baseline.amount)
         seconds = Decimal(str(duration.total_seconds()))

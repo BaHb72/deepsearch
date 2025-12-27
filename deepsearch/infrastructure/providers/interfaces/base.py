@@ -14,7 +14,6 @@ from deepsearch.ports.data_sources import DataSourceType
 from .payloads import DataPayload
 
 
-
 @dataclass
 class DataProviderConfig:
     """数据提供者配置"""
@@ -76,7 +75,6 @@ class ProxyConfig:
         return f"http://{auth}{self.host}:{self.port}"
 
 
-
 @dataclass
 class DataRequest:
     """数据请求"""
@@ -94,7 +92,16 @@ class DataRequest:
 
     def __post_init__(self) -> None:
         """补全常用字段并构建参数映射"""
-        for key in ("symbol", "symbols", "start_date", "end_date", "period", "adjust", "request_type", "source"):
+        for key in (
+            "symbol",
+            "symbols",
+            "start_date",
+            "end_date",
+            "period",
+            "adjust",
+            "request_type",
+            "source",
+        ):
             if key in self.params and getattr(self, key) is None:
                 setattr(self, key, self.params[key])
         if isinstance(self.symbols, str):
@@ -130,7 +137,6 @@ class DataRequest:
         self.params = normalized_params
 
 
-
 @dataclass(init=False)
 class DataResponse:
     """数据响应"""
@@ -152,6 +158,7 @@ class DataResponse:
         self.error = error
         self.metadata = dict(metadata or {})
 
+
 class DataProviderError(Exception):
     """数据提供者错误"""
 
@@ -160,14 +167,14 @@ class DataProviderError(Exception):
 
 class TGWError(DataProviderError):
     """TGW网关相关错误
-    
+
     用于标识以下情况：
     - TGW连接失败
     - TGW超时
     - TGW初始化失败
     - SDK系统退出
     """
-    
+
     def __init__(self, message: str, error_code: str | None = None, is_recoverable: bool = False):
         super().__init__(message)
         self.error_code = error_code

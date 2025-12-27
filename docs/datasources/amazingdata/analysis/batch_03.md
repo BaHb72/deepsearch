@@ -1,6 +1,7 @@
 # 批次3分析结果：图片21-30
 
 ## 概览
+
 图片21-30包含BaseData模块剩余接口和InfoData模块介绍。
 
 ---
@@ -10,6 +11,7 @@
 ### 4. BaseData 模块接口 (续)
 
 #### 4.1 get_history_stock_status - 历史证券状态 (3.5.2.9)
+
 ```python
 ad.BaseData.get_history_stock_status(
     code_list=["000001.SZ"],
@@ -17,7 +19,9 @@ ad.BaseData.get_history_stock_status(
     is_local=True
 )
 ```
+
 **参数**:
+
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | code_list | List[str] | 代码列表 |
@@ -27,12 +31,14 @@ ad.BaseData.get_history_stock_status(
 **返回**: DataFrame，包含停牌、ST、除权除息等信息
 
 #### 4.2 get_bj_code_mapping - 北交所代码映射 (3.5.2.10)
+
 ```python
 ad.BaseData.get_bj_code_mapping(
     local_path="./data",
     is_local=True
 )
 ```
+
 **返回**: DataFrame，北交所代码新旧映射表
 
 ---
@@ -40,6 +46,7 @@ ad.BaseData.get_bj_code_mapping(
 ### 5. MarketData 模块接口
 
 #### 5.1 query_snapshot - 历史快照 (3.5.4.1)
+
 ```python
 ad.MarketData.query_snapshot(
     code_list=["000001.SZ"],
@@ -48,7 +55,9 @@ ad.MarketData.query_snapshot(
     market="SH"
 )
 ```
+
 **参数**:
+
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | code_list | List[str] | 股票列表 |
@@ -59,6 +68,7 @@ ad.MarketData.query_snapshot(
 **返回**: 快照数据字典
 
 #### 5.2 query_kline - 历史K线 (3.5.4.2)
+
 ```python
 ad.MarketData.query_kline(
     code_list=["000001.SZ"],
@@ -67,7 +77,9 @@ ad.MarketData.query_kline(
     period="day"
 )
 ```
+
 **参数**:
+
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | code_list | List[str] | 代码列表 |

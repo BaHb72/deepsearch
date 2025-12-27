@@ -8,14 +8,14 @@ from loguru import logger
 
 # 导入各个子模块的路由器
 from .basic_data import router as basic_data_router
+from .concept import router as concept_router
+from .etf import router as etf_router
 from .financial import router as financial_router
 from .history import router as history_router
 from .margin import router as margin_router
+from .option import router as option_router
 from .realtime import router as realtime_router
 from .shareholder import router as shareholder_router
-from .concept import router as concept_router
-from .option import router as option_router
-from .etf import router as etf_router
 
 # 创建主路由器
 router = APIRouter(prefix="/api/amazingdata", tags=["AmazingData"])

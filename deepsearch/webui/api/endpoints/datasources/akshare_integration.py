@@ -426,5 +426,7 @@ async def get_realtime_quote(symbols: str = Query(..., description="股票代码
     except Exception as e:
         logger.error(f"获取实时行情失败: {e}")
         return APIResponse.error(
-            code=ErrorCodes.DATA_SOURCE_ERROR, message=f"获取实时行情失败: {str(e)}", status_code=500
+            code=ErrorCodes.DATA_SOURCE_ERROR,
+            message=f"获取实时行情失败: {str(e)}",
+            status_code=500,
         )

@@ -4,8 +4,8 @@
 提供数据库连接管理、状态查询等功能
 """
 
-from datetime import datetime, timezone
 import re
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, cast
 
 from fastapi import APIRouter, HTTPException
@@ -34,6 +34,7 @@ PRIMARY_CONNECTION_KEY = "primary"
 _ACTIVATION_STATES = {"active", "inactive", "pending", "error", "unknown"}
 _CONNECTIVITY_STATES = {"connected", "connecting", "disconnected", "error", "unknown"}
 
+
 def _coerce_activation_state(value: Any, default: ActivationStateLiteral) -> ActivationStateLiteral:
     if isinstance(value, str):
         candidate = value.strip().lower()
@@ -41,12 +42,14 @@ def _coerce_activation_state(value: Any, default: ActivationStateLiteral) -> Act
             return cast(ActivationStateLiteral, candidate)
     return default
 
+
 def _maybe_connectivity_state(value: Any) -> Optional[ConnectivityStateLiteral]:
     if isinstance(value, str):
         candidate = value.strip().lower()
         if candidate in _CONNECTIVITY_STATES:
             return cast(ConnectivityStateLiteral, candidate)
     return None
+
 
 def _coerce_connectivity_state(
     value: Any,
@@ -58,7 +61,6 @@ def _coerce_connectivity_state(
     return default
 
 
-
 def _quote_identifier(name: str) -> str:
     """使用双引号安全包装标识符，支持 schema.table 形式"""
     parts = name.split(".")
@@ -66,7 +68,6 @@ def _quote_identifier(name: str) -> str:
         if not VALID_IDENTIFIER.fullmatch(part):
             raise ValueError(f"Invalid identifier segment: {part}")
     return ".".join(f'"{segment}"' for segment in parts)
-
 
 
 class ConnectRequest(BaseModel):
@@ -565,7 +566,9 @@ async def get_database_tables(
                         # 使用引号包裹表名以降低 SQL 注入/保留字风险（表名来自系统元数据，仍做基本保护）
                         name = cast(str, t.get("name"))
                         quoted_name = _quote_identifier(name)
-                        result = await conn.execute(text(f'SELECT COUNT(*) FROM {quoted_name}'))  # nosec B608 - 标识符已通过 _quote_identifier 校验
+                        result = await conn.execute(
+                            text(f"SELECT COUNT(*) FROM {quoted_name}")
+                        )  # nosec B608 - 标识符已通过 _quote_identifier 校验
                         t["rows"] = result.scalar()
                     except Exception as e:
                         t["rows"] = None
@@ -596,4 +599,3 @@ async def get_database_tables(
     except Exception as e:
         logger.error(f"获取数据库表列表失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取表列表失败: {str(e)}")
-

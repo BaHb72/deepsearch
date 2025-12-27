@@ -13,7 +13,19 @@ import threading
 import time
 from concurrent.futures import TimeoutError
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Literal, Optional, Type, TypeVar, cast
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Type,
+    TypeVar,
+    cast,
+)
 
 from deepsearch.config import get_config
 from deepsearch.constants import EVENT_SYSTEM_EXIT, EVENT_SYSTEM_READY
@@ -120,9 +132,7 @@ class MainEngine:
         # 创建容器 - 在所有依赖属性设置后
         self._container = container or self._create_default_container()
 
-    def _resolve_runtime_mode(
-        self, explicit_mode: Optional[RuntimeModeInput]
-    ) -> RuntimeModeInput:
+    def _resolve_runtime_mode(self, explicit_mode: Optional[RuntimeModeInput]) -> RuntimeModeInput:
         """根据显式参数或配置解析运行模式。"""
 
         if explicit_mode is not None:
@@ -213,8 +223,6 @@ class MainEngine:
         if self._provider is None:
             raise RuntimeError("Service provider is not initialized")
         return self._provider
-
-
 
     def _should_load_business_components(self) -> bool:
         """判断是否应该加载业务组件"""
@@ -551,7 +559,9 @@ class MainEngine:
             if isinstance(message_bus, MessageBusComponent) and isinstance(cache, CacheComponent):
                 message_bus_instance = message_bus.get_instance()
                 if message_bus_instance is None:
-                    self._logger.warning("Cannot initialize IPC server: message bus instance unavailable")
+                    self._logger.warning(
+                        "Cannot initialize IPC server: message bus instance unavailable"
+                    )
                     return
 
                 ipc_server = EngineIPCServer(
@@ -786,12 +796,12 @@ class MainEngine:
         try:
             provider = self._provider
             if provider is None:
-                self._logger.debug("Service provider is not initialized; skipping component shutdown")
+                self._logger.debug(
+                    "Service provider is not initialized; skipping component shutdown"
+                )
                 return
 
-            await asyncio.wait_for(
-                self._container.stop_async_services(provider), timeout=timeout
-            )
+            await asyncio.wait_for(self._container.stop_async_services(provider), timeout=timeout)
         except asyncio.TimeoutError:
             self._logger.warning("Component shutdown timed out")
         except Exception as e:
@@ -890,7 +900,9 @@ class MainEngine:
                 pass
 
         self._original_sigint = cast(signal.Handlers, signal.signal(signal.SIGINT, signal_handler))
-        self._original_sigterm = cast(signal.Handlers, signal.signal(signal.SIGTERM, signal_handler))
+        self._original_sigterm = cast(
+            signal.Handlers, signal.signal(signal.SIGTERM, signal_handler)
+        )
 
     def _restore_signal_handlers(self) -> None:
         """恢复原始信号处理器"""
@@ -1028,7 +1040,7 @@ class MainEngine:
         finally:
             # 确保资源被清理
             if server:
-                    setattr(server, "should_exit", True)
+                setattr(server, "should_exit", True)
             self._logger.info("WebUI task cleanup completed")
 
     # ==================== 组件访问 ====================
@@ -1279,7 +1291,6 @@ def create_engine(
     return MainEngine(container=container, mode=runtime_mode_input)
 
 
-
 async def run_engine(
     mode: Optional[RuntimeModeInput] = None,
     container: Optional[AsyncContainer] = None,
@@ -1302,4 +1313,3 @@ async def run_engine(
     finally:
         if engine.is_running():
             await engine.stop_async()
-

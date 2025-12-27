@@ -13,20 +13,18 @@ from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, cast
 
 from loguru import logger
 
-from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 from deepsearch.observability.monitoring.decorators import (
     MonitorMetadata,
     SymbolExtractor,
     analyze_result,
-    monitor_access as core_monitor_access,
 )
+from deepsearch.observability.monitoring.decorators import monitor_access as core_monitor_access
+from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
 __all__ = ["monitor_access", "batch_monitor_access", "MonitorMetadata"]
 
 
-def _wrap_symbol_extractor(
-    resolver: Optional[Callable[..., Any]]
-) -> Optional[SymbolExtractor]:
+def _wrap_symbol_extractor(resolver: Optional[Callable[..., Any]]) -> Optional[SymbolExtractor]:
     if resolver is None:
         return None
 
@@ -196,9 +194,7 @@ def batch_monitor_access(
                 return result
             except Exception as exc:
                 latency_ms = (time.time() - start_time) * 1000.0
-                logger.warning(
-                    f"[MONITOR] {source.value} -> {access_type.value} FAILED: {exc}"
-                )
+                logger.warning(f"[MONITOR] {source.value} -> {access_type.value} FAILED: {exc}")
                 raise
 
         return sync_wrapper

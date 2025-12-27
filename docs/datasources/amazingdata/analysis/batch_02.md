@@ -1,6 +1,7 @@
 # 批次2分析结果：图片11-20
 
 ## 概览
+
 图片11-20主要包含BaseData模块的复权因子、交易日历、证券基础信息等接口。
 
 ---
@@ -10,6 +11,7 @@
 ### 3. BaseData 模块接口 (续)
 
 #### 3.1 get_backward_factor - 后复权因子 (3.5.2.4)
+
 ```python
 ad.BaseData.get_backward_factor(
     code_list=["000001.SZ"],
@@ -17,7 +19,9 @@ ad.BaseData.get_backward_factor(
     is_local=True
 )
 ```
+
 **参数**:
+
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | code_list | List[str] | 代码列表 |
@@ -27,6 +31,7 @@ ad.BaseData.get_backward_factor(
 **返回**: DataFrame，index为交易日期，columns为股票代码
 
 #### 3.2 get_adj_factor - 单次复权因子 (3.5.2.5)
+
 ```python
 ad.BaseData.get_adj_factor(
     code_list=["000001.SZ"],
@@ -34,7 +39,9 @@ ad.BaseData.get_adj_factor(
     is_local=True
 )
 ```
+
 **参数**:
+
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | code_list | List[str] | 代码列表 |
@@ -44,6 +51,7 @@ ad.BaseData.get_adj_factor(
 **返回**: DataFrame，index为交易日期，columns为股票代码
 
 #### 3.3 get_hist_code_list - 历史代码列表 (3.5.2.6)
+
 ```python
 ad.BaseData.get_hist_code_list(
     security_type="EXTRA_STOCK_A_SH_SZ",
@@ -52,7 +60,9 @@ ad.BaseData.get_hist_code_list(
     local_path="./data"
 )
 ```
+
 **参数**:
+
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | security_type | str | 代码类型 |
@@ -63,13 +73,16 @@ ad.BaseData.get_hist_code_list(
 **返回**: 代码列表
 
 #### 3.4 get_calendar - 交易日历 (3.5.2.7)
+
 ```python
 ad.BaseData.get_calendar(
     data_type="str",
     market="SH"
 )
 ```
+
 **参数**:
+
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | data_type | str | 返回类型 "str"/"datetime" |
@@ -78,10 +91,13 @@ ad.BaseData.get_calendar(
 **返回**: 交易日列表
 
 #### 3.5 get_stock_basic - 证券基础信息 (3.5.2.8)
+
 ```python
 ad.BaseData.get_stock_basic(code_list=["000001.SZ"])
 ```
+
 **参数**:
+
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | code_list | List[str] | 股票代码列表 |

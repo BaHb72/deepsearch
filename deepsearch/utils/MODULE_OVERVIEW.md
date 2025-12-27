@@ -10,16 +10,16 @@ CLI、核心引擎、脚本间共享。
 - `data_sources.py`：维护数据源常量、别名与配置帮助函数，为 providers 与 CLI 提供统一映射。
 - `finance/decimal_utils.py`：针对金融场景的 `Decimal` 运算封装（安全除法、四舍五入、百分比换算等），避免浮点误差。
 - `network/`：
-    - `akshare_proxy.py`：封装 AkShare 请求代理逻辑（重试、速率控制、断线重连）。
-    - `connection_pool.py`：提供可配置的 `requests` 连接池，并处理代理、超时参数。
-    - `proxy_client.py`：从配置或代理池中获取可用代理，支持健康检查与禁用机制。
+  - `akshare_proxy.py`：封装 AkShare 请求代理逻辑（重试、速率控制、断线重连）。
+  - `connection_pool.py`：提供可配置的 `requests` 连接池，并处理代理、超时参数。
+  - `proxy_client.py`：从配置或代理池中获取可用代理，支持健康检查与禁用机制。
 - `patterns/`：
-    - `request_batcher.py`：实现请求批处理（队列+定时触发）模式，常用于统一调用外部 API。
-    - `retry_handler.py`：通用重试装饰器，支持指数退避、异常白名单、同步/异步调用。
+  - `request_batcher.py`：实现请求批处理（队列+定时触发）模式，常用于统一调用外部 API。
+  - `retry_handler.py`：通用重试装饰器，支持指数退避、异常白名单、同步/异步调用。
 - `system/`：
-    - `port_checker.py`：检测关键端口占用情况（HTTP、ZeroMQ、Redis等），供 CLI `check-ports` 使用。
-    - `redis_startup.py`：辅助启动本地 Redis、检测连接失败原因。
-    - `singleton.py`：线程安全的单例元类（被配置管理等模块使用）。
+  - `port_checker.py`：检测关键端口占用情况（HTTP、ZeroMQ、Redis等），供 CLI `check-ports` 使用。
+  - `redis_startup.py`：辅助启动本地 Redis、检测连接失败原因。
+  - `singleton.py`：线程安全的单例元类（被配置管理等模块使用）。
 - `time/market_time.py`：封装交易日历、集合竞价/连续竞价时间段判定，提供 `is_trading_time`, `get_next_session_start` 等函数。
 
 ## 使用建议

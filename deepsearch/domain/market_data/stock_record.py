@@ -112,25 +112,25 @@ class StockListRecord:
 
     @classmethod
     def from_payload(
-            cls,
-            payload: Mapping[str, Any],
-            *,
-            board_fields: Sequence[str] = DEFAULT_BOARD_FIELDS,
+        cls,
+        payload: Mapping[str, Any],
+        *,
+        board_fields: Sequence[str] = DEFAULT_BOARD_FIELDS,
     ) -> "StockListRecord":
         symbol = (
-                payload.get("symbol")
-                or payload.get("code")
-                or payload.get("SECURITY_ID")
-                or payload.get("SECURITY_CODE")
-                or payload.get("MARKET_CODE")
+            payload.get("symbol")
+            or payload.get("code")
+            or payload.get("SECURITY_ID")
+            or payload.get("SECURITY_CODE")
+            or payload.get("MARKET_CODE")
         )
         name = (
-                payload.get("name")
-                or payload.get("sec_name")
-                or payload.get("SECURITY_NAME")
-                or payload.get("SEC_NAME_A")
-                or symbol
-                or ""
+            payload.get("name")
+            or payload.get("sec_name")
+            or payload.get("SECURITY_NAME")
+            or payload.get("SEC_NAME_A")
+            or symbol
+            or ""
         )
         exchange = payload.get("exchange")
         market = payload.get("market")
@@ -145,9 +145,7 @@ class StockListRecord:
         if isinstance(raw_tags, (list, tuple)):
             tags = _normalize_iterable(str(tag) for tag in raw_tags)
         elif isinstance(raw_tags, str):
-            tags = _normalize_iterable(
-                chunk for chunk in _BOARD_SPLIT_PATTERN.split(raw_tags)
-            )
+            tags = _normalize_iterable(chunk for chunk in _BOARD_SPLIT_PATTERN.split(raw_tags))
         else:
             tags = ()
 

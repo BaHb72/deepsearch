@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_zt_pool_em
 
-目标地址: https://quote.eastmoney.com/ztb/detail#type=ztgc
+目标地址: <https://quote.eastmoney.com/ztb/detail#type=ztgc>
 
 描述: 东方财富网-行情中心-涨停板行情-涨停股池
 
@@ -75,7 +75,7 @@ print(stock_zt_pool_em_df)
 
 接口: stock_zt_pool_previous_em
 
-目标地址: https://quote.eastmoney.com/ztb/detail#type=zrzt
+目标地址: <https://quote.eastmoney.com/ztb/detail#type=zrzt>
 
 描述: 东方财富网-行情中心-涨停板行情-昨日涨停股池
 
@@ -187,7 +187,7 @@ print(stock_zt_pool_previous_em_df)
 
 接口: stock_zt_pool_strong_em
 
-目标地址: https://quote.eastmoney.com/ztb/detail#type=qsgc
+目标地址: <https://quote.eastmoney.com/ztb/detail#type=qsgc>
 
 描述: 东方财富网-行情中心-涨停板行情-强势股池
 
@@ -251,7 +251,7 @@ print(stock_zt_pool_strong_em_df)
 
 接口: stock_zt_pool_sub_new_em
 
-目标地址: https://quote.eastmoney.com/ztb/detail#type=cxgc
+目标地址: <https://quote.eastmoney.com/ztb/detail#type=cxgc>
 
 描述: 东方财富网-行情中心-涨停板行情-次新股池
 
@@ -315,7 +315,7 @@ print(stock_zt_pool_sub_new_em_df)
 
 接口: stock_zt_pool_zbgc_em
 
-目标地址: https://quote.eastmoney.com/ztb/detail#type=zbgc
+目标地址: <https://quote.eastmoney.com/ztb/detail#type=zbgc>
 
 描述: 东方财富网-行情中心-涨停板行情-炸板股池
 
@@ -384,7 +384,7 @@ print(stock_zt_pool_zbgc_em_df)
 
 接口: stock_zt_pool_dtgc_em
 
-目标地址: https://quote.eastmoney.com/ztb/detail#type=zbgc
+目标地址: <https://quote.eastmoney.com/ztb/detail#type=zbgc>
 
 描述: 东方财富网-行情中心-涨停板行情-跌停股池
 

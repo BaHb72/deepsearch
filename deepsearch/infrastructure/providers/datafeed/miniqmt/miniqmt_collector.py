@@ -133,7 +133,6 @@ class MiniQMTCollector:
             if cached_data:
                 return cached_data
 
-
             # 调用MiniQMT下载接口
             # 注意：MiniQMT需要先确保有数据，如果不足需要先补充
             self.xtdata.download_history_data(
@@ -226,7 +225,6 @@ class MiniQMTCollector:
                 # 发送到消息队列
                 self.message_queue.put(processed)
 
-
             self.xtdata.subscribe_quote(
                 stock_code=stock_code,
                 period=period,
@@ -306,7 +304,6 @@ class MiniQMTCollector:
         try:
             if field_list is None:
                 field_list = ["time", "open", "high", "low", "close", "volume", "amount"]
-
 
             # 获取数据
             data = self.xtdata.get_market_data(
@@ -401,7 +398,6 @@ class MiniQMTCollector:
         try:
             if table_list is None:
                 table_list = ["Balance", "Income", "CashFlow"]
-
 
             result = {}
 

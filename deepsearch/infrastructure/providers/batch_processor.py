@@ -342,4 +342,3 @@ class BatchProcessor:
                 self.batch_tasks.clear()
 
                 logger.info("已取消所有批量处理任务")
-

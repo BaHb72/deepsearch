@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口：stock_info_cjzc_em
 
-目标地址：https://stock.eastmoney.com/a/czpnc.html
+目标地址：<https://stock.eastmoney.com/a/czpnc.html>
 
 描述：东方财富-财经早餐
 
@@ -63,7 +63,7 @@ print(stock_info_cjzc_em_df)
 
 接口：stock_info_global_em
 
-目标地址：https://kuaixun.eastmoney.com/7_24.html
+目标地址：<https://kuaixun.eastmoney.com/7_24.html>
 
 描述：东方财富-全球财经快讯
 
@@ -115,7 +115,7 @@ print(stock_info_global_em_df)
 
 接口：stock_info_global_sina
 
-目标地址：https://finance.sina.com.cn/7x24
+目标地址：<https://finance.sina.com.cn/7x24>
 
 描述：新浪财经-全球财经快讯
 
@@ -173,7 +173,7 @@ print(stock_info_global_sina_df)
 
 接口：stock_info_global_futu
 
-目标地址：https://news.futunn.com/main/live
+目标地址：<https://news.futunn.com/main/live>
 
 描述：富途牛牛-快讯
 
@@ -264,7 +264,7 @@ print(stock_info_global_futu_df)
 
 接口：stock_info_global_ths
 
-目标地址：https://news.10jqka.com.cn/realtimenews.html
+目标地址：<https://news.10jqka.com.cn/realtimenews.html>
 
 描述：同花顺财经-全球财经直播
 
@@ -325,7 +325,7 @@ print(stock_info_global_ths_df)
 
 接口：stock_info_global_cls
 
-目标地址：https://www.cls.cn/telegraph
+目标地址：<https://www.cls.cn/telegraph>
 
 描述：财联社-电报
 

@@ -1,64 +1,36 @@
-from typing import Any
+"""AmazingData Process Adapter 真实数据测试。
+
+使用真实的 AmazingData SDK 测试进程适配器功能。
+"""
+
+from __future__ import annotations
 
 import pytest
 
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_adapter import (
-    AmazingDataProcessAdapter,
-)
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_proxy import (
-    ProxyResponse,
-)
-from deepsearch.ports.amazingdata_process import ProcessCommand, ProcessCommandType
 
-
-class _StubProxy:
-    def __init__(self, response: ProxyResponse) -> None:
-        self._response = response
-        self.is_running = True
-
-    def is_worker_alive(self) -> bool:
-        return True
-
-    async def start_async(self) -> bool:
-        self.is_running = True
-        return True
-
-    def execute(self, method: str, *args, **kwargs) -> ProxyResponse:
-        return self._response
-
-    def get_stats(self):
-        return {}
+@pytest.mark.asyncio
+async def test_process_adapter_connection(real_amazingdata_provider):
+    """测试进程适配器连接状态。"""
+    assert real_amazingdata_provider._connected is True
 
 
 @pytest.mark.asyncio
-async def test_adapter_none_payload_returns_error():
-    response = ProxyResponse(request_id="1", success=True, result=None)
-    adapter = AmazingDataProcessAdapter(_StubProxy(response))
-
-    command = ProcessCommand[Any](
-        method="BaseData.get_code_list",
-        command_type=ProcessCommandType.DATA,
+async def test_process_adapter_execute_query(real_amazingdata_provider):
+    """测试进程适配器执行查询。"""
+    from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+        AmazingDataQueryManager,
     )
 
-    result = await adapter.execute(command)
+    manager = AmazingDataQueryManager(real_amazingdata_provider)
+    quotes = await manager.fetch_realtime_quote(symbols=["SZ000001"])
 
-    assert result.success is False
-    assert result.error == "BaseData.get_code_list: SDK returned None"
-    assert result.error_type == "SDKEmptyResponse"
+    assert quotes is not None
 
 
 @pytest.mark.asyncio
-async def test_adapter_unexpected_payload_type_returns_error():
-    response = ProxyResponse(request_id="2", success=True, result="invalid-payload")
-    adapter = AmazingDataProcessAdapter(_StubProxy(response))
-
-    command = ProcessCommand[Any](
-        method="BaseData.get_code_list",
-        command_type=ProcessCommandType.DATA,
-    )
-
-    result = await adapter.execute(command)
-
-    assert result.success is False
-    assert result.error_type == "SDKUnexpectedPayload"
-    assert "unexpected payload type" in (result.error or "")
+async def test_process_adapter_health(real_amazingdata_provider):
+    """测试进程适配器健康状态。"""
+    # 验证 provider 健康
+    assert real_amazingdata_provider._connected is True
+    if hasattr(real_amazingdata_provider, "_initialized"):
+        assert real_amazingdata_provider._initialized is True

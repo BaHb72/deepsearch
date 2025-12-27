@@ -4,11 +4,12 @@
 
 运行方式: uv run python scripts/test_amazingdata_direct.py
 """
+
 import asyncio
 from datetime import datetime
 
 print("=" * 60)
-print(f"AmazingData SDK 直接连接测试")
+print("AmazingData SDK 直接连接测试")
 print(f"测试时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 print("=" * 60)
 
@@ -39,6 +40,7 @@ async def test_amazingdata():
     except Exception as e:
         print(f"    [错误] 创建失败: {e}")
         import traceback
+
         traceback.print_exc()
         return
 
@@ -50,6 +52,7 @@ async def test_amazingdata():
     except Exception as e:
         print(f"    [错误] 初始化失败: {e}")
         import traceback
+
         traceback.print_exc()
         return
 

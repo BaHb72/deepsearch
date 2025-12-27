@@ -13,9 +13,9 @@ from pydantic import BaseModel, Field
 from typing_extensions import Literal
 
 from deepsearch.infrastructure.trading.ttrading_service import (
+    TradingSignal,
     TTradingService,
     TTradingStrategy,
-    TradingSignal,
     get_ttrading_service,
     set_ttrading_notification_callback,
 )

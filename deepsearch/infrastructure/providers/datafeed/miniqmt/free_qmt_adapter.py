@@ -16,8 +16,8 @@ from typing import Any, Callable, Dict, List
 
 import pandas as pd
 
-from deepsearch.observability import get_logger
 from deepsearch.core.utils.status_display import get_status_display
+from deepsearch.observability import get_logger
 
 logger = get_logger(__name__)
 
@@ -150,9 +150,7 @@ class FreeQMTAdapter:
                         df[col] = df[col] * factor
 
                 # 使用动态状态更新而不是日志
-                self._status.update_source(
-                    "MiniQMT", request=True, success=True
-                )
+                self._status.update_source("MiniQMT", request=True, success=True)
                 return df
             else:
                 logger.warning("未获取到数据")

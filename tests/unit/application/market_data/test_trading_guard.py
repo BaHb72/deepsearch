@@ -150,10 +150,7 @@ async def test_load_calendar_skips_caching_when_get_calendar_returns_empty():
 @pytest.mark.asyncio
 async def test_session_guard_skip_in_no_trade_phase():
     """验证 NO_TRADE 阶段当配置 skip_polling=true 时会跳过轮询"""
-    from deepsearch.config.trading_schedule_config import (
-        PhaseBehavior,
-        TradingScheduleConfig,
-    )
+    from deepsearch.config.trading_schedule_config import PhaseBehavior, TradingScheduleConfig
 
     # 创建模拟配置：非交易时段默认跳过
     config = TradingScheduleConfig(
@@ -192,10 +189,7 @@ async def test_session_guard_skip_in_no_trade_phase():
 @pytest.mark.asyncio
 async def test_session_guard_no_skip_during_trading():
     """验证交易时段（CONTINUOUS/AUCTION）不会跳过轮询"""
-    from deepsearch.config.trading_schedule_config import (
-        PhaseBehavior,
-        TradingScheduleConfig,
-    )
+    from deepsearch.config.trading_schedule_config import PhaseBehavior, TradingScheduleConfig
 
     # 即使配置了 no_trade 跳过，交易时段也不应跳过
     config = TradingScheduleConfig(

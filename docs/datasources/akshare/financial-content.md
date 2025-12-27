@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_news_main_cx
 
-目标地址: https://cxdata.caixin.com/pc/
+目标地址: <https://cxdata.caixin.com/pc/>
 
 描述: 财新网-财新数据通-内容精选
 

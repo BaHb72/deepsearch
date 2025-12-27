@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_gpzy_profile_em
 
-目标地址: https://data.eastmoney.com/gpzy/marketProfile.aspx
+目标地址: <https://data.eastmoney.com/gpzy/marketProfile.aspx>
 
 描述: 东方财富网-数据中心-特色数据-股权质押-股权质押市场概况
 
@@ -67,17 +67,17 @@ print(stock_gpzy_profile_em_df)
 
 接口: stock_gpzy_pledge_ratio_em
 
-目标地址: https://data.eastmoney.com/gpzy/pledgeRatio.aspx
+目标地址: <https://data.eastmoney.com/gpzy/pledgeRatio.aspx>
 
 描述: 东方财富网-数据中心-特色数据-股权质押-上市公司质押比例
 
-限量: 单次返回指定交易日的所有历史数据; 其中的交易日需要根据网站提供的为准; 请访问 http://data.eastmoney.com/gpzy/pledgeRatio.aspx 查询具体交易日
+限量: 单次返回指定交易日的所有历史数据; 其中的交易日需要根据网站提供的为准; 请访问 <http://data.eastmoney.com/gpzy/pledgeRatio.aspx> 查询具体交易日
 
 输入参数
 
 | 名称   | 类型  | 描述                                                                           |
 |------|-----|------------------------------------------------------------------------------|
-| date | str | date="20240906"; 请访问 http://data.eastmoney.com/gpzy/pledgeRatio.aspx 查询具体交易日 |
+| date | str | date="20240906"; 请访问 <http://data.eastmoney.com/gpzy/pledgeRatio.aspx> 查询具体交易日 |
 
 输出参数
 
@@ -128,7 +128,7 @@ print(stock_gpzy_pledge_ratio_em_df)
 
 接口: stock_gpzy_pledge_ratio_detail_em
 
-目标地址: https://data.eastmoney.com/gpzy/pledgeDetail.aspx
+目标地址: <https://data.eastmoney.com/gpzy/pledgeDetail.aspx>
 
 描述: 东方财富网-数据中心-特色数据-股权质押-重要股东股权质押明细
 
@@ -189,7 +189,7 @@ print(stock_gpzy_pledge_ratio_detail_em_df)
 
 接口: stock_gpzy_distribute_statistics_company_em
 
-目标地址: https://data.eastmoney.com/gpzy/distributeStatistics.aspx
+目标地址: <https://data.eastmoney.com/gpzy/distributeStatistics.aspx>
 
 描述: 东方财富网-数据中心-特色数据-股权质押-质押机构分布统计-证券公司
 
@@ -274,7 +274,7 @@ print(stock_gpzy_distribute_statistics_company_em_df)
 
 接口: stock_gpzy_distribute_statistics_bank_em
 
-目标地址: https://data.eastmoney.com/gpzy/distributeStatistics.aspx
+目标地址: <https://data.eastmoney.com/gpzy/distributeStatistics.aspx>
 
 描述: 东方财富网-数据中心-特色数据-股权质押-质押机构分布统计-银行
 
@@ -360,7 +360,7 @@ print(stock_em_gpzy_distribute_statistics_bank_df)
 
 接口: stock_gpzy_industry_data_em
 
-目标地址: https://data.eastmoney.com/gpzy/industryData.aspx
+目标地址: <https://data.eastmoney.com/gpzy/industryData.aspx>
 
 描述: 东方财富网-数据中心-特色数据-股权质押-上市公司质押比例-行业数据
 

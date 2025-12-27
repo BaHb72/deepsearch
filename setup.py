@@ -41,9 +41,7 @@ def load_requirements_and_extras() -> Tuple[List[str], Dict[str, List[str]]]:
     if not requirements and requirements_txt.exists():
         with requirements_txt.open("r", encoding="utf-8") as fh:
             requirements = [
-                line.strip()
-                for line in fh
-                if line.strip() and not line.startswith("#")
+                line.strip() for line in fh if line.strip() and not line.startswith("#")
             ]
 
     if not requirements:

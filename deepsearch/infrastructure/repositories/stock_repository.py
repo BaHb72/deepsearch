@@ -4,17 +4,16 @@ Stock repository implementation using PostgreSQL.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 import asyncpg
+
+from deepsearch.observability import get_logger
 from domain.entities.stock import Stock
 from domain.interfaces.repository import IStockRepository, PageRequest, PageResult
 from domain.values.price import Price
 from domain.values.symbol import Symbol
-
-from deepsearch.observability import get_logger
 
 logger = get_logger(__name__)
 
@@ -117,7 +116,7 @@ class PostgreSQLStockRepository(IStockRepository):
             # Get paginated results
             rows = await conn.fetch(
                 """
-                SELECT * FROM stocks 
+                SELECT * FROM stocks
                 WHERE market = $1
                 ORDER BY symbol
                 LIMIT $2 OFFSET $3
@@ -141,7 +140,7 @@ class PostgreSQLStockRepository(IStockRepository):
             # Get total count
             total = await conn.fetchval(
                 """
-                SELECT COUNT(*) FROM stocks 
+                SELECT COUNT(*) FROM stocks
                 WHERE symbol ILIKE $1 OR name ILIKE $1
             """,
                 search_pattern,
@@ -150,7 +149,7 @@ class PostgreSQLStockRepository(IStockRepository):
             # Get paginated results
             rows = await conn.fetch(
                 """
-                SELECT * FROM stocks 
+                SELECT * FROM stocks
                 WHERE symbol ILIKE $1 OR name ILIKE $1
                 ORDER BY symbol
                 LIMIT $2 OFFSET $3
@@ -170,8 +169,8 @@ class PostgreSQLStockRepository(IStockRepository):
         """Get top gaining stocks."""
         async with self._pool.acquire() as conn:
             query = """
-                SELECT * FROM stocks 
-                WHERE current_price IS NOT NULL 
+                SELECT * FROM stocks
+                WHERE current_price IS NOT NULL
                 AND previous_close IS NOT NULL
                 AND previous_close > 0
             """
@@ -191,8 +190,8 @@ class PostgreSQLStockRepository(IStockRepository):
         """Get top losing stocks."""
         async with self._pool.acquire() as conn:
             query = """
-                SELECT * FROM stocks 
-                WHERE current_price IS NOT NULL 
+                SELECT * FROM stocks
+                WHERE current_price IS NOT NULL
                 AND previous_close IS NOT NULL
                 AND previous_close > 0
             """
@@ -219,7 +218,7 @@ class PostgreSQLStockRepository(IStockRepository):
             # Get paginated results
             rows = await conn.fetch(
                 """
-                SELECT * FROM stocks 
+                SELECT * FROM stocks
                 WHERE volume >= $1
                 ORDER BY volume DESC
                 LIMIT $2 OFFSET $3
@@ -235,7 +234,7 @@ class PostgreSQLStockRepository(IStockRepository):
                 items=stocks, total=total, page=page_request.page, size=page_request.size
             )
 
-    def _map_to_entity(self, row: Mapping[str, object]) -> Stock:
+    def _map_to_entity(self, row: Any) -> Stock:
         """Map database row to Stock entity."""
         data = dict(row)
         symbol = Symbol(str(data["symbol"]))
@@ -246,11 +245,11 @@ class PostgreSQLStockRepository(IStockRepository):
             if isinstance(value, Price):
                 return value
             if isinstance(value, (int, float, Decimal)):
-                return Price(value)
+                return Price(Decimal(value))
             try:
                 if isinstance(value, str):
                     numeric = float(value)
-                    return Price(numeric)
+                    return Price(Decimal(numeric))
             except (TypeError, ValueError):
                 return None
             return None

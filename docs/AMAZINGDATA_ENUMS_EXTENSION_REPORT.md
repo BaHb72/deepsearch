@@ -1,6 +1,7 @@
 # AmazingData 接口扩展完成报告
 
 ## 📅 时间
+
 2025-12-16 01:10
 
 ## ✅ 扩展内容
@@ -12,11 +13,13 @@
 创建了 `deepsearch/infrastructure/providers/implementations/amazingdata/amazingdata_enums_extended.py`，包含：
 
 #### 🔸 AmazingDataTradingPhase - 交易阶段代码 (文档 4.1.5)
+
 - 上市现货连续竞价交易状态码（11个）
 - 深交所特殊交易状态（2个）
 - 辅助函数：`get_trading_phase_name()` 用于获取状态说明
 
 **主要状态码**：
+
 | 代码 | 说明 |
 |-----|------|
 | S | 启动（开市前）|
@@ -27,10 +30,12 @@
 | P | 停牌 |
 
 #### 🔸 AmazingDataReportPeriod - 报告期 (文档 4.1.7)
+
 - 四个报告期枚举：Q1(3月)、Q2(6月)、Q3(9月)、ANNUAL(12月)
 - 辅助函数：`get_report_period_name()` 用于获取期名称
 
 #### 🔸 AmazingDataStatementType - 报表类型 (文档 4.1.8)
+
 - 36种报表类型枚举
 - 分类包括：合并报表、现金流量表、利润表、准备金相关、股东权益相关、正式报告、更正报告
 - 辅助函数：`get_statement_type_name()` 用于获取报表说明
@@ -38,7 +43,9 @@
 ### 2. **文档文件**
 
 #### 📄 `docs/amazingdata_enums_extension.md`
+
 详细的枚举类型使用文档，包含：
+
 - 所有枚举类型的完整说明
 - security_type、market、trading_phase_code、Period、REPORT_TYPE、STATEMENT_TYPE 映射表
 - 代码使用示例
@@ -47,7 +54,9 @@
 ### 3. **测试脚本**
 
 #### 🧪 `scripts/test_enums_standalone.py`
+
 独立的枚举测试脚本（不依赖AmazingData SDK），测试内容：
+
 - 交易阶段枚举测试
 - 报告期枚举测试
 - 报表类型枚举测试
@@ -60,6 +69,7 @@
 ### 4. **Bug修复**
 
 修复了 `amazingdata_extended.py` 中的两个HTML实体语法错误：
+
 - 第2076行：`-&gt;` → `->`
 - 第2124行：`-&gt;` → `->`
 
@@ -98,7 +108,7 @@ from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata
 phase_code = "2"  # 从API获取的交易阶段代码
 if phase_code == AmazingDataTradingPhase.CONTINUOUS_TRADING.value:
     print("股票正在连续竞价，可以交易")
-    
+
 # 获取交易阶段说明
 print(get_trading_phase_name(phase_code))  # 输出: 连续竞价
 ```
@@ -168,11 +178,13 @@ if statement_type in consolidated_types:
 ## 🧪 测试方法
 
 运行独立测试脚本：
+
 ```bash
 python scripts/test_enums_standalone.py
 ```
 
 预期输出：
+
 ```
 ============================================================
 AmazingData 枚举类型扩展测试

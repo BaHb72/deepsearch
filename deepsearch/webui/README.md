@@ -47,7 +47,7 @@ npm install
 python -m deepsearch.webui.server
 ```
 
-服务器将在 http://localhost:8000 启动
+服务器将在 <http://localhost:8000> 启动
 
 #### 启动前端开发服务器
 
@@ -57,7 +57,7 @@ cd deepsearch/webui/frontend
 npm run dev
 ```
 
-前端开发服务器将在 http://localhost:3000 启动
+前端开发服务器将在 <http://localhost:3000> 启动
 
 ### 3. 生产构建
 
@@ -82,8 +82,8 @@ gunicorn deepsearch.webui.server:app -w 4 -k uvicorn.workers.UvicornWorker --bin
 
 FastAPI 自动生成的 API 文档可通过以下地址访问：
 
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+- Swagger UI: <http://localhost:8000/docs>
+- ReDoc: <http://localhost:8000/redoc>
 
 ## 目录结构
 

@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_comment_em
 
-目标地址: https://data.eastmoney.com/stockcomment/
+目标地址: <https://data.eastmoney.com/stockcomment/>
 
 描述: 东方财富网-数据中心-特色数据-千股千评
 

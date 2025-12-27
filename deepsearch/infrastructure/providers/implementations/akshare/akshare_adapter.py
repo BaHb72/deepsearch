@@ -10,11 +10,9 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 import pandas as pd
 from loguru import logger
 
-from deepsearch.infrastructure.providers.interfaces.base import (
-    DataProvider as IAkShareProvider,
-    DataProviderError,
-    DataRequest,
-)
+from deepsearch.infrastructure.providers.interfaces.base import DataProvider as IAkShareProvider
+from deepsearch.infrastructure.providers.interfaces.base import DataProviderError, DataRequest
+
 from .akshare import AkShareProxyProvider
 from .akshare_api_mapping import AkShareAPIMapping
 from .akshare_direct import AKShareDirectProvider
@@ -111,8 +109,11 @@ class AkShareAdapter(IAkShareProvider):
 
     def _require_fallback(self) -> IAkShareProvider:
         if self.fallback_provider is None:
-            raise DataProviderError("AkShare fallback provider not available. Call initialize() first.")
+            raise DataProviderError(
+                "AkShare fallback provider not available. Call initialize() first."
+            )
         return self.fallback_provider
+
     @staticmethod
     def _extract_data_list(result: Dict[str, Any]) -> List[Dict[str, Any]]:
         data = result.get("data")
@@ -159,13 +160,19 @@ class AkShareAdapter(IAkShareProvider):
         **kwargs: Any,
     ) -> Optional[List[Dict[str, Any]]]:
         """对外暴露兼容 DataProvider 的股票列表接口."""
-        async def _call_provider(provider_obj: IAkShareProvider | None) -> Optional[List[Dict[str, Any]]]:
+
+        async def _call_provider(
+            provider_obj: IAkShareProvider | None,
+        ) -> Optional[List[Dict[str, Any]]]:
             if provider_obj is None:
                 return None
             fetcher = getattr(provider_obj, "get_stock_list", None)
             if not callable(fetcher):
                 return None
-            return await fetcher(limit=limit, **kwargs)
+            result = await fetcher(limit=limit, **kwargs)
+            if result is None:
+                return None
+            return list(result)
 
         try:
             result = await _call_provider(self.provider)
@@ -197,13 +204,16 @@ class AkShareAdapter(IAkShareProvider):
         **kwargs: Any,
     ) -> Optional[List[Dict[str, Any]]]:
         """封装 DataProvider 兼容的 K 线数据接口."""
-        async def _call_provider(provider_obj: IAkShareProvider | None) -> Optional[List[Dict[str, Any]]]:
+
+        async def _call_provider(
+            provider_obj: IAkShareProvider | None,
+        ) -> Optional[List[Dict[str, Any]]]:
             if provider_obj is None:
                 return None
             fetcher = getattr(provider_obj, "get_kline_data", None)
             if not callable(fetcher):
                 return None
-            return await fetcher(
+            result = await fetcher(
                 symbol=symbol,
                 period=period,
                 start_date=start_date,
@@ -211,6 +221,9 @@ class AkShareAdapter(IAkShareProvider):
                 limit=limit,
                 **kwargs,
             )
+            if result is None:
+                return None
+            return list(result)
 
         try:
             result = await _call_provider(self.provider)
@@ -238,6 +251,8 @@ class AkShareAdapter(IAkShareProvider):
             return None
         if limit and limit > 0:
             rows = rows[-limit:]
+        return rows
+
     async def get_realtime_quote(self, symbol: str) -> Dict[str, Any]:
         """获取实时行情"""
         provider = cast(Any, self._require_provider())
@@ -269,7 +284,7 @@ class AkShareAdapter(IAkShareProvider):
             if hasattr(provider, "get_realtime_quotes"):
                 result = await provider.get_realtime_quotes(symbols)
                 if result:
-                    return result
+                    return list(result)
         except Exception as e:
             logger.warning(f"主数据源批量获取实时行情失败: {e}")
 
@@ -293,7 +308,7 @@ class AkShareAdapter(IAkShareProvider):
             quote = await self.get_realtime_quote(symbol)
             if quote and not quote.get("error"):
                 results.append(quote)
-        
+
         return results
 
     async def get_stock_hist(
@@ -362,38 +377,38 @@ class AkShareAdapter(IAkShareProvider):
         try:
             quotes_list = await self.get_realtime_quotes(symbols)
             if quotes_list:
-                result = {}
+                result: Dict[str, Any] = {}
                 for quote in quotes_list:
                     symbol = quote.get("symbol") or quote.get("code")
                     if symbol:
                         result[str(symbol)] = quote
-                
+
                 # 确保所有请求的symbol都有返回
                 for sym in symbols:
                     if str(sym) not in result:
                         result[str(sym)] = {"error": "Not found", "symbol": sym}
-                        
+
                 return result
         except Exception as e:
             logger.warning(f"批量获取失败，降级到循环获取: {e}")
 
-        result: Dict[str, Any] = {}
+        fallback_result: Dict[str, Any] = {}
         for sym in symbols:
             try:
                 payload = await self.get_realtime_quote(sym)
-                result[str(sym)] = payload
+                fallback_result[str(sym)] = payload
             except Exception as e:
                 logger.error(f"获取 {sym} 实时行情失败: {e}")
-                result[str(sym)] = {"error": str(e)}
-        return result
+                fallback_result[str(sym)] = {"error": str(e)}
+        return fallback_result
 
     async def get_history_data(
-            self,
-            symbol: str,
-            period: str = "daily",
-            start_date: Optional[str] = None,
-            end_date: Optional[str] = None,
-            adjust: str = "",
+        self,
+        symbol: str,
+        period: str = "daily",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        adjust: str = "",
     ) -> pd.DataFrame:
         """兼容管理器调用：获取历史K线，返回 DataFrame"""
         try:
@@ -514,8 +529,6 @@ class AkShareAdapter(IAkShareProvider):
 
         return {"success": True, "data": result}
 
-
-
     @staticmethod
     def _normalize_stock_list(result: Any) -> List[Dict[str, str]]:
         """将不同来源的股票列表统一转换为字典列表"""
@@ -573,6 +586,7 @@ class AkShareAdapter(IAkShareProvider):
         if isinstance(result, list):
             return [item for item in result if isinstance(item, dict)]
         return []
+
     async def fetch_market_overview(self) -> Dict[str, Any]:
         """获取市场概览"""
         # 使用通用API接口
@@ -661,4 +675,3 @@ class AkShareAdapter(IAkShareProvider):
         except Exception as e:
             logger.error(f"获取数据失败: {e}")
             return pd.DataFrame()
-

@@ -5,7 +5,7 @@
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
 import pandas as pd
 from loguru import logger
@@ -349,7 +349,9 @@ class DataBridge:
 
         return df
 
-    def create_backtrader_feed(self, df: pd.DataFrame, **kwargs) -> Optional["BacktraderPandasData"]:
+    def create_backtrader_feed(
+        self, df: pd.DataFrame, **kwargs
+    ) -> Optional["BacktraderPandasData"]:
         """
         创建 Backtrader 数据源对象
 

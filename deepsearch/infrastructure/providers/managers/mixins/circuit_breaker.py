@@ -45,7 +45,7 @@ from loguru import logger
 try:
     from deepsearch.ports.data_sources import DataSourceType
 except ImportError:
-    DataSourceType = Any  # type: ignore
+    DataSourceType = Any  # type: ignore[assignment, misc]
 
 
 class CircuitState(Enum):
@@ -142,11 +142,11 @@ class CircuitBreakerMixin:
     _on_circuit_state_change: List[Callable[[Any, CircuitState, CircuitState], None]]
 
     def _init_circuit_breakers(
-            self,
-            failure_threshold: int = 5,
-            recovery_timeout: float = 60.0,
-            half_open_attempts: int = 3,
-            excluded_exceptions: Optional[Set[type]] = None,
+        self,
+        failure_threshold: int = 5,
+        recovery_timeout: float = 60.0,
+        half_open_attempts: int = 3,
+        excluded_exceptions: Optional[Set[type]] = None,
     ) -> None:
         """初始化熔断器配置
 
@@ -174,8 +174,8 @@ class CircuitBreakerMixin:
         )
 
     def add_circuit_state_listener(
-            self,
-            callback: Callable[[Any, CircuitState, CircuitState], None],
+        self,
+        callback: Callable[[Any, CircuitState, CircuitState], None],
     ) -> None:
         """添加熔断器状态变更监听器
 
@@ -207,10 +207,10 @@ class CircuitBreakerMixin:
         return self._circuit_config
 
     def _notify_state_change(
-            self,
-            source_type: Any,
-            old_state: CircuitState,
-            new_state: CircuitState,
+        self,
+        source_type: Any,
+        old_state: CircuitState,
+        new_state: CircuitState,
     ) -> None:
         """通知状态变更"""
         if not hasattr(self, "_on_circuit_state_change"):
@@ -251,9 +251,7 @@ class CircuitBreakerMixin:
                 state.state_changes += 1
 
                 source_name = (
-                    source_type.value
-                    if hasattr(source_type, "value")
-                    else str(source_type)
+                    source_type.value if hasattr(source_type, "value") else str(source_type)
                 )
                 logger.info(
                     f"🔄 数据源 {source_name} 熔断器进入半开状态，"
@@ -268,9 +266,9 @@ class CircuitBreakerMixin:
         return False
 
     def _should_attempt_reset(
-            self,
-            state: CircuitBreakerState,
-            config: CircuitBreakerConfig,
+        self,
+        state: CircuitBreakerState,
+        config: CircuitBreakerConfig,
     ) -> bool:
         """检查是否应该尝试重置熔断器"""
         if state.last_failure_time is None:
@@ -291,9 +289,7 @@ class CircuitBreakerMixin:
         config = self._get_config()
         state.total_successes += 1
 
-        source_name = (
-            source_type.value if hasattr(source_type, "value") else str(source_type)
-        )
+        source_name = source_type.value if hasattr(source_type, "value") else str(source_type)
 
         if state.state == CircuitState.HALF_OPEN:
             state.successes += 1
@@ -318,9 +314,9 @@ class CircuitBreakerMixin:
             state.failures = 0
 
     def record_failure(
-            self,
-            source_type: Any,
-            exception: Optional[Exception] = None,
+        self,
+        source_type: Any,
+        exception: Optional[Exception] = None,
     ) -> None:
         """记录失败请求
 
@@ -346,9 +342,7 @@ class CircuitBreakerMixin:
         state.total_failures += 1
         state.last_failure_time = time.time()
 
-        source_name = (
-            source_type.value if hasattr(source_type, "value") else str(source_type)
-        )
+        source_name = source_type.value if hasattr(source_type, "value") else str(source_type)
 
         if state.state == CircuitState.HALF_OPEN:
             # 半开状态下失败，立即回到打开状态
@@ -365,7 +359,7 @@ class CircuitBreakerMixin:
             self._notify_state_change(source_type, old_state, state.state)
 
         elif state.failures >= config.failure_threshold:
-            old_state = state.state
+            prev_state: CircuitState = state.state
             state.state = CircuitState.OPEN
             state.successes = 0
             state.last_state_change = time.time()
@@ -375,11 +369,10 @@ class CircuitBreakerMixin:
                 f"⚡ 数据源 {source_name} 连续失败 {state.failures} 次，"
                 f"熔断器打开，{config.recovery_timeout}秒后重试"
             )
-            self._notify_state_change(source_type, old_state, state.state)
+            self._notify_state_change(source_type, prev_state, state.state)
         else:
             logger.debug(
-                f"数据源 {source_name} 失败 "
-                f"({state.failures}/{config.failure_threshold})"
+                f"数据源 {source_name} 失败 " f"({state.failures}/{config.failure_threshold})"
             )
 
     def reset_circuit(self, source_type: Any) -> None:
@@ -402,9 +395,7 @@ class CircuitBreakerMixin:
         state.last_state_change = time.time()
         state.state_changes += 1
 
-        source_name = (
-            source_type.value if hasattr(source_type, "value") else str(source_type)
-        )
+        source_name = source_type.value if hasattr(source_type, "value") else str(source_type)
         logger.info(f"🔧 数据源 {source_name} 熔断器已手动重置")
 
         if old_state != CircuitState.CLOSED:
@@ -425,11 +416,7 @@ class CircuitBreakerMixin:
             return {}
 
         return {
-            (
-                source_type.value
-                if hasattr(source_type, "value")
-                else str(source_type)
-            ): {
+            (source_type.value if hasattr(source_type, "value") else str(source_type)): {
                 "state": state.state.value,
                 "failures": state.failures,
                 "successes": state.successes,

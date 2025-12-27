@@ -10,8 +10,8 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from .base import (
-    JSONDict,
     DEFAULT_LOCAL_PATH,
+    JSONDict,
     dataframe_to_dict,
     ensure_dataframe,
     filter_dataframe_by_dates,
@@ -42,9 +42,6 @@ class ProfitNoticeRequest(BaseModel):
     """业绩预告请求"""
 
     code_list: list[str] = Field(..., description="股票代码列表")
-    start_date: Optional[int] = Field(None, description="开始日期")
-    end_date: Optional[int] = Field(None, description="结束日期")
-    is_local: bool = Field(True, description="是否使用本地存储")
     start_date: Optional[int] = Field(None, description="开始日期")
     end_date: Optional[int] = Field(None, description="结束日期")
     is_local: bool = Field(True, description="是否使用本地存储")
@@ -176,7 +173,10 @@ async def get_income(request: FinancialReportRequest) -> JSONDict:
         )
         # DEBUG: 记录raw_result类型用于排查序列化问题
         import logging
-        logging.getLogger(__name__).info(f"[DEBUG] get_income raw_result type: {type(raw_result).__name__}")
+
+        logging.getLogger(__name__).info(
+            f"[DEBUG] get_income raw_result type: {type(raw_result).__name__}"
+        )
         filtered_df = ensure_dataframe(raw_result)
         if filtered_df is not None and request.report_date is not None:
             filtered_df = filter_dataframe_by_dates(
@@ -199,9 +199,10 @@ async def get_income(request: FinancialReportRequest) -> JSONDict:
             payload = dataframe_to_dict(payload_source)
         else:
             payload = dataframe_to_dict(payload_source)
-        
+
         # DEBUG: 记录payload类型和内容结构
         import logging as _log
+
         _log.getLogger(__name__).info(f"[DEBUG] payload type: {type(payload).__name__}")
         if isinstance(payload, dict):
             for k, v in payload.items():
@@ -246,21 +247,42 @@ async def get_profit_express(request: ProfitNoticeRequest) -> JSONDict:
                     filtered_df,
                     request.start_date,
                     request.end_date,
-                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                    columns=(
+                        "notice_date",
+                        "NOTICE_DATE",
+                        "report_date",
+                        "REPORT_DATE",
+                        "ann_date",
+                        "ANN_DATE",
+                    ),
                 )
             elif request.start_date:
                 filtered_df = filter_dataframe_by_dates(
                     filtered_df,
                     request.start_date,
                     request.start_date,
-                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                    columns=(
+                        "notice_date",
+                        "NOTICE_DATE",
+                        "report_date",
+                        "REPORT_DATE",
+                        "ann_date",
+                        "ANN_DATE",
+                    ),
                 )
             elif request.end_date:
                 filtered_df = filter_dataframe_by_dates(
                     filtered_df,
                     request.end_date,
                     request.end_date,
-                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                    columns=(
+                        "notice_date",
+                        "NOTICE_DATE",
+                        "report_date",
+                        "REPORT_DATE",
+                        "ann_date",
+                        "ANN_DATE",
+                    ),
                 )
 
         payload_source = filtered_df if filtered_df is not None else raw_result
@@ -302,21 +324,42 @@ async def get_profit_notice(request: ProfitNoticeRequest) -> JSONDict:
                     filtered_df,
                     request.start_date,
                     request.end_date,
-                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                    columns=(
+                        "notice_date",
+                        "NOTICE_DATE",
+                        "report_date",
+                        "REPORT_DATE",
+                        "ann_date",
+                        "ANN_DATE",
+                    ),
                 )
             elif request.start_date:
                 filtered_df = filter_dataframe_by_dates(
                     filtered_df,
                     request.start_date,
                     request.start_date,
-                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                    columns=(
+                        "notice_date",
+                        "NOTICE_DATE",
+                        "report_date",
+                        "REPORT_DATE",
+                        "ann_date",
+                        "ANN_DATE",
+                    ),
                 )
             elif request.end_date:
                 filtered_df = filter_dataframe_by_dates(
                     filtered_df,
                     request.end_date,
                     request.end_date,
-                    columns=("notice_date", "NOTICE_DATE", "report_date", "REPORT_DATE", "ann_date", "ANN_DATE"),
+                    columns=(
+                        "notice_date",
+                        "NOTICE_DATE",
+                        "report_date",
+                        "REPORT_DATE",
+                        "ann_date",
+                        "ANN_DATE",
+                    ),
                 )
 
         payload_source = filtered_df if filtered_df is not None else raw_result

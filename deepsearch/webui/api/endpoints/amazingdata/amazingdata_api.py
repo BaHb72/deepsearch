@@ -9,7 +9,7 @@ Date: 2025-09-18
 """
 
 import json
-from typing import Any, Dict, List, Mapping, Optional, TypedDict, Literal, cast
+from typing import Any, Dict, List, Literal, Mapping, Optional, TypedDict, cast
 
 import pandas as pd
 from fastapi import APIRouter, Body, HTTPException, Query
@@ -24,11 +24,13 @@ from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata
     AmazingDataRealtime,
 )
 from deepsearch.webui.api.providers import DataProviderFactory, DataSourceType
+
 from .base import DEFAULT_LOCAL_PATH
 
 
 def _resolve_local_path(local_path: Optional[str]) -> str:
     return local_path or DEFAULT_LOCAL_PATH
+
 
 # 创建路由器
 router = APIRouter(prefix="/api/amazingdata", tags=["AmazingData"])
@@ -120,6 +122,7 @@ class KlineRequest(BaseModel):
     )
     period: Optional[str] = Field(None, description="K线周期")
 
+
 class SubscriptionRequest(BaseModel):
     """订阅请求"""
 
@@ -135,6 +138,8 @@ class BlockTradingRequest(BaseModel):
     is_local: bool = Field(True, description="�Ƿ����ñ��ػ���")
     begin_date: Optional[int] = Field(None, description="��ʼ���ڣ�YYYYMMDD��")
     end_date: Optional[int] = Field(None, description="�������ڣ�YYYYMMDD��")
+
+
 # ================== 辅助函数 ==================
 
 
@@ -163,24 +168,28 @@ async def get_amazingdata_provider() -> AmazingDataExtended:
                 amazingdata_section: Any | None = None
                 if data_sources_section is not None:
                     providers_section = getattr(data_sources_section, "providers", None)
-                    if providers_section is None and data_sources_section is not None and hasattr(data_sources_section,
-                                                                                                  "model_dump"):
+                    if (
+                        providers_section is None
+                        and data_sources_section is not None
+                        and hasattr(data_sources_section, "model_dump")
+                    ):
                         providers_section = data_sources_section.model_dump().get("providers")
                     if providers_section is not None and hasattr(providers_section, "get"):
                         amazingdata_section = providers_section.get("amazingdata")
-                if amazingdata_section is None and hasattr(data_sources_section, "model_dump"):
-                    try:
-                        providers_map = data_sources_section.model_dump().get("providers", {})
-                    except Exception:
-                        providers_map = {}
-                    if isinstance(providers_map, dict):
-                        amazingdata_section = providers_map.get("amazingdata")
+                if amazingdata_section is None:
+                    if data_sources_section is not None and hasattr(
+                        data_sources_section, "model_dump"
+                    ):
+                        try:
+                            providers_map = data_sources_section.model_dump().get("providers", {})
+                        except Exception:
+                            providers_map = {}
+                        if isinstance(providers_map, dict):
+                            amazingdata_section = providers_map.get("amazingdata")
 
                 if amazingdata_section is not None:
                     if hasattr(amazingdata_section, "to_provider_payload"):
-                        payload = cast(
-                            Mapping[str, Any], amazingdata_section.to_provider_payload()
-                        )
+                        payload = cast(Mapping[str, Any], amazingdata_section.to_provider_payload())
                     elif hasattr(amazingdata_section, "model_dump"):
                         payload = cast(Mapping[str, Any], amazingdata_section.model_dump())
                     elif isinstance(amazingdata_section, Mapping):
@@ -415,7 +424,10 @@ async def get_hist_code_list(request: HistCodeListRequest):
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_hist_code_list(
-            request.security_type, request.start_date, request.end_date, _resolve_local_path(request.local_path)
+            request.security_type,
+            request.start_date,
+            request.end_date,
+            _resolve_local_path(request.local_path),
         )
         return {"status": "success", "data": result, "count": len(result) if result else 0}
     except Exception as e:
@@ -867,6 +879,7 @@ async def get_long_hu_bang(code_list: List[str] = Body(..., description="股票�
         logger.error(f"获取龙虎榜数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # block-trading 端点已移至 margin.py 模块
 
 # ================== 9. 实时行情订阅接口 ==================
@@ -889,9 +902,7 @@ async def subscribe_index(request: SubscriptionRequest) -> AmazingDataResponse:
 
         success = await _realtime_manager.onSnapshotindex(request.code_list)
         if success:
-            return _build_success_response(
-                message=f"成功订阅{len(request.code_list)}个指数"
-            )
+            return _build_success_response(message=f"成功订阅{len(request.code_list)}个指数")
         else:
             raise HTTPException(status_code=400, detail="订阅失败")
     except Exception as e:
@@ -913,9 +924,7 @@ async def subscribe_stock(request: SubscriptionRequest) -> AmazingDataResponse:
 
         success = await _realtime_manager.onSnapshot(request.code_list)
         if success:
-            return _build_success_response(
-                message=f"成功订阅{len(request.code_list)}个股票"
-            )
+            return _build_success_response(message=f"成功订阅{len(request.code_list)}个股票")
         else:
             raise HTTPException(status_code=400, detail="订阅失败")
     except Exception as e:
@@ -937,9 +946,7 @@ async def subscribe_future(request: SubscriptionRequest) -> AmazingDataResponse:
 
         success = await _realtime_manager.onSnapshotfuture(request.code_list)
         if success:
-            return _build_success_response(
-                message=f"成功订阅{len(request.code_list)}个期货"
-            )
+            return _build_success_response(message=f"成功订阅{len(request.code_list)}个期货")
         else:
             raise HTTPException(status_code=400, detail="订阅失败")
     except Exception as e:
@@ -961,9 +968,7 @@ async def subscribe_etf(request: SubscriptionRequest) -> AmazingDataResponse:
 
         success = await _realtime_manager.onSnapshotetf(request.code_list)
         if success:
-            return _build_success_response(
-                message=f"成功订阅{len(request.code_list)}个ETF"
-            )
+            return _build_success_response(message=f"成功订阅{len(request.code_list)}个ETF")
         else:
             raise HTTPException(status_code=400, detail="订阅失败")
     except Exception as e:
@@ -985,9 +990,7 @@ async def subscribe_kzz(request: SubscriptionRequest) -> AmazingDataResponse:
 
         success = await _realtime_manager.onSnapshotkzz(request.code_list)
         if success:
-            return _build_success_response(
-                message=f"成功订阅{len(request.code_list)}个可转债"
-            )
+            return _build_success_response(message=f"成功订阅{len(request.code_list)}个可转债")
         else:
             raise HTTPException(status_code=400, detail="订阅失败")
     except Exception as e:
@@ -1009,9 +1012,7 @@ async def subscribe_hkt(request: SubscriptionRequest) -> AmazingDataResponse:
 
         success = await _realtime_manager.onSnapshothkt(request.code_list)
         if success:
-            return _build_success_response(
-                message=f"成功订阅{len(request.code_list)}个港股通"
-            )
+            return _build_success_response(message=f"成功订阅{len(request.code_list)}个港股通")
         else:
             raise HTTPException(status_code=400, detail="订阅失败")
     except Exception as e:
@@ -1033,9 +1034,7 @@ async def subscribe_kline(request: SubscriptionRequest) -> AmazingDataResponse:
 
         success = await _realtime_manager.OnKLine(request.code_list, request.period)
         if success:
-            return _build_success_response(
-                message=f"成功订阅{len(request.code_list)}个K线"
-            )
+            return _build_success_response(message=f"成功订阅{len(request.code_list)}个K线")
         else:
             raise HTTPException(status_code=400, detail="订阅失败")
     except Exception as e:

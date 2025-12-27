@@ -45,9 +45,7 @@ class TestDataSourceStatus:
         manager.providers = {
             DataSourceType.AMAZINGDATA: Mock(is_connected=Mock(return_value=True)),
         }
-        manager.registry.get_config = Mock(
-            return_value=DataSourceConfig(enabled=True, priority=1)
-        )
+        manager.registry.get_config = Mock(return_value=DataSourceConfig(enabled=True, priority=1))
 
         report = manager.get_status_report()
 

@@ -14,7 +14,7 @@ import threading
 import time
 from ipaddress import ip_address
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from deepsearch.config import get_config
 from deepsearch.core import MainEngine
@@ -143,7 +143,10 @@ class WebUIRunner:
             if not node_modules.exists():
                 print("正在安装前端依赖...")
                 result = subprocess.run(
-                    ["npm", "install"], cwd=str(self.frontend_dir), capture_output=True, text=True  # nosec B603 B607
+                    ["npm", "install"],
+                    cwd=str(self.frontend_dir),
+                    capture_output=True,
+                    text=True,  # nosec B603 B607
                 )
                 if result.returncode != 0:
                     self.logger.error(f"安装依赖失败: {result.stderr}")

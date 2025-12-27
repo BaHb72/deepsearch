@@ -23,8 +23,6 @@ class CacheEntry(TypedDict):
     ttl: int
 
 
-
-
 class WorkersProxyManager:
     """
     Cloudflare Workers 代理管理器
@@ -186,9 +184,7 @@ class WorkersProxyManager:
                             )
                             return result
             except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-                self.logger.opt(exception=exc).warning(
-                    "Workers 业务 API 测试失败，将退回健康检查"
-                )
+                self.logger.opt(exception=exc).warning("Workers 业务 API 测试失败，将退回健康检查")
             except Exception as exc:
                 self.logger.opt(exception=exc).error(
                     "Workers 业务 API 测试出现意外异常，将退回健康检查"

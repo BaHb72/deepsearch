@@ -13,9 +13,7 @@ from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata
     RequestType,
 )
 
-EXTERNAL_EXECUTABLE = Path(
-    os.environ.get("DEEPSEARCH_AMAZINGDATA_EXTERNAL_PYTHON", sys.executable)
-)
+EXTERNAL_EXECUTABLE = Path(os.environ.get("DEEPSEARCH_AMAZINGDATA_EXTERNAL_PYTHON", sys.executable))
 
 _required_modules = ["pandas", "pydantic", "redis"]
 _missing_deps: list[str] = []
@@ -30,7 +28,9 @@ if EXTERNAL_EXECUTABLE.exists():
             _missing_deps.append(name)
 
 if not EXTERNAL_EXECUTABLE.exists():
-    EXTERNAL_SKIP_REASON = "AmazingData 外部解释器未找到，请设置 DEEPSEARCH_AMAZINGDATA_EXTERNAL_PYTHON"
+    EXTERNAL_SKIP_REASON = (
+        "AmazingData 外部解释器未找到，请设置 DEEPSEARCH_AMAZINGDATA_EXTERNAL_PYTHON"
+    )
 elif _missing_deps:
     modules = ", ".join(_missing_deps)
     EXTERNAL_SKIP_REASON = f"AmazingData 外部解释器缺少依赖: {modules}"

@@ -3,6 +3,7 @@
 """全面探索所有AmazingData模块的方法"""
 
 import sys
+
 sys.path.insert(0, "d:/Stock/code/deepsearch")
 
 import AmazingData as ad
@@ -17,7 +18,7 @@ print("=" * 60)
 # BaseData
 print("\n### BaseData ###")
 base = ad.BaseData()
-base_methods = [m for m in dir(base) if not m.startswith('_') and callable(getattr(base, m))]
+base_methods = [m for m in dir(base) if not m.startswith("_") and callable(getattr(base, m))]
 print(f"总计: {len(base_methods)} 个方法")
 for m in sorted(base_methods):
     print(f"  - {m}")
@@ -28,7 +29,9 @@ market_methods = []
 try:
     calendar = ad.get_calendar_cached()
     market = ad.MarketData(calendar)
-    market_methods = [m for m in dir(market) if not m.startswith('_') and callable(getattr(market, m))]
+    market_methods = [
+        m for m in dir(market) if not m.startswith("_") and callable(getattr(market, m))
+    ]
     print(f"总计: {len(market_methods)} 个方法")
     for m in sorted(market_methods):
         print(f"  - {m}")
@@ -39,7 +42,7 @@ except Exception as e:
 # InfoData
 print("\n### InfoData ###")
 info = ad.InfoData()
-info_methods = [m for m in dir(info) if not m.startswith('_') and callable(getattr(info, m))]
+info_methods = [m for m in dir(info) if not m.startswith("_") and callable(getattr(info, m))]
 print(f"总计: {len(info_methods)} 个方法")
 for m in sorted(info_methods):
     print(f"  - {m}")
@@ -47,13 +50,17 @@ for m in sorted(info_methods):
 # SubscribeData
 print("\n### SubscribeData ###")
 subscribe = ad.SubscribeData()
-subscribe_methods = [m for m in dir(subscribe) if not m.startswith('_') and callable(getattr(subscribe, m))]
+subscribe_methods = [
+    m for m in dir(subscribe) if not m.startswith("_") and callable(getattr(subscribe, m))
+]
 print(f"总计: {len(subscribe_methods)} 个方法")
 for m in sorted(subscribe_methods):
     print(f"  - {m}")
 
 print("\n" + "=" * 60)
-print(f"总方法数: {len(base_methods) + len(market_methods) + len(info_methods) + len(subscribe_methods)}")
+print(
+    f"总方法数: {len(base_methods) + len(market_methods) + len(info_methods) + len(subscribe_methods)}"
+)
 print("=" * 60)
 
 # 登出

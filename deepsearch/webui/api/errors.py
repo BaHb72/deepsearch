@@ -2,8 +2,8 @@
 前端错误日志 API
 收集和管理前端错误信息
 """
-from __future__ import annotations
 
+from __future__ import annotations
 
 import asyncio
 import json

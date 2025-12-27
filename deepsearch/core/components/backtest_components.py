@@ -259,7 +259,6 @@ class BacktestComponent(AsyncComponent):
             self._logger.error(f"Failed to get statistics: {e}")
             return {"error": str(e)}
 
-
     def get_instance(self) -> Optional[Any]:
         """获取回测实例（供其他组件使用）"""
         return self._backtest_instance
@@ -276,7 +275,6 @@ class BacktestComponent(AsyncComponent):
             self._logger.error(f"Failed to cancel backtest task {task_id}: {e}")
             return False
 
-
     async def get_backtest_status(self, task_id: str) -> Dict[str, Any]:
         """获取回测任务状态"""
         if not self._backtest_instance or not hasattr(self._backtest_instance, "get_task_status"):
@@ -292,7 +290,6 @@ class BacktestComponent(AsyncComponent):
         except Exception as e:
             self._logger.error(f"Failed to get backtest status for task {task_id}: {e}")
             return {"error": str(e)}
-
 
     def is_enabled(self) -> bool:
         """检查回测组件是否启用"""

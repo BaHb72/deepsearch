@@ -1,16 +1,11 @@
 from typing import Protocol
 
-
 class _Hasher(Protocol):
     def update(self, data: bytes | bytearray | memoryview) -> None: ...
     def digest(self) -> bytes: ...
     def hexdigest(self) -> str: ...
 
-
 def xxh64(data: bytes | bytearray | memoryview | str = ..., seed: int = ...) -> _Hasher: ...
-
-
 def xxh64_hexdigest(data: bytes | bytearray | memoryview | str = ..., seed: int = ...) -> str: ...
-
 
 __all__ = ["xxh64", "xxh64_hexdigest"]

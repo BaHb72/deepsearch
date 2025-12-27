@@ -1,20 +1,14 @@
 from __future__ import annotations
 
 from typing import Any, Iterable, Mapping, MutableMapping, Optional, Sequence
+from typing import Set as SetType
 
-
-class RedisError(Exception):
-    ...
-
-
-class ResponseError(RedisError):
-    ...
-
+class RedisError(Exception): ...
+class ResponseError(RedisError): ...
 
 class exceptions:
     RedisError = RedisError
     ResponseError = ResponseError
-
 
 class ConnectionPool:
     max_connections: int
@@ -23,50 +17,48 @@ class ConnectionPool:
     _available_connections: Sequence[Any]
     _in_use_connections: Sequence[Any]
 
-
 class Redis:
     connection_pool: ConnectionPool
 
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
-
     def execute_command(self, *args: Any, **kwargs: Any) -> Any: ...
-
     def ping(self) -> bool: ...
-
     def flushdb(self) -> Any: ...
-
     def close(self) -> None: ...
-
     def delete(self, *names: Any) -> Any: ...
-
     def scan_iter(self, match: Optional[str | bytes] = None) -> Iterable[Any]: ...
-
     def expire(self, name: Any, time: int) -> bool: ...
-
     def exists(self, name: Any) -> int: ...
-
     def get(self, name: Any) -> Any: ...
-
     def setex(self, name: Any, time: int, value: Any) -> bool: ...
-
     def info(self, section: Optional[str] = None) -> Mapping[str, Any]: ...
-
     def dbsize(self) -> int: ...
-
     def scan(
         self,
         cursor: int = ...,
         match: Optional[str | bytes] = ...,
         count: Optional[int] = ...,
     ) -> tuple[int, list[Any]]: ...
-
     def hset(self, name: Any, key: Any, value: Any) -> Any: ...
-
     def hget(self, name: Any, key: Any) -> Any: ...
-
     def keys(self, pattern: Optional[str | bytes] = None) -> list[Any]: ...
-
     def ttl(self, name: Any) -> int: ...
+    # String and Set operations
+    def set(
+        self,
+        name: Any,
+        value: Any,
+        ex: Optional[int] = ...,
+        px: Optional[int] = ...,
+        nx: bool = ...,
+        xx: bool = ...,
+    ) -> Optional[bool]: ...
+    def sadd(self, name: Any, *values: Any) -> int: ...
+    def smembers(self, name: Any) -> SetType[Any]: ...
+    def srem(self, name: Any, *values: Any) -> int: ...
+    def sismember(self, name: Any, value: Any) -> bool: ...
+    def scard(self, name: Any) -> int: ...
+
 __all__ = [
     "ConnectionPool",
     "Redis",
@@ -74,4 +66,3 @@ __all__ = [
     "ResponseError",
     "exceptions",
 ]
-

@@ -27,7 +27,7 @@
             return data
 """
 
-from typing import Any, Optional, Protocol, Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol
 
 from loguru import logger
 
@@ -85,10 +85,10 @@ class CacheableMixin:
     _cache_default_ttl: int = 300
 
     def _init_cache(
-            self,
-            max_memory_size: int = 2000,
-            default_ttl: int = 300,
-            enabled: bool = True,
+        self,
+        max_memory_size: int = 2000,
+        default_ttl: int = 300,
+        enabled: bool = True,
     ) -> None:
         """初始化缓存管理器
 
@@ -113,17 +113,19 @@ class CacheableMixin:
                 SmartCacheManager,
             )
 
-            self._cache_manager = SmartCacheManager(max_memory_size=max_memory_size)
-            logger.info(f"✅ 缓存管理器初始化成功，最大容量: {max_memory_size}，默认TTL: {default_ttl}秒")
+            self._cache_manager = SmartCacheManager(max_memory_size=max_memory_size)  # type: ignore[assignment]
+            logger.info(
+                f"✅ 缓存管理器初始化成功，最大容量: {max_memory_size}，默认TTL: {default_ttl}秒"
+            )
         except ImportError as e:
             logger.warning(f"SmartCacheManager 导入失败，缓存功能已禁用: {e}")
             self._cache_enabled = False
             self._cache_manager = None
 
     async def get_cached(
-            self,
-            key: str,
-            max_age: Optional[int] = None,
+        self,
+        key: str,
+        max_age: Optional[int] = None,
     ) -> Optional[Any]:
         """从缓存获取数据
 
@@ -153,10 +155,10 @@ class CacheableMixin:
             return None
 
     def set_cached(
-            self,
-            key: str,
-            value: Any,
-            ttl: Optional[int] = None,
+        self,
+        key: str,
+        value: Any,
+        ttl: Optional[int] = None,
     ) -> None:
         """设置缓存
 

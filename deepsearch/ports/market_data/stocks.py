@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, Sequence
 
 if TYPE_CHECKING:
     from deepsearch.domain.market_data.stock_record import StockListRecord

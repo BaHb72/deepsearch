@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_yjbb_em
 
-目标地址: http://data.eastmoney.com/bbsj/202003/yjbb.html
+目标地址: <http://data.eastmoney.com/bbsj/202003/yjbb.html>
 
 描述: 东方财富-数据中心-年报季报-业绩报表
 
@@ -75,7 +75,7 @@ print(stock_yjbb_em_df)
 
 接口: stock_yjkb_em
 
-目标地址: https://data.eastmoney.com/bbsj/202003/yjkb.html
+目标地址: <https://data.eastmoney.com/bbsj/202003/yjkb.html>
 
 描述: 东方财富-数据中心-年报季报-业绩快报
 
@@ -141,7 +141,7 @@ print(stock_yjkb_em_df)
 
 接口: stock_yjyg_em
 
-目标地址: https://data.eastmoney.com/bbsj/202003/yjyg.html
+目标地址: <https://data.eastmoney.com/bbsj/202003/yjyg.html>
 
 描述: 东方财富-数据中心-年报季报-业绩预告
 
@@ -200,7 +200,7 @@ print(stock_yjyg_em_df)
 
 接口: stock_yysj_em
 
-目标地址: https://data.eastmoney.com/bbsj/202003/yysj.html
+目标地址: <https://data.eastmoney.com/bbsj/202003/yysj.html>
 
 描述: 东方财富-数据中心-年报季报-预约披露时间
 
@@ -257,7 +257,7 @@ print(stock_yysj_em_df)
 
 接口: stock_report_disclosure
 
-目标地址: http://www.cninfo.com.cn/new/commonUrl?url=data/yypl
+目标地址: <http://www.cninfo.com.cn/new/commonUrl?url=data/yypl>
 
 描述: 巨潮资讯-数据-预约披露的数据
 
@@ -313,7 +313,7 @@ print(stock_report_disclosure_df)
 
 接口: stock_zh_a_disclosure_report_cninfo
 
-目标地址: http://www.cninfo.com.cn/new/commonUrl/pageOfSearch?url=disclosure/list/search
+目标地址: <http://www.cninfo.com.cn/new/commonUrl/pageOfSearch?url=disclosure/list/search>
 
 描述: 巨潮资讯-首页-公告查询-信息披露公告-沪深京
 
@@ -366,7 +366,7 @@ print(stock_zh_a_disclosure_report_cninfo_df)
 
 接口: stock_zh_a_disclosure_relation_cninfo
 
-目标地址: http://www.cninfo.com.cn/new/commonUrl/pageOfSearch?url=disclosure/list/search
+目标地址: <http://www.cninfo.com.cn/new/commonUrl/pageOfSearch?url=disclosure/list/search>
 
 描述: 巨潮资讯-首页-公告查询-信息披露调研-沪深京
 
@@ -421,7 +421,7 @@ print(stock_zh_a_disclosure_relation_cninfo_df)
 
 接口: stock_industry_category_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/apiDoc
+目标地址: <https://webapi.cninfo.com.cn/#/apiDoc>
 
 描述: 巨潮资讯-数据-行业分类数据
 
@@ -477,7 +477,7 @@ print(stock_industry_category_cninfo_df)
 
 接口: stock_industry_change_cninfo
 
-目标地址: http://webapi.cninfo.com.cn/#/apiDoc
+目标地址: <http://webapi.cninfo.com.cn/#/apiDoc>
 
 描述: 巨潮资讯-数据-上市公司行业归属的变动情况
 
@@ -538,7 +538,7 @@ print(stock_industry_change_cninfo_df)
 
 接口: stock_share_change_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/apiDoc
+目标地址: <https://webapi.cninfo.com.cn/#/apiDoc>
 
 描述: 巨潮资讯-数据-公司股本变动
 
@@ -662,7 +662,7 @@ print(stock_share_change_cninfo_df)
 
 接口: stock_allotment_cninfo
 
-目标地址: http://webapi.cninfo.com.cn/#/dataBrowse
+目标地址: <http://webapi.cninfo.com.cn/#/dataBrowse>
 
 描述: 巨潮资讯-个股-配股实施方案
 
@@ -759,7 +759,7 @@ print(stock_allotment_cninfo_df)
 
 接口: stock_profile_cninfo
 
-目标地址: http://webapi.cninfo.com.cn/#/company
+目标地址: <http://webapi.cninfo.com.cn/#/company>
 
 描述: 巨潮资讯-个股-公司概况
 
@@ -822,7 +822,7 @@ print(stock_profile_cninfo_df)
 
 接口: stock_ipo_summary_cninfo
 
-目标地址: https://webapi.cninfo.com.cn/#/company
+目标地址: <https://webapi.cninfo.com.cn/#/company>
 
 描述: 巨潮资讯-个股-上市相关
 
@@ -875,7 +875,7 @@ print(stock_ipo_summary_cninfo_df)
 
 接口: stock_zcfz_em
 
-目标地址: https://data.eastmoney.com/bbsj/202003/zcfz.html
+目标地址: <https://data.eastmoney.com/bbsj/202003/zcfz.html>
 
 描述: 东方财富-数据中心-年报季报-业绩快报-资产负债表
 
@@ -938,7 +938,7 @@ print(stock_zcfz_em_df)
 
 接口: stock_zcfz_bj_em
 
-目标地址: https://data.eastmoney.com/bbsj/202003/zcfz.html
+目标地址: <https://data.eastmoney.com/bbsj/202003/zcfz.html>
 
 描述: 东方财富-数据中心-年报季报-业绩快报-资产负债表
 
@@ -1001,7 +1001,7 @@ print(stock_zcfz_bj_em_df)
 
 接口: stock_lrb_em
 
-目标地址: http://data.eastmoney.com/bbsj/202003/lrb.html
+目标地址: <http://data.eastmoney.com/bbsj/202003/lrb.html>
 
 描述: 东方财富-数据中心-年报季报-业绩快报-利润表
 
@@ -1064,7 +1064,7 @@ print(stock_lrb_em_df)
 
 接口: stock_xjll_em
 
-目标地址: http://data.eastmoney.com/bbsj/202003/xjll.html
+目标地址: <http://data.eastmoney.com/bbsj/202003/xjll.html>
 
 描述: 东方财富-数据中心-年报季报-业绩快报-现金流量表
 

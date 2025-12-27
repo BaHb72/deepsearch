@@ -8,11 +8,11 @@ AmazingData 进程管理做补充。
 ## 主要文件
 
 - `market_data/protocols.py`：声明行情相关的 `Protocol` 接口，包括：
-    - `MarketStreamPort`：订阅/退订、拉取最新快照、窗口数据聚合。
-    - `CapitalPulsePort`、`AuctionQualityPort`、`OrderImbalancePort`、`LimitStrengthPort` 等指标计算端口。
-    - `ETFReferencePort`、`MarginFlowPort`、`SupplyConstraintPort`、`StylePreferencePort`、`ConceptAssociationPort`、
+  - `MarketStreamPort`：订阅/退订、拉取最新快照、窗口数据聚合。
+  - `CapitalPulsePort`、`AuctionQualityPort`、`OrderImbalancePort`、`LimitStrengthPort` 等指标计算端口。
+  - `ETFReferencePort`、`MarginFlowPort`、`SupplyConstraintPort`、`StylePreferencePort`、`ConceptAssociationPort`、
       `ExternalOverlayPort` 等扩展能力。
-    - `MarketDataPortRegistry` 作为聚合器，为应用层提供统一的 resolve API。
+  - `MarketDataPortRegistry` 作为聚合器，为应用层提供统一的 resolve API。
 - `market_data/models.py`：基于 `dataclass` 定义所有端口返回/查询实体，例如 `MarketSnapshot`, `WindowSpec`,
   `CapitalPulseEntry`, `AuctionQualityEntry` 等。它们是领域层与应用层的数据契约。
 - `market_data/stocks.py`：提供板块/股票列表请求模型 (`StockListRecord`, `StockListQuery` 等)，以及序列化/反序列化工具，常用于

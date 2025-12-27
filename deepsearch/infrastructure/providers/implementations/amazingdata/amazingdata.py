@@ -2,7 +2,7 @@ import asyncio
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Mapping, Optional, Sequence, cast
+from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
 import pandas as pd
 
@@ -16,6 +16,7 @@ from deepsearch.infrastructure.providers.interfaces.base import (
 from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
 from deepsearch.observability.decorators.decorators import monitor_data_source
 from deepsearch.ports.data_sources import DataAccessType
+
 from ._sdk_loader import HAS_AMAZINGDATA, ad
 from .alert_utils import trigger_alert as _trigger_provider_alert
 from .amazingdata_types import (
@@ -32,8 +33,8 @@ from .config import (
     resolve_local_cache_path,
 )
 from .connection_manager import AmazingDataConnectionManager
+from .helpers import _coalesce as _helpers_coalesce
 from .helpers import (
-    _coalesce as _helpers_coalesce,
     _create_market_data_instance,
     _ensure_float,
     _normalize_date_to_int,
@@ -50,10 +51,6 @@ from .types import AmazingDataSDKProtocol
 logger = ProcessLoggerAdapter(action="amazingdata_provider")
 
 _coalesce = _helpers_coalesce  # 兼容旧版测试入口，后续逐步收敛到 helpers
-
-
-
-
 
 
 class AmazingDataProvider(DataProvider):
@@ -195,7 +192,9 @@ class AmazingDataProvider(DataProvider):
                         f"[DEBUG] CRITICAL: AmazingData SDK attempted system exit with code: {exc.code}",
                         action="login",
                     )
-                    logger.critical(f"[DEBUG] Stack trace: {traceback.format_exc()}", action="login")
+                    logger.critical(
+                        f"[DEBUG] Stack trace: {traceback.format_exc()}", action="login"
+                    )
                     result_holder["result"] = -999
                     result_holder["exception"] = exc
                 except ConnectionError as exc:
@@ -285,7 +284,7 @@ class AmazingDataProvider(DataProvider):
 
     def get_capabilities(self) -> set[DataCapability]:
         """返回 AmazingData 支持的数据能力集合。
-        
+
         AmazingData SDK 提供全面的数据能力：
         - 基础行情：实时行情、K线、分钟数据、Tick
         - 基础信息：股票列表、股票信息、交易日历、复权因子
@@ -342,11 +341,11 @@ class AmazingDataProvider(DataProvider):
         current = self._get_stat_int(key) + delta
         self._stats[key] = current
         return current
+
     def _before_query(self) -> None:
         """查询前执行统一的状态检查"""
         self._ensure_sdk_ready()
         self._increment_stat("queries")
-
 
     async def _initialize_source(self) -> None:
         """初始化数据源"""
@@ -503,7 +502,6 @@ class AmazingDataProvider(DataProvider):
 
         return await self._connection_manager.ensure_session()
 
-
     async def _restore_subscriptions(self) -> None:
         """重新恢复订阅状态"""
         if not self.config.subscription_enabled:
@@ -527,17 +525,19 @@ class AmazingDataProvider(DataProvider):
     # ==================== 订阅接口 ====================
 
     async def subscribe_quote(
-            self,
-            symbols: Sequence[str],
-            callback: SubscriptionCallback,
-            data_type: str = "snapshot",
+        self,
+        symbols: Sequence[str],
+        callback: SubscriptionCallback,
+        data_type: str = "snapshot",
     ) -> bool:
         """订阅 AmazingData 实时行情"""
         if not self.config.subscription_enabled:
             logger.warning("AmazingData 订阅功能未启用，忽略请求", action="subscribe")
             return False
         try:
-            success = await self._subscription_manager.subscribe(symbols, callback, data_type=data_type)
+            success = await self._subscription_manager.subscribe(
+                symbols, callback, data_type=data_type
+            )
             if success:
                 self._stats["subscriptions"] = self._subscription_manager.subscription_count
             return success
@@ -558,10 +558,10 @@ class AmazingDataProvider(DataProvider):
             return False
 
     async def subscribe_stock_snapshot(
-            self,
-            symbols: Sequence[str],
-            callback: SubscriptionCallback,
-            data_type: str = "snapshot",
+        self,
+        symbols: Sequence[str],
+        callback: SubscriptionCallback,
+        data_type: str = "snapshot",
     ) -> bool:
         """订阅通用入口，默认使用 snapshot 周期"""
         return await self.subscribe_quote(list(symbols), callback, data_type=data_type)
@@ -570,6 +570,7 @@ class AmazingDataProvider(DataProvider):
     def _subscriptions(self) -> Mapping[str, SubscriptionInfo]:
         """提供当前订阅状态的快照视图"""
         return self._subscription_manager.snapshot()
+
     async def _trigger_alert(self, alert_type: str, message: str) -> None:
         """统一委托至 alert_utils，减少重复实现。"""
         try:
@@ -632,7 +633,6 @@ class AmazingDataProvider(DataProvider):
 
     # ==================== 数据查询接口 ====================
 
-
     async def get_data(self, request: DataRequest) -> DataResponse:
         """使用 QueryManager 路由 DataRequest"""
 
@@ -641,7 +641,6 @@ class AmazingDataProvider(DataProvider):
         response.metadata.setdefault("source", self.config.name or self.__class__.__name__)
         response.metadata.setdefault("request_type", request.request_type)
         return response
-
 
     async def get_kline(
         self,
@@ -725,7 +724,9 @@ class AmazingDataProvider(DataProvider):
                 )
 
             market_cls = getattr(sdk, "MarketData", None)
-            legacy_callable = getattr(market_cls, "get_kline_data", None) if market_cls is not None else None
+            legacy_callable = (
+                getattr(market_cls, "get_kline_data", None) if market_cls is not None else None
+            )
             if (not data or symbol not in data) and callable(legacy_callable):
 
                 def _query_with_legacy() -> Any:
@@ -792,35 +793,36 @@ class AmazingDataProvider(DataProvider):
             )
             raise DataProviderError(f"获取K线数据失败: {exc}") from exc
 
-
     @monitor_data_source(
         source=DataSourceType.AMAZINGDATA,
         access_type=DataAccessType.FINANCIAL_DATA,
         extract_symbol=lambda *args, **kwargs: args[1] if len(args) > 1 else kwargs.get("symbol"),
     )
     async def get_key_indicators(
-            self,
-            symbol: str,
-            report_date: Optional[str] = None,
+        self,
+        symbol: str,
+        report_date: Optional[str] = None,
     ) -> pd.DataFrame:
         await self.ensure_session()
-        return await self._query_manager.fetch_key_indicators(symbol=symbol, report_date=report_date)
-
+        return await self._query_manager.fetch_key_indicators(
+            symbol=symbol, report_date=report_date
+        )
 
     async def get_shareholder_info(
-            self,
-            symbol: str,
-            report_date: Optional[str] = None,
+        self,
+        symbol: str,
+        report_date: Optional[str] = None,
     ) -> Optional[ShareholderSnapshot]:
         await self.ensure_session()
-        return await self._query_manager.fetch_shareholder_info(symbol=symbol, report_date=report_date)
-
+        return await self._query_manager.fetch_shareholder_info(
+            symbol=symbol, report_date=report_date
+        )
 
     async def get_dragon_tiger(
-            self,
-            symbol: str,
-            start_date: Optional[str] = None,
-            end_date: Optional[str] = None,
+        self,
+        symbol: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> list[DragonTigerRecord]:
         await self.ensure_session()
         return await self._query_manager.fetch_dragon_tiger(
@@ -829,12 +831,11 @@ class AmazingDataProvider(DataProvider):
             end_date=end_date,
         )
 
-
     async def get_margin_trading(
-            self,
-            symbol: str,
-            start_date: Optional[str] = None,
-            end_date: Optional[str] = None,
+        self,
+        symbol: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> pd.DataFrame:
         await self.ensure_session()
         return await self._query_manager.fetch_margin_trading(
@@ -843,15 +844,14 @@ class AmazingDataProvider(DataProvider):
             end_date=end_date,
         )
 
-
     async def get_block_trading(
-            self,
-            symbols: List[str],
-            *,
-            local_path: Optional[str] = None,
-            is_local: bool = True,
-            begin_date: Optional[int] = None,
-            end_date: Optional[int] = None,
+        self,
+        symbols: List[str],
+        *,
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+        begin_date: Optional[int] = None,
+        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         await self.ensure_session()
         resolved_path = self._prepare_local_path(local_path)
@@ -863,17 +863,15 @@ class AmazingDataProvider(DataProvider):
             end_date=end_date,
         )
 
-
     async def get_north_flow(
         self, start_date: Optional[str] = None, end_date: Optional[str] = None
     ) -> pd.DataFrame:
         await self.ensure_session()
         return await self._query_manager.fetch_north_flow(start_date=start_date, end_date=end_date)
 
-
     async def get_stock_list(
-            self, limit: Optional[int] = None, **kwargs: Any
-    ) -> Optional[list[StockListItem]]:
+        self, limit: Optional[int] = None, **kwargs: Any
+    ) -> Optional[List[Dict[str, Any]]]:
         await self.ensure_session()
         payload = await self._query_manager.fetch_stock_list(limit=limit, **kwargs)
         if payload is None:
@@ -883,7 +881,7 @@ class AmazingDataProvider(DataProvider):
         for entry in payload:
             if isinstance(entry, Mapping):
                 typed_payload.append(cast(StockListItem, dict(entry)))
-        return typed_payload
+        return cast(List[Dict[str, Any]], typed_payload)
 
     async def get_kline_data(
         self,
@@ -945,49 +943,43 @@ class AmazingDataProvider(DataProvider):
 
             extended = AmazingDataExtended(self.config)
             await extended.initialize()
-            return extended.get_option_code_list(security_type)
+            return await extended.get_option_code_list(security_type)
         except Exception as e:
             logger.error(f"获取期权代码列表失败: {e}")
             return None
 
-    async def get_etf_pcf(
-        self, code_list: List[str], **kwargs: Any
-    ) -> Optional[pd.DataFrame]:
+    async def get_etf_pcf(self, code_list: List[str], **kwargs: Any) -> Optional[pd.DataFrame]:
         """获取ETF申赎清单 (PCF)"""
         try:
             from .amazingdata_extended import AmazingDataExtended
 
             extended = AmazingDataExtended(self.config)
             await extended.initialize()
-            return extended.get_etf_pcf(code_list, **kwargs)
+            return await extended.get_etf_pcf(code_list, **kwargs)
         except Exception as e:
             logger.error(f"获取ETF申赎清单失败: {e}")
             return None
 
-    async def get_index_constituent(
-        self, index_code: str, **kwargs: Any
-    ) -> Optional[pd.DataFrame]:
+    async def get_index_constituent(self, index_code: str, **kwargs: Any) -> Optional[pd.DataFrame]:
         """获取指数成分股"""
         try:
             from .amazingdata_extended import AmazingDataExtended
 
             extended = AmazingDataExtended(self.config)
             await extended.initialize()
-            return extended.get_index_constituent(index_code, **kwargs)
+            return await extended.get_index_constituent(index_code, **kwargs)
         except Exception as e:
             logger.error(f"获取指数成分股失败: {e}")
             return None
 
-    async def get_index_weight(
-        self, index_code: str, **kwargs: Any
-    ) -> Optional[pd.DataFrame]:
+    async def get_index_weight(self, index_code: str, **kwargs: Any) -> Optional[pd.DataFrame]:
         """获取指数成分股权重"""
         try:
             from .amazingdata_extended import AmazingDataExtended
 
             extended = AmazingDataExtended(self.config)
             await extended.initialize()
-            return extended.get_index_weight(index_code, **kwargs)
+            return await extended.get_index_weight(index_code, **kwargs)
         except Exception as e:
             logger.error(f"获取指数权重失败: {e}")
             return None
@@ -1001,35 +993,31 @@ class AmazingDataProvider(DataProvider):
 
             extended = AmazingDataExtended(self.config)
             await extended.initialize()
-            return extended.get_industry_constituent(industry_code, **kwargs)
+            return await extended.get_industry_constituent(industry_code, **kwargs)
         except Exception as e:
             logger.error(f"获取行业成分股失败: {e}")
             return None
 
-    async def get_treasury_yield(
-        self, term: str = "y10", **kwargs: Any
-    ) -> Optional[pd.DataFrame]:
+    async def get_treasury_yield(self, term: str = "y10", **kwargs: Any) -> Optional[pd.DataFrame]:
         """获取国债收益率"""
         try:
             from .amazingdata_extended import AmazingDataExtended
 
             extended = AmazingDataExtended(self.config)
             await extended.initialize()
-            return extended.get_treasury_yield(term=term, **kwargs)
+            return await extended.get_treasury_yield(term=term, **kwargs)
         except Exception as e:
             logger.error(f"获取国债收益率失败: {e}")
             return None
 
-    async def get_fund_share(
-        self, code_list: List[str], **kwargs: Any
-    ) -> Optional[pd.DataFrame]:
+    async def get_fund_share(self, code_list: List[str], **kwargs: Any) -> Optional[pd.DataFrame]:
         """获取ETF份额数据"""
         try:
             from .amazingdata_extended import AmazingDataExtended
 
             extended = AmazingDataExtended(self.config)
             await extended.initialize()
-            return extended.get_fund_share(code_list, **kwargs)
+            return await extended.get_fund_share(code_list, **kwargs)
         except Exception as e:
             logger.error(f"获取ETF份额失败: {e}")
             return None

@@ -34,7 +34,7 @@ class ModuleSourceConfig:
 class ModuleSourceResolver:
     """
     模块级数据源解析器。
-    
+
     优先级（从高到低）：
     1. module_overrides[module_name]
     2. access_type_overrides[access_type]
@@ -42,11 +42,11 @@ class ModuleSourceResolver:
     """
 
     def __init__(
-            self,
-            module_overrides: Optional[Mapping[str, Mapping[str, Any]]] = None,
-            access_type_overrides: Optional[Mapping[str, Mapping[str, Any]]] = None,
-            global_default: Optional[str] = None,
-            global_fallback_order: Optional[Sequence[str]] = None,
+        self,
+        module_overrides: Optional[Mapping[str, Mapping[str, Any]]] = None,
+        access_type_overrides: Optional[Mapping[str, Mapping[str, Any]]] = None,
+        global_default: Optional[str] = None,
+        global_fallback_order: Optional[Sequence[str]] = None,
     ) -> None:
         self._module_configs: Dict[str, ModuleSourceConfig] = {}
         self._access_type_configs: Dict[DataAccessType, ModuleSourceConfig] = {}
@@ -103,17 +103,17 @@ class ModuleSourceResolver:
         return ModuleSourceConfig(primary=primary, fallback=fallback)
 
     def resolve(
-            self,
-            module: Optional[str] = None,
-            access_type: Optional[DataAccessType] = None,
+        self,
+        module: Optional[str] = None,
+        access_type: Optional[DataAccessType] = None,
     ) -> List[DataSourceType]:
         """
         解析特定上下文的数据源顺序。
-        
+
         Args:
             module: 模块名称（如 "market_strength"）
             access_type: 数据访问类型
-        
+
         Returns:
             数据源类型列表（按优先级排序）
         """
@@ -152,10 +152,10 @@ class ModuleSourceResolver:
 def create_resolver_from_config(data_sources_config: Mapping[str, Any]) -> ModuleSourceResolver:
     """
     从 data_sources 配置创建解析器。
-    
+
     Args:
         data_sources_config: settings.yaml 中的 data_sources 配置块
-    
+
     Returns:
         ModuleSourceResolver 实例
     """

@@ -5,7 +5,7 @@ MiniQMT Real Connection Test - Detailed Version
 import sys
 import warnings
 
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 
 print("=" * 60)
 print("MiniQMT Real Connection Test")
@@ -30,18 +30,18 @@ try:
         print("    [OK] Got tick data!")
         if isinstance(tick, dict):
             print(f"    Fields: {list(tick.keys())}")
-            if 'lastPrice' in tick:
+            if "lastPrice" in tick:
                 print(f"    lastPrice: {tick['lastPrice']}")
-            if 'open' in tick:
+            if "open" in tick:
                 print(f"    open: {tick['open']}")
-            if 'high' in tick:
+            if "high" in tick:
                 print(f"    high: {tick['high']}")
-            if 'low' in tick:
+            if "low" in tick:
                 print(f"    low: {tick['low']}")
-            if 'volume' in tick:
+            if "volume" in tick:
                 print(f"    volume: {tick['volume']}")
     else:
-        print(f"    [WARN] Empty result")
+        print("    [WARN] Empty result")
 except Exception as e:
     print(f"    [FAIL] {type(e).__name__}: {e}")
 
@@ -55,27 +55,23 @@ try:
         print(f"    [OK] Got {len(received)}/{len(stocks)} stocks")
         for s in received:
             tick = result[s]
-            if isinstance(tick, dict) and 'lastPrice' in tick:
+            if isinstance(tick, dict) and "lastPrice" in tick:
                 print(f"    {s}: lastPrice={tick['lastPrice']}")
     else:
-        print(f"    [WARN] Empty result")
+        print("    [WARN] Empty result")
 except Exception as e:
     print(f"    [FAIL] {type(e).__name__}: {e}")
 
 # Step 4: Get Market Data
 print("\n[4] get_market_data(['000001.SZ'], period='1d', count=5)...")
 try:
-    result = xtdata.get_market_data(
-        stock_list=["000001.SZ"],
-        period="1d",
-        count=5
-    )
+    result = xtdata.get_market_data(stock_list=["000001.SZ"], period="1d", count=5)
     if result:
         print(f"    [OK] Data type: {type(result)}")
         if isinstance(result, dict):
             print(f"    Keys: {list(result.keys())}")
     else:
-        print(f"    [WARN] Empty result")
+        print("    [WARN] Empty result")
 except Exception as e:
     print(f"    [FAIL] {type(e).__name__}: {e}")
 

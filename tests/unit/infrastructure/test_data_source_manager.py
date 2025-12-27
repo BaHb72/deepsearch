@@ -9,12 +9,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from deepsearch.ports.data_sources import DataSourceType
 from deepsearch.infrastructure.providers.managers.data_source_manager import (
     DataSourceConfig,
     DataSourceManager,
     DataSourceRegistry,
 )
+from deepsearch.ports.data_sources import DataSourceType
 
 
 @pytest.fixture
@@ -373,7 +373,6 @@ def test_enable_akshare_restores_fallback_order(mock_config):
 
     assert DataSourceType.AKSHARE in manager._fallback_order
     assert manager.config.data_sources["fallback_order"] == ["amazingdata", "akshare"]
-
 
 
 @pytest.mark.integration

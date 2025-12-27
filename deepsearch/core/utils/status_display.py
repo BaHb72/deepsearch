@@ -10,10 +10,20 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from threading import Lock
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from loguru import logger
 
+# 可选依赖：rich 库
+# 使用 TYPE_CHECKING 确保类型检查器可以看到类型
+if TYPE_CHECKING:
+    from rich.console import Console
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+
+# 运行时检测和导入
 try:
     from rich.console import Console
     from rich.live import Live
@@ -24,12 +34,12 @@ try:
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
-    # 创建占位类型，避免类型注解导致NameError
-    Console = None  # type: ignore
-    Live = None  # type: ignore
-    Panel = None  # type: ignore
-    Table = None  # type: ignore
-    Text = None  # type: ignore
+    # 运行时占位符 - 这些只在 rich 不可用时使用
+    Console = None  # type: ignore[assignment, misc]
+    Live = None  # type: ignore[assignment, misc]
+    Panel = None  # type: ignore[assignment, misc]
+    Table = None  # type: ignore[assignment, misc]
+    Text = None  # type: ignore[assignment, misc]
     logger.warning("rich 库未安装，状态显示功能将被禁用")
 
 
@@ -142,7 +152,7 @@ class RichStatusDisplay:
     @property
     def should_suppress_log(self) -> bool:
         """是否应该抑制当前日志（由外部检查）"""
-        return self._suppress_logs and self._running
+        return bool(self._suppress_logs and self._running)
 
     def start(self) -> None:
         """启动状态显示"""
@@ -171,15 +181,15 @@ class RichStatusDisplay:
             self._live = None
 
     def update_source(
-            self,
-            source: str,
-            *,
-            status: Optional[str] = None,
-            request: bool = False,
-            success: bool = False,
-            error: bool = False,
-            latency_ms: Optional[float] = None,
-            cache_hit: Optional[bool] = None,
+        self,
+        source: str,
+        *,
+        status: Optional[str] = None,
+        request: bool = False,
+        success: bool = False,
+        error: bool = False,
+        latency_ms: Optional[float] = None,
+        cache_hit: Optional[bool] = None,
     ) -> None:
         """更新数据源指标"""
         if source not in self._metrics.sources:
@@ -229,7 +239,7 @@ class RichStatusDisplay:
     def _render(self) -> Any:
         """渲染状态面板"""
         if not RICH_AVAILABLE:
-            return None  # type: ignore
+            return None
 
         # 创建表格
         table = Table(show_header=False, box=None, padding=(0, 1))
@@ -267,9 +277,7 @@ class RichStatusDisplay:
         # 第三行：缓存和运行时间
         last_update = ""
         if self._metrics.last_update:
-            last_update = datetime.fromtimestamp(self._metrics.last_update).strftime(
-                "%H:%M:%S"
-            )
+            last_update = datetime.fromtimestamp(self._metrics.last_update).strftime("%H:%M:%S")
 
         table.add_row(
             "缓存命中",

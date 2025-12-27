@@ -10,7 +10,7 @@ import asyncio
 import os
 import threading
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -421,7 +421,11 @@ class MultiSourceData:
             差异信息
         """
         differences: List[Dict[str, Any]] = []
-        diff_info: Dict[str, Any] = {"base_source": base_name, "compare_source": compare_name, "differences": differences}
+        diff_info: Dict[str, Any] = {
+            "base_source": base_name,
+            "compare_source": compare_name,
+            "differences": differences,
+        }
 
         try:
             # 对比数据长度
@@ -504,7 +508,11 @@ class MultiSourceData:
         Returns:
             统计信息
         """
-        stats: Dict[str, Any] = {"total_sources": len(source_names), "available_sources": 0, "data_ranges": {}}
+        stats: Dict[str, Any] = {
+            "total_sources": len(source_names),
+            "available_sources": 0,
+            "data_ranges": {},
+        }
 
         for name in source_names:
             if name in self.sources:

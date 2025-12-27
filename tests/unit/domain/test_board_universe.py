@@ -22,10 +22,12 @@ def test_board_universe_update_from_records() -> None:
 
 def test_board_universe_snapshot_roundtrip() -> None:
     universe = BoardUniverse()
-    universe.update_from_records([
-        {"symbol": "000001.SZ", "board": "TEST"},
-        {"symbol": "000002.SZ", "board": "TEST"},
-    ])
+    universe.update_from_records(
+        [
+            {"symbol": "000001.SZ", "board": "TEST"},
+            {"symbol": "000002.SZ", "board": "TEST"},
+        ]
+    )
 
     snapshot = universe.snapshot()
 
@@ -38,16 +40,18 @@ def test_board_universe_snapshot_roundtrip() -> None:
 
 def test_board_universe_normalizes_aliases() -> None:
     universe = BoardUniverse()
-    universe.update_from_records([
-        {"symbol": "000001.SZ", "board": "\u4e0a\u6d77\u4e3b\u677f"},
-        {"symbol": "688001.SH", "board": "\u79d1\u521b\u677fA\u80a1"},
-        {"symbol": "300001.SZ", "board": "\u6df1\u5733\u521b\u4e1a\u677f"},
-        {"symbol": "830001.BJ", "board": "\u5317\u4eac\u8bc1\u5238\u4ea4\u6613\u6240A\u80a1"},
-        {"symbol": "600010.SH", "board": "\u4e3b\u677fB\u80a1"},
-        {"symbol": "832100.BJ", "board": "\u65b0\u4e09\u677f\u7cbe\u9009\u5c42"},
-        {"symbol": "00700.HK", "board": "\u6e2f\u80a1\u4e3b\u677f"},
-        {"symbol": "08083.HK", "board": "\u6e2f\u80a1\u521b\u4e1a\u677f"},
-    ])
+    universe.update_from_records(
+        [
+            {"symbol": "000001.SZ", "board": "\u4e0a\u6d77\u4e3b\u677f"},
+            {"symbol": "688001.SH", "board": "\u79d1\u521b\u677fA\u80a1"},
+            {"symbol": "300001.SZ", "board": "\u6df1\u5733\u521b\u4e1a\u677f"},
+            {"symbol": "830001.BJ", "board": "\u5317\u4eac\u8bc1\u5238\u4ea4\u6613\u6240A\u80a1"},
+            {"symbol": "600010.SH", "board": "\u4e3b\u677fB\u80a1"},
+            {"symbol": "832100.BJ", "board": "\u65b0\u4e09\u677f\u7cbe\u9009\u5c42"},
+            {"symbol": "00700.HK", "board": "\u6e2f\u80a1\u4e3b\u677f"},
+            {"symbol": "08083.HK", "board": "\u6e2f\u80a1\u521b\u4e1a\u677f"},
+        ]
+    )
 
     assert "\u4e3b\u677f" in universe.boards()
     assert set(universe.resolve_codes("\u4e3b\u677f")) == {"000001.SZ", "600010.SH"}

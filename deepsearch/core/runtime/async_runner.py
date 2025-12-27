@@ -163,6 +163,7 @@ class AsyncRunner:
             # 执行应用层引导
             try:
                 from deepsearch.application.bootstrap import bootstrap_system
+
                 await bootstrap_system()
             except ImportError:
                 runner.logger.debug("未找到引导模块 deepsearch.application.bootstrap，跳过引导步骤")

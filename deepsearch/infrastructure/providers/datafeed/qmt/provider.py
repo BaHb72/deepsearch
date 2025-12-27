@@ -7,7 +7,7 @@ QMT数据提供者
 import asyncio
 import time
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypedDict, cast
 
 from loguru import logger
 
@@ -18,18 +18,18 @@ else:
 
 try:
     import pandas as pd
+
     HAS_PANDAS = True
 except ImportError:  # pragma: no cover
     pd = cast(Any, None)
     HAS_PANDAS = False
 
 
-
-
 class SubscriptionInfo(TypedDict):
     symbol: str
     period: str
     callback: Optional[Callable[[Dict[str, Any]], None]]
+
 
 class QMTDataProvider:
     """QMT数据提供者 - 实现统一数据接口"""
@@ -456,7 +456,10 @@ class QMTDataProvider:
         logger.info("QMT data provider closed")
 
     async def subscribe_quote(
-        self, symbol: str, period: str = "tick", callback: Optional[Callable[[Dict[str, Any]], None]] = None
+        self,
+        symbol: str,
+        period: str = "tick",
+        callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> int:
         """
         订阅实时行情（增强版）
@@ -641,7 +644,11 @@ class QMTDataProvider:
             return {"error": str(e)}
 
     async def get_factor_data(
-        self, symbol: str, factors: List[str], start_date: Optional[str] = None, end_date: Optional[str] = None
+        self,
+        symbol: str,
+        factors: List[str],
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         获取因子数据

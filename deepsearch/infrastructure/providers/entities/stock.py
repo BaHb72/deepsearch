@@ -85,7 +85,17 @@ class StockEntity:
         if status_value is not None and not isinstance(status_value, StockStatus):
             normalized["status"] = StockStatus(str(status_value))
 
-        for field_name in ("current_price", "prev_close", "open_price", "high", "low", "amount", "market_cap", "pe_ratio", "pb_ratio"):
+        for field_name in (
+            "current_price",
+            "prev_close",
+            "open_price",
+            "high",
+            "low",
+            "amount",
+            "market_cap",
+            "pe_ratio",
+            "pb_ratio",
+        ):
             value = normalized.get(field_name)
             if value is None or isinstance(value, Decimal):
                 continue

@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_board_concept_index_ths
 
-目标地址: https://q.10jqka.com.cn/gn/detail/code/301558
+目标地址: <https://q.10jqka.com.cn/gn/detail/code/301558>
 
 描述: 同花顺-板块-概念板块-指数日频率数据
 
@@ -68,7 +68,7 @@ print(stock_board_concept_index_ths_df)
 
 接口: stock_board_concept_info_ths
 
-目标地址: http://q.10jqka.com.cn/gn/detail/code/301558/
+目标地址: <http://q.10jqka.com.cn/gn/detail/code/301558/>
 
 描述: 同花顺-板块-概念板块-板块简介
 
@@ -116,7 +116,7 @@ print(stock_board_concept_info_ths_df)
 
 接口: stock_board_concept_name_em
 
-目标地址: https://quote.eastmoney.com/center/boardlist.html#concept_board
+目标地址: <https://quote.eastmoney.com/center/boardlist.html#concept_board>
 
 描述: 东方财富网-行情中心-沪深京板块-概念板块
 
@@ -176,7 +176,7 @@ print(stock_board_concept_name_em_df)
 
 接口: stock_board_concept_spot_em
 
-目标地址: https://quote.eastmoney.com/bk/90.BK0818.html
+目标地址: <https://quote.eastmoney.com/bk/90.BK0818.html>
 
 描述: 东方财富网-行情中心-沪深京板块-概念板块-实时行情
 
@@ -224,7 +224,7 @@ print(stock_board_concept_spot_em_df)
 
 接口: stock_board_concept_cons_em
 
-目标地址: http://quote.eastmoney.com/center/boardlist.html#boards-BK06551
+目标地址: <http://quote.eastmoney.com/center/boardlist.html#boards-BK06551>
 
 描述: 东方财富-沪深板块-概念板块-板块成份
 
@@ -288,7 +288,7 @@ print(stock_board_concept_cons_em_df)
 
 接口: stock_board_concept_hist_em
 
-目标地址: http://quote.eastmoney.com/bk/90.BK0715.html
+目标地址: <http://quote.eastmoney.com/bk/90.BK0715.html>
 
 描述: 东方财富-沪深板块-概念板块-历史行情数据
 
@@ -351,7 +351,7 @@ print(stock_board_concept_hist_em_df)
 
 接口: stock_board_concept_hist_min_em
 
-目标地址: http://quote.eastmoney.com/bk/90.BK0715.html
+目标地址: <http://quote.eastmoney.com/bk/90.BK0715.html>
 
 描述: 东方财富-沪深板块-概念板块-分时历史行情数据
 
@@ -451,7 +451,7 @@ print(stock_board_concept_hist_min_em_df)
 
 接口: stock_concept_cons_futu
 
-目标地址: https://www.futunn.com/quote/sparks-us
+目标地址: <https://www.futunn.com/quote/sparks-us>
 
 描述: 富途牛牛-主题投资-概念板块-成分股
 

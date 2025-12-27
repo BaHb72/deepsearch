@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_zh_a_new
 
-目标地址: http://vip.stock.finance.sina.com.cn/mkt/#new_stock
+目标地址: <http://vip.stock.finance.sina.com.cn/mkt/#new_stock>
 
 描述: 新浪财经-行情中心-沪深股市-次新股
 

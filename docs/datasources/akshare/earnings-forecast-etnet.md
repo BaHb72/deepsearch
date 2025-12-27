@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_hk_profit_forecast_et
 
-目标地址: https://www.etnet.com.hk/www/sc/stocks/realtime/quote_profit.php?code=9999
+目标地址: <https://www.etnet.com.hk/www/sc/stocks/realtime/quote_profit.php?code=9999>
 
 描述: 经济通-公司资料-盈利预测
 

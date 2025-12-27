@@ -57,7 +57,6 @@ class DataSourceTestSuite:
             logger.error(f"初始化失败: {e}")
             return False
 
-
     async def test_get_stock_list(self, source: str) -> TestResult:
         """测试获取股票列表"""
         start_time = time.time()
@@ -189,7 +188,7 @@ class DataSourceTestSuite:
                 else:
                     data_count = len(quotes)
                     data_sample = quotes[0] if quotes else None
-                    
+
                 return TestResult(
                     source=source,
                     method="get_realtime_quotes",

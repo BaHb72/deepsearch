@@ -115,4 +115,3 @@ class LRUStrategy(ICacheStrategy):
                 "current_size": self._current_size,
                 "capacity_used": len(self._access_order) / self.max_size * 100,
             }
-

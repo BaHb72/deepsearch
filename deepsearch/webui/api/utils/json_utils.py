@@ -3,8 +3,8 @@ JSON sanitization utilities
 
 处理 NaN、Infinity 等非 JSON 兼容的值
 """
-from __future__ import annotations
 
+from __future__ import annotations
 
 import math
 from typing import Any, Dict, List, Union, cast
@@ -28,6 +28,7 @@ except ImportError:
 else:
     HAS_PANDAS = True
     pd = _pd
+
 
 def sanitize_for_json(data: Any) -> Any:
     """

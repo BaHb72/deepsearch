@@ -189,7 +189,7 @@ print(f"分红进度: {progress_desc}")
 
 **用途**: 解释配股数据中的 `PROGRESS` 字段（如 `get_right_issue` 接口）
 
-####  枚举值列表
+#### 枚举值列表
 
 | 数值 | 枚举名称 | 说明 |
 |------|---------|------|
@@ -274,30 +274,30 @@ from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata
 
 async def analyze_stock_status(provider, stock_code):
     """综合分析股票状态"""
-    
+
     # 1. 检查交易状态
     snapshot = await provider.get_snapshot([stock_code])
     if not snapshot.empty:
         phase = snapshot.iloc[0]['trading_phase_code']
         print(f"交易状态: {get_trading_phase_name(phase)}")
-        
+
         if phase == AmazingDataTradingPhase.CONTINUOUS_TRADING.value:
             print("可以交易")
         elif phase == AmazingDataTradingPhase.MARKET_CLOSED.value:
             print("停牌中")
-    
+
     # 2. 检查配股进度
     right_issues = await provider.get_right_issue([stock_code])
     if not right_issues.empty:
         for _, row in right_issues.iterrows():
             progress = row['PROGRESS']
             print(f"配股进度: {get_progress_name(progress)}")
-            
+
             if progress in {5, 6, 7, 8, 9}:
                 print("已获得监管审批")
             elif progress == AmazingDataProgress.COMPLETED.value:
                 print("配股已完成")
-    
+
     # 3. 检查分红进度（假设有该接口）
     # dividends = await provider.get_dividend([stock_code])
     # if not dividends.empty:
@@ -311,20 +311,20 @@ async def analyze_stock_status(provider, stock_code):
 ```python
 def analyze_right_issue_statistics(right_issues_df):
     """统计配股数据的进度分布"""
-    
+
     from collections import Counter
     from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_enums_extended import (
         get_progress_name
     )
-    
+
     # 统计各进度的数量
     progress_counts = Counter(right_issues_df['PROGRESS'])
-    
+
     print("配股进度分布:")
     for progress, count in sorted(progress_counts.items()):
         progress_name = get_progress_name(progress)
         print(f"  {progress_name}: {count}条")
-    
+
     # 计算完成率
     total = len(right_issues_df)
     completed = len(right_issues_df[right_issues_df['PROGRESS'] == 4])
@@ -396,7 +396,7 @@ for idx, row in df.iterrows():
 
 ## ⚠️ 注意事项
 
-1. **枚举值类型**: 
+1. **枚举值类型**:
    - `AmazingDataTradingPhase`: 字符串类型 (str)
    - 其他枚举: 整数类型 (int)
 
@@ -416,6 +416,6 @@ for idx, row in df.iterrows():
 
 ---
 
-**最后更新时间**: 2025-12-16 01:45  
-**版本**: v1.0  
+**最后更新时间**: 2025-12-16 01:45
+**版本**: v1.0
 **状态**: ✅ 完成

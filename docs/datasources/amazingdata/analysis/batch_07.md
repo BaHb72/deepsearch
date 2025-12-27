@@ -1,6 +1,7 @@
 # 批次7分析结果：图片61-70
 
 ## 概览
+
 图片61-70包含SubscribeData模块实时行情订阅回调函数。
 
 ---
@@ -10,6 +11,7 @@
 ### 9. SubscribeData 模块 - 实时行情订阅
 
 #### 9.1 onSnapshot - 股票快照回调 (3.5.6.1)
+
 ```python
 def onSnapshot(data):
     """股票实时行情快照回调"""
@@ -20,7 +22,9 @@ ad.SubscribeData.subscribe(
     callback=onSnapshot
 )
 ```
+
 **回调参数**:
+
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | code | str | 股票代码 |
@@ -33,14 +37,17 @@ ad.SubscribeData.subscribe(
 | bid/ask | list | 五档买卖盘 |
 
 #### 9.2 onSnapshotIndex - 指数快照回调 (3.5.6.2)
+
 ```python
 def onSnapshotIndex(data):
     """指数实时行情回调"""
     pass
 ```
+
 **回调参数**: 同onSnapshot
 
 #### 9.3 onSnapshotFuture - 期货快照回调 (3.5.6.3)
+
 ```python
 def onSnapshotFuture(data):
     """期货实时行情回调"""
@@ -48,6 +55,7 @@ def onSnapshotFuture(data):
 ```
 
 #### 9.4 onSnapshotETF - ETF快照回调 (3.5.6.4)
+
 ```python
 def onSnapshotETF(data):
     """ETF实时行情回调"""
@@ -55,6 +63,7 @@ def onSnapshotETF(data):
 ```
 
 #### 9.5 onSnapshotKZZ - 可转债快照回调 (3.5.6.5)
+
 ```python
 def onSnapshotKZZ(data):
     """可转债实时行情回调"""
@@ -62,6 +71,7 @@ def onSnapshotKZZ(data):
 ```
 
 #### 9.6 onSnapshotHKT - 港股通快照回调 (3.5.6.6)
+
 ```python
 def onSnapshotHKT(data):
     """港股通实时行情回调"""

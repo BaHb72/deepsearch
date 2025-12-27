@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
 from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
 from deepsearch.utils.network.connection_pool import ConnectionPool, PoolConfig
+
 from .helpers import async_retry
 from .logging_utils import log_debug, log_error, log_info, log_warning
 from .session_manager import AmazingDataSessionManager

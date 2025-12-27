@@ -7,10 +7,10 @@
 
 - SubscribeData 回调命名 onSnapshotindex / onSnapshot / onSnapshotfuture / onSnapshotetf / onSnapshotkzz /
   onSnapshothkt：
-    - 标注：SDK 1.0.18 未提供同名 API；这些为示例函数名，不对应 SDK 内置回调。
+  - 标注：SDK 1.0.18 未提供同名 API；这些为示例函数名，不对应 SDK 内置回调。
 
 - 市场枚举 market：
-    - 标注：SDK 1.0.18 未提供 `Market` 枚举类型；应以 `AmazingData.utils.security_type.security_type_info` 的配置为准。
+  - 标注：SDK 1.0.18 未提供 `Market` 枚举类型；应以 `AmazingData.utils.security_type.security_type_info` 的配置为准。
 
 ## 二、SDK 存在但文档未覆盖（新增，提供确定性信息）
 
@@ -51,10 +51,10 @@ minN/day/...）并存。默认值示例：`MarketData.query_kline(..., period=10
 ### 2.3 BaseData 新增/补充（方法签名与要点）
 
 - get_future_code_info(self, security_type='EXTRA_FUTURE')
-    - 文档字符串包含子类型示例：`ZJ_FUTURE`（中金所）/`SQ_FUTURE`（上期所）/`DS_FUTURE`（大商所）/`ZS_FUTURE`（郑商所）/
+  - 文档字符串包含子类型示例：`ZJ_FUTURE`（中金所）/`SQ_FUTURE`（上期所）/`DS_FUTURE`（大商所）/`ZS_FUTURE`（郑商所）/
       `SN_FUTURE`（上能所）。
 - get_calendar(self, data_type='str', market='SH', date=YYYYMMDD)
-    - data_type 允许值：'datetime' 或 'str'；market 允许值示例：SH / SZ / BJ。
+  - data_type 允许值：'datetime' 或 'str'；market 允许值示例：SH / SZ / BJ。
 
 ### 2.4 security_type 相关（以配置为准）
 
@@ -77,4 +77,3 @@ minN/day/...）并存。默认值示例：`MarketData.query_kline(..., period=10
   形参
 
 以上均源自运行时 `inspect.signature`。如与现有文档呈现不同，请以此签名为准调整调用端；文档主体暂不增删，以降低官方改动对系统的连带破坏。
-

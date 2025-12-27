@@ -12,13 +12,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
-from typing import Any, Deque, Dict, List, Optional, Tuple, TypedDict, DefaultDict
+from typing import Any, DefaultDict, Deque, Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
 from loguru import logger
 
-from deepsearch.ports.data_sources import DataSourceType
 from deepsearch.observability.logging.monitoring_logger import MonitoringRecord, OperationType
+from deepsearch.ports.data_sources import DataSourceType
 
 
 @dataclass
@@ -231,7 +231,9 @@ class MetricsCollector:
                 },
             )
 
-    def _record_anomaly(self, anomaly_type: str, snapshot: PerformanceSnapshot, details: Dict[str, Any]) -> None:
+    def _record_anomaly(
+        self, anomaly_type: str, snapshot: PerformanceSnapshot, details: Dict[str, Any]
+    ) -> None:
         """记录异常"""
         anomaly_file = self.export_dir / "anomalies.jsonl"
 
@@ -457,6 +459,3 @@ metrics_collector = MetricsCollector()
 def get_metrics_collector() -> MetricsCollector:
     """获取指标收集器实例"""
     return metrics_collector
-
-
-

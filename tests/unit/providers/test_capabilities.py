@@ -23,7 +23,9 @@ def dummy_config():
     return SimpleNamespace(cloudflare_workers=None)
 
 
-def test_akshare_proxy_capabilities(monkeypatch: pytest.MonkeyPatch, dummy_config: SimpleNamespace) -> None:
+def test_akshare_proxy_capabilities(
+    monkeypatch: pytest.MonkeyPatch, dummy_config: SimpleNamespace
+) -> None:
     monkeypatch.setattr(
         "deepsearch.infrastructure.providers.implementations.akshare.akshare_refactored.get_config",
         lambda: dummy_config,
@@ -85,22 +87,38 @@ def test_amazingdata_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = AmazingDataProvider(config)
 
     expected = {
+        # 基础行情能力
         DataCapability.REALTIME_QUOTE,
         DataCapability.REALTIME_QUOTES,
         DataCapability.KLINE_DATA,
         DataCapability.MINUTE_DATA,
         DataCapability.TICK_DATA,
+        # 基础信息能力
         DataCapability.STOCK_LIST,
+        DataCapability.STOCK_INFO,
+        DataCapability.TRADING_CALENDAR,
+        DataCapability.ADJUSTMENT_FACTOR,
+        # 财务数据能力
         DataCapability.FINANCIAL_DATA,
         DataCapability.KEY_INDICATORS,
         DataCapability.SHAREHOLDER_INFO,
+        # 特色数据能力
         DataCapability.DRAGON_TIGER,
         DataCapability.BLOCK_TRADE,
         DataCapability.MARGIN_TRADING,
         DataCapability.NORTH_FLOW,
-        DataCapability.TRADING_CALENDAR,
-        DataCapability.ADJUSTMENT_FACTOR,
-        DataCapability.STOCK_INFO,
+        # 市场数据能力
+        DataCapability.CAPITAL_FLOW,
+        DataCapability.SECTOR_DATA,
+        DataCapability.MARKET_OVERVIEW,
+        DataCapability.MARKET_BREADTH,
+        DataCapability.LEVEL2_DATA,
+        # 扩展数据能力
+        DataCapability.INDEX_DATA,
+        DataCapability.OPTION_DATA,
+        DataCapability.ETF_DATA,
+        DataCapability.INDUSTRY_DATA,
+        DataCapability.BOND_DATA,
     }
 
     assert provider.get_capabilities() == expected
@@ -174,11 +192,27 @@ def test_miniqmt_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = _TestMiniQMT()
 
     expected = {
+        # 基础行情能力
         DataCapability.REALTIME_QUOTE,
         DataCapability.REALTIME_QUOTES,
         DataCapability.TICK_DATA,
         DataCapability.MINUTE_DATA,
         DataCapability.KLINE_DATA,
+        # 基础信息能力
+        DataCapability.STOCK_LIST,
+        DataCapability.STOCK_INFO,
+        DataCapability.ORDER_BOOK,
+        DataCapability.TRADING_CALENDAR,
+        # 特色数据能力
+        DataCapability.CAPITAL_FLOW,
+        DataCapability.DRAGON_TIGER,
+        DataCapability.NORTH_FLOW,
+        DataCapability.FINANCIAL_DATA,
+        DataCapability.SECTOR_DATA,
+        # 扩展数据能力
+        DataCapability.INDEX_DATA,
+        DataCapability.INDUSTRY_DATA,
+        DataCapability.ORDER_FLOW,
     }
 
     assert provider.get_capabilities() == expected

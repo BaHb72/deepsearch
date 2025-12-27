@@ -9,41 +9,24 @@ BaseStrategy - 统一的策略基类
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-
 from dataclasses import dataclass
-
 from datetime import datetime
-
 from logging import Logger
-
-from typing import Any, Dict, List, Mapping, Optional, TYPE_CHECKING, Type, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Type, cast
 
 from deepsearch.observability import get_logger
-
 from deepsearch.strategies.interfaces.protocols import BacktestStrategy
-
 from deepsearch.strategies.interfaces.types import (
-
     MarketBarData,
-
     StrategyBusEnvelope,
-
     StrategyCancelPayload,
-
     StrategyDataCache,
-
     StrategyMetrics,
-
     StrategyOrder,
-
     StrategyParams,
-
     StrategyPosition,
-
     StrategyTrade,
-
     TickData,
-
 )
 
 if TYPE_CHECKING:
@@ -68,30 +51,22 @@ except ImportError:
 
     bt = None
 
-def _default_metrics() -> "StrategyMetrics":
 
+def _default_metrics() -> "StrategyMetrics":
     """����Ĭ�ϵĲ������ݱ�׼ָ��."""
 
     return {
-
         "total_trades": 0,
-
         "winning_trades": 0,
-
         "losing_trades": 0,
-
         "total_pnl": 0.0,
-
         "max_drawdown": 0.0,
-
         "sharpe_ratio": 0.0,
-
     }
 
+
 @dataclass(init=False)
-
 class BaseStrategy(ABC):
-
     """
 
     DeepSearch 统一策略基类
@@ -123,17 +98,11 @@ class BaseStrategy(ABC):
     event_engine: "EventEngine | None"
 
     def __init__(
-
         self,
-
         params: Optional[StrategyParams] = None,
-
         *,
-
         strategy_id: Optional[str] = None,
-
     ) -> None:
-
         """
 
         ��ʼ������
@@ -165,31 +134,24 @@ class BaseStrategy(ABC):
         self.event_engine = None
 
     @abstractmethod
-
     def on_init(self) -> None:
-
         """策略初始化，设置指标等"""
 
         pass
 
     @abstractmethod
-
     def on_start(self) -> None:
-
         """策略启动时调用"""
 
         pass
 
     @abstractmethod
-
     def on_bar(self, bar: MarketBarData) -> None:
-
         """处理K线数据"""
 
         raise NotImplementedError
 
     def on_tick(self, tick: TickData) -> None:
-
         """
 
         处理Tick数据
@@ -203,9 +165,7 @@ class BaseStrategy(ABC):
         pass
 
     @abstractmethod
-
     def on_order(self, order: StrategyOrder) -> None:
-
         """
 
         订单状态更新
@@ -219,9 +179,7 @@ class BaseStrategy(ABC):
         pass
 
     @abstractmethod
-
     def on_trade(self, trade: StrategyTrade) -> None:
-
         """
 
         成交回报
@@ -235,29 +193,19 @@ class BaseStrategy(ABC):
         pass
 
     @abstractmethod
-
     def on_stop(self) -> None:
-
         """策略停止时调用"""
 
         pass
 
     def buy(
-
         self,
-
         symbol: str,
-
         size: float,
-
         price: Optional[float] = None,
-
         order_type: str = "MARKET",
-
         **kwargs: object,
-
     ) -> str:
-
         """
 
         ���붩��
@@ -285,31 +233,18 @@ class BaseStrategy(ABC):
         order_id = self._generate_order_id()
 
         order: StrategyOrder = {
-
             "id": order_id,
-
             "order_id": order_id,
-
             "strategy_id": self.strategy_id,
-
             "symbol": symbol,
-
             "side": "BUY",
-
             "size": size_value,
-
             "price": price,
-
             "type": order_type,
-
             "status": "PENDING",
-
             "create_time": datetime.now(),
-
             "filled": 0.0,
-
             "remaining": size_value,
-
         }
 
         extra_kwargs: Dict[str, object] = dict(kwargs)
@@ -343,21 +278,13 @@ class BaseStrategy(ABC):
         return order_id
 
     def sell(
-
         self,
-
         symbol: str,
-
         size: float,
-
         price: Optional[float] = None,
-
         order_type: str = "MARKET",
-
         **kwargs: object,
-
     ) -> str:
-
         """
 
         ��������
@@ -385,31 +312,18 @@ class BaseStrategy(ABC):
         order_id = self._generate_order_id()
 
         order: StrategyOrder = {
-
             "id": order_id,
-
             "order_id": order_id,
-
             "strategy_id": self.strategy_id,
-
             "symbol": symbol,
-
             "side": "SELL",
-
             "size": size_value,
-
             "price": price,
-
             "type": order_type,
-
             "status": "PENDING",
-
             "create_time": datetime.now(),
-
             "filled": 0.0,
-
             "remaining": size_value,
-
         }
 
         extra_kwargs: Dict[str, object] = dict(kwargs)
@@ -443,7 +357,6 @@ class BaseStrategy(ABC):
         return order_id
 
     def cancel_order(self, order_id: str) -> None:
-
         """ȡ������"""
 
         if self.is_backtest:
@@ -453,35 +366,27 @@ class BaseStrategy(ABC):
         self._send_cancel_event(order_id)
 
     def get_position(self, symbol: str) -> StrategyPosition:
-
         """��ȡ�ֲ�"""
 
         default_position: StrategyPosition = {
-
             "symbol": symbol,
-
             "size": 0.0,
-
             "avg_cost": 0.0,
-
             "market_value": 0.0,
-
             "unrealized_pnl": 0.0,
-
             "realized_pnl": 0.0,
-
         }
 
         return cast(StrategyPosition, self.positions.get(symbol, default_position))
 
     def get_all_positions(self) -> Dict[str, StrategyPosition]:
-
         """��ȡ���гֲ�"""
 
-        return {symbol: cast(StrategyPosition, position) for symbol, position in self.positions.items()}
+        return {
+            symbol: cast(StrategyPosition, position) for symbol, position in self.positions.items()
+        }
 
     def _generate_order_id(self) -> str:
-
         """���ɶ���ID"""
 
         import uuid
@@ -489,7 +394,6 @@ class BaseStrategy(ABC):
         return f"{self.strategy_id}_{uuid.uuid4().hex[:8]}"
 
     def _send_order_event(self, order: StrategyOrder) -> None:
-
         """���Ͷ����¼���ʵ���ã�"""
 
         if not self.event_engine:
@@ -499,25 +403,17 @@ class BaseStrategy(ABC):
         from deepsearch.event.engine.engine import Event
 
         envelope: StrategyBusEnvelope = {
-
             "topic": f"strategy.{self.strategy_id}.orders",
-
             "type": "STRATEGY_ORDER_SUBMIT",
-
             "timestamp": datetime.now().timestamp(),
-
             "payload": order,
-
             "metadata": {"source": "backtest" if self.is_backtest else "live"},
-
             "headers": {"strategy_id": self.strategy_id},
-
         }
 
         self.event_engine.put(Event(type="STRATEGY_ORDER_SUBMIT", data=envelope))
 
     def _send_cancel_event(self, order_id: str) -> None:
-
         """����ȡ�������¼���ʵ���ã�"""
 
         if not self.event_engine:
@@ -529,25 +425,17 @@ class BaseStrategy(ABC):
         payload: StrategyCancelPayload = {"order_id": order_id, "strategy_id": self.strategy_id}
 
         envelope: StrategyBusEnvelope = {
-
             "topic": f"strategy.{self.strategy_id}.orders",
-
             "type": "STRATEGY_ORDER_CANCEL",
-
             "timestamp": datetime.now().timestamp(),
-
             "payload": payload,
-
             "headers": {"strategy_id": self.strategy_id},
-
             "metadata": {"source": "backtest" if self.is_backtest else "live"},
-
         }
 
         self.event_engine.put(Event(type="STRATEGY_ORDER_CANCEL", data=envelope))
 
     def log(self, message: str, level: str = "INFO") -> None:
-
         """记录日志"""
 
         if level == "DEBUG":
@@ -570,8 +458,8 @@ class BaseStrategy(ABC):
 
             self.logger.info(message)
 
-class BacktraderStrategyAdapter:
 
+class BacktraderStrategyAdapter:
     """
 
     Backtrader 策略适配器
@@ -581,13 +469,9 @@ class BacktraderStrategyAdapter:
     """
 
     @staticmethod
-
     def create_backtrader_strategy(
-
         base_strategy: BacktestStrategy,
-
     ) -> "Type[BacktraderStrategyBase]":
-
         """
 
         创建 Backtrader 策略类
@@ -609,7 +493,6 @@ class BacktraderStrategyAdapter:
         assert bt is not None
 
         class BTStrategy(bt.Strategy):
-
             """动态生成的 Backtrader 策略"""
 
             def __init__(self):
@@ -625,33 +508,23 @@ class BacktraderStrategyAdapter:
                 self.deepsearch_strategy.on_init()
 
             def start(self):
-
                 """策略启动"""
 
                 self.deepsearch_strategy.on_start()
 
             def next(self):
-
                 """处理新的K线"""
 
                 # 构造K线数据字典
 
                 bar: MarketBarData = {
-
                     "symbol": self.datas[0]._name,
-
                     "datetime": self.datas[0].datetime.datetime(0),
-
                     "open": float(self.datas[0].open[0]),
-
                     "high": float(self.datas[0].high[0]),
-
                     "low": float(self.datas[0].low[0]),
-
                     "close": float(self.datas[0].close[0]),
-
                     "volume": float(self.datas[0].volume[0]),
-
                 }
 
                 # 更新持仓信息
@@ -667,7 +540,6 @@ class BacktraderStrategyAdapter:
                 self._process_strategy_orders()
 
             def notify_order(self, order):
-
                 """订单通知"""
 
                 size_value = float(order.size)
@@ -676,102 +548,71 @@ class BacktraderStrategyAdapter:
 
                 remaining = max(size_value - executed_size, 0.0)
 
-                order_type = getattr(getattr(order, "info", {}), "get", lambda *args, **kwargs: "UNKNOWN")("order_type", "UNKNOWN")
+                order_type = getattr(
+                    getattr(order, "info", {}), "get", lambda *args, **kwargs: "UNKNOWN"
+                )("order_type", "UNKNOWN")
 
                 order_symbol = getattr(getattr(order, "data", None), "_name", "")
 
                 order_info: StrategyOrder = {
-
                     "id": str(order.ref),
-
                     "order_id": str(order.ref),
-
                     "strategy_id": self.deepsearch_strategy.strategy_id,
-
                     "symbol": order_symbol,
-
                     "side": "BUY" if order.isbuy() else "SELL",
-
                     "size": size_value,
-
                     "price": float(order.price) if order.price is not None else None,
-
                     "type": str(order_type),
-
                     "status": self._get_order_status(order),
-
                     "filled": executed_size,
-
                     "remaining": remaining,
-
                     "update_time": datetime.now(),
-
                     "metadata": {
-
                         "executed_price": float(getattr(order.executed, "price", 0.0) or 0.0),
-
                         "commission": float(getattr(order.executed, "comm", 0.0) or 0.0),
-
                     },
-
                 }
 
                 self.deepsearch_strategy.on_order(order_info)
 
             def notify_trade(self, trade):
-
                 """成交通知"""
 
                 trade_order = getattr(trade, "order", None)
 
                 order_id = str(getattr(trade_order, "ref", ""))
 
-                trade_id = str(getattr(trade, "ref", order_id or f"trade_{datetime.now().timestamp():.0f}"))
+                trade_id = str(
+                    getattr(trade, "ref", order_id or f"trade_{datetime.now().timestamp():.0f}")
+                )
 
                 side = "BUY" if float(trade.size) >= 0 else "SELL"
 
                 trade_info: StrategyTrade = {
-
                     "trade_id": trade_id,
-
                     "order_id": order_id,
-
                     "strategy_id": self.deepsearch_strategy.strategy_id,
-
                     "symbol": getattr(trade.data, "_name", ""),
-
                     "side": side,
-
                     "size": abs(float(trade.size)),
-
                     "price": float(trade.price),
-
                     "pnl": float(trade.pnl),
-
                     "fee": float(trade.commission or 0.0),
-
                     "timestamp": datetime.now(),
-
                     "metadata": {
-
                         "value": float(trade.value),
-
                         "pnl_comm": float(trade.pnlcomm),
-
                     },
-
                 }
 
                 self.deepsearch_strategy.on_trade(trade_info)
 
             def stop(self):
-
                 """策略停止"""
 
                 self.deepsearch_strategy.on_stop()
 
             def _update_positions(self):
-
                 """更新持仓信息"""
 
                 position = self.getposition(self.datas[0])
@@ -779,31 +620,20 @@ class BacktraderStrategyAdapter:
                 if position:
 
                     position_data: StrategyPosition = {
-
                         "symbol": self.datas[0]._name,
-
                         "size": float(position.size),
-
                         "avg_cost": float(position.price),
-
                         "market_value": float(position.value),
-
                         "unrealized_pnl": float(position.pnl),
-
                         "metadata": {
-
                             "pnl_comm": float(position.pnlcomm),
-
                         },
-
                         "last_update": datetime.now(),
-
                     }
 
                     self.deepsearch_strategy.positions[self.datas[0]._name] = position_data
 
             def _process_strategy_orders(self):
-
                 """处理策略产生的订单"""
 
                 # 这里可以检查策略的 buy/sell 调用
@@ -813,7 +643,6 @@ class BacktraderStrategyAdapter:
                 pass
 
             def _get_order_status(self, order):
-
                 """获取订单状态"""
 
                 if order.status == order.Submitted:
@@ -850,8 +679,8 @@ class BacktraderStrategyAdapter:
 
         return BTStrategy
 
-class SimpleMovingAverageStrategy(BaseStrategy):
 
+class SimpleMovingAverageStrategy(BaseStrategy):
     """
 
     ���ƶ�ƽ���߲���ʾ��
@@ -889,9 +718,7 @@ class SimpleMovingAverageStrategy(BaseStrategy):
         self.in_position: bool = False
 
     @staticmethod
-
     def _coerce_period(value: Optional[object], default: int) -> int:
-
         """ʹ�����ֶ�������������ȷ�����."""
 
         if isinstance(value, bool):
@@ -919,19 +746,16 @@ class SimpleMovingAverageStrategy(BaseStrategy):
         return candidate if candidate > 0 else default
 
     def on_init(self) -> None:
-
         """初始化策略"""
 
         self.log(f"初始化 SMA 策略: 短期={self.short_period}, 长期={self.long_period}")
 
     def on_start(self) -> None:
-
         """策略启动"""
 
         self.log("SMA 策略启动")
 
     def on_bar(self, bar: MarketBarData) -> None:
-
         """����K������"""
 
         close_value = bar.get("close")
@@ -959,13 +783,9 @@ class SimpleMovingAverageStrategy(BaseStrategy):
         if len(self.short_ma) >= 2 and len(self.long_ma) >= 2:
 
             if (
-
                 self.short_ma[-2] <= self.long_ma[-2]
-
                 and self.short_ma[-1] > self.long_ma[-1]
-
                 and not self.in_position
-
             ):
 
                 self.log(f"����ź�: ���� @ {close_price}")
@@ -975,13 +795,9 @@ class SimpleMovingAverageStrategy(BaseStrategy):
                 self.in_position = True
 
             elif (
-
                 self.short_ma[-2] >= self.long_ma[-2]
-
                 and self.short_ma[-1] < self.long_ma[-1]
-
                 and self.in_position
-
             ):
 
                 self.log(f"�����ź�: ���� @ {close_price}")
@@ -991,26 +807,21 @@ class SimpleMovingAverageStrategy(BaseStrategy):
                 self.in_position = False
 
     def on_tick(self, tick: TickData) -> None:
-
         """处理Tick数据"""
 
         pass  # 该策略不使用tick数据
 
     def on_order(self, order: StrategyOrder) -> None:
-
         """处理订单更新"""
 
         self.log(f"订单更新: {order['id']} - {order['status']}")
 
     def on_trade(self, trade: StrategyTrade) -> None:
-
         """处理成交回报"""
 
         self.log(f"成交: {trade['size']} @ {trade['price']}, PnL: {trade.get('pnl', 0)}")
 
     def on_stop(self) -> None:
-
         """策略停止"""
 
         self.log("SMA 策略停止")
-

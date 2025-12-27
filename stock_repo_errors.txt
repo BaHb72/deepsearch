@@ -1,0 +1,443 @@
+Bytecode compiled 11107 files in 380ms
+deepsearch\webui\api\endpoints\qmt\qmt_subscription.py:49: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\qmt\qmt_subscription.py:50: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\qmt\qmt_subscription.py:56: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\qmt\qmt_subscription.py:59: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\base\provider_base.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\base\provider_base.py:148: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\config\manager.py:36: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\config\manager.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\config\manager.py:38: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\config\manager.py:39: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\scheduler\tasks\base.py:40: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\scheduler\tasks\base.py:41: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\scheduler\tasks\base.py:42: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\data\data_feed.py:58: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\statistics.py:63: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\statistics.py:64: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\statistics.py:65: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\statistics.py:66: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\statistics.py:68: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\status_display.py:120: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\status_display.py:124: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\errors.py:126: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\container.py:196: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\utils\container.py:197: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:91: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:95: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:98: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:99: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:100: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\process_manager.py:103: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\messaging\implementations\inmemory.py:29: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\messaging\implementations\inmemory.py:30: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\messaging\implementations\inmemory.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\messaging\implementations\inmemory.py:32: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\interfaces\strategy.py:520: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\interfaces\strategy.py:557: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\interfaces\strategy.py:591: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\interfaces\strategy.py:622: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\data\data_source_config_api.py:49: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\trading\market_overview.py:33: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\trading\market_overview.py:35: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:351: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:354: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:355: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:359: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:362: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:363: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:364: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:367: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:375: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\memory\smart_memory.py:376: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\debug\performance_profiler.py:126: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\debug\performance_profiler.py:129: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\debug\performance_profiler.py:141: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\persistence\query_optimizer.py:150: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\persistence\query_optimizer.py:151: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\persistence\query_optimizer.py:153: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\persistence\query_optimizer.py:154: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\persistence\query_optimizer.py:155: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\component_manager.py:55: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\component_manager.py:56: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\managers\component_manager.py:57: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:78: error:
+Signature of "get_by_id" incompatible with supertype
+"deepsearch.infrastructure.providers.interfaces.repositories.base.IRepository"
+[override]
+        async def get_by_id(self, symbol: str) -> Optional[StockEntity]:
+        ^
+deepsearch\infrastructure\repositories\stock_repository_impl.py:78: note:      Superclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:78: note:          def get_by_id(self, key: str) -> Coroutine[Any, Any, StockEntity | None]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:78: note:      Subclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:78: note:          def get_by_id(*Never, **Never) -> Coroutine[Any, Any, None]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:98: error: List
+item 0 has incompatible type "str"; expected "Mapping[str, Any]"  [list-item]
+            raw_row = await self.db.fetch_one(query, [symbol])
+                                                      ^~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:114: error:
+Signature of "get_all" incompatible with supertype
+"deepsearch.infrastructure.providers.interfaces.repositories.base.IRepository"
+[override]
+        async def get_all(self, options: Optional[QueryOptions] = None) ->...
+        ^
+deepsearch\infrastructure\repositories\stock_repository_impl.py:114: note:      Superclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:114: note:          def get_all(self, options: QueryOptions | None = ...) -> Coroutine[Any, Any, list[StockEntity]]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:114: note:      Subclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:114: note:          def get_all(*Never, **Never) -> Coroutine[Any, Any, None]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:149: error:
+Argument 2 to "fetch_all" of "DatabaseServiceProtocol" has incompatible type
+"list[object]"; expected
+"Sequence[Mapping[str, Any]] | Mapping[str, Any] | None"  [arg-type]
+            rows = await self.db.fetch_all(query, params)
+                                                  ^~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:155: error:
+Signature of "find" incompatible with supertype
+"deepsearch.infrastructure.providers.interfaces.repositories.base.IRepository"
+[override]
+        async def find(self, criteria: Mapping[str, object]) -> list[Stock...
+        ^
+deepsearch\infrastructure\repositories\stock_repository_impl.py:155: note:      Superclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:155: note:          def find(self, criteria: Mapping[str, object]) -> Coroutine[Any, Any, list[StockEntity]]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:155: note:      Subclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:155: note:          def find(*Never, **Never) -> Coroutine[Any, Any, None]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:166: error:
+Function does not return a value (it only ever returns None)
+[func-returns-value]
+            results = await self.get_all(options)
+                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:166: error:
+Invalid self argument "StockRepository" to attribute function "get_all" with
+type "Callable[[VarArg(Never), KwArg(Never)], Coroutine[Any, Any, None]]"
+[misc]
+            results = await self.get_all(options)
+                            ^~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:166: error:
+Argument 1 to "get_all" of "StockRepository" has incompatible type
+"QueryOptions"; expected "Never"  [arg-type]
+            results = await self.get_all(options)
+                                         ^~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:170: error:
+Signature of "find_one" incompatible with supertype
+"deepsearch.infrastructure.providers.interfaces.repositories.base.IRepository"
+[override]
+        async def find_one(self, criteria: Mapping[str, object]) -> Option...
+        ^
+deepsearch\infrastructure\repositories\stock_repository_impl.py:170: note:      Superclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:170: note:          def find_one(self, criteria: Mapping[str, object]) -> Coroutine[Any, Any, StockEntity | None]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:170: note:      Subclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:170: note:          def find_one(*Never, **Never) -> Coroutine[Any, Any, None]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:181: error:
+Function does not return a value (it only ever returns None)
+[func-returns-value]
+            results = await self.get_all(options)
+                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:181: error:
+Invalid self argument "StockRepository" to attribute function "get_all" with
+type "Callable[[VarArg(Never), KwArg(Never)], Coroutine[Any, Any, None]]"
+[misc]
+            results = await self.get_all(options)
+                            ^~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:181: error:
+Argument 1 to "get_all" of "StockRepository" has incompatible type
+"QueryOptions"; expected "Never"  [arg-type]
+            results = await self.get_all(options)
+                                         ^~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:198: error:
+List item 0 has incompatible type "str"; expected "Mapping[str, Any]"
+[list-item]
+            raw_row = await self.db.fetch_one(query, [symbol])
+                                                      ^~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:227: error:
+Argument 2 to "fetch_one" of "DatabaseServiceProtocol" has incompatible type
+"list[object]"; expected
+"Sequence[Mapping[str, Any]] | Mapping[str, Any] | None"  [arg-type]
+            result = await self.db.fetch_one(query, params)
+                                                    ^~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:235: error:
+Signature of "save" incompatible with supertype
+"deepsearch.infrastructure.providers.interfaces.repositories.base.IRepository"
+[override]
+        async def save(
+        ^
+deepsearch\infrastructure\repositories\stock_repository_impl.py:235: note:      Superclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:235: note:          def save(self, entity: StockEntity, *args: Any, **kwargs: Any) -> Coroutine[Any, Any, StockEntity]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:235: note:      Subclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:235: note:          def save(self, *Never, **Never) -> Coroutine[Any, Any, None]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:261: error:
+Signature of "save_many" incompatible with supertype
+"deepsearch.infrastructure.providers.interfaces.repositories.base.IRepository"
+[override]
+        async def save_many(self, entities: list[StockEntity]) -> list[Sto...
+        ^
+deepsearch\infrastructure\repositories\stock_repository_impl.py:261: note:      Superclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:261: note:          def save_many(self, entities: list[StockEntity]) -> Coroutine[Any, Any, list[StockEntity]]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:261: note:      Subclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:261: note:          def save_many(*Never, **Never) -> Coroutine[Any, Any, None]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:279: error:
+Function does not return a value (it only ever returns None)
+[func-returns-value]
+                    saved_entities.append(await self.save(entity, session=...
+                                          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+deepsearch\infrastructure\repositories\stock_repository_impl.py:279: error:
+Argument 1 to "append" of "list" has incompatible type "None"; expected
+"StockEntity"  [arg-type]
+                    saved_entities.append(await self.save(entity, session=...
+                                          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+deepsearch\infrastructure\repositories\stock_repository_impl.py:279: error:
+Invalid self argument "StockRepository" to attribute function "save" with type
+"Callable[[VarArg(Never), KwArg(Never)], Coroutine[Any, Any, None]]"  [misc]
+                    saved_entities.append(await self.save(entity, session=...
+                                                ^~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:279: error:
+Argument 1 to "save" of "StockRepository" has incompatible type "StockEntity";
+expected "Never"  [arg-type]
+    ...           saved_entities.append(await self.save(entity, session=sessi...
+                                                        ^~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:279: error:
+Argument "session" to "save" of "StockRepository" has incompatible type
+"DatabaseSessionProtocol"; expected "Never"  [arg-type]
+    ...       saved_entities.append(await self.save(entity, session=session))
+                                                                    ^~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:284: error:
+Signature of "update" incompatible with supertype
+"deepsearch.infrastructure.providers.interfaces.repositories.base.IRepository"
+[override]
+        async def update(self, symbol: str, updates: Mapping[str, object])...
+        ^
+deepsearch\infrastructure\repositories\stock_repository_impl.py:284: note:      Superclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:284: note:          def update(self, key: str, updates: Mapping[str, object]) -> Coroutine[Any, Any, StockEntity | None]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:284: note:      Subclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:284: note:          def update(self, *Never, **Never) -> Coroutine[Any, Any, None]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:296: error:
+Function does not return a value (it only ever returns None)
+[func-returns-value]
+            entity = await self.get_by_id(symbol)
+                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:296: error:
+Invalid self argument "StockRepository" to attribute function "get_by_id" with
+type "Callable[[VarArg(Never), KwArg(Never)], Coroutine[Any, Any, None]]"
+[misc]
+            entity = await self.get_by_id(symbol)
+                           ^~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:296: error:
+Argument 1 to "get_by_id" of "StockRepository" has incompatible type "str";
+expected "Never"  [arg-type]
+            entity = await self.get_by_id(symbol)
+                                          ^~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:313: error:
+Signature of "delete" incompatible with supertype
+"deepsearch.infrastructure.providers.interfaces.repositories.base.IRepository"
+[override]
+        async def delete(self, symbol: str) -> bool:
+        ^
+deepsearch\infrastructure\repositories\stock_repository_impl.py:313: note:      Superclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:313: note:          def delete(self, key: str) -> Coroutine[Any, Any, bool]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:313: note:      Subclass:
+deepsearch\infrastructure\repositories\stock_repository_impl.py:313: note:          def delete(*Never, **Never) -> Coroutine[Any, Any, None]
+deepsearch\infrastructure\repositories\stock_repository_impl.py:324: error:
+List item 0 has incompatible type "str"; expected "Mapping[str, Any]"
+[list-item]
+            affected = await self.db.execute(query, [symbol])
+                                                     ^~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:346: error:
+Function does not return a value (it only ever returns None)
+[func-returns-value]
+            to_delete = await self.find(criteria)
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:346: error:
+Invalid self argument "StockRepository" to attribute function "find" with type
+"Callable[[VarArg(Never), KwArg(Never)], Coroutine[Any, Any, None]]"  [misc]
+            to_delete = await self.find(criteria)
+                              ^~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:346: error:
+Argument 1 to "find" of "StockRepository" has incompatible type
+"Mapping[str, object]"; expected "Never"  [arg-type]
+            to_delete = await self.find(criteria)
+                                        ^~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:350: error:
+"None" has no attribute "__iter__" (not iterable)  [attr-defined]
+            for entity in to_delete:
+                          ^~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:351: error:
+Function does not return a value (it only ever returns None)
+[func-returns-value]
+                if await self.delete(entity.symbol):
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:351: error:
+Invalid self argument "StockRepository" to attribute function "delete" with type
+"Callable[[VarArg(Never), KwArg(Never)], Coroutine[Any, Any, None]]"  [misc]
+                if await self.delete(entity.symbol):
+                         ^~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:450: error:
+Argument 1 to "StockEntity" has incompatible type
+"**MutableMapping[str, object]"; expected "str"  [arg-type]
+            return StockEntity(**data)
+                                 ^~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:450: error:
+Argument 1 to "StockEntity" has incompatible type
+"**MutableMapping[str, object]"; expected "StockMarket"  [arg-type]
+            return StockEntity(**data)
+                                 ^~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:450: error:
+Argument 1 to "StockEntity" has incompatible type
+"**MutableMapping[str, object]"; expected "StockStatus"  [arg-type]
+            return StockEntity(**data)
+                                 ^~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:450: error:
+Argument 1 to "StockEntity" has incompatible type
+"**MutableMapping[str, object]"; expected "str | None"  [arg-type]
+            return StockEntity(**data)
+                                 ^~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:450: error:
+Argument 1 to "StockEntity" has incompatible type
+"**MutableMapping[str, object]"; expected "datetime | None"  [arg-type]
+            return StockEntity(**data)
+                                 ^~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:450: error:
+Argument 1 to "StockEntity" has incompatible type
+"**MutableMapping[str, object]"; expected "datetime"  [arg-type]
+            return StockEntity(**data)
+                                 ^~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:450: error:
+Argument 1 to "StockEntity" has incompatible type
+"**MutableMapping[str, object]"; expected "Decimal | None"  [arg-type]
+            return StockEntity(**data)
+                                 ^~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:450: error:
+Argument 1 to "StockEntity" has incompatible type
+"**MutableMapping[str, object]"; expected "int"  [arg-type]
+            return StockEntity(**data)
+                                 ^~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:497: error:
+Function does not return a value (it only ever returns None)
+[func-returns-value]
+            results = await self.repo.find({"market": market.value})
+                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:497: error:
+Invalid self argument "StockRepository" to attribute function "find" with type
+"Callable[[VarArg(Never), KwArg(Never)], Coroutine[Any, Any, None]]"  [misc]
+            results = await self.repo.find({"market": market.value})
+                            ^~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:497: error:
+Argument 1 to "find" of "StockRepository" has incompatible type
+"dict[str, str]"; expected "Never"  [arg-type]
+            results = await self.repo.find({"market": market.value})
+                                           ^~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:510: error:
+Function does not return a value (it only ever returns None)
+[func-returns-value]
+            results = await self.repo.find({"status": status.value})
+                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:510: error:
+Invalid self argument "StockRepository" to attribute function "find" with type
+"Callable[[VarArg(Never), KwArg(Never)], Coroutine[Any, Any, None]]"  [misc]
+            results = await self.repo.find({"status": status.value})
+                            ^~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:510: error:
+Argument 1 to "find" of "StockRepository" has incompatible type
+"dict[str, str]"; expected "Never"  [arg-type]
+            results = await self.repo.find({"status": status.value})
+                                           ^~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:523: error:
+Function does not return a value (it only ever returns None)
+[func-returns-value]
+            results = await self.repo.find({"industry": industry})
+                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:523: error:
+Invalid self argument "StockRepository" to attribute function "find" with type
+"Callable[[VarArg(Never), KwArg(Never)], Coroutine[Any, Any, None]]"  [misc]
+            results = await self.repo.find({"industry": industry})
+                            ^~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:523: error:
+Argument 1 to "find" of "StockRepository" has incompatible type
+"dict[str, str]"; expected "Never"  [arg-type]
+            results = await self.repo.find({"industry": industry})
+                                           ^~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:546: error:
+Function does not return a value (it only ever returns None)
+[func-returns-value]
+            all_stocks = await self.repo.get_all()
+                         ^~~~~~~~~~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:546: error:
+Invalid self argument "StockRepository" to attribute function "get_all" with
+type "Callable[[VarArg(Never), KwArg(Never)], Coroutine[Any, Any, None]]"
+[misc]
+            all_stocks = await self.repo.get_all()
+                               ^~~~~~~~~~~~~~~~~
+deepsearch\infrastructure\repositories\stock_repository_impl.py:547: error:
+"None" has no attribute "__iter__" (not iterable)  [attr-defined]
+            return [stock for stock in all_stocks if keyword.lower() in st...
+                                       ^~~~~~~~~~
+deepsearch\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:521: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:666: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:667: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:668: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\event\schema.py:405: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\scheduler\cache_scheduler.py:28: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\ui_components.py:34: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\ui_components.py:35: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\ui_components.py:36: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\data_components.py:109: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\data_components.py:110: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\data_components.py:111: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\data_components.py:113: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\component_factory.py:45: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\component_factory.py:46: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\component_factory.py:47: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\component_factory.py:48: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\implementations\akshare\akshare_refactored.py:92: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\qmt_gateway_component.py:469: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:32: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:33: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:34: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:35: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\analytics_components.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server_manager.py:48: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server_manager.py:49: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server_manager.py:51: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\data\data_source_capability_api.py:311: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\data\data_source_capability_api.py:320: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\data\data_source_capability_api.py:347: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:386: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:389: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:390: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:391: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:392: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:395: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:401: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\infrastructure\providers\managers\data_source_manager.py:680: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\engines\engine.py:75: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\engines\backtest_engine.py:105: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:38: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:39: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:40: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:41: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:42: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\backtest\components\component.py:44: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\backtest_components.py:25: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\backtest_components.py:26: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\backtest_components.py:27: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\backtest_components.py:28: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\backtest_components.py:34: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\context.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\context.py:36: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\context.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\context.py:38: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\runtime\context.py:41: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\data\data_source_monitor_api.py:272: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\core\components\gateway_components.py:30: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\amazingdata\realtime.py:46: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\amazingdata\realtime.py:47: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\api\endpoints\amazingdata\realtime.py:48: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:415: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:416: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:417: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:418: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:419: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:427: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:429: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:430: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+deepsearch\webui\server.py:433: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+Found 53 errors in 1 file (checked 1 source file)

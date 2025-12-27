@@ -125,9 +125,7 @@ class SignalGenerator:
         self.last_signals: Dict[str, TradingSignal] = {}
 
         # Custom signal rules
-        self.signal_rules: List[
-            Callable[[TradingSignal, Optional[Dict[str, Any]]], bool]
-        ] = []
+        self.signal_rules: List[Callable[[TradingSignal, Optional[Dict[str, Any]]], bool]] = []
 
         logger.info("SignalGenerator initialized")
 

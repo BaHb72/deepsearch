@@ -30,8 +30,11 @@ def run_self_test(source: str, payload: Dict[str, Any]) -> None:
             json=payload or None,
         )
 
-        logger.info("HTTP {} 响应体:\n{}", response.status_code,
-                    json.dumps(response.json(), ensure_ascii=False, indent=2))
+        logger.info(
+            "HTTP {} 响应体:\n{}",
+            response.status_code,
+            json.dumps(response.json(), ensure_ascii=False, indent=2),
+        )
         if response.status_code >= 500:
             logger.error("接口返回 500，需检查 `response_payload` 未初始化或后端测试逻辑。")
         else:

@@ -23,6 +23,7 @@ def _format_last_check(value: Any) -> str | None:
         return value
     return None
 
+
 # 创建路由
 router = APIRouter(prefix="/api/workers", tags=["Workers Proxy"])
 
@@ -126,9 +127,7 @@ async def get_status() -> WorkersStatusResponse:
         if cloudflare:
             workers = [w for w in getattr(cloudflare, "workers", []) if w and w.strip()]
             if workers:
-                config["workers"] = [
-                    w if w.startswith("http") else f"https://{w}" for w in workers
-                ]
+                config["workers"] = [w if w.startswith("http") else f"https://{w}" for w in workers]
             else:
                 worker_url = getattr(cloudflare, "worker_url", "")
                 if worker_url:
@@ -140,9 +139,7 @@ async def get_status() -> WorkersStatusResponse:
 
             config["api_key"] = getattr(cloudflare, "api_key", "") or ""
             config["timeout"] = int(getattr(cloudflare, "timeout", config["timeout"]))
-            config["retry_count"] = int(
-                getattr(cloudflare, "retry_count", config["retry_count"])
-            )
+            config["retry_count"] = int(getattr(cloudflare, "retry_count", config["retry_count"]))
         else:
             config["workers"] = ["https://akshare-proxy.934073514.workers.dev"]
 

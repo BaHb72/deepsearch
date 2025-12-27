@@ -30,9 +30,7 @@ class SnapshotBuffer:
 
         bucket = self._store.setdefault(snapshot.code, deque())
         if bucket and snapshot.ts < bucket[-1].ts:
-            raise ValueError(
-                f"行情快照时间戳逆序: {snapshot.code} {snapshot.ts} < {bucket[-1].ts}"
-            )
+            raise ValueError(f"行情快照时间戳逆序: {snapshot.code} {snapshot.ts} < {bucket[-1].ts}")
 
         bucket.append(snapshot)
         self._trim_bucket(bucket, snapshot.ts - self.retention)
@@ -56,12 +54,12 @@ class SnapshotBuffer:
         return latest
 
     def window_series(
-            self,
-            code: str,
-            *,
-            end: datetime,
-            duration: timedelta,
-            include_prefetch: bool = True,
+        self,
+        code: str,
+        *,
+        end: datetime,
+        duration: timedelta,
+        include_prefetch: bool = True,
     ) -> tuple[list[MarketSnapshot], MarketSnapshot | None]:
         """获取指定代码在时间窗口内的快照序列。
 
@@ -96,12 +94,12 @@ class SnapshotBuffer:
         return window, None
 
     def sliced_series(
-            self,
-            codes: Sequence[str],
-            *,
-            end: datetime,
-            duration: timedelta,
-            include_prefetch: bool = True,
+        self,
+        codes: Sequence[str],
+        *,
+        end: datetime,
+        duration: timedelta,
+        include_prefetch: bool = True,
     ) -> Mapping[str, tuple[list[MarketSnapshot], MarketSnapshot | None]]:
         """批量获取窗口内快照序列。"""
 
@@ -115,9 +113,7 @@ class SnapshotBuffer:
             )
         return result
 
-    def _resolve_buckets(
-            self, codes: Sequence[str] | None
-    ) -> Iterator[Deque[MarketSnapshot]]:
+    def _resolve_buckets(self, codes: Sequence[str] | None) -> Iterator[Deque[MarketSnapshot]]:
         if codes is None:
             yield from self._store.values()
             return

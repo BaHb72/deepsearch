@@ -224,7 +224,6 @@ class BacktestComponent(AsyncComponent):
             engine.cancel()
             self._logger.info(f"取消回测 {backtest_id}")
 
-
     def _handle_backtest_query(self, event: Event):
         """处理回测查询事件"""
         payload = event.data
@@ -272,7 +271,6 @@ class BacktestComponent(AsyncComponent):
                 },
             )
             event_engine.put(response_event)
-
 
     async def create_backtest_engine(
         self,
@@ -413,4 +411,3 @@ class BacktestComponent(AsyncComponent):
             type="BACKTEST_ERROR", data={"backtest_id": backtest_id, "error": error_message}
         )
         event_engine.put(event)
-

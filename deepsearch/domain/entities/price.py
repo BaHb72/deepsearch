@@ -56,6 +56,11 @@ class Price:
         self.low = _to_decimal(self.low)
         self.turnover = _to_decimal(self.turnover)
 
+    @property
+    def value(self) -> Decimal:
+        """向后兼容别名：返回current价格值。"""
+        return self.current
+
     def calculate_change(self) -> PriceChange:
         """根据昨收价计算涨跌幅。"""
 

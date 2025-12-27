@@ -207,7 +207,9 @@ class ErrorHandler:
             )
 
     @staticmethod
-    def handle_subscription_error(error: Exception, symbols: list[str] | None = None) -> AmazingDataException:
+    def handle_subscription_error(
+        error: Exception, symbols: list[str] | None = None
+    ) -> AmazingDataException:
         """处理订阅错误"""
         error_msg = str(error).lower()
 
@@ -259,9 +261,3 @@ class ErrorHandler:
             return 5
         else:
             return 10  # 默认延迟
-
-
-
-
-
-

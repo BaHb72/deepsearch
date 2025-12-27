@@ -4,9 +4,9 @@
 提供统一的健康检查端点
 """
 
+import asyncio
 from collections.abc import Mapping
 from typing import Any, Dict, cast
-import asyncio
 
 from fastapi import APIRouter, HTTPException
 from loguru import logger
@@ -142,7 +142,10 @@ async def get_health_summary() -> Dict[str, Any]:
         # 统计各状态组件数量
         for name, result in last_results.items():
             status = getattr(result.status, "value", result.status)
-            summary["components"][name] = {"status": status, "message": getattr(result, "message", "ok")}
+            summary["components"][name] = {
+                "status": status,
+                "message": getattr(result, "message", "ok"),
+            }
 
             if status == "healthy":
                 summary["healthy_components"] += 1

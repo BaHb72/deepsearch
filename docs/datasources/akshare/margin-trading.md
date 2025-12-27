@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_margin_ratio_pa
 
-目标地址: https://stock.pingan.com/static/webinfo/margin/business.html?businessType=0
+目标地址: <https://stock.pingan.com/static/webinfo/margin/business.html?businessType=0>
 
 描述: 融资融券-标的证券名单及保证金比例查询
 
@@ -63,7 +63,7 @@ print(stock_margin_ratio_pa_df)
 
 接口: stock_margin_account_info
 
-目标地址: https://data.eastmoney.com/rzrq/zhtjday.html
+目标地址: <https://data.eastmoney.com/rzrq/zhtjday.html>
 
 描述: 东方财富网-数据中心-融资融券-融资融券账户统计-两融账户信息
 
@@ -126,7 +126,7 @@ print(stock_margin_account_info_df)
 
 接口: stock_margin_sse
 
-目标地址: http://www.sse.com.cn/market/othersdata/margin/sum/
+目标地址: <http://www.sse.com.cn/market/othersdata/margin/sum/>
 
 描述: 上海证券交易所-融资融券数据-融资融券汇总数据
 
@@ -182,7 +182,7 @@ print(stock_margin_sse_df)
 
 接口: stock_margin_detail_sse
 
-目标地址: http://www.sse.com.cn/market/othersdata/margin/detail/
+目标地址: <http://www.sse.com.cn/market/othersdata/margin/detail/>
 
 描述: 上海证券交易所-融资融券数据-融资融券明细数据
 
@@ -241,7 +241,7 @@ print(stock_margin_detail_sse_df)
 
 接口: stock_margin_szse
 
-目标地址: https://www.szse.cn/disclosure/margin/margin/index.html
+目标地址: <https://www.szse.cn/disclosure/margin/margin/index.html>
 
 描述: 深圳证券交易所-融资融券数据-融资融券汇总数据
 
@@ -284,7 +284,7 @@ print(stock_margin_sse_df)
 
 接口: stock_margin_detail_szse
 
-目标地址: https://www.szse.cn/disclosure/margin/margin/index.html
+目标地址: <https://www.szse.cn/disclosure/margin/margin/index.html>
 
 描述: 深证证券交易所-融资融券数据-融资融券交易明细数据
 
@@ -340,7 +340,7 @@ print(stock_margin_detail_sse_df)
 
 接口: stock_margin_underlying_info_szse
 
-目标地址: https://www.szse.cn/disclosure/margin/object/index.html
+目标地址: <https://www.szse.cn/disclosure/margin/object/index.html>
 
 描述: 深圳证券交易所-融资融券数据-标的证券信息
 

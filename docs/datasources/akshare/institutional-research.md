@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_jgdy_tj_em
 
-目标地址: http://data.eastmoney.com/jgdy/tj.html
+目标地址: <http://data.eastmoney.com/jgdy/tj.html>
 
 描述: 东方财富网-数据中心-特色数据-机构调研-机构调研统计
 
@@ -69,7 +69,7 @@ print(stock_jgdy_tj_em_df)
 
 接口: stock_jgdy_detail_em
 
-目标地址: http://data.eastmoney.com/jgdy/xx.html
+目标地址: <http://data.eastmoney.com/jgdy/xx.html>
 
 描述: 东方财富网-数据中心-特色数据-机构调研-机构调研详细
 

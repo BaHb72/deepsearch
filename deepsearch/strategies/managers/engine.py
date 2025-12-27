@@ -224,9 +224,7 @@ class StrategyEngine:
         """Handle market bar event"""
         payload = event.data
         if not isinstance(payload, dict):
-            logger.warning(
-                "MARKET_BAR event payload is not a mapping: {}", type(payload).__name__
-            )
+            logger.warning("MARKET_BAR event payload is not a mapping: {}", type(payload).__name__)
             return
 
         bar_data = cast(MarketBarData, payload)
@@ -238,9 +236,7 @@ class StrategyEngine:
         """Handle market tick event"""
         payload = event.data
         if not isinstance(payload, dict):
-            logger.warning(
-                "MARKET_TICK event payload is not a mapping: {}", type(payload).__name__
-            )
+            logger.warning("MARKET_TICK event payload is not a mapping: {}", type(payload).__name__)
             return
 
         tick_data = cast(TickData, payload)
@@ -330,9 +326,7 @@ class StrategyEngine:
         """Handle order status update"""
         payload_obj, headers = self._unwrap_envelope(event.data)
         if not isinstance(payload_obj, Mapping):
-            logger.warning(
-                "ORDER_STATUS payload is not a mapping: {}", type(payload_obj).__name__
-            )
+            logger.warning("ORDER_STATUS payload is not a mapping: {}", type(payload_obj).__name__)
             return
 
         order_update_map = dict(cast(Mapping[str, object], payload_obj))
@@ -366,9 +360,7 @@ class StrategyEngine:
         """Handle order filled event"""
         payload_obj, headers = self._unwrap_envelope(event.data)
         if not isinstance(payload_obj, Mapping):
-            logger.warning(
-                "ORDER_FILLED payload is not a mapping: {}", type(payload_obj).__name__
-            )
+            logger.warning("ORDER_FILLED payload is not a mapping: {}", type(payload_obj).__name__)
             return
 
         trade_map = dict(cast(Mapping[str, object], payload_obj))
@@ -495,7 +487,10 @@ class StrategyEngine:
             if snapshot:
                 return cast(PerformanceSnapshot, dict(snapshot))
             return {}
-        return {sid: cast(PerformanceSnapshot, dict(snapshot)) for sid, snapshot in self.performance_tracker.items()}
+        return {
+            sid: cast(PerformanceSnapshot, dict(snapshot))
+            for sid, snapshot in self.performance_tracker.items()
+        }
         """Get pending orders"""
         if strategy_id:
             return [

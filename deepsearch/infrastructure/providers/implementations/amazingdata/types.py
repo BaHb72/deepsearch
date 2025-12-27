@@ -8,8 +8,7 @@ from typing import Any, Callable, Mapping, Protocol
 class ProviderPayloadConvertible(Protocol):
     """����װ�������ṩ������ʽ�Ķ���."""
 
-    def to_provider_payload(self) -> Mapping[str, Any]:
-        ...
+    def to_provider_payload(self) -> Mapping[str, Any]: ...
 
 
 class AmazingDataSDKProtocol(Protocol):
@@ -22,14 +21,11 @@ class AmazingDataSDKProtocol(Protocol):
     KLine: Any
     SubscribeData: Callable[..., Any]
 
-    def login(self, username: str, password: str, host: str, port: int) -> int | bool:
-        ...
+    def login(self, username: str, password: str, host: str, port: int) -> int | bool: ...
 
-    def logout(self, username: str | None = None) -> bool | None:
-        ...
+    def logout(self, username: str | None = None) -> bool | None: ...
 
-    def update_password(self, username: str, old_password: str, new_password: str) -> bool:
-        ...
+    def update_password(self, username: str, old_password: str, new_password: str) -> bool: ...
 
 
 __all__ = ["ProviderPayloadConvertible", "AmazingDataSDKProtocol"]

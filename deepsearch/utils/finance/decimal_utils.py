@@ -8,8 +8,8 @@ Author: DeepSearch Team
 Version: 1.0.0
 """
 
-from decimal import ROUND_HALF_UP, Decimal, getcontext
 from collections.abc import Sequence
+from decimal import ROUND_HALF_UP, Decimal, getcontext
 from typing import Optional, Union
 
 # 设置全局精度（小数位数）
@@ -474,5 +474,3 @@ if __name__ == "__main__":
     price2 = FinanceDecimal("10.00")
     diff = price1 - price2
     print(f"价格差: {diff}")  # 0.0200
-
-

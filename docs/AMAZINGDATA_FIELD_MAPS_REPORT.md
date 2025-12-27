@@ -1,6 +1,7 @@
 # AmazingData 字段映射扩展完成报告
 
 ## 📅 扩展时间
+
 2025-12-16 01:26 - 01:29
 
 ## ✅ 本次扩展内容
@@ -30,6 +31,7 @@
 ### 1. Snapshot（Level-1快照）- 36个字段
 
 #### 基础字段
+
 - `code`: 证券代码+市场
 - `datetime` / `trade_time`: 交易所行情数据时间
 - `pre_close`: 昨收价
@@ -40,14 +42,17 @@
 - `num_trades`: 成交笔数
 
 #### 涨跌停字段
+
 - `high_limited`: 涨停价
 - `low_limited`: 跌停价
 
 #### 五档买卖盘（20个字段）
+
 - **卖盘**: `ask_price1~5`, `ask_volume1~5`
 - **买盘**: `bid_price1~5`, `bid_volume1~5`
 
 #### 特殊字段
+
 - `iopv`: 净估值价（仅适合基金快照）
 - `trading_phase_code`: 交易阶段代码
 
@@ -58,6 +63,7 @@
 **在Snapshot基础上新增**：
 
 #### 期权特有字段
+
 - `total_long_position`: 总持仓量
 - `auction_price`: 动态参考价（盘前竞价时段）
 - `auction_volume`: 集中成交数量
@@ -65,6 +71,7 @@
 - `settle`: 本次结算价
 
 #### 合约信息
+
 - `contract_type`: 合约类型
 - `expire_date`: 到期日
 - `underlying_security_cod`: 标的代码
@@ -77,6 +84,7 @@
 **在Snapshot基础上新增**：
 
 #### 期货特有字段
+
 - `action_day`: 业务日期
 - `trading_day`: 交易日期
 - `pre_settle`: 上次结算价
@@ -103,6 +111,7 @@
 **在Snapshot基础上新增**：
 
 #### 港股通特有字段
+
 - `nominal_price`: 叫盘价
 - `ref_price`: 参考价
 - `bid_price_limit_up` / `bid_price_limit_down`: 买盘上下限价
@@ -117,7 +126,7 @@
 
 - `code`: 证券代码+市场
 - `datetime` / `trade_time`: 交易所行情数据时间
-- `open`, `high`, `low`, `close`: OHLC价格  
+- `open`, `high`, `low`, `close`: OHLC价格
 - `volume`: 成交总额
 - `amount`: 成交总金额
 
@@ -128,14 +137,17 @@
 ### 常量定义
 
 #### FIVE_LEVEL_FIELDS（20个）
+
 五档盘口字段列表，包含所有买卖五档的价格和量
 
 #### OHLCV_FIELDS（5个）
+
 基础OHLCV字段：`open`, `high`, `low`, `close`, `volume`
 
 ### 辅助函数
 
 #### 1. `get_field_description(data_type, field_name)`
+
 获取字段的中文描述
 
 ```python
@@ -146,6 +158,7 @@
 ```
 
 #### 2. `get_all_fields(data_type)`
+
 获取数据类型的所有字段列表
 
 ```python
@@ -155,6 +168,7 @@
 ```
 
 #### 3. `is_five_level_field(field_name)`
+
 判断是否是五档盘口字段
 
 ```python
@@ -165,6 +179,7 @@ False
 ```
 
 #### 4. `is_ohlcv_field(field_name)`
+
 判断是否是OHLCV基础字段
 
 ```python
@@ -241,7 +256,7 @@ market_data = {
 
 # 提取五档数据
 five_level_data = {
-    k: v for k, v in market_data.items() 
+    k: v for k, v in market_data.items()
     if is_five_level_field(k)
 }
 
@@ -270,7 +285,7 @@ full_data = {
 
 # 只提取OHLCV数据
 ohlcv_data = {
-    k: v for k, v in full_data.items() 
+    k: v for k, v in full_data.items()
     if is_ohlcv_field(k)
 }
 
@@ -283,6 +298,7 @@ print(ohlcv_data)
 ## 🧪 测试结果
 
 运行测试命令：
+
 ```bash
 python scripts/test_field_maps_standalone.py
 ```
@@ -290,6 +306,7 @@ python scripts/test_field_maps_standalone.py
 **测试结果**：✅ 全部通过
 
 测试覆盖：
+
 - ✅ 各数据类型字段数量验证
 - ✅ 基础字段映射测试
 - ✅ 辅助函数功能测试
@@ -318,18 +335,23 @@ python scripts/test_field_maps_standalone.py
 ## 🎯 应用场景
 
 ### 场景1: 数据清洗和标准化
+
 使用字段映射统一各种数据源的字段命名
 
 ### 场景2: 数据验证
+
 验证API返回的数据是否包含所有必需字段
 
 ### 场景3: 数据转换
+
 在不同数据格式之间进行转换时，确保字段正确映射
 
 ### 场景4: 文档生成
+
 自动生成数据字段说明文档
 
 ### 场景5: 盘口分析
+
 快速提取五档盘口数据进行深度分析
 
 ---
@@ -366,6 +388,7 @@ python scripts/test_field_maps_standalone.py
 本次扩展为 DeepSearch 项目新增了完整的 **AmazingData 字段映射系统**，覆盖了6种数据结构共55个唯一字段的定义。
 
 主要成果：
+
 - ✅ 6种数据结构完整字段映射
 - ✅ 55个唯一字段定义
 - ✅ 4个实用辅助函数
@@ -373,6 +396,7 @@ python scripts/test_field_maps_standalone.py
 - ✅ 丰富的使用示例
 
 这些字段映射可以帮助开发者：
+
 1. 快速理解数据字段含义
 2. 验证数据完整性
 3. 提取特定类型字段（五档、OHLCV）

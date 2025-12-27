@@ -120,7 +120,6 @@ class GatewayComponent(AsyncComponent[Gateway]):
         self._logger.warning("消息总线组件未初始化，将退回使用内存消息总线作为降级方案")
         return None
 
-
     async def _do_start(self) -> None:
         """启动网关"""
         with error_context(self.name, "start"):
@@ -221,16 +220,16 @@ class QMTGatewayComponent(AsyncComponent):
         with error_context(self.name, "initialize"):
             # 从配置获取QMT设置
             config = get_config()
-            qmt_settings = getattr(config, 'qmt', None) if config else None
+            qmt_settings = getattr(config, "qmt", None) if config else None
             if qmt_settings is not None:
-                if hasattr(qmt_settings, 'model_dump'):
+                if hasattr(qmt_settings, "model_dump"):
                     self._config = cast(Dict[str, Any], qmt_settings.model_dump())
-                elif hasattr(qmt_settings, 'dict'):
+                elif hasattr(qmt_settings, "dict"):
                     self._config = cast(Dict[str, Any], qmt_settings.dict())
                 else:
                     self._config = self._build_qmt_config(qmt_settings)
             else:
-                self._config = {'enabled': False, 'receiver': {'host': '0.0.0.0', 'tcp_port': 9999}}
+                self._config = {"enabled": False, "receiver": {"host": "0.0.0.0", "tcp_port": 9999}}
             if not self._config.get("enabled", False):
                 self._logger.info("QMT网关已禁用")
                 return None
@@ -240,9 +239,9 @@ class QMTGatewayComponent(AsyncComponent):
 
     def _build_qmt_config(self, qmt_settings: Optional[Any]) -> Dict[str, Any]:
         """构建QMT配置字典"""
-        receiver = getattr(qmt_settings, 'receiver', None) if qmt_settings is not None else None
-        security = getattr(qmt_settings, 'security', None) if qmt_settings is not None else None
-        data_settings = getattr(qmt_settings, 'data', None) if qmt_settings is not None else None
+        receiver = getattr(qmt_settings, "receiver", None) if qmt_settings is not None else None
+        security = getattr(qmt_settings, "security", None) if qmt_settings is not None else None
+        data_settings = getattr(qmt_settings, "data", None) if qmt_settings is not None else None
 
         def _as_int(value: Any, default: int) -> int:
             try:
@@ -257,22 +256,27 @@ class QMTGatewayComponent(AsyncComponent):
                 return default
 
         return {
-            'enabled': bool(getattr(qmt_settings, 'enabled', True)) if qmt_settings is not None else True,
-            'receiver': {
-                'host': getattr(receiver, 'host', '0.0.0.0') or '0.0.0.0',
-                'tcp_port': _as_int(getattr(receiver, 'tcp_port', 9999), 9999),
-                'websocket_port': _as_int(getattr(receiver, 'websocket_port', 9998), 9998),
+            "enabled": (
+                bool(getattr(qmt_settings, "enabled", True)) if qmt_settings is not None else True
+            ),
+            "receiver": {
+                "host": getattr(receiver, "host", "0.0.0.0") or "0.0.0.0",
+                "tcp_port": _as_int(getattr(receiver, "tcp_port", 9999), 9999),
+                "websocket_port": _as_int(getattr(receiver, "websocket_port", 9998), 9998),
             },
-            'security': {
-                'enable_auth': bool(getattr(security, 'enable_auth', False)) if security is not None else False,
-                'token': getattr(security, 'token', '') or '',
+            "security": {
+                "enable_auth": (
+                    bool(getattr(security, "enable_auth", False)) if security is not None else False
+                ),
+                "token": getattr(security, "token", "") or "",
             },
-            'data': {
-                'batch_size': _as_int(getattr(data_settings, 'batch_size', 100), 100),
-                'flush_interval': _as_float(getattr(data_settings, 'flush_interval', 0.1), 0.1),
-                'cache_ttl': _as_int(getattr(data_settings, 'cache_ttl', 60), 60),
+            "data": {
+                "batch_size": _as_int(getattr(data_settings, "batch_size", 100), 100),
+                "flush_interval": _as_float(getattr(data_settings, "flush_interval", 0.1), 0.1),
+                "cache_ttl": _as_int(getattr(data_settings, "cache_ttl", 60), 60),
             },
         }
+
     def set_dependencies(self, event_engine, message_bus):
         """设置依赖（由容器在初始化后调用）"""
         self._event_engine = event_engine
@@ -386,18 +390,18 @@ class QMTGatewayComponent(AsyncComponent):
 
     def get_statistics(self) -> Dict[str, Any]:
         """获取QMT网关统计信息。"""
-        if not self._gateway or not hasattr(self._gateway, 'get_statistics'):
+        if not self._gateway or not hasattr(self._gateway, "get_statistics"):
             return {}
 
         gateway = cast(Any, self._gateway)
         try:
             result = gateway.get_statistics()
         except Exception as exc:
-            self._logger.warning(f'Failed to fetch QMT statistics: {exc}')
-            return {'error': str(exc)}
+            self._logger.warning(f"Failed to fetch QMT statistics: {exc}")
+            return {"error": str(exc)}
 
         if isinstance(result, dict):
             return result
         if result is None:
             return {}
-        return {'data': result}
+        return {"data": result}

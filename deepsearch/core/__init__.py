@@ -5,12 +5,7 @@ This module contains core utilities, constants, exceptions,
 and the main engine that manages the entire system.
 """
 
-from deepsearch.constants import (
-    APP_NAME,
-    DEFAULT_ENCODING,
-    MAX_RETRIES,
-    TIMEOUT_SECONDS,
-)
+from deepsearch.constants import APP_NAME, DEFAULT_ENCODING, MAX_RETRIES, TIMEOUT_SECONDS
 
 from .interfaces import Component, Lifecycle, Monitorable, MonitoringHook
 from .runtime.engine import MainEngine

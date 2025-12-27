@@ -174,7 +174,10 @@ class CircuitBreaker:
         self.failure_count += 1
         self.last_failure_time = time.time()
 
-        if self.state == CircuitBreakerState.HALF_OPEN or self.failure_count >= self.failure_threshold:
+        if (
+            self.state == CircuitBreakerState.HALF_OPEN
+            or self.failure_count >= self.failure_threshold
+        ):
             logger.warning("断路器打开，停止后续请求")
             self._transition(CircuitBreakerState.OPEN)
 
@@ -219,7 +222,9 @@ def with_retry(
                         )
                         time.sleep(delay)
                     else:
-                        logger.error("达到最大同步重试次数 ({}): {}", retry_config.max_attempts, exc)
+                        logger.error(
+                            "达到最大同步重试次数 ({}): {}", retry_config.max_attempts, exc
+                        )
 
             if last_exception is not None:
                 raise last_exception
@@ -246,7 +251,9 @@ def with_retry(
                         )
                         await asyncio.sleep(delay)
                     else:
-                        logger.error("达到最大异步重试次数 ({}): {}", retry_config.max_attempts, exc)
+                        logger.error(
+                            "达到最大异步重试次数 ({}): {}", retry_config.max_attempts, exc
+                        )
 
             if last_exception is not None:
                 raise last_exception
@@ -270,7 +277,9 @@ class SmartRetry:
         self.retry_config = retry_config or RetryConfig()
         self.circuit_breaker = circuit_breaker or CircuitBreaker()
 
-    async def execute(self, func: Callable[..., Union[T, Awaitable[T]]], *args: Any, **kwargs: Any) -> T:
+    async def execute(
+        self, func: Callable[..., Union[T, Awaitable[T]]], *args: Any, **kwargs: Any
+    ) -> T:
         last_exception: Optional[BaseException] = None
         is_coroutine = asyncio.iscoroutinefunction(func)
         async_callable = cast(Optional[Callable[..., Awaitable[T]]], func if is_coroutine else None)
@@ -279,7 +288,9 @@ class SmartRetry:
         for attempt in range(self.retry_config.max_attempts):
             try:
                 if is_coroutine and async_callable is not None:
-                    return await self.circuit_breaker.async_call(lambda: async_callable(*args, **kwargs))
+                    return await self.circuit_breaker.async_call(
+                        lambda: async_callable(*args, **kwargs)
+                    )
                 if sync_callable is not None:
                     return self.circuit_breaker.call(lambda: sync_callable(*args, **kwargs))
                 raise RuntimeError("Unsupported callable passed to SmartRetry")

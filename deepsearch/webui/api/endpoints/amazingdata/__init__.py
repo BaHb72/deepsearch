@@ -31,6 +31,7 @@ def _load_routers():
 
     try:
         from .router import router as modular
+
         _modular_router = modular
         _main_router = modular
         logger.info("AmazingData 模块化路由器加载成功")
@@ -38,6 +39,7 @@ def _load_routers():
         logger.warning(f"AmazingData 模块化路由器加载失败: {e}")
         try:
             from .amazingdata_api import router as legacy
+
             _legacy_router = legacy
             _main_router = legacy
             logger.info("AmazingData 回退到legacy路由器")
@@ -45,6 +47,7 @@ def _load_routers():
             logger.error(f"AmazingData legacy路由器也加载失败: {e2}")
             # 创建空路由器避免None错误
             from fastapi import APIRouter
+
             _main_router = APIRouter(prefix="/api/amazingdata", tags=["AmazingData"])
 
 

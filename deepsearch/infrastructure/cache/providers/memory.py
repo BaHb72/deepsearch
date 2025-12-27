@@ -31,7 +31,13 @@ class MemoryCache(ICache):
         self._strategy = strategy or LRUStrategy(max_size)
         self._data: Dict[str, Any] = {}
         self._lock = RLock()
-        self._stats: Dict[str, Union[int, float]] = {"hits": 0, "misses": 0, "sets": 0, "deletes": 0, "evictions": 0}
+        self._stats: Dict[str, Union[int, float]] = {
+            "hits": 0,
+            "misses": 0,
+            "sets": 0,
+            "deletes": 0,
+            "evictions": 0,
+        }
 
     async def get(self, key: str) -> Optional[Any]:
         """
@@ -170,5 +176,3 @@ class MemoryCache(ICache):
                 stats["strategy_stats"] = self._strategy.get_stats()
 
             return stats
-
-

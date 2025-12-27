@@ -2,6 +2,7 @@
 
 不依赖 TA-Lib 的技术指标实现
 """
+
 from __future__ import annotations
 
 from typing import Optional, TypedDict, cast
@@ -137,9 +138,7 @@ class SimpleIndicators:
         """布林带 (Bollinger Bands)"""
         price_series = self._ensure_numeric(df, price_col)
         middle_band = self.sma(df, period, price_col)
-        std = cast(
-            NumericSeries, price_series.rolling(window=period, min_periods=period).std()
-        )
+        std = cast(NumericSeries, price_series.rolling(window=period, min_periods=period).std())
 
         upper_band = cast(NumericSeries, middle_band + (std_dev * std))
         lower_band = cast(NumericSeries, middle_band - (std_dev * std))
@@ -175,9 +174,7 @@ class SimpleIndicators:
         close_series = self._ensure_numeric(df, "close")
         volume_series = self._ensure_numeric(df, "volume")
         close_diff = cast(NumericSeries, close_series.diff().fillna(0.0))
-        flow = volume_series.where(close_diff > 0, 0.0) - volume_series.where(
-            close_diff < 0, 0.0
-        )
+        flow = volume_series.where(close_diff > 0, 0.0) - volume_series.where(close_diff < 0, 0.0)
 
         return cast(NumericSeries, flow.cumsum())
 

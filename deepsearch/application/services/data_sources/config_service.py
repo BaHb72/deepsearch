@@ -71,7 +71,7 @@ def prune_empty(value: Any) -> Any:
         cleaned: Dict[str, Any] = {}
         for key, sub_value in value.items():
             cleaned_value = prune_empty(sub_value)
-            if cleaned_value in (None, "", {} , []):
+            if cleaned_value in (None, "", {}, []):
                 continue
             cleaned[key] = cleaned_value
         return cleaned
@@ -158,7 +158,9 @@ class DataSourceConfigService:
                 existing_data = {}
 
         data_sources_section = existing_data.setdefault("data_sources", {})
-        providers_section: MutableMapping[str, Any] = data_sources_section.setdefault("providers", {})
+        providers_section: MutableMapping[str, Any] = data_sources_section.setdefault(
+            "providers", {}
+        )
         provider_key = source_type.value
         existing_entry = providers_section.get(provider_key, {})
 

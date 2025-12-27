@@ -8,7 +8,6 @@ AmazingData 数据结构字段映射
 
 from typing import Dict, List
 
-
 # ==================== 4.2.1 Level-1 快照 Snapshot ====================
 
 SNAPSHOT_FIELDS: Dict[str, str] = {
@@ -223,33 +222,50 @@ KLINE_FIELDS: Dict[str, str] = {
 # ==================== 通用五档盘口字段 ====================
 
 FIVE_LEVEL_FIELDS: List[str] = [
-    "ask_price1", "ask_price2", "ask_price3", "ask_price4", "ask_price5",
-    "ask_volume1", "ask_volume2", "ask_volume3", "ask_volume4", "ask_volume5",
-    "bid_price1", "bid_price2", "bid_price3", "bid_price4", "bid_price5",
-    "bid_volume1", "bid_volume2", "bid_volume3", "bid_volume4", "bid_volume5",
+    "ask_price1",
+    "ask_price2",
+    "ask_price3",
+    "ask_price4",
+    "ask_price5",
+    "ask_volume1",
+    "ask_volume2",
+    "ask_volume3",
+    "ask_volume4",
+    "ask_volume5",
+    "bid_price1",
+    "bid_price2",
+    "bid_price3",
+    "bid_price4",
+    "bid_price5",
+    "bid_volume1",
+    "bid_volume2",
+    "bid_volume3",
+    "bid_volume4",
+    "bid_volume5",
 ]
 
 
 # ==================== 基础OHLCV字段 ====================
 
 OHLCV_FIELDS: List[str] = [
-    "open",    # 开盘价
-    "high",    # 最高价
-    "low",     # 最低价
-    "close",   # 收盘价
+    "open",  # 开盘价
+    "high",  # 最高价
+    "low",  # 最低价
+    "close",  # 收盘价
     "volume",  # 成交量
 ]
 
 
 # ==================== 辅助函数 ====================
 
+
 def get_field_description(data_type: str, field_name: str) -> str:
     """获取字段描述
-    
+
     Args:
         data_type: 数据类型（snapshot, snapshot_option, snapshot_future等）
         field_name: 字段名
-        
+
     Returns:
         字段描述，未找到返回字段名本身
     """
@@ -261,7 +277,7 @@ def get_field_description(data_type: str, field_name: str) -> str:
         "snapshot_hkt": SNAPSHOT_HKT_FIELDS,
         "kline": KLINE_FIELDS,
     }
-    
+
     field_map = field_maps.get(data_type.lower())
     if field_map:
         return field_map.get(field_name, field_name)
@@ -270,10 +286,10 @@ def get_field_description(data_type: str, field_name: str) -> str:
 
 def get_all_fields(data_type: str) -> List[str]:
     """获取数据类型的所有字段列表
-    
+
     Args:
         data_type: 数据类型
-        
+
     Returns:
         字段名列表
     """
@@ -285,7 +301,7 @@ def get_all_fields(data_type: str) -> List[str]:
         "snapshot_hkt": SNAPSHOT_HKT_FIELDS,
         "kline": KLINE_FIELDS,
     }
-    
+
     field_map = field_maps.get(data_type.lower())
     if field_map:
         return list(field_map.keys())
@@ -294,10 +310,10 @@ def get_all_fields(data_type: str) -> List[str]:
 
 def is_five_level_field(field_name: str) -> bool:
     """判断是否是五档盘口字段
-    
+
     Args:
         field_name: 字段名
-        
+
     Returns:
         是否是五档字段
     """
@@ -306,10 +322,10 @@ def is_five_level_field(field_name: str) -> bool:
 
 def is_ohlcv_field(field_name: str) -> bool:
     """判断是否是OHLCV基础字段
-    
+
     Args:
         field_name: 字段名
-        
+
     Returns:
         是否是OHLCV字段
     """

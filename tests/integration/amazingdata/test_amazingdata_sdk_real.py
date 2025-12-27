@@ -2,10 +2,8 @@ import os
 
 import pytest
 
+from deepsearch.infrastructure.providers.managers.data_source_manager import get_data_source_manager
 from deepsearch.ports.data_sources import DataSourceType
-from deepsearch.infrastructure.providers.managers.data_source_manager import (
-    get_data_source_manager,
-)
 
 
 @pytest.mark.integration

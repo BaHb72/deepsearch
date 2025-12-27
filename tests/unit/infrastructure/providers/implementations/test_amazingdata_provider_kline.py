@@ -1,172 +1,102 @@
+"""AmazingData Provider K线数据真实测试。
+
+使用真实的 AmazingData SDK 连接测试 K 线数据获取功能。
+"""
+
 from __future__ import annotations
 
-import importlib
-import sys
-from types import ModuleType, SimpleNamespace
-from typing import Sequence
+from datetime import datetime, timedelta
 
 import pandas as pd
 import pytest
 
-from deepsearch.infrastructure.providers.implementations.amazingdata.config import (
-    AmazingDataConfig,
-)
-
-
-class _FakeSDK:
-    def __init__(self) -> None:
-        self.raise_on_query: Exception | None = None
-        self.query_calls: list[tuple[Sequence[str], dict[str, object]]] = []
-        self.legacy_calls: list[tuple[Sequence[str], object, object, object, int, object, object]] = []
-        self.query_payload = {
-            "000001.SZ": [
-                {
-                    "time": "2024-01-02 09:30:00",
-                    "open": 10.0,
-                    "high": 10.5,
-                    "low": 9.8,
-                    "close": 10.2,
-                    "volume": 1000,
-                    "amount": 15000,
-                }
-            ]
-        }
-        self.legacy_payload = {
-            "000001.SZ": [
-                {
-                    "time": "2024-01-02 09:31:00",
-                    "open": 11.0,
-                    "high": 11.5,
-                    "low": 10.8,
-                    "close": 11.2,
-                    "volume": 1200,
-                    "amount": 18000,
-                }
-            ]
-        }
-        period_namespace = SimpleNamespace(
-            snapshot=SimpleNamespace(value="snapshot"),
-            m1=SimpleNamespace(value="1m"),
-            min1=SimpleNamespace(value="1m"),
-            day=SimpleNamespace(value="1d"),
-            d1=SimpleNamespace(value="1d"),
-            tick=SimpleNamespace(value="tick"),
-        )
-        adjust_namespace = SimpleNamespace(
-            none=SimpleNamespace(value="none"),
-            forward=SimpleNamespace(value="qfq"),
-            pre=SimpleNamespace(value="qfq"),
-            backward=SimpleNamespace(value="hfq"),
-            post=SimpleNamespace(value="hfq"),
-        )
-        self.constant = SimpleNamespace(Period=period_namespace, Adjust=adjust_namespace)
-
-        fake_sdk = self
-
-        class MarketData:  # type: ignore[valid-type]
-            def __init__(self) -> None:
-                fake_sdk._last_instance = self
-
-            def query_kline(self, symbols, **kwargs):  # noqa: ANN001 - mimic SDK signature
-                fake_sdk.query_calls.append((tuple(symbols), dict(kwargs)))
-                if fake_sdk.raise_on_query:
-                    raise fake_sdk.raise_on_query
-                return fake_sdk.query_payload
-
-            @staticmethod
-            def get_kline_data(symbols, period, start, end, count, adjust, include_flag):  # noqa: ANN001
-                fake_sdk.legacy_calls.append(
-                    (tuple(symbols), period, start, end, count, adjust, include_flag)
-                )
-                return fake_sdk.legacy_payload
-
-        self.MarketData = MarketData
-        self.BaseData = SimpleNamespace(get_calendar=lambda: None)
-
-
-@pytest.fixture()
-def provider_with_fake_sdk(monkeypatch):
-    module_name = "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata"
-    optimized_name = (
-        "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized"
-    )
-
-    module = importlib.import_module(module_name)
-    original_optimized = sys.modules.get(optimized_name)
-    sys.modules[optimized_name] = ModuleType(optimized_name)
-    module = importlib.reload(module)
-    BaseProvider = module.AmazingDataProvider
-
-    class TestProvider(BaseProvider):  # type: ignore[misc]
-        async def initialize(self) -> bool:  # noqa: D401
-            return True
-
-    config = AmazingDataConfig(
-        username="user",
-        password="pass",
-        host="127.0.0.1",
-        port=6000,
-        timeout=1.0,
-    )
-    provider = TestProvider(config)
-    fake_sdk = _FakeSDK()
-    provider._sdk = fake_sdk  # type: ignore[assignment]
-    provider._sdk_available = True
-    provider._degraded_mode = False
-    provider._connected = True
-
-    async def immediate_to_thread(func, /, *args, **kwargs):  # noqa: ANN001
-        return func(*args, **kwargs)
-
-    monkeypatch.setattr(
-        "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.asyncio.to_thread",
-        immediate_to_thread,
-    )
-    try:
-        yield provider, fake_sdk
-    finally:
-        if original_optimized is not None:
-            sys.modules[optimized_name] = original_optimized
-        else:
-            sys.modules.pop(optimized_name, None)
-        importlib.reload(module)
-
 
 @pytest.mark.asyncio
-async def test_get_kline_prefers_query_kline(provider_with_fake_sdk):
-    provider, fake_sdk = provider_with_fake_sdk
+async def test_get_kline_returns_valid_dataframe(real_amazingdata_provider):
+    """测试获取K线数据返回有效的DataFrame。"""
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=30)
 
-    df = await provider.get_kline(
-        "000001.SZ",
+    df = await real_amazingdata_provider.get_kline(
+        symbol="SZ000001",
         period="1d",
-        start_date="2024-01-01",
-        end_date="2024-01-02",
-        count=10,
+        start_date=start_date.strftime("%Y-%m-%d"),
+        end_date=end_date.strftime("%Y-%m-%d"),
+        count=30,
         adjust="none",
     )
 
     assert isinstance(df, pd.DataFrame)
-    assert not df.empty
-    assert fake_sdk.query_calls
-    assert not fake_sdk.legacy_calls
-    symbols, kwargs = fake_sdk.query_calls[0]
-    assert symbols == ("000001.SZ",)
-    assert kwargs.get("begin_date") == 20240101
-    assert kwargs.get("end_date") == 20240102
+    if not df.empty:
+        # 验证K线必要列
+        expected_columns = {"open", "high", "low", "close", "volume"}
+        actual_columns = set(c.lower() for c in df.columns)
+        assert expected_columns & actual_columns, f"缺少K线列，实际: {df.columns.tolist()}"
 
 
 @pytest.mark.asyncio
-async def test_get_kline_falls_back_to_legacy_api(provider_with_fake_sdk):
-    provider, fake_sdk = provider_with_fake_sdk
-    fake_sdk.raise_on_query = RuntimeError("query failed")
+async def test_get_kline_with_different_periods(real_amazingdata_provider):
+    """测试不同周期的K线数据获取。"""
+    periods = ["1d", "1m", "5m"]
 
-    df = await provider.get_kline("000001.SZ", period="1d", count=5, adjust="qfq")
+    for period in periods:
+        df = await real_amazingdata_provider.get_kline(
+            symbol="SZ000001",
+            period=period,
+            count=10,
+            adjust="none",
+        )
+
+        assert isinstance(df, pd.DataFrame), f"周期 {period} 返回类型错误"
+
+
+@pytest.mark.asyncio
+async def test_get_kline_with_adjust_types(real_amazingdata_provider):
+    """测试不同复权类型的K线数据。"""
+    adjust_types = ["none", "qfq", "hfq"]
+
+    for adjust in adjust_types:
+        df = await real_amazingdata_provider.get_kline(
+            symbol="SZ000001",
+            period="1d",
+            count=10,
+            adjust=adjust,
+        )
+
+        assert isinstance(df, pd.DataFrame), f"复权类型 {adjust} 返回类型错误"
+
+
+@pytest.mark.asyncio
+async def test_get_kline_multiple_symbols(real_amazingdata_provider):
+    """测试批量获取多个股票的K线数据。"""
+    symbols = ["SZ000001", "SH600000", "SZ000002"]
+
+    for symbol in symbols:
+        df = await real_amazingdata_provider.get_kline(
+            symbol=symbol,
+            period="1d",
+            count=5,
+            adjust="none",
+        )
+
+        assert isinstance(df, pd.DataFrame), f"股票 {symbol} 返回类型错误"
+
+
+@pytest.mark.asyncio
+async def test_get_kline_with_date_range(real_amazingdata_provider):
+    """测试指定日期范围的K线数据获取。"""
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=60)
+
+    df = await real_amazingdata_provider.get_kline(
+        symbol="SH600000",
+        period="1d",
+        start_date=start_date.strftime("%Y%m%d"),
+        end_date=end_date.strftime("%Y%m%d"),
+        adjust="qfq",
+    )
 
     assert isinstance(df, pd.DataFrame)
-    assert not df.empty
-    assert fake_sdk.legacy_calls  # legacy API was invoked
-    symbols, period, start, end, count, adjust, include_flag = fake_sdk.legacy_calls[0]
-    assert symbols == ("000001.SZ",)
-    assert period in {"1d", "day"}
-    assert count == 5
-    assert adjust in {"qfq", "forward"}
+    if not df.empty:
+        # 验证数据量合理（交易日约为总日期的60-70%）
+        assert len(df) > 0

@@ -554,11 +554,11 @@ class BenchmarkRunner:
         <body>
             <h1>Performance Benchmark Report</h1>
             <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-            
+
             <h2>Summary</h2>
             <p>Total benchmarks: {len(suite.results)}</p>
             <p>Total duration: {self._format_duration(suite)}</p>
-            
+
             <h2>Results</h2>
             <table>
                 <tr>
@@ -583,7 +583,7 @@ class BenchmarkRunner:
 
         html_content += """
             </table>
-            
+
             <h2>Charts</h2>
             <div class="chart">
                 <img src="throughput_chart.png" alt="Throughput Chart">

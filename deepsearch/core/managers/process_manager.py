@@ -92,7 +92,9 @@ class ProcessManager:
         self._resource_lock = threading.RLock()
 
         # 弱引用存储，避免循环引用
-        self._threads: weakref.WeakValueDictionary[str, threading.Thread] = weakref.WeakValueDictionary()
+        self._threads: weakref.WeakValueDictionary[str, threading.Thread] = (
+            weakref.WeakValueDictionary()
+        )
         self._processes: Dict[str, subprocess.Popen] = {}
         self._executors: weakref.WeakSet = weakref.WeakSet()
         self._event_loops: weakref.WeakSet = weakref.WeakSet()
@@ -349,6 +351,7 @@ class ProcessManager:
             self.logger.warning(f"线程 {target_thread.name} 在 {timeout} 秒内未停止")
 
         return success
+
     def stop_process(
         self, process: Union[subprocess.Popen, str], timeout: float = 5.0, force: bool = False
     ) -> bool:

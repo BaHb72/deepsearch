@@ -15,7 +15,18 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, DefaultDict, Deque, Dict, List, Optional, Protocol, TypedDict, cast
+from typing import (
+    Any,
+    Callable,
+    DefaultDict,
+    Deque,
+    Dict,
+    List,
+    Optional,
+    Protocol,
+    TypedDict,
+    cast,
+)
 
 import psutil
 from loguru import logger
@@ -235,7 +246,9 @@ class PerformanceTracker:
         self.application_metrics: Deque[ApplicationMetrics] = deque(maxlen=history_size)
 
         # 自定义指标
-        self.custom_metrics: DefaultDict[str, Deque[CustomMetric]] = self._create_custom_metric_store(history_size)
+        self.custom_metrics: DefaultDict[str, Deque[CustomMetric]] = (
+            self._create_custom_metric_store(history_size)
+        )
 
         # 告警
         self.alerts: Dict[str, Alert] = {}
@@ -389,7 +402,9 @@ class PerformanceTracker:
         # CPU使用率
         cpu_percent_raw = psutil.cpu_percent(interval=None)
         if isinstance(cpu_percent_raw, list):
-            cpu_percent = float(sum(cpu_percent_raw) / len(cpu_percent_raw)) if cpu_percent_raw else 0.0
+            cpu_percent = (
+                float(sum(cpu_percent_raw) / len(cpu_percent_raw)) if cpu_percent_raw else 0.0
+            )
         else:
             cpu_percent = float(cpu_percent_raw)
 

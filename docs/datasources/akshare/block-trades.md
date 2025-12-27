@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_dzjy_sctj
 
-目标地址: https://data.eastmoney.com/dzjy/dzjy_sctj.html
+目标地址: <https://data.eastmoney.com/dzjy/dzjy_sctj.html>
 
 描述: 东方财富网-数据中心-大宗交易-市场统计
 
@@ -68,7 +68,7 @@ print(stock_dzjy_sctj_df)
 
 接口: stock_dzjy_mrmx
 
-目标地址: https://data.eastmoney.com/dzjy/dzjy_mrmx.html
+目标地址: <https://data.eastmoney.com/dzjy/dzjy_mrmx.html>
 
 描述: 东方财富网-数据中心-大宗交易-每日明细
 
@@ -237,7 +237,7 @@ print(stock_dzjy_mrmx_df)
 
 接口: stock_dzjy_mrtj
 
-目标地址: https://data.eastmoney.com/dzjy/dzjy_mrtj.html
+目标地址: <https://data.eastmoney.com/dzjy/dzjy_mrtj.html>
 
 描述: 东方财富网-数据中心-大宗交易-每日统计
 
@@ -298,7 +298,7 @@ print(stock_dzjy_mrtj_df)
 
 接口: stock_dzjy_hygtj
 
-目标地址: https://data.eastmoney.com/dzjy/dzjy_hygtj.html
+目标地址: <https://data.eastmoney.com/dzjy/dzjy_hygtj.html>
 
 描述: 东方财富网-数据中心-大宗交易-活跃 A 股统计
 
@@ -362,7 +362,7 @@ print(stock_dzjy_hygtj_df)
 
 接口: stock_dzjy_hyyybtj
 
-目标地址: https://data.eastmoney.com/dzjy/dzjy_hyyybtj.html
+目标地址: <https://data.eastmoney.com/dzjy/dzjy_hyyybtj.html>
 
 描述: 东方财富网-数据中心-大宗交易-活跃营业部统计
 
@@ -419,7 +419,7 @@ print(stock_dzjy_hyyybtj_df)
 
 接口: stock_dzjy_yybph
 
-目标地址: https://data.eastmoney.com/dzjy/dzjy_yybph.html
+目标地址: <https://data.eastmoney.com/dzjy/dzjy_yybph.html>
 
 描述: 东方财富网-数据中心-大宗交易-营业部排行
 

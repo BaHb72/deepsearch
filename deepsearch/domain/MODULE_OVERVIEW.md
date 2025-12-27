@@ -7,18 +7,18 @@
 ## 子模块概述
 
 - `entities/`：通用实体
-    - `price.py`：`Price` 值对象封装当前价、前收、开高低等字段，提供 `calculate_change` 计算涨跌幅；`PriceChange` 表达涨跌结果。
-    - `stock_simple.py`：定义轻量级股票信息（代码、名称、交易所）。
-    - `trade.py`：`Trade` 数据类描述成交记录（方向、数量、价格、时间戳）。
+  - `price.py`：`Price` 值对象封装当前价、前收、开高低等字段，提供 `calculate_change` 计算涨跌幅；`PriceChange` 表达涨跌结果。
+  - `stock_simple.py`：定义轻量级股票信息（代码、名称、交易所）。
+  - `trade.py`：`Trade` 数据类描述成交记录（方向、数量、价格、时间戳）。
 - `market_data/`：行情领域核心
-    - `buffers.py`：`SnapshotBuffer` 维护以代码为 key 的 deque，按照 retention 滚动存储 `MarketSnapshot`，提供窗口查询（
+  - `buffers.py`：`SnapshotBuffer` 维护以代码为 key 的 deque，按照 retention 滚动存储 `MarketSnapshot`，提供窗口查询（
       `window_series`, `sliced_series`）和快速获取最新时间戳。
-    - `calculators.py`：实现三大指标计算器：
-        - `CapitalPulseCalculator`：针对板块集合，基于 `SnapshotBuffer` 计算资金增量、每分钟速度与加速度，支持窗口配置。
-        - `AuctionQualityCalculator`：衡量集合竞价质量，聚合金额、成交量、价格稳定度，支持过滤 phase code、采样窗口。
-        - `OrderImbalanceCalculator`：按单只股票计算委买委卖失衡（OBI）、等效冲击（EIS）、成交笔数（NTM），利用盘口深度数据。
-    - `board.py`：`BoardUniverse` 管理板块与证券代码映射；包含别名解析、关键词匹配、快照序列化功能。
-    - `stock_record.py`：`StockListRecord` 表达从数据源拉取的成份股信息，负责字段规范化、板块字段合并、标签处理。
+  - `calculators.py`：实现三大指标计算器：
+    - `CapitalPulseCalculator`：针对板块集合，基于 `SnapshotBuffer` 计算资金增量、每分钟速度与加速度，支持窗口配置。
+    - `AuctionQualityCalculator`：衡量集合竞价质量，聚合金额、成交量、价格稳定度，支持过滤 phase code、采样窗口。
+    - `OrderImbalanceCalculator`：按单只股票计算委买委卖失衡（OBI）、等效冲击（EIS）、成交笔数（NTM），利用盘口深度数据。
+  - `board.py`：`BoardUniverse` 管理板块与证券代码映射；包含别名解析、关键词匹配、快照序列化功能。
+  - `stock_record.py`：`StockListRecord` 表达从数据源拉取的成份股信息，负责字段规范化、板块字段合并、标签处理。
 
 ## 运行逻辑
 

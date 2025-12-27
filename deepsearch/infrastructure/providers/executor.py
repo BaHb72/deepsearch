@@ -8,10 +8,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from loguru import logger
 
-from deepsearch.observability.monitoring.data_source_monitor import (
-    DataSourceMonitor,
-    get_monitor,
-)
+from deepsearch.observability.monitoring.data_source_monitor import DataSourceMonitor, get_monitor
 from deepsearch.ports.data_sources import DataAccessType, DataSourceType
 
 

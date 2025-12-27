@@ -158,7 +158,9 @@ def test_amazingdata():
     print("\n[5] 常用能力概览:")
     try:
         base_attrs = [attr for attr in dir(base_data or ad.BaseData()) if not attr.startswith("_")]
-        market_attrs = [attr for attr in dir(market_data or ad.MarketData()) if not attr.startswith("_")]
+        market_attrs = [
+            attr for attr in dir(market_data or ad.MarketData()) if not attr.startswith("_")
+        ]
         print(f"    BaseData: {base_attrs[:8]}")
         print(f"    MarketData: {market_attrs[:8]}")
     except Exception as e:

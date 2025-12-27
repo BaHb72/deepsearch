@@ -14,7 +14,17 @@ from collections.abc import Mapping as MappingABC
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import FrameType
-from typing import Any, Callable, Dict, Mapping, MutableMapping, Optional, Sequence, TYPE_CHECKING, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    cast,
+)
 
 from loguru import logger
 
@@ -28,8 +38,10 @@ from deepsearch.constants import (
 )
 
 if TYPE_CHECKING:
+    from loguru import Logger
+    from loguru import Record as LogRecordDict
+
     from deepsearch.config.models.log import LogConfig
-    from loguru import Logger, Record as LogRecordDict
 else:
     FormatFunction = Callable[[MutableMapping[str, object]], str]
     LogRecordDict = MutableMapping[str, object]
@@ -420,10 +432,10 @@ class LoggerManager:
             self._module_sinks[module_key] = sink_id
 
     def _build_retention_handler(
-            self,
-            *,
-            archive_base: Path,
-            retention_days: Optional[int],
+        self,
+        *,
+        archive_base: Path,
+        retention_days: Optional[int],
     ) -> Callable[[Sequence[str]], None]:
         """创建处理过期日志的回调。"""
         effective_days = retention_days or self._archive_after_days
@@ -483,10 +495,10 @@ class LoggerManager:
             stat_info = None
 
         with zipfile.ZipFile(
-                target,
-                mode="w",
-                compression=zipfile.ZIP_DEFLATED,
-                compresslevel=ARCHIVE_COMPRESSION_LEVEL,
+            target,
+            mode="w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=ARCHIVE_COMPRESSION_LEVEL,
         ) as archive:
             archive.write(source, arcname=source.name)
 
@@ -641,7 +653,9 @@ class LoggerManager:
         message_style = self._message_colors.get(level_name.upper(), self._default_message_color)
         message_text = record.get("message")
         message_str = str(message_text) if message_text is not None else ""
-        message_block = self._format_message_with_metadata(message_str, metadata, message_style, colorize)
+        message_block = self._format_message_with_metadata(
+            message_str, metadata, message_style, colorize
+        )
 
         level_color = self._level_colors.get(level_name.upper(), self._separator_color)
         timestamp_token = self._apply_color(self._timestamp_color, timestamp, colorize)
@@ -679,7 +693,9 @@ class LoggerManager:
                 exc_value = getattr(exception_obj, "value", None)
                 if exc_type or exc_value:
                     type_name = exc_type.__name__ if isinstance(exc_type, type) else str(exc_type)
-                    exception_text = f"{type_name}: {exc_value}" if exc_value is not None else type_name
+                    exception_text = (
+                        f"{type_name}: {exc_value}" if exc_value is not None else type_name
+                    )
             if not exception_text:
                 exception_text = str(exception_obj)
             if exception_text:
@@ -699,10 +715,10 @@ class LoggerManager:
         return self._format_spring_boot_line(record, colorize=False)
 
     def _apply_logger_configuration(
-            self,
-            *,
-            extra: Mapping[str, object] | None = None,
-            patcher: Callable[[LogRecordDict], object] | None = None,
+        self,
+        *,
+        extra: Mapping[str, object] | None = None,
+        patcher: Callable[[LogRecordDict], object] | None = None,
     ) -> None:
         """Thin wrapper around loguru.configure with permissive typing."""
         configure_kwargs: dict[str, object] = {}
@@ -857,7 +873,6 @@ class LoggerManager:
             )
             self._datasource_sinks[name] = sink_id
         return loguru_logger.bind(datasource=name, module=f"datasource.{name}")
-
 
 
 logger_manager = LoggerManager()

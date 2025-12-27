@@ -40,7 +40,10 @@ class QMTGatewayComponent(AsyncComponent):
     ):
         normalized_config: Dict[str, Any] = dict(config or {})
         super().__init__(
-            "qmt_gateway_optimized", ComponentType.BUSINESS, "QMT网关(优化)", config=normalized_config
+            "qmt_gateway_optimized",
+            ComponentType.BUSINESS,
+            "QMT网关(优化)",
+            config=normalized_config,
         )
         self.event_engine = event_engine
         self.message_bus = message_bus

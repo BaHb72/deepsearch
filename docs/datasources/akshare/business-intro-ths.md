@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_zyjs_ths
 
-目标地址: https://basic.10jqka.com.cn/new/000066/operate.html
+目标地址: <https://basic.10jqka.com.cn/new/000066/operate.html>
 
 描述: 同花顺-主营介绍
 

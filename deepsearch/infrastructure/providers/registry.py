@@ -27,6 +27,7 @@ class ProviderType(Enum):
     THS = "ths"
     CUSTOM = "custom"
 
+
 ALLOWED_PROVIDER_TYPES = {
     ProviderType.AMAZINGDATA,
     ProviderType.CLOUDFLARE,
@@ -34,6 +35,7 @@ ALLOWED_PROVIDER_TYPES = {
     ProviderType.MINIQMT,
     ProviderType.CUSTOM,
 }
+
 
 @dataclass
 class ProviderInfo:
@@ -51,6 +53,7 @@ class ProviderInfo:
     def __post_init__(self):
         if self.config is None:
             self.config = {}
+
 
 class DataProviderRegistry:
     """
@@ -229,9 +232,7 @@ class DataProviderRegistry:
             "has_saved_credential",
             "provider_name",
         }
-        fallback_payload = {
-            key: value for key, value in entry_dict.items() if key not in meta_keys
-        }
+        fallback_payload = {key: value for key, value in entry_dict.items() if key not in meta_keys}
         return fallback_payload if fallback_payload else {}
 
     def get_provider_instance(self, name: str, force_new: bool = False) -> Optional[Any]:
@@ -310,15 +311,19 @@ class DataProviderRegistry:
 
                     if isinstance(subscription_cfg, dict):
                         if "subscription_enabled" not in flattened:
-                            flattened["subscription_enabled"] = subscription_cfg.get("enabled", True)
+                            flattened["subscription_enabled"] = subscription_cfg.get(
+                                "enabled", True
+                            )
                         if (
-                                "subscription_batch_size" not in flattened
-                                and subscription_cfg.get("batch_size") is not None
+                            "subscription_batch_size" not in flattened
+                            and subscription_cfg.get("batch_size") is not None
                         ):
-                            flattened["subscription_batch_size"] = subscription_cfg.get("batch_size")
+                            flattened["subscription_batch_size"] = subscription_cfg.get(
+                                "batch_size"
+                            )
                         if (
-                                "max_subscriptions" not in flattened
-                                and subscription_cfg.get("max_symbols") is not None
+                            "max_subscriptions" not in flattened
+                            and subscription_cfg.get("max_symbols") is not None
                         ):
                             flattened["max_subscriptions"] = subscription_cfg.get("max_symbols")
 
@@ -431,7 +436,9 @@ class DataProviderRegistry:
                     if fallback_config:
                         raw_config = dict(fallback_config)
                         flattened_config = _extract_connection_payload(raw_config)
-                        _validate_connection("AmazingDataProvider settings config", flattened_config)
+                        _validate_connection(
+                            "AmazingDataProvider settings config", flattened_config
+                        )
                         payload = dict(flattened_config)
                         _sanitize_payload(payload)
                         _patch_missing_credentials(payload)
@@ -452,7 +459,9 @@ class DataProviderRegistry:
                         _sanitize_payload(payload)
                         _validate_connection(f"{config_hint} amazingdata.connection", payload)
                         structured_config = dict(amazingdata_settings.model_dump())
-                        mode = _normalize_mode(getattr(amazingdata_settings, "implementation_mode", None))
+                        mode = _normalize_mode(
+                            getattr(amazingdata_settings, "implementation_mode", None)
+                        )
 
                 payload["config"] = copy.deepcopy(structured_config or {})
 
@@ -479,7 +488,9 @@ class DataProviderRegistry:
                     "api_mode",
                     "config",
                 }
-                payload = {key: value for key, value in payload.items() if key in allowed_payload_keys}
+                payload = {
+                    key: value for key, value in payload.items() if key in allowed_payload_keys
+                }
 
                 desired_mode = mode or "process"
 
@@ -644,8 +655,10 @@ class DataProviderRegistry:
         self._instances.clear()
         logger.info("清除所有数据提供者实例缓存")
 
+
 # 全局注册表实例
 _registry: DataProviderRegistry | None = None
+
 
 def get_registry() -> DataProviderRegistry:
     """
@@ -659,6 +672,7 @@ def get_registry() -> DataProviderRegistry:
         _registry = DataProviderRegistry()
     return _registry
 
+
 def register_provider(provider_info: ProviderInfo) -> None:
     """
     注册数据提供者（便捷函数）
@@ -667,6 +681,7 @@ def register_provider(provider_info: ProviderInfo) -> None:
         provider_info: 提供者信息
     """
     get_registry().register(provider_info)
+
 
 def get_provider(name: str, force_new: bool = False) -> Optional[Any]:
     """

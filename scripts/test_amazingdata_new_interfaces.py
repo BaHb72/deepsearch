@@ -5,8 +5,8 @@
 测试 ETF、指数和行业相关的新增/更新接口
 """
 
-import sys
 import os
+import sys
 
 # 添加项目根目录到路径
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -15,12 +15,12 @@ if project_root not in sys.path:
 
 # 导入验证脚本
 from verify_amazingdata_api import (
-    test_get_fund_share,
+    logout,
     test_get_fund_iopv,
+    test_get_fund_share,
     test_get_index_constituent,
     test_get_index_weight,
     test_get_industry_base_info,
-    logout
 )
 
 
@@ -46,7 +46,7 @@ def main():
     for name, test_func in tests:
         print(f"\n{'='*80}")
         print(f"测试: {name}")
-        print('='*80)
+        print("=" * 80)
         try:
             if test_func():
                 passed += 1
@@ -58,6 +58,7 @@ def main():
             failed += 1
             print(f"✗ {name} 测试异常: {e}")
             import traceback
+
             traceback.print_exc()
 
     # 登出

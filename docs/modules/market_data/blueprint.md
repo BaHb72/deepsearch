@@ -42,8 +42,8 @@
 ## 4. 适配器规划
 
 - **订阅适配器**：`amazingdata_market_stream_adapter.py`
-    - 包含连接管理、节流（5–10s）、竞价特化（2–5s）、异常重连。
-    - 输出统一的 `MarketSnapshot` dataclass（时间戳、五档、成交额、笔数等）。
+  - 包含连接管理、节流（5–10s）、竞价特化（2–5s）、异常重连。
+  - 输出统一的 `MarketSnapshot` dataclass（时间戳、五档、成交额、笔数等）。
 - **ETF/两融/事件适配器**：按接口拆分为 `etf_adapter.py`、`margin_adapter.py`、`corporate_event_adapter.py`，每个适配器仅封装
   SDK 调用与字段清洗。
 - **外部资产适配器**（可选）：`futures_overlay_adapter.py`，按夜盘规则切分序列。
@@ -70,10 +70,10 @@
 ## 6. 数据建模 & API 契约映射
 
 - 实体与值对象：
-    - `MarketSnapshot`, `CapitalPulse`, `AuctionScore`, `OrderImbalance`, `LimitStrength`, `ETFPremium`,
+  - `MarketSnapshot`, `CapitalPulse`, `AuctionScore`, `OrderImbalance`, `LimitStrength`, `ETFPremium`,
       `MarginSummary`, `MarginDetail`, `SupplyConstraintEvent`, `StylePreference`, `ExternalOverlay`.
-    - 均落在 `deepsearch/domain/market_data/entities.py`（或按子域拆分）。
-    - 数据传输对象使用 `TypedDict`（端口层）与 Pydantic Schema（API 层）双向保持同名字段，确保与 `api_contract_v4.yaml` 一致。
+  - 均落在 `deepsearch/domain/market_data/entities.py`（或按子域拆分）。
+  - 数据传输对象使用 `TypedDict`（端口层）与 Pydantic Schema（API 层）双向保持同名字段，确保与 `api_contract_v4.yaml` 一致。
 - API 输出字段与实体属性一一对应，禁止在 Web 层拼接裸字典；由 `application.market_data.presenters` 提供序列化辅助。
 
 ## 7. 缓存、性能与容错

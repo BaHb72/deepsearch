@@ -1,9 +1,9 @@
 # AmazingData 进程隔离架构说明
 
-> 更新时间：2025-10-19  
+> 更新时间：2025-10-19
 > 适用范围：兼容旧版 SDK、隔离实验账号、批量自动化演练等需要子进程防护的环境
 
-默认运行时 DeepSearch 直接通过 `amazingdata_optimized.py` 调用最新版 SDK。  
+默认运行时 DeepSearch 直接通过 `amazingdata_optimized.py` 调用最新版 SDK。
 当遇到老版本 SDK 内存泄漏、需要特定 Python 运行时或账号隔离要求时，可启用进程隔离方案。本文同步最新实现，替换旧版“进程池流程”文档。
 
 ## 1. 组件总览

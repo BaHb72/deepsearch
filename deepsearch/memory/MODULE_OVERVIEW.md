@@ -8,19 +8,19 @@
 ## 关键功能
 
 - **监控采集**：
-    - 定期记录进程 RSS、虚拟内存、对象分配统计，使用 `psutil` 获取系统信息。
-    - `MemoryStats` 保存历史测量，可计算峰值、平均值、增长趋势。
-    - 支持跟踪大对象 (`register_large_object`) 与缓存对象，维护弱引用避免阻止 GC。
+  - 定期记录进程 RSS、虚拟内存、对象分配统计，使用 `psutil` 获取系统信息。
+  - `MemoryStats` 保存历史测量，可计算峰值、平均值、增长趋势。
+  - 支持跟踪大对象 (`register_large_object`) 与缓存对象，维护弱引用避免阻止 GC。
 - **限制与保护**：
-    - Unix 上通过 `resource` 限制进程地址空间；Windows 使用 WinAPI 设置工作集上限，辅助 `memory_limit` 上下文管理器。
+  - Unix 上通过 `resource` 限制进程地址空间；Windows 使用 WinAPI 设置工作集上限，辅助 `memory_limit` 上下文管理器。
 - **清理与优化**：
-    - `cleanup()` 触发 GC、清理缓存字典、统计回收的对象数量与释放的内存。
-    - `optimize_memory()` 调整 GC 阈值、清理模块缓存、压缩大对象（示例逻辑），并输出总结。
+  - `cleanup()` 触发 GC、清理缓存字典、统计回收的对象数量与释放的内存。
+  - `optimize_memory()` 调整 GC 阈值、清理模块缓存、压缩大对象（示例逻辑），并输出总结。
 - **趋势分析**：
-    - `analyze_usage()` 计算内存增长斜率、预估触达上限所需时间，并根据使用率输出建议。
-    - `find_memory_leaks()` 基于 `gc.garbage` 与追踪列表识别潜在泄漏。
+  - `analyze_usage()` 计算内存增长斜率、预估触达上限所需时间，并根据使用率输出建议。
+  - `find_memory_leaks()` 基于 `gc.garbage` 与追踪列表识别潜在泄漏。
 - **工具函数**：
-    - `track_large_object(obj, name)`、`clear_cache()`、`memory_limit(limit_mb)` 作为快捷调用。
+  - `track_large_object(obj, name)`、`clear_cache()`、`memory_limit(limit_mb)` 作为快捷调用。
 
 ## 使用场景
 

@@ -13,21 +13,21 @@ from deepsearch.ports.market_data import MarketSnapshot, WindowSpec
 
 
 def _make_snapshot(
-        code: str,
-        name: str,
-        ts: datetime,
-        *,
-        last: str,
-        amount: str,
-        volume: int,
-        num_trades: int,
-        bid_prices: list[str],
-        bid_volumes: list[int],
-        ask_prices: list[str],
-        ask_volumes: list[int],
-        upper_limit: str | None = None,
-        lower_limit: str | None = None,
-        trading_phase: str | None = None,
+    code: str,
+    name: str,
+    ts: datetime,
+    *,
+    last: str,
+    amount: str,
+    volume: int,
+    num_trades: int,
+    bid_prices: list[str],
+    bid_volumes: list[int],
+    ask_prices: list[str],
+    ask_volumes: list[int],
+    upper_limit: str | None = None,
+    lower_limit: str | None = None,
+    trading_phase: str | None = None,
 ) -> MarketSnapshot:
     return MarketSnapshot(
         code=code,
@@ -176,7 +176,7 @@ def test_capital_pulse_calculator_basic() -> None:
     second = calculator.compute("core", window, as_of=later)
     assert second is not None
     delta_second = (Decimal("2200000") - Decimal("1600000")) + (
-            Decimal("1150000") - Decimal("950000")
+        Decimal("1150000") - Decimal("950000")
     )
     assert second.amount_total == delta_second
     assert second.speed_per_min == delta_second

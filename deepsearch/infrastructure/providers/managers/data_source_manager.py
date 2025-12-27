@@ -39,7 +39,10 @@ def get_global_pool():
     from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
         get_global_pool as _get_global_pool,
     )
+
     return _get_global_pool()
+
+
 from deepsearch.infrastructure.providers.interfaces.base import IDataSource
 from deepsearch.infrastructure.providers.interfaces.runtime import (
     ProviderMessageEnvelope,
@@ -183,10 +186,10 @@ def _iter_stock_payload(payload: Any) -> Iterable[Any]:
 
 
 def build_stock_list_result(
-        payload: Any,
-        source: str,
-        *,
-        limit: Optional[int] = None,
+    payload: Any,
+    source: str,
+    *,
+    limit: Optional[int] = None,
 ) -> Optional[StockListFetchResult]:
     """归一化股票列表响应，产出领域与旧结构并存的结果。"""
 
@@ -194,16 +197,16 @@ def build_stock_list_result(
         return None
 
     if isinstance(payload, StockListFetchResult):
-        records: Sequence[StockListRecord] = payload.records
-        legacy: Sequence[dict[str, Any]] = payload.legacy
+        existing_records: Sequence[StockListRecord] = payload.records
+        existing_legacy: Sequence[dict[str, Any]] = payload.legacy
         if limit is not None and limit > 0:
-            records = records[:limit]
-            legacy = legacy[:limit]
-        mismatch = payload.mismatch or abs(len(records) - len(legacy))
+            existing_records = existing_records[:limit]
+            existing_legacy = existing_legacy[:limit]
+        mismatch = payload.mismatch or abs(len(existing_records) - len(existing_legacy))
         return StockListFetchResult(
             source=source,
-            records=tuple(records),
-            legacy=tuple(dict(item) for item in legacy),
+            records=tuple(existing_records),
+            legacy=tuple(dict(item) for item in existing_legacy),
             mismatch=mismatch,
         )
 
@@ -232,7 +235,7 @@ def build_stock_list_result(
 
         if mapping is None:
             try:
-                mapping = dict(entry)  # type: ignore[arg-type]
+                mapping = dict(entry)
             except Exception:
                 mismatch_extra += 1
                 continue
@@ -353,7 +356,7 @@ class DataSourceRegistry:
     def set_config(self, source_type: DataSourceType, config: DataSourceConfig):
         """设置数据源配置"""
         if source_type not in SUPPORTED_SOURCE_TYPES:
-            logger.warning("忽略不受支持的数据源配置: {}" % source_type.value)
+            logger.warning("忽略不受支持的数据源配置: {}".format(source_type.value))
             return
 
         self._configs[source_type] = config
@@ -731,8 +734,8 @@ class DataSourceManager:
                 "data_sources.providers 中未找到受支持的数据源配置，已回退到 AmazingData 默认配置"
             )
             self._register_provider_config(
-                    DataSourceType.AMAZINGDATA, "amazingdata", {"enabled": False}
-                )
+                DataSourceType.AMAZINGDATA, "amazingdata", {"enabled": False}
+            )
 
     def _load_legacy_configs(self) -> None:
         """兼容旧版配置结构，仅注册 AmazingData。"""
@@ -779,7 +782,9 @@ class DataSourceManager:
                 proxy_enabled = bool(normalized.get("enabled"))
             config_block = normalized.get("config")
             if config_block:
-                proxy_payload = self._deep_merge_dicts(proxy_payload, self._ensure_dict(config_block))
+                proxy_payload = self._deep_merge_dicts(
+                    proxy_payload, self._ensure_dict(config_block)
+                )
 
         if proxy_enabled is None and not proxy_payload:
             return
@@ -833,12 +838,16 @@ class DataSourceManager:
             except Exception:  # pragma: no cover - ���ͱ����쳣
                 logger.debug("�� runtime config д�� default ʱ�����쳣", exc_info=True)
 
-    def _update_provider_snapshot(self, source_type: DataSourceType, config: DataSourceConfig) -> None:
+    def _update_provider_snapshot(
+        self, source_type: DataSourceType, config: DataSourceConfig
+    ) -> None:
         """ͬ���� runtime config �е�����Դ������� fallback ���ã�����������ͨ�� UI ����ʾ"""
         data_sources_section = getattr(self.config, "data_sources", None)
         fallback_sources_raw = list(config.fallback_sources or [])
-        fallback_sources_str = [item.value if isinstance(item, DataSourceType) else str(item) for item in
-                                fallback_sources_raw]
+        fallback_sources_str = [
+            item.value if isinstance(item, DataSourceType) else str(item)
+            for item in fallback_sources_raw
+        ]
         enabled_flag = bool(config.enabled)
         fallback_enabled_flag = bool(fallback_sources_raw)
 
@@ -916,7 +925,9 @@ class DataSourceManager:
                 continue
             if DataSourceType.AKSHARE in other_config.fallback_sources:
                 other_config.fallback_sources = [
-                    source for source in other_config.fallback_sources if source != DataSourceType.AKSHARE
+                    source
+                    for source in other_config.fallback_sources
+                    if source != DataSourceType.AKSHARE
                 ]
                 if not other_config.fallback_sources:
                     other_config.fallback_enabled = False
@@ -959,12 +970,12 @@ class DataSourceManager:
         return result
 
     def _coerce_float(
-            self,
-            value: Any,
-            *,
-            default: float,
-            field: str,
-            provider: str,
+        self,
+        value: Any,
+        *,
+        default: float,
+        field: str,
+        provider: str,
     ) -> float:
         if value is None:
             return default
@@ -978,18 +989,16 @@ class DataSourceManager:
                 return float(stripped)
             except ValueError:
                 pass
-        logger.warning(
-            f"���Դ {provider} �ֶ� {field} ֵ {value!r} ����ת��Ϊ float����ʹ��Ĭ��ֵ {default}"
-        )
+        logger.warning(f"���Դ {provider} �ֶ� {field} ֵ {value!r} ����ת��Ϊ float����ʹ��Ĭ��ֵ {default}")
         return default
 
     def _coerce_int(
-            self,
-            value: Any,
-            *,
-            default: int,
-            field: str,
-            provider: str,
+        self,
+        value: Any,
+        *,
+        default: int,
+        field: str,
+        provider: str,
     ) -> int:
         if value is None:
             return default
@@ -1005,9 +1014,7 @@ class DataSourceManager:
                 return int(stripped)
             except ValueError:
                 pass
-        logger.warning(
-            f"���Դ {provider} �ֶ� {field} ֵ {value!r} ����ת��Ϊ int����ʹ��Ĭ��ֵ {default}"
-        )
+        logger.warning(f"���Դ {provider} �ֶ� {field} ֵ {value!r} ����ת��Ϊ int����ʹ��Ĭ��ֵ {default}")
         return default
 
     def is_provider_enabled(self, source: Union[str, DataSourceType]) -> bool:
@@ -1049,16 +1056,14 @@ class DataSourceManager:
         mode = str(payload.get("mode", "direct")).lower()
         proxy_payload = self._ensure_dict(payload.get("proxy"))
 
-        direct_payload = {
-            k: v for k, v in payload.items() if k not in {"mode", "proxy"}
-        }
+        direct_payload = {k: v for k, v in payload.items() if k not in {"mode", "proxy"}}
 
         proxy_enabled = proxy_payload.get("enabled")
         if isinstance(proxy_enabled, str):
             proxy_enabled = proxy_enabled.lower() in {"1", "true", "yes", "on"}
 
         use_proxy = mode == "proxy" or bool(proxy_enabled)
-        
+
         # 检查 Worker URL 是否为有效配置（非占位符）
         if use_proxy:
             worker_url = str(proxy_payload.get("worker_url", "")).lower()
@@ -1069,9 +1074,7 @@ class DataSourceManager:
                 or worker_url.endswith("your-worker.example.com")
             )
             if is_placeholder:
-                logger.warning(
-                    "AkShare 代理启用但未配置有效的 Worker URL，将回退直连模式"
-                )
+                logger.warning("AkShare 代理启用但未配置有效的 Worker URL，将回退直连模式")
                 use_proxy = False
 
         if use_proxy:
@@ -1086,7 +1089,9 @@ class DataSourceManager:
         data = self._ensure_dict(normalized)
         enabled = bool(data.get("enabled", True))
         priority = int(data.get("priority", DEFAULT_SOURCE_PRIORITY.get(source_type, 100)))
-        timeout = self._coerce_float(data.get("timeout"), default=10.0, field="timeout", provider=provider_name)
+        timeout = self._coerce_float(
+            data.get("timeout"), default=10.0, field="timeout", provider=provider_name
+        )
         retry_count = self._coerce_int(
             data.get("retry_count"),
             default=3,
@@ -1240,22 +1245,22 @@ class DataSourceManager:
         return available
 
     def get_sources_for_context(
-            self,
-            module: Optional[str] = None,
-            access_type: Optional[DataAccessType] = None,
+        self,
+        module: Optional[str] = None,
+        access_type: Optional[DataAccessType] = None,
     ) -> List[DataSourceType]:
         """
         获取特定模块/访问类型的数据源顺序。
-        
+
         按以下优先级查找：
         1. module_overrides[module] - 模块级配置
         2. access_type_overrides[access_type] - 访问类型配置
         3. 全局 fallback_order / available sources
-        
+
         Args:
             module: 模块名称（如 "market_strength"）
             access_type: 数据访问类型
-            
+
         Returns:
             数据源类型列表（按优先级排序）
         """
@@ -1400,9 +1405,7 @@ class DataSourceManager:
 
         return result
 
-    async def _get_realtime_quote(
-        self, provider: Any, symbol: str
-    ) -> Optional[Dict[str, Any]]:
+    async def _get_realtime_quote(self, provider: Any, symbol: str) -> Optional[Dict[str, Any]]:
         """获取实时行情"""
         getter = getattr(provider, "get_realtime_quote", None)
         if callable(getter):
@@ -1413,9 +1416,7 @@ class DataSourceManager:
             return await bound(symbol)
         return None
 
-    async def _get_orderbook(
-        self, provider: Any, symbol: str
-    ) -> Optional[Dict[str, Any]]:
+    async def _get_orderbook(self, provider: Any, symbol: str) -> Optional[Dict[str, Any]]:
         """获取盘口数据"""
         async_getter = getattr(provider, "get_orderbook", None)
         if callable(async_getter):
@@ -1430,7 +1431,9 @@ class DataSourceManager:
             return bound_sync(symbol)
         return None
 
-    async def _get_kline(self, provider: Any, symbol: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
+    async def _get_kline(
+        self, provider: Any, symbol: str, **kwargs: Any
+    ) -> Optional[Dict[str, Any]]:
         """获取K线数据"""
         kline_getter = getattr(provider, "get_kline_data", None)
         if callable(kline_getter):
@@ -1515,7 +1518,7 @@ class DataSourceManager:
             for source_type in SUPPORTED_SOURCE_TYPES:
                 if source_type is not DataSourceType.AMAZINGDATA:
                     continue
-                provider = self.providers.get(source_type)
+                provider = self.providers.get(source_type)  # type: ignore[assignment]
                 if provider is None:
                     continue
                 datasource_id = getattr(provider, "_datasource_id", None)
@@ -1568,10 +1571,10 @@ class DataSourceManager:
             if status.get("pendingLogin") is not None:
                 entry["pendingLogin"] = bool(status.get("pendingLogin"))
             for field_name in (
-                    "lastLoginStartedAt",
-                    "lastLoginCompletedAt",
-                    "lastLoginSuccessAt",
-                    "lastLoginErrorAt",
+                "lastLoginStartedAt",
+                "lastLoginCompletedAt",
+                "lastLoginSuccessAt",
+                "lastLoginErrorAt",
             ):
                 field_value = status.get(field_name)
                 if field_value:
@@ -1605,9 +1608,9 @@ class DataSourceManager:
         }
 
     async def get_stock_list(
-            self,
-            limit: Optional[int] = None,
-            **kwargs,
+        self,
+        limit: Optional[int] = None,
+        **kwargs,
     ) -> Optional[StockListFetchResult]:
         """获取股票列表，同时返回领域结构与旧结构。"""
 
@@ -1619,9 +1622,7 @@ class DataSourceManager:
             if not provider:
                 continue
 
-            source_label = (
-                source_type.value if hasattr(source_type, "value") else str(source_type)
-            )
+            source_label = source_type.value if hasattr(source_type, "value") else str(source_type)
 
             try:
                 payload: Optional[Any] = None
@@ -1629,9 +1630,7 @@ class DataSourceManager:
                 if callable(get_records):
                     maybe_records = get_records(limit=limit, **kwargs)
                     payload = (
-                        await maybe_records
-                        if inspect.isawaitable(maybe_records)
-                        else maybe_records
+                        await maybe_records if inspect.isawaitable(maybe_records) else maybe_records
                     )
                     result = build_stock_list_result(payload, source_label, limit=limit)
                     if result and (result.records or result.legacy):
@@ -2109,9 +2108,7 @@ class DataSourceManager:
         self.initialized = False
         logger.info("数据源管理器已关闭")
 
-    async def subscribe_realtime(
-        self, symbols: List[str], callback: RealtimeCallback
-    ) -> bool:
+    async def subscribe_realtime(self, symbols: List[str], callback: RealtimeCallback) -> bool:
         """
         订阅实时数据
 
@@ -2465,11 +2462,11 @@ async def initialize_data_sources():
 
 async def get_data_manager() -> DataSourceManager:
     """获取已初始化的数据管理器实例
-    
+
     这是一个向后兼容的别名函数，供从 enhanced_manager 迁移的代码使用。
     等同于调用 initialize_data_sources()。
-    
+
     Returns:
         初始化后的 DataSourceManager 实例
     """
-    return await initialize_data_sources()
+    return await initialize_data_sources()  # type: ignore[no-any-return]

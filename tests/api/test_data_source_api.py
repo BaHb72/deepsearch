@@ -45,11 +45,13 @@ class TestDataSourceAPI:
                 "username": "demo_user",
                 "password": "demo_password",
                 "host": "1.2.3.4",
-                "port": 8600
+                "port": 8600,
             },
-            "rememberCredential": True
+            "rememberCredential": True,
         }
-        update_response = test_client.put("/api/data-sources/config/amazingdata", json=update_payload)
+        update_response = test_client.put(
+            "/api/data-sources/config/amazingdata", json=update_payload
+        )
         api_helper.assert_success_response(update_response)
 
         response = test_client.get("/api/data-sources/list")
@@ -72,7 +74,9 @@ class TestDataSourceAPI:
         assert amazing is not None, "Ӧ������ amazingdata ����Դ"
 
         config = amazing.get("config") or {}
-        connection_block = config.get("connection") if isinstance(config.get("connection"), dict) else {}
+        connection_block = (
+            config.get("connection") if isinstance(config.get("connection"), dict) else {}
+        )
         username = config.get("username") or connection_block.get("username")
         assert username, "amazingdata ����ԴӦ����ʾ�û�����������ƾ֤������Խ�"
         assert len(ids) == len(data), "数据源ID应该唯一"
@@ -340,9 +344,7 @@ class TestDataSourceAPI:
     def test_manager_stub_recovery(self, test_client, api_helper, monkeypatch):
         """验证当管理器模块被替换为桩实现时仍可恢复真实依赖"""
 
-        stub_module = ModuleType(
-            "deepsearch.infrastructure.providers.managers.data_source_manager"
-        )
+        stub_module = ModuleType("deepsearch.infrastructure.providers.managers.data_source_manager")
         stub_module.DataSourceManager = object
         stub_module.get_data_source_manager = lambda: None
         monkeypatch.setitem(

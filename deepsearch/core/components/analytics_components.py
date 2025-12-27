@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional
 
 from deepsearch.config import get_config
 from deepsearch.config.models.database import AnalyticsDatabaseConfig
+
 from ..async_component import AsyncComponent
 from ..interfaces import ComponentType
 from ..utils.exceptions import error_context
@@ -16,8 +17,9 @@ from ..utils.timeout_config import TimeoutCategory, get_timeout_manager
 
 if TYPE_CHECKING:  # pragma: no cover - 仅用于类型检查
     from deepsearch.infrastructure.persistence.duckdb_analytics import DuckDBAnalytics
-    from deepsearch.infrastructure.providers.managers.data_sync_service import DataSyncService
     from deepsearch.infrastructure.providers.managers.data_sync_pipeline import DataSyncPipeline
+    from deepsearch.infrastructure.providers.managers.data_sync_service import DataSyncService
+
     from .data_components import DatabaseComponent
 
 
@@ -40,16 +42,13 @@ class AnalyticsComponent(AsyncComponent):
         from deepsearch.infrastructure.providers.managers.data_sync_service import get_sync_service
         from deepsearch.infrastructure.providers.managers.pipeline_setup import create_sync_pipeline
 
-
         with error_context(self.name, "initialize"):
             # 获取配置
             config = get_config()
-            analytics_config = (
-                config.database.analytics if config and config.database else None
-            )
+            analytics_config = config.database.analytics if config and config.database else None
             self._config = analytics_config
 
-            if True: # Force disable for now
+            if True:  # Force disable for now
                 self._logger.info("分析数据库强制已禁用")
                 return
 
@@ -90,7 +89,7 @@ class AnalyticsComponent(AsyncComponent):
                     "数据同步管道已初始化，已注册数据源: %s",
                     self._sync_pipeline.sources,
                 )
-                
+
                 # 保留旧版服务用于兼容（将在后续版本移除）
                 self._sync_service = get_sync_service(self._database_component)
                 self._sync_service.sync_interval = analytics_config.sync_interval
@@ -243,7 +242,7 @@ class AnalyticsComponent(AsyncComponent):
         if self._sync_service:
             info["sync_interval"] = self._config.sync_interval
             info["sync_running"] = getattr(self._sync_service, "_running", False)
-        
+
         # 新版管道信息
         if self._sync_pipeline:
             info["pipeline_sources"] = self._sync_pipeline.sources
@@ -256,12 +255,12 @@ class AnalyticsComponent(AsyncComponent):
             }
 
         return info
-    
+
     @property
     def sync_pipeline(self) -> "DataSyncPipeline | None":
         """获取数据同步管道实例"""
         return self._sync_pipeline
-    
+
     async def sync_data(
         self,
         table: str = "kline_history",
@@ -269,19 +268,19 @@ class AnalyticsComponent(AsyncComponent):
         force_full: bool = False,
     ) -> dict:
         """使用新管道同步数据
-        
+
         Args:
             table: 目标表名
             sources: 数据源列表，None 表示全部
             force_full: 是否强制全量同步
-            
+
         Returns:
             同步结果字典
         """
         if not self._sync_pipeline:
             self._logger.warning("数据同步管道未初始化")
             return {"error": "Pipeline not initialized"}
-        
+
         try:
             results = await self._sync_pipeline.sync(
                 table=table,
@@ -364,9 +363,7 @@ class AnalyticsComponent(AsyncComponent):
             self._logger.error(f"Failed to get statistics: {e}")
             return {"error": str(e)}
 
-    async def execute_query(
-        self, query: str, params: Optional[Mapping[str, Any]] = None
-    ) -> Any:
+    async def execute_query(self, query: str, params: Optional[Mapping[str, Any]] = None) -> Any:
         """执行分析查询（带超时）"""
         if not self._analytics_db:
             raise RuntimeError("Analytics DB not initialized")

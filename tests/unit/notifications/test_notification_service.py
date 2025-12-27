@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from httpx import Request, Response
-from typing import cast
 
 from deepsearch.config.models.notifications import NotificationCategoryConfig, NotificationsConfig
 from deepsearch.infrastructure.notifications import (

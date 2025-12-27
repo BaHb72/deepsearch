@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_sy_profile_em
 
-目标地址:  https://data.eastmoney.com/sy/scgk.html
+目标地址:  <https://data.eastmoney.com/sy/scgk.html>
 
 描述: 东方财富网-数据中心-特色数据-商誉-A股商誉市场概况
 
@@ -72,7 +72,7 @@ print(stock_sy_profile_em_df)
 
 接口: stock_sy_yq_em
 
-目标地址: https://data.eastmoney.com/sy/yqlist.html
+目标地址: <https://data.eastmoney.com/sy/yqlist.html>
 
 描述: 东方财富网-数据中心-特色数据-商誉-商誉减值预期明细
 
@@ -134,7 +134,7 @@ print(stock_sy_yq_em_df)
 
 接口: stock_sy_jz_em
 
-目标地址: https://data.eastmoney.com/sy/jzlist.html
+目标地址: <https://data.eastmoney.com/sy/jzlist.html>
 
 描述: 东方财富网-数据中心-特色数据-商誉-个股商誉减值明细
 
@@ -192,7 +192,7 @@ print(stock_sy_jz_em_df)
 
 接口: stock_sy_em
 
-目标地址: https://data.eastmoney.com/sy/list.html
+目标地址: <https://data.eastmoney.com/sy/list.html>
 
 描述: 东方财富网-数据中心-特色数据-商誉-个股商誉明细
 
@@ -250,7 +250,7 @@ print(stock_sy_em_df)
 
 接口: stock_sy_hy_em
 
-目标地址: https://data.eastmoney.com/sy/hylist.html
+目标地址: <https://data.eastmoney.com/sy/hylist.html>
 
 描述: 东方财富网-数据中心-特色数据-商誉-行业商誉
 

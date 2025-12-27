@@ -5,7 +5,7 @@ TTL (Time To Live) cache eviction strategy.
 import heapq
 import time
 from threading import RLock
-from typing import Any, Dict, Optional, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..interfaces import ICacheStrategy
 
@@ -152,4 +152,3 @@ class TTLStrategy(ICacheStrategy):
                 "expired_keys": expired_count,
                 "heap_size": len(self._expiry_heap),
             }
-

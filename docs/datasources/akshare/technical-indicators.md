@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口：stock_rank_cxg_ths
 
-目标地址：https://data.10jqka.com.cn/rank/cxg/
+目标地址：<https://data.10jqka.com.cn/rank/cxg/>
 
 描述：同花顺-数据中心-技术选股-创新高
 
@@ -67,7 +67,7 @@ print(stock_rank_cxg_ths_df)
 
 接口：stock_rank_cxd_ths
 
-目标地址：https://data.10jqka.com.cn/rank/cxd/
+目标地址：<https://data.10jqka.com.cn/rank/cxd/>
 
 描述：同花顺-数据中心-技术选股-创新低
 
@@ -123,7 +123,7 @@ print(stock_rank_cxd_ths_df)
 
 接口：stock_rank_lxsz_ths
 
-目标地址：https://data.10jqka.com.cn/rank/lxsz/
+目标地址：<https://data.10jqka.com.cn/rank/lxsz/>
 
 描述：同花顺-数据中心-技术选股-连续上涨
 
@@ -180,7 +180,7 @@ print(stock_rank_lxsz_ths_df)
 
 接口：stock_rank_lxxd_ths
 
-目标地址：https://data.10jqka.com.cn/rank/lxxd/
+目标地址：<https://data.10jqka.com.cn/rank/lxxd/>
 
 描述：同花顺-数据中心-技术选股-连续下跌
 
@@ -238,7 +238,7 @@ print(stock_rank_lxxd_ths_df)
 
 接口: stock_rank_cxfl_ths
 
-目标地址: https://data.10jqka.com.cn/rank/cxfl/
+目标地址: <https://data.10jqka.com.cn/rank/cxfl/>
 
 描述: 同花顺-数据中心-技术选股-持续放量
 
@@ -296,7 +296,7 @@ print(stock_rank_cxfl_ths_df)
 
 接口: stock_rank_cxsl_ths
 
-目标地址: https://data.10jqka.com.cn/rank/cxsl/
+目标地址: <https://data.10jqka.com.cn/rank/cxsl/>
 
 描述: 同花顺-数据中心-技术选股-持续缩量
 
@@ -354,7 +354,7 @@ print(stock_rank_cxsl_ths_df)
 
 接口: stock_rank_xstp_ths
 
-目标地址: https://data.10jqka.com.cn/rank/xstp/
+目标地址: <https://data.10jqka.com.cn/rank/xstp/>
 
 描述: 同花顺-数据中心-技术选股-向上突破
 
@@ -410,7 +410,7 @@ print(stock_rank_xstp_ths_df)
 
 接口: stock_rank_xxtp_ths
 
-目标地址: https://data.10jqka.com.cn/rank/xxtp/
+目标地址: <https://data.10jqka.com.cn/rank/xxtp/>
 
 描述: 同花顺-数据中心-技术选股-向下突破
 
@@ -466,7 +466,7 @@ print(stock_rank_xxtp_ths_df)
 
 接口: stock_rank_ljqs_ths
 
-目标地址: https://data.10jqka.com.cn/rank/ljqs/
+目标地址: <https://data.10jqka.com.cn/rank/ljqs/>
 
 描述: 同花顺-数据中心-技术选股-量价齐升
 
@@ -522,7 +522,7 @@ print(stock_rank_ljqs_ths_df)
 
 接口: stock_rank_ljqd_ths
 
-目标地址: https://data.10jqka.com.cn/rank/ljqd/
+目标地址: <https://data.10jqka.com.cn/rank/ljqd/>
 
 描述: 同花顺-数据中心-技术选股-量价齐跌
 
@@ -578,7 +578,7 @@ print(stock_rank_ljqd_ths_df)
 
 接口: stock_rank_xzjp_ths
 
-目标地址: https://data.10jqka.com.cn/financial/xzjp/
+目标地址: <https://data.10jqka.com.cn/financial/xzjp/>
 
 描述: 同花顺-数据中心-技术选股-险资举牌
 

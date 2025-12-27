@@ -212,6 +212,7 @@ def _is_capability_supported(source: str, capability: DataCapability) -> bool:
     capability_set = DATA_SOURCE_CAPABILITIES[cast(DataSourceSlug, normalized)]
     return capability in capability_set
 
+
 # 能力分类元数据
 CAPABILITY_CATEGORIES: Final[dict[str, CapabilityCategoryMeta]] = {
     "market": {
@@ -358,6 +359,7 @@ async def get_capability_matrix():
 # 否则 "compare", "recommend", "check" 等路径会被错误匹配为 source 参数
 # 但由于FastAPI的路由注册顺序是代码定义顺序，我们需要将此路由移到文件末尾
 # 暂时保持原有位置，下面在419行后重新定义
+
 
 @router.get("/capabilities/source/{source}")
 async def get_source_capabilities(source: str):
@@ -667,15 +669,15 @@ async def check_feature_availability(source: str, feature: str):
 
         source_info: CapabilitySourceInfo = {
             "id": source_slug,
-            "name": DATA_SOURCE_METADATA.get(source_slug, DEFAULT_METADATA).get("name", source_slug),
+            "name": DATA_SOURCE_METADATA.get(source_slug, DEFAULT_METADATA).get(
+                "name", source_slug
+            ),
         }
         feature_descriptor: CapabilityDescriptor = {
             "id": feature,
             "name": CAPABILITY_NAMES.get(cap, feature),
         }
-        availability_message = (
-            "功能可用" if available else "功能不可用，请切换到支持的数据源"
-        )
+        availability_message = "功能可用" if available else "功能不可用，请切换到支持的数据源"
 
         data: CapabilityAvailabilityData = {
             "source": source_info,

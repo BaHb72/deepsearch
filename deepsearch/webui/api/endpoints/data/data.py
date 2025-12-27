@@ -13,12 +13,23 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from importlib import import_module
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, MutableMapping, Optional, Sequence, Tuple, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterable,
+    List,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Tuple,
+    cast,
+)
 
 import pandas as pd
 from duckdb import DuckDBPyConnection
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, Request
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.sql import Select, and_
@@ -117,6 +128,7 @@ def _require_duckdb_connection(analytics_db: AnalyticsDB) -> DuckDBPyConnection:
 
 from deepsearch.core.runtime.context import get_context
 
+
 def get_db_service() -> DatabaseService:
     """获取数据库服务实例。"""
 
@@ -172,7 +184,9 @@ def _normalize_date_records(records: Iterable[MutableMapping[str, object]]) -> L
     return normalized
 
 
-def _normalize_indicator_records(records: Iterable[MutableMapping[str, object]]) -> List[Dict[str, Any]]:
+def _normalize_indicator_records(
+    records: Iterable[MutableMapping[str, object]]
+) -> List[Dict[str, Any]]:
     normalized: List[Dict[str, Any]] = []
     for record in records:
         row: Dict[str, Any] = dict(record)
@@ -408,7 +422,9 @@ async def export_data(
             raise HTTPException(status_code=501, detail=f"暂不支持导出 {data_type} 数据")
 
         analytics_db = get_analytics_db()
-        df = analytics_db.query_daily_data(symbols=symbols, start_date=start_date, end_date=end_date)
+        df = analytics_db.query_daily_data(
+            symbols=symbols, start_date=start_date, end_date=end_date
+        )
 
         if format == "csv":
             csv_buffer = StringIO()
@@ -541,7 +557,9 @@ async def clean_old_data(
 
 
 @router.get("/stocks")
-async def get_stocks(limit: int = Query(100, description="返回股票数量限制")) -> List[Dict[str, Any]]:
+async def get_stocks(
+    limit: int = Query(100, description="返回股票数量限制")
+) -> List[Dict[str, Any]]:
     """获取股票列表"""
 
     try:
@@ -605,7 +623,9 @@ async def get_kline_data(
                     return JSONResponse(
                         status_code=400,
                         content=APIResponse.error(
-                            ErrorCodes.INVALID_PARAMETERS, "结束日期不能早于开始日期", status_code=400
+                            ErrorCodes.INVALID_PARAMETERS,
+                            "结束日期不能早于开始日期",
+                            status_code=400,
                         ),
                     )
             except Exception:
@@ -615,7 +635,9 @@ async def get_kline_data(
                 return JSONResponse(
                     status_code=400,
                     content=APIResponse.error(
-                        ErrorCodes.INVALID_PARAMETERS, "无效的日期格式，应为 YYYY-MM-DD", status_code=400
+                        ErrorCodes.INVALID_PARAMETERS,
+                        "无效的日期格式，应为 YYYY-MM-DD",
+                        status_code=400,
                     ),
                 )
 

@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Optional, TypedDict, cast
 
 from loguru import logger
 
+from deepsearch.observability.analyzers.error_analyzer import get_error_analyzer
 from deepsearch.observability.logging.monitoring_logger import (
     ErrorInfo,
     ErrorType,
@@ -20,12 +21,10 @@ from deepsearch.observability.logging.monitoring_logger import (
     OperationType,
     get_monitor_logger,
 )
-from deepsearch.observability.metrics.collectors.metrics_collector import (
-    get_metrics_collector,
-)
-from deepsearch.observability.analyzers.error_analyzer import get_error_analyzer
+from deepsearch.observability.metrics.collectors.metrics_collector import get_metrics_collector
 from deepsearch.observability.monitoring.data_source_monitor import get_monitor
 from deepsearch.ports.data_sources import DataAccessType, DataSourceType
+
 
 class CircuitBreakerState(TypedDict):
     failures: int
@@ -208,7 +207,9 @@ def monitor_http_request(
     return decorator
 
 
-def monitor_database_query(table: Optional[str] = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def monitor_database_query(
+    table: Optional[str] = None,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     数据库查询监控装饰器
 
@@ -274,8 +275,7 @@ def monitor_database_query(table: Optional[str] = None) -> Callable[[Callable[..
                 latency_ms = _ensure_latency_ms(record.performance.latency_ms)
                 if latency_ms > 1000:
                     logger.warning(
-                        f"慢查询检测: {record.context.function} - "
-                        f"{latency_ms:.1f}ms"
+                        f"慢查询检测: {record.context.function} - " f"{latency_ms:.1f}ms"
                     )
                     record.metadata["slow_query"] = True
 
@@ -313,7 +313,9 @@ def monitor_database_query(table: Optional[str] = None) -> Callable[[Callable[..
     return decorator
 
 
-def monitor_cache_operation(cache_name: str = "default") -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def monitor_cache_operation(
+    cache_name: str = "default",
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     缓存操作监控装饰器
 
@@ -373,7 +375,9 @@ def monitor_cache_operation(cache_name: str = "default") -> Callable[[Callable[.
     return decorator
 
 
-def monitor_tcp_connection(host: Optional[str] = None, port: Optional[int] = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def monitor_tcp_connection(
+    host: Optional[str] = None, port: Optional[int] = None
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     TCP连接监控装饰器
 
@@ -455,7 +459,9 @@ def monitor_tcp_connection(host: Optional[str] = None, port: Optional[int] = Non
     return decorator
 
 
-def monitor_batch_process(batch_name: Optional[str] = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def monitor_batch_process(
+    batch_name: Optional[str] = None,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     批量处理监控装饰器
 
@@ -544,7 +550,9 @@ def monitor_batch_process(batch_name: Optional[str] = None) -> Callable[[Callabl
     return decorator
 
 
-def monitor_circuit_breaker(threshold: int = 5, timeout: int = 60) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def monitor_circuit_breaker(
+    threshold: int = 5, timeout: int = 60
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     熔断器监控装饰器
 
@@ -633,11 +641,3 @@ def _classify_http_error(error: Exception) -> ErrorType:
         return ErrorType.NETWORK_ERROR
     else:
         return ErrorType.UNKNOWN_ERROR
-
-
-
-
-
-
-
-

@@ -25,8 +25,8 @@ from typing import (
     List,
     Optional,
     Tuple,
-    TypeVar,
     TypedDict,
+    TypeVar,
     Union,
     cast,
 )
@@ -41,6 +41,8 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = get_logger(__name__)
 T = TypeVar("T")  # Data / Event / Command payload
 R = TypeVar("R")  # Response payload
+
+
 class DeduplicationStats(TypedDict):
     """消息去重统计结构。"""
 

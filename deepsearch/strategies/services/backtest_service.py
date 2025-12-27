@@ -14,12 +14,7 @@ from loguru import logger
 
 from deepsearch.backtest.adapters.unified_backtrader_adapter import UnifiedBacktraderAdapter
 from deepsearch.backtest.interfaces.strategy import BacktraderStrategyAdapter
-from deepsearch.backtest.ports import (
-    BacktesterAPI,
-    CerebroProto,
-    FigureProto,
-    StrategyProto,
-)
+from deepsearch.backtest.ports import BacktesterAPI, CerebroProto, FigureProto, StrategyProto
 from deepsearch.strategies.interfaces.protocols import BacktestStrategy
 
 HAS_MATPLOTLIB = find_spec("matplotlib") is not None
@@ -183,9 +178,7 @@ class BacktestService:
         strategy_instance = strategy_class(
             params=dict(strategy_params) if strategy_params else None
         )
-        bt_strategy_class = BacktraderStrategyAdapter.create_backtrader_strategy(
-            strategy_instance
-        )
+        bt_strategy_class = BacktraderStrategyAdapter.create_backtrader_strategy(strategy_instance)
         cerebro.addstrategy(bt_strategy_class)
 
         analyzers = self._backtester.analyzers
@@ -202,9 +195,7 @@ class BacktestService:
             initial_capital=initial_capital,
         )
 
-        logger.info(
-            f"开始回测 {strategy_class.__name__}，标的：{', '.join(symbols)}"
-        )
+        logger.info(f"开始回测 {strategy_class.__name__}，标的：{', '.join(symbols)}")
 
         strategies = cerebro.run()
         if not strategies:
@@ -213,17 +204,13 @@ class BacktestService:
         strategy = cast(StrategyProto, strategies[0])
 
         result.final_value = cerebro.broker.getvalue()
-        result.total_return = _to_float(
-            (result.final_value - initial_capital) / initial_capital
-        )
+        result.total_return = _to_float((result.final_value - initial_capital) / initial_capital)
 
         result.sharpe_ratio = _extract_ratio(strategy, "sharpe", "sharperatio")
         result.max_drawdown = _extract_nested_ratio(
             strategy, "drawdown", "max", "drawdown", scale=0.01
         )
-        result.annual_return = _extract_ratio(
-            strategy, "returns", "rnorm100", scale=0.01
-        )
+        result.annual_return = _extract_ratio(strategy, "returns", "rnorm100", scale=0.01)
 
         trades_summary = _extract_analysis(strategy, "trades")
         total_section = _as_mapping(trades_summary.get("total"))
@@ -252,14 +239,10 @@ class BacktestService:
         time_returns = _extract_analysis(strategy, "timereturn")
         if time_returns:
             equity = initial_capital
-            equity_curve: list[EquityPoint] = [
-                EquityPoint(start_date, round(equity, 2))
-            ]
+            equity_curve: list[EquityPoint] = [EquityPoint(start_date, round(equity, 2))]
             for date_value, daily_return in time_returns.items():
                 equity *= 1.0 + _to_float(daily_return)
-                equity_curve.append(
-                    EquityPoint(_format_date_label(date_value), round(equity, 2))
-                )
+                equity_curve.append(EquityPoint(_format_date_label(date_value), round(equity, 2)))
             result.equity_curve = equity_curve
 
         if plot:
@@ -273,9 +256,7 @@ class BacktestService:
 
         return result
 
-    def _generate_plot(
-        self, cerebro: CerebroProto
-    ) -> str | None:
+    def _generate_plot(self, cerebro: CerebroProto) -> str | None:
         """生成回测图表并转换为 base64 编码."""
 
         try:

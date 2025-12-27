@@ -8,16 +8,16 @@
 ## 核心组件
 
 - `engine/engine.py`：全新重写的 `EventEngine`。
-    - 采用单独的 Dispatcher/Scheduler 线程，内部使用 `PriorityQueue` 管理事件优先级。
-    - 支持同步、线程池异步两种 handler 执行方式，`async_flag=True` 时通过 `ThreadPoolExecutor` 运行。
-    - 提供定时任务 API（包含循环/一次性任务），可取消与自恢复。
-    - 内置批量调度、慢事件检测、监控钩子，优雅处理 `stop()` 与系统信号。
+  - 采用单独的 Dispatcher/Scheduler 线程，内部使用 `PriorityQueue` 管理事件优先级。
+  - 支持同步、线程池异步两种 handler 执行方式，`async_flag=True` 时通过 `ThreadPoolExecutor` 运行。
+  - 提供定时任务 API（包含循环/一次性任务），可取消与自恢复。
+  - 内置批量调度、慢事件检测、监控钩子，优雅处理 `stop()` 与系统信号。
 - `engine/optimized_engine.py`：面向高吞吐场景的轻量化实现，可根据配置替换默认引擎。
 - `bus/bus.py`：`TimeSeriesZeroMQBus` 基于 `ZeroMQMessageBus` 扩展，支持消息发布后同步写入 RedisTimeSeries，并提供可插拔的持久化规则。
 - `schema.py`：事件 schema 管理中心。
-    - `SchemaRegistry` 维护事件类型与 `pydantic` 模型映射，支持校验统计、JSON Schema 导出。
-    - 内置交易/行情（Tick、Order、Trade、Position、Account）等标准 schema，并提供 `schema_validated` 装饰器。
-    - `SchemaBuilder` 与 `SchemaMigration` 支持动态生成/迁移 schema。
+  - `SchemaRegistry` 维护事件类型与 `pydantic` 模型映射，支持校验统计、JSON Schema 导出。
+  - 内置交易/行情（Tick、Order、Trade、Position、Account）等标准 schema，并提供 `schema_validated` 装饰器。
+  - `SchemaBuilder` 与 `SchemaMigration` 支持动态生成/迁移 schema。
 - `decorators.py`：封装 `event_handler`、`session_handler` 等注解，自动注册/反注册 handler。
 - `const.py`：事件类型常量，与 `deepsearch/constants/events.py` 对齐。
 - `handlers/`：预留事件处理器，实现按需扩展。

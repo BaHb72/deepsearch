@@ -116,8 +116,8 @@ async def run_debug_server():
     os.environ["WEBUI__BACKEND_PORT"] = "8000"
 
     # 导入并配置服务器
-    from deepsearch.webui.server import create_app
     from deepsearch.core.utils.status_display import get_status_display
+    from deepsearch.webui.server import create_app
 
     logger.info("[1] 创建 FastAPI 应用...")
     app = create_app()

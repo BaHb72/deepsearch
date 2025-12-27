@@ -376,6 +376,7 @@ class HealthCheckManager:
             components_report[name] = result.to_dict()
 
         return report
+
     def _generate_summary(self) -> str:
         """生成健康状态摘要"""
         overall = self.get_overall_status()

@@ -11,9 +11,9 @@ import asyncio
 import signal
 import sys
 import threading
-from types import FrameType
 from abc import ABC, abstractmethod
 from datetime import datetime
+from types import FrameType
 from typing import Any, Callable, Dict, List, Optional, Protocol, cast
 
 

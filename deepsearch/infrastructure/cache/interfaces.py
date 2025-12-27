@@ -62,4 +62,3 @@ class ICacheStrategy(ABC):
     def get_eviction_candidate(self) -> Optional[str]:
         """Get the next key to evict."""
         pass
-

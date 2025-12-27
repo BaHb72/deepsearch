@@ -59,7 +59,9 @@ def _make_summary(
 async def test_run_once_skips_outside_window() -> None:
     service = StubIngestionService([])
     cfg = DataSourcePrefetchConfig(enabled=True, interval_seconds=60)
-    scheduler = DataSourcePrefetchScheduler(ingestion_service=service, config=cfg, time_checker=lambda: False)
+    scheduler = DataSourcePrefetchScheduler(
+        ingestion_service=service, config=cfg, time_checker=lambda: False
+    )
 
     triggered = await scheduler.run_once()
 
@@ -72,7 +74,9 @@ async def test_run_once_triggers_new_job() -> None:
     summary = _make_summary("job-1", "queued")
     service = StubIngestionService([summary])
     cfg = DataSourcePrefetchConfig(enabled=True, interval_seconds=60)
-    scheduler = DataSourcePrefetchScheduler(ingestion_service=service, config=cfg, time_checker=lambda: True)
+    scheduler = DataSourcePrefetchScheduler(
+        ingestion_service=service, config=cfg, time_checker=lambda: True
+    )
 
     triggered = await scheduler.run_once()
 
@@ -86,7 +90,9 @@ async def test_run_once_detects_active_job() -> None:
     second = _make_summary("job-1", "queued")
     service = StubIngestionService([first, second])
     cfg = DataSourcePrefetchConfig(enabled=True, interval_seconds=60)
-    scheduler = DataSourcePrefetchScheduler(ingestion_service=service, config=cfg, time_checker=lambda: True)
+    scheduler = DataSourcePrefetchScheduler(
+        ingestion_service=service, config=cfg, time_checker=lambda: True
+    )
 
     assert await scheduler.run_once() is True  # 第一次创建新作业
     assert await scheduler.run_once() is False  # 第二次复用正在运行的作业
@@ -97,7 +103,9 @@ async def test_run_once_detects_active_job() -> None:
 async def test_start_respects_disabled_config() -> None:
     service = StubIngestionService([])
     cfg = DataSourcePrefetchConfig(enabled=False)
-    scheduler = DataSourcePrefetchScheduler(ingestion_service=service, config=cfg, time_checker=lambda: True)
+    scheduler = DataSourcePrefetchScheduler(
+        ingestion_service=service, config=cfg, time_checker=lambda: True
+    )
 
     started = await scheduler.start()
 

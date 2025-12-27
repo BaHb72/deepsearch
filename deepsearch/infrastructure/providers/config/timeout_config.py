@@ -14,7 +14,6 @@ from loguru import logger
 
 from deepsearch.ports.data_sources import DataSourceType
 
-
 EnumT = TypeVar("EnumT", bound=Enum)
 
 
@@ -81,9 +80,9 @@ class TimeoutSettings:
     """超时配置矩阵"""
 
     default_timeouts: MutableMapping[RequestType, float] = field(default_factory=dict)
-    source_overrides: MutableMapping[
-        DataSourceType, MutableMapping[RequestType, float]
-    ] = field(default_factory=dict)
+    source_overrides: MutableMapping[DataSourceType, MutableMapping[RequestType, float]] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def build_default(cls) -> "TimeoutSettings":
@@ -182,12 +181,12 @@ class TimeoutManager:
         history.append(TimeoutObservation(success=success, elapsed=actual_time))
 
         if len(history) > self.HISTORY_LIMIT:
-            del history[:-self.HISTORY_LIMIT]
+            del history[: -self.HISTORY_LIMIT]
 
         if len(history) < self.RECENT_WINDOW:
             return
 
-        recent = history[-self.RECENT_WINDOW:]
+        recent = history[-self.RECENT_WINDOW :]
         success_times = [record.elapsed for record in recent if record.success]
         if not success_times:
             return

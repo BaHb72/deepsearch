@@ -29,9 +29,7 @@ class ProcessCommand(Generic[TResult]):
 
     method: str
     args: Sequence[object] = field(default_factory=tuple)
-    kwargs: Mapping[str, object] = field(
-        default_factory=lambda: MappingProxyType({})
-    )
+    kwargs: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
     timeout: float = 30.0
     command_type: ProcessCommandType = ProcessCommandType.DATA
     alt_methods: Sequence[str] = field(default_factory=tuple)

@@ -21,6 +21,7 @@ from loguru import logger
 
 from deepsearch.ports.data_sources import DataSourceType
 
+
 class OperationType(Enum):
     """操作类型枚举"""
 
@@ -35,6 +36,7 @@ class OperationType(Enum):
     VALIDATION = "validation"
     AUTHENTICATION = "authentication"
 
+
 class ErrorType(Enum):
     """错误类型枚举"""
 
@@ -48,9 +50,11 @@ class ErrorType(Enum):
     VALIDATION_ERROR = "validation_error"
     UNKNOWN_ERROR = "unknown_error"
 
+
 class SourceStats(TypedDict):
     success: int
     error: int
+
 
 class MonitoringStats(TypedDict):
     total_records: int
@@ -59,6 +63,7 @@ class MonitoringStats(TypedDict):
     by_source: Dict[str, SourceStats]
     by_operation: Dict[str, int]
     by_error_type: Dict[str, int]
+
 
 class ExportStatsPayload(TypedDict):
     timestamp: float
@@ -81,6 +86,7 @@ def _create_monitoring_stats() -> MonitoringStats:
         "by_error_type": cast(Dict[str, int], {}),
     }
 
+
 @dataclass
 class MonitoringContext:
     """监控上下文"""
@@ -94,6 +100,7 @@ class MonitoringContext:
     trace_id: Optional[str] = None
     span_id: Optional[str] = None
     parent_span_id: Optional[str] = None
+
 
 @dataclass
 class PerformanceMetrics:
@@ -114,6 +121,7 @@ class PerformanceMetrics:
         if self.end_time and self.start_time:
             self.latency_ms = (self.end_time - self.start_time) * 1000
 
+
 @dataclass
 class DataMetrics:
     """数据指标"""
@@ -124,6 +132,7 @@ class DataMetrics:
     cache_hit: bool = False
     cache_key: Optional[str] = None
     compression_ratio: Optional[float] = None
+
 
 @dataclass
 class ErrorInfo:
@@ -136,6 +145,7 @@ class ErrorInfo:
     retry_count: int = 0
     max_retries: int = 3
     is_recoverable: bool = True
+
 
 @dataclass
 class MonitoringRecord:
@@ -166,6 +176,7 @@ class MonitoringRecord:
             "metadata": self.metadata,
         }
         return json.dumps(data, ensure_ascii=False, default=str)
+
 
 class StructuredMonitorLogger:
     """结构化监控日志记录器"""
@@ -273,7 +284,9 @@ class StructuredMonitorLogger:
         # 按错误类型统计
         if record.error:
             error_key = record.error.error_type.value
-            self.stats["by_error_type"][error_key] = self.stats["by_error_type"].get(error_key, 0) + 1
+            self.stats["by_error_type"][error_key] = (
+                self.stats["by_error_type"].get(error_key, 0) + 1
+            )
 
     def flush(self) -> None:
         """刷新缓冲区到文件"""
@@ -349,9 +362,7 @@ class StructuredMonitorLogger:
         **kwargs: Any,
     ) -> MonitoringRecord:
         """记录HTTP请求"""
-        is_success = (
-            error is None and status_code is not None and 200 <= status_code < 400
-        )
+        is_success = error is None and status_code is not None and 200 <= status_code < 400
         record = MonitoringRecord(
             source_type=source_type,
             operation=OperationType.HTTP_REQUEST,
@@ -425,8 +436,10 @@ class StructuredMonitorLogger:
         else:
             return ErrorType.UNKNOWN_ERROR
 
+
 # 全局实例
 monitor_logger = StructuredMonitorLogger()
+
 
 def get_monitor_logger() -> StructuredMonitorLogger:
     """获取监控日志记录器实例"""

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Coroutine, Mapping, Protocol, Sequence, cast
 
 from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
+
 from ..common import SubscriptionCallback
 from ..logging_utils import ProcessLoggerAdapter
 from ..subscription import SubscriptionInfo, SubscriptionRegistry
@@ -37,7 +38,9 @@ def _normalize_period_token(raw: object | None) -> str:
 class ProcessSubscriptionCoordinator:
     """Manage subscription state, polling loop and recovery logic."""
 
-    def __init__(self, owner: "ProcessProviderProtocol", *, poll_interval: float, batch_size: int) -> None:
+    def __init__(
+        self, owner: "ProcessProviderProtocol", *, poll_interval: float, batch_size: int
+    ) -> None:
         self._owner = owner
         self._lock = asyncio.Lock()
         self._callbacks: dict[str, set[SubscriptionCallback]] = {}
@@ -73,11 +76,11 @@ class ProcessSubscriptionCoordinator:
     # Subscription entry points
     # ------------------------------------------------------------------
     async def subscribe_snapshot(
-            self,
-            symbols: Sequence[str],
-            callback: SubscriptionCallback,
-            data_type: str,
-            **kwargs: Any,
+        self,
+        symbols: Sequence[str],
+        callback: SubscriptionCallback,
+        data_type: str,
+        **kwargs: Any,
     ) -> bool:
         if not getattr(self._owner.config, "subscription_enabled", True):
             raise DataProviderError("AmazingData process subscription is disabled by configuration")
@@ -108,15 +111,15 @@ class ProcessSubscriptionCoordinator:
             "snapshotkzz": {"snapshotkzz"},
         }
         period_hint = _normalize_period_token(kwargs.get("period") or canonical_type)
-        if period_hint and period_hint not in expected_periods.get(canonical_type, {canonical_type}):
+        if period_hint and period_hint not in expected_periods.get(
+            canonical_type, {canonical_type}
+        ):
             raise DataProviderError(
                 f"AmazingData process period={kwargs.get('period')!r} does not match data_type={data_type!r}"
             )
 
         normalized_codes = [
-            code.strip().upper()
-            for code in symbols
-            if isinstance(code, str) and code.strip()
+            code.strip().upper() for code in symbols if isinstance(code, str) and code.strip()
         ]
         if not normalized_codes:
             logger.debug("AmazingData process subscribe_stock_snapshot ignored empty codes list")
@@ -158,9 +161,7 @@ class ProcessSubscriptionCoordinator:
 
     async def unsubscribe(self, symbols: Sequence[str]) -> bool:
         normalized_codes = [
-            code.strip().upper()
-            for code in symbols
-            if isinstance(code, str) and code.strip()
+            code.strip().upper() for code in symbols if isinstance(code, str) and code.strip()
         ]
         if not normalized_codes:
             logger.debug("AmazingData unsubscribe_quote received empty code list")
@@ -214,9 +215,7 @@ class ProcessSubscriptionCoordinator:
         if should_start:
             self._start_loop()
         payload_map = {
-            code: tuple(info.callbacks)
-            for code, info in snapshot.items()
-            if info.callbacks
+            code: tuple(info.callbacks) for code, info in snapshot.items() if info.callbacks
         }
         if payload_map:
             await self.dispatch_payloads(list(payload_map.keys()), payload_map)
@@ -232,9 +231,9 @@ class ProcessSubscriptionCoordinator:
         await self._stop_loop()
 
     async def dispatch_payloads(
-            self,
-            codes: Sequence[str],
-            callbacks_map: Mapping[str, tuple[SubscriptionCallback, ...]],
+        self,
+        codes: Sequence[str],
+        callbacks_map: Mapping[str, tuple[SubscriptionCallback, ...]],
     ) -> None:
         await self._dispatch_payloads(codes, callbacks_map)
 
@@ -334,15 +333,15 @@ class ProcessSubscriptionCoordinator:
             self._task = None
 
     async def _dispatch_payloads(
-            self,
-            codes: Sequence[str],
-            callbacks_map: Mapping[str, tuple[SubscriptionCallback, ...]],
+        self,
+        codes: Sequence[str],
+        callbacks_map: Mapping[str, tuple[SubscriptionCallback, ...]],
     ) -> None:
         if not codes:
             return
         batch_size = max(1, self._batch_size)
         for offset in range(0, len(codes), batch_size):
-            batch = list(codes[offset: offset + batch_size])
+            batch = list(codes[offset : offset + batch_size])
             if not batch:
                 continue
             try:
@@ -386,9 +385,9 @@ class ProcessSubscriptionCoordinator:
 
     @staticmethod
     def _build_stream_payload(
-            code: str,
-            quote: Mapping[str, Any],
-            timestamp: datetime,
+        code: str,
+        quote: Mapping[str, Any],
+        timestamp: datetime,
     ) -> dict[str, Any]:
         data = dict(quote)
         data.setdefault("code", code)
@@ -440,4 +439,6 @@ class ProcessProviderProtocol(Protocol):
 
     def is_connected(self) -> bool: ...
 
-    async def get_realtime_quote(self, symbols: Sequence[str] | str, **kwargs: Any) -> Mapping[str, Any] | None: ...
+    async def get_realtime_quote(
+        self, symbols: Sequence[str] | str, **kwargs: Any
+    ) -> Mapping[str, Any] | None: ...

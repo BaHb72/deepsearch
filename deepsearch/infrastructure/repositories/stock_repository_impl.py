@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping, MutableMapping
 from datetime import datetime
 from decimal import Decimal
-from typing import NotRequired, Optional, TypedDict, cast
+from typing import Any, NotRequired, Optional, TypedDict, cast
 
 from loguru import logger
 from sqlalchemy import text
@@ -21,10 +21,7 @@ from deepsearch.infrastructure.persistence.types import (
     RowDict,
 )
 from deepsearch.infrastructure.providers.entities.stock import StockEntity, StockMarket, StockStatus
-from deepsearch.infrastructure.providers.interfaces.repositories.base import (
-    IRepository,
-    QueryOptions,
-)
+from deepsearch.infrastructure.providers.interfaces.repositories.base import QueryOptions
 
 
 class StockRow(TypedDict, total=False):
@@ -51,14 +48,16 @@ class StockRow(TypedDict, total=False):
     count: NotRequired[int]
 
 
-class StockRepository(IRepository[StockEntity, str]):
+class StockRepository:
     """
     股票仓储实现
 
     提供股票实体的持久化和查询功能
     """
 
-    def __init__(self, db_service: DatabaseServiceProtocol, cache_manager: Optional[CacheManager] = None):
+    def __init__(
+        self, db_service: DatabaseServiceProtocol, cache_manager: Optional[CacheManager] = None
+    ):
         """
         初始化股票仓储
 
@@ -162,7 +161,7 @@ class StockRepository(IRepository[StockEntity, str]):
         """
         options = QueryOptions(filters=dict(criteria))
         results = await self.get_all(options)
-        return results if results is not None else []
+        return list(results) if results else []
 
     @with_timeout(TimeoutCategory.DB_QUERY)
     async def find_one(self, criteria: Mapping[str, object]) -> Optional[StockEntity]:
@@ -179,7 +178,8 @@ class StockRepository(IRepository[StockEntity, str]):
         results = await self.get_all(options)
         if not results:
             return None
-        return results[0]
+        stock_list = list(results)
+        return stock_list[0] if stock_list else None
 
     @with_timeout(TimeoutCategory.DB_QUERY)
     async def exists(self, symbol: str) -> bool:
@@ -394,9 +394,7 @@ class StockRepository(IRepository[StockEntity, str]):
         self, session: DatabaseSessionProtocol, entity: StockEntity
     ) -> None:
         """在给定会话中保存实体，自动选择插入或更新。"""
-        exists_query = text(
-            f"SELECT 1 FROM {self.table_name} WHERE symbol = :symbol LIMIT 1"
-        )
+        exists_query = text(f"SELECT 1 FROM {self.table_name} WHERE symbol = :symbol LIMIT 1")
         result = await session.execute(exists_query, {"symbol": entity.symbol})
         if result.first() is None:
             await self._insert_entity(entity, session=session)
@@ -447,7 +445,7 @@ class StockRepository(IRepository[StockEntity, str]):
                 continue
             data[field] = Decimal(str(value))
 
-        return StockEntity(**data)
+        return StockEntity(**cast(dict[str, Any], data))
 
     @staticmethod
     def _parse_count(value: object | None) -> int | None:

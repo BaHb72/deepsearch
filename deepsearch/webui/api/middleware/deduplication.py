@@ -91,7 +91,9 @@ class RequestDeduplicator:
             # 降级到 MD5
             import hashlib
 
-            return hashlib.md5(str(key_data).encode(), usedforsecurity=False).hexdigest()  # nosec B324 - 仅用于请求去重
+            return hashlib.md5(
+                str(key_data).encode(), usedforsecurity=False
+            ).hexdigest()  # nosec B324 - 仅用于请求去重
 
     async def deduplicate(
         self,
@@ -251,9 +253,7 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
             "/api/data/realtime",
         }
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # 只对特定路径进行去重
         path = request.url.path
         should_dedupe = any(path.startswith(p) for p in self.include_paths)
@@ -270,6 +270,7 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
                 body = await request.body()
                 if body:
                     params.update(json.loads(body))
+
                 # 重新创建request以便后续使用
                 # 创建新的request对象，包含原始body
                 async def receive() -> dict[str, object]:

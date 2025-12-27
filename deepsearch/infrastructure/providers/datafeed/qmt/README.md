@@ -25,6 +25,7 @@ qmt/
 1. 将 `scripts/market_data_sender.py` 复制到QMT的Python策略目录
 2. 在QMT中创建新的Python策略
 3. 修改脚本中的服务器配置：
+
    ```python
    context.sender = MarketDataSender(
        server_host="127.0.0.1",  # DeepSearch服务器地址
@@ -32,6 +33,7 @@ qmt/
        auth_token="your-token"    # 认证令牌
    )
    ```
+
 4. 添加需要订阅的股票代码
 5. 运行策略
 
@@ -57,6 +59,7 @@ qmt:
 ### 3. 启动顺序
 
 1. 先启动DeepSearch系统：
+
    ```bash
    python -m deepsearch run
    ```
@@ -126,6 +129,7 @@ qmt:
 ### 查看连接状态
 
 访问WebUI的QMT监控页面：
+
 ```
 http://localhost:8000/api/qmt/status
 ```
@@ -186,6 +190,7 @@ queue_size = 10000    # 数据队列大小
 ### 自定义指标计算
 
 可以在QMT端进行实时指标计算后推送：
+
 ```python
 def calculate_custom_indicator(tick_data):
     # 自定义指标计算
@@ -203,6 +208,7 @@ def calculate_custom_indicator(tick_data):
 ## 联系支持
 
 如有问题，请查看：
+
 - DeepSearch文档：docs/
-- QMT官方文档：http://www.xtquant.com/
-- 提交Issue：https://github.com/your-repo/issues
+- QMT官方文档：<http://www.xtquant.com/>
+- 提交Issue：<https://github.com/your-repo/issues>

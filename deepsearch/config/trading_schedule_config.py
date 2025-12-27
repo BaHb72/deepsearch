@@ -94,9 +94,7 @@ class TradingScheduleConfig:
         """获取所有启用的市场"""
         return [m for m in self.markets.values() if m.enabled]
 
-    def get_phase_behavior(
-            self, phase: str, market_or_alias: str | None = None
-    ) -> PhaseBehavior:
+    def get_phase_behavior(self, phase: str, market_or_alias: str | None = None) -> PhaseBehavior:
         """获取阶段行为配置，优先使用市场特定配置，回退到默认配置"""
         if market_or_alias:
             market = self.get_market(market_or_alias)
@@ -143,12 +141,8 @@ def _parse_session_config(raw: dict[str, Any] | None) -> SessionConfig:
     if not raw:
         return SessionConfig()
     return SessionConfig(
-        auction_windows=_parse_time_windows(
-            raw.get("auction", {}).get("windows")
-        ),
-        continuous_windows=_parse_time_windows(
-            raw.get("continuous", {}).get("windows")
-        ),
+        auction_windows=_parse_time_windows(raw.get("auction", {}).get("windows")),
+        continuous_windows=_parse_time_windows(raw.get("continuous", {}).get("windows")),
     )
 
 
@@ -170,7 +164,7 @@ def _parse_market_config(name: str, raw: dict[str, Any]) -> MarketConfig:
 
 
 def load_trading_schedule_config(
-        path: Path | str | None = None,
+    path: Path | str | None = None,
 ) -> TradingScheduleConfig:
     """从 YAML 文件加载交易时段配置
 
@@ -235,7 +229,7 @@ def get_trading_schedule_config() -> TradingScheduleConfig:
 
 
 def reload_trading_schedule_config(
-        path: Path | str | None = None,
+    path: Path | str | None = None,
 ) -> TradingScheduleConfig:
     """重新加载交易时段配置"""
     global _config

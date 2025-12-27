@@ -5,8 +5,8 @@ AmazingData测试辅助模块
 """
 
 import time
-from typing import Any, Dict, Optional, TypedDict
 from types import ModuleType
+from typing import Any, Dict, Optional, TypedDict
 
 from loguru import logger
 

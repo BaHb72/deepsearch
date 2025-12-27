@@ -20,6 +20,7 @@ from deepsearch.infrastructure.providers.interfaces.base import (
 )
 from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
 from deepsearch.utils.network.akshare_proxy import patch_akshare
+
 from .api_methods import AkShareAPIMethods
 from .async_wrapper import get_async_wrapper
 from .cache_manager import get_cache_manager
@@ -220,7 +221,6 @@ class AkShareProxyProvider:
     # ==================== 状态工具 ====================
 
     def is_connected(self) -> bool:
-
         """初始化成功且存在可用 Worker 即视为已连接"""
 
         if not self._initialized or self.status != "running":
@@ -236,8 +236,9 @@ class AkShareProxyProvider:
 
         return any(health_flags.values()) or bool(self.worker_manager.worker_urls)
 
-    async def get_calendar(self, *, market: str = "SH", data_type: str = "int") -> list[int] | list[str]:
-
+    async def get_calendar(
+        self, *, market: str = "SH", data_type: str = "int"
+    ) -> list[int] | list[str]:
         """使用 AkShare 交易日历供 TradingSessionGuard 判断开闭市"""
 
         normalized_market = (market or "SH").strip().upper() or "SH"
@@ -276,12 +277,11 @@ class AkShareProxyProvider:
         return normalized
 
     def _fetch_calendar_dates_sync(self, market: str) -> list[str]:
-
         """同步调用 AkShare 的交易日历接口"""
 
         try:
 
-            import akshare as ak  # type: ignore
+            import akshare as ak
 
         except Exception as exc:  # pragma: no cover - 记录环境异常
 
@@ -315,7 +315,6 @@ class AkShareProxyProvider:
 
     @staticmethod
     def _normalize_trade_dates(raw_dates: Iterable[str | int]) -> list[int]:
-
         """将字符串日期规范成 20250101 形式并去重"""
 
         normalized: list[int] = []
@@ -347,8 +346,6 @@ class AkShareProxyProvider:
         normalized.sort()
 
         return normalized
-
-
 
     # ==================== API方法代理 ====================
 
@@ -480,7 +477,9 @@ class AkShareProxyProvider:
         """获取历史K线数据"""
         if not self._initialized:
             await self.initialize()
-        result = await self.api_methods.get_history_data(symbol, start_date, end_date, period, adjust)
+        result = await self.api_methods.get_history_data(
+            symbol, start_date, end_date, period, adjust
+        )
         return cast(Optional[pd.DataFrame], result)
 
     async def fetch_sector_data(self, api_name: str, params: Dict[str, Any]) -> Any:

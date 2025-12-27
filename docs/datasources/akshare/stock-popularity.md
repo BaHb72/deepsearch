@@ -13,7 +13,7 @@ updated: 2025-11-17
 
 接口: stock_hot_follow_xq
 
-目标地址: https://xueqiu.com/hq
+目标地址: <https://xueqiu.com/hq>
 
 描述: 雪球-沪深股市-热度排行榜-关注排行榜
 
@@ -65,7 +65,7 @@ print(stock_hot_follow_xq_df)
 
 接口: stock_hot_tweet_xq
 
-目标地址: https://xueqiu.com/hq
+目标地址: <https://xueqiu.com/hq>
 
 描述: 雪球-沪深股市-热度排行榜-讨论排行榜
 
@@ -117,7 +117,7 @@ print(stock_hot_tweet_xq_df)
 
 接口: stock_hot_deal_xq
 
-目标地址: https://xueqiu.com/hq
+目标地址: <https://xueqiu.com/hq>
 
 描述: 雪球-沪深股市-热度排行榜-交易排行榜
 
@@ -171,7 +171,7 @@ print(stock_hot_deal_xq_df)
 
 接口: stock_hot_rank_em
 
-目标地址: http://guba.eastmoney.com/rank/
+目标地址: <http://guba.eastmoney.com/rank/>
 
 描述: 东方财富网站-股票热度
 
@@ -225,7 +225,7 @@ print(stock_hot_rank_em_df)
 
 接口: stock_hot_up_em
 
-目标地址: http://guba.eastmoney.com/rank/
+目标地址: <http://guba.eastmoney.com/rank/>
 
 描述: 东方财富-个股人气榜-飙升榜
 
@@ -280,7 +280,7 @@ print(stock_hot_up_em_df)
 
 接口: stock_hk_hot_rank_em
 
-目标地址: https://guba.eastmoney.com/rank/
+目标地址: <https://guba.eastmoney.com/rank/>
 
 描述: 东方财富-个股人气榜-人气榜-港股市场
 
@@ -334,7 +334,7 @@ print(stock_hk_hot_rank_em_df)
 
 接口: stock_hot_rank_detail_em
 
-目标地址: http://guba.eastmoney.com/rank/stock?code=000665
+目标地址: <http://guba.eastmoney.com/rank/stock?code=000665>
 
 描述: 东方财富网-股票热度-历史趋势及粉丝特征
 
@@ -387,7 +387,7 @@ print(stock_hot_rank_detail_em_df)
 
 接口: stock_hk_hot_rank_detail_em
 
-目标地址: https://guba.eastmoney.com/rank/stock?code=HK_00700
+目标地址: <https://guba.eastmoney.com/rank/stock?code=HK_00700>
 
 描述: 东方财富网-股票热度-历史趋势
 
@@ -439,7 +439,7 @@ print(stock_hk_hot_rank_detail_em_df)
 
 接口: stock_irm_cninfo
 
-目标地址: https://irm.cninfo.com.cn/
+目标地址: <https://irm.cninfo.com.cn/>
 
 描述: 互动易-提问
 
@@ -501,7 +501,7 @@ print(stock_irm_cninfo_df)
 
 接口: stock_irm_ans_cninfo
 
-目标地址: https://irm.cninfo.com.cn/
+目标地址: <https://irm.cninfo.com.cn/>
 
 描述: 互动易-回答
 
@@ -546,7 +546,7 @@ print(stock_irm_ans_cninfo_df)
 
 接口: stock_sns_sseinfo
 
-目标地址: https://sns.sseinfo.com/company.do?uid=65
+目标地址: <https://sns.sseinfo.com/company.do?uid=65>
 
 描述: 上证e互动-提问与回答
 
@@ -605,7 +605,7 @@ print(stock_sns_sseinfo_df)
 
 接口: stock_hot_rank_detail_realtime_em
 
-目标地址: http://guba.eastmoney.com/rank/stock?code=000665
+目标地址: <http://guba.eastmoney.com/rank/stock?code=000665>
 
 描述: 东方财富网-个股人气榜-实时变动
 
@@ -654,7 +654,7 @@ print(stock_hot_rank_detail_realtime_em_df)
 
 接口: stock_hk_hot_rank_detail_realtime_em
 
-目标地址: https://guba.eastmoney.com/rank/stock?code=HK_00700
+目标地址: <https://guba.eastmoney.com/rank/stock?code=HK_00700>
 
 描述: 东方财富网-个股人气榜-实时变动
 
@@ -703,7 +703,7 @@ print(stock_hk_hot_rank_detail_realtime_em_df)
 
 接口: stock_hot_keyword_em
 
-目标地址: http://guba.eastmoney.com/rank/stock?code=000665
+目标地址: <http://guba.eastmoney.com/rank/stock?code=000665>
 
 描述: 东方财富-个股人气榜-热门关键词
 
@@ -754,7 +754,7 @@ print(stock_hot_keyword_em_df)
 
 接口: stock_inner_trade_xq
 
-目标地址: https://xueqiu.com/hq/insider
+目标地址: <https://xueqiu.com/hq/insider>
 
 描述: 雪球-行情中心-沪深股市-内部交易
 
@@ -813,7 +813,7 @@ print(stock_inner_trade_xq_df)
 
 接口: stock_hot_rank_latest_em
 
-目标地址: http://guba.eastmoney.com/rank/stock?code=000665
+目标地址: <http://guba.eastmoney.com/rank/stock?code=000665>
 
 描述: 东方财富-个股人气榜-最新排名
 
@@ -861,7 +861,7 @@ print(stock_hot_rank_latest_em_df)
 
 接口: stock_hk_hot_rank_latest_em
 
-目标地址: https://guba.eastmoney.com/rank/stock?code=HK_00700
+目标地址: <https://guba.eastmoney.com/rank/stock?code=HK_00700>
 
 描述: 东方财富-个股人气榜-最新排名
 
@@ -909,7 +909,7 @@ print(stock_hk_hot_rank_latest_em_df)
 
 接口: stock_hot_search_baidu
 
-目标地址: https://gushitong.baidu.com/expressnews
+目标地址: <https://gushitong.baidu.com/expressnews>
 
 描述: 百度股市通-热搜股票
 
@@ -962,7 +962,7 @@ print(stock_hot_search_baidu_df)
 
 接口: stock_hot_rank_relate_em
 
-目标地址: http://guba.eastmoney.com/rank/stock?code=000665
+目标地址: <http://guba.eastmoney.com/rank/stock?code=000665>
 
 描述: 东方财富-个股人气榜-相关股票
 

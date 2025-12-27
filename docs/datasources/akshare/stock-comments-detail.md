@@ -13,7 +13,7 @@ updated: 2025-11-17
 
 接口: stock_comment_detail_zlkp_jgcyd_em
 
-目标地址: https://data.eastmoney.com/stockcomment/stock/600000.html
+目标地址: <https://data.eastmoney.com/stockcomment/stock/600000.html>
 
 描述: 东方财富网-数据中心-特色数据-千股千评-主力控盘-机构参与度
 
@@ -95,7 +95,7 @@ print(stock_comment_detail_zlkp_jgcyd_em_df)
 
 接口: stock_comment_detail_zhpj_lspf_em
 
-目标地址: https://data.eastmoney.com/stockcomment/stock/600000.html
+目标地址: <https://data.eastmoney.com/stockcomment/stock/600000.html>
 
 描述: 东方财富网-数据中心-特色数据-千股千评-综合评价-历史评分
 
@@ -165,7 +165,7 @@ print(stock_comment_detail_zhpj_lspf_em_df)
 
 接口: stock_comment_detail_scrd_focus_em
 
-目标地址: https://data.eastmoney.com/stockcomment/stock/600000.html
+目标地址: <https://data.eastmoney.com/stockcomment/stock/600000.html>
 
 描述: 东方财富网-数据中心-特色数据-千股千评-市场热度-用户关注指数
 
@@ -233,7 +233,7 @@ print(stock_comment_detail_scrd_focus_em_df)
 
 接口: stock_comment_detail_scrd_desire_em
 
-目标地址: https://data.eastmoney.com/stockcomment/stock/600000.html
+目标地址: <https://data.eastmoney.com/stockcomment/stock/600000.html>
 
 描述: 东方财富网-数据中心-特色数据-千股千评-市场热度-市场参与意愿
 
@@ -299,7 +299,7 @@ print(stock_comment_detail_scrd_desire_em_df)
 
 接口: stock_comment_detail_scrd_desire_daily_em
 
-目标地址: https://data.eastmoney.com/stockcomment/stock/600000.html
+目标地址: <https://data.eastmoney.com/stockcomment/stock/600000.html>
 
 描述: 东方财富网-数据中心-特色数据-千股千评-市场热度-日度市场参与意愿
 

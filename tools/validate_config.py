@@ -12,7 +12,6 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import yaml
 
-
 ConfigMessages = Dict[str, list[str]]
 
 

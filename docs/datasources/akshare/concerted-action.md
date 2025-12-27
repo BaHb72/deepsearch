@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_yzxdr_em
 
-目标地址: http://data.eastmoney.com/yzxdr/
+目标地址: <http://data.eastmoney.com/yzxdr/>
 
 描述: 东方财富网-数据中心-特色数据-一致行动人
 

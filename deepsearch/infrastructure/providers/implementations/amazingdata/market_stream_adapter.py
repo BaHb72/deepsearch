@@ -11,16 +11,12 @@ from typing import Any, Deque, Mapping, MutableMapping, Sequence, cast
 
 from deepsearch.ports.market_data import MarketSnapshot, WindowSpec
 from deepsearch.ports.market_data.protocols import MarketStreamPort
+
 from .amazingdata import AmazingDataProvider
-from .amazingdata_types import (
-    AmazingDataStreamPayload,
-    AmazingDataStreamQuote,
-    RealtimeQuoteMap,
-)
+from .amazingdata_types import AmazingDataStreamPayload, AmazingDataStreamQuote, RealtimeQuoteMap
 from .logging_utils import ProcessLoggerAdapter
 
 logger = ProcessLoggerAdapter(action="market_stream")
-
 
 
 def _as_decimal(value: object | None, default: Decimal | None = Decimal("0")) -> Decimal | None:
@@ -132,11 +128,11 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
     """基于 AmazingData Provider 的 MarketStreamPort 实现。"""
 
     def __init__(
-            self,
-            provider: AmazingDataProvider,
-            *,
-            retention: timedelta = timedelta(minutes=10),
-            freshness_window: timedelta | None = None,
+        self,
+        provider: AmazingDataProvider,
+        *,
+        retention: timedelta = timedelta(minutes=10),
+        freshness_window: timedelta | None = None,
     ) -> None:
         self.name = "AmazingData"
         self._provider = provider
@@ -158,9 +154,7 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
         subscription_batch = getattr(
             getattr(subscription_cfg, "subscription", None), "batch_size", None
         )
-        max_symbols = getattr(
-            getattr(subscription_cfg, "subscription", None), "max_symbols", None
-        )
+        max_symbols = getattr(getattr(subscription_cfg, "subscription", None), "max_symbols", None)
         batch_candidates = [
             value
             for value in (subscription_batch, max_symbols)
@@ -255,9 +249,7 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
             total_stale = len(stale_codes)
             batch_size = min(self._refresh_batch_size, total_stale)
             offset = self._refresh_cursor % total_stale if total_stale else 0
-            refresh_codes = [
-                stale_codes[(offset + idx) % total_stale] for idx in range(batch_size)
-            ]
+            refresh_codes = [stale_codes[(offset + idx) % total_stale] for idx in range(batch_size)]
             self._refresh_cursor = (offset + batch_size) % max(total_stale, 1)
         logger.debug(
             "AmazingData fetch_latest 判定完成 stale={} refresh={} batch_size={} cursor={}",
@@ -270,7 +262,7 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
         if refresh_codes:
             refresh_start = time.perf_counter()
             try:
-                quotes_raw = await self._provider.get_realtime_quote(refresh_codes)
+                quotes_raw = await self._provider.get_realtime_quote(refresh_codes)  # type: ignore[attr-defined]
             except Exception as exc:  # pragma: no cover - provider errors handled upstream
                 logger.warning("AmazingDataʵʱ鲹ʧ: {}", exc)
                 quotes_map: RealtimeQuoteMap = {}
@@ -327,7 +319,7 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
             if not initialized or not self._provider.is_connected():
                 status = {}
                 try:
-                    status = self._provider.connection_status()
+                    status = self._provider.connection_status()  # type: ignore[attr-defined]
                 except Exception:  # pragma: no cover - 防御性
                     status = {}
                 logger.error(
@@ -361,8 +353,8 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
                 bucket.popleft()
 
     def _snapshot_from_stream_payload(
-            self,
-            payload: AmazingDataStreamPayload,
+        self,
+        payload: AmazingDataStreamPayload,
     ) -> MarketSnapshot | None:
         data = payload.get("data")
         if not isinstance(data, Mapping):
@@ -375,7 +367,9 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
         exchange = _short_exchange(code, str(data.get("exchange") or ""))
         ts = _parse_timestamp(data.get("time"), payload.get("timestamp"))
 
-        last = _as_decimal(data.get("price") or data.get("last") or data.get("last_price")) or Decimal("0")
+        last = _as_decimal(
+            data.get("price") or data.get("last") or data.get("last_price")
+        ) or Decimal("0")
         open_px = _as_decimal(data.get("open"), default=Decimal("0")) or Decimal("0")
         high_px = _as_decimal(data.get("high"), default=Decimal("0")) or Decimal("0")
         low_px = _as_decimal(data.get("low"), default=Decimal("0")) or Decimal("0")
@@ -437,10 +431,22 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
 
         bid1 = _as_decimal(payload.get("bid1"))
         ask1 = _as_decimal(payload.get("ask1"))
-        bid_prices = (bid1,) if bid1 != Decimal("0") else tuple()
-        ask_prices = (ask1,) if ask1 != Decimal("0") else tuple()
-        bid_volumes = (_as_int(payload.get("bid1_volume")),) if payload.get("bid1_volume") is not None else tuple()
-        ask_volumes = (_as_int(payload.get("ask1_volume")),) if payload.get("ask1_volume") is not None else tuple()
+        bid_prices: tuple[Decimal, ...] = (
+            (bid1,) if bid1 is not None and bid1 != Decimal("0") else ()
+        )
+        ask_prices: tuple[Decimal, ...] = (
+            (ask1,) if ask1 is not None and ask1 != Decimal("0") else ()
+        )
+        bid_volumes = (
+            (_as_int(payload.get("bid1_volume")),)
+            if payload.get("bid1_volume") is not None
+            else tuple()
+        )
+        ask_volumes = (
+            (_as_int(payload.get("ask1_volume")),)
+            if payload.get("ask1_volume") is not None
+            else tuple()
+        )
 
         upper_limit = _as_decimal(payload.get("high_limit"), default=None)
         lower_limit = _as_decimal(payload.get("low_limit"), default=None)
@@ -471,7 +477,12 @@ class AmazingDataMarketStreamAdapter(MarketStreamPort):
     @staticmethod
     def _extract_prices(raw: Any) -> Sequence[Decimal]:
         if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes)):
-            return tuple(_as_decimal(value) for value in list(raw)[:5])
+            result: list[Decimal] = []
+            for value in list(raw)[:5]:
+                dec = _as_decimal(value)
+                if dec is not None:
+                    result.append(dec)
+            return tuple(result)
         return tuple()
 
     @staticmethod

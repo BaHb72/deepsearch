@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_zh_a_cdr_daily
 
-目标地址: https://finance.sina.com.cn/realstock/company/sh689009/nc.shtml
+目标地址: <https://finance.sina.com.cn/realstock/company/sh689009/nc.shtml>
 
 描述: 上海证券交易所-科创板-CDR
 

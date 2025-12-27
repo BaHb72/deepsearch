@@ -505,4 +505,3 @@ finally {
         Read-Host -Prompt '按回车关闭窗口。' | Out-Null
     }
 }
-

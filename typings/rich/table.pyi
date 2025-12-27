@@ -1,9 +1,6 @@
 from typing import Any
 
-
 class Table:
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
-
     def add_column(self, header: str, *args: Any, **kwargs: Any) -> None: ...
-
     def add_row(self, *columns: Any) -> None: ...

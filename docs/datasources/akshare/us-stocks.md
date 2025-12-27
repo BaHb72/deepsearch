@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_us_spot_em
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#us_stocks
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#us_stocks>
 
 描述: 东方财富网-美股-实时行情
 
@@ -75,7 +75,7 @@ print(stock_us_spot_em_df)
 
 接口: stock_us_spot
 
-目标地址: https://finance.sina.com.cn/stock/usstock/sector.shtml
+目标地址: <https://finance.sina.com.cn/stock/usstock/sector.shtml>
 
 描述: 新浪财经-美股; 获取的数据有 15 分钟延迟; 建议使用 ak.stock_us_spot_em() 来获取数据
 
@@ -159,7 +159,7 @@ print(us_stock_current_df)
 
 接口: stock_us_hist
 
-目标地址: https://quote.eastmoney.com/us/ENTX.html#fullScreenChart
+目标地址: <https://quote.eastmoney.com/us/ENTX.html#fullScreenChart>
 
 描述: 东方财富网-行情-美股-每日行情
 
@@ -222,7 +222,7 @@ print(stock_us_hist_df)
 
 接口: stock_individual_basic_info_us_xq
 
-目标地址: https://xueqiu.com/snowman/S/NVDA/detail#/GSJJ
+目标地址: <https://xueqiu.com/snowman/S/NVDA/detail#/GSJJ>
 
 描述: 雪球-个股-公司概况-公司简介
 
@@ -296,7 +296,7 @@ print(stock_individual_basic_info_us_xq_df)
 
 接口: stock_us_hist_min_em
 
-目标地址: https://quote.eastmoney.com/us/ATER.html
+目标地址: <https://quote.eastmoney.com/us/ATER.html>
 
 描述: 东方财富网-行情首页-美股-每日分时行情
 
@@ -353,7 +353,7 @@ print(stock_us_hist_min_em_df)
 
 接口: stock_us_daily
 
-目标地址: http://finance.sina.com.cn/stock/usstock/sector.shtml
+目标地址: <http://finance.sina.com.cn/stock/usstock/sector.shtml>
 
 描述: 美股历史行情数据，设定 adjust="qfq" 则返回前复权后的数据，默认 adjust="", 则返回未复权的数据，历史数据按日频率更新
 
@@ -474,7 +474,7 @@ print(qfq_df)
 
 接口: stock_us_pink_spot_em
 
-目标地址: http://quote.eastmoney.com/center/gridlist.html#us_pinksheet
+目标地址: <http://quote.eastmoney.com/center/gridlist.html#us_pinksheet>
 
 描述: 美股粉单市场的实时行情数据
 
@@ -533,7 +533,7 @@ print(stock_us_pink_spot_em_df)
 
 接口: stock_us_famous_spot_em
 
-目标地址: http://quote.eastmoney.com/center/gridlist.html#us_wellknown
+目标地址: <http://quote.eastmoney.com/center/gridlist.html#us_wellknown>
 
 描述: 美股-知名美股的实时行情数据
 

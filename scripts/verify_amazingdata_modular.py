@@ -11,9 +11,11 @@ AmazingData SDK 模块化验证脚本
 """
 
 import sys
+
 sys.path.insert(0, "d:/Stock/code/deepsearch")
 
 from datetime import datetime, timedelta
+
 import pandas as pd
 
 # ========== 公共配置 ==========
@@ -21,7 +23,7 @@ AMAZINGDATA_CONFIG = {
     "username": "212200038719",
     "password": "212200038719@2025",
     "host": "101.230.159.234",
-    "port": 8600
+    "port": 8600,
 }
 LOCAL_PATH = "D://AmazingData_local_data//"
 
@@ -37,6 +39,7 @@ def get_sdk():
     global _ad
     if _ad is None:
         import AmazingData as ad
+
         _ad = ad
     return _ad
 
@@ -46,14 +49,14 @@ def login():
     global _logged_in
     if _logged_in:
         return True
-    
+
     ad = get_sdk()
     try:
         result = ad.login(
             username=AMAZINGDATA_CONFIG["username"],
             password=AMAZINGDATA_CONFIG["password"],
             host=AMAZINGDATA_CONFIG["host"],
-            port=AMAZINGDATA_CONFIG["port"]
+            port=AMAZINGDATA_CONFIG["port"],
         )
         if result == 0 or result is True:
             print("  [OK] 登录成功")
@@ -110,17 +113,17 @@ def record(category, name, success, count=0, msg="", sample=None):
 # ========== BaseData 测试 ==========
 def test_basedata():
     """测试BaseData模块"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("测试 BaseData 基础数据")
-    print("="*60)
-    
+    print("=" * 60)
+
     if not login():
         return 0, 0
-    
+
     base = get_base_data()
     passed = 0
     total = 0
-    
+
     # 交易日历
     total += 1
     try:
@@ -132,23 +135,25 @@ def test_basedata():
             record("BaseData", "get_calendar", False, msg="无数据")
     except Exception as e:
         record("BaseData", "get_calendar", False, msg=str(e)[:40])
-    
+
     # A股代码列表
     total += 1
     try:
-        code_list = base.get_code_list(security_type='EXTRA_STOCK_A')
+        code_list = base.get_code_list(security_type="EXTRA_STOCK_A")
         if code_list and len(code_list) > 0:
-            if record("BaseData", "get_code_list(A股)", True, len(code_list), sample=list(code_list)[:3]):
+            if record(
+                "BaseData", "get_code_list(A股)", True, len(code_list), sample=list(code_list)[:3]
+            ):
                 passed += 1
         else:
             record("BaseData", "get_code_list(A股)", False, msg="无数据")
     except Exception as e:
         record("BaseData", "get_code_list(A股)", False, msg=str(e)[:40])
-    
+
     # 股票基本信息
     total += 1
     try:
-        code_info = base.get_code_info(security_type='EXTRA_STOCK_A')
+        code_info = base.get_code_info(security_type="EXTRA_STOCK_A")
         if code_info is not None and len(code_info) > 0:
             if record("BaseData", "get_code_info", True, len(code_info)):
                 passed += 1
@@ -156,7 +161,7 @@ def test_basedata():
             record("BaseData", "get_code_info", False, msg="无数据")
     except Exception as e:
         record("BaseData", "get_code_info", False, msg=str(e)[:40])
-    
+
     # ETF申赎清单
     total += 1
     try:
@@ -168,7 +173,7 @@ def test_basedata():
             record("BaseData", "get_etf_pcf", False, msg="无数据")
     except Exception as e:
         record("BaseData", "get_etf_pcf", False, msg=str(e)[:40])
-    
+
     # 期权代码列表
     total += 1
     try:
@@ -180,7 +185,7 @@ def test_basedata():
             record("BaseData", "get_option_code_list", False, msg="无数据")
     except Exception as e:
         record("BaseData", "get_option_code_list", False, msg=str(e)[:40])
-    
+
     # 期货代码列表
     total += 1
     try:
@@ -192,7 +197,7 @@ def test_basedata():
             record("BaseData", "get_future_code_list", False, msg="无数据")
     except Exception as e:
         record("BaseData", "get_future_code_list", False, msg=str(e)[:40])
-    
+
     print(f"\nBaseData: {passed}/{total} 通过")
     return passed, total
 
@@ -200,77 +205,67 @@ def test_basedata():
 # ========== MarketData 测试 ==========
 def test_marketdata():
     """测试MarketData模块"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("测试 MarketData 历史行情")
-    print("="*60)
-    
+    print("=" * 60)
+
     if not login():
         return 0, 0
-    
+
     ad = get_sdk()
     calendar = get_calendar()
     passed = 0
     total = 0
-    
+
     if calendar is None:
         print("  [SKIP] 无交易日历")
         return 0, 0
-    
+
     try:
         market = ad.MarketData(calendar)
         print("  [INFO] MarketData 实例创建成功")
     except Exception as e:
         print(f"  [FAIL] MarketData 创建失败: {e}")
         return 0, 1
-    
+
     today = int(datetime.now().strftime("%Y%m%d"))
-    
+
     # 日K线 (Period.day = 10008)
     total += 1
     try:
         kline = market.query_kline(
-            code_list=["000001.SZ"],
-            begin_date=20241201,
-            end_date=20241213,
-            period=10008
+            code_list=["000001.SZ"], begin_date=20241201, end_date=20241213, period=10008
         )
         if kline and "000001.SZ" in kline:
             data = kline["000001.SZ"]
-            count = len(data) if hasattr(data, '__len__') else 1
+            count = len(data) if hasattr(data, "__len__") else 1
             if record("MarketData", "query_kline(日K)", True, count):
                 passed += 1
         else:
             record("MarketData", "query_kline(日K)", False, msg="无数据")
     except Exception as e:
         record("MarketData", "query_kline(日K)", False, msg=str(e)[:50])
-    
+
     # 1分钟K线 (Period.min1 = 10000)
     total += 1
     try:
         kline_min = market.query_kline(
-            code_list=["000001.SZ"],
-            begin_date=today,
-            end_date=today,
-            period=10000
+            code_list=["000001.SZ"], begin_date=today, end_date=today, period=10000
         )
         if kline_min and "000001.SZ" in kline_min:
             data = kline_min["000001.SZ"]
-            count = len(data) if hasattr(data, '__len__') else 1
+            count = len(data) if hasattr(data, "__len__") else 1
             if record("MarketData", "query_kline(1分钟)", True, count):
                 passed += 1
         else:
             record("MarketData", "query_kline(1分钟)", False, msg="无数据")
     except Exception as e:
         record("MarketData", "query_kline(1分钟)", False, msg=str(e)[:50])
-    
+
     # 历史快照
     total += 1
     try:
-        snapshot = market.query_snapshot(
-            code_list=["000001.SZ"],
-            begin_date=today,
-            end_date=today
-        )
+        snapshot = market.query_snapshot(code_list=["000001.SZ"], begin_date=today, end_date=today)
         if snapshot:
             keys = list(snapshot.keys())[:3]
             if "000001.SZ" in snapshot or keys:
@@ -282,7 +277,7 @@ def test_marketdata():
             record("MarketData", "query_snapshot", False, msg="返回空")
     except Exception as e:
         record("MarketData", "query_snapshot", False, msg=str(e)[:50])
-    
+
     print(f"\nMarketData: {passed}/{total} 通过")
     return passed, total
 
@@ -290,29 +285,29 @@ def test_marketdata():
 # ========== InfoData 测试 ==========
 def test_infodata():
     """测试InfoData模块"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("测试 InfoData 财务/股东数据")
-    print("="*60)
-    
+    print("=" * 60)
+
     if not login():
         return 0, 0
-    
+
     ad = get_sdk()
     passed = 0
     total = 0
-    
+
     try:
         info = ad.InfoData()
     except Exception as e:
         print(f"  [FAIL] InfoData 创建失败: {e}")
         return 0, 1
-    
+
     test_codes = ["000001.SZ"]
     end_dt = datetime.now()
     begin_dt = end_dt - timedelta(days=30)
     begin_date = int(begin_dt.strftime("%Y%m%d"))
     end_date = int(end_dt.strftime("%Y%m%d"))
-    
+
     # 资产负债表
     total += 1
     try:
@@ -324,7 +319,7 @@ def test_infodata():
             record("InfoData", "get_balance_sheet", False, msg="无数据")
     except Exception as e:
         record("InfoData", "get_balance_sheet", False, msg=str(e)[:40])
-    
+
     # 利润表
     total += 1
     try:
@@ -336,7 +331,7 @@ def test_infodata():
             record("InfoData", "get_income", False, msg="无数据")
     except Exception as e:
         record("InfoData", "get_income", False, msg=str(e)[:40])
-    
+
     # 十大股东
     total += 1
     try:
@@ -354,12 +349,14 @@ def test_infodata():
             record("InfoData", "get_share_holder", False, msg="无数据")
     except Exception as e:
         record("InfoData", "get_share_holder", False, msg=str(e)[:40])
-    
+
     # 龙虎榜
     total += 1
     try:
         lhb_codes = ["000001.SZ", "600519.SH", "000002.SZ"]
-        lhb = info.get_long_hu_bang(lhb_codes, local_path=LOCAL_PATH, begin_date=begin_date, end_date=end_date)
+        lhb = info.get_long_hu_bang(
+            lhb_codes, local_path=LOCAL_PATH, begin_date=begin_date, end_date=end_date
+        )
         if isinstance(lhb, pd.DataFrame):
             if not lhb.empty:
                 if record("InfoData", "get_long_hu_bang", True, len(lhb)):
@@ -373,7 +370,7 @@ def test_infodata():
             record("InfoData", "get_long_hu_bang", False, msg="无上榜记录(正常)")
     except Exception as e:
         record("InfoData", "get_long_hu_bang", False, msg=str(e)[:40])
-    
+
     # 大宗交易
     total += 1
     try:
@@ -391,7 +388,7 @@ def test_infodata():
             record("InfoData", "get_block_trading", False, msg="无数据")
     except Exception as e:
         record("InfoData", "get_block_trading", False, msg=str(e)[:40])
-    
+
     # 融资融券明细
     total += 1
     try:
@@ -403,7 +400,7 @@ def test_infodata():
             record("InfoData", "get_margin_detail", False, msg="无数据")
     except Exception as e:
         record("InfoData", "get_margin_detail", False, msg=str(e)[:40])
-    
+
     # 指数成分
     total += 1
     try:
@@ -415,7 +412,7 @@ def test_infodata():
             record("InfoData", "get_index_constituent", False, msg="无数据")
     except Exception as e:
         record("InfoData", "get_index_constituent", False, msg=str(e)[:40])
-    
+
     print(f"\nInfoData: {passed}/{total} 通过")
     return passed, total
 
@@ -423,48 +420,52 @@ def test_infodata():
 # ========== 主入口 ==========
 def main():
     """主函数"""
-    print("="*60)
+    print("=" * 60)
     print("AmazingData SDK 模块化验证")
-    print("="*60)
+    print("=" * 60)
     print(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
+
     # 解析命令行参数
     module = "all"
     if len(sys.argv) > 1:
         module = sys.argv[1].lower()
-    
+
     print(f"测试模块: {module}")
-    
+
     total_passed = 0
     total_tests = 0
-    
+
     try:
         if module in ["base", "all"]:
             p, t = test_basedata()
             total_passed += p
             total_tests += t
-        
+
         if module in ["market", "all"]:
             p, t = test_marketdata()
             total_passed += p
             total_tests += t
-        
+
         if module in ["info", "all"]:
             p, t = test_infodata()
             total_passed += p
             total_tests += t
-        
+
         if module not in ["base", "market", "info", "all"]:
             print(f"\n未知模块: {module}")
             print("可用选项: base, market, info, all")
             return
     finally:
         logout()
-    
+
     # 汇总
-    print("\n" + "="*60)
-    print(f"总计: {total_passed}/{total_tests} 通过 ({total_passed/total_tests*100:.1f}%)" if total_tests > 0 else "无测试执行")
-    print("="*60)
+    print("\n" + "=" * 60)
+    print(
+        f"总计: {total_passed}/{total_tests} 通过 ({total_passed/total_tests*100:.1f}%)"
+        if total_tests > 0
+        else "无测试执行"
+    )
+    print("=" * 60)
 
 
 if __name__ == "__main__":

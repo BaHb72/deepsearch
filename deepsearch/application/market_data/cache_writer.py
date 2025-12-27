@@ -14,8 +14,8 @@ try:
     import redis as aioredis
     from redis import Redis as AsyncRedis
 except Exception:  # pragma: no cover - optional import fallback
-    aioredis = None  # type: ignore
-    AsyncRedis = None  # type: ignore
+    aioredis = None  # type: ignore[assignment]
+    AsyncRedis = None  # type: ignore[assignment, misc]
 
 from deepsearch.ports.market_data import (
     AuctionQualityEntry,
@@ -60,12 +60,12 @@ class MarketDataCacheWriter:
                 await asyncio.to_thread(cast(Callable[[], object], close_method))
 
     async def write_capital_pulse(
-            self,
-            entries: Sequence[CapitalPulseEntry],
-            *,
-            limit: int | None = None,
-            module: str = "strength",
-            source: str | None = None,
+        self,
+        entries: Sequence[CapitalPulseEntry],
+        *,
+        limit: int | None = None,
+        module: str = "strength",
+        source: str | None = None,
     ) -> None:
         limit = limit or self.max_strength_entries
         aggregated: Dict[str, list[Dict[str, Any]]] = {}
@@ -75,7 +75,9 @@ class MarketDataCacheWriter:
         for entry in entries:
             entry_dict = self._serialize_capital_entry(entry)
             entry_dict["as_of"] = entry_dict["ts"]
-            board_key = self._build_key(module_name, entry.board, entry.window.name, source=normalized_source)
+            board_key = self._build_key(
+                module_name, entry.board, entry.window.name, source=normalized_source
+            )
             await self._set(board_key, entry_dict, ttl=self.strength_ttl)
             window_bucket = aggregated.setdefault(entry.window.name, [])
             window_bucket.append(entry_dict)
@@ -96,13 +98,13 @@ class MarketDataCacheWriter:
             await self._set(key, payload, ttl=self.strength_ttl)
 
     async def write_order_imbalance(
-            self,
-            entries: Sequence[OrderImbalanceEntry],
-            *,
-            window: WindowSpec,
-            limit: int,
-            module: str = "order_imbalance",
-            source: str | None = None,
+        self,
+        entries: Sequence[OrderImbalanceEntry],
+        *,
+        window: WindowSpec,
+        limit: int,
+        module: str = "order_imbalance",
+        source: str | None = None,
     ) -> None:
         serialized = [self._serialize_imbalance_entry(entry) for entry in entries]
         serialized.sort(key=lambda x: abs(x["obi"]), reverse=True)
@@ -117,11 +119,11 @@ class MarketDataCacheWriter:
         await self._set(key, payload, ttl=self.imbalance_ttl)
 
     async def write_auction_quality(
-            self,
-            entries: Sequence[AuctionQualityEntry],
-            *,
-            module: str = "auction_quality",
-            source: str | None = None,
+        self,
+        entries: Sequence[AuctionQualityEntry],
+        *,
+        module: str = "auction_quality",
+        source: str | None = None,
     ) -> None:
         normalized_source = self._normalize_source(source)
         for entry in entries:
@@ -131,15 +133,14 @@ class MarketDataCacheWriter:
             await self._set(key, data, ttl=self.auction_ttl)
 
     async def write_board_universe(
-            self,
-            mapping: Mapping[str, Sequence[str]],
-            *,
-            ttl: int | None = None,
-            source: str | None = None,
+        self,
+        mapping: Mapping[str, Sequence[str]],
+        *,
+        ttl: int | None = None,
+        source: str | None = None,
     ) -> None:
         serializable = {
-            str(board): [str(code) for code in codes if code]
-            for board, codes in mapping.items()
+            str(board): [str(code) for code in codes if code] for board, codes in mapping.items()
         }
         effective_ttl = ttl or self.board_universe_ttl
         key = self._build_key("boards", source=self._normalize_source(source or self.data_source))
@@ -154,7 +155,9 @@ class MarketDataCacheWriter:
                 if iscoroutinefunction(set_method):
                     await cast(Callable[..., Awaitable[object]], set_method)(key, payload, ex=ttl)
                 else:  # 同步 redis 客户端
-                    await asyncio.to_thread(cast(Callable[..., object], set_method), key, payload, ex=ttl)
+                    await asyncio.to_thread(
+                        cast(Callable[..., object], set_method), key, payload, ex=ttl
+                    )
                 return
             except Exception as exc:  # pragma: no cover - fallback path
                 # Log through standard logger to avoid dependency cycle
@@ -163,6 +166,7 @@ class MarketDataCacheWriter:
                 logger.warning("Redis write failed for {}: {}", key, exc)
         # In-memory fallback for tests or when Redis unavailable
         self._memory_cache[key] = envelope
+
     @staticmethod
     def _serialize_capital_entry(entry: CapitalPulseEntry) -> Dict[str, Any]:
         return {
@@ -244,8 +248,6 @@ class MarketDataCacheWriter:
             "__meta": {
                 "cached_at": cached_at.isoformat().replace("+00:00", "Z"),
                 "ttl": ttl,
-                "expires_at": expires_at.isoformat().replace("+00:00", "Z")
-                if ttl > 0
-                else None,
+                "expires_at": expires_at.isoformat().replace("+00:00", "Z") if ttl > 0 else None,
             },
         }

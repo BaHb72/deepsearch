@@ -6,7 +6,7 @@ DeepSearchDataFeed - Backtrader 数据适配器
 
 import os
 from datetime import datetime
-from typing import Any, Dict, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Dict, cast
 
 import numpy as np
 import pandas as pd
@@ -31,7 +31,6 @@ else:
 def _allow_mock_data() -> bool:
     """Return True only during automated tests to allow mock data generation."""
     return bool(os.getenv("PYTEST_CURRENT_TEST"))
-
 
 
 class DeepSearchDataFeed:
@@ -80,11 +79,14 @@ class DeepSearchDataFeed:
             return self._cache[cache_key].copy()
 
         if self.data_provider:
-            raw_df = await self._fetch_from_provider(symbol, start_date, end_date, timeframe, adjust)
+            raw_df = await self._fetch_from_provider(
+                symbol, start_date, end_date, timeframe, adjust
+            )
         else:
             if not _allow_mock_data():
                 raise RuntimeError(
-                    "DeepSearchDataFeed requires a data_provider; mock data is only permitted during automated tests.")
+                    "DeepSearchDataFeed requires a data_provider; mock data is only permitted during automated tests."
+                )
             raw_df = self._generate_mock_data(symbol, start_date, end_date, timeframe)
 
         df = self._standardize_dataframe(self._ensure_dataframe(raw_df))

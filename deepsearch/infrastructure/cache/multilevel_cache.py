@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, AsyncContextManager, Callable, Dict, Optional, Tuple, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, AsyncContextManager, Callable, Dict, Optional, Tuple, cast
 
 import redis.asyncio as aioredis
 from cachetools import TTLCache  # type: ignore[import-untyped]
@@ -429,9 +429,7 @@ class MultiLevelCache:
             try:
                 cursor = 0
                 while True:
-                    cursor, raw_keys = await self.l2_cache.scan(
-                        cursor, match=pattern, count=100
-                    )
+                    cursor, raw_keys = await self.l2_cache.scan(cursor, match=pattern, count=100)
                     keys = cast(Tuple[str | bytes, ...], tuple(raw_keys))
                     if keys:
                         await self.l2_cache.delete(*keys)

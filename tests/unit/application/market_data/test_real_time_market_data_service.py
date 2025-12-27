@@ -32,7 +32,9 @@ class FakeAmazingDataProvider:
     def is_connected(self) -> bool:
         return self._connected
 
-    async def subscribe_stock_snapshot(self, symbols, callback, data_type: str = "snapshot") -> bool:
+    async def subscribe_stock_snapshot(
+        self, symbols, callback, data_type: str = "snapshot"
+    ) -> bool:
         self.subscribed.append(list(symbols))
         self._callback = callback
         return True

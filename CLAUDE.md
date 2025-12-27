@@ -23,7 +23,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## ⚠️ CRITICAL: API接口管理
 
 ### 📌 所有API接口统一文档位置
+
 **所有API接口都记录在以下统一文档中，每次修改API前后必须读取和更新这些文档：**
+
 - 📄 **完整API列表**: `docs/api/README.md` - 包含所有前后端API接口的完整清单（265个端点）
 - 📄 **前端API定义**: `docs/api/FRONTEND_API_REGISTRY.md` - 前端调用的API列表
 - 📄 **后端API定义**: `docs/api/BACKEND_API_REGISTRY.md` - 后端提供的API路由
@@ -31,6 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 📄 **数据源API**: `docs/api/datasource_api.md` - 数据源管理相关API文档
 
 ### 重要：修改API前必读
+
 在修改任何API接口前，**必须**先执行以下步骤：
 
 1. **读取接口文档**：
@@ -48,7 +51,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - 确保 README.md 始终保持最新
 
 ### API文档生成工具使用说明
+
 **自动化API文档生成器** (`tools/generate_api_documentation.py`)：
+
 - **功能**：扫描前后端代码，自动生成完整的API文档
 - **使用方法**：`python tools/generate_api_documentation.py`
 - **输出位置**：`docs/api/` 目录
@@ -64,18 +69,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - 定期检查前后端API一致性
 
 ### 架构优化文档
+
 **系统架构优化策略** (`docs/ARCHITECTURE_OPTIMIZATION_STRATEGY.md`)：
+
 - **功能**：规划架构目标形态与各阶段优化路线
 - **更新时间**：2025-09-17
 - **内容**：覆盖性能、可靠性、团队协作三大方向的行动清单
 
 ### AmazingData 集成资料
+
 **综合方案** (`docs/AMAZINGDATA_COMPREHENSIVE_SOLUTION.md`)：
+
 - **范围**：涵盖接入流程、隔离策略与关键 API 封装
 - **同步**：结合 SDK 隔离设计与技术实现文档一并维护
 - **建议**：落地变更时对照 `AMAZINGDATA_SDK_ISOLATION_*` 系列文档核查
 
 ### API接口规范
+
 - 前端请求路径：相对路径，如 `/database/status`
 - axios baseURL 设置：`/api`（通过 request.js 自动添加）
 - 实际请求路径：`/api/database/status`
@@ -83,6 +93,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Vite代理配置：将 `/api` 请求代理到 `http://localhost:8000`
 
 ### 配置自检
+
 - **模板**：`deepsearch/config/settings.template.yaml` 提供基础结构，修改后务必保留占位符
 - **示例**：`.env.example` 列出所有环境变量，请复制为本地私有文件使用
 - **校验**：运行 `python tools/validate_config.py` 自动检查必填项与敏感字段配置
@@ -94,7 +105,9 @@ DeepSearch is a high-performance quantitative trading event system built with Py
 ## ⚠️ CRITICAL: Development Requirements
 
 ### NO MOCK DATA IN PRODUCTION CODE
+
 **Mock数据仅限单元测试使用：**
+
 - ❌ **生产代码严禁**硬编码假数据或Mock判断
 - ❌ **API业务逻辑严禁**包含环境判断来返回不同数据
 - ✅ 生产和开发环境必须连接真实数据源
@@ -102,11 +115,13 @@ DeepSearch is a high-performance quantitative trading event system built with Py
 - ✅ 单元测试通过 pytest fixtures 和 mocking 实现，不需要环境配置
 
 **环境配置：**
+
 - 通过 `config.app.env` 判断当前环境
 - `prod`: 生产环境 - 使用真实数据源
 - `dev`: 开发环境 - 使用真实数据源进行开发
 
 **真实数据源降级优先级：**
+
 1. AmazingData（银河证券星耀数智）- **默认主数据源**
 2. AkShare Proxy（CloudFlare代理）
 3. AkShare Direct（直连）
@@ -114,12 +129,14 @@ DeepSearch is a high-performance quantitative trading event system built with Py
 5. 返回明确的错误信息（不返回Mock）
 
 **⚠️ AmazingData API使用注意事项：**
+
 - **实时数据获取**：必须使用订阅模式（onSnapshot系列），不存在 `get_market_realtime()` 方法
 - **订阅接口**：通过 `SubscribeData` 对象和 `@register` 装饰器实现
 - **测试连接**：可使用 `BaseData.get_code_info()` 或 `get_calendar()` 验证连接
 - **代码格式**：需要市场前缀，如 `SH.600000`、`SZ.000001`
 
 **⚠️ 重要说明：数据源API使用规范**
+
 - **优先通过 AmazingData API 获取数据**：本项目默认使用银河证券的 AmazingData（星耀数智）接口，在可用范围内尽量通过该渠道完成需求
 - **通过 AmazingData 调用**：业务仅通过 AmazingData SDK 暴露的 API 访问数据，底层 TGW 组件随 SDK 一同交付，无需手动接入
 - **必要时使用 AkShare**：当 AmazingData 无法使用或无法提供特定数据时，可启用 AkShare（含 CloudFlare 代理）作为备选数据源，并在变更记录中说明原因
@@ -129,6 +146,7 @@ DeepSearch is a high-performance quantitative trading event system built with Py
 ### 单元测试 Mock 实现规范
 
 **使用 pytest fixtures 和 mocking：**
+
 ```python
 # ✅ 正确的 Mock 实现（仅在测试文件中）
 import pytest
@@ -148,6 +166,7 @@ def test_with_mock_provider(mock_data_provider):
 ```
 
 **配置文件：**
+
 - `settings.dev.yaml`: 开发环境配置
 - `settings.prod.yaml`: 生产环境配置
 - 测试环境不需要单独配置文件，使用 pytest fixtures
@@ -155,7 +174,9 @@ def test_with_mock_provider(mock_data_provider):
 ## ⚠️ CRITICAL: Architecture Requirements
 
 ### NO DISTRIBUTED SYSTEMS
+
 **This project is designed as a SINGLE-MACHINE system. DO NOT implement or suggest:**
+
 - ❌ Distributed caching (Redis Cluster, Memcached clusters)
 - ❌ Distributed message queues (Kafka, RabbitMQ clusters)
 - ❌ Microservices architecture
@@ -164,6 +185,7 @@ def test_with_mock_provider(mock_data_provider):
 - ❌ Service mesh (Istio, Linkerd)
 
 **Acceptable optimizations:**
+
 - ✅ Single Redis instance for caching
 - ✅ Single PostgreSQL/DuckDB for storage
 - ✅ In-process message bus (ZeroMQ)
@@ -175,6 +197,7 @@ def test_with_mock_provider(mock_data_provider):
 ## ⚠️ CRITICAL: Configuration File Management
 
 ### 配置文件安全规范
+
 **永远不要提交包含真实密码的配置文件！**
 
 1. **配置文件处理流程**：
@@ -204,6 +227,7 @@ def test_with_mock_provider(mock_data_provider):
 This is mandatory because QMT terminal only supports GBK. Using UTF-8 will cause Chinese characters to display as garbage.
 
 When modifying QMT scripts:
+
 1. Always save with GBK encoding
 2. First line must be: `# encoding:gbk`
 3. Read with: `open(file, 'r', encoding='gbk')`
@@ -212,6 +236,7 @@ When modifying QMT scripts:
 ## Recent Updates (2025-01-21)
 
 ### 配置文件安全管理 (Current)
+
 - **实施内容**：
   - 从Git移除所有包含真实密码的配置文件
   - 创建脱敏的 example 配置文件供开发者参考
@@ -219,14 +244,15 @@ When modifying QMT scripts:
   - 修改代码从配置文件动态读取凭据，移除硬编码密码
 
 ### AmazingData SDK进程隔离架构 (已完成)
+
 - **核心改进**：通过进程池隔离SDK，防止其崩溃影响主服务
 - **技术文档**：`docs/DATASOURCE_PROCESS_POOL_ARCHITECTURE.md`
 - **关键特性**：30秒进程复用窗口，智能故障恢复，健康检查API
 
-
 ## Recent Updates (2025-09-17)
 
 ### 基础架构重构完成
+
 - **Infrastructure层引入**: 完成项目基础架构重构，所有基础设施代码迁移到`infrastructure/`目录
 - **目录结构调整**:
   - `data_providers/` → `infrastructure/providers/`
@@ -236,6 +262,7 @@ When modifying QMT scripts:
 - **QMT路径更新**: QMT脚本路径从`datafeed/qmt/scripts/`更新为`infrastructure/providers/datafeed/qmt/scripts/`
 
 ### API文档自动化工具
+
 - **新增工具**：`tools/generate_api_documentation.py` API文档自动生成器
 - **功能特性**：自动扫描前后端代码，生成完整的API文档
 - **文档位置**：生成的文档保存在 `docs/api/` 目录，主文档为`README.md`
@@ -244,6 +271,7 @@ When modifying QMT scripts:
 ## Recent Updates (2025-08-22)
 
 ### Backend Performance Optimization
+
 - **Singleton Data Providers**: Implemented factory pattern in `webui/api/providers.py` to ensure single instances
 - **Request Deduplication**: Added middleware in `webui/api/middleware/deduplication.py` to merge identical concurrent requests
 - **Unified Cache Layer**: Created multi-tier caching in `webui/api/cache/unified.py` (L1 Memory + L2 Redis)
@@ -253,6 +281,7 @@ When modifying QMT scripts:
 ## Recent Updates (2025-08-21)
 
 ### Data Source Architecture Refactoring
+
 - **Unified Data Source Manager**: Created `infrastructure/providers/managers/data_source_manager.py` for centralized data provider management
 - **Priority-based Selection**: Implemented automatic failover with configurable priorities (AmazingData > CloudFlare > QMT)
 - **Circuit Breaker Pattern**: Added fault tolerance with automatic recovery
@@ -262,7 +291,9 @@ When modifying QMT scripts:
 - **Database Connection Pooling**: Implemented high-performance pool in `infrastructure/persistence/pool.py`
 
 ### Infrastructure Layer Structure
+
 完整的基础设施层包含以下模块：
+
 - `infrastructure/cache/` - 缓存提供者实现
 - `infrastructure/caching/` - 缓存策略和管理
 - `infrastructure/data/` - 数据分析和处理
@@ -277,6 +308,7 @@ When modifying QMT scripts:
 ## Recent Updates (2025-08-18)
 
 ### QMT Integration Fixes
+
 - Fixed authentication message sending in `qmt_collector.py`
 - Special handling for AUTH messages in `send_message()` function
 - Consolidated multiple QMT scripts into production and test versions
@@ -285,6 +317,7 @@ When modifying QMT scripts:
 ## Recent Updates (2025-08-17)
 
 ### Professional Trading View Features
+
 1. ✅ **ElCol Flickering Fixed**: Implemented RAF batching and stable keys for order book updates
 2. ✅ **MA Lines Continuous Display**: Set showSymbol=false, disabled smooth curves for accurate financial data
 3. ✅ **K-line Hollow/Solid Toggle**: Added isHollowCandle switch in toolbar with dynamic itemStyle
@@ -296,6 +329,7 @@ When modifying QMT scripts:
 9. ✅ **Volume & Sub-indicators**: Added volume bars, MACD, RSI, KDJ with chart synchronization
 
 ### Data Source Architecture (已重构到Infrastructure层)
+
 - Implemented dependency inversion principle with IDataSource interface
 - Created DataSourceAdapter with circuit breaker pattern (现位于 `infrastructure/providers/`)
 - Built AggregatedDataSource for intelligent routing and failover
@@ -372,10 +406,12 @@ uv run mypy deepsearch
 ### Configuration Management
 
 The system uses YAML configuration files located in `deepsearch/config/`:
+
 - `settings.dev.yaml` - Development environment
 - `settings.prod.yaml` - Production environment
 
 Environment variables override config using double underscore notation:
+
 ```bash
 LOG__LEVEL=DEBUG
 WEBUI__BACKEND_PORT=8080
@@ -405,6 +441,7 @@ MESSAGE_BUS__BUSES__ZMQ__CONFIG__HOST=10.0.0.5
 ### Port Configuration
 
 All service ports are managed through configuration files:
+
 - WebUI Backend: 8000 (default)
 - WebUI Frontend: 3000 (default)
 - ZeroMQ Pub: 5556

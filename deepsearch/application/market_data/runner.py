@@ -78,7 +78,11 @@ class MarketDataStreamingRunner:
                     current_interval,
                     current_timeout,
                     ",".join(self.boards) if self.boards else "<empty>",
-                    getattr(self.step, "__qualname__", "_default_step") if self.step else "_default_step",
+                    (
+                        getattr(self.step, "__qualname__", "_default_step")
+                        if self.step
+                        else "_default_step"
+                    ),
                     decision.status_label if decision else "unknown",
                     phase_label,
                 )
@@ -117,7 +121,9 @@ class MarketDataStreamingRunner:
                     if self.step is not None:
                         await asyncio.wait_for(self.step(phase_state), timeout=effective_timeout)
                     else:
-                        await asyncio.wait_for(self._default_step(phase_state), timeout=effective_timeout)
+                        await asyncio.wait_for(
+                            self._default_step(phase_state), timeout=effective_timeout
+                        )
                 except asyncio.TimeoutError:
                     log_fn = logger.warning
                     if decision and decision.timeout_log_level.lower() == "info":
@@ -135,7 +141,9 @@ class MarketDataStreamingRunner:
                         iteration_id,
                     )
                 except Exception as exc:  # pragma: no cover - 防御性日志
-                    logger.exception("实时行情轮询执行异常 iteration={} error={}", iteration_id, exc)
+                    logger.exception(
+                        "实时行情轮询执行异常 iteration={} error={}", iteration_id, exc
+                    )
                 else:
                     self._should_apply_initial_timeout = False
                     logger.debug(

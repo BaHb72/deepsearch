@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, time as time_type, timedelta
+from datetime import date, datetime
+from datetime import time as time_type
+from datetime import timedelta
 from enum import Enum
 from typing import Awaitable, Callable, Iterable, Sequence
 from zoneinfo import ZoneInfo
@@ -42,11 +44,11 @@ class PhaseDetector:
     trading_phase_no_trade: frozenset[str] = frozenset({"S", "E", "B", "H", "V"})
 
     def detect(
-            self,
-            *,
-            now: datetime,
-            trading_days: set[int],
-            phase_token: str | None,
+        self,
+        *,
+        now: datetime,
+        trading_days: set[int],
+        phase_token: str | None,
     ) -> PhaseState:
         today_int = int(now.strftime("%Y%m%d"))
         if not trading_days or today_int not in trading_days:
@@ -137,7 +139,9 @@ class TradingSessionGuard:
         PhaseState.AUCTION: 3.0,
         PhaseState.CONTINUOUS: 3.0,
     }
-    _AUCTION_WINDOWS: tuple[tuple[time_type, time_type], ...] = ((time_type(9, 15), time_type(9, 25)),)
+    _AUCTION_WINDOWS: tuple[tuple[time_type, time_type], ...] = (
+        (time_type(9, 15), time_type(9, 25)),
+    )
     _CONTINUOUS_WINDOWS: tuple[tuple[time_type, time_type], ...] = (
         (time_type(9, 30), time_type(11, 30)),
         (time_type(13, 0), time_type(15, 0)),
@@ -162,13 +166,13 @@ class TradingSessionGuard:
                 self._schedule_config_loaded = None
 
     async def evaluate(
-            self,
-            *,
-            default_interval: float,
-            default_timeout: float,
-            now: datetime | None = None,
+        self,
+        *,
+        default_interval: float,
+        default_timeout: float,
+        now: datetime | None = None,
     ) -> TradingSessionDecision:
-        now = (now.astimezone(self.timezone) if now else datetime.now(self.timezone))
+        now = now.astimezone(self.timezone) if now else datetime.now(self.timezone)
         today_int = self._as_date_int(now.date())
         trading_days = await self._collect_trading_days()
         if not trading_days:
@@ -230,9 +234,7 @@ class TradingSessionGuard:
             skip_in_window=skip_in_window,
         )
 
-    def _check_skip_window(
-            self, phase_state: PhaseState, current_time: time_type
-    ) -> bool:
+    def _check_skip_window(self, phase_state: PhaseState, current_time: time_type) -> bool:
         """检查当前阶段是否应该跳过轮询
 
         根据配置决定是否跳过：

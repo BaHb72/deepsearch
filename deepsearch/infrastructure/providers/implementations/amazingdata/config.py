@@ -6,10 +6,8 @@ import copy
 import os
 from typing import Any, Dict, Mapping, Union, cast
 
-from deepsearch.infrastructure.providers.interfaces.base import (
-    DataProviderConfig,
-    DataSourceType,
-)
+from deepsearch.infrastructure.providers.interfaces.base import DataProviderConfig, DataSourceType
+
 from .common import get_default_local_data_path
 from .helpers import _ensure_float, _ensure_int
 from .types import ProviderPayloadConvertible
@@ -164,14 +162,22 @@ def ensure_amazingdata_provider_config(config_like: ProviderConfigLike) -> Amazi
         nested_connection = config_section.get("connection")
         if isinstance(nested_connection, Mapping):
             # 将 config.connection 中的值合并到 data
-            for key in ("username", "password", "host", "port", "timeout",
-                        "heartbeat_interval", "auto_reconnect", "reconnect_interval",
-                        "max_retries", "api_mode"):
+            for key in (
+                "username",
+                "password",
+                "host",
+                "port",
+                "timeout",
+                "heartbeat_interval",
+                "auto_reconnect",
+                "reconnect_interval",
+                "max_retries",
+                "api_mode",
+            ):
                 if key not in data or not data.get(key):
                     value = nested_connection.get(key)
                     if value is not None:
                         data[key] = value
-
 
     worker_env_raw = data.get("worker_env")
     if isinstance(worker_env_raw, Mapping):
@@ -203,17 +209,17 @@ def ensure_amazingdata_provider_config(config_like: ProviderConfigLike) -> Amazi
 
 
 def resolve_local_cache_path(
-        config: AmazingDataConfig | None,
-        candidate: object | None,
+    config: AmazingDataConfig | None,
+    candidate: object | None,
 ) -> str:
     """������������ػ���·��������ʹ����ʽ��������ζ�ȡ�����"""
 
     for item in (
-            candidate,
-            getattr(config, "local_path", None) if config else None,
-            getattr(config, "config", {}).get("local_path") if config else None,
-            getattr(config, "config", {}).get("local_cache_path") if config else None,
-            os.getenv("AMAZINGDATA_LOCAL_PATH"),
+        candidate,
+        getattr(config, "local_path", None) if config else None,
+        getattr(config, "config", {}).get("local_path") if config else None,
+        getattr(config, "config", {}).get("local_cache_path") if config else None,
+        os.getenv("AMAZINGDATA_LOCAL_PATH"),
     ):
         if not item:
             continue

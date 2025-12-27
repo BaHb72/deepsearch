@@ -8,17 +8,17 @@
 ## 核心组件
 
 - `models.py`
-    - `WorkersConfig`：Workers 运行配置（开关、URL、超时、重试、缓存、API Key 等）。
-    - `ProxyStatus`、`ProxyStatistics`、`ProxyTestResult`：跟踪代理状态、请求统计与健康检查结果。
-    - `AkShareRequest/AkShareResponse`：包装 AkShare API 请求/响应，包含源、响应时间、缓存标记等元信息。
+  - `WorkersConfig`：Workers 运行配置（开关、URL、超时、重试、缓存、API Key 等）。
+  - `ProxyStatus`、`ProxyStatistics`、`ProxyTestResult`：跟踪代理状态、请求统计与健康检查结果。
+  - `AkShareRequest/AkShareResponse`：包装 AkShare API 请求/响应，包含源、响应时间、缓存标记等元信息。
 - `proxy_manager.py`
-    - `WorkersProxyManager`：核心管理类，负责会话管理、请求转发、缓存、统计、故障降级。
-        - `initialize()/shutdown()`：创建/关闭 `aiohttp` 会话。
-        - `test_connection()`：测试 Workers 可用性（HTTP 调用 + 响应解析）。
-        - `request_akshare()`：根据配置在 Workers 与直接访问之间切换，处理缓存、重试和错误记录。
-        - 提供 `enable/disable/toggle`、`clear_cache`、`get_status`、`reset_statistics` 等辅助方法。
-    - 内置简单缓存（按 AkShare 函数 + 参数生成 key，TTL 默认为 `cache_ttl`），并维护命中状态。
-    - 统计指标包括总请求数、成功/失败次数、平均响应时间、回退次数等。
+  - `WorkersProxyManager`：核心管理类，负责会话管理、请求转发、缓存、统计、故障降级。
+    - `initialize()/shutdown()`：创建/关闭 `aiohttp` 会话。
+    - `test_connection()`：测试 Workers 可用性（HTTP 调用 + 响应解析）。
+    - `request_akshare()`：根据配置在 Workers 与直接访问之间切换，处理缓存、重试和错误记录。
+    - 提供 `enable/disable/toggle`、`clear_cache`、`get_status`、`reset_statistics` 等辅助方法。
+  - 内置简单缓存（按 AkShare 函数 + 参数生成 key，TTL 默认为 `cache_ttl`），并维护命中状态。
+  - 统计指标包括总请求数、成功/失败次数、平均响应时间、回退次数等。
 
 ## 使用流程
 

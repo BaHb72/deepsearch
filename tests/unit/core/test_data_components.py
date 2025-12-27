@@ -350,9 +350,9 @@ class TestCacheComponent:
             with patch("redis.asyncio.Redis", return_value=mock_redis):
                 # 使用极短的超时时间来触发超时
                 with patch.object(
-                        cache_component._timeout_manager,
-                        "get_timeout",
-                        return_value=0.001,  # 1毫秒超时
+                    cache_component._timeout_manager,
+                    "get_timeout",
+                    return_value=0.001,  # 1毫秒超时
                 ):
                     with pytest.raises(asyncio.TimeoutError):
                         await cache_component._connect_to_redis()

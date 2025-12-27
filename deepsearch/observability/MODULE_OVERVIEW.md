@@ -8,21 +8,21 @@
 ## 主要组件
 
 - **日志体系**
-    - `logger.py`：`LoggerManager` 基于 loguru 实现集中管理，支持多 sink（控制台、每日滚动文件、JSONL、模块级文件）、日志等级覆盖、压缩归档（zip）、历史清理。
-    - 提供 `ensure_subdirectory`、`create_module_logger` 等工具，配合 CLI 和调试命令输出额外文件（如诊断报告）。
-    - `log_standard.py` 定义统一格式、颜色和模块别名映射。
+  - `logger.py`：`LoggerManager` 基于 loguru 实现集中管理，支持多 sink（控制台、每日滚动文件、JSONL、模块级文件）、日志等级覆盖、压缩归档（zip）、历史清理。
+  - 提供 `ensure_subdirectory`、`create_module_logger` 等工具，配合 CLI 和调试命令输出额外文件（如诊断报告）。
+  - `log_standard.py` 定义统一格式、颜色和模块别名映射。
 - **装饰器**
-    - `decorators/decorators.py` 提供 `log_execution`、`log_exceptions`、`log_parameters` 等通用装饰器。
-    - `monitor_decorator.py`、`enhanced_decorators.py` 在执行前后记录耗时、异常、上下文信息，并写入监控指标。
+  - `decorators/decorators.py` 提供 `log_execution`、`log_exceptions`、`log_parameters` 等通用装饰器。
+  - `monitor_decorator.py`、`enhanced_decorators.py` 在执行前后记录耗时、异常、上下文信息，并写入监控指标。
 - **监控 & 指标**
-    - `metrics/metrics.py` 提供统计接口，`collectors/metrics_collector.py` 实现时序采集与导出。
-    - `monitoring/` 子目录涵盖性能监控（`performance_monitor.py`）、数据源健康（`data_source_monitor.py`）、事件监控（
+  - `metrics/metrics.py` 提供统计接口，`collectors/metrics_collector.py` 实现时序采集与导出。
+  - `monitoring/` 子目录涵盖性能监控（`performance_monitor.py`）、数据源健康（`data_source_monitor.py`）、事件监控（
       `event_monitor.py`）、监控 API 网关（`monitor_api.py`）等，辅以 `decorators.py` 将监控能力注入业务代码。
-    - `monitoring/integration.py` 汇总各监控模块，对外提供统一初始化接口。
+  - `monitoring/integration.py` 汇总各监控模块，对外提供统一初始化接口。
 - **分析工具**
-    - `analyzers/error_analyzer.py` 对错误日志进行聚类、统计，辅助调试和报警。
+  - `analyzers/error_analyzer.py` 对错误日志进行聚类、统计，辅助调试和报警。
 - **日志扩展**
-    - `logging/monitoring_logger.py` 负责将监控数据、诊断信息写入特定 JSONL 文件，便于后续分析。
+  - `logging/monitoring_logger.py` 负责将监控数据、诊断信息写入特定 JSONL 文件，便于后续分析。
 
 ## 运行流程
 

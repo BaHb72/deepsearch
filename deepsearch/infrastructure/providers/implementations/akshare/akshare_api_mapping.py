@@ -641,4 +641,3 @@ class AkShareAPIMapping:
         """
         deprecated_prefixes = ["/eastmoney/", "/east_money/", "/em/"]
         return any(path.startswith(prefix) for prefix in deprecated_prefixes)
-

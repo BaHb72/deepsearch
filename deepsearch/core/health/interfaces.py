@@ -218,7 +218,9 @@ class CompositeHealthChecker(HealthChecker):
 
         # 并发执行所有子检查
         tasks = [checker.perform_check() for checker in self._checkers]
-        results: List[HealthCheckResult | BaseException] = await asyncio.gather(*tasks, return_exceptions=True)
+        results: List[HealthCheckResult | BaseException] = await asyncio.gather(
+            *tasks, return_exceptions=True
+        )
 
         # 聚合结果
         all_healthy = True
@@ -262,7 +264,3 @@ class CompositeHealthChecker(HealthChecker):
         return HealthCheckResult(
             status=status, message=message, details=details, errors=errors, metrics=metrics
         )
-
-
-
-

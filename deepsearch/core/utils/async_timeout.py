@@ -37,8 +37,16 @@ def with_timeout(
     default: Optional[T] = None,
     *,
     operation_name: str | None = None,
-) -> Coroutine[Any, Any, Optional[T]]:
-    ...
+) -> Coroutine[Any, Any, Optional[T]]: ...
+
+
+# 新增：装饰器模式（不带default），保留原始返回类型T
+@overload
+def with_timeout(
+    timeout: TimeoutSpec,
+    *,
+    operation_name: str | None = None,
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Coroutine[Any, Any, T]]]: ...
 
 
 @overload
@@ -47,8 +55,7 @@ def with_timeout(
     default: Optional[T] = None,
     *,
     operation_name: str | None = None,
-) -> Callable[[CallableWithOptionalAwait], Callable[P, Coroutine[Any, Any, Optional[T]]]]:
-    ...
+) -> Callable[[CallableWithOptionalAwait], Callable[P, Coroutine[Any, Any, Optional[T]]]]: ...
 
 
 @overload
@@ -58,8 +65,7 @@ def with_timeout(
     default: Optional[T] = None,
     *,
     operation_name: str | None = None,
-) -> Callable[P, Coroutine[Any, Any, Optional[T]]]:
-    ...
+) -> Callable[P, Coroutine[Any, Any, Optional[T]]]: ...
 
 
 def with_timeout(*args: Any, **kwargs: Any) -> Any:
@@ -76,17 +82,28 @@ def with_timeout(*args: Any, **kwargs: Any) -> Any:
     first_arg = args[0] if args else None
 
     if inspect.isawaitable(first_arg):
-        timeout_spec = timeout_kw if timeout_kw is not None else (args[1] if len(args) >= 2 else None)
+        timeout_spec = (
+            timeout_kw if timeout_kw is not None else (args[1] if len(args) >= 2 else None)
+        )
         if timeout_spec is None:
             raise TypeError("with_timeout expects a timeout when used with awaitables")
         seconds = _resolve_timeout_spec(cast(TimeoutSpec, timeout_spec))
-        return _await_with_timeout(cast(Awaitable[Any], first_arg), seconds, cast(Optional[Any], default), operation_name)
+        return _await_with_timeout(
+            cast(Awaitable[Any], first_arg), seconds, cast(Optional[Any], default), operation_name
+        )
 
     if callable(first_arg):
-        timeout_spec = timeout_kw if timeout_kw is not None else (args[1] if len(args) >= 2 else None)
+        timeout_spec = (
+            timeout_kw if timeout_kw is not None else (args[1] if len(args) >= 2 else None)
+        )
         if timeout_spec is not None:
             seconds = _resolve_timeout_spec(cast(TimeoutSpec, timeout_spec))
-            return _wrap_callable(cast(CallableWithOptionalAwait, first_arg), seconds, cast(Optional[Any], default), operation_name)
+            return _wrap_callable(
+                cast(CallableWithOptionalAwait, first_arg),
+                seconds,
+                cast(Optional[Any], default),
+                operation_name,
+            )
 
     timeout_spec = timeout_kw if timeout_kw is not None else first_arg
     if timeout_spec is None:
@@ -96,7 +113,9 @@ def with_timeout(*args: Any, **kwargs: Any) -> Any:
 
     seconds = _resolve_timeout_spec(cast(TimeoutSpec, timeout_spec))
 
-    def decorator(func: CallableWithOptionalAwait) -> Callable[P, Coroutine[Any, Any, Optional[Any]]]:
+    def decorator(
+        func: CallableWithOptionalAwait,
+    ) -> Callable[P, Coroutine[Any, Any, Optional[Any]]]:
         return _wrap_callable(func, seconds, cast(Optional[Any], default), operation_name)
 
     return decorator
@@ -124,7 +143,9 @@ async def run_with_timeout(
     op_name = operation_name
 
     if inspect.isawaitable(target):
-        awaited = await _await_with_timeout(cast(Awaitable[Any], target), seconds, cast(Optional[Any], default), op_name)
+        awaited = await _await_with_timeout(
+            cast(Awaitable[Any], target), seconds, cast(Optional[Any], default), op_name
+        )
         return cast(Optional[T], awaited)
 
     if callable(target):
@@ -134,19 +155,25 @@ async def run_with_timeout(
 
         if inspect.iscoroutinefunction(callable_target):
             coroutine = cast(Awaitable[Any], callable_target(*remaining_args, **kwargs))
-            awaited = await _await_with_timeout(coroutine, seconds, cast(Optional[Any], default), op_name)
+            awaited = await _await_with_timeout(
+                coroutine, seconds, cast(Optional[Any], default), op_name
+            )
             return cast(Optional[T], awaited)
 
         loop = asyncio.get_running_loop()
         bound_call = functools.partial(callable_target, *remaining_args, **kwargs)
         try:
-            outcome = await asyncio.wait_for(loop.run_in_executor(None, bound_call), timeout=seconds)
+            outcome = await asyncio.wait_for(
+                loop.run_in_executor(None, bound_call), timeout=seconds
+            )
         except asyncio.TimeoutError:
             _log_timeout(op_name, seconds)
             return default
 
         if inspect.isawaitable(outcome):
-            awaited = await _await_with_timeout(cast(Awaitable[Any], outcome), seconds, cast(Optional[Any], default), op_name)
+            awaited = await _await_with_timeout(
+                cast(Awaitable[Any], outcome), seconds, cast(Optional[Any], default), op_name
+            )
             return cast(Optional[T], awaited)
 
         return cast(Optional[T], outcome)
@@ -154,10 +181,14 @@ async def run_with_timeout(
     raise TypeError("run_with_timeout requires an awaitable or callable target")
 
 
-def timeout_decorator(seconds: float, default: Any = None) -> Callable[[CallableWithOptionalAwait], Callable[P, Coroutine[Any, Any, Optional[Any]]]]:
+def timeout_decorator(
+    seconds: float, default: Any = None
+) -> Callable[[CallableWithOptionalAwait], Callable[P, Coroutine[Any, Any, Optional[Any]]]]:
     """Provide decorator-style usage for synchronous or asynchronous callables."""
 
-    def decorator(func: CallableWithOptionalAwait) -> Callable[P, Coroutine[Any, Any, Optional[Any]]]:
+    def decorator(
+        func: CallableWithOptionalAwait,
+    ) -> Callable[P, Coroutine[Any, Any, Optional[Any]]]:
         return _wrap_callable(func, seconds, default, getattr(func, "__name__", None))
 
     return decorator
@@ -248,13 +279,17 @@ def _wrap_callable(
         loop = asyncio.get_running_loop()
         bound_call = functools.partial(cast(Callable[..., Any], func), *args, **kwargs)
         try:
-            outcome = await asyncio.wait_for(loop.run_in_executor(None, bound_call), timeout=seconds)
+            outcome = await asyncio.wait_for(
+                loop.run_in_executor(None, bound_call), timeout=seconds
+            )
         except asyncio.TimeoutError:
             _log_timeout(op_name, seconds)
             return default
 
         if inspect.isawaitable(outcome):
-            return await _await_with_timeout(cast(Awaitable[Any], outcome), seconds, default, op_name)
+            return await _await_with_timeout(
+                cast(Awaitable[Any], outcome), seconds, default, op_name
+            )
 
         return cast(Optional[Any], outcome)
 

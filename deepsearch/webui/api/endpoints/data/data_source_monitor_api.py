@@ -12,9 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-from deepsearch.infrastructure.providers.managers.data_source_manager import (
-    StockListFetchResult,
-)
+from deepsearch.infrastructure.providers.managers.data_source_manager import StockListFetchResult
 from deepsearch.infrastructure.providers.unified_proxy import get_data_proxy
 from deepsearch.observability.monitoring.data_source_monitor import get_monitor
 from deepsearch.ports.data_sources import DataAccessType, DataSourceType

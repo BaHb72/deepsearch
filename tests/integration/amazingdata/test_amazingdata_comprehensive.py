@@ -21,9 +21,9 @@ from typing import Any, Dict, Iterable, List, Protocol, TypeVar, cast
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
+from helpers import fetch_code_list
 
 from deepsearch.config import get_config
-from helpers import fetch_code_list
 
 # 为 colorama 定义最小协议，确保缺失依赖时依旧具备类型约束
 
@@ -47,13 +47,14 @@ class _StyleProtocol(Protocol):
 
 
 class _TqdmCallable(Protocol):
-    def __call__(self, iterable: Iterable[Any], *args: Any, **kwargs: Any) -> Iterable[Any]:
-        ...
+    def __call__(self, iterable: Iterable[Any], *args: Any, **kwargs: Any) -> Iterable[Any]: ...
 
 
 # 尝试导入彩色输出库
 try:
-    from colorama import Fore as _ForeInstance, Style as _StyleInstance, init
+    from colorama import Fore as _ForeInstance
+    from colorama import Style as _StyleInstance
+    from colorama import init
 
     init(autoreset=True)
     Fore: _ColorProtocol = _ForeInstance
@@ -126,6 +127,18 @@ class AmazingDataTester:
         self.results: List[TestResult] = []
         self.start_time = None
         self.end_time = None
+        self._calendar = None  # 交易日历缓存
+
+    def _get_calendar(self):
+        """获取交易日历（缓存）- MarketData.query_kline必需"""
+        if self._calendar is None:
+            import AmazingData as ad
+
+            try:
+                self._calendar = ad.BaseData().get_calendar()
+            except Exception:
+                pass
+        return self._calendar
 
     def print_header(self):
         """打印测试头部信息"""
@@ -182,23 +195,75 @@ class AmazingDataTester:
 
             # 尝试新格式配置
             if hasattr(self.config, "data_sources") and self.config.data_sources:
-                providers = self.config.data_sources.get("providers", {})
-                if "amazingdata" in providers:
+                ds = self.config.data_sources
+                # 兼容 Pydantic 模型和字典两种格式
+                providers = (
+                    getattr(ds, "providers", None) or ds.get("providers", {})
+                    if isinstance(ds, dict)
+                    else getattr(ds, "providers", {})
+                )
+
+                # 获取 amazingdata 提供者配置
+                ad_provider = None
+                if isinstance(providers, dict):
+                    ad_provider = providers.get("amazingdata")
+                elif hasattr(providers, "__getitem__"):
+                    ad_provider = (
+                        providers.get("amazingdata", None)
+                        if hasattr(providers, "get")
+                        else providers["amazingdata"] if "amazingdata" in providers else None
+                    )
+
+                if ad_provider:
                     print(f"{Fore.GREEN}使用新格式配置{Style.RESET_ALL}")
-                    ad_provider = providers["amazingdata"]
 
-                    enabled = ad_provider.get("enabled", False)
-                    ad_config = ad_provider.get("config", {})
-                    conn_config = ad_config.get("connection", {})
+                    # 获取 enabled 状态
+                    enabled = (
+                        getattr(ad_provider, "enabled", False)
+                        if hasattr(ad_provider, "enabled")
+                        else (
+                            ad_provider.get("enabled", False)
+                            if isinstance(ad_provider, dict)
+                            else False
+                        )
+                    )
 
-                    self.credentials = {
-                        "host": conn_config.get("host", ""),
-                        "port": conn_config.get("port", 8600),
-                        "username": conn_config.get("username", ""),
-                        "password": conn_config.get("password", ""),
-                        "timeout": conn_config.get("timeout", 10),
-                        "enabled": enabled,
-                    }
+                    # 获取 config
+                    ad_config = (
+                        getattr(ad_provider, "config", {})
+                        if hasattr(ad_provider, "config")
+                        else ad_provider.get("config", {}) if isinstance(ad_provider, dict) else {}
+                    )
+
+                    # 获取 connection
+                    if isinstance(ad_config, dict):
+                        conn_config = ad_config.get("connection", {})
+                    else:
+                        conn_config = (
+                            getattr(ad_config, "connection", {})
+                            if hasattr(ad_config, "connection")
+                            else {}
+                        )
+
+                    # 提取凭证
+                    if isinstance(conn_config, dict):
+                        self.credentials = {
+                            "host": conn_config.get("host", ""),
+                            "port": conn_config.get("port", 8600),
+                            "username": conn_config.get("username", ""),
+                            "password": conn_config.get("password", ""),
+                            "timeout": conn_config.get("timeout", 10),
+                            "enabled": enabled,
+                        }
+                    else:
+                        self.credentials = {
+                            "host": getattr(conn_config, "host", ""),
+                            "port": getattr(conn_config, "port", 8600),
+                            "username": getattr(conn_config, "username", ""),
+                            "password": getattr(conn_config, "password", ""),
+                            "timeout": getattr(conn_config, "timeout", 10),
+                            "enabled": enabled,
+                        }
             # 尝试旧格式配置
             elif hasattr(self.config, "amazingdata"):
                 print(f"{Fore.YELLOW}使用旧格式配置{Style.RESET_ALL}")
@@ -423,12 +488,11 @@ class AmazingDataTester:
                 print(f"{Fore.CYAN}获取 {symbol} {name} 的K线数据...{Style.RESET_ALL}")
 
                 # 使用AmazingData MarketData获取K线数据
-                kline_data = ad.MarketData.get_kline_data(
-                    symbol=symbol,
-                    period="1d",
-                    start_date=start_date.strftime("%Y%m%d"),
-                    end_date=end_date.strftime("%Y%m%d"),
-                    adjust="none",
+                kline_data = ad.MarketData(self._get_calendar()).query_kline(
+                    [symbol + ".SZ" if symbol.startswith("0") else symbol + ".SH"],
+                    period=10008,  # Period.day.value
+                    begin_date=int(start_date.strftime("%Y%m%d")),
+                    end_date=int(end_date.strftime("%Y%m%d")),
                 )
 
                 if kline_data is not None and len(kline_data) > 0:
@@ -482,10 +546,15 @@ class AmazingDataTester:
         try:
             print(f"{Fore.CYAN}批量获取实时行情: {test_symbols}...{Style.RESET_ALL}")
 
+            today = int(datetime.now().strftime("%Y%m%d"))
             quotes = {}
             for symbol in test_symbols:
                 # 使用AmazingData MarketData获取实时行情
-                quote = ad.MarketData.get_realtime_quote(symbol)
+                quote = ad.MarketData(self._get_calendar()).query_snapshot(
+                    [symbol + ".SZ" if symbol.startswith("0") else symbol + ".SH"],
+                    begin_date=today,
+                    end_date=today,
+                )
                 if quote:
                     quotes[symbol] = quote
 
@@ -538,10 +607,13 @@ class AmazingDataTester:
         print(f"{Fore.CYAN}测试单次请求延迟...{Style.RESET_ALL}")
         latencies = []
 
+        today = int(datetime.now().strftime("%Y%m%d"))
         for i in range(10):
             start_time = time.time()
             try:
-                ad.MarketData.get_realtime_quote("000001")
+                ad.MarketData(self._get_calendar()).query_snapshot(
+                    ["000001.SZ"], begin_date=today, end_date=today
+                )
                 latency = time.time() - start_time
                 latencies.append(latency)
             except Exception:
@@ -578,9 +650,14 @@ class AmazingDataTester:
         start_time = time.time()
         try:
             # 并发获取多只股票
+            today = int(datetime.now().strftime("%Y%m%d"))
             for symbol in concurrent_symbols:
                 # 这里简化处理，实际应该用asyncio并发
-                ad.MarketData.get_realtime_quote(symbol)
+                ad.MarketData(self._get_calendar()).query_snapshot(
+                    [symbol + ".SZ" if symbol.startswith("0") else symbol + ".SH"],
+                    begin_date=today,
+                    end_date=today,
+                )
 
             duration = time.time() - start_time
             result = TestResult(

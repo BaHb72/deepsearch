@@ -1,7 +1,7 @@
 # 数据源落库与实时行情持久化运行手册（AmazingData + AkShare）
 
-> 适用环境：`DEV`（`settings.dev.yaml`）  
-> 适用场景：股票基础信息预取、板块成分与实时行情入库  
+> 适用环境：`DEV`（`settings.dev.yaml`）
+> 适用场景：股票基础信息预取、板块成分与实时行情入库
 > 参考日志示例：`C:\Users\bahb6\AppData\Roaming\JetBrains\PyCharm2025.2\scratches\scratch_10.txt`
 
 本手册说明在当前重构后的架构下，如何：
@@ -214,15 +214,15 @@ AmazingData 作为主数据源，采用“显式后台作业 + WebAPI 轮询”�
   - `_run_prefetch_job(job_id)` 内部通过 `AmazingDataBoardSource.fetch_records()` + `persist_stock_list()` 落库。
 - WebAPI：`deepsearch/webui/api/endpoints/datasources/ingestion_jobs.py`
 
-  - `GET /api/data-sources/jobs?job_type=prefetch_stock_basics&limit=20`  
+  - `GET /api/data-sources/jobs?job_type=prefetch_stock_basics&limit=20`
     查询最近的股票列表预取作业。
 
-  - `POST /api/data-sources/jobs/prefetch-stock-basics`  
-    Body: `{ "force": true | false }`  
+  - `POST /api/data-sources/jobs/prefetch-stock-basics`
+    Body: `{ "force": true | false }`
     - `force=false` 时，若已有未过期的 `succeeded` 作业或正在运行的作业，则直接复用；
     - 否则新建一个 `prefetch_stock_basics` 作业，并在后台异步执行。
 
-  - `POST /api/data-sources/jobs/{job_id}/cancel`  
+  - `POST /api/data-sources/jobs/{job_id}/cancel`
     - 取消指定 ID 的排队 / 运行中作业。
 
 ### 5.2 运维调用示例（PowerShell）
@@ -317,12 +317,11 @@ AmazingData 作为主数据源，采用“显式后台作业 + WebAPI 轮询”�
 
 ---
 
-本手册重点说明了 **AkShare 与 AmazingData 在新架构下的数据落库路径** 以及操作步骤。  
+本手册重点说明了 **AkShare 与 AmazingData 在新架构下的数据落库路径** 以及操作步骤。
 在排查 “爬取成功但数据库无数据” 的问题时，请优先对照：
 
-1. Schema 是否已初始化（步骤一）；  
-2. AkShare / AmazingData 是否按本文所述路径写入 `market_snapshots`；  
-3. 实时接口是否在已有基础数据的前提下运行。  
+1. Schema 是否已初始化（步骤一）；
+2. AkShare / AmazingData 是否按本文所述路径写入 `market_snapshots`；
+3. 实时接口是否在已有基础数据的前提下运行。
 
-如需扩展到其他数据源（如 Cloudflare 代理、QMT 等），建议复用当前的 `DataSourceRecordPersistence` + `ingestion_jobs` 模式，统一管理后台作业与持久化。 
-
+如需扩展到其他数据源（如 Cloudflare 代理、QMT 等），建议复用当前的 `DataSourceRecordPersistence` + `ingestion_jobs` 模式，统一管理后台作业与持久化。

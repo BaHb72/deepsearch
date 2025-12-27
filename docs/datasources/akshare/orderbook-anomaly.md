@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_changes_em
 
-目标地址: http://quote.eastmoney.com/changes/
+目标地址: <http://quote.eastmoney.com/changes/>
 
 描述: 东方财富-行情中心-盘口异动数据
 

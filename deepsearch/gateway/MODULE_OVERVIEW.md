@@ -14,9 +14,9 @@
   封装为协程。
 - **心跳机制**：`start_heartbeat` 创建后台线程周期性发送 `HEARTBEAT_EVENT_TYPE` 事件，并可配置间隔、断线重连延迟。
 - **连接生命周期**：
-    - `connect()`：置状态为 `CONNECTING`，调用子类 `on_connect`，成功后触发 `on_connected` 与心跳。
-    - `disconnect()`：调用子类 `on_disconnect`，停止心跳、线程池和事件监听。
-    - `reconnect()`、`schedule_reconnect()`：提供自动重连能力。
+  - `connect()`：置状态为 `CONNECTING`，调用子类 `on_connect`，成功后触发 `on_connected` 与心跳。
+  - `disconnect()`：调用子类 `on_disconnect`，停止心跳、线程池和事件监听。
+  - `reconnect()`、`schedule_reconnect()`：提供自动重连能力。
 - **事件分发**：封装 `emit_tick/order/trade/log/error` 辅助方法，把原始数据包装成 `Event` 或消息总线 payload，统一事件类型：
   `EVENT_TICK/ORDER/TRADE/LOG/ERROR`。
 - **订阅/下单接口**：抽象方法 `subscribe`, `unsubscribe`, `send_order`, `cancel_order`、`query_account` 等由具体网关实现。

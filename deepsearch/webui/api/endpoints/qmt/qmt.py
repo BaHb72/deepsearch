@@ -67,6 +67,7 @@ def _ensure_gateway(candidate: Any) -> Optional[QMTGatewayLike]:
         return None
     return cast(QMTGatewayLike, candidate)
 
+
 # 获取数据源配置
 try:
     config = get_config()

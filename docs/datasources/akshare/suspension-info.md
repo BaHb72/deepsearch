@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_tfp_em
 
-目标地址: https://data.eastmoney.com/tfpxx/
+目标地址: <https://data.eastmoney.com/tfpxx/>
 
 描述: 东方财富网-数据中心-特色数据-停复牌信息
 

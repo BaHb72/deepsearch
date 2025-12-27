@@ -5,7 +5,9 @@ import os
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="重启 AmazingData 进程池（停止所有 Worker，下次使用时自动重建）")
+    parser = argparse.ArgumentParser(
+        description="重启 AmazingData 进程池（停止所有 Worker，下次使用时自动重建）"
+    )
     parser.add_argument("env", choices=["dev", "prod"], nargs="?", default="prod")
     args = parser.parse_args()
 

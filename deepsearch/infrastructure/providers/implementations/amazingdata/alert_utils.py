@@ -40,7 +40,7 @@ def _append_alert_bucket(container: Any, alert_type: str, message: str) -> None:
         bucket = stats.setdefault(alert_type, [])
         try:
             # list[dict[str, str]]
-            bucket.append(payload)  # type: ignore[call-arg]
+            bucket.append(payload)
         except Exception:
             # 如果历史结构不兼容，尽力写入
             stats[alert_type] = [payload]
@@ -97,8 +97,9 @@ def read_tgw_tail_lines(file_path: Path, max_bytes: int = 4096, max_lines: int =
         return [f"(读取失败: {exc})"]
 
 
-async def trigger_alert(container: Any, alert_type: str, message: str, *,
-                        extras: Mapping[str, Any] | None = None) -> None:
+async def trigger_alert(
+    container: Any, alert_type: str, message: str, *, extras: Mapping[str, Any] | None = None
+) -> None:
     """触发告警：
     - 拼接 TGW 日志片段
     - 记录日志与本地告警缓存

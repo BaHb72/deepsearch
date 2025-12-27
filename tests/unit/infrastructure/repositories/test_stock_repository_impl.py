@@ -1,6 +1,6 @@
 from __future__ import annotations
-import pytest
 
+import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -9,7 +9,7 @@ from enum import Enum
 from types import ModuleType
 from typing import Any, Generic, TypeVar
 
-import sys
+import pytest
 
 # `stock_repository_impl` 依赖的 stock 实体模块在当前工作区缺失，为保证测试可导入，这里构造最小 stub。
 entities_module = ModuleType("deepsearch.infrastructure.providers.entities")
@@ -73,15 +73,17 @@ sys.modules.setdefault("deepsearch.infrastructure.providers.interfaces", interfa
 sys.modules.setdefault(
     "deepsearch.infrastructure.providers.interfaces.repositories", repositories_module
 )
-sys.modules[
-    "deepsearch.infrastructure.providers.interfaces.repositories.base"
-] = repositories_base_module
+sys.modules["deepsearch.infrastructure.providers.interfaces.repositories.base"] = (
+    repositories_base_module
+)
 
 
-from deepsearch.infrastructure.repositories.stock_repository_impl import StockRepository  # noqa: E402
 from deepsearch.infrastructure.persistence.types import (  # noqa: E402
     DatabaseServiceProtocol,
     DatabaseSessionProtocol,
+)
+from deepsearch.infrastructure.repositories.stock_repository_impl import (  # noqa: E402
+    StockRepository,
 )
 
 

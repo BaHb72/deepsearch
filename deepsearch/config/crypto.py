@@ -8,7 +8,7 @@
 import base64
 import binascii
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Optional, cast
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes

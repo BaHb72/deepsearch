@@ -1,8 +1,9 @@
 """直接测试 MiniQMT 获取当日数据是否包含 amount"""
+
 import asyncio
 import sys
 
-sys.path.insert(0, r'd:\Stock\code\deepsearch')
+sys.path.insert(0, r"d:\Stock\code\deepsearch")
 
 
 async def test_miniqmt_data():
@@ -40,6 +41,7 @@ async def test_miniqmt_data():
     except Exception as e:
         print(f"Error: {e}")
         import traceback
+
         traceback.print_exc()
 
 

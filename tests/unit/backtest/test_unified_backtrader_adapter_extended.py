@@ -24,7 +24,7 @@ class TestRunSync:
     def adapter(self):
         """创建 adapter 实例（mock data_manager）"""
         with patch(
-                "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
+            "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
         ) as mock:
             mock.return_value = MagicMock()
             adapter = UnifiedBacktraderAdapter()
@@ -70,7 +70,7 @@ class TestEnsureDataFrame:
     @pytest.fixture
     def adapter(self):
         with patch(
-                "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
+            "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
         ) as mock:
             mock.return_value = MagicMock()
             adapter = UnifiedBacktraderAdapter()
@@ -121,7 +121,7 @@ class TestResampleToWeekly:
     @pytest.fixture
     def adapter(self):
         with patch(
-                "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
+            "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
         ) as mock:
             mock.return_value = MagicMock()
             adapter = UnifiedBacktraderAdapter()
@@ -131,13 +131,16 @@ class TestResampleToWeekly:
     def daily_data(self):
         """创建每日数据"""
         dates = pd.date_range("2024-01-01", periods=20, freq="D")
-        return pd.DataFrame({
-            "open": range(20),
-            "high": range(1, 21),
-            "low": range(20),
-            "close": range(20),
-            "volume": [1000] * 20,
-        }, index=dates)
+        return pd.DataFrame(
+            {
+                "open": range(20),
+                "high": range(1, 21),
+                "low": range(20),
+                "close": range(20),
+                "volume": [1000] * 20,
+            },
+            index=dates,
+        )
 
     def test_resample_preserves_original(self, adapter, daily_data):
         """测试重采样不修改原始数据"""
@@ -176,7 +179,7 @@ class TestValidateData:
     @pytest.fixture
     def adapter(self):
         with patch(
-                "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
+            "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
         ) as mock:
             mock.return_value = MagicMock()
             adapter = UnifiedBacktraderAdapter()
@@ -186,13 +189,16 @@ class TestValidateData:
     def valid_data(self):
         """创建有效的数据"""
         dates = pd.date_range("2024-01-01", periods=10, freq="D")
-        return pd.DataFrame({
-            "open": [10.0] * 10,
-            "high": [11.0] * 10,
-            "low": [9.0] * 10,
-            "close": [10.5] * 10,
-            "volume": [1000] * 10,
-        }, index=dates)
+        return pd.DataFrame(
+            {
+                "open": [10.0] * 10,
+                "high": [11.0] * 10,
+                "low": [9.0] * 10,
+                "close": [10.5] * 10,
+                "volume": [1000] * 10,
+            },
+            index=dates,
+        )
 
     def test_validate_valid_data(self, adapter, valid_data):
         """测试有效数据验证"""

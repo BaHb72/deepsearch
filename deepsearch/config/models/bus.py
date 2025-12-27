@@ -37,7 +37,8 @@ class MessageBusConfig(BaseModel):
         default_factory=lambda: MessageBusConfig._create_default_buses(), description="总线实例配置"
     )
     routes: List[RouteConfig] = Field(
-        default_factory=lambda: [RouteConfig(match="*", buses=[BusName.ZMQ])], description="消息路由配置"
+        default_factory=lambda: [RouteConfig(match="*", buses=[BusName.ZMQ])],
+        description="消息路由配置",
     )
 
     @staticmethod

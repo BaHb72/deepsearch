@@ -1,7 +1,14 @@
 """Data provider managers module."""
 
-from .data_sync_pipeline import DataSyncPipeline, SourceConfig, SyncState, SyncResult, create_pipeline
+from .data_sync_pipeline import (
+    DataSyncPipeline,
+    SourceConfig,
+    SyncResult,
+    SyncState,
+    create_pipeline,
+)
 from .data_sync_service import DataSyncService, get_sync_service
+
 # 接口和混入模块（重构新增）
 from .interfaces import (
     IDataSource,
@@ -11,18 +18,18 @@ from .interfaces import (
 )
 from .mixins import (
     CacheableMixin,
+    CircuitBreakerConfig,
     CircuitBreakerMixin,
     CircuitState,
-    CircuitBreakerConfig,
     HealthCheckMixin,
 )
 from .sync_fetchers import (
-    PostgreSQLFetcher,
-    AmazingDataFetcher,
     AkShareFetcher,
-    create_postgresql_fetcher,
-    create_amazingdata_fetcher,
+    AmazingDataFetcher,
+    PostgreSQLFetcher,
     create_akshare_fetcher,
+    create_amazingdata_fetcher,
+    create_postgresql_fetcher,
 )
 
 __all__ = [
@@ -54,4 +61,3 @@ __all__ = [
     "CircuitBreakerConfig",
     "HealthCheckMixin",
 ]
-

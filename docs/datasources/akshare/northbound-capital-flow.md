@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_hsgt_fund_flow_summary_em
 
-目标地址: https://data.eastmoney.com/hsgt/index.html#lssj
+目标地址: <https://data.eastmoney.com/hsgt/index.html#lssj>
 
 描述: 东方财富网-数据中心-资金流向-沪深港通资金流向
 

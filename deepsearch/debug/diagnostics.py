@@ -13,12 +13,25 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Awaitable, Callable, Dict, List, Optional, ParamSpec, Type, TypeVar, cast, overload
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    ParamSpec,
+    Type,
+    TypeVar,
+    cast,
+    overload,
+)
 
 P = ParamSpec("P")
 R = TypeVar("R")
 A = TypeVar("A")
 T = TypeVar("T")
+
 
 class DiagnosticLogger:
     """诊断日志记录器"""
@@ -96,14 +109,10 @@ class DiagnosticLogger:
         return result
 
     @overload
-    def diagnostic_method(self, func: Callable[P, R]) -> Callable[P, R]:
-        ...
+    def diagnostic_method(self, func: Callable[P, R]) -> Callable[P, R]: ...
 
     @overload
-    def diagnostic_method(
-        self, func: Callable[P, Awaitable[A]]
-    ) -> Callable[P, Awaitable[A]]:
-        ...
+    def diagnostic_method(self, func: Callable[P, Awaitable[A]]) -> Callable[P, Awaitable[A]]: ...
 
     def diagnostic_method(self, func: Callable[P, object]) -> Callable[P, object]:
         """装饰器用于记录方法调用诊断信息"""
@@ -196,6 +205,7 @@ class DiagnosticLogger:
             return cast(Callable[P, object], async_wrapper)
 
         return wrapper
+
     def diagnostic_class(self, cls: Type[T]) -> Type[T]:
         """装饰器：记录类的所有公共方法"""
         # 记录类创建

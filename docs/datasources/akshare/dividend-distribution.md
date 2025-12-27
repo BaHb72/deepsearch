@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_fhps_em
 
-目标地址: https://data.eastmoney.com/yjfp/
+目标地址: <https://data.eastmoney.com/yjfp/>
 
 描述: 东方财富-数据中心-年报季报-分红配送
 
@@ -77,7 +77,7 @@ print(stock_fhps_em_df)
 
 接口: stock_fhps_detail_em
 
-目标地址: https://data.eastmoney.com/yjfp/detail/300073.html
+目标地址: <https://data.eastmoney.com/yjfp/detail/300073.html>
 
 描述: 东方财富网-数据中心-分红送配-分红送配详情
 
@@ -143,7 +143,7 @@ print(stock_fhps_detail_em_df)
 
 接口: stock_fhps_detail_ths
 
-目标地址: https://basic.10jqka.com.cn/new/603444/bonus.html
+目标地址: <https://basic.10jqka.com.cn/new/603444/bonus.html>
 
 描述: 同花顺-分红情况
 
@@ -207,7 +207,7 @@ print(stock_fhps_detail_ths_df)
 
 接口: stock_hk_fhpx_detail_ths
 
-目标地址: https://stockpage.10jqka.com.cn/HK0700/bonus/
+目标地址: <https://stockpage.10jqka.com.cn/HK0700/bonus/>
 
 描述: 同花顺-港股-分红派息
 

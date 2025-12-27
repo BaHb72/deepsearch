@@ -9,18 +9,15 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from deepsearch.infrastructure.providers.managers.data_source_manager import (
-    DataSourceManager,
-)
-from deepsearch.infrastructure.providers.managers.module_registry import (
-    get_module_registry,
-)
+from deepsearch.infrastructure.providers.managers.data_source_manager import DataSourceManager
+from deepsearch.infrastructure.providers.managers.module_registry import get_module_registry
 
 router = APIRouter(prefix="/api/module-sources", tags=["Module Sources"])
 
 
 class ModuleConfigResponse(BaseModel):
     """模块配置响应。"""
+
     name: str
     label: Optional[str] = None
     description: Optional[str] = None
@@ -32,12 +29,14 @@ class ModuleConfigResponse(BaseModel):
 
 class ModuleListResponse(BaseModel):
     """模块列表响应。"""
+
     modules: List[ModuleConfigResponse]
     categories: List[Dict[str, str]]
 
 
 class UpdateModuleConfigRequest(BaseModel):
     """更新模块配置请求。"""
+
     label: Optional[str] = None
     description: Optional[str] = None
     category: Optional[str] = None
@@ -48,6 +47,7 @@ class UpdateModuleConfigRequest(BaseModel):
 
 class UpdateModuleConfigResponse(BaseModel):
     """更新模块配置响应。"""
+
     success: bool
     message: str
     module: Optional[ModuleConfigResponse] = None
@@ -80,20 +80,22 @@ async def get_all_module_sources() -> ModuleListResponse:
         module_name = config["module_name"]
         module_info = registry.get_module(module_name)
 
-        modules.append(ModuleConfigResponse(
-            name=module_name,
-            label=config.get("label") or (module_info.label if module_info else module_name),
-            description=config.get("description") or (module_info.description if module_info else ""),
-            category=config.get("category", "general"),
-            currentConfig={
-                "primary": config.get("primary_source"),
-                "fallback": config.get("fallback_sources", []),
-            },
-            defaultConfig=config.get("default_config") or (
-                module_info.to_dict()["defaultConfig"] if module_info else None
-            ),
-            availableSources=available_sources,
-        ))
+        modules.append(
+            ModuleConfigResponse(
+                name=module_name,
+                label=config.get("label") or (module_info.label if module_info else module_name),
+                description=config.get("description")
+                or (module_info.description if module_info else ""),
+                category=config.get("category", "general"),
+                currentConfig={
+                    "primary": config.get("primary_source"),
+                    "fallback": config.get("fallback_sources", []),
+                },
+                defaultConfig=config.get("default_config")
+                or (module_info.to_dict()["defaultConfig"] if module_info else None),
+                availableSources=available_sources,
+            )
+        )
 
     # 按分类排序
     modules.sort(key=lambda m: (m.category, m.name))
@@ -129,17 +131,14 @@ async def get_module_source(module_name: str) -> ModuleConfigResponse:
 
 @router.put("/{module_name}", response_model=UpdateModuleConfigResponse)
 async def update_module_source(
-        module_name: str,
-        request: UpdateModuleConfigRequest,
+    module_name: str,
+    request: UpdateModuleConfigRequest,
 ) -> UpdateModuleConfigResponse:
     """更新模块的数据源配置（写入数据库，立即生效）。"""
     registry = get_module_registry()
 
     if not registry.has_repository:
-        raise HTTPException(
-            status_code=503,
-            detail="数据库未初始化，无法更新配置"
-        )
+        raise HTTPException(status_code=503, detail="数据库未初始化，无法更新配置")
 
     success = await registry.update_module_config(
         module_name=module_name,
@@ -183,10 +182,7 @@ async def delete_module_source(module_name: str) -> Dict[str, Any]:
     registry = get_module_registry()
 
     if not registry.has_repository:
-        raise HTTPException(
-            status_code=503,
-            detail="数据库未初始化，无法删除配置"
-        )
+        raise HTTPException(status_code=503, detail="数据库未初始化，无法删除配置")
 
     success = await registry.delete_module_config(module_name)
 

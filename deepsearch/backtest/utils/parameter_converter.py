@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Tuple, Type, Union, cast
 
 from loguru import logger
 
-
 ParamType = Union[Type[Any], Tuple[Type[Any], ...]]
 StrategyParamConfig = Dict[str, ParamType]
 
@@ -79,8 +78,6 @@ class ParameterConverter:
         "take_profit": float,
     }
 
-
-
     @classmethod
     def convert_strategy_params(cls, strategy: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """根据策略类型将原始参数转换成目标类型"""
@@ -113,7 +110,6 @@ class ParameterConverter:
                 raise ValueError(f"参数 {key} 转换失败: {exc}")
 
         return converted
-
 
     @classmethod
     def _convert_value(

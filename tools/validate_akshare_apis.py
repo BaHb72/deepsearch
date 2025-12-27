@@ -173,13 +173,17 @@ class AkShareAPIValidator:
                                     "error": cast(Optional[str], item.get("error")),
                                     "error_type": cast(Optional[str], item.get("error_type")),
                                     "traceback": cast(Optional[str], item.get("traceback")),
-                                    "response_time": cast(Optional[float], item.get("response_time")),
+                                    "response_time": cast(
+                                        Optional[float], item.get("response_time")
+                                    ),
                                     "data_shape": item.get("data_shape"),
                                     "data_sample": item.get("data_sample"),
                                     "params_used": cast(
                                         Optional[Mapping[str, object]], item.get("params_used")
                                     ),
-                                    "timestamp": cast(str, item.get("timestamp", datetime.now().isoformat())),
+                                    "timestamp": cast(
+                                        str, item.get("timestamp", datetime.now().isoformat())
+                                    ),
                                 }
                                 results.append(result)
 
@@ -391,9 +395,7 @@ class AkShareAPIValidator:
 
             # Windows不支持SIGALRM，使用线程超时
             if os.name == "nt":
-                from concurrent.futures import (
-                    ThreadPoolExecutor,
-                )
+                from concurrent.futures import ThreadPoolExecutor
                 from concurrent.futures import TimeoutError as FutureTimeoutError
 
                 with ThreadPoolExecutor(max_workers=1) as executor:
@@ -579,9 +581,7 @@ class AkShareAPIValidator:
         report_lines.append("\n## Performance Analysis\n")
 
         successful_apis = [
-            r
-            for r in self.results
-            if r["status"] == "success" and r["response_time"] is not None
+            r for r in self.results if r["status"] == "success" and r["response_time"] is not None
         ]
         if successful_apis:
             response_times = [cast(float, r["response_time"]) for r in successful_apis]
@@ -620,9 +620,7 @@ class AkShareAPIValidator:
                 report_lines.append(f"\n### {error_type} ({len(apis)} APIs)\n")
                 for api in apis[:5]:  # 只显示前5个
                     error_detail = api["error"] or ""
-                    report_lines.append(
-                        f"- **{api['function_name']}**: {error_detail[:100]}"
-                    )
+                    report_lines.append(f"- **{api['function_name']}**: {error_detail[:100]}")
                 if len(apis) > 5:
                     report_lines.append(f"- ... and {len(apis) - 5} more")
 
@@ -631,39 +629,43 @@ class AkShareAPIValidator:
 
         # 按类别组织成功的API
         for category in ["stock", "index", "fund", "macro"]:
-                category_success = [
-                    r for r in self.results if r["category"] == category and r["status"] == "success"
-                ]
+            category_success = [
+                r for r in self.results if r["category"] == category and r["status"] == "success"
+            ]
 
-                if category_success:
+            if category_success:
+                report_lines.append(
+                    f"\n### {category.capitalize()} APIs ({len(category_success)} available)\n"
+                )
+
+                # 按响应时间排序，推荐最快的
+                category_success.sort(
+                    key=lambda x: (
+                        cast(float, x["response_time"])
+                        if x["response_time"] is not None
+                        else float("inf")
+                    )
+                )
+
+                for api in category_success[:10]:  # 显示前10个
+                    params = api.get("params_used")
+                    if isinstance(params, Mapping):
+                        param_str = ", ".join(f"{k}={v}" for k, v in params.items())
+                    else:
+                        param_str = "no params"
+
+                    response_value = api["response_time"]
+                    response_display = (
+                        f"{cast(float, response_value):.3f}s"
+                        if isinstance(response_value, (int, float))
+                        else "N/A"
+                    )
                     report_lines.append(
-                        f"\n### {category.capitalize()} APIs ({len(category_success)} available)\n"
+                        f"- **{api['function_name']}** - {response_display} - ({param_str})"
                     )
 
-                    # 按响应时间排序，推荐最快的
-                    category_success.sort(
-                        key=lambda x: cast(float, x["response_time"]) if x["response_time"] is not None else float("inf")
-                    )
-
-                    for api in category_success[:10]:  # 显示前10个
-                        params = api.get("params_used")
-                        if isinstance(params, Mapping):
-                            param_str = ", ".join(f"{k}={v}" for k, v in params.items())
-                        else:
-                            param_str = "no params"
-
-                        response_value = api["response_time"]
-                        response_display = (
-                            f"{cast(float, response_value):.3f}s"
-                            if isinstance(response_value, (int, float))
-                            else "N/A"
-                        )
-                        report_lines.append(
-                            f"- **{api['function_name']}** - {response_display} - ({param_str})"
-                        )
-
-                if len(category_success) > 10:
-                    report_lines.append(f"- ... and {len(category_success) - 10} more")
+            if len(category_success) > 10:
+                report_lines.append(f"- ... and {len(category_success) - 10} more")
 
         # 详细结果表格（可选）
         report_lines.append("\n## Detailed Results\n")

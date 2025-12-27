@@ -11,8 +11,8 @@ from deepsearch.core.interfaces import ComponentType
 from deepsearch.core.utils.exceptions import error_context
 from deepsearch.event.engine.engine import EventEngine
 from deepsearch.messaging.bus import CompositeMessageBus, RouteConfig
-from deepsearch.messaging.types import BusName
 from deepsearch.messaging.factory import MessageBusFactory
+from deepsearch.messaging.types import BusName
 
 
 class EventEngineComponent(SimpleAsyncComponent[EventEngine]):
@@ -126,9 +126,7 @@ class MessageBusComponent(AsyncComponent[CompositeMessageBus]):
                             elif hasattr(bus, "value"):
                                 bus_list.append(BusName(str(bus.value)))
                             else:
-                                raise TypeError(
-                                    f"无法识别的消息总线类型: {type(bus).__name__}"
-                                )
+                                raise TypeError(f"无法识别的消息总线类型: {type(bus).__name__}")
 
                         route = RouteConfig(match=route_cfg.match, buses=bus_list)
                         routes.append(route)

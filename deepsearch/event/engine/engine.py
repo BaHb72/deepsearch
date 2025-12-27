@@ -48,7 +48,18 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from itertools import count
 from queue import Empty, Full, PriorityQueue
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Protocol, Tuple, TypedDict, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Protocol,
+    Tuple,
+    TypedDict,
+    cast,
+)
 
 if TYPE_CHECKING:
     from deepsearch.core.interfaces.component import MonitoringHook
@@ -154,12 +165,12 @@ class _ScheduledTask:
 
 Handler = Callable[[Event], None]
 
+
 # 处理器包装器在运行时会附加 `_original_handler` 属性，以便调试/监控。
 class MonitoredHandler(Protocol):
     """为监控包装后的处理器提供类型约束。"""
 
-    def __call__(self, event: Event) -> None:
-        ...
+    def __call__(self, event: Event) -> None: ...
 
     _original_handler: Handler
 
@@ -1257,7 +1268,7 @@ Usage Example:
         batch_size=50,
         batch_timeout=0.1
     )
-    
+
     # Create a batch-aware handler
     class TickBatchHandler(BatchHandler):
         def process_batch(self, events: List[Event]) -> None:
@@ -1265,10 +1276,10 @@ Usage Example:
             prices = [e.data['price'] for e in events]
             avg_price = sum(prices) / len(prices)
             print(f"Batch of {len(events)} ticks, avg price: {avg_price}")
-    
+
     # Register handler
     engine.register(event_type="TICK", handler=TickBatchHandler())
-    
+
     # Start engine
     engine.start()
 """

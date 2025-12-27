@@ -13,12 +13,12 @@ from typing import Any, DefaultDict, Dict, List, Optional, TypedDict
 
 import click
 
+
 class ComponentStats(TypedDict):
     total_logs: int
     level_distribution: Dict[str, int]
     error_rate: float
     warning_rate: float
-
 
 
 class LogAnalyzer:
@@ -378,12 +378,3 @@ def summary(log_dir, hours):
 
 if __name__ == "__main__":
     cli()
-
-
-
-
-
-
-
-
-

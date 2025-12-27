@@ -13,16 +13,16 @@ def cleanup_ports():
     # 获取所有运行main.py的Python进程
     try:
         output = subprocess.check_output(
-            'wmic process where "name=\'python.exe\'" get processid,commandline',
+            "wmic process where \"name='python.exe'\" get processid,commandline",
             shell=True,
-            text=True
+            text=True,
         )
 
-        lines = output.strip().split('\n')
+        lines = output.strip().split("\n")
         pids_to_kill = []
 
         for line in lines:
-            if 'main.py' in line and line.strip():
+            if "main.py" in line and line.strip():
                 # 提取PID (最后一个数字)
                 parts = line.strip().split()
                 if parts:
@@ -36,7 +36,7 @@ def cleanup_ports():
                 print(f"  终止进程 PID: {pid}")
                 try:
                     # 使用os.system执行Windows命令
-                    os.system(f'taskkill /PID {pid} /F >nul 2>&1')
+                    os.system(f"taskkill /PID {pid} /F >nul 2>&1")
                 except OSError as e:
                     print(f"  警告: 无法终止进程 {pid}: {e}")
             print("清理完成!")

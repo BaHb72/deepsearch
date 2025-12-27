@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any, Optional, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 if TYPE_CHECKING:
     from .implementations.akshare.akshare import AkShareProxyProvider as _AkShareProxyProvider

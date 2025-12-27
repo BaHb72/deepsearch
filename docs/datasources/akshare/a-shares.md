@@ -13,7 +13,7 @@ updated: 2025-11-17
 
 接口: stock_sse_summary
 
-目标地址: http://www.sse.com.cn/market/stockdata/statistic/
+目标地址: <http://www.sse.com.cn/market/stockdata/statistic/>
 
 描述: 上海证券交易所-股票数据总貌
 
@@ -63,7 +63,7 @@ print(stock_sse_summary_df)
 
 接口: stock_szse_summary
 
-目标地址: http://www.szse.cn/market/overview/index.html
+目标地址: <http://www.szse.cn/market/overview/index.html>
 
 描述: 深圳证券交易所-市场总貌-证券类别统计
 
@@ -119,7 +119,7 @@ print(stock_szse_summary_df)
 
 接口: stock_szse_area_summary
 
-目标地址: http://www.szse.cn/market/overview/index.html
+目标地址: <http://www.szse.cn/market/overview/index.html>
 
 描述: 深圳证券交易所-市场总貌-地区交易排序
 
@@ -250,13 +250,13 @@ print(stock_szse_area_summary_df)
 33  34    青海  2.453409e+10  ...  6.640867e+09          0.0  2.349068e+06
 ```
 
-###### 
+######
 
 ###### 股票行业成交
 
 接口: stock_szse_sector_summary
 
-目标地址: http://docs.static.szse.cn/www/market/periodical/month/W020220511355248518608.html
+目标地址: <http://docs.static.szse.cn/www/market/periodical/month/W020220511355248518608.html>
 
 描述: 深圳证券交易所-统计资料-股票行业成交数据
 
@@ -323,7 +323,7 @@ print(stock_szse_sector_summary_df)
 
 接口: stock_sse_deal_daily
 
-目标地址: http://www.sse.com.cn/market/stockdata/overview/day/
+目标地址: <http://www.sse.com.cn/market/stockdata/overview/day/>
 
 描述: 上海证券交易所-数据-股票数据-成交概况-股票成交概况-每日股票情况
 
@@ -373,7 +373,7 @@ print(stock_sse_deal_daily_df)
 
 接口: stock_individual_info_em
 
-目标地址: http://quote.eastmoney.com/concept/sh603777.html?from=classic
+目标地址: <http://quote.eastmoney.com/concept/sh603777.html?from=classic>
 
 描述: 东方财富-个股-股票信息
 
@@ -421,7 +421,7 @@ print(stock_individual_info_em_df)
 
 接口: stock_individual_basic_info_xq
 
-目标地址: https://xueqiu.com/snowman/S/SH601127/detail#/GSJJ
+目标地址: <https://xueqiu.com/snowman/S/SH601127/detail#/GSJJ>
 
 描述: 雪球财经-个股-公司概况-公司简介
 
@@ -500,7 +500,7 @@ print(stock_individual_basic_info_xq_df)
 
 接口: stock_bid_ask_em
 
-目标地址: https://quote.eastmoney.com/sz000001.html
+目标地址: <https://quote.eastmoney.com/sz000001.html>
 
 描述: 东方财富-行情报价
 
@@ -578,7 +578,7 @@ print(stock_bid_ask_em_df)
 
 接口: stock_zh_a_spot_em
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#hs_a_board
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#hs_a_board>
 
 描述: 东方财富网-沪深京 A 股-实时行情数据
 
@@ -649,7 +649,7 @@ print(stock_zh_a_spot_em_df)
 
 接口: stock_sh_a_spot_em
 
-目标地址: http://quote.eastmoney.com/center/gridlist.html#sh_a_board
+目标地址: <http://quote.eastmoney.com/center/gridlist.html#sh_a_board>
 
 描述: 东方财富网-沪 A 股-实时行情数据
 
@@ -720,7 +720,7 @@ print(stock_sh_a_spot_em_df)
 
 接口: stock_sz_a_spot_em
 
-目标地址: http://quote.eastmoney.com/center/gridlist.html#sz_a_board
+目标地址: <http://quote.eastmoney.com/center/gridlist.html#sz_a_board>
 
 描述: 东方财富网-深 A 股-实时行情数据
 
@@ -791,7 +791,7 @@ print(stock_sz_a_spot_em_df)
 
 接口: stock_bj_a_spot_em
 
-目标地址: http://quote.eastmoney.com/center/gridlist.html#bj_a_board
+目标地址: <http://quote.eastmoney.com/center/gridlist.html#bj_a_board>
 
 描述: 东方财富网-京 A 股-实时行情数据
 
@@ -862,7 +862,7 @@ print(stock_bj_a_spot_em_df)
 
 接口: stock_new_a_spot_em
 
-目标地址: http://quote.eastmoney.com/center/gridlist.html#newshares
+目标地址: <http://quote.eastmoney.com/center/gridlist.html#newshares>
 
 描述: 东方财富网-新股-实时行情数据
 
@@ -934,7 +934,7 @@ print(stock_new_a_spot_em_df)
 
 接口: stock_cy_a_spot_em
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#gem_board
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#gem_board>
 
 描述: 东方财富网-创业板-实时行情
 
@@ -1005,7 +1005,7 @@ print(stock_cy_a_spot_em_df)
 
 接口: stock_kc_a_spot_em
 
-目标地址: http://quote.eastmoney.com/center/gridlist.html#kcb_board
+目标地址: <http://quote.eastmoney.com/center/gridlist.html#kcb_board>
 
 描述: 东方财富网-科创板-实时行情
 
@@ -1076,7 +1076,7 @@ print(stock_kc_a_spot_em_df)
 
 接口: stock_zh_ab_comparison_em
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#ab_comparison
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#ab_comparison>
 
 描述: 东方财富网-行情中心-沪深京个股-AB股比价-全部AB股比价
 
@@ -1134,7 +1134,7 @@ print(stock_zh_ab_comparison_em_df)
 
 接口: stock_zh_a_spot
 
-目标地址: https://vip.stock.finance.sina.com.cn/mkt/#hs_a
+目标地址: <https://vip.stock.finance.sina.com.cn/mkt/#hs_a>
 
 描述: 新浪财经-沪深京 A 股数据, 重复运行本函数会被新浪暂时封 IP, 建议增加时间间隔
 
@@ -1196,7 +1196,7 @@ print(stock_zh_a_spot_df)
 
 接口: stock_individual_spot_xq
 
-目标地址: https://xueqiu.com/S/SH513520
+目标地址: <https://xueqiu.com/S/SH513520>
 
 描述: 雪球-行情中心-个股
 
@@ -1275,7 +1275,7 @@ print(stock_individual_spot_xq_df)
 
 接口: stock_zh_a_hist
 
-目标地址: https://quote.eastmoney.com/concept/sh603777.html?from=classic(示例)
+目标地址: <https://quote.eastmoney.com/concept/sh603777.html?from=classic(示例)>
 
 描述: 东方财富-沪深京 A 股日频率数据; 历史数据按日频率更新, 当日收盘价请在收盘后获取
 
@@ -1417,7 +1417,7 @@ print(stock_zh_a_hist_df)
 
 P.S. 建议切换为 stock_zh_a_hist 接口使用(该接口数据质量高, 访问无限制)
 
-目标地址: https://finance.sina.com.cn/realstock/company/sh600006/nc.shtml(示例)
+目标地址: <https://finance.sina.com.cn/realstock/company/sh600006/nc.shtml(示例)>
 
 描述: 新浪财经-沪深京 A 股的数据, 历史数据按日频率更新; 注意其中的 **sh689009** 为 CDR, 请 通过 **ak.stock_zh_a_cdr_daily** 接口获取
 
@@ -1629,7 +1629,7 @@ print(hfq_factor_df)
 
 接口: stock_zh_a_hist_tx
 
-目标地址: https://gu.qq.com/sh000919/zs
+目标地址: <https://gu.qq.com/sh000919/zs>
 
 描述: 腾讯证券-日频-股票历史数据; 历史数据按日频率更新, 当日收盘价请在收盘后获取
 
@@ -1762,7 +1762,7 @@ print(stock_zh_a_hist_tx_df)
 
 接口: stock_zh_a_minute
 
-目标地址: http://finance.sina.com.cn/realstock/company/sh600519/nc.shtml
+目标地址: <http://finance.sina.com.cn/realstock/company/sh600519/nc.shtml>
 
 描述: 新浪财经-沪深京 A 股股票或者指数的分时数据，目前可以获取 1, 5, 15, 30, 60 分钟的数据频率, 可以指定是否复权
 
@@ -1817,7 +1817,7 @@ print(stock_zh_a_minute_df)
 
 接口: stock_zh_a_hist_min_em
 
-目标地址: https://quote.eastmoney.com/concept/sh603777.html
+目标地址: <https://quote.eastmoney.com/concept/sh603777.html>
 
 描述: 东方财富网-行情首页-沪深京 A 股-每日分时行情; 该接口只能获取近期的分时数据，注意时间周期的设置
 
@@ -1958,7 +1958,7 @@ print(stock_zh_a_hist_min_em_df)
 
 接口: stock_intraday_em
 
-目标地址: https://quote.eastmoney.com/f1.html?newcode=0.000001
+目标地址: <https://quote.eastmoney.com/f1.html?newcode=0.000001>
 
 描述: 东方财富-分时数据
 
@@ -2010,7 +2010,7 @@ print(stock_intraday_em_df)
 
 接口: stock_intraday_sina
 
-目标地址: https://vip.stock.finance.sina.com.cn/quotes_service/view/cn_bill.php?symbol=sz000001
+目标地址: <https://vip.stock.finance.sina.com.cn/quotes_service/view/cn_bill.php?symbol=sz000001>
 
 描述: 新浪财经-日内分时数据
 
@@ -2066,7 +2066,7 @@ print(stock_intraday_sina_df)
 
 接口: stock_zh_a_hist_pre_min_em
 
-目标地址: https://quote.eastmoney.com/concept/sh603777.html
+目标地址: <https://quote.eastmoney.com/concept/sh603777.html>
 
 描述: 东方财富-股票行情-盘前数据
 
@@ -2126,7 +2126,7 @@ print(stock_zh_a_hist_pre_min_em_df)
 
 接口: stock_zh_a_tick_tx
 
-目标地址: http://gu.qq.com/sz300494/gp/detail(示例)
+目标地址: <http://gu.qq.com/sz300494/gp/detail(示例)>
 
 描述: 每个交易日 16:00 提供当日数据; 如遇到数据缺失, 请使用 **ak.stock_zh_a_tick_163()** 接口(注意数据会有一定差异)
 
@@ -2175,14 +2175,13 @@ print(stock_zh_a_tick_tx_js_df)
 1409  15:00:02  3.52  0.01      10    3520   买盘
 ```
 
-
 #### 同行比较
 
 ##### 成长性比较
 
 接口: stock_zh_growth_comparison_em
 
-目标地址: https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=000895&color=b#/thbj/czxbj
+目标地址: <https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=000895&color=b#/thbj/czxbj>
 
 描述: 东方财富-行情中心-同行比较-成长性比较
 
@@ -2248,7 +2247,7 @@ print(stock_zh_growth_comparison_em_df)
 
 接口: stock_zh_valuation_comparison_em
 
-目标地址: https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=000895&color=b#/thbj/gzbj
+目标地址: <https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=000895&color=b#/thbj/gzbj>
 
 描述: 东方财富-行情中心-同行比较-估值比较
 
@@ -2314,7 +2313,7 @@ print(stock_zh_valuation_comparison_em_df)
 
 接口: stock_zh_dupont_comparison_em
 
-目标地址: https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=000895&color=b#/thbj/dbfxbj
+目标地址: <https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=000895&color=b#/thbj/dbfxbj>
 
 描述: 东方财富-行情中心-同行比较-杜邦分析比较
 
@@ -2350,7 +2349,6 @@ print(stock_zh_valuation_comparison_em_df)
 | 权益乘数-24A    | float64 | -  |
 | ROE-3年平均排名  | float64 | -  |
 
-
 接口示例
 
 ```python
@@ -2379,7 +2377,7 @@ print(stock_zh_dupont_comparison_em_df)
 
 接口: stock_zh_scale_comparison_em
 
-目标地址: https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=000895&color=b#/thbj/gsgm
+目标地址: <https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=000895&color=b#/thbj/gsgm>
 
 描述: 东方财富-行情中心-同行比较-公司规模
 

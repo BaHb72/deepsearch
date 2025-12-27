@@ -9,7 +9,7 @@ AmazingData 财务数据 API 测试脚本
 import asyncio
 import sys
 from datetime import datetime
-from typing import Any, Callable
+from typing import Callable
 
 # 添加项目路径
 sys.path.insert(0, "d:/Stock/code/deepsearch")
@@ -20,7 +20,9 @@ from deepsearch.webui.api.endpoints.amazingdata.base import get_amazingdata_prov
 class TestResult:
     """测试结果类"""
 
-    def __init__(self, api_name: str, success: bool, data_count: int, error: str = "", elapsed: float = 0):
+    def __init__(
+        self, api_name: str, success: bool, data_count: int, error: str = "", elapsed: float = 0
+    ):
         self.api_name = api_name
         self.success = success
         self.data_count = data_count
@@ -41,13 +43,13 @@ async def test_api(api_name: str, func: Callable, *args, **kwargs) -> TestResult
 
         # 解析结果
         if result is None:
-            print(f"状态: 返回None")
+            print("状态: 返回None")
             return TestResult(api_name, False, 0, "返回None", elapsed)
 
         if hasattr(result, "to_dict"):
             # DataFrame
             data_count = len(result)
-            print(f"状态: 成功")
+            print("状态: 成功")
             print(f"数据条数: {data_count}")
             print(f"耗时: {elapsed:.2f}秒")
             if data_count > 0:
@@ -82,7 +84,7 @@ async def test_api(api_name: str, func: Callable, *args, **kwargs) -> TestResult
 
     except Exception as e:
         elapsed = (datetime.now() - start).total_seconds()
-        print(f"状态: 异常")
+        print("状态: 异常")
         print(f"错误: {str(e)}")
         return TestResult(api_name, False, 0, str(e), elapsed)
 
@@ -148,7 +150,9 @@ async def run_financial_tests():
         else:
             return {"success": False, "data": None, "error": "方法不存在"}
 
-    results.append(await test_api("get_financial_indicators (财务指标)", test_get_financial_indicators))
+    results.append(
+        await test_api("get_financial_indicators (财务指标)", test_get_financial_indicators)
+    )
 
     # 生成测试报告
     print_report(results)

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
 
 from .base import Base
-
 
 JSONType = JSON
 

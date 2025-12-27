@@ -3,6 +3,7 @@
 
 作为所有数据访问的统一入口，提供监控、路由和容错功能。
 """
+
 import asyncio
 import inspect
 import time
@@ -171,6 +172,71 @@ class DataAccessProxy:
 
         return True
 
+    def _get_source_priority(
+        self,
+        access_type: DataAccessType,
+        prefer_source: Optional[DataSourceType] = None,
+    ) -> list[DataSourceType]:
+        """
+        获取数据源优先级列表
+
+        Args:
+            access_type: 访问类型
+            prefer_source: 优先使用的数据源
+
+        Returns:
+            数据源优先级列表
+        """
+        # 默认优先级：QMT > AKShare
+        default_priority = [DataSourceType.QMT, DataSourceType.AKSHARE]
+
+        # 根据访问类型调整优先级
+        if access_type == DataAccessType.REALTIME_QUOTE:
+            # 实时行情优先QMT
+            priority = [DataSourceType.QMT, DataSourceType.AKSHARE]
+        elif access_type == DataAccessType.HISTORICAL_KLINE:
+            # 历史K线优先AKShare
+            priority = [DataSourceType.AKSHARE, DataSourceType.QMT]
+        elif access_type == DataAccessType.STOCK_LIST:
+            # 股票列表优先AKShare
+            priority = [DataSourceType.AKSHARE, DataSourceType.QMT]
+        else:
+            priority = default_priority
+
+        # 如果指定了优先数据源，将其移到最前面
+        if prefer_source and prefer_source in priority:
+            priority.remove(prefer_source)
+            priority.insert(0, prefer_source)
+
+        return priority
+
+    def reset_circuit_breaker(
+        self,
+        source: Optional[DataSourceType] = None,
+    ) -> None:
+        """
+        重置熔断器状态
+
+        Args:
+            source: 指定数据源，None表示重置所有
+        """
+        if source:
+            if source in self.circuit_breaker_status:
+                self.circuit_breaker_status[source] = {
+                    "is_open": False,
+                    "failure_count": 0,
+                    "last_failure_time": 0,
+                }
+                logger.info(f"数据源 {source.value} 熔断器已重置")
+        else:
+            for src in DataSourceType:
+                self.circuit_breaker_status[src] = {
+                    "is_open": False,
+                    "failure_count": 0,
+                    "last_failure_time": 0,
+                }
+            logger.info("所有数据源熔断器已重置")
+
     async def get_realtime_quote(
         self,
         symbol: str,
@@ -311,9 +377,9 @@ class DataAccessProxy:
         raise Exception(error_msg)
 
     async def get_stock_list(
-            self,
-            prefer_source: Optional[DataSourceType] = None,
-            module: Optional[str] = None,
+        self,
+        prefer_source: Optional[DataSourceType] = None,
+        module: Optional[str] = None,
     ) -> StockListFetchResult:
         """
         获取股票列表，并返回领域对象与旧结构。
@@ -398,8 +464,6 @@ class DataAccessProxy:
             legacy=tuple(fallback_legacy),
             mismatch=len(fallback_legacy),
         )
-
-
 
 
 def monitor_access(

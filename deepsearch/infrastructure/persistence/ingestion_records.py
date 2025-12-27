@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 from typing import Any, Iterable, Mapping, MutableMapping, Sequence
+from uuid import uuid4
 
 from sqlalchemy import insert, update
 
@@ -30,7 +30,9 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _chunk_records(records: Sequence[Mapping[str, Any]], chunk_size: int) -> Iterable[list[dict[str, Any]]]:
+def _chunk_records(
+    records: Sequence[Mapping[str, Any]], chunk_size: int
+) -> Iterable[list[dict[str, Any]]]:
     bucket: list[dict[str, Any]] = []
     for record in records:
         bucket.append(dict(record))
@@ -44,7 +46,9 @@ def _chunk_records(records: Sequence[Mapping[str, Any]], chunk_size: int) -> Ite
 def _record_checksum(records: Sequence[Mapping[str, Any]]) -> str:
     digest = hashlib.sha256()
     for record in records:
-        serialized = json.dumps(record, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        serialized = json.dumps(
+            record, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+        ).encode("utf-8")
         digest.update(serialized)
     return digest.hexdigest()
 
@@ -126,7 +130,7 @@ class DataSourceRecordPersistence:
             if payload_obj is not None:
                 normalized_records.append(payload_obj)
 
-        return PersistedRecordSetEnvelope(
+        return PersistedRecordSetEnvelope(  # type: ignore[return-value]
             id=str(job_row.get("id")),
             source=data_source,
             access_type=access_type,
@@ -134,7 +138,7 @@ class DataSourceRecordPersistence:
             completed_at=self._coerce_dt(job_row.get("completed_at")),
             expires_at=self._coerce_dt(job_row.get("expires_at")),
             checksum=str(job_row.get("checksum")) if job_row.get("checksum") else None,
-            record_count=int(job_row.get("record_count") or len(normalized_records)),
+            record_count=int(job_row.get("record_count") or len(normalized_records)),  # type: ignore[call-overload]
             metadata=self._coerce_mapping(job_row.get("job_metadata")),
             records=tuple(normalized_records),
         )
@@ -217,7 +221,7 @@ class DataSourceRecordPersistence:
                         .returning(IngestionBatch.id)
                     )
                     batch_id_result = await session.execute(batch_stmt)
-                    batch_id = batch_id_result.scalar_one()
+                    batch_id = batch_id_result.scalar_one()  # type: ignore[attr-defined]
 
                     await session.execute(
                         insert(RawProviderPayload).values(
@@ -242,7 +246,9 @@ class DataSourceRecordPersistence:
                             board_value = boards
 
                         as_of_raw = record.get("as_of")
-                        as_of_value = self._coerce_dt(as_of_raw) if as_of_raw is not None else requested_at
+                        as_of_value = (
+                            self._coerce_dt(as_of_raw) if as_of_raw is not None else requested_at
+                        )
 
                         snapshot_rows.append(
                             {
@@ -298,7 +304,7 @@ class DataSourceRecordPersistence:
                 )
             raise
 
-        return PersistedRecordSetEnvelope(
+        return PersistedRecordSetEnvelope(  # type: ignore[return-value]
             id=job_id,
             source=data_source,
             access_type=access_type,
@@ -366,9 +372,13 @@ class DataSourceRecordPersistence:
         if completed:
             values["completed_at"] = _utcnow()
         async with self._db.transaction() as session:
-            await session.execute(update(IngestionJob).where(IngestionJob.id == job_id).values(values))
+            await session.execute(
+                update(IngestionJob).where(IngestionJob.id == job_id).values(values)
+            )
 
-    async def fetch_jobs(self, *, job_type: str | None = None, limit: int = 20) -> list[Mapping[str, Any]]:
+    async def fetch_jobs(
+        self, *, job_type: str | None = None, limit: int = 20
+    ) -> list[Mapping[str, Any]]:
         """查询最近的作业记录。"""
 
         clauses: list[str] = []

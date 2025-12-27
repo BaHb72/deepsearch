@@ -5,10 +5,10 @@
 支持基础设施组件和业务组件的分离管理。
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime
 import asyncio
 import inspect
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from deepsearch.core.utils.exceptions import ComponentError
@@ -134,6 +134,7 @@ class ComponentManager:
         self._update_initialization_order()
 
         self._logger.debug(f"取消注册组件: {name}")
+
     async def initialize_component(self, name: str) -> None:
         """初始化指定组件。"""
         if name not in self._components:
@@ -159,6 +160,7 @@ class ComponentManager:
             info.error_message = str(exc)
             self._logger.error(f"初始化 {name} 失败: {exc}")
             raise ComponentError(name, f"Failed to initialize {name}: {exc}") from exc
+
     async def initialize_all(self, component_type: Optional[ComponentType] = None) -> None:
         """
         初始化所有组件（或指定类型的组件）
@@ -206,6 +208,7 @@ class ComponentManager:
             info.error_message = str(exc)
             self._logger.error(f"启动 {name} 失败: {exc}")
             raise ComponentError(name, f"Failed to start {name}: {exc}") from exc
+
     async def stop_component(self, name: str) -> None:
         """停止指定组件。"""
         if name not in self._components:
@@ -220,7 +223,9 @@ class ComponentManager:
 
         for comp_name, comp_info in self._component_info.items():
             if name in comp_info.dependencies and comp_info.status == ComponentStatus.RUNNING:
-                raise ComponentError(name, f"Cannot stop {name}, component {comp_name} depends on it")
+                raise ComponentError(
+                    name, f"Cannot stop {name}, component {comp_name} depends on it"
+                )
 
         try:
             info.status = ComponentStatus.STOPPING
@@ -236,6 +241,7 @@ class ComponentManager:
             info.error_message = str(exc)
             self._logger.error(f"停止 {name} 失败: {exc}")
             raise ComponentError(name, f"Failed to stop {name}: {exc}") from exc
+
     async def start_infrastructure(self) -> None:
         """启动所有基础设施组件"""
         for name in self._initialization_order:
@@ -475,6 +481,7 @@ class ComponentManager:
                 self._logger.error(f"Health check failed for {name}: {e}")
                 return False
         return bool(info.status == ComponentStatus.RUNNING)
+
     def health_check_all(self) -> Dict[str, bool]:
         """对所有组件执行健康检查（别名）"""
         return self.perform_health_check()
@@ -513,6 +520,7 @@ class ComponentManager:
 
         summary["components"] = components_summary
         return summary
+
     async def initialize_all_components(self) -> None:
         """初始化所有组件（别名）"""
         await self.initialize_all()

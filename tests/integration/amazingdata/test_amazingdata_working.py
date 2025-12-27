@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from helpers import fetch_code_list
 
+
 def test_amazingdata():
     print("\n" + "=" * 60)
     print("AmazingData 功能测试（使用正确的API调用）")
@@ -75,14 +76,21 @@ def test_amazingdata():
 
     # 3. 测试获取实时行情
     print("\n[测试3] 获取实时行情...")
-    test_symbols = ["000001", "600036", "000002"]
+
+    # 获取交易日历（MarketData必需）
+    calendar = None
+    try:
+        calendar = ad.BaseData().get_calendar()
+        print(f"[信息] 交易日历: {len(calendar)}天")
+    except Exception as e:
+        print(f"[警告] 获取交易日历失败: {e}")
+
+    test_symbols = ["000001.SZ", "600036.SH", "000002.SZ"]
     for symbol in test_symbols:
         try:
-            quote = ad.MarketData.get_realtime_quote(symbol)
+            quote = ad.MarketData(calendar).query_snapshot([symbol])
             if quote:
-                print(
-                    f"[SUCCESS] {symbol}: 最新价={quote.get('last', 'N/A')}, 涨跌幅={quote.get('pct_chg', 'N/A')}%"
-                )
+                print(f"[SUCCESS] {symbol}: 获取到快照数据")
             else:
                 print(f"[WARNING] {symbol}: 无数据")
         except Exception as e:
@@ -97,12 +105,11 @@ def test_amazingdata():
         end_date = datetime.now()
         start_date = end_date - timedelta(days=30)
 
-        kline = ad.MarketData.get_kline_data(
-            symbol="000001",
-            period="1d",
-            start_date=start_date.strftime("%Y%m%d"),
-            end_date=end_date.strftime("%Y%m%d"),
-            adjust="none",
+        kline = ad.MarketData(calendar).query_kline(
+            ["000001.SZ"],
+            period=10008,  # Period.day.value
+            begin_date=int(start_date.strftime("%Y%m%d")),
+            end_date=int(end_date.strftime("%Y%m%d")),
         )
 
         if kline is not None and len(kline) > 0:

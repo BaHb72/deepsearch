@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_esg_rate_sina
 
-目标地址: https://finance.sina.com.cn/esg/grade.shtml
+目标地址: <https://finance.sina.com.cn/esg/grade.shtml>
 
 描述: 新浪财经-ESG评级中心-ESG评级-ESG评级数据
 
@@ -65,7 +65,7 @@ print(stock_esg_rate_sina_df)
 
 接口: stock_esg_msci_sina
 
-目标地址: https://finance.sina.com.cn/esg/grade.shtml
+目标地址: <https://finance.sina.com.cn/esg/grade.shtml>
 
 描述: 新浪财经-ESG评级中心-ESG评级-MSCI
 
@@ -120,7 +120,7 @@ print(stock_esg_msci_sina_df)
 
 接口: stock_esg_rft_sina
 
-目标地址: https://finance.sina.com.cn/esg/grade.shtml
+目标地址: <https://finance.sina.com.cn/esg/grade.shtml>
 
 描述: 新浪财经-ESG评级中心-ESG评级-路孚特
 
@@ -181,7 +181,7 @@ print(stock_esg_rft_sina_df)
 
 接口: stock_esg_zd_sina
 
-目标地址: https://finance.sina.com.cn/esg/grade.shtml
+目标地址: <https://finance.sina.com.cn/esg/grade.shtml>
 
 描述: 新浪财经-ESG评级中心-ESG评级-秩鼎
 
@@ -203,7 +203,6 @@ print(stock_esg_rft_sina_df)
 | 社会责任总评 | object | -  |
 | 治理总评   | object | -  |
 | 评分日期   | object | -  |
-
 
 接口示例
 
@@ -236,7 +235,7 @@ print(stock_esg_zd_sina_df)
 
 接口: stock_esg_hz_sina
 
-目标地址: https://finance.sina.com.cn/esg/grade.shtml
+目标地址: <https://finance.sina.com.cn/esg/grade.shtml>
 
 描述: 新浪财经-ESG评级中心-ESG评级-华证指数
 

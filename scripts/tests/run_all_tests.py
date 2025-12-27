@@ -5,7 +5,7 @@ AmazingData API 测试脚本 - 总运行入口
 
 使用方式:
     uv run python scripts/tests/run_all_tests.py
-    
+
     或运行单个模块:
     uv run python scripts/tests/test_amazingdata_basic_data.py
     uv run python scripts/tests/test_amazingdata_financial.py
@@ -40,6 +40,7 @@ async def run_all_tests():
     print("#" * 80)
     try:
         from test_amazingdata_basic_data import run_basic_data_tests
+
         results = await run_basic_data_tests()
         all_results["基础数据"] = results
     except Exception as e:
@@ -52,6 +53,7 @@ async def run_all_tests():
     print("#" * 80)
     try:
         from test_amazingdata_financial import run_financial_tests
+
         results = await run_financial_tests()
         all_results["财务数据"] = results
     except Exception as e:
@@ -64,6 +66,7 @@ async def run_all_tests():
     print("#" * 80)
     try:
         from test_amazingdata_history import run_history_tests
+
         results = await run_history_tests()
         all_results["历史行情"] = results
     except Exception as e:
@@ -76,6 +79,7 @@ async def run_all_tests():
     print("#" * 80)
     try:
         from test_amazingdata_shareholder import run_shareholder_tests
+
         results = await run_shareholder_tests()
         all_results["股东数据"] = results
     except Exception as e:
@@ -88,6 +92,7 @@ async def run_all_tests():
     print("#" * 80)
     try:
         from test_amazingdata_margin import run_margin_tests
+
         results = await run_margin_tests()
         all_results["融资融券"] = results
     except Exception as e:
@@ -100,6 +105,7 @@ async def run_all_tests():
     print("#" * 80)
     try:
         from test_amazingdata_option import run_option_tests
+
         results = await run_option_tests()
         all_results["期权数据"] = results
     except Exception as e:
@@ -112,6 +118,7 @@ async def run_all_tests():
     print("#" * 80)
     try:
         from test_amazingdata_etf import run_etf_tests
+
         results = await run_etf_tests()
         all_results["ETF数据"] = results
     except Exception as e:
@@ -145,7 +152,9 @@ def print_final_report(all_results: dict, total_elapsed: float):
         module_failed = module_total - module_passed
         pass_rate = f"{module_passed/module_total*100:.1f}%" if module_total > 0 else "N/A"
 
-        print(f"{module_name:<20} {module_total:<10} {module_passed:<10} {module_failed:<10} {pass_rate:<10}")
+        print(
+            f"{module_name:<20} {module_total:<10} {module_passed:<10} {module_failed:<10} {pass_rate:<10}"
+        )
 
         total_tests += module_total
         total_passed += module_passed
@@ -153,7 +162,9 @@ def print_final_report(all_results: dict, total_elapsed: float):
 
     print("-" * 80)
     overall_rate = f"{total_passed/total_tests*100:.1f}%" if total_tests > 0 else "N/A"
-    print(f"{'总计':<20} {total_tests:<10} {total_passed:<10} {total_failed:<10} {overall_rate:<10}")
+    print(
+        f"{'总计':<20} {total_tests:<10} {total_passed:<10} {total_failed:<10} {overall_rate:<10}"
+    )
     print("-" * 80)
 
     print(f"\n总耗时: {total_elapsed:.2f} 秒")

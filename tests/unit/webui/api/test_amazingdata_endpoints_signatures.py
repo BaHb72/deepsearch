@@ -40,11 +40,13 @@ async def test_get_backward_factor_filters_by_date(monkeypatch):
 
     class DummyProvider:
         async def get_backward_factor(self, code_list, local_path, is_local):
-            captured.update({
-                "code_list": code_list,
-                "local_path": local_path,
-                "is_local": is_local,
-            })
+            captured.update(
+                {
+                    "code_list": code_list,
+                    "local_path": local_path,
+                    "is_local": is_local,
+                }
+            )
             return pd.DataFrame({"factor": [1.0, 1.1, 1.2]}, index=[20240101, 20240102, 20240105])
 
     provider = DummyProvider()
@@ -166,4 +168,3 @@ async def test_share_holder_applies_topn(monkeypatch):
     rows = response["data"]["data"]
     assert len(rows) == 2
     assert [row["holder"] for row in rows] == ["A", "B"]
-

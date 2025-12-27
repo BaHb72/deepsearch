@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncIterator
+from typing import AsyncIterator
 
 import pytest
 from sqlalchemy import text
@@ -101,7 +101,11 @@ async def test_persist_and_load_round_trip(sqlite_db_service: SQLiteDatabaseServ
     assert loaded is not None
     assert loaded.id == record_set.id
     assert len(loaded.records) == 3
-    assert {entry["symbol"] for entry in loaded.records if "symbol" in entry} == {"AAA", "BBB", "CCC"}
+    assert {entry["symbol"] for entry in loaded.records if "symbol" in entry} == {
+        "AAA",
+        "BBB",
+        "CCC",
+    }
 
 
 @pytest.mark.asyncio

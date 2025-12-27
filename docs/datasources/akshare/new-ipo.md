@@ -9,7 +9,7 @@ updated: 2025-11-17
 
 接口: stock_zh_a_new_em
 
-目标地址: https://quote.eastmoney.com/center/gridlist.html#newshares
+目标地址: <https://quote.eastmoney.com/center/gridlist.html#newshares>
 
 描述: 东方财富网-行情中心-沪深个股-新股
 

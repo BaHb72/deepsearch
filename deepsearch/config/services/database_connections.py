@@ -36,7 +36,9 @@ def _read_config(path: Path) -> Dict[str, Any]:
     return data
 
 
-def load_database_connections(path: Path) -> Tuple[List[DatabaseConnectionConfigModel], Dict[str, Any]]:
+def load_database_connections(
+    path: Path,
+) -> Tuple[List[DatabaseConnectionConfigModel], Dict[str, Any]]:
     """
     读取数据库连接配置。
 
@@ -59,9 +61,9 @@ def load_database_connections(path: Path) -> Tuple[List[DatabaseConnectionConfig
 
 
 def persist_database_connections(
-        path: Path,
-        connections: Iterable[DatabaseConnectionConfigModel | Dict[str, Any]],
-        base_payload: Dict[str, Any] | None = None,
+    path: Path,
+    connections: Iterable[DatabaseConnectionConfigModel | Dict[str, Any]],
+    base_payload: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """
     持久化数据库连接配置。

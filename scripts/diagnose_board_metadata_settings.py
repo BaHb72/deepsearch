@@ -80,8 +80,10 @@ async def diagnose(symbols: Sequence[str]) -> None:
             kwargs={"code_list": normalized[:20] or normalized},
         )
         info_res = await provider._execute(info_cmd)
-        info_ok = isinstance(info_res, (dict, list)) or getattr(getattr(info_res, "__class__", object), "__name__",
-                                                                "") == "DataFrame"
+        info_ok = (
+            isinstance(info_res, (dict, list))
+            or getattr(getattr(info_res, "__class__", object), "__name__", "") == "DataFrame"
+        )
         print("info.get_stock_basic_type=", type(info_res).__name__)
         if hasattr(info_res, "head"):
             try:

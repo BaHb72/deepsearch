@@ -16,10 +16,12 @@ class DummyProvider:
 
 @pytest.mark.asyncio
 async def test_board_source_fetch_returns_payload():
-    provider = DummyProvider([
-        {"symbol": "000001.SZ", "board": "TEST"},
-        {"symbol": "600000.SH", "board": "TEST"},
-    ])
+    provider = DummyProvider(
+        [
+            {"symbol": "000001.SZ", "board": "TEST"},
+            {"symbol": "600000.SH", "board": "TEST"},
+        ]
+    )
     source = AmazingDataBoardSource(provider)
 
     result = await source.fetch_stock_list()

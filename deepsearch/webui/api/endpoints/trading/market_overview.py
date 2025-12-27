@@ -26,7 +26,6 @@ class MarketResponse(TypedDict, total=False):
     market: str
 
 
-
 class MarketDataProvider:
     """市场数据提供者"""
 
@@ -217,7 +216,6 @@ class MarketDataProvider:
         except Exception as e:
             logger.error(f"获取实时行情失败: {e}")
             return {"success": False, "error": str(e)}
-
 
 
 # 全局实例

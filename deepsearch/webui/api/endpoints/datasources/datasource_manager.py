@@ -24,12 +24,11 @@ from deepsearch.application.services.data_sources import (
     prune_empty,
 )
 from deepsearch.infrastructure.cache.cache_manager import CacheManager
+from deepsearch.observability.monitoring.data_source_monitor import AccessRecord, DataSourceMonitor
 from deepsearch.observability.monitoring.data_source_monitor import (
-    AccessRecord,
-    DataSourceMonitor,
     DataSourceType as MonitorDataSourceType,
-    get_monitor,
 )
+from deepsearch.observability.monitoring.data_source_monitor import get_monitor
 from deepsearch.ports.data_sources import DataAccessType
 from deepsearch.utils.data_sources import (
     DataSourceConfig,
@@ -64,6 +63,7 @@ PROXY_SOURCE_MAP = {
 
 SELF_TEST_FAILURE_DECAY_SECONDS = 300  # 5min 内重复失败才累计
 SELF_TEST_FAILURE_THRESHOLD = 3  # 连续失败 3 次才认定为不可用
+
 
 class SwitchRequest(BaseModel):
     """主数据源切换请求"""
@@ -235,8 +235,6 @@ def _can_reuse_amazingdata_provider(provider: Any, requested: Dict[str, Any]) ->
     return True
 
 
-
-
 # ---------------------------------------------------------------------------
 # 内部工具函数
 # ---------------------------------------------------------------------------
@@ -268,11 +266,14 @@ async def _test_amazingdata_login(config: DataSourceConfig) -> Tuple[bool, float
         test_connection as test_amazingdata_connection,
     )
 
+    latency_ms: float = 0.0
     credentials_override = _flatten_amazingdata_credentials(config.config)
     manager = await _ensure_manager(_manager())
     existing_provider = manager.providers.get(DataSourceType.AMAZINGDATA)
 
-    if existing_provider and _can_reuse_amazingdata_provider(existing_provider, credentials_override):
+    if existing_provider and _can_reuse_amazingdata_provider(
+        existing_provider, credentials_override
+    ):
         reuse_start = time.perf_counter()
         ensure_callable = getattr(existing_provider, "ensure_session", None)
         try:
@@ -310,7 +311,6 @@ async def _test_amazingdata_login(config: DataSourceConfig) -> Tuple[bool, float
             port=provider_config.port,
         )
         latency_raw = result.get("latency_ms")
-        latency_ms: float
         if latency_raw is None:
             latency_ms = (time.perf_counter() - start_time) * 1000
         else:
@@ -504,7 +504,7 @@ def _assemble_sources_payload(
     sources: Dict[str, Dict[str, Any]],
     metrics_map: Dict[str, Any],
     proxy_map: Dict[str, List[Tuple[str, Dict[str, Any], Any, Dict[str, Any]]]],
-        manager: Optional[DataSourceManager] = None,
+    manager: Optional[DataSourceManager] = None,
 ) -> List[Dict[str, Any]]:
     """构建前端所需的数据源列表。"""
 
@@ -857,7 +857,8 @@ async def test_data_source(
     source: str,
     symbol: Optional[str] = Query(None, description="测试使用的标的"),
     payload: Optional[DataSourceTestRequest] = Body(
-        None, description="Temporary data source overrides for testing",
+        None,
+        description="Temporary data source overrides for testing",
     ),
 ):
     """触发单个数据源自检"""
@@ -915,7 +916,7 @@ async def test_data_source(
         if error_detail:
             response_payload["error"] = error_detail
 
-        message = "登录成功" if success else (error_detail or "登录失败")
+        message = "login_ok" if success else (error_detail or "login_fail")
         if success:
             return APIResponse.success(response_payload, message)
         return JSONResponse(
@@ -931,7 +932,7 @@ async def test_data_source(
     test_symbol = symbol or DEFAULT_TEST_SYMBOL
     start = time.perf_counter()
     result: Any = None
-    error_detail: str | None = None
+    selftest_error: str | None = None
 
     try:
         result = await manager.get_data(
@@ -940,11 +941,11 @@ async def test_data_source(
             preferred_source=source_type,
         )
     except Exception as exc:  # pragma: no cover - �Լ����ѹ���
-        error_detail = str(exc)
+        selftest_error = str(exc)
         logger.warning("数据源 %s 自检 get_data 失败: %s", source_type.value, exc)
 
     latency_ms = (time.perf_counter() - start) * 1000
-    success = bool(result) and error_detail is None
+    success = bool(result) and selftest_error is None
 
     monitor = _monitor()
     monitor_type = _to_monitor_type(source_type)
@@ -958,23 +959,23 @@ async def test_data_source(
                 success=success,
                 latency_ms=latency_ms,
                 data_size=len(str(result)) if result else 0,
-                error_message=error_detail or ("self_test_failed" if not success else None),
+                error_message=selftest_error or ("self_test_failed" if not success else None),
             )
         except Exception as exc:  # pragma: no cover - ����쳣ʱ������
             logger.debug(f"��¼�Լ���ʧ��: {exc}")
 
-    payload = {
+    resp_data: Dict[str, Any] = {
         "success": success,
         "source": source_type.value,
         "latency_ms": latency_ms,
         "data": sanitize_for_json(result) if result else None,
     }
-    if error_detail:
-        payload["error"] = error_detail
+    if selftest_error:
+        resp_data["error"] = selftest_error
 
-    message = "�Լ�ɹ�" if success else (error_detail or "�Լ�ʧ��")
+    message = "selftest_ok" if success else (selftest_error or "selftest_fail")
 
-    response_payload = payload
+    response_payload = resp_data
 
     if success:
         return APIResponse.success(response_payload, message)
@@ -1118,10 +1119,7 @@ async def update_data_source_config(request: Request, source: str, payload: Conf
 
     if isinstance(config.config, dict):
         config.config["implementation_mode"] = "process"
-        if (
-            isinstance(persist_payload, dict)
-            and isinstance(persist_payload.get("config"), dict)
-        ):
+        if isinstance(persist_payload, dict) and isinstance(persist_payload.get("config"), dict):
             persist_payload["config"]["implementation_mode"] = "process"
 
     persisted_has_saved: Optional[bool] = None
@@ -1296,8 +1294,16 @@ def update_datasource_status_after_test(datasource_type: str, success: bool, lat
         updated.pop("self_test_last_fail_ts", None)
         return
 
-    last_fail_ts = float(entry.get("self_test_last_fail_ts") or 0.0)
-    failure_count = int(entry.get("self_test_fail_count") or 0)
+    last_fail_ts_val = entry.get("self_test_last_fail_ts")
+    try:
+        last_fail_ts = float(str(last_fail_ts_val)) if last_fail_ts_val is not None else 0.0
+    except (ValueError, TypeError):
+        last_fail_ts = 0.0
+    fail_count_val = entry.get("self_test_fail_count")
+    try:
+        failure_count = int(str(fail_count_val)) if fail_count_val is not None else 0
+    except (ValueError, TypeError):
+        failure_count = 0
     if now_ts - last_fail_ts > SELF_TEST_FAILURE_DECAY_SECONDS:
         failure_count = 0
     failure_count += 1
@@ -1317,7 +1323,6 @@ def update_datasource_status_after_test(datasource_type: str, success: bool, lat
     )
     updated["self_test_fail_count"] = failure_count
     updated["self_test_last_fail_ts"] = now_ts
-
 
 
 # ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ from deepsearch.infrastructure.providers.interfaces.runtime import (
     ProviderStatsReport,
     ProxyRuntimeStats,
 )
+
 from .amazingdata_process_pool import get_global_pool
 from .amazingdata_process_proxy import ProxyResponse, RequestType
 from .subscription import SubscriptionInfo
@@ -649,7 +650,13 @@ def test_connection_with_reuse(
         response = cast(
             ProxyResponse,
             proxy.execute(
-                "login", username, password, host, port, timeout=30.0, request_type=RequestType.LOGIN
+                "login",
+                username,
+                password,
+                host,
+                port,
+                timeout=30.0,
+                request_type=RequestType.LOGIN,
             ),
         )
 
@@ -664,7 +671,9 @@ def test_connection_with_reuse(
         else:
             result = {
                 "success": False,
-                "error": response.error or AmazingDataSafeWrapper._extract_message(response.result) or "登录失败",
+                "error": response.error
+                or AmazingDataSafeWrapper._extract_message(response.result)
+                or "登录失败",
                 "process_id": process_id,
                 "latency_ms": (time.time() - start_time) * 1000,
                 "stats": proxy.get_stats(),

@@ -34,6 +34,7 @@ class MarketOverviewResponse(BaseModel):
     stale: bool  # �Ƿ�Ϊ��������
     data_source: str = "unknown"  # ����Դ
 
+
 class SectorResponse(BaseModel):
     """板块数据响应"""
 
@@ -471,7 +472,8 @@ async def get_stock_changes(
 
 @router.get("/zt-pool", response_model=List[ZTPoolItem])
 async def get_zt_pool(
-    date: Optional[str] = Query(None, description="日期，格式：20241231"), service=Depends(get_market_service)
+    date: Optional[str] = Query(None, description="日期，格式：20241231"),
+    service=Depends(get_market_service),
 ):
     """
     获取涨停股池数据
@@ -530,11 +532,10 @@ async def refresh_market_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
-
-
 @router.get("/top-gainers")
-async def get_top_gainers(limit: int = Query(10, ge=1, le=100), service=Depends(get_market_service)):
+async def get_top_gainers(
+    limit: int = Query(10, ge=1, le=100), service=Depends(get_market_service)
+):
     """涨幅榜（前N名）"""
     try:
         result = await service.get_top_gainers(limit=limit)
@@ -570,6 +571,7 @@ async def _get_akshare_provider():
         from deepsearch.infrastructure.providers.implementations.akshare.akshare_direct import (
             AKShareDirectProvider,
         )
+
         _akshare_provider = AKShareDirectProvider()
         await _akshare_provider.initialize()
     return _akshare_provider
@@ -585,27 +587,31 @@ async def get_concept_velocity(
     """
     import asyncio
     import time
-    
+
     # 检查缓存
     current_time = time.time()
-    if _concept_velocity_cache["data"] and (current_time - _concept_velocity_cache["timestamp"]) < _CACHE_TTL:
+    if (
+        _concept_velocity_cache["data"]
+        and (current_time - _concept_velocity_cache["timestamp"]) < _CACHE_TTL
+    ):
         cached_data = _concept_velocity_cache["data"][:limit]
         return {"success": True, "data": cached_data, "cached": True}
-    
+
     try:
         provider = await _get_akshare_provider()
 
         # 使用更快的 get_concept_sectors API，添加超时控制
         try:
-            data = await asyncio.wait_for(
-                provider.get_concept_sectors(),
-                timeout=10.0  # 10秒超时
-            )
+            data = await asyncio.wait_for(provider.get_concept_sectors(), timeout=10.0)  # 10秒超时
         except asyncio.TimeoutError:
             logger.warning("获取概念板块列表超时")
             # 如果有缓存数据，返回缓存
             if _concept_velocity_cache["data"]:
-                return {"success": True, "data": _concept_velocity_cache["data"][:limit], "cached": True}
+                return {
+                    "success": True,
+                    "data": _concept_velocity_cache["data"][:limit],
+                    "cached": True,
+                }
             return {"success": False, "error": "请求超时，请稍后重试"}
 
         if data:
@@ -616,7 +622,11 @@ async def get_concept_velocity(
                     "name": item.get("name", ""),
                     "velocity": item.get("change_pct", 0),  # 用涨跌幅作为"velocity"指标
                     "lead_stock": item.get("leading_stock", ""),
-                    "lead_change": item.get("leading_stock_change_pct", 0) / 100 if item.get("leading_stock_change_pct") else 0,
+                    "lead_change": (
+                        item.get("leading_stock_change_pct", 0) / 100
+                        if item.get("leading_stock_change_pct")
+                        else 0
+                    ),
                 }
                 for i, item in enumerate(data[:200])  # 最多缓存200条
             ]
@@ -631,7 +641,9 @@ async def get_concept_velocity(
         logger.error(f"获取概念板块资金流速失败: {e}")
         # 如果有缓存数据，返回缓存
         if _concept_velocity_cache["data"]:
-            return {"success": True, "data": _concept_velocity_cache["data"][:limit], "cached": True}
+            return {
+                "success": True,
+                "data": _concept_velocity_cache["data"][:limit],
+                "cached": True,
+            }
         return {"success": False, "error": str(e)}
-
-

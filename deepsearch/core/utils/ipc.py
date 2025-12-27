@@ -10,17 +10,16 @@ import json
 import uuid
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, Optional, Protocol, cast
+
 from deepsearch.observability.logger import logger
 
 
 class SupportsAsyncBus(Protocol):
     async def subscribe_async(
         self, topic: str, async_handler: Callable[[str, Any], Awaitable[None]]
-    ) -> None:
-        ...
+    ) -> None: ...
 
-    async def publish_async(self, topic: str, message: Any) -> None:
-        ...
+    async def publish_async(self, topic: str, message: Any) -> None: ...
 
 
 class IPCMessage:
@@ -286,7 +285,9 @@ class WebUIIPCClient:
         # 可以在这里触发 WebSocket 广播等
         logger.debug(f"Received status update: {topic}")
 
-    async def send_command(self, command: str, data: Optional[dict] = None, timeout: float = 30.0) -> dict:
+    async def send_command(
+        self, command: str, data: Optional[dict] = None, timeout: float = 30.0
+    ) -> dict:
         """
         发送命令到引擎并等待响应
 

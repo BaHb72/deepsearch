@@ -191,9 +191,7 @@ class PerformanceProfiler:
 
         return wrapper
 
-    def profile_async_function(
-        self, func: Callable[P, Awaitable[R]]
-    ) -> Callable[P, Awaitable[R]]:
+    def profile_async_function(self, func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         """异步函数性能分析装饰器"""
 
         @wraps(func)
@@ -348,9 +346,7 @@ class PerformanceProfiler:
                 )
 
             # 检测频繁的慢操作
-            slow_ratio = float(stats.get("slow_operations", 0)) / max(
-                1, int(stats.get("count", 1))
-            )
+            slow_ratio = float(stats.get("slow_operations", 0)) / max(1, int(stats.get("count", 1)))
             if slow_ratio > 0.1:  # 超过10%的操作是慢操作
                 suggestions.append(
                     {

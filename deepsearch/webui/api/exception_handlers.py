@@ -178,7 +178,6 @@ def setup_global_exception_handlers(app):
             content={"error": "请求参数无效", "details": str(exc), "path": str(request.url)},
         )
 
-
     @app.exception_handler(500)
     async def internal_error_handler(request, exc):
         """处理500错误"""

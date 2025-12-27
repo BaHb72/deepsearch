@@ -892,7 +892,9 @@ class EventSystemMonitor:
 # ==============================================================================
 
 
-def monitored_handler(event_type: str, monitor: EventSystemMonitor) -> Callable[[Callable[[Event], Any]], Callable[[Event], Any]]:
+def monitored_handler(
+    event_type: str, monitor: EventSystemMonitor
+) -> Callable[[Callable[[Event], Any]], Callable[[Event], Any]]:
     """Decorator to automatically monitor event handlers"""
 
     def decorator(func: Callable[[Event], Any]) -> Callable[[Event], Any]:
@@ -954,20 +956,18 @@ This module provides comprehensive monitoring capabilities:
 
 Usage Example:
     from deepsearch.event.monitoring import EventSystemMonitor
-    
+
     # Create monitor
     monitor = EventSystemMonitor(engine, bus)
-    
+
     # Start monitoring
     monitor.start()
-    
+
     # Get monitoring summary
     summary = monitor.get_summary()
-    
+
     # Use decorator for automatic monitoring
     @monitored_handler("TICK", monitor)
     def handle_tick(event: Event):
         process_tick(event.data)
 """
-
-

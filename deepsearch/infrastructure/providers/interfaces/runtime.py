@@ -17,8 +17,8 @@ from typing import (
     Mapping,
     Optional,
     Protocol,
-    TypedDict,
     TypeAlias,
+    TypedDict,
 )
 
 from typing_extensions import NotRequired

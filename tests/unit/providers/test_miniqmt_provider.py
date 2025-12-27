@@ -26,32 +26,30 @@ from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapa
 
 def _create_testable_provider(config: Optional[DataProviderConfig] = None):
     """创建可测试的 MiniQMTProvider 实例
-    
+
     由于 MiniQMTProvider 继承自 DataProvider 但未实现所有抽象方法，
     我们创建一个测试子类来实现这些方法
     """
-    from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import (
-        MiniQMTProvider,
-    )
+    from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTProvider
 
     class TestMiniQMT(MiniQMTProvider):
         async def initialize(self) -> bool:
             return True
 
         async def get_stock_list(
-                self, limit: Optional[int] = None, **kwargs
+            self, limit: Optional[int] = None, **kwargs
         ) -> Optional[List[Dict[str, Any]]]:
             return []
 
         async def get_kline_data(
-                self,
-                symbol: str,
-                period: str = "1d",
-                start_date: Optional[str] = None,
-                end_date: Optional[str] = None,
-                limit: int = 100,
-                adjust: str = "none",
-                **kwargs,
+            self,
+            symbol: str,
+            period: str = "1d",
+            start_date: Optional[str] = None,
+            end_date: Optional[str] = None,
+            limit: int = 100,
+            adjust: str = "none",
+            **kwargs,
         ) -> Optional[List[Dict[str, Any]]]:
             return []
 

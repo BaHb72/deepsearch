@@ -20,7 +20,6 @@ SYMBOL = "000001.SZ"
 
 
 async def _run() -> None:
-    from deepsearch.ports.data_sources import DataSourceType
     from deepsearch.utils.data_sources import initialize_data_sources
 
     manager = await initialize_data_sources()

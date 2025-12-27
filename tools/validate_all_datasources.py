@@ -30,9 +30,7 @@ def _import_optional(module_name: str) -> Any:
     return importlib.import_module(module_name)
 
 
-async def _await_callable(
-    call: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any
-) -> Any:
+async def _await_callable(call: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any) -> Any:
     """帮助等待一个声明为 Awaitable 的可调用对象，统一类型推断。"""
 
     return await call(*args, **kwargs)

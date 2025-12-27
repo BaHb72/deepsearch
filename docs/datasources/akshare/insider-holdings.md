@@ -11,7 +11,7 @@ updated: 2025-11-17
 
 接口: stock_ggcg_em
 
-目标地址: http://data.eastmoney.com/executive/gdzjc.html
+目标地址: <http://data.eastmoney.com/executive/gdzjc.html>
 
 描述: 东方财富网-数据中心-特色数据-高管持股
 

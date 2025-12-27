@@ -5,9 +5,9 @@
 - p1_cleanup.py：临时清理脚本，已由新的自动化流程替代，确认未在当前流程引用。
 - erify_fixes.py：修复验证阶段的手动脚本，现有 CI/CD 流程已覆盖相同检查逻辑。
 - rowser_debug.js：浏览器控制台调试片段，对应的前端问题已关闭，保留代码片段供历史参考。
-- 	est_antd_message_fix.js：针对旧版通知组件的手动回归脚本，相关缺陷已修复并纳入前端测试。
-- 	est_error_handling.py：早期错误处理冒烟脚本，现有集成测试覆盖同类场景。
-- 	est_frontend_startup.js：前端启动状态验证脚本，用于复现 2024Q4 故障，已无保留必要。
-- 	est_state_sync.js：后台状态同步复现脚本，对应流程已在自动化测试中维护。
+- est_antd_message_fix.js：针对旧版通知组件的手动回归脚本，相关缺陷已修复并纳入前端测试。
+- est_error_handling.py：早期错误处理冒烟脚本，现有集成测试覆盖同类场景。
+- est_frontend_startup.js：前端启动状态验证脚本，用于复现 2024Q4 故障，已无保留必要。
+- est_state_sync.js：后台状态同步复现脚本，对应流程已在自动化测试中维护。
 
 如需还原，可将脚本移回 scripts/ 目录。

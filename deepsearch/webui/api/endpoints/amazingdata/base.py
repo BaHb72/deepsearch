@@ -31,6 +31,7 @@ _DATE_COLUMN_CANDIDATES: tuple[str, ...] = (
 JSONValue: TypeAlias = object
 JSONDict: TypeAlias = dict[str, JSONValue]
 
+
 async def get_amazingdata_provider():
     """
     获取AmazingData提供者实例
@@ -42,30 +43,33 @@ async def get_amazingdata_provider():
         HTTPException: 获取提供者失败时
     """
     import time
+
     start_time = time.time()
     logger.debug("[DEBUG] get_amazingdata_provider 开始...")
-    
+
     try:
         logger.debug("[DEBUG] 调用 DataProviderFactory.get_provider_async(AMAZINGDATA)...")
         step_start = time.time()
         provider = await DataProviderFactory.get_provider_async(DataSourceType.AMAZINGDATA)
-        logger.debug(f"[DEBUG] get_provider_async 完成, 耗时: {time.time() - step_start:.2f}秒, 类型: {type(provider).__name__}")
-        
+        logger.debug(
+            f"[DEBUG] get_provider_async 完成, 耗时: {time.time() - step_start:.2f}秒, 类型: {type(provider).__name__}"
+        )
+
         # 检查provider状态
         if provider is None:
             logger.error("[DEBUG] provider 为 None!")
             raise HTTPException(status_code=500, detail="AmazingData provider 获取失败: 返回 None")
-        
+
         # 检查连接状态
-        is_connected = getattr(provider, '_connected', False)
-        is_degraded = getattr(provider, '_degraded_mode', False)
-        sdk_available = getattr(provider, '_sdk_available', False)
-        
+        is_connected = getattr(provider, "_connected", False)
+        is_degraded = getattr(provider, "_degraded_mode", False)
+        sdk_available = getattr(provider, "_sdk_available", False)
+
         logger.debug(
             f"[DEBUG] Provider状态: _connected={is_connected}, "
             f"_degraded_mode={is_degraded}, _sdk_available={sdk_available}"
         )
-        
+
         if not is_connected:
             error_msg = (
                 f"AmazingData 未连接! "
@@ -74,13 +78,15 @@ async def get_amazingdata_provider():
             )
             logger.error(f"[DEBUG] {error_msg}")
             raise HTTPException(status_code=503, detail=error_msg)
-        
+
         # 注意：不再创建AmazingDataExtended实例
         # ProcessIsolatedAmazingDataProvider已经包含所有必要的方法
         # 创建AmazingDataExtended会绕过进程隔离，导致SDK的sys.exit()崩溃主进程
         logger.debug(f"[DEBUG] 使用Provider: {type(provider).__name__}")
-        
-        logger.debug(f"[DEBUG] get_amazingdata_provider 完成, 总耗时: {time.time() - start_time:.2f}秒")
+
+        logger.debug(
+            f"[DEBUG] get_amazingdata_provider 完成, 总耗时: {time.time() - start_time:.2f}秒"
+        )
         return provider
     except HTTPException:
         raise
@@ -133,7 +139,7 @@ def dataframe_to_dict(data: object) -> JSONValue:
     # 确保返回值是JSON可序列化的基础类型
     if isinstance(data, (str, int, float, bool, type(None))):
         return data
-    
+
     # 其他类型转为字符串表示
     try:
         return str(data)
@@ -143,7 +149,7 @@ def dataframe_to_dict(data: object) -> JSONValue:
 
 def ensure_dataframe(data: object) -> pd.DataFrame | None:
     """辅助函数：将输入安全转换为 DataFrame，无法转换时返回 None。
-    
+
     支持的转换类型：
     - pd.DataFrame: 直接返回
     - pd.Series: 转换为 DataFrame
@@ -153,41 +159,41 @@ def ensure_dataframe(data: object) -> pd.DataFrame | None:
     """
     if data is None:
         return None
-    
+
     # 直接是 DataFrame
     if isinstance(data, pd.DataFrame):
         return data
-    
+
     # pickle反序列化后的DataFrame可能类型检测失败，检查类名
     type_name = type(data).__name__
-    if type_name == 'DataFrame':
+    if type_name == "DataFrame":
         # 可能是pickle反序列化后的DataFrame，尝试重新转换
         try:
             return pd.DataFrame(data)
         except Exception:
             pass
-    
+
     # pd.Series 转换为 DataFrame
     if isinstance(data, pd.Series):
         return data.to_frame()
-    
+
     # 检查是否有 to_dataframe 或 to_frame 方法
-    if hasattr(data, 'to_dataframe') and callable(getattr(data, 'to_dataframe')):
+    if hasattr(data, "to_dataframe") and callable(getattr(data, "to_dataframe")):
         try:
             result = data.to_dataframe()
             if isinstance(result, pd.DataFrame):
                 return result
         except Exception:
             pass
-    
-    if hasattr(data, 'to_frame') and callable(getattr(data, 'to_frame')):
+
+    if hasattr(data, "to_frame") and callable(getattr(data, "to_frame")):
         try:
             result = data.to_frame()
             if isinstance(result, pd.DataFrame):
                 return result
         except Exception:
             pass
-    
+
     # Mapping (dict) 类型尝试转换
     if isinstance(data, Mapping):
         try:
@@ -197,23 +203,36 @@ def ensure_dataframe(data: object) -> pd.DataFrame | None:
                 return pd.DataFrame([data])
             except Exception:
                 pass
-    
+
     # Sequence (list) 类型尝试转换
     if isinstance(data, Sequence) and not isinstance(data, (str, bytes, bytearray)):
         try:
             return pd.DataFrame(data)
         except Exception:
             pass
-    
+
     return None
+
 
 def _is_tgw_related_error(error_msg: str) -> bool:
     """识别是否为TGW相关错误"""
     tgw_patterns = [
-        "tgw", "not login", "login first", "未登录", "登录失败",
-        "connection", "timeout", "超时", "连接失败",
-        "push_init_failed", "进程崩溃", "network", "socket",
-        "sdk unavailable", "sdk not detected", "未连接",
+        "tgw",
+        "not login",
+        "login first",
+        "未登录",
+        "登录失败",
+        "connection",
+        "timeout",
+        "超时",
+        "连接失败",
+        "push_init_failed",
+        "进程崩溃",
+        "network",
+        "socket",
+        "sdk unavailable",
+        "sdk not detected",
+        "未连接",
     ]
     error_lower = error_msg.lower()
     return any(pattern in error_lower for pattern in tgw_patterns)
@@ -247,7 +266,7 @@ def handle_api_error(api_name: str, error: Exception) -> JSONDict:
             "recoverable": is_recoverable,
             "suggestion": "TGW网关连接异常，请检查网络或稍后重试",
         }
-    
+
     # 根据错误消息模式识别TGW相关错误
     if _is_tgw_related_error(error_msg):
         return {
@@ -272,12 +291,13 @@ def handle_api_error(api_name: str, error: Exception) -> JSONDict:
 
     # 获取错误堆栈信息
     import traceback
+
     tb_info = traceback.format_exc()
-    
+
     response: JSONDict = {
-        "success": False, 
-        "error": error_msg, 
-        "api": api_name, 
+        "success": False,
+        "error": error_msg,
+        "api": api_name,
         "status_code": status_code,
         "traceback": tb_info,
     }
@@ -325,51 +345,51 @@ def validate_date_range(start_date: int, end_date: int) -> bool:
 
 def _ensure_json_serializable(data: object) -> JSONValue:
     """递归确保数据是JSON可序列化的类型
-    
+
     处理DataFrame、Series、Mapping、Sequence等复杂类型，
     确保返回给前端的数据都可以被JSON.stringify处理。
     """
     if data is None:
         return None
-    
+
     # 基础类型直接返回
     if isinstance(data, (str, int, float, bool)):
         return data
-    
+
     # pandas类型特殊处理
     if isinstance(data, pd.DataFrame):
         return dataframe_to_dict(data)
-    
+
     if isinstance(data, pd.Series):
         return dataframe_to_dict(data.to_frame())
-    
+
     # numpy类型处理
-    if hasattr(data, 'item') and callable(getattr(data, 'item')):
+    if hasattr(data, "item") and callable(getattr(data, "item")):
         try:
-            return data.item()  # type: ignore
+            return data.item()
         except Exception:
             pass
-    
+
     # 检查类名（pickle反序列化后的DataFrame）
     type_name = type(data).__name__
-    if type_name == 'DataFrame':
+    if type_name == "DataFrame":
         try:
             return dataframe_to_dict(pd.DataFrame(data))
         except Exception:
             pass
-    
+
     # Mapping类型递归处理
     if isinstance(data, Mapping):
         return {str(k): _ensure_json_serializable(v) for k, v in data.items()}
-    
+
     # Sequence类型递归处理
     if isinstance(data, Sequence) and not isinstance(data, (str, bytes, bytearray)):
         return [_ensure_json_serializable(item) for item in data]
-    
+
     # Timestamp类型
     if isinstance(data, (pd.Timestamp, datetime)):
-        return data.isoformat() if hasattr(data, 'isoformat') else str(data)
-    
+        return data.isoformat() if hasattr(data, "isoformat") else str(data)
+
     # 其他类型尝试转换为字符串
     try:
         return str(data)
@@ -377,10 +397,12 @@ def _ensure_json_serializable(data: object) -> JSONValue:
         return f"<无法序列化: {type(data).__name__}>"
 
 
-def format_response(success: bool, data: JSONValue | None = None, error: str | None = None, **kwargs: JSONValue) -> JSONDict:
+def format_response(
+    success: bool, data: JSONValue | None = None, error: str | None = None, **kwargs: JSONValue
+) -> JSONDict:
     """
     格式化API响应
-    
+
     自动确保所有数据都是JSON可序列化的类型。
 
     Args:
@@ -427,7 +449,7 @@ def normalize_date_int(value: object) -> Optional[int]:
     text_value = str(value).strip()
     if not text_value:
         return None
-    digits = ''.join(ch for ch in text_value if ch.isdigit())
+    digits = "".join(ch for ch in text_value if ch.isdigit())
     if len(digits) >= 8:
         try:
             return int(digits[:8])
@@ -450,8 +472,10 @@ def filter_dataframe_by_dates(
     columns_lower = {col.lower() for col in column_candidates}
     for column in data.columns:
         if column.lower() in columns_lower:
-            mask = data[column].apply(normalize_date_int).apply(
-                lambda value: value is not None and start_date <= value <= end_date
+            mask = (
+                data[column]
+                .apply(normalize_date_int)
+                .apply(lambda value: value is not None and start_date <= value <= end_date)
             )
             return cast(pd.DataFrame, data.loc[mask])
     if data.index.nlevels == 1:
@@ -490,4 +514,3 @@ def filter_dataframe_by_value(
                 mask = series == target
             return cast(pd.DataFrame, data.loc[mask])
     return data
-

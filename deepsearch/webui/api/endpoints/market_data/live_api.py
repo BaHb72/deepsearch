@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, time as time_type, timezone
+from datetime import datetime
+from datetime import time as time_type
+from datetime import timezone
 from typing import Any, Iterable, Sequence
 from zoneinfo import ZoneInfo
 
@@ -110,11 +112,11 @@ def _resolve_module_config(settings: Any | None, module: str) -> Any | None:
 
 
 def _auto_fallback_source(
-        settings: Any | None,
-        module: str,
-        *,
-        phase: str | None = None,
-        error_code: str | None = None,
+    settings: Any | None,
+    module: str,
+    *,
+    phase: str | None = None,
+    error_code: str | None = None,
 ) -> str | None:
     module_cfg = _resolve_module_config(settings, module)
     if module_cfg is None:
@@ -148,7 +150,9 @@ async def _ensure_fallback_data(app_state: Any, module: str, target_source: str)
     if status_text == "ok":
         return detail or {}
     if status_text == "throttled":
-        raise HTTPException(status_code=429, detail=detail or {"message": "fallback fetch throttled"})
+        raise HTTPException(
+            status_code=429, detail=detail or {"message": "fallback fetch throttled"}
+        )
     raise HTTPException(status_code=502, detail=detail or {"message": "fallback fetch failed"})
 
 
@@ -159,7 +163,7 @@ def _orchestrator_detail(app_state: Any) -> dict[str, Any] | None:
     orchestrator = getattr(app_state, "market_data_orchestrator", None)
     if orchestrator is not None:
         try:
-            return orchestrator.get_status_snapshot()
+            return orchestrator.get_status_snapshot()  # type: ignore[no-any-return]
         except Exception:  # pragma: no cover - defensive
             return None
     return None
@@ -203,7 +207,7 @@ def _enabled_adapter_names(settings: Any | None) -> list[str]:
 
 
 def _ensure_runtime_components(
-        request: Request,
+    request: Request,
 ) -> tuple[Any, Any, Any]:
     app_state = getattr(request.app.state, "app_state", None)
     if app_state is None:
@@ -242,11 +246,11 @@ def _safe_float(value: Any) -> float | None:
 
 @router.get("/strength")
 async def get_market_strength(
-        request: Request,
-        windows: str | None = Query(None, description="�������ƣ����ŷָ������� 1m,5m"),
-        boards: str | None = Query(None, description="������ƣ����ŷָ�"),
-        limit: int | None = Query(None, ge=1, le=500, description="���Ʒ�������"),
-        source: str | None = Query(None, description="ָ������Դ��auto ��ʾ��Դ"),
+    request: Request,
+    windows: str | None = Query(None, description="�������ƣ����ŷָ������� 1m,5m"),
+    boards: str | None = Query(None, description="������ƣ����ŷָ�"),
+    limit: int | None = Query(None, ge=1, le=500, description="���Ʒ�������"),
+    source: str | None = Query(None, description="ָ������Դ��auto ��ʾ��Դ"),
 ) -> JSONResponse:
     """�ʱ�����ǿ�Ȱ񵥡�"""
 
@@ -263,7 +267,9 @@ async def get_market_strength(
         specs = getattr(service, "default_capital_windows", ()) or ()
         window_candidates = tuple(spec.name for spec in specs)
         if not window_candidates and pipeline is not None:
-            window_candidates = tuple(getattr(window, "name", "") for window in pipeline.capital_windows)
+            window_candidates = tuple(
+                getattr(window, "name", "") for window in pipeline.capital_windows
+            )
     if not window_candidates:
         raise HTTPException(status_code=400, detail="ȱ����Ч�Ĵ��ڲ���")
 
@@ -288,20 +294,20 @@ async def get_market_strength(
         if requested_source:
             try:
                 fallback_detail = await asyncio.wait_for(
-                    _ensure_fallback_data(app_state, "strength", requested_source),
-                    timeout=5.0
+                    _ensure_fallback_data(app_state, "strength", requested_source), timeout=5.0
                 )
                 strength_result = await _fetch(requested_source)
                 effective_source = requested_source
             except asyncio.TimeoutError:
                 logger.warning("strength fallback 超时（5秒），返回空结果")
         else:
-            auto_source = _auto_fallback_source(settings, "strength", error_code=None if provider_ready else "DATA_SOURCE_OFFLINE")
+            auto_source = _auto_fallback_source(
+                settings, "strength", error_code=None if provider_ready else "DATA_SOURCE_OFFLINE"
+            )
             if auto_source:
                 try:
                     fallback_detail = await asyncio.wait_for(
-                        _ensure_fallback_data(app_state, "strength", auto_source),
-                        timeout=5.0
+                        _ensure_fallback_data(app_state, "strength", auto_source), timeout=5.0
                     )
                     strength_result = await _fetch(auto_source)
                     effective_source = auto_source
@@ -347,9 +353,9 @@ async def get_market_strength(
 
 @router.get("/concept-strength")
 async def get_concept_strength(
-        request: Request,
-        limit: int = Query(50, ge=1, le=200, description="返回数量"),
-        source: str | None = Query(None, description="指定数据源，默认 amazingdata"),
+    request: Request,
+    limit: int = Query(50, ge=1, le=200, description="返回数量"),
+    source: str | None = Query(None, description="指定数据源，默认 amazingdata"),
 ) -> JSONResponse:
     """获取概念板块资金脉冲数据（调用 AmazingData 概念资金流接口）。"""
 
@@ -357,6 +363,7 @@ async def get_concept_strength(
 
     try:
         from deepsearch.webui.api.endpoints.amazingdata.concept import get_concept_velocity
+
         result = await get_concept_velocity(limit=limit)
 
         if result.get("success") and result.get("data"):
@@ -364,54 +371,58 @@ async def get_concept_strength(
             items = []
             for item in result["data"]:
                 velocity = item.get("velocity", 0)
-                items.append({
-                    "board": item.get("name", ""),
-                    "window": "1m",  # 默认窗口
-                    "amount_total": velocity,
-                    "speed_per_min": velocity / 60 if velocity else 0,
-                    "accel_per_min2": 0,
-                    "lead_stock": item.get("lead_stock", ""),
-                    "lead_change": item.get("lead_change", 0),
-                    "data_source": "amazingdata",
-                })
+                items.append(
+                    {
+                        "board": item.get("name", ""),
+                        "window": "1m",  # 默认窗口
+                        "amount_total": velocity,
+                        "speed_per_min": velocity / 60 if velocity else 0,
+                        "accel_per_min2": 0,
+                        "lead_stock": item.get("lead_stock", ""),
+                        "lead_change": item.get("lead_change", 0),
+                        "data_source": "amazingdata",
+                    }
+                )
 
             is_trading = _is_trading_hours()
-            return JSONResponse({
-                "windows": ["1m"],
-                "boards": [item["board"] for item in items],
-                "items": items,
-                "asOf": _iso_now(),
-                "stale": False,
-                "retrieved_at": _iso_now(),
-                "data_source": requested_source,
-                "mode": "realtime" if is_trading else "summary",
-                "is_trading_hours": is_trading,
-            })
+            return JSONResponse(
+                {
+                    "windows": ["1m"],
+                    "boards": [item["board"] for item in items],
+                    "items": items,
+                    "asOf": _iso_now(),
+                    "stale": False,
+                    "retrieved_at": _iso_now(),
+                    "data_source": requested_source,
+                    "mode": "realtime" if is_trading else "summary",
+                    "is_trading_hours": is_trading,
+                }
+            )
     except Exception as e:
         logger.warning(f"获取概念资金脉冲失败: {e}")
 
     # 返回空数据
-    return JSONResponse({
-        "windows": ["1m"],
-        "boards": [],
-        "items": [],
-        "asOf": _iso_now(),
-        "stale": True,
-        "retrieved_at": _iso_now(),
-        "data_source": requested_source,
-        "detail": {"code": "DATA_SOURCE_OFFLINE", "message": "获取数据失败"},
-    })
-
-
+    return JSONResponse(
+        {
+            "windows": ["1m"],
+            "boards": [],
+            "items": [],
+            "asOf": _iso_now(),
+            "stale": True,
+            "retrieved_at": _iso_now(),
+            "data_source": requested_source,
+            "detail": {"code": "DATA_SOURCE_OFFLINE", "message": "获取数据失败"},
+        }
+    )
 
 
 @router.get("/board-overview")
 async def get_board_overview(
-        request: Request,
-        type_: str = Query("concept", alias="type", description="������ͣ�concept/industry"),
-        window: str | None = Query(None, description="ָ�괰�ڣ��� 1m/5m"),
-        limit: int = Query(12, ge=1, le=200, description="���صİ������"),
-        source: str | None = Query(None, description="ָ������Դ��auto ��ʾ��Դ"),
+    request: Request,
+    type_: str = Query("concept", alias="type", description="������ͣ�concept/industry"),  # type: ignore[call-arg]
+    window: str | None = Query(None, description="ָ�괰�ڣ��� 1m/5m"),
+    limit: int = Query(12, ge=1, le=200, description="���صİ������"),
+    source: str | None = Query(None, description="ָ������Դ��auto ��ʾ��Դ"),
 ) -> JSONResponse:
     """����/��ҵ���ʵʱ������"""
 
@@ -427,7 +438,9 @@ async def get_board_overview(
         specs = getattr(service, "default_capital_windows", ()) or ()
         window_candidates = tuple(spec.name for spec in specs) or ()
         if not window_candidates and pipeline is not None:
-            window_candidates = tuple(getattr(spec, "name", "") for spec in getattr(pipeline, "capital_windows", ()))
+            window_candidates = tuple(
+                getattr(spec, "name", "") for spec in getattr(pipeline, "capital_windows", ())
+            )
     if not window_candidates:
         raise HTTPException(status_code=400, detail="ȱ����Ч�Ĵ��ڲ���")
     window_name = window_candidates[0]
@@ -437,7 +450,9 @@ async def get_board_overview(
     cache_module = _cache_module_name("board_overview")
 
     async def _fetch(current_source: str | None):
-        return await reader.fetch_strength([window_name], boards=None, limit=None, module=cache_module, source=current_source)
+        return await reader.fetch_strength(
+            [window_name], boards=None, limit=None, module=cache_module, source=current_source
+        )
 
     strength_result = await _fetch(requested_source)
 
@@ -446,23 +461,28 @@ async def get_board_overview(
             try:
                 fallback_detail = await asyncio.wait_for(
                     _ensure_fallback_data(app_state, "board_overview", requested_source),
-                    timeout=5.0
+                    timeout=5.0,
                 )
                 strength_result = await _fetch(requested_source)
             except asyncio.TimeoutError:
                 logger.warning("board_overview fallback 超时（5秒），返回空结果")
         else:
-            auto_source = _auto_fallback_source(settings, "board_overview", error_code=None if provider_ready else "DATA_SOURCE_OFFLINE")
+            auto_source = _auto_fallback_source(
+                settings,
+                "board_overview",
+                error_code=None if provider_ready else "DATA_SOURCE_OFFLINE",
+            )
             if auto_source:
                 try:
                     fallback_detail = await asyncio.wait_for(
-                        _ensure_fallback_data(app_state, "board_overview", auto_source),
-                        timeout=5.0
+                        _ensure_fallback_data(app_state, "board_overview", auto_source), timeout=5.0
                     )
                     strength_result = await _fetch(auto_source)
                     requested_source = auto_source
                 except asyncio.TimeoutError:
-                    logger.warning("board_overview fallback 超时（5秒），跳过 {} fallback", auto_source)
+                    logger.warning(
+                        "board_overview fallback 超时（5秒），跳过 {} fallback", auto_source
+                    )
             elif provider_ready:
                 await refresh_market_data_once(app_state)
                 strength_result = await _fetch(None)
@@ -549,9 +569,6 @@ async def get_board_overview(
     return JSONResponse(payload)
 
 
-
-
-
 @router.get("/data-source/status", status_code=status.HTTP_200_OK)
 async def get_data_source_status(request: Request) -> JSONResponse:
     """返回实时数据源可用列表及当前激活项。"""
@@ -565,9 +582,7 @@ async def get_data_source_status(request: Request) -> JSONResponse:
         raise HTTPException(status_code=503, detail="实时数据源 orchestrator 未初始化")
 
     snapshot = (
-        orchestrator.get_status_snapshot()
-        if hasattr(orchestrator, "get_status_snapshot")
-        else {}
+        orchestrator.get_status_snapshot() if hasattr(orchestrator, "get_status_snapshot") else {}
     )
     adapters_snapshot = snapshot.get("adapters") if isinstance(snapshot, dict) else {}
     snapshot_active = snapshot.get("active") if isinstance(snapshot, dict) else None
@@ -591,8 +606,8 @@ async def get_data_source_status(request: Request) -> JSONResponse:
 
 @router.post("/data-source/switch", status_code=status.HTTP_200_OK)
 async def switch_data_source(
-        request: Request,
-        payload: SwitchDataSourceRequest,
+    request: Request,
+    payload: SwitchDataSourceRequest,
 ) -> JSONResponse:
     """Manually switch the realtime data adapter."""
 
@@ -621,7 +636,11 @@ async def switch_data_source(
 
     current = (getattr(app_state, "market_data_active_source", "") or "").lower()
     if current == target:
-        snapshot = orchestrator.get_status_snapshot() if hasattr(orchestrator, "get_status_snapshot") else {}
+        snapshot = (
+            orchestrator.get_status_snapshot()
+            if hasattr(orchestrator, "get_status_snapshot")
+            else {}
+        )
         return JSONResponse(
             {
                 "active": getattr(app_state, "market_data_active_source", target),
@@ -655,10 +674,10 @@ async def switch_data_source(
 
 @router.get("/order-imbalance")
 async def get_order_imbalance(
-        request: Request,
-        window: str | None = Query(None, description="�������ƣ�Ĭ��ʹ�����ô���"),
-        limit: int | None = Query(100, ge=1, le=500, description="������������"),
-        source: str | None = Query(None, description="ָ������Դ��auto ��ʾ��Դ"),
+    request: Request,
+    window: str | None = Query(None, description="�������ƣ�Ĭ��ʹ�����ô���"),
+    limit: int | None = Query(100, ge=1, le=500, description="������������"),
+    source: str | None = Query(None, description="ָ������Դ��auto ��ʾ��Դ"),
 ) -> JSONResponse:
     """ί��������������񵥡�"""
 
@@ -678,7 +697,9 @@ async def get_order_imbalance(
     cache_module = _cache_module_name("order_imbalance")
 
     async def _fetch(current_source: str | None):
-        return await reader.fetch_order_imbalance(window_name, limit=limit, module=cache_module, source=current_source)
+        return await reader.fetch_order_imbalance(
+            window_name, limit=limit, module=cache_module, source=current_source
+        )
 
     imbalance_result = await _fetch(requested_source)
 
@@ -687,23 +708,29 @@ async def get_order_imbalance(
             try:
                 fallback_detail = await asyncio.wait_for(
                     _ensure_fallback_data(app_state, "order_imbalance", requested_source),
-                    timeout=5.0
+                    timeout=5.0,
                 )
                 imbalance_result = await _fetch(requested_source)
             except asyncio.TimeoutError:
                 logger.warning("order_imbalance fallback 超时（5秒），返回空结果")
         else:
-            auto_source = _auto_fallback_source(settings, "order_imbalance", error_code=None if provider_ready else "DATA_SOURCE_OFFLINE")
+            auto_source = _auto_fallback_source(
+                settings,
+                "order_imbalance",
+                error_code=None if provider_ready else "DATA_SOURCE_OFFLINE",
+            )
             if auto_source:
                 try:
                     fallback_detail = await asyncio.wait_for(
                         _ensure_fallback_data(app_state, "order_imbalance", auto_source),
-                        timeout=5.0
+                        timeout=5.0,
                     )
                     imbalance_result = await _fetch(auto_source)
                     requested_source = auto_source
                 except asyncio.TimeoutError:
-                    logger.warning("order_imbalance fallback 超时（5秒），跳过 {} fallback", auto_source)
+                    logger.warning(
+                        "order_imbalance fallback 超时（5秒），跳过 {} fallback", auto_source
+                    )
             elif provider_ready:
                 try:
                     await asyncio.wait_for(refresh_market_data_once(app_state), timeout=5.0)
@@ -737,14 +764,11 @@ async def get_order_imbalance(
     return JSONResponse(payload)
 
 
-
-
-
 @router.get("/auction-quality")
 async def get_auction_quality(
-        request: Request,
-        boards: str | None = Query(None, description="������ƣ����ŷָ�"),
-        source: str | None = Query(None, description="ָ������Դ��auto ��ʾ��Դ"),
+    request: Request,
+    boards: str | None = Query(None, description="������ƣ����ŷָ�"),
+    source: str | None = Query(None, description="ָ������Դ��auto ��ʾ��Դ"),
 ) -> JSONResponse:
     """���Ͼ�������ָ�ꡣ"""
 
@@ -773,18 +797,28 @@ async def get_auction_quality(
     cache_module = _cache_module_name("auction_quality")
 
     async def _fetch(current_source: str | None):
-        return await reader.fetch_auction_quality(board_list, module=cache_module, source=current_source)
+        return await reader.fetch_auction_quality(
+            board_list, module=cache_module, source=current_source
+        )
 
     auction_result = await _fetch(requested_source)
 
     if not auction_result.items:
         if requested_source:
-            fallback_detail = await _ensure_fallback_data(app_state, "auction_quality", requested_source)
+            fallback_detail = await _ensure_fallback_data(
+                app_state, "auction_quality", requested_source
+            )
             auction_result = await _fetch(requested_source)
         else:
-            auto_source = _auto_fallback_source(settings, "auction_quality", error_code=None if provider_ready else "DATA_SOURCE_OFFLINE")
+            auto_source = _auto_fallback_source(
+                settings,
+                "auction_quality",
+                error_code=None if provider_ready else "DATA_SOURCE_OFFLINE",
+            )
             if auto_source:
-                fallback_detail = await _ensure_fallback_data(app_state, "auction_quality", auto_source)
+                fallback_detail = await _ensure_fallback_data(
+                    app_state, "auction_quality", auto_source
+                )
                 auction_result = await _fetch(auto_source)
                 requested_source = auto_source
             elif provider_ready:
@@ -819,9 +853,9 @@ async def get_auction_quality(
 
 @router.get("/concept-flow")
 async def get_concept_flow(
-        request: Request,
-        limit: int = Query(50, ge=1, le=200, description="返回数量"),
-        source: str | None = Query(None, description="指定数据源，默认 amazingdata"),
+    request: Request,
+    limit: int = Query(50, ge=1, le=200, description="返回数量"),
+    source: str | None = Query(None, description="指定数据源，默认 amazingdata"),
 ) -> JSONResponse:
     """获取概念板块资金流向排行（替代订单失衡）。"""
 
@@ -830,36 +864,43 @@ async def get_concept_flow(
     # 调用 AmazingData 的 /concept/velocity 接口
     try:
         from deepsearch.webui.api.endpoints.amazingdata.concept import get_concept_velocity
+
         result = await get_concept_velocity(limit=limit)
 
         if result.get("success") and result.get("data"):
             items = []
             for item in result["data"]:
-                items.append({
-                    "board": item.get("name", ""),
-                    "concept_code": item.get("concept_code", ""),
-                    "velocity": item.get("velocity", 0),
-                    "lead_stock": item.get("lead_stock", ""),
-                    "lead_change": item.get("lead_change", 0),
-                    "data_source": "amazingdata",
-                })
+                items.append(
+                    {
+                        "board": item.get("name", ""),
+                        "concept_code": item.get("concept_code", ""),
+                        "velocity": item.get("velocity", 0),
+                        "lead_stock": item.get("lead_stock", ""),
+                        "lead_change": item.get("lead_change", 0),
+                        "data_source": "amazingdata",
+                    }
+                )
 
-            return JSONResponse({
-                "items": items,
-                "count": len(items),
-                "retrieved_at": _iso_now(),
-                "data_source": requested_source,
-                "stale": False,
-            })
+            return JSONResponse(
+                {
+                    "items": items,
+                    "count": len(items),
+                    "retrieved_at": _iso_now(),
+                    "data_source": requested_source,
+                    "stale": False,
+                }
+            )
     except Exception as e:
         logger.warning(f"获取概念资金流失败: {e}")
 
     # 返回空数据
-    return JSONResponse({
-        "items": [],
-        "count": 0,
-        "retrieved_at": _iso_now(),
-        "data_source": requested_source,
-        "stale": True,
-        "detail": {"code": "DATA_SOURCE_OFFLINE", "message": "获取数据失败"},
-    })
+    return JSONResponse(
+        {
+            "items": [],
+            "count": 0,
+            "retrieved_at": _iso_now(),
+            "data_source": requested_source,
+            "stale": True,
+            "detail": {"code": "DATA_SOURCE_OFFLINE", "message": "获取数据失败"},
+        }
+    )

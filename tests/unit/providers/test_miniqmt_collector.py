@@ -92,7 +92,7 @@ class TestMiniQMTCollectorCache:
 @pytest.mark.skipif(not XTQUANT_AVAILABLE, reason="xtquant SDK 未安装")
 class TestMiniQMTCollectorHistoryData:
     """MiniQMTCollector 历史数据测试
-    
+
     注意：这些测试需要 MiniQMT 终端运行才能获取真实数据
     """
 

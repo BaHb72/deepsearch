@@ -14,11 +14,11 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 from loguru import logger
 
 from deepsearch.core.utils.async_timeout import timeout_decorator
+from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
 
 # 导入监控装饰器
 from deepsearch.infrastructure.providers.unified_proxy import async_monitor_access
 from deepsearch.ports.data_sources import DataAccessType, DataSourceType
-from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
 
 from ._deps import AkshareModule, PandasModule, load_akshare, load_pandas
 
@@ -56,12 +56,14 @@ class AKShareDirectProvider:
         self.initialized = False
         self.access_mode = "auto"
         self.proxy_info = {"enabled": False, "worker_url": None, "mode": "direct"}
-        self._akshare: Optional[AkshareModule] = akshare_module if akshare_module is not None else ak
+        self._akshare: Optional[AkshareModule] = (
+            akshare_module if akshare_module is not None else ak
+        )
         self._pandas: Optional[PandasModule] = pandas_module if pandas_module is not None else pd
 
     def get_capabilities(self) -> set[DataCapability]:
         """返回 AKShare Direct 支持的数据能力集合。
-        
+
         AKShare 提供丰富的免费股票数据接口：
         - 基础数据：股票列表、实时行情、K线数据、股票信息
         - 市场数据：资金流向、板块数据、行业数据
@@ -597,28 +599,30 @@ class AKShareDirectProvider:
                 logger.info(f"[AKShare] 使用并发单股票查询获取 {len(symbols)} 只股票行情")
                 tasks = [self.get_realtime_quote(symbol) for symbol in symbols]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
-                
+
                 quotes = []
                 for symbol, result in zip(symbols, results):
                     if isinstance(result, Exception):
                         logger.debug(f"获取 {symbol} 行情失败: {result}")
-                        quotes.append({"symbol": symbol, "error": str(result), "source": "akshare_direct"})
+                        quotes.append(
+                            {"symbol": symbol, "error": str(result), "source": "akshare_direct"}
+                        )
                     elif isinstance(result, dict) and not result.get("error"):
                         result["symbol"] = symbol
                         quotes.append(result)
                     elif isinstance(result, dict):
                         quotes.append(result)
-                
+
                 logger.info(f"[AKShare] 并发查询完成，获取 {len(quotes)} 条行情")
                 return quotes
-            
+
             # 对于大量股票，使用全市场查询（慢但高效）
             logger.info(f"[AKShare] 使用全市场查询获取 {len(symbols)} 只股票行情")
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
                 self._executor, self._fetch_realtime_quotes_sync, symbols
             )
-            return result
+            return result  # type: ignore[return-value]
         except Exception as e:
             logger.error(f"批量获取实时行情失败: {e}")
             return []
@@ -628,56 +632,56 @@ class AKShareDirectProvider:
         module = self._akshare
         if module is None:
             return []
-        
+
         try:
             logger.info(f"[AKShare] 开始批量获取 {len(symbols)} 只股票的实时行情")
-            
+
             # 直接使用全市场查询
             df = module.stock_zh_a_spot_em()
-            
+
             if df is None or df.empty:
                 return []
 
             result = []
             # 创建代码索引以加速查找
             df_indexed = df.set_index("代码")
-            
+
             for symbol in symbols:
                 if symbol in df_indexed.index:
                     row = df_indexed.loc[symbol]
                     # 如果有重复代码，loc可能返回DataFrame，取第一行
-                    if isinstance(row, pd.DataFrame):
+                    if isinstance(row, pd.DataFrame):  # type: ignore[union-attr]
                         row = row.iloc[0]
-                        
-                    result.append({
-                        "symbol": symbol,
-                        "name": row.get("名称", ""),
-                        "current": self._safe_float(row.get("最新价", 0)),
-                        "prev_close": self._safe_float(row.get("昨收", 0)),
-                        "open": self._safe_float(row.get("今开", 0)),
-                        "high": self._safe_float(row.get("最高", 0)),
-                        "low": self._safe_float(row.get("最低", 0)),
-                        "volume": self._safe_float(row.get("成交量", 0)),
-                        "amount": self._safe_float(row.get("成交额", 0)),
-                        "change": self._safe_float(row.get("涨跌额", 0)),
-                        "change_pct": self._safe_float(row.get("涨跌幅", 0)),
-                        "timestamp": datetime.now().isoformat(),
-                        "amplitude": self._safe_float(row.get("振幅", 0)),
-                        "turnover_rate": self._safe_float(row.get("换手率", 0)),
-                        "pe_ratio": self._safe_float(row.get("市盈率-动态", 0)),
-                        "pb_ratio": self._safe_float(row.get("市净率", 0)),
-                        "market_cap": self._safe_float(row.get("总市值", 0)),
-                        "float_market_cap": self._safe_float(row.get("流通市值", 0)),
-                        "source": "akshare_direct_batch",
-                    })
+
+                    result.append(
+                        {
+                            "symbol": symbol,
+                            "name": row.get("名称", ""),
+                            "current": self._safe_float(row.get("最新价", 0)),
+                            "prev_close": self._safe_float(row.get("昨收", 0)),
+                            "open": self._safe_float(row.get("今开", 0)),
+                            "high": self._safe_float(row.get("最高", 0)),
+                            "low": self._safe_float(row.get("最低", 0)),
+                            "volume": self._safe_float(row.get("成交量", 0)),
+                            "amount": self._safe_float(row.get("成交额", 0)),
+                            "change": self._safe_float(row.get("涨跌额", 0)),
+                            "change_pct": self._safe_float(row.get("涨跌幅", 0)),
+                            "timestamp": datetime.now().isoformat(),
+                            "amplitude": self._safe_float(row.get("振幅", 0)),
+                            "turnover_rate": self._safe_float(row.get("换手率", 0)),
+                            "pe_ratio": self._safe_float(row.get("市盈率-动态", 0)),
+                            "pb_ratio": self._safe_float(row.get("市净率", 0)),
+                            "market_cap": self._safe_float(row.get("总市值", 0)),
+                            "float_market_cap": self._safe_float(row.get("流通市值", 0)),
+                            "source": "akshare_direct_batch",
+                        }
+                    )
                 else:
                     # 未找到的股票返回错误信息或空数据
-                    result.append({
-                        "symbol": symbol,
-                        "error": "Not found",
-                        "source": "akshare_direct_batch"
-                    })
-            
+                    result.append(
+                        {"symbol": symbol, "error": "Not found", "source": "akshare_direct_batch"}
+                    )
+
             return result
 
         except Exception as e:
@@ -950,7 +954,9 @@ class AKShareDirectProvider:
             logger.error(f"获取股票列表失败: {e}")
             return []
 
-    async def get_stock_list(self, limit: Optional[int] = None, **kwargs) -> Optional[List[Dict[str, Any]]]:
+    async def get_stock_list(
+        self, limit: Optional[int] = None, **kwargs
+    ) -> Optional[List[Dict[str, Any]]]:
         """
         获取股票列表 - DataSourceManager接口方法
 
@@ -1214,9 +1220,7 @@ class AKShareDirectProvider:
                     return cast(List[Dict[str, Any]], cached_data.get("data", []))
 
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                self._executor, self._fetch_concept_sectors_sync
-            )
+            result = await loop.run_in_executor(self._executor, self._fetch_concept_sectors_sync)
 
             if result:
                 self._cache[cache_key] = (time.time(), {"data": result})
@@ -1240,21 +1244,23 @@ class AKShareDirectProvider:
 
             result = []
             for _, row in df.iterrows():
-                result.append({
-                    "rank": int(row.get("排名", 0)),
-                    "name": str(row.get("板块名称", "")),
-                    "code": str(row.get("板块代码", "")),
-                    "price": float(row.get("最新价", 0) or 0),
-                    "change": float(row.get("涨跌额", 0) or 0),
-                    "change_pct": float(row.get("涨跌幅", 0) or 0),
-                    "market_cap": int(row.get("总市值", 0) or 0),
-                    "turnover_rate": float(row.get("换手率", 0) or 0),
-                    "up_count": int(row.get("上涨家数", 0) or 0),
-                    "down_count": int(row.get("下跌家数", 0) or 0),
-                    "leading_stock": str(row.get("领涨股票", "")),
-                    "leading_stock_change_pct": float(row.get("领涨股票-涨跌幅", 0) or 0),
-                    "source": "akshare_direct",
-                })
+                result.append(
+                    {
+                        "rank": int(row.get("排名", 0)),
+                        "name": str(row.get("板块名称", "")),
+                        "code": str(row.get("板块代码", "")),
+                        "price": float(row.get("最新价", 0) or 0),
+                        "change": float(row.get("涨跌额", 0) or 0),
+                        "change_pct": float(row.get("涨跌幅", 0) or 0),
+                        "market_cap": int(row.get("总市值", 0) or 0),
+                        "turnover_rate": float(row.get("换手率", 0) or 0),
+                        "up_count": int(row.get("上涨家数", 0) or 0),
+                        "down_count": int(row.get("下跌家数", 0) or 0),
+                        "leading_stock": str(row.get("领涨股票", "")),
+                        "leading_stock_change_pct": float(row.get("领涨股票-涨跌幅", 0) or 0),
+                        "source": "akshare_direct",
+                    }
+                )
 
             logger.info(f"获取到 {len(result)} 个概念板块")
             return result
@@ -1289,9 +1295,7 @@ class AKShareDirectProvider:
                     return cast(List[Dict[str, Any]], cached_data.get("data", []))
 
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                self._executor, self._fetch_industry_sectors_sync
-            )
+            result = await loop.run_in_executor(self._executor, self._fetch_industry_sectors_sync)
 
             if result:
                 self._cache[cache_key] = (time.time(), {"data": result})
@@ -1315,21 +1319,23 @@ class AKShareDirectProvider:
 
             result = []
             for _, row in df.iterrows():
-                result.append({
-                    "rank": int(row.get("排名", 0)),
-                    "name": str(row.get("板块名称", "")),
-                    "code": str(row.get("板块代码", "")),
-                    "price": float(row.get("最新价", 0) or 0),
-                    "change": float(row.get("涨跌额", 0) or 0),
-                    "change_pct": float(row.get("涨跌幅", 0) or 0),
-                    "market_cap": int(row.get("总市值", 0) or 0),
-                    "turnover_rate": float(row.get("换手率", 0) or 0),
-                    "up_count": int(row.get("上涨家数", 0) or 0),
-                    "down_count": int(row.get("下跌家数", 0) or 0),
-                    "leading_stock": str(row.get("领涨股票", "")),
-                    "leading_stock_change_pct": float(row.get("领涨股票-涨跌幅", 0) or 0),
-                    "source": "akshare_direct",
-                })
+                result.append(
+                    {
+                        "rank": int(row.get("排名", 0)),
+                        "name": str(row.get("板块名称", "")),
+                        "code": str(row.get("板块代码", "")),
+                        "price": float(row.get("最新价", 0) or 0),
+                        "change": float(row.get("涨跌额", 0) or 0),
+                        "change_pct": float(row.get("涨跌幅", 0) or 0),
+                        "market_cap": int(row.get("总市值", 0) or 0),
+                        "turnover_rate": float(row.get("换手率", 0) or 0),
+                        "up_count": int(row.get("上涨家数", 0) or 0),
+                        "down_count": int(row.get("下跌家数", 0) or 0),
+                        "leading_stock": str(row.get("领涨股票", "")),
+                        "leading_stock_change_pct": float(row.get("领涨股票-涨跌幅", 0) or 0),
+                        "source": "akshare_direct",
+                    }
+                )
 
             logger.info(f"获取到 {len(result)} 个行业板块")
             return result
@@ -1408,25 +1414,27 @@ class AKShareDirectProvider:
 
             result = []
             for _, row in df.iterrows():
-                result.append({
-                    "rank": int(row.get("序号", 0)),
-                    "symbol": str(row.get("代码", "")),
-                    "name": str(row.get("名称", "")),
-                    "price": float(row.get("最新价", 0) or 0),
-                    "change_pct": float(row.get("涨跌幅", 0) or 0),
-                    "change": float(row.get("涨跌额", 0) or 0),
-                    "volume": float(row.get("成交量", 0) or 0),
-                    "amount": float(row.get("成交额", 0) or 0),
-                    "amplitude": float(row.get("振幅", 0) or 0),
-                    "high": float(row.get("最高", 0) or 0),
-                    "low": float(row.get("最低", 0) or 0),
-                    "open": float(row.get("今开", 0) or 0),
-                    "prev_close": float(row.get("昨收", 0) or 0),
-                    "turnover_rate": float(row.get("换手率", 0) or 0),
-                    "pe_ratio": float(row.get("市盈率-动态", 0) or 0),
-                    "pb_ratio": float(row.get("市净率", 0) or 0),
-                    "source": "akshare_direct",
-                })
+                result.append(
+                    {
+                        "rank": int(row.get("序号", 0)),
+                        "symbol": str(row.get("代码", "")),
+                        "name": str(row.get("名称", "")),
+                        "price": float(row.get("最新价", 0) or 0),
+                        "change_pct": float(row.get("涨跌幅", 0) or 0),
+                        "change": float(row.get("涨跌额", 0) or 0),
+                        "volume": float(row.get("成交量", 0) or 0),
+                        "amount": float(row.get("成交额", 0) or 0),
+                        "amplitude": float(row.get("振幅", 0) or 0),
+                        "high": float(row.get("最高", 0) or 0),
+                        "low": float(row.get("最低", 0) or 0),
+                        "open": float(row.get("今开", 0) or 0),
+                        "prev_close": float(row.get("昨收", 0) or 0),
+                        "turnover_rate": float(row.get("换手率", 0) or 0),
+                        "pe_ratio": float(row.get("市盈率-动态", 0) or 0),
+                        "pb_ratio": float(row.get("市净率", 0) or 0),
+                        "source": "akshare_direct",
+                    }
+                )
 
             logger.info(f"获取到 {sector_name} 板块 {len(result)} 只成份股")
             return result
@@ -1494,22 +1502,24 @@ class AKShareDirectProvider:
 
             result = []
             for _, row in df.iterrows():
-                result.append({
-                    "date": str(row.get("日期", "")),
-                    "close": float(row.get("收盘价", 0) or 0),
-                    "change_pct": float(row.get("涨跌幅", 0) or 0),
-                    "main_net_inflow": float(row.get("主力净流入-净额", 0) or 0),
-                    "main_net_inflow_pct": float(row.get("主力净流入-净占比", 0) or 0),
-                    "super_large_net_inflow": float(row.get("超大单净流入-净额", 0) or 0),
-                    "super_large_net_inflow_pct": float(row.get("超大单净流入-净占比", 0) or 0),
-                    "large_net_inflow": float(row.get("大单净流入-净额", 0) or 0),
-                    "large_net_inflow_pct": float(row.get("大单净流入-净占比", 0) or 0),
-                    "medium_net_inflow": float(row.get("中单净流入-净额", 0) or 0),
-                    "medium_net_inflow_pct": float(row.get("中单净流入-净占比", 0) or 0),
-                    "small_net_inflow": float(row.get("小单净流入-净额", 0) or 0),
-                    "small_net_inflow_pct": float(row.get("小单净流入-净占比", 0) or 0),
-                    "source": "akshare_direct",
-                })
+                result.append(
+                    {
+                        "date": str(row.get("日期", "")),
+                        "close": float(row.get("收盘价", 0) or 0),
+                        "change_pct": float(row.get("涨跌幅", 0) or 0),
+                        "main_net_inflow": float(row.get("主力净流入-净额", 0) or 0),
+                        "main_net_inflow_pct": float(row.get("主力净流入-净占比", 0) or 0),
+                        "super_large_net_inflow": float(row.get("超大单净流入-净额", 0) or 0),
+                        "super_large_net_inflow_pct": float(row.get("超大单净流入-净占比", 0) or 0),
+                        "large_net_inflow": float(row.get("大单净流入-净额", 0) or 0),
+                        "large_net_inflow_pct": float(row.get("大单净流入-净占比", 0) or 0),
+                        "medium_net_inflow": float(row.get("中单净流入-净额", 0) or 0),
+                        "medium_net_inflow_pct": float(row.get("中单净流入-净占比", 0) or 0),
+                        "small_net_inflow": float(row.get("小单净流入-净额", 0) or 0),
+                        "small_net_inflow_pct": float(row.get("小单净流入-净占比", 0) or 0),
+                        "source": "akshare_direct",
+                    }
+                )
 
             logger.info(f"获取到 {symbol} 共 {len(result)} 条资金流向数据")
             return result
@@ -1580,9 +1590,7 @@ class AKShareDirectProvider:
             return []
 
         try:
-            df = module.stock_sector_fund_flow_rank(
-                indicator=indicator, sector_type=sector_type
-            )
+            df = module.stock_sector_fund_flow_rank(indicator=indicator, sector_type=sector_type)
             if df is None or df.empty:
                 return []
 
@@ -1591,19 +1599,27 @@ class AKShareDirectProvider:
             prefix = indicator if indicator != "今日" else "今日"
 
             for _, row in df.iterrows():
-                result.append({
-                    "rank": int(row.get("序号", 0)),
-                    "name": str(row.get("名称", "")),
-                    "change_pct": float(row.get(f"{prefix}涨跌幅", row.get("今日涨跌幅", 0)) or 0),
-                    "main_net_inflow": float(row.get("主力净流入-净额", 0) or 0),
-                    "main_net_inflow_pct": float(row.get("主力净流入-净占比", 0) or 0),
-                    "super_large_net_inflow": float(row.get("超大单净流入-净额", 0) or 0),
-                    "super_large_net_inflow_pct": float(row.get("超大单净流入-净占比", 0) or 0),
-                    "large_net_inflow": float(row.get("大单净流入-净额", 0) or 0),
-                    "large_net_inflow_pct": float(row.get("大单净流入-净占比", 0) or 0),
-                    "leading_stock": str(row.get(f"{prefix}主力净流入最大股", row.get("今日主力净流入最大股", ""))),
-                    "source": "akshare_direct",
-                })
+                result.append(
+                    {
+                        "rank": int(row.get("序号", 0)),
+                        "name": str(row.get("名称", "")),
+                        "change_pct": float(
+                            row.get(f"{prefix}涨跌幅", row.get("今日涨跌幅", 0)) or 0
+                        ),
+                        "main_net_inflow": float(row.get("主力净流入-净额", 0) or 0),
+                        "main_net_inflow_pct": float(row.get("主力净流入-净占比", 0) or 0),
+                        "super_large_net_inflow": float(row.get("超大单净流入-净额", 0) or 0),
+                        "super_large_net_inflow_pct": float(row.get("超大单净流入-净占比", 0) or 0),
+                        "large_net_inflow": float(row.get("大单净流入-净额", 0) or 0),
+                        "large_net_inflow_pct": float(row.get("大单净流入-净占比", 0) or 0),
+                        "leading_stock": str(
+                            row.get(
+                                f"{prefix}主力净流入最大股", row.get("今日主力净流入最大股", "")
+                            )
+                        ),
+                        "source": "akshare_direct",
+                    }
+                )
 
             logger.info(f"获取到 {len(result)} 条板块资金流向数据")
             return result
@@ -1671,16 +1687,18 @@ class AKShareDirectProvider:
 
             result = []
             for _, row in df.iterrows():
-                result.append({
-                    "date": str(row.get("信用交易日期", "")),
-                    "margin_balance": float(row.get("融资余额", 0) or 0),
-                    "margin_buy": float(row.get("融资买入额", 0) or 0),
-                    "short_volume": float(row.get("融券余量", 0) or 0),
-                    "short_volume_value": float(row.get("融券余量金额", 0) or 0),
-                    "short_sell_volume": float(row.get("融券卖出量", 0) or 0),
-                    "total_balance": float(row.get("融资融券余额", 0) or 0),
-                    "source": "akshare_direct",
-                })
+                result.append(
+                    {
+                        "date": str(row.get("信用交易日期", "")),
+                        "margin_balance": float(row.get("融资余额", 0) or 0),
+                        "margin_buy": float(row.get("融资买入额", 0) or 0),
+                        "short_volume": float(row.get("融券余量", 0) or 0),
+                        "short_volume_value": float(row.get("融券余量金额", 0) or 0),
+                        "short_sell_volume": float(row.get("融券卖出量", 0) or 0),
+                        "total_balance": float(row.get("融资融券余额", 0) or 0),
+                        "source": "akshare_direct",
+                    }
+                )
 
             logger.info(f"获取到 {len(result)} 条融资融券数据")
             return result
@@ -1746,29 +1764,29 @@ class AKShareDirectProvider:
             return []
 
         try:
-            df = module.stock_dzjy_mrmx(
-                symbol=symbol, start_date=start_date, end_date=end_date
-            )
+            df = module.stock_dzjy_mrmx(symbol=symbol, start_date=start_date, end_date=end_date)
             if df is None or df.empty:
                 return []
 
             result = []
             for _, row in df.iterrows():
-                result.append({
-                    "rank": int(row.get("序号", 0)),
-                    "date": str(row.get("交易日期", "")),
-                    "symbol": str(row.get("证券代码", "")),
-                    "name": str(row.get("证券简称", "")),
-                    "change_pct": float(row.get("涨跌幅", 0) or 0),
-                    "close": float(row.get("收盘价", 0) or 0),
-                    "trade_price": float(row.get("成交价", 0) or 0),
-                    "premium_rate": float(row.get("折溢率", 0) or 0),
-                    "volume": float(row.get("成交量", 0) or 0),
-                    "amount": float(row.get("成交额", 0) or 0),
-                    "buyer": str(row.get("买方营业部", "")),
-                    "seller": str(row.get("卖方营业部", "")),
-                    "source": "akshare_direct",
-                })
+                result.append(
+                    {
+                        "rank": int(row.get("序号", 0)),
+                        "date": str(row.get("交易日期", "")),
+                        "symbol": str(row.get("证券代码", "")),
+                        "name": str(row.get("证券简称", "")),
+                        "change_pct": float(row.get("涨跌幅", 0) or 0),
+                        "close": float(row.get("收盘价", 0) or 0),
+                        "trade_price": float(row.get("成交价", 0) or 0),
+                        "premium_rate": float(row.get("折溢率", 0) or 0),
+                        "volume": float(row.get("成交量", 0) or 0),
+                        "amount": float(row.get("成交额", 0) or 0),
+                        "buyer": str(row.get("买方营业部", "")),
+                        "seller": str(row.get("卖方营业部", "")),
+                        "source": "akshare_direct",
+                    }
+                )
 
             logger.info(f"获取到 {len(result)} 条大宗交易数据")
             return result
@@ -1840,19 +1858,21 @@ class AKShareDirectProvider:
 
             result = []
             for _, row in df.iterrows():
-                result.append({
-                    "date": str(row.get("日期", "")),
-                    "net_buy": float(row.get("当日成交净买额", 0) or 0),
-                    "buy_amount": float(row.get("买入成交额", 0) or 0),
-                    "sell_amount": float(row.get("卖出成交额", 0) or 0),
-                    "cumulative_net_buy": float(row.get("历史累计净买额", 0) or 0),
-                    "fund_inflow": float(row.get("当日资金流入", 0) or 0),
-                    "balance": float(row.get("当日余额", 0) or 0),
-                    "market_value": float(row.get("持股市值", 0) or 0),
-                    "leading_stock": str(row.get("领涨股", "")),
-                    "leading_stock_change_pct": float(row.get("领涨股-涨跌幅", 0) or 0),
-                    "source": "akshare_direct",
-                })
+                result.append(
+                    {
+                        "date": str(row.get("日期", "")),
+                        "net_buy": float(row.get("当日成交净买额", 0) or 0),
+                        "buy_amount": float(row.get("买入成交额", 0) or 0),
+                        "sell_amount": float(row.get("卖出成交额", 0) or 0),
+                        "cumulative_net_buy": float(row.get("历史累计净买额", 0) or 0),
+                        "fund_inflow": float(row.get("当日资金流入", 0) or 0),
+                        "balance": float(row.get("当日余额", 0) or 0),
+                        "market_value": float(row.get("持股市值", 0) or 0),
+                        "leading_stock": str(row.get("领涨股", "")),
+                        "leading_stock_change_pct": float(row.get("领涨股-涨跌幅", 0) or 0),
+                        "source": "akshare_direct",
+                    }
+                )
 
             logger.info(f"获取到 {len(result)} 条北向资金历史数据")
             return result
@@ -1924,25 +1944,27 @@ class AKShareDirectProvider:
 
             result = []
             for _, row in df.iterrows():
-                result.append({
-                    "rank": int(row.get("序号", 0)),
-                    "symbol": str(row.get("代码", "")),
-                    "name": str(row.get("名称", "")),
-                    "change_pct": float(row.get("涨跌幅", 0) or 0),
-                    "price": float(row.get("最新价", 0) or 0),
-                    "amount": float(row.get("成交额", 0) or 0),
-                    "circulating_market_cap": float(row.get("流通市值", 0) or 0),
-                    "total_market_cap": float(row.get("总市值", 0) or 0),
-                    "turnover_rate": float(row.get("换手率", 0) or 0),
-                    "seal_amount": float(row.get("封板资金", 0) or 0),
-                    "first_seal_time": str(row.get("首次封板时间", "")),
-                    "last_seal_time": str(row.get("最后封板时间", "")),
-                    "break_count": int(row.get("炸板次数", 0) or 0),
-                    "limit_up_stats": str(row.get("涨停统计", "")),
-                    "continuous_count": int(row.get("连板数", 0) or 0),
-                    "industry": str(row.get("所属行业", "")),
-                    "source": "akshare_direct",
-                })
+                result.append(
+                    {
+                        "rank": int(row.get("序号", 0)),
+                        "symbol": str(row.get("代码", "")),
+                        "name": str(row.get("名称", "")),
+                        "change_pct": float(row.get("涨跌幅", 0) or 0),
+                        "price": float(row.get("最新价", 0) or 0),
+                        "amount": float(row.get("成交额", 0) or 0),
+                        "circulating_market_cap": float(row.get("流通市值", 0) or 0),
+                        "total_market_cap": float(row.get("总市值", 0) or 0),
+                        "turnover_rate": float(row.get("换手率", 0) or 0),
+                        "seal_amount": float(row.get("封板资金", 0) or 0),
+                        "first_seal_time": str(row.get("首次封板时间", "")),
+                        "last_seal_time": str(row.get("最后封板时间", "")),
+                        "break_count": int(row.get("炸板次数", 0) or 0),
+                        "limit_up_stats": str(row.get("涨停统计", "")),
+                        "continuous_count": int(row.get("连板数", 0) or 0),
+                        "industry": str(row.get("所属行业", "")),
+                        "source": "akshare_direct",
+                    }
+                )
 
             logger.info(f"获取到 {len(result)} 只涨停股")
             return result
@@ -2001,24 +2023,26 @@ class AKShareDirectProvider:
 
             result = []
             for _, row in df.iterrows():
-                result.append({
-                    "rank": int(row.get("序号", 0)),
-                    "symbol": str(row.get("代码", "")),
-                    "name": str(row.get("名称", "")),
-                    "change_pct": float(row.get("涨跌幅", 0) or 0),
-                    "price": float(row.get("最新价", 0) or 0),
-                    "amount": float(row.get("成交额", 0) or 0),
-                    "circulating_market_cap": float(row.get("流通市值", 0) or 0),
-                    "total_market_cap": float(row.get("总市值", 0) or 0),
-                    "turnover_rate": float(row.get("换手率", 0) or 0),
-                    "seal_amount": float(row.get("封单资金", 0) or 0),
-                    "last_seal_time": str(row.get("最后封板时间", "")),
-                    "on_board_amount": float(row.get("板上成交额", 0) or 0),
-                    "continuous_count": int(row.get("连续跌停", 0) or 0),
-                    "break_count": int(row.get("开板次数", 0) or 0),
-                    "industry": str(row.get("所属行业", "")),
-                    "source": "akshare_direct",
-                })
+                result.append(
+                    {
+                        "rank": int(row.get("序号", 0)),
+                        "symbol": str(row.get("代码", "")),
+                        "name": str(row.get("名称", "")),
+                        "change_pct": float(row.get("涨跌幅", 0) or 0),
+                        "price": float(row.get("最新价", 0) or 0),
+                        "amount": float(row.get("成交额", 0) or 0),
+                        "circulating_market_cap": float(row.get("流通市值", 0) or 0),
+                        "total_market_cap": float(row.get("总市值", 0) or 0),
+                        "turnover_rate": float(row.get("换手率", 0) or 0),
+                        "seal_amount": float(row.get("封单资金", 0) or 0),
+                        "last_seal_time": str(row.get("最后封板时间", "")),
+                        "on_board_amount": float(row.get("板上成交额", 0) or 0),
+                        "continuous_count": int(row.get("连续跌停", 0) or 0),
+                        "break_count": int(row.get("开板次数", 0) or 0),
+                        "industry": str(row.get("所属行业", "")),
+                        "source": "akshare_direct",
+                    }
+                )
 
             logger.info(f"获取到 {len(result)} 只跌停股")
             return result
@@ -2103,36 +2127,56 @@ class AKShareDirectProvider:
 
                 # 根据不同报表类型添加不同字段
                 if report_type == "业绩报表":
-                    item.update({
-                        "eps": float(row.get("每股收益", 0) or 0),
-                        "revenue": float(row.get("营业总收入-营业总收入", 0) or 0),
-                        "revenue_yoy": float(row.get("营业总收入-同比增长", 0) or 0),
-                        "net_profit": float(row.get("净利润-净利润", 0) or 0),
-                        "net_profit_yoy": float(row.get("净利润-同比增长", 0) or 0),
-                        "bps": float(row.get("每股净资产", 0) or 0),
-                        "roe": float(row.get("净资产收益率", 0) or 0),
-                        "gross_margin": float(row.get("销售毛利率", 0) or 0),
-                        "industry": str(row.get("所处行业", "")),
-                    })
+                    item.update(
+                        {
+                            "eps": float(row.get("每股收益", 0) or 0),
+                            "revenue": float(row.get("营业总收入-营业总收入", 0) or 0),
+                            "revenue_yoy": float(row.get("营业总收入-同比增长", 0) or 0),
+                            "net_profit": float(row.get("净利润-净利润", 0) or 0),
+                            "net_profit_yoy": float(row.get("净利润-同比增长", 0) or 0),
+                            "bps": float(row.get("每股净资产", 0) or 0),
+                            "roe": float(row.get("净资产收益率", 0) or 0),
+                            "gross_margin": float(row.get("销售毛利率", 0) or 0),
+                            "industry": str(row.get("所处行业", "")),
+                        }
+                    )
                 elif report_type == "业绩快报":
-                    item.update({
-                        "eps": float(row.get("每股收益", 0) or 0) if row.get("每股收益") else 0,
-                        "revenue": float(row.get("营业收入-营业收入", 0) or 0) if row.get("营业收入-营业收入") else 0,
-                        "net_profit": float(row.get("净利润-净利润", 0) or 0) if row.get("净利润-净利润") else 0,
-                        "bps": float(row.get("每股净资产", 0) or 0) if row.get("每股净资产") else 0,
-                        "roe": float(row.get("净资产收益率", 0) or 0) if row.get("净资产收益率") else 0,
-                        "industry": str(row.get("所处行业", "")),
-                    })
+                    item.update(
+                        {
+                            "eps": float(row.get("每股收益", 0) or 0) if row.get("每股收益") else 0,
+                            "revenue": (
+                                float(row.get("营业收入-营业收入", 0) or 0)
+                                if row.get("营业收入-营业收入")
+                                else 0
+                            ),
+                            "net_profit": (
+                                float(row.get("净利润-净利润", 0) or 0)
+                                if row.get("净利润-净利润")
+                                else 0
+                            ),
+                            "bps": (
+                                float(row.get("每股净资产", 0) or 0) if row.get("每股净资产") else 0
+                            ),
+                            "roe": (
+                                float(row.get("净资产收益率", 0) or 0)
+                                if row.get("净资产收益率")
+                                else 0
+                            ),
+                            "industry": str(row.get("所处行业", "")),
+                        }
+                    )
                 elif report_type == "业绩预告":
-                    item.update({
-                        "forecast_indicator": str(row.get("预测指标", "")),
-                        "performance_change": str(row.get("业绩变动", "")),
-                        "forecast_value": str(row.get("预测数值", "")),
-                        "change_range": str(row.get("业绩变动幅度", "")),
-                        "change_reason": str(row.get("业绩变动原因", "")),
-                        "forecast_type": str(row.get("预告类型", "")),
-                        "last_year_value": str(row.get("上年同期值", "")),
-                    })
+                    item.update(
+                        {
+                            "forecast_indicator": str(row.get("预测指标", "")),
+                            "performance_change": str(row.get("业绩变动", "")),
+                            "forecast_value": str(row.get("预测数值", "")),
+                            "change_range": str(row.get("业绩变动幅度", "")),
+                            "change_reason": str(row.get("业绩变动原因", "")),
+                            "forecast_type": str(row.get("预告类型", "")),
+                            "last_year_value": str(row.get("上年同期值", "")),
+                        }
+                    )
 
                 result.append(item)
 

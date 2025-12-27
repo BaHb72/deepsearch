@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Tuple
 
 from loguru import logger
 
@@ -17,9 +17,7 @@ from deepsearch.config.models.market_data import (
 from deepsearch.config.settings import Settings
 
 if TYPE_CHECKING:
-    from deepsearch.application.market_data.orchestrator import (
-        RealtimeRuntimeHandle,
-    )
+    from deepsearch.application.market_data.orchestrator import RealtimeRuntimeHandle
 
 
 def _iso_now() -> str:
@@ -41,7 +39,7 @@ class ModuleFallbackManager:
 
     def __init__(self, settings: Settings) -> None:
         from deepsearch.application.market_data.orchestrator import RealtimeDataOrchestrator
-        
+
         self._settings = settings
         self._orchestrator = RealtimeDataOrchestrator(settings)
         self._locks: Dict[Tuple[str, str], asyncio.Lock] = {}
@@ -66,7 +64,9 @@ class ModuleFallbackManager:
                     "nextAllowedAt": next_allowed.isoformat().replace("+00:00", "Z"),
                     "retryAfterSeconds": round(remaining, 2),
                 }
-                return FallbackFetchResult(module=module_name, source=source_name, status="throttled", detail=detail)
+                return FallbackFetchResult(
+                    module=module_name, source=source_name, status="throttled", detail=detail
+                )
 
             handle = await self._start_adapter(source_name)
             if handle is None:
@@ -85,9 +85,16 @@ class ModuleFallbackManager:
                     "writer_source": handle.cache_writer.data_source,
                     "boards": list(getattr(handle.pipeline, "boards", ())),
                 }
-                return FallbackFetchResult(module=module_name, source=source_name, status="ok", detail=detail)
+                return FallbackFetchResult(
+                    module=module_name, source=source_name, status="ok", detail=detail
+                )
             except Exception as exc:  # pragma: no cover - defensive logging
-                logger.error("Fallback fetch failed for module={} source={}: {}", module_name, source_name, exc)
+                logger.error(
+                    "Fallback fetch failed for module={} source={}: {}",
+                    module_name,
+                    source_name,
+                    exc,
+                )
                 return FallbackFetchResult(
                     module=module_name,
                     source=source_name,
@@ -98,9 +105,9 @@ class ModuleFallbackManager:
                 await self._orchestrator._teardown_handle(handle)
 
     def _remaining_interval(
-            self,
-            rule: MarketModuleFallbackConfig,
-            last: datetime | None,
+        self,
+        rule: MarketModuleFallbackConfig,
+        last: datetime | None,
     ) -> float | None:
         interval = rule.min_interval_seconds
         if interval <= 0 or last is None:
@@ -121,10 +128,10 @@ class ModuleFallbackManager:
         return self._settings.market_data
 
     def _locate_rule(
-            self,
-            module_name: str,
-            module_cfg: MarketModuleConfig,
-            source: str,
+        self,
+        module_name: str,
+        module_cfg: MarketModuleConfig,
+        source: str,
     ) -> MarketModuleFallbackConfig:
         normalized_source = self._normalize_identifier(source)
         for rule in module_cfg.fallbacks:

@@ -109,6 +109,7 @@
 完成以上步骤后，再逐步把其它实时接口（权重榜、竞价、委差）接入新机制，最终实现真正“按能力切换”的统一体。每个里程碑都应同步更新文档和运维手册，确保信息一致。
 \n### Phase 5：模块级兜底与前端切换
 \n- 接口 \\/market/live/{strength|board-overview|order-imbalance|auction-quality}\\ 新增 \\source\\ 查询参数，默认 auto。兜底成功时会在 \\detail.fallback\\ 中反馈写入源、时间戳等信息。
+
 - \\settings.*.yaml\\ 中的 \\market_data.modules.{模块}\\ 描述主源+fallback 组合，后端会在主源失效或休市时按模块自动挑选兜底源，也允许显式指定。
 - 代码层面引入 \\ModuleFallbackManager\\，按需启动指定 adapter 运行一次 pipeline，保证不会常驻多条 runner。
 

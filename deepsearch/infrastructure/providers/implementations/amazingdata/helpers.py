@@ -7,11 +7,12 @@ import random
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Mapping, Optional, Sequence, TypeVar, ParamSpec
+from typing import Any, Awaitable, Callable, Mapping, Optional, ParamSpec, Sequence, TypeVar
 
 import pandas as pd
 
 from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
+
 from .common import (
     BOARD_FIELD_CANDIDATES,
     DEFAULT_HIST_CODE_LIST_START,
@@ -25,7 +26,9 @@ from .types import AmazingDataSDKProtocol
 class _RetryStrategy:
     """Simple exponential-backoff retry strategy."""
 
-    def __init__(self, max_attempts: int, backoff_base: float, max_delay: float, jitter: bool) -> None:
+    def __init__(
+        self, max_attempts: int, backoff_base: float, max_delay: float, jitter: bool
+    ) -> None:
         self.max_attempts = max_attempts
         self.backoff_base = backoff_base
         self.max_delay = max_delay
@@ -34,7 +37,7 @@ class _RetryStrategy:
     def delays(self) -> list[float]:
         delays: list[float] = []
         for attempt in range(self.max_attempts - 1):
-            delay = min(self.backoff_base ** attempt, self.max_delay)
+            delay = min(self.backoff_base**attempt, self.max_delay)
             if self.jitter:
                 delay += random.uniform(0, 1)
             delays.append(delay)
@@ -42,11 +45,11 @@ class _RetryStrategy:
 
 
 def build_retry_strategy(
-        *,
-        max_attempts: int = 3,
-        backoff_base: float = 2.0,
-        max_delay: float = 60.0,
-        jitter: bool = True,
+    *,
+    max_attempts: int = 3,
+    backoff_base: float = 2.0,
+    max_delay: float = 60.0,
+    jitter: bool = True,
 ) -> _RetryStrategy:
     """Factory for retry animations used in async_retry and future backoff logic."""
     return _RetryStrategy(max_attempts, backoff_base, max_delay, jitter)
@@ -86,9 +89,9 @@ def _ensure_float(value: object | None, default: float = 0.0) -> float:
 
 
 def _resolve_constant_variant(
-        namespace: object | None,
-        names: Sequence[str],
-        fallback: Any | None = None,
+    namespace: object | None,
+    names: Sequence[str],
+    fallback: Any | None = None,
 ) -> Any | None:
     """�Ը����кܶ�ֶε����������ƣ����빹��ʵ��ֵ."""
     if namespace is None:
@@ -118,36 +121,47 @@ def _normalize_date_to_int(value: object | None) -> Optional[int]:
 
 
 def _create_market_data_instance(sdk: Any) -> Any:
-    """���� MarketData ʵ�������벢������������."""
+    """创建 MarketData 实例，必须传入交易日历。
+
+    根据SDK文档，query_kline内部会遍历calendar筛选交易日，
+    因此calendar参数是必需的，不能为None。
+    详见：docs/datasources/amazingdata/query_kline_calendar_requirement.md
+    """
     market_cls = getattr(sdk, "MarketData", None)
     if market_cls is None:
-        raise DataProviderError("AmazingData SDK ȱ�� MarketData �࣬�޷���ѯ��������")
+        raise DataProviderError("AmazingData SDK 缺少 MarketData 类，无法查询行情数据")
 
-    try:
-        return market_cls()
-    except TypeError:
-        base_cls = getattr(sdk, "BaseData", None)
-        calendar = None
-        if base_cls is not None:
-            try:
-                base_instance = base_cls()
-                calendar = base_instance.get_calendar()
-            except Exception as exc:  # noqa: BLE001
-                log_warning(
-                    "BaseData 初始化失败，忽略 MarketData 日历上下文",
-                    action="market_data_init",
-                    metadata={"error": str(exc)},
-                )
+    # 获取交易日历（必需）
+    calendar = None
+    base_cls = getattr(sdk, "BaseData", None)
+    if base_cls is not None:
         try:
-            if calendar is not None:
-                return market_cls(calendar)
-            return market_cls()
-        except TypeError as exc:
-            raise DataProviderError(f"AmazingData MarketData ��ʼ��ʧ��: {exc}") from exc
+            base_instance = base_cls()
+            calendar = base_instance.get_calendar()
+            log_debug("获取交易日历成功，长度: {}", len(calendar) if calendar else 0)
+        except Exception as exc:  # noqa: BLE001
+            log_warning(
+                "BaseData.get_calendar 调用失败",
+                action="market_data_init",
+                metadata={"error": str(exc)},
+            )
+
+    # 使用calendar创建MarketData
+    try:
+        if calendar is not None:
+            return market_cls(calendar)
+        # calendar为None时尝试无参创建（可能会在query_kline时报错）
+        log_warning(
+            "未能获取交易日历，MarketData可能无法正常调用query_kline",
+            action="market_data_init",
+        )
+        return market_cls()
+    except TypeError as exc:
+        raise DataProviderError(f"AmazingData MarketData 初始化失败: {exc}") from exc
 
 
 def _ensure_int(value: object | None, default: int = 0) -> int:
-    """���������ת��Ϊ int��ʧ��ʱ����Ĭ��ֵ."""
+    """תΪ intʧʱĬֵ."""
     if value is None:
         return default
     if isinstance(value, bool):
@@ -182,12 +196,12 @@ def _format_date(value: object) -> str:
 
 
 def fetch_stock_dataset_blocking(
-        sdk: AmazingDataSDKProtocol,
-        *,
-        security_type: str = "EXTRA_STOCK_A",
-        start_date: object | None = None,
-        end_date: object | None = None,
-        local_path: object | None = None,
+    sdk: AmazingDataSDKProtocol,
+    *,
+    security_type: str = "EXTRA_STOCK_A",
+    start_date: object | None = None,
+    end_date: object | None = None,
+    local_path: object | None = None,
 ) -> Any:
     """��ͬ���߳��е��� AmazingData SDK����ȡ��Ʊ�б����ڱ��."""
 
@@ -294,7 +308,10 @@ def fetch_stock_dataset_blocking(
                 result = hist_method(**hist_kwargs)
             except TypeError as exc:
                 message = str(exc)
-                if "unexpected keyword argument 'is_local'" in message and "is_local" in hist_kwargs:
+                if (
+                    "unexpected keyword argument 'is_local'" in message
+                    and "is_local" in hist_kwargs
+                ):
                     log_debug("BaseData.get_hist_code_list ��֧�� is_local��ʹ�ü���ģʽ����")
                     hist_kwargs.pop("is_local", None)
                     try:
@@ -318,8 +335,11 @@ def fetch_stock_dataset_blocking(
             log_warning(
                 "BaseData.get_hist_code_list 返回空集合",
                 action="hist_code_list",
-                metadata={"mode": "local" if local_mode else "remote", "start": start_normalized,
-                          "end": end_normalized},
+                metadata={
+                    "mode": "local" if local_mode else "remote",
+                    "start": start_normalized,
+                    "end": end_normalized,
+                },
             )
     if errors:
         raise RuntimeError("; ".join(errors))
@@ -335,7 +355,9 @@ def normalize_stock_records(dataset: Any) -> list[dict[str, Any]]:
     if isinstance(dataset, pd.DataFrame):
         df_reset = dataset.reset_index()
         if "code" not in df_reset.columns:
-            index_candidates = [col for col in ("index", dataset.index.name) if col and col in df_reset.columns]
+            index_candidates = [
+                col for col in ("index", dataset.index.name) if col and col in df_reset.columns
+            ]
             if index_candidates:
                 df_reset = df_reset.rename(columns={index_candidates[0]: "code"})
             elif "index" in df_reset.columns:
@@ -415,18 +437,18 @@ def _records_need_board(records: Sequence[Mapping[str, Any]]) -> bool:
 
 def _extract_symbol(record: Mapping[str, Any]) -> str:
     raw = (
-            record.get("symbol")
-            or record.get("code")
-            or record.get("MARKET_CODE")
-            or record.get("SECURITY_ID")
-            or record.get("SECURITY_CODE")
+        record.get("symbol")
+        or record.get("code")
+        or record.get("MARKET_CODE")
+        or record.get("SECURITY_ID")
+        or record.get("SECURITY_CODE")
     )
     return str(raw or "").upper().strip()
 
 
 def fetch_stock_board_metadata_blocking(
-        sdk: AmazingDataSDKProtocol,
-        symbols: Sequence[str],
+    sdk: AmazingDataSDKProtocol,
+    symbols: Sequence[str],
 ) -> list[dict[str, Any]]:
     """ͨ�� InfoData/BaseData ��ȡ��չ�ĵ�Ʊ������."""
 
@@ -471,8 +493,8 @@ def fetch_stock_board_metadata_blocking(
 
 
 def _merge_board_metadata(
-        records: list[dict[str, Any]],
-        metadata: Sequence[Mapping[str, Any]],
+    records: list[dict[str, Any]],
+    metadata: Sequence[Mapping[str, Any]],
 ) -> None:
     """�� metadata ���������������״̬."""
 
@@ -504,7 +526,9 @@ def _merge_board_metadata(
             raw_value = record.get(field)
             if not isinstance(raw_value, str):
                 continue
-            tokens = [token.strip() for token in raw_value.replace(";", ",").replace("/", ",").split(",")]
+            tokens = [
+                token.strip() for token in raw_value.replace(";", ",").replace("/", ",").split(",")
+            ]
             existing_aliases.update(token for token in tokens if token)
 
         record["LISTPLATE_NAME"] = board_value
@@ -519,8 +543,9 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
-def async_retry(max_attempts: int = 3, backoff_base: float = 2, max_delay: float = 60, jitter: bool = True) -> Callable[
-    [Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
+def async_retry(
+    max_attempts: int = 3, backoff_base: float = 2, max_delay: float = 60, jitter: bool = True
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """
     �첽����װ�������ṩָ���˱ܺͶ���.
 

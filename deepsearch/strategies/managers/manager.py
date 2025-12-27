@@ -7,7 +7,7 @@ starting, stopping, and monitoring strategies.
 
 import asyncio
 from datetime import datetime
-from typing import Dict, List, Mapping, Optional, Type, TYPE_CHECKING, cast, Literal
+from typing import TYPE_CHECKING, Dict, List, Literal, Mapping, Optional, Type, cast
 
 from loguru import logger
 
@@ -286,7 +286,9 @@ class StrategyManager(metaclass=Singleton):
 
     def get_all_status(self) -> Dict[str, StrategyStatus]:
         """Get status of all strategies"""
-        return {sid: cast(StrategyStatus, dict(status)) for sid, status in self.strategy_status.items()}
+        return {
+            sid: cast(StrategyStatus, dict(status)) for sid, status in self.strategy_status.items()
+        }
 
     def get_running_strategies(self) -> List[str]:
         """Get list of running strategy IDs"""

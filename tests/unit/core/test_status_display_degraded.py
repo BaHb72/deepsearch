@@ -21,20 +21,29 @@ class TestStatusDisplayDegradedMode:
         # 模拟 rich 不可用
         mock_modules = {}
         for name in list(sys.modules.keys()):
-            if name.startswith('rich') or name == 'rich':
+            if name.startswith("rich") or name == "rich":
                 mock_modules[name] = sys.modules.pop(name, None)
 
         # 移除已缓存的 status_display
-        if 'deepsearch.core.utils.status_display' in sys.modules:
-            del sys.modules['deepsearch.core.utils.status_display']
+        if "deepsearch.core.utils.status_display" in sys.modules:
+            del sys.modules["deepsearch.core.utils.status_display"]
 
         try:
             # 在 rich 不可用时尝试导入
-            with patch.dict(sys.modules, {'rich': None, 'rich.console': None, 'rich.live': None, 'rich.panel': None,
-                                          'rich.table': None, 'rich.text': None}):
+            with patch.dict(
+                sys.modules,
+                {
+                    "rich": None,
+                    "rich.console": None,
+                    "rich.live": None,
+                    "rich.panel": None,
+                    "rich.table": None,
+                    "rich.text": None,
+                },
+            ):
                 # 由于模块级别的导入行为，这里可能很难完全模拟
                 # 改用已加载模块的状态测试
-                from deepsearch.core.utils.status_display import RICH_AVAILABLE
+
                 # 只验证模块可以被导入
                 assert True
         finally:

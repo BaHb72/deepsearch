@@ -6,10 +6,10 @@ Author: DeepSearch Team
 Version: 1.0.0
 """
 
-from loguru import logger
 from types import ModuleType, SimpleNamespace
 from typing import cast
 
+from loguru import logger
 
 try:
     import backtrader as bt

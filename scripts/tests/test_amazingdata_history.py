@@ -9,7 +9,7 @@ AmazingData 历史行情 API 测试脚本
 import asyncio
 import sys
 from datetime import datetime
-from typing import Any, Callable
+from typing import Callable
 
 # 添加项目路径
 sys.path.insert(0, "d:/Stock/code/deepsearch")
@@ -20,7 +20,9 @@ from deepsearch.webui.api.endpoints.amazingdata.base import get_amazingdata_prov
 class TestResult:
     """测试结果类"""
 
-    def __init__(self, api_name: str, success: bool, data_count: int, error: str = "", elapsed: float = 0):
+    def __init__(
+        self, api_name: str, success: bool, data_count: int, error: str = "", elapsed: float = 0
+    ):
         self.api_name = api_name
         self.success = success
         self.data_count = data_count
@@ -41,13 +43,13 @@ async def test_api(api_name: str, func: Callable, *args, **kwargs) -> TestResult
 
         # 解析结果
         if result is None:
-            print(f"状态: 返回None")
+            print("状态: 返回None")
             return TestResult(api_name, False, 0, "返回None", elapsed)
 
         if hasattr(result, "to_dict"):
             # DataFrame
             data_count = len(result)
-            print(f"状态: 成功")
+            print("状态: 成功")
             print(f"数据条数: {data_count}")
             print(f"耗时: {elapsed:.2f}秒")
             return TestResult(api_name, True, data_count, "", elapsed)
@@ -56,7 +58,7 @@ async def test_api(api_name: str, func: Callable, *args, **kwargs) -> TestResult
             # 可能是 {code: DataFrame} 的格式
             if all(hasattr(v, "to_dict") for v in result.values() if v is not None):
                 total_rows = sum(len(v) for v in result.values() if v is not None)
-                print(f"状态: 成功")
+                print("状态: 成功")
                 print(f"股票数: {len(result)}")
                 print(f"总数据行数: {total_rows}")
                 print(f"耗时: {elapsed:.2f}秒")
@@ -89,7 +91,7 @@ async def test_api(api_name: str, func: Callable, *args, **kwargs) -> TestResult
 
     except Exception as e:
         elapsed = (datetime.now() - start).total_seconds()
-        print(f"状态: 异常")
+        print("状态: 异常")
         print(f"错误: {str(e)}")
         return TestResult(api_name, False, 0, str(e), elapsed)
 
