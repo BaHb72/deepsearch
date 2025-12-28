@@ -843,13 +843,11 @@ def create_app() -> FastAPI:
     )
     from deepsearch.webui.api.endpoints.data.data_unified import router as data_unified_router
     from deepsearch.webui.api.endpoints.market_data.live_api import router as market_live_router
-    from deepsearch.webui.api.endpoints.monitor.monitor_api import router as monitor_api_router
-    from deepsearch.webui.api.endpoints.monitoring.analytics import (
+    from deepsearch.webui.api.endpoints.monitor.analytics import (
         router as monitoring_analytics_router,
     )
-    from deepsearch.webui.api.endpoints.monitoring.cache_api import (
-        router as monitoring_cache_router,
-    )
+    from deepsearch.webui.api.endpoints.monitor.cache_api import router as monitoring_cache_router
+    from deepsearch.webui.api.endpoints.monitor.monitor_api import router as monitor_api_router
     from deepsearch.webui.api.endpoints.notifications.push import router as notification_push_router
     from deepsearch.webui.api.endpoints.qmt.qmt import router as qmt_router
     from deepsearch.webui.api.endpoints.qmt.qmt_subscription import (
@@ -1121,7 +1119,7 @@ def create_app() -> FastAPI:
 
     # 注册监控指标API
     try:
-        from deepsearch.webui.api.endpoints.monitoring.metrics_api import router as metrics_router
+        from deepsearch.webui.api.endpoints.monitor.metrics_api import router as metrics_router
 
         app.include_router(metrics_router, tags=["Metrics"])
         logger.info("监控指标API已注册")

@@ -9,11 +9,10 @@ from typing import Any, Optional
 
 import asyncpg
 
+from deepsearch.domain.entities.stock_simple import Stock
+from deepsearch.domain.interfaces.repository import IStockRepository, PageRequest, PageResult
+from deepsearch.domain.value_objects import Price, Symbol
 from deepsearch.observability import get_logger
-from domain.entities.stock import Stock
-from domain.interfaces.repository import IStockRepository, PageRequest, PageResult
-from domain.values.price import Price
-from domain.values.symbol import Symbol
 
 logger = get_logger(__name__)
 
