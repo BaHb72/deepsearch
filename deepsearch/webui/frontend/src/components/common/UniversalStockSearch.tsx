@@ -99,8 +99,8 @@ export interface UniversalStockSearchProps {
     dataSource?: DataSourceType
     /** 当前选中值 */
     value: string
-    /** 值变更回调 */
-    onChange: (value: string) => void
+    /** 值变更回调 (同时传递 symbol 和 name) */
+    onChange: (value: string, name?: string) => void
     /** 自定义占位符 */
     placeholder?: string
     /** 自定义样式 */
@@ -166,7 +166,10 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
 
     // 处理选择或输入
     const handleSelect = (val: string) => {
-        onChange(val)
+        // 查找对应的股票名称
+        const matched = options.find((opt) => opt.symbol === val)
+        const name = matched?.name || PRESET_STOCK_MAP[val] || undefined
+        onChange(val, name)
         setSearchValue('')
     }
 

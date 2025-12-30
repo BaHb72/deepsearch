@@ -351,7 +351,7 @@ class AmazingDataExtended(AmazingDataProvider):
             if isinstance(entry, StockListRecord):
                 record = entry
             elif isinstance(entry, Mapping):
-                record = StockListRecord.from_payload(entry)
+                record = StockListRecord.from_payload(entry)  # type: ignore[assignment]
             else:
                 continue
             if record.symbol:

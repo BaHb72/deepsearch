@@ -1042,6 +1042,17 @@ def create_app() -> FastAPI:
     except ImportError as e:
         logger.warning(f"日内做T API模块加载失败: {e}")
 
+    # Strategy Center API (策略中心)
+    try:
+        from deepsearch.webui.api.endpoints.strategy_center import router as strategy_center_router
+
+        app.include_router(
+            strategy_center_router, tags=["Strategy Center"]
+        )  # 策略中心API，已包含 /api/strategy-center 前缀
+        logger.info("策略中心API已注册")
+    except ImportError as e:
+        logger.warning(f"策略中心API模块加载失败: {e}")
+
     # Data Source Monitor API
     try:
         from deepsearch.webui.api.monitor.data_source_api import (

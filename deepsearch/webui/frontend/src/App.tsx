@@ -19,6 +19,7 @@ const ConceptMonitor = lazy(() => import('./pages/ConceptMonitor'))
 
 const DataExplorer = lazy(() => import('./pages/DataSource/Explorer'))
 const StrategyGenerator = lazy(() => import('./pages/Strategy/Generator'))
+const StrategyTTrading = lazy(() => import('./pages/Strategy/TTrading'))
 const DataPlayground = lazy(() => import('./pages/Playground/DataPlayground'))
 const TTradingPage = lazy(() => import('./pages/Trading/TTradingPage'))
 
@@ -53,8 +54,13 @@ const App: React.FC = () => {
           <Route path="system/config" element={<SystemConfig />} />
 
           <Route path="datasource/explorer" element={<DataExplorer />} />
-          <Route path="strategy/generator" element={<StrategyGenerator />} />
-          <Route path="trading/ttrading" element={<TTradingPage />} />
+
+          {/* 策略中心路由 */}
+          <Route path="strategy/manager" element={<StrategyGenerator />} />
+          <Route path="strategy/composite" element={<StrategyGenerator />} />
+          <Route path="strategy/ttrading" element={<StrategyTTrading />} />
+          <Route path="strategy/backtest" element={<StrategyGenerator />} />
+          <Route path="strategy/generator" element={<Navigate to="/strategy/backtest" replace />} />
 
           <Route path="monitor/market" element={<MarketMonitor />} />
           <Route path="monitor/datasource" element={<MarketMonitor />} />

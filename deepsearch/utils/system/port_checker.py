@@ -127,9 +127,8 @@ class PortChecker:
         config = get_config()
         listen_ports = {}
 
-        # WebUI 端口
+        # WebUI 后端端口（前端是独立 Vite 进程，不由后端检查）
         listen_ports["webui_backend"] = config.webui.backend_port
-        listen_ports["webui_frontend"] = config.webui.frontend_port
 
         # QMT 端口（如果配置了）
         if hasattr(config, "qmt") and config.qmt:

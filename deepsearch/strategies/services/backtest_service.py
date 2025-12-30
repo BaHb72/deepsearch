@@ -8,14 +8,18 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from importlib import import_module
 from importlib.util import find_spec
-from typing import Callable, Mapping, Sequence, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence, TypedDict, cast
 
 from loguru import logger
 
 from deepsearch.backtest.adapters.unified_backtrader_adapter import UnifiedBacktraderAdapter
 from deepsearch.backtest.interfaces.strategy import BacktraderStrategyAdapter
 from deepsearch.backtest.ports import BacktesterAPI, CerebroProto, FigureProto, StrategyProto
+from deepsearch.strategies.interfaces.models import TradingCostConfig
 from deepsearch.strategies.interfaces.protocols import BacktestStrategy
+
+if TYPE_CHECKING:
+    pass
 
 HAS_MATPLOTLIB = find_spec("matplotlib") is not None
 
@@ -32,6 +36,85 @@ StrategyComparisonConfig = TypedDict(
 )
 
 PlotClose = Callable[[FigureProto], None]
+
+
+# ============================================
+# A-Share Commission Model (万二不免五)
+# ============================================
+
+
+def _create_cn_stock_commission(
+    backtester: BacktesterAPI,
+    cost_config: TradingCostConfig,
+) -> Any:
+    """
+    创建A股佣金模型类.
+
+    实现"万二不免五"逻辑：
+    - 佣金率: 万分之二 (0.02%)
+    - 最低佣金: 5元 (可配置是否免五)
+    - 印花税: 千分之一，仅卖出收取
+    - 过户费: 十万分之一，双向收取
+    """
+    bt_module = backtester._bt_module  # type: ignore[attr-defined]
+
+    class CNStockCommission(bt_module.CommInfoBase):  # type: ignore[name-defined]
+        """
+        A股佣金计算类.
+
+        继承自Backtrader的CommInfoBase，实现真实的A股交易费用模型.
+        """
+
+        params = (
+            ("commission", cost_config.commission_rate),
+            ("min_commission", cost_config.min_commission),
+            ("commission_exempt_min", cost_config.commission_exempt_min),
+            ("stamp_tax", cost_config.stamp_tax_rate),
+            ("transfer_fee", cost_config.transfer_fee_rate),
+            ("stocklike", True),
+            ("commtype", bt_module.CommInfoBase.COMM_PERC),
+        )
+
+        def _getcommission(
+            self,
+            size: float,
+            price: float,
+            pseudoexec: bool,
+        ) -> float:
+            """
+            计算交易佣金.
+
+            Args:
+                size: 交易数量 (正数=买入, 负数=卖出)
+                price: 成交价格
+                pseudoexec: 是否为模拟执行
+
+            Returns:
+                交易费用总和
+            """
+            amount = abs(size * price)
+
+            # 1. 计算佣金
+            base_commission = amount * self.p.commission
+            if self.p.commission_exempt_min:
+                # 免五模式：不设最低佣金
+                commission = base_commission
+            else:
+                # 不免五模式：最低5元
+                commission = max(base_commission, self.p.min_commission)
+
+            # 2. 过户费 (双向)
+            transfer_fee = amount * self.p.transfer_fee
+
+            # 3. 印花税 (仅卖出)
+            stamp_tax = 0.0
+            if size < 0:
+                stamp_tax = amount * self.p.stamp_tax
+
+            total = commission + transfer_fee + stamp_tax
+            return float(total)
+
+    return CNStockCommission()
 
 
 @dataclass(frozen=True)
@@ -143,20 +226,49 @@ class BacktestService:
         end_date: str,
         initial_capital: float = 100000,
         strategy_params: StrategyParameters | None = None,
-        commission: float = 0.001,
+        cost_config: TradingCostConfig | None = None,
         plot: bool = True,
     ) -> BacktestResult:
-        """执行单个策略的回测."""
+        """
+        执行单个策略的回测.
 
+        Args:
+            strategy_class: 策略类
+            symbols: 标的代码列表
+            start_date: 回测开始日期 (YYYY-MM-DD)
+            end_date: 回测结束日期 (YYYY-MM-DD)
+            initial_capital: 初始资金 (默认100000)
+            strategy_params: 策略参数覆盖
+            cost_config: 交易费用配置 (默认使用A股万二不免五)
+            plot: 是否生成图表
+
+        Returns:
+            BacktestResult: 回测结果
+        """
         if self.adapter is None:
             await self.initialize()
 
         if self.adapter is None:
             raise RuntimeError("回测数据适配器初始化失败")
 
+        # 使用默认A股费用配置 (万二不免五)
+        if cost_config is None:
+            cost_config = TradingCostConfig()
+
         cerebro = self._backtester.Cerebro()
         cerebro.broker.setcash(initial_capital)
-        cerebro.broker.setcommission(commission=commission)
+
+        # 使用CNStockCommission实现高保真佣金模型
+        cn_commission = _create_cn_stock_commission(self._backtester, cost_config)
+        cerebro.broker.addcommissioninfo(cn_commission)
+
+        logger.debug(
+            "佣金配置: 费率={:.4%}, 最低={}元, 免五={}, 印花税={:.3%}",
+            cost_config.commission_rate,
+            cost_config.min_commission,
+            cost_config.commission_exempt_min,
+            cost_config.stamp_tax_rate,
+        )
 
         for symbol in symbols:
             df = await self.adapter.get_data(
@@ -314,7 +426,7 @@ class BacktestService:
                 end_date=end_date,
                 initial_capital=initial_capital,
                 strategy_params=params,
-                commission=0.001,
+                cost_config=None,  # 使用默认A股费用
                 plot=True,
             )
 

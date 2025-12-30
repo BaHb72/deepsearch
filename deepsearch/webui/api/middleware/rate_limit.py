@@ -117,7 +117,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             exclude_paths: 不限流的路径集合
         """
         # FastAPI 应用满足 ASGI 协议，此处忽略 mypy 的类型误报
-        super().__init__(app)
+        super().__init__(app)  # type: ignore[arg-type]
 
         global _middleware_instance
         _middleware_instance = self

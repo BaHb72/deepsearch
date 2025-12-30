@@ -72,7 +72,7 @@ class DatabasePool:
 
         self.config: dict[str, object] = config_dict
         self.engine: Optional[AsyncEngine] = None
-        self.session_factory: async_sessionmaker[AsyncSession] | None = None
+        self.session_factory: Optional[async_sessionmaker[AsyncSession]] = None  # type: ignore[valid-type]
         self._initialized = False
 
         # 连接池统计

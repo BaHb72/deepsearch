@@ -316,6 +316,8 @@ async def get_strategy_positions(strategy_id: str):
 @router.post("/backtest")
 async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTasks):
     """Run a strategy backtest"""
+    from deepsearch.strategies.interfaces.models import TradingCostConfig
+
     # Get strategy class
     strategy_class = STRATEGY_TYPES.get(request.strategy_type)
     if not strategy_class:
@@ -327,6 +329,9 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
         # Get backtest service
         service = get_backtest_service()
 
+        # Create cost config from commission rate
+        cost_config = TradingCostConfig(commission_rate=request.commission)
+
         # Run backtest
         result = await service.run_backtest(
             strategy_class=strategy_class,
@@ -335,7 +340,7 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
             end_date=request.end_date,
             initial_capital=request.initial_capital,
             strategy_params=request.strategy_params,
-            commission=request.commission,
+            cost_config=cost_config,
             plot=True,
         )
 

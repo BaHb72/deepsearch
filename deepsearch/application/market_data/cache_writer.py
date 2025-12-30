@@ -37,6 +37,7 @@ class MarketDataCacheWriter:
     auction_ttl: int = 180
     max_strength_entries: int = 50
     board_universe_ttl: int = 900
+    memory_cache_max_size: int = 100  # 内存缓存最大条数
     _memory_cache: MutableMapping[str, Any] = field(default_factory=dict, init=False)
 
     @classmethod
@@ -165,6 +166,19 @@ class MarketDataCacheWriter:
 
                 logger.warning("Redis write failed for {}: {}", key, exc)
         # In-memory fallback for tests or when Redis unavailable
+        # 限制内存缓存大小，防止无限增长
+        if len(self._memory_cache) >= self.memory_cache_max_size:
+            # 删除最旧的缓存项（按 cached_at 排序）
+            oldest_key = None
+            oldest_time = None
+            for k, v in self._memory_cache.items():
+                meta = v.get("__meta", {})
+                cached_at = meta.get("cached_at", "")
+                if oldest_time is None or cached_at < oldest_time:
+                    oldest_time = cached_at
+                    oldest_key = k
+            if oldest_key is not None:
+                del self._memory_cache[oldest_key]
         self._memory_cache[key] = envelope
 
     @staticmethod

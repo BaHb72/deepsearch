@@ -330,7 +330,7 @@ class DataProviderManager:
                 config=config.get("config", {}),
             )
             if not hasattr(provider, "status"):
-                provider.status = "initialized"  # type: ignore[union-attr]
+                setattr(provider, "status", "initialized")
         return provider
 
     async def _init_provider(self, name: str, provider: DataProvider) -> None:

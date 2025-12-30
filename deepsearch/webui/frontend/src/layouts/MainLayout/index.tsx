@@ -47,14 +47,27 @@ const MainLayout: React.FC = () => {
         icon: <LineChartOutlined />,
       },
       {
-        path: '/strategy/generator',
-        name: '策略生成',
+        path: '/strategy',
+        name: '策略中心',
         icon: <FlagOutlined />,
-      },
-      {
-        path: '/trading/ttrading',
-        name: '日内做T',
-        icon: <SwapOutlined />,
+        routes: [
+          {
+            path: '/strategy/manager',
+            name: '策略管理',
+          },
+          {
+            path: '/strategy/composite',
+            name: '策略组合',
+          },
+          {
+            path: '/strategy/ttrading',
+            name: '日内做T',
+          },
+          {
+            path: '/strategy/backtest',
+            name: '策略回测',
+          },
+        ],
       },
       {
         path: '/monitor/market',

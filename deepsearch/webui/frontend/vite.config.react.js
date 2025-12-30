@@ -54,7 +54,7 @@ export default defineConfig({
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json']
   },
   server: {
-    port: 3001, // 使用不同端口避免与 Vue 冲突
+    port: parseInt(process.env.VITE_PORT || '3000'), // dev: 3000, prod: 3001
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

@@ -6,7 +6,7 @@ Backtest API
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from loguru import logger
@@ -218,7 +218,9 @@ async def execute_backtest(backtest_id: str, config: BacktestConfig):
         equity_curve = equity_df.to_dict(orient="records")
 
         # 进一步清理数据以确保没有NaN或Infinity
-        equity_curve = sanitize_data(equity_curve)
+        equity_curve_sanitized: List[Dict[str, Any]] = cast(
+            List[Dict[str, Any]], sanitize_data(equity_curve)
+        )
 
         # 生成Backtrader原生图表（使用缓存避免重复生成）
         chart_key = f"{config.strategy}_{config.symbols}_{config.start_date}_{config.end_date}"
@@ -254,7 +256,7 @@ async def execute_backtest(backtest_id: str, config: BacktestConfig):
         result.status = "completed"
         result.metrics = metrics
         result.trades = trades
-        result.equity_curve = equity_curve
+        result.equity_curve = equity_curve_sanitized
         result.chart = chart
         result.completed_at = datetime.now()
 

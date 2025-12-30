@@ -245,7 +245,7 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app: ASGIApp, ttl: int = 5, include_paths: Optional[Set[str]] = None):
         # FastAPI 应用满足 ASGI 协议，此处忽略 mypy 的类型误报
-        super().__init__(app)
+        super().__init__(app)  # type: ignore[arg-type]
         self.deduplicator = RequestDeduplicator(ttl)
         self.include_paths = include_paths or {
             "/api/qmt/orderbook",

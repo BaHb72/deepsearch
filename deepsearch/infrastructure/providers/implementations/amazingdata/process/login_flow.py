@@ -67,14 +67,14 @@ async def perform_login(
                 host=getattr(provider.config, "host", ""),
                 port=getattr(provider.config, "port", 0),
                 timeout=max(timeout_value, 5.0),
-                api_mode=provider._login_api_mode,
+                api_mode=provider._login_api_mode,  # type: ignore[has-type]
             )
             # [TGW参数检查] 使用INFO级别确保始终可见
             tgw_params_msg = (
                 f"[TGW登录参数] datasource={provider._datasource_id} "
                 f"username={login_request.username!r} host={login_request.host!r} "
                 f"port={login_request.port} timeout={login_request.timeout:.2f}s "
-                f"api_mode={provider._login_api_mode or 'default'} "
+                f"api_mode={provider._login_api_mode or 'default'} "  # type: ignore[has-type]
                 f"password={'***' if login_request.password else '(空)'}"
             )
             logger.info(tgw_params_msg)
@@ -114,7 +114,7 @@ async def perform_login(
                     login_request.host,
                     login_request.port,
                     latency,
-                    provider._login_api_mode or "default",
+                    provider._login_api_mode or "default",  # type: ignore[has-type]
                 )
                 break
 

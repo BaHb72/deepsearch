@@ -38,6 +38,9 @@ class BrokerProto(Protocol):
     def set_slippage_perc(self, perc: float) -> None:
         """设置滑点百分比."""
 
+    def addcommissioninfo(self, comminfo: Any, name: Any = None) -> None:
+        """添加佣金配置."""
+
     def getvalue(self) -> float:
         """获取账户当前权益."""
 

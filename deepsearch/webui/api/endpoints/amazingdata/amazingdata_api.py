@@ -203,7 +203,7 @@ async def get_amazingdata_provider() -> AmazingDataExtended:
 
             provider = AmazingDataExtended(payload)
             await provider.initialize()
-        return provider
+        return cast(AmazingDataExtended, provider)
     except Exception as e:
         logger.error(f"获取AmazingData提供者失败: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get AmazingData provider: {e}")

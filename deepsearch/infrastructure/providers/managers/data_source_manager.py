@@ -288,6 +288,7 @@ class SourceStatusEntry(TypedDict, total=False):
     lastLoginSuccessAt: NotRequired[str]
     lastLoginErrorAt: NotRequired[str]
     lastLoginErrorReason: NotRequired[str]
+    pending_reactivation: NotRequired[bool]
 
 
 @dataclass

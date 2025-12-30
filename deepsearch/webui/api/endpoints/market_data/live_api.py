@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
-from starlette import status
+from starlette.status import HTTP_200_OK
 
 from deepsearch.webui.services.market_data_runtime import (
     bind_market_data_handle,
@@ -569,7 +569,7 @@ async def get_board_overview(
     return JSONResponse(payload)
 
 
-@router.get("/data-source/status", status_code=status.HTTP_200_OK)
+@router.get("/data-source/status", status_code=HTTP_200_OK)
 async def get_data_source_status(request: Request) -> JSONResponse:
     """返回实时数据源可用列表及当前激活项。"""
 
@@ -604,7 +604,7 @@ async def get_data_source_status(request: Request) -> JSONResponse:
     return JSONResponse(payload.model_dump())
 
 
-@router.post("/data-source/switch", status_code=status.HTTP_200_OK)
+@router.post("/data-source/switch", status_code=HTTP_200_OK)
 async def switch_data_source(
     request: Request,
     payload: SwitchDataSourceRequest,

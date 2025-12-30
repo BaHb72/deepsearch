@@ -13,7 +13,6 @@ Version: 1.0.0
 
 import threading
 import time
-from queue import Queue
 from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
@@ -50,12 +49,17 @@ class MiniQMTCollector:
         # 数据缓存
         self.data_cache: Dict[str, tuple[float, Dict[str, Any]]] = {}
         self.cache_ttl = 300  # 缓存有效期5分钟
+        self.cache_max_size = 100  # 缓存最大条数
 
-        # 消息队列
-        self.message_queue: Queue[Dict[str, Any]] = Queue()
+        # 缓存清理定时器
+        self._cleanup_timer: Optional[threading.Timer] = None
+        self._cleanup_interval = 60  # 每60秒清理一次
 
         # 初始化连接
         self._init_connection()
+
+        # 启动缓存清理定时器
+        self._start_cleanup_timer()
 
     def _init_connection(self):
         """初始化MiniQMT连接"""
@@ -140,7 +144,6 @@ class MiniQMTCollector:
                 period=period,
                 start_time=start_time,
                 end_time=end_time,
-                count=count,
             )
 
             # 等待数据下载完成
@@ -165,9 +168,18 @@ class MiniQMTCollector:
 
                 # 处理数据格式
                 if not df.empty:
-                    # 转换时间格式
+                    # 转换时间格式（尝试多种格式）
                     if "time" in df.columns:
-                        df["time"] = pd.to_datetime(df["time"], format="%Y%m%d%H%M%S")
+                        try:
+                            # 尝试标准格式
+                            df["time"] = pd.to_datetime(df["time"], format="%Y%m%d%H%M%S")
+                        except Exception:
+                            try:
+                                # 分时数据可能返回时间戳（毫秒）
+                                df["time"] = pd.to_datetime(df["time"], unit="ms")
+                            except Exception:
+                                # 使用自动推断
+                                df["time"] = pd.to_datetime(df["time"])
 
                     result = {
                         "success": True,
@@ -221,9 +233,6 @@ class MiniQMTCollector:
                 # 触发用户回调
                 if callback:
                     callback(processed)
-
-                # 发送到消息队列
-                self.message_queue.put(processed)
 
             self.xtdata.subscribe_quote(
                 stock_code=stock_code,
@@ -516,11 +525,48 @@ class MiniQMTCollector:
 
     def _cache_data(self, key: str, data: Dict[str, Any]) -> None:
         """缓存数据"""
+        # 检查缓存大小限制
+        if len(self.data_cache) >= self.cache_max_size:
+            # 删除最旧的缓存项
+            oldest_key = min(self.data_cache.keys(), key=lambda k: self.data_cache[k][0])
+            del self.data_cache[oldest_key]
+            logger.debug(f"缓存已满，删除最旧缓存: {oldest_key}")
         self.data_cache[key] = (time.time(), data)
 
     def clear_cache(self):
         """清空缓存"""
         self.data_cache.clear()
+
+    def _start_cleanup_timer(self) -> None:
+        """启动缓存清理定时器"""
+        self._cleanup_timer = threading.Timer(self._cleanup_interval, self._cleanup_expired_cache)
+        self._cleanup_timer.daemon = True
+        self._cleanup_timer.start()
+
+    def _stop_cleanup_timer(self) -> None:
+        """停止缓存清理定时器"""
+        if self._cleanup_timer is not None:
+            self._cleanup_timer.cancel()
+            self._cleanup_timer = None
+
+    def _cleanup_expired_cache(self) -> None:
+        """清理过期缓存"""
+        try:
+            now = time.time()
+            expired_keys = [
+                key
+                for key, (cached_time, _) in self.data_cache.items()
+                if now - cached_time > self.cache_ttl
+            ]
+            for key in expired_keys:
+                del self.data_cache[key]
+            if expired_keys:
+                logger.debug(f"清理过期缓存: {len(expired_keys)} 条")
+        except Exception as e:
+            logger.error(f"清理缓存失败: {e}")
+        finally:
+            # 重新调度下一次清理
+            self._start_cleanup_timer()
 
     def get_connection_status(self) -> Dict[str, Any]:
         """获取连接状态"""
@@ -528,12 +574,14 @@ class MiniQMTCollector:
             "connected": self.connected,
             "subscriptions": len(self.subscriptions),
             "cached_items": len(self.data_cache),
-            "queue_size": self.message_queue.qsize(),
         }
 
     def close(self):
         """关闭连接"""
         try:
+            # 停止缓存清理定时器
+            self._stop_cleanup_timer()
+
             # 取消所有订阅
             for key in list(self.subscriptions.keys()):
                 stock_code, period = key.split("_", 1)
@@ -543,7 +591,7 @@ class MiniQMTCollector:
             self.clear_cache()
 
             self.connected = False
-            logger.info("👋 MiniQMT连接已关闭")
+            logger.info("MiniQMT连接已关闭")
 
         except Exception as e:
             logger.error(f"关闭连接失败: {e}")

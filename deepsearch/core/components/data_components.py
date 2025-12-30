@@ -489,7 +489,7 @@ class DatabaseComponent(AsyncComponent[Any]):
 
         async def _test_connection() -> None:
             async with engine.begin() as conn:
-                await conn.exec_driver_sql("SELECT 1")
+                await conn.exec_driver_sql("SELECT 1")  # type: ignore[attr-defined]
             self._logger.info("数据库连接成功 (%s:%s)", host, main_config.port)
 
         test_task = asyncio.create_task(_test_connection())

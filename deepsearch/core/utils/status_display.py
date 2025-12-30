@@ -17,29 +17,30 @@ from loguru import logger
 # 可选依赖：rich 库
 # 使用 TYPE_CHECKING 确保类型检查器可以看到类型
 if TYPE_CHECKING:
-    from rich.console import Console
     from rich.live import Live
-    from rich.panel import Panel
-    from rich.table import Table
-    from rich.text import Text
 
 # 运行时检测和导入
+RICH_AVAILABLE = False
+_Console: Any = None
+_Live: Any = None
+_Panel: Any = None
+_Table: Any = None
+_Text: Any = None
+
 try:
-    from rich.console import Console
-    from rich.live import Live
-    from rich.panel import Panel
-    from rich.table import Table
-    from rich.text import Text
+    from rich.console import Console as _ConsoleClass
+    from rich.live import Live as _LiveClass
+    from rich.panel import Panel as _PanelClass
+    from rich.table import Table as _TableClass
+    from rich.text import Text as _TextClass
 
     RICH_AVAILABLE = True
+    _Console = _ConsoleClass
+    _Live = _LiveClass
+    _Panel = _PanelClass
+    _Table = _TableClass
+    _Text = _TextClass
 except ImportError:
-    RICH_AVAILABLE = False
-    # 运行时占位符 - 这些只在 rich 不可用时使用
-    Console = None  # type: ignore[assignment, misc]
-    Live = None  # type: ignore[assignment, misc]
-    Panel = None  # type: ignore[assignment, misc]
-    Table = None  # type: ignore[assignment, misc]
-    Text = None  # type: ignore[assignment, misc]
     logger.warning("rich 库未安装，状态显示功能将被禁用")
 
 
@@ -126,8 +127,8 @@ class RichStatusDisplay:
         self._initialized = True
         # 默认禁用rich状态面板，避免刷屏。需要时可以手动调用 enable() 启用
         self._enabled = False  # RICH_AVAILABLE 改为 False，不再自动启用
-        self._console = Console() if RICH_AVAILABLE else None
-        self._live: Optional[Live] = None
+        self._console = _Console() if RICH_AVAILABLE else None
+        self._live: Optional["Live"] = None
         self._metrics = StatusMetrics()
         self._running = False
         self._update_interval = 1.0  # 每秒更新一次显示
@@ -161,14 +162,15 @@ class RichStatusDisplay:
 
         self._running = True
         self._metrics.start_time = time.time()
-        self._live = Live(
-            self._render(),
-            console=self._console,
-            refresh_per_second=2,
-            transient=False,
-        )
-        self._live.start()
-        logger.info("Rich 状态显示已启动")
+        if _Live is not None:
+            self._live = _Live(
+                self._render(),
+                console=self._console,
+                refresh_per_second=2,
+                transient=False,
+            )
+            self._live.start()  # type: ignore[union-attr]
+            logger.info("Rich 状态显示已启动")
 
     def stop(self) -> None:
         """停止状态显示"""
@@ -242,7 +244,7 @@ class RichStatusDisplay:
             return None
 
         # 创建表格
-        table = Table(show_header=False, box=None, padding=(0, 1))
+        table = _Table(show_header=False, box=None, padding=(0, 1))
         table.add_column("Key", style="cyan", width=12)
         table.add_column("Value", style="white")
         table.add_column("Key2", style="cyan", width=12)
@@ -251,7 +253,7 @@ class RichStatusDisplay:
         # 第一行：数据源和请求数
         active = self._metrics.active_source or "N/A"
         status_style = "green" if self._get_active_status() == "online" else "yellow"
-        source_text = Text()
+        source_text = _Text()
         source_text.append(active, style=status_style)
 
         table.add_row(
@@ -289,7 +291,7 @@ class RichStatusDisplay:
         # 第四行：最后更新时间
         table.add_row("最后更新", last_update or "N/A", "", "")
 
-        return Panel(
+        return _Panel(
             table,
             title="[bold blue]DeepSearch 状态监控[/bold blue]",
             border_style="blue",

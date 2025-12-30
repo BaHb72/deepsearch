@@ -2207,3 +2207,156 @@ save 300 10                 # 5分钟有10次写就快照
 | **P1** | 做T提醒 | 分时分析，信号推送 |
 | **P2** | 策略组合编排 | 多策略权重组合 |
 | **P3** | PMS 实盘风控 | 后续开发 |
+
+---
+
+## 实施进度记录
+
+> [!NOTE]
+> 此章节记录实际开发进度，与设计文档同步更新
+
+### 2025-12-29 Phase 1 & 2 完成
+
+**实施者**: Antigravity Agent
+**状态**: ✅ Phase 1 & 2 完成，Phase 3-5 待继续
+
+#### 已完成内容
+
+| Phase | 内容 | 状态 |
+|-------|------|------|
+| Phase 1 | 策略注册系统 | ✅ 完成 |
+| Phase 2 | 策略中心 API | ✅ 完成 |
+| Phase 3 | 佣金模型优化 | ⏳ 待实施 |
+| Phase 4 | 智能选股集成 | ⏳ 待实施 |
+| Phase 5 | 做T引擎 | ⏳ 待实施 |
+
+#### 新建文件清单
+
+```
+deepsearch/strategies/
+├── config/
+│   ├── registry.yaml           # [NEW] 策略元数据配置 (5个策略)
+│   └── composites/.gitkeep     # [NEW] 组合策略配置目录
+├── interfaces/
+│   └── models.py               # [NEW] Pydantic数据模型
+├── services/
+│   └── registry_service.py     # [NEW] 策略注册服务
+├── implementations/
+│   └── custom/.gitkeep         # [NEW] 用户自定义策略目录
+├── ttrading/
+│   └── __init__.py             # [NEW] 做T模块目录
+└── adapters/
+    └── __init__.py             # [NEW] 引擎适配器目录
+
+deepsearch/webui/api/endpoints/strategy_center/
+├── __init__.py                 # [NEW] 路由聚合
+├── strategies.py               # [NEW] 策略管理API
+├── composites.py               # [NEW] 组合策略API
+└── screener.py                 # [NEW] 智能选股API
+```
+
+#### 修改文件
+
+| 文件 | 修改内容 |
+|------|---------|
+| `webui/server.py` | 添加策略中心路由注册 |
+| `strategies/interfaces/__init__.py` | 添加模型导出 |
+| `strategies/services/__init__.py` | 添加服务导出 |
+
+#### API 端点
+
+**策略管理 `/api/strategy-center/strategies`**
+- `GET /` - 策略列表
+- `GET /{id}` - 策略详情
+- `PUT /{id}/status` - 启用/禁用
+- `GET /{id}/params` - 参数定义
+- `POST /scan` - 扫描策略目录
+- `POST /reload` - 重载配置
+
+**组合策略 `/api/strategy-center/composites`**
+- `GET/POST/PUT/DELETE` - CRUD 操作
+- `POST /test-signal` - 测试信号聚合
+
+**智能选股 `/api/strategy-center/screener`**
+- `POST /` - 使用组合策略选股
+- `POST /quick` - 单策略快速选股
+- `POST /batch` - 批量选股
+- `GET /stock-pools` - 股票池列表
+
+#### 验证结果
+
+```
+✅ interfaces 导入正常
+✅ registry_service 加载 5 个策略
+✅ API router 注册成功 (prefix: /api/strategy-center)
+```
+
+#### 实施进度 (2025-12-29)
+
+| Phase | 描述 | 状态 | 关键实现 |
+|-------|------|------|----------|
+| **Phase 1** | 策略注册系统 | ✅ 完成 | `registry.yaml`, `registry_service.py` |
+| **Phase 2** | 策略中心API | ✅ 完成 | `strategies.py`, `composites.py`, `screener.py` |
+| **Phase 3** | 佣金模型优化 | ✅ 完成 | `CNStockCommission` (万二不免五) |
+| **Phase 4** | 智能选股服务 | ✅ 完成 | `screening_service.py` 集成真实行情 |
+| **Phase 5** | 做T引擎 | ✅ 完成 | `interfaces.py`, `analyzers.py`, `signal_generators.py`, `engine.py` |
+| **Phase 6** | E2E验证 | ✅ 完成 | `ttrading.py` API端点 |
+| **Phase 7** | MiniQMT数据集成 | ✅ 完成 | `providers.py` 分时数据提供者 |
+
+#### 做T引擎模块结构
+
+```
+deepsearch/strategies/ttrading/
+├── __init__.py             # 模块导出
+├── interfaces.py           # 核心协议和抽象基类
+├── analyzers.py            # 技术分析器 (VWAP/MA/支撑阻力/量价)
+├── signal_generators.py    # 信号生成器 (均线偏离/支撑阻力/网格/量价)
+├── engine.py               # TTradingEngine 主引擎
+└── providers.py            # [NEW] MiniQMT 分时数据提供者
+
+deepsearch/webui/api/endpoints/strategy_center/
+├── __init__.py             # 路由聚合
+├── strategies.py           # 策略管理API
+├── composites.py           # 组合策略API
+├── screener.py             # 智能选股API
+└── ttrading.py             # 做T引擎API (含数据源切换)
+```
+
+#### API 端点清单
+
+**做T引擎 `/api/strategy-center/ttrading`**
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/config` | GET | 获取默认配置 |
+| `/analyze` | POST | 快速分析 (Mock数据) |
+| `/engine/{symbol}/start` | POST | 启动引擎 (`use_real_data` 切换数据源) |
+| `/engine/{symbol}/stop` | POST | 停止引擎 |
+| `/engine/{symbol}/status` | GET | 状态和统计 |
+| `/engine/{symbol}/signals` | GET | 获取当前信号 |
+| `/engine/{symbol}/snapshot` | GET | 分析快照 |
+| `/datasource/status` | GET | 数据源状态 |
+
+#### 2025-12-29 MiniQMT 分时数据集成
+
+**新增文件：**
+- `providers.py` - `MiniQMTIntradayDataProvider` 实现 `IntradayDataProvider` 协议
+
+**接口映射：**
+| IntradayDataProvider | MiniQMT Collector |
+|---------------------|-------------------|
+| `get_intraday_bars()` | `get_market_data(period='1m')` |
+| `get_current_quote()` | `get_full_tick()` |
+| `subscribe()` | `subscribe_quote(period='tick')` |
+
+**验证结果：**
+```
+MINIQMT_AVAILABLE: True
+所有API端点注册成功
+```
+
+#### 下一步
+
+- [x] 创建做T引擎API端点 (`ttrading.py`)
+- [x] 集成真实MiniQMT分时数据 (`providers.py`)
+- [x] 前端策略中心页面UI (`TTrading.tsx`)

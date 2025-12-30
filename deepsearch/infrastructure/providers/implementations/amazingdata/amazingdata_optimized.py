@@ -72,18 +72,14 @@ class ErrorContext:
 class PerformanceMetrics:
     """性能指标"""
 
-    latencies: List[float] = field(default_factory=list)
-    timestamps: List[float] = field(default_factory=list)
+    latencies: deque[float] = field(default_factory=lambda: deque(maxlen=1000))
+    timestamps: deque[float] = field(default_factory=lambda: deque(maxlen=1000))
 
     def add_latency(self, latency: float):
         """添加延迟数据"""
         self.latencies.append(latency)
         self.timestamps.append(time.time())
-
-        # 保留最近1000个数据点
-        if len(self.latencies) > 1000:
-            self.latencies = self.latencies[-1000:]
-            self.timestamps = self.timestamps[-1000:]
+        # deque 自动维护 maxlen，无需手动裁剪
 
     def get_statistics(self) -> dict:
         """获取统计数据"""
@@ -269,9 +265,10 @@ class OptimizedHeartbeat:
 class OptimizedCacheManager:
     """优化的缓存管理器"""
 
-    def __init__(self, ttl=300):
+    def __init__(self, ttl=300, max_size=200):
         self.cache = {}
         self.ttl = ttl
+        self.max_size = max_size  # 缓存最大条数
         self.stats = {"hits": 0, "misses": 0, "evictions": 0}
 
     def _normalize_params(self, **params) -> dict:
@@ -342,6 +339,12 @@ class OptimizedCacheManager:
 
     def set(self, key: str, data: Any) -> None:
         """设置缓存"""
+        # 检查缓存大小限制
+        if len(self.cache) >= self.max_size:
+            # 删除最旧的缓存项
+            oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k]["timestamp"])
+            del self.cache[oldest_key]
+            self.stats["evictions"] += 1
         self.cache[key] = {"data": data, "timestamp": time.time(), "hits": 0}
 
     def get_stats(self) -> dict:
@@ -507,7 +510,7 @@ class OptimizedDataConverter:
             df = pd.DataFrame(data)
 
             # 批量重命名列
-            df.columns = [cls.COLUMN_MAPPING.get(col, col) for col in df.columns]
+            df.columns = pd.Index([cls.COLUMN_MAPPING.get(col, col) for col in df.columns])  # type: ignore
 
             # 向量化时间转换
             if "datetime" in df.columns:
@@ -515,7 +518,7 @@ class OptimizedDataConverter:
                 df.set_index("datetime", inplace=True)
 
             # 向量化数值转换（一次性处理所有数值列）
-            numeric_cols = df.columns.intersection(cls.NUMERIC_COLUMNS)
+            numeric_cols = list(df.columns.intersection(cls.NUMERIC_COLUMNS))  # type: ignore[attr-defined]
             if len(numeric_cols) > 0:
                 df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors="coerce")
 
