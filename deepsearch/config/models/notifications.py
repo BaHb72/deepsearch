@@ -63,7 +63,7 @@ class BarkMessageTemplate(MessageTemplateBase):
     image: Optional[str] = Field(default=None, description="通知配图 URL")
     group: Optional[str] = Field(default=None, description="通知分组名称")
     url: Optional[str] = Field(default=None, description="点击跳转 URL")
-    copy: Optional[str] = Field(default=None, description="复制内容模板")
+    copy_content: Optional[str] = Field(default=None, description="复制内容模板")
     auto_copy: bool = Field(default=False, description="是否自动复制内容到剪贴板")
     is_archive: Optional[bool] = Field(default=None, description="是否归档到历史记录")
     call: bool = Field(default=False, description="是否持续响铃直到用户操作")

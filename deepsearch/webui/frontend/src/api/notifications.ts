@@ -41,7 +41,7 @@ export interface BarkMessageTemplate {
   image?: string
   group?: string
   url?: string
-  copy?: string
+  copyContent?: string
   autoCopy?: boolean
   isArchive?: boolean
   call?: boolean

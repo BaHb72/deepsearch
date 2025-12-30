@@ -793,3 +793,150 @@ async def test_cache_connection(config: CacheConnectionTest) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Redis 连接测试失败：{e}")
         return {"success": False, "message": f"Redis 连接失败: {str(e)}"}
+
+
+# ---------------------------------------------------------------------------
+# 轮询配置 API
+# ---------------------------------------------------------------------------
+
+
+class PhaseBehaviorUpdate(BaseModel):
+    """阶段行为更新模型。"""
+
+    interval_seconds: float | None = None
+    timeout_seconds: float | None = None
+    skip_polling: bool | None = None
+
+
+class SessionGuardUpdate(BaseModel):
+    """交易阶段判断配置更新模型。"""
+
+    enabled: bool | None = None
+    calendar_source: str | None = None  # amazingdata, miniqmt, auto
+    market: str | None = None  # SH, SZ, BJ, HK 等
+
+
+class PollingConfigUpdate(BaseModel):
+    """轮询配置更新模型。"""
+
+    calendar_ttl_minutes: int | None = None
+    session_guard: SessionGuardUpdate | None = None
+    defaults: Dict[str, PhaseBehaviorUpdate] | None = None
+
+
+@router.get("/polling")
+async def get_polling_config() -> Dict[str, Any]:
+    """
+    获取当前轮询配置。
+
+    Returns:
+        轮询配置字典
+    """
+    try:
+        from deepsearch.config.trading_schedule_config import (
+            config_to_dict,
+            get_trading_schedule_config,
+        )
+
+        config = get_trading_schedule_config()
+        return {
+            "success": True,
+            "config": config_to_dict(config),
+        }
+    except Exception as e:
+        logger.error(f"获取轮询配置失败：{e}")
+        raise HTTPException(status_code=500, detail=f"获取轮询配置失败：{e}") from e
+
+
+@router.put("/polling")
+async def update_polling_config(payload: PollingConfigUpdate) -> Dict[str, Any]:
+    """
+    更新轮询配置并热重载。
+
+    Args:
+        payload: 轮询配置更新
+
+    Returns:
+        更新结果
+    """
+    try:
+        from deepsearch.config.trading_schedule_config import (
+            PhaseBehavior,
+            SessionGuardConfig,
+            config_to_dict,
+            get_trading_schedule_config,
+            reload_trading_schedule_config,
+            save_trading_schedule_config,
+        )
+
+        config = get_trading_schedule_config()
+
+        # 更新 calendar_ttl_minutes
+        if payload.calendar_ttl_minutes is not None:
+            config.calendar_ttl_minutes = payload.calendar_ttl_minutes
+
+        # 更新 session_guard 配置
+        if payload.session_guard:
+            current_guard = config.session_guard
+            new_enabled = (
+                payload.session_guard.enabled
+                if payload.session_guard.enabled is not None
+                else current_guard.enabled
+            )
+            new_source = (
+                payload.session_guard.calendar_source.lower()
+                if payload.session_guard.calendar_source is not None
+                else current_guard.calendar_source
+            )
+            new_market = (
+                payload.session_guard.market.upper()
+                if payload.session_guard.market is not None
+                else current_guard.market
+            )
+            config.session_guard = SessionGuardConfig(
+                enabled=new_enabled,
+                calendar_source=new_source,
+                market=new_market,
+            )
+
+        # 更新阶段行为配置
+        if payload.defaults:
+            for phase_name, phase_update in payload.defaults.items():
+                current = config.defaults.get(phase_name, PhaseBehavior())
+
+                new_interval = (
+                    phase_update.interval_seconds
+                    if phase_update.interval_seconds is not None
+                    else current.interval_seconds
+                )
+                new_timeout = (
+                    phase_update.timeout_seconds
+                    if phase_update.timeout_seconds is not None
+                    else current.timeout_seconds
+                )
+                new_skip = (
+                    phase_update.skip_polling
+                    if phase_update.skip_polling is not None
+                    else current.skip_polling
+                )
+
+                config.defaults[phase_name] = PhaseBehavior(
+                    interval_seconds=new_interval,
+                    timeout_seconds=new_timeout,
+                    skip_polling=new_skip,
+                    skip_windows=current.skip_windows,
+                )
+
+        # 保存并热重载
+        save_trading_schedule_config(config)
+        updated_config = reload_trading_schedule_config()
+
+        logger.info("轮询配置已更新并热重载")
+        return {
+            "success": True,
+            "message": "轮询配置已更新",
+            "config": config_to_dict(updated_config),
+        }
+    except Exception as e:
+        logger.error(f"更新轮询配置失败：{e}")
+        raise HTTPException(status_code=500, detail=f"更新轮询配置失败：{e}") from e

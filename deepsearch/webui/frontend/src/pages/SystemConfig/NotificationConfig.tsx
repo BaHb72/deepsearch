@@ -1024,7 +1024,7 @@ const NotificationConfig: React.FC = () => {
               image: values.image || undefined,
               group: values.group || undefined,
               url: values.url || undefined,
-              copy: values.copy || undefined,
+              copyContent: values.copyContent || undefined,
               autoCopy: values.autoCopy || false,
               isArchive: values.isArchive,
               call: values.call || false,
@@ -1157,7 +1157,7 @@ const NotificationConfig: React.FC = () => {
             </Col>
           </Row>
 
-          <Form.Item name="copy" label="复制内容">
+          <Form.Item name="copyContent" label="复制内容">
             <Input placeholder="用户点击复制时复制的内容" />
           </Form.Item>
 

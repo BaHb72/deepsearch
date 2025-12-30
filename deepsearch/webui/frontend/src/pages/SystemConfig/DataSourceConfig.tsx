@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import type { ColumnsType } from 'antd/es/table'
 import type { SortOrder } from 'antd/es/table/interface'
 import {
@@ -18,11 +18,13 @@ import {
   Space,
   Switch,
   Table,
+  Tabs,
   Tag,
   Tooltip
 } from 'antd'
 import {
   ApiOutlined,
+  ClockCircleOutlined,
   CloudOutlined,
   DeleteOutlined,
   EditOutlined,
@@ -30,6 +32,7 @@ import {
   PlusOutlined,
   ThunderboltOutlined
 } from '@ant-design/icons'
+import PollingConfig from './PollingConfig'
 import { useModal } from '@/hooks'
 import {
   createDataSource,
@@ -1556,145 +1559,171 @@ const DataSourceConfig = () => {
   }, [loading, dataSources, health, error])
 
   return (
-    <>
-      {health && health.degraded && (
-        <Alert
-          message="数据源健康提醒"
-          description={`有 ${health.degraded} 个数据源处于降级状态，可能影响数据获取`}
-          type="warning"
-          showIcon
-          icon={<ExclamationCircleOutlined />}
-          closable
-          style={{ marginBottom: 16 }}
-        />
-      )}
-
-      <Card
-        title="状态概览"
-        style={{ marginBottom: 16 }}
-        extra={
-          <Space size={24}>
-            <span style={{ color: '#595959' }}>
-              总数: <strong style={{ fontSize: 16 }}>{totalSources}</strong>
+    <Tabs
+      defaultActiveKey="datasources"
+      items={[
+        {
+          key: 'datasources',
+          label: (
+            <span>
+              <ThunderboltOutlined />
+              数据源管理
             </span>
-            <Tooltip title="标注当前 available=true 的数据源数量">
-              <span style={{ color: '#595959' }}>
-                当前可用: <strong style={{ fontSize: 16 }}>{availableSources}</strong>
-              </span>
-            </Tooltip>
-          </Space>
-        }
-      >
-        <Space size={[16, 16]} wrap>
-          {DATA_SOURCE_STATUS_ORDER.map(statusKey => {
-            const meta = getDataSourceStatusMeta(statusKey)
-            const count = statusSummary.counts?.[statusKey] ?? 0
-            const isZero = count === 0
-            return (
-              <Tooltip title={meta.description} key={statusKey}>
-                <div
-                  style={{
-                    minWidth: 180,
-                    maxWidth: 220,
-                    borderRadius: 8,
-                    border: `1px solid ${meta.tagColor}`,
-                    padding: '12px 16px',
-                    background: '#fff',
-                    boxShadow: isZero ? 'none' : '0 2px 8px rgba(0,0,0,0.06)',
-                    opacity: isZero ? 0.55 : 1,
-                    transition: 'all 0.2s ease-in-out',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: 8,
-                    }}
-                  >
-                    <Tag color={meta.tagColor} style={{ margin: 0 }}>
-                      {meta.text}
-                    </Tag>
-                    <span style={{ fontSize: 24, fontWeight: 600, color: meta.tagColor }}>
-                      {count}
+          ),
+          children: (
+            <>
+              {health && health.degraded && (
+                <Alert
+                  message="数据源健康提醒"
+                  description={`有 ${health.degraded} 个数据源处于降级状态，可能影响数据获取`}
+                  type="warning"
+                  showIcon
+                  icon={<ExclamationCircleOutlined />}
+                  closable
+                  style={{ marginBottom: 16 }}
+                />
+              )}
+
+              <Card
+                title="状态概览"
+                style={{ marginBottom: 16 }}
+                extra={
+                  <Space size={24}>
+                    <span style={{ color: '#595959' }}>
+                      总数: <strong style={{ fontSize: 16 }}>{totalSources}</strong>
                     </span>
-                  </div>
-                  <div style={{ color: '#8c8c8c', fontSize: 12, lineHeight: 1.4 }}>
-                    {meta.description}
-                  </div>
-                </div>
-              </Tooltip>
-            )
-          })}
-        </Space>
-      </Card>
+                    <Tooltip title="标注当前 available=true 的数据源数量">
+                      <span style={{ color: '#595959' }}>
+                        当前可用: <strong style={{ fontSize: 16 }}>{availableSources}</strong>
+                      </span>
+                    </Tooltip>
+                  </Space>
+                }
+              >
+                <Space size={[16, 16]} wrap>
+                  {DATA_SOURCE_STATUS_ORDER.map(statusKey => {
+                    const meta = getDataSourceStatusMeta(statusKey)
+                    const count = statusSummary.counts?.[statusKey] ?? 0
+                    const isZero = count === 0
+                    return (
+                      <Tooltip title={meta.description} key={statusKey}>
+                        <div
+                          style={{
+                            minWidth: 180,
+                            maxWidth: 220,
+                            borderRadius: 8,
+                            border: `1px solid ${meta.tagColor}`,
+                            padding: '12px 16px',
+                            background: '#fff',
+                            boxShadow: isZero ? 'none' : '0 2px 8px rgba(0,0,0,0.06)',
+                            opacity: isZero ? 0.55 : 1,
+                            transition: 'all 0.2s ease-in-out',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: 8,
+                            }}
+                          >
+                            <Tag color={meta.tagColor} style={{ margin: 0 }}>
+                              {meta.text}
+                            </Tag>
+                            <span style={{ fontSize: 24, fontWeight: 600, color: meta.tagColor }}>
+                              {count}
+                            </span>
+                          </div>
+                          <div style={{ color: '#8c8c8c', fontSize: 12, lineHeight: 1.4 }}>
+                            {meta.description}
+                          </div>
+                        </div>
+                      </Tooltip>
+                    )
+                  })}
+                </Space>
+              </Card>
 
-      <Card
-        title="数据源管理"
-        extra={
-          <Space>
-            <span style={{ fontSize: 12, color: '#999' }}>
-              自动刷新: 5秒 | 最后更新: {currentTime.toLocaleTimeString()}
-            </span>
-            <span style={{ fontSize: 12, color: '#666' }}>
-              全局速率限制:
-            </span>
-            <RateLimitEditor value={globalRateLimit} onChange={setGlobalRateLimit} />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => editModal.open()}
-            >
-              新建数据源
-            </Button>
-          </Space>
-        }
-      >
-        {error ? (
-          <div style={{ textAlign: 'center', padding: '50px' }}>
-            <p style={{ color: '#ff4d4f' }}>
-              {error.message?.includes('503') || error.message?.includes('系统未初始化')
-                ? '后端服务未就绪'
-                : '加载失败: ' + error.message}
-            </p>
-            {(error.message?.includes('503') || error.message?.includes('系统未初始化')) && (
-              <div style={{ marginTop: '16px', padding: '16px', background: '#f0f0f0', borderRadius: '4px' }}>
-                <p style={{ marginBottom: '8px' }}>请确保后端服务已启动：</p>
-                <code style={{ display: 'block', padding: '8px', background: '#000', color: '#0f0', borderRadius: '4px' }}>
-                  python -m deepsearch run --no-frontend
-                </code>
-              </div>
-            )}
-            <Button onClick={refreshAll} style={{ marginTop: 16 }}>重试</Button>
-          </div>
-        ) : (
-          <Table
-            columns={columns}
-            dataSource={dataSources || []}
-            loading={loading && !(dataSources && dataSources.length > 0)}
-            rowKey={(record, index) => record.id ?? record.name ?? `${record.type}-${index}`}
-            pagination={{ pageSize: 10 }}
-            scroll={{ x: 1200 }}
-            size="middle"
-          />
-        )}
-      </Card>
+              <Card
+                title="数据源管理"
+                extra={
+                  <Space>
+                    <span style={{ fontSize: 12, color: '#999' }}>
+                      自动刷新: 5秒 | 最后更新: {currentTime.toLocaleTimeString()}
+                    </span>
+                    <span style={{ fontSize: 12, color: '#666' }}>
+                      全局速率限制:
+                    </span>
+                    <RateLimitEditor value={globalRateLimit} onChange={setGlobalRateLimit} />
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={() => editModal.open()}
+                    >
+                      新建数据源
+                    </Button>
+                  </Space>
+                }
+              >
+                {error ? (
+                  <div style={{ textAlign: 'center', padding: '50px' }}>
+                    <p style={{ color: '#ff4d4f' }}>
+                      {error.message?.includes('503') || error.message?.includes('系统未初始化')
+                        ? '后端服务未就绪'
+                        : '加载失败: ' + error.message}
+                    </p>
+                    {(error.message?.includes('503') || error.message?.includes('系统未初始化')) && (
+                      <div style={{ marginTop: '16px', padding: '16px', background: '#f0f0f0', borderRadius: '4px' }}>
+                        <p style={{ marginBottom: '8px' }}>请确保后端服务已启动：</p>
+                        <code style={{ display: 'block', padding: '8px', background: '#000', color: '#0f0', borderRadius: '4px' }}>
+                          python -m deepsearch run --no-frontend
+                        </code>
+                      </div>
+                    )}
+                    <Button onClick={refreshAll} style={{ marginTop: 16 }}>重试</Button>
+                  </div>
+                ) : (
+                  <Table
+                    columns={columns}
+                    dataSource={dataSources || []}
+                    loading={loading && !(dataSources && dataSources.length > 0)}
+                    rowKey={(record, index) => record.id ?? record.name ?? `${record.type}-${index}`}
+                    pagination={{ pageSize: 10 }}
+                    scroll={{ x: 1200 }}
+                    size="middle"
+                  />
+                )}
+              </Card>
 
-      <Modal
-        title={editModal.data ? '编辑数据源' : '新建数据源'}
-        open={editModal.visible}
-        onCancel={editModal.close}
-        footer={null}
-        width={700}
-      >
-        <DataSourceForm
-          initialValues={editModal.data || undefined}
-          onSubmit={editModal.data ? handleUpdate : handleCreate}
-          onTestSuccess={handleTestSuccess}
-        />
-      </Modal>
-    </>
+              <Modal
+                title={editModal.data ? '编辑数据源' : '新建数据源'}
+                open={editModal.visible}
+                onCancel={editModal.close}
+                footer={null}
+                width={700}
+              >
+                <DataSourceForm
+                  initialValues={editModal.data || undefined}
+                  onSubmit={editModal.data ? handleUpdate : handleCreate}
+                  onTestSuccess={handleTestSuccess}
+                />
+              </Modal>
+            </>
+          ),
+        },
+        {
+          key: 'polling',
+          label: (
+            <span>
+              <ClockCircleOutlined />
+              轮询配置
+            </span>
+          ),
+          children: <PollingConfig />,
+        },
+      ]}
+    />
   )
 }
 

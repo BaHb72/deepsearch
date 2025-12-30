@@ -67,10 +67,20 @@ class MarketConfig:
 
 
 @dataclass(slots=True)
+class SessionGuardConfig:
+    """交易阶段判断配置"""
+
+    enabled: bool = True
+    calendar_source: str = "amazingdata"  # amazingdata, miniqmt, auto
+    market: str = "SH"
+
+
+@dataclass(slots=True)
 class TradingScheduleConfig:
     """交易时段总配置"""
 
     calendar_ttl_minutes: int = 10
+    session_guard: SessionGuardConfig = field(default_factory=SessionGuardConfig)
     defaults: dict[str, PhaseBehavior] = field(default_factory=dict)
     markets: dict[str, MarketConfig] = field(default_factory=dict)
     _alias_map: dict[str, str] = field(default_factory=dict, init=False)
@@ -190,6 +200,14 @@ def load_trading_schedule_config(
         logger.error("加载交易时段配置失败: {} error={}", path, exc)
         return TradingScheduleConfig()
 
+    # 解析 session_guard 配置
+    raw_guard = raw.get("session_guard", {})
+    session_guard = SessionGuardConfig(
+        enabled=bool(raw_guard.get("enabled", True)),
+        calendar_source=str(raw_guard.get("calendar_source", "amazingdata")).lower(),
+        market=str(raw_guard.get("market", "SH")).upper(),
+    )
+
     # 解析默认行为
     defaults = {}
     raw_defaults = raw.get("defaults", {})
@@ -204,14 +222,16 @@ def load_trading_schedule_config(
 
     config = TradingScheduleConfig(
         calendar_ttl_minutes=int(raw.get("calendar_ttl_minutes", 10)),
+        session_guard=session_guard,
         defaults=defaults,
         markets=markets,
     )
 
     logger.info(
-        "交易时段配置加载完成: {} 个市场, {} 个启用",
+        "交易时段配置加载完成: {} 个市场, {} 个启用, session_guard={}",
         len(markets),
         len(config.get_enabled_markets()),
+        session_guard.enabled,
     )
     return config
 
@@ -235,3 +255,164 @@ def reload_trading_schedule_config(
     global _config
     _config = load_trading_schedule_config(path)
     return _config
+
+
+# ---------------------------------------------------------------------------
+# 配置序列化与保存
+# ---------------------------------------------------------------------------
+
+
+def _time_to_str(t: time_type) -> str:
+    """将 time 对象转换为字符串"""
+    return t.strftime("%H:%M")
+
+
+def _time_window_to_dict(window: TimeWindow) -> dict[str, str]:
+    """将 TimeWindow 转换为字典"""
+    return {"start": _time_to_str(window.start), "end": _time_to_str(window.end)}
+
+
+def _phase_behavior_to_dict(behavior: PhaseBehavior) -> dict[str, Any]:
+    """将 PhaseBehavior 转换为字典"""
+    result: dict[str, Any] = {
+        "interval_seconds": behavior.interval_seconds,
+        "timeout_seconds": behavior.timeout_seconds,
+    }
+    if behavior.skip_polling:
+        result["skip_polling"] = True
+    if behavior.skip_windows:
+        result["skip_windows"] = [_time_window_to_dict(w) for w in behavior.skip_windows]
+    return result
+
+
+def _session_config_to_dict(sessions: SessionConfig) -> dict[str, Any]:
+    """将 SessionConfig 转换为字典"""
+    result: dict[str, Any] = {}
+    if sessions.auction_windows:
+        result["auction"] = {"windows": [_time_window_to_dict(w) for w in sessions.auction_windows]}
+    if sessions.continuous_windows:
+        result["continuous"] = {
+            "windows": [_time_window_to_dict(w) for w in sessions.continuous_windows]
+        }
+    return result
+
+
+def _market_config_to_dict(market: MarketConfig) -> dict[str, Any]:
+    """将 MarketConfig 转换为字典"""
+    result: dict[str, Any] = {
+        "enabled": market.enabled,
+        "timezone": market.timezone,
+    }
+    if market.aliases:
+        result["aliases"] = market.aliases
+    sessions_dict = _session_config_to_dict(market.sessions)
+    if sessions_dict:
+        result["sessions"] = sessions_dict
+    if market.phase_behavior:
+        result["phase_behavior"] = {
+            name: _phase_behavior_to_dict(behavior)
+            for name, behavior in market.phase_behavior.items()
+        }
+    return result
+
+
+def config_to_dict(config: TradingScheduleConfig) -> dict[str, Any]:
+    """将 TradingScheduleConfig 转换为可序列化的字典"""
+    result: dict[str, Any] = {
+        "calendar_ttl_minutes": config.calendar_ttl_minutes,
+        "session_guard": {
+            "enabled": config.session_guard.enabled,
+            "calendar_source": config.session_guard.calendar_source,
+            "market": config.session_guard.market,
+        },
+    }
+    if config.defaults:
+        result["defaults"] = {
+            name: _phase_behavior_to_dict(behavior) for name, behavior in config.defaults.items()
+        }
+    if config.markets:
+        result["markets"] = {
+            name: _market_config_to_dict(market) for name, market in config.markets.items()
+        }
+    return result
+
+
+def save_trading_schedule_config(
+    config: TradingScheduleConfig,
+    path: Path | str | None = None,
+) -> None:
+    """将配置保存回 YAML 文件
+
+    Args:
+        config: 要保存的配置对象
+        path: 配置文件路径，默认为 config/trading_schedule.yaml
+    """
+    if path is None:
+        path = Path(__file__).parent / "trading_schedule.yaml"
+    else:
+        path = Path(path)
+
+    config_dict = config_to_dict(config)
+
+    # 添加文件头注释
+    header = """# 交易时段配置
+# 独立配置文件，管理各市场交易时段参数
+#
+# 设计原则：只记录交易时段，非交易时段自动跳过轮询
+
+"""
+
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(header)
+            yaml.dump(
+                config_dict,
+                f,
+                default_flow_style=False,
+                allow_unicode=True,
+                sort_keys=False,
+            )
+        logger.info("交易时段配置已保存: {}", path)
+    except Exception as exc:
+        logger.error("保存交易时段配置失败: {} error={}", path, exc)
+        raise
+
+
+def update_phase_behavior(
+    phase: str,
+    interval_seconds: float | None = None,
+    timeout_seconds: float | None = None,
+    skip_polling: bool | None = None,
+) -> TradingScheduleConfig:
+    """更新指定阶段的行为配置并热重载
+
+    Args:
+        phase: 阶段名称 (continuous, auction, no_trade, off_day)
+        interval_seconds: 轮询间隔（秒）
+        timeout_seconds: 超时时间（秒）
+        skip_polling: 是否跳过轮询
+
+    Returns:
+        更新后的配置
+    """
+    config = get_trading_schedule_config()
+
+    # 获取或创建阶段配置
+    current = config.defaults.get(phase, PhaseBehavior())
+
+    # 更新字段
+    new_interval = interval_seconds if interval_seconds is not None else current.interval_seconds
+    new_timeout = timeout_seconds if timeout_seconds is not None else current.timeout_seconds
+    new_skip = skip_polling if skip_polling is not None else current.skip_polling
+
+    # 创建新的 PhaseBehavior
+    config.defaults[phase] = PhaseBehavior(
+        interval_seconds=new_interval,
+        timeout_seconds=new_timeout,
+        skip_polling=new_skip,
+        skip_windows=current.skip_windows,
+    )
+
+    # 保存并重载
+    save_trading_schedule_config(config)
+    return reload_trading_schedule_config()

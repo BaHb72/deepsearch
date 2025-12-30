@@ -22,6 +22,8 @@ import subprocess
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -134,6 +136,68 @@ def _summarize_payload_shape(payload: Any) -> str:
         if length is not None:
             return f"{type_name}(len={length})"
     return type_name
+
+
+# ---------------------------------------------------------------------------
+# SDK 调用超时保护
+# ---------------------------------------------------------------------------
+
+_SDK_DEFAULT_TIMEOUT = 60.0  # 默认 SDK 调用超时时间（秒）
+_SDK_LOGIN_TIMEOUT = 90.0  # 登录操作超时时间（秒）
+_SDK_LOGOUT_TIMEOUT = 10.0  # 登出操作超时时间（秒）
+
+
+def _execute_with_timeout(
+    func: Callable[..., Any],
+    args: tuple[Any, ...] = (),
+    kwargs: Optional[Dict[str, Any]] = None,
+    timeout: float = _SDK_DEFAULT_TIMEOUT,
+    operation_name: str = "SDK call",
+) -> Any:
+    """
+    使用 ThreadPoolExecutor 包装可能阻塞的 SDK 调用，添加超时保护。
+
+    Args:
+        func: 要执行的函数
+        args: 位置参数
+        kwargs: 关键字参数
+        timeout: 超时时间（秒）
+        operation_name: 操作名称，用于日志
+
+    Returns:
+        函数执行结果
+
+    Raises:
+        TimeoutError: 操作超时
+        Exception: 原始异常
+
+    Note:
+        Python 线程无法被强制终止。超时后，底层线程可能仍在运行，
+        但主线程不会等待它完成。阻塞的线程最终会在 SDK 调用返回后自然结束。
+        由于这些调用在 Worker 进程中执行，进程终止时线程也会被强制终止。
+    """
+    kwargs = kwargs or {}
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sdk_timeout")
+    future = executor.submit(func, *args, **kwargs)
+    try:
+        return future.result(timeout=timeout)
+    except FuturesTimeoutError:
+        func_name = getattr(func, "__name__", str(func))
+        logger.error(
+            f"{operation_name} timed out after {timeout:.1f}s, func={func_name}. "
+            f"Thread may still be running in background."
+        )
+        # 取消未开始的 future（对于已开始的无效，但这是最佳实践）
+        future.cancel()
+        raise TimeoutError(f"{operation_name} timed out after {timeout:.1f}s")
+    finally:
+        # 使用 wait=False 避免阻塞主线程，cancel_futures=True 取消队列中的任务
+        # Python 3.9+ 支持 cancel_futures 参数
+        try:
+            executor.shutdown(wait=False, cancel_futures=True)
+        except TypeError:
+            # Python 3.8 不支持 cancel_futures 参数
+            executor.shutdown(wait=False)
 
 
 def _attach_worker_file_sink(level: str) -> None:
@@ -1366,7 +1430,28 @@ class AmazingDataProcessProxy:
                             raise AttributeError(
                                 f"SDK module has no login/Login method (method_name={login_method_name})"
                             )
-                        result = login_func(*request.args, **request.kwargs)
+                        # 使用超时保护执行 login，防止 SDK 阻塞导致进程卡死
+                        login_timeout = (
+                            request.timeout if request.timeout > 0 else _SDK_LOGIN_TIMEOUT
+                        )
+                        result = _execute_with_timeout(
+                            login_func,
+                            args=request.args,
+                            kwargs=request.kwargs,
+                            timeout=login_timeout,
+                            operation_name="SDK login",
+                        )
+                    except TimeoutError as exc:
+                        logger.error(f"SDK login timed out: {exc}")
+                        login_errors = ["login_timeout"]
+                        logged_in_username = None
+                        response = ProxyResponse(
+                            request_id=request.request_id,
+                            success=False,
+                            error=str(exc),
+                            error_type="TimeoutError",
+                            result={"stage": "login", "timeout": login_timeout},
+                        )
                     except SystemExit as exc:  # pragma: no cover - SDK behaviour
                         exit_code = getattr(exc, "code", None)
                         logger.critical(f"SDK called SystemExit during login: {exit_code}")
@@ -1425,7 +1510,18 @@ class AmazingDataProcessProxy:
                                 username_to_logout = request.args[0]
                             if username_to_logout:
                                 logger.info(f"Logging out user: {username_to_logout}")
-                                ad.logout(username_to_logout)
+                                # 使用超时保护执行 logout，防止阻塞
+                                try:
+                                    _execute_with_timeout(
+                                        ad.logout,
+                                        args=(username_to_logout,),
+                                        timeout=_SDK_LOGOUT_TIMEOUT,
+                                        operation_name="SDK logout",
+                                    )
+                                except TimeoutError:
+                                    logger.warning(
+                                        f"Logout timed out for {username_to_logout}, continuing shutdown"
+                                    )
                             else:
                                 logger.warning("No username available for logout, skipping")
 
