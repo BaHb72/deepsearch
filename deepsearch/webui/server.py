@@ -930,6 +930,15 @@ def create_app() -> FastAPI:
     app.include_router(
         data_unified_router, tags=["UnifiedData"]
     )  # 统一数据API，已包含 /api/data 前缀
+    
+    # 新架构数据查询 API (统一查询接口)
+    try:
+        from deepsearch.webui.api.endpoints.data.unified_query import router as unified_query_router
+        app.include_router(unified_query_router, tags=["UnifiedQuery"])  # 新架构数据API，已包含 /api/v1/data 前缀
+        logger.info("统一数据查询API已注册")
+    except ImportError as e:
+        logger.warning(f"统一数据查询API模块加载失败: {e}")
+    
     app.include_router(
         data_router, prefix="/api/data", tags=["Data"]
     )  # 基础数据API，提供 /stocks、/kline 等

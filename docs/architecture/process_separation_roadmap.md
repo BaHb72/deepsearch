@@ -129,7 +129,6 @@ Qlib 使用 **RabbitMQ + Redis** 实现进程分离：
 1. 创建 `core_runner.py`，启动独立 Core 进程。
 2. Web Server 移除 `start_aggregation_engine()` 调用。
 3. 引入 RabbitMQ，重任务走 MQ。
-4. 使用 Docker Compose 编排多进程。
 
 ---
 
@@ -150,4 +149,3 @@ Qlib 使用 **RabbitMQ + Redis** 实现进程分离：
 
 - **轻量级**：Redis Pub/Sub 或 Redis Stream
 - **企业级**：RabbitMQ (Qlib 选择)
-- **云原生**：AWS SQS / GCP Pub/Sub
