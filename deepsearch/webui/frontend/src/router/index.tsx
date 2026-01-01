@@ -8,6 +8,7 @@ const Dashboard = lazy(() => import('@/pages/dashboard'))
 const EventSystem = lazy(() => import('@/pages/EventSystem'))
 const MarketData = lazy(() => import('@/pages/market'))
 const LogCenter = lazy(() => import('@/pages/System/LogCenter'))
+const MemoryManagement = lazy(() => import('@/pages/System/MemoryManagement'))
 const SystemConfig = lazy(() => import('@/pages/SystemConfig'))
 const DataSourceMonitor = lazy(() => import('@/pages/Monitor/DataSourceMonitor'))
 const CacheSystem = lazy(() => import('@/pages/Monitor/CacheSystem'))
@@ -64,6 +65,10 @@ const routes: RouteObject[] = [
       {
         path: 'system/logs',
         element: <RouteWrapper element={LogCenter} />
+      },
+      {
+        path: 'system/memory',
+        element: <RouteWrapper element={MemoryManagement} />
       },
       {
         path: 'system/config',

@@ -22,7 +22,9 @@ async def get_database_component() -> "DatabaseComponent":
     获取数据库组件。
 
     通过 RuntimeContext 获取已初始化的数据库组件。
-    如果组件未初始化，抛出 HTTP 503 错误。
+    支持两种初始化路径：
+    1. 完整引擎模式：通过 ComponentManager 获取组件
+    2. Lifespan 模式：通过 override_component 注入的组件
 
     Yields:
         DatabaseComponent: 数据库组件实例
@@ -35,10 +37,14 @@ async def get_database_component() -> "DatabaseComponent":
 
     try:
         context = get_context()
-        if context._component_manager is None:
+
+        # 尝试获取数据库组件（支持 override 和 component_manager 两种路径）
+        try:
+            component = context.get_component("database")
+        except (RuntimeError, ValueError):
+            # get_component 会在 _component_manager 未设置且无 override 时抛出异常
             raise HTTPException(status_code=503, detail="服务尚未完全启动，请稍后重试")
 
-        component = context.get_component("database")
         if not isinstance(component, DatabaseComponent):
             raise HTTPException(status_code=503, detail="数据库组件未初始化")
 
@@ -118,10 +124,13 @@ async def get_optional_ingestion_service() -> Optional["DataSourceIngestionServi
         from deepsearch.core.runtime.context import get_context
 
         context = get_context()
-        if context._component_manager is None:
+
+        # 尝试获取数据库组件（支持 override 和 component_manager 两种路径）
+        try:
+            component = context.get_component("database")
+        except (RuntimeError, ValueError):
             return None
 
-        component = context.get_component("database")
         if not isinstance(component, DatabaseComponent) or not component.is_connected():
             return None
 

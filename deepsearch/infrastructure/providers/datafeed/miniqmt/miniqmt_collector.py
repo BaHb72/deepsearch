@@ -181,19 +181,24 @@ class MiniQMTCollector:
                                 # 使用自动推断
                                 df["time"] = pd.to_datetime(df["time"])
 
+                    # 转换为 dict 后立即释放 DataFrame
+                    records = df.to_dict("records")
+                    count = len(df)
+                    del df  # 显式释放 DataFrame 内存
+
                     result = {
                         "success": True,
                         "symbol": stock_code,
                         "period": period,
                         "dividend_type": dividend_type,
-                        "count": len(df),
-                        "data": df.to_dict("records"),
+                        "count": count,
+                        "data": records,
                     }
 
                     # 缓存数据
                     self._cache_data(cache_key, result)
 
-                    logger.debug(f"下载成功: {len(df)} 条数据")
+                    logger.debug(f"下载成功: {count} 条数据")
                     return result
                 else:
                     return {"success": False, "error": "返回数据为空"}
@@ -201,7 +206,7 @@ class MiniQMTCollector:
                 return {"success": False, "error": "未获取到数据"}
 
         except Exception as e:
-            logger.error(f"❌ 下载历史数据失败: {e}")
+            logger.error(f"下载历史数据失败: {e}")
             return {"success": False, "error": str(e)}
 
     # ==================== 2. 实时数据订阅 ====================

@@ -30,6 +30,7 @@ from deepsearch.ports.market_data import (
     OrderImbalanceQuery,
     WindowSpec,
 )
+from deepsearch.ports.market_data.snapshot_cache import SnapshotCachePort
 
 BoardStockListFetcher = Callable[[], Awaitable[Sequence[StockListRecord]]]
 
@@ -48,6 +49,7 @@ class RealTimeMarketDataService:
     auction_window: WindowSpec
     board_universe: BoardUniverse
     stock_list_fetcher: BoardStockListFetcher | None = None
+    snapshot_cache: SnapshotCachePort | None = None  # Arrow 文件缓存
     _subscribed_codes: Set[str] = field(default_factory=set, init=False, repr=False)
     _status: Any = field(default=None, init=False, repr=False)
 
@@ -81,6 +83,18 @@ class RealTimeMarketDataService:
                 perf_counter() - fetch_start,
             )
             self.snapshot_buffer.bulk_ingest(snapshots)
+
+            # 写入 Arrow 文件缓存（off-heap）
+            if self.snapshot_cache:
+                try:
+                    cached_count = self.snapshot_cache.cache_snapshots(snapshots)
+                    logger.debug(
+                        "实时行情 ingest_from_stream Arrow缓存写入 count={}",
+                        cached_count,
+                    )
+                except Exception as cache_err:
+                    logger.warning("实时行情 Arrow缓存写入失败: {}", cache_err)
+
             logger.debug(
                 "实时行情 ingest_from_stream 写入缓冲区完成 total_duration={:.3f}s",
                 perf_counter() - fetch_start,

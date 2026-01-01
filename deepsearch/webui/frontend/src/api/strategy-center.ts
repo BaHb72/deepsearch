@@ -410,7 +410,144 @@ export const getKLineData = async (
     return res?.data ?? res;
 };
 
-// 导出对象形式
+
+// ============================================
+// 持仓管理 API
+// ============================================
+
+const POSITIONS_PATH = '/positions';
+
+export interface Position {
+    id: number;
+    symbol: string;
+    market: 'A' | 'HK' | 'US';
+    quantity: number;
+    cost_price: number;
+    available_qty: number;
+    frozen_qty: number;
+    last_buy_date?: string;
+    position_type: 'base' | 'trading';
+    created_at: string;
+    updated_at: string;
+}
+
+export interface PositionWithPnl extends Position {
+    current_price: number;
+    market_value: number;
+    unrealized_pnl: number;
+    pnl_ratio: number;
+}
+
+export interface PositionsSummary {
+    total_positions: number;
+    total_market_value: number;
+    total_cost_value: number;
+    total_unrealized_pnl: number;
+    total_pnl_ratio: number;
+}
+
+export interface PnlResult {
+    symbol: string;
+    quantity: number;
+    cost_price: number;
+    current_price: number;
+    market_value: number;
+    cost_value: number;
+    unrealized_pnl: number;
+    pnl_ratio: number;
+}
+
+/**
+ * 获取所有持仓
+ */
+export const getPositions = async (): Promise<Position[]> => {
+    const res = await request.get(POSITIONS_PATH);
+    return res?.data ?? res;
+};
+
+/**
+ * 获取所有持仓（含实时盈亏）
+ */
+export const getPositionsWithPnl = async (): Promise<PositionWithPnl[]> => {
+    const res = await request.get(`${POSITIONS_PATH}/realtime`);
+    return res?.data ?? res;
+};
+
+/**
+ * 获取持仓汇总
+ */
+export const getPositionsSummary = async (): Promise<PositionsSummary> => {
+    const res = await request.get(`${POSITIONS_PATH}/summary`);
+    return res?.data ?? res;
+};
+
+/**
+ * 获取持仓汇总（实时）
+ */
+export const getPositionsSummaryRealtime = async (): Promise<PositionsSummary> => {
+    const res = await request.get(`${POSITIONS_PATH}/summary/realtime`);
+    return res?.data ?? res;
+};
+
+/**
+ * 买入股票
+ */
+export const buyPosition = async (
+    symbol: string,
+    quantity: number,
+    price: number,
+    market: 'A' | 'HK' | 'US' = 'A',
+    source: 'manual' | 'signal' | 'strategy' = 'manual'
+): Promise<Position> => {
+    const res = await request.post(`${POSITIONS_PATH}/${symbol}/buy?market=${market}`, {
+        quantity,
+        price,
+        source,
+    });
+    return res?.data ?? res;
+};
+
+/**
+ * 卖出股票
+ */
+export const sellPosition = async (
+    symbol: string,
+    quantity: number,
+    price: number,
+    source: 'manual' | 'signal' | 'strategy' = 'manual'
+): Promise<Position> => {
+    const res = await request.post(`${POSITIONS_PATH}/${symbol}/sell`, {
+        quantity,
+        price,
+        source,
+    });
+    return res?.data ?? res;
+};
+
+/**
+ * 获取单只股票盈亏
+ */
+export const getPositionPnl = async (
+    symbol: string,
+    currentPrice: number
+): Promise<PnlResult> => {
+    const res = await request.get(`${POSITIONS_PATH}/${symbol}/pnl?current_price=${currentPrice}`);
+    return res?.data ?? res;
+};
+
+/**
+ * 获取单只股票实时盈亏
+ */
+export const getPositionPnlRealtime = async (
+    symbol: string
+): Promise<PnlResult> => {
+    const res = await request.get(`${POSITIONS_PATH}/${symbol}/pnl/realtime`);
+    return res?.data ?? res;
+};
+
+// ============================================
+// 导出对象形式 (必须在所有函数定义之后)
+// ============================================
 export const strategyCenterAPI = {
     getTTradingConfig,
     quickAnalyze,
@@ -432,7 +569,14 @@ export const strategyCenterAPI = {
     getIntradayData,
     // K线历史数据
     getKLineData,
+    // 持仓管理
+    getPositions,
+    getPositionsWithPnl,
+    getPositionsSummary,
+    buyPosition,
+    sellPosition,
+    getPositionPnl,
+    getPositionPnlRealtime,
 };
 
 export default strategyCenterAPI;
-

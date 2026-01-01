@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
 import uuid
 from datetime import datetime, timezone
@@ -349,14 +350,18 @@ async def calculate_indicators(request: IndicatorsRequest):
 
         bars_df = pd.DataFrame(series_data["bars"])
 
-        results = await service.calculate_indicators(
-            symbol=request.symbol,
-            timeframe=request.timeframe,
-            indicators=indicators,
-            bars_data=bars_df,
-        )
-
-        return results
+        try:
+            results = await service.calculate_indicators(
+                symbol=request.symbol,
+                timeframe=request.timeframe,
+                indicators=indicators,
+                bars_data=bars_df,
+            )
+            return results
+        finally:
+            # 显式释放 DataFrame 内存
+            del bars_df
+            gc.collect()
 
     except Exception as e:
         logger.error(f"计算指标失败: {e}")
@@ -577,6 +582,8 @@ async def get_signals(
 
     包括金叉死叉、背离、K线形态等信号
     """
+    df = None
+    indicator_data = None
     try:
         service = await get_chart_service()
         detector = get_signal_detector()
@@ -620,6 +627,14 @@ async def get_signals(
     except Exception as e:
         logger.error(f"获取信号失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # 显式释放 DataFrame 和 Series 内存
+        if df is not None:
+            del df
+        if indicator_data is not None:
+            indicator_data.clear()
+            del indicator_data
+        gc.collect()
 
 
 @router.get("/stats")

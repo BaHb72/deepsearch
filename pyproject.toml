@@ -69,6 +69,7 @@ dependencies = [
     "tables>=3.10.2",
     "pypinyin>=0.55.0",
     "apscheduler>=3.11.1",
+    "pyarrow>=22.0.0",
 ]
 
 [project.optional-dependencies]

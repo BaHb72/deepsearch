@@ -15,6 +15,8 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 import pandas as pd
 from loguru import logger
 
+# Arrow Cache for high-performance file-based caching
+from deepsearch.infrastructure.cache import ArrowCacheManager
 from deepsearch.infrastructure.providers.interfaces.base import (
     DataProvider,
     DataProviderConfig,
@@ -93,6 +95,10 @@ class MiniQMTProvider(DataProvider):
         # 数据接收
         self.receive_task: Optional[asyncio.Task[None]] = None
         self.data_queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue(maxsize=10000)
+
+        # Arrow IPC 文件缓存，支持跨进程共享
+        cache_ttl = config.config.get("cache_ttl", 60) if config.config else 60
+        self.cache = ArrowCacheManager(namespace="miniqmt", ttl=cache_ttl)
 
     def get_capabilities(self) -> set[DataCapability]:
         """返回 MiniQMT 支持的数据能力集合。

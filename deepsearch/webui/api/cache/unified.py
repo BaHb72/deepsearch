@@ -5,13 +5,17 @@
 """
 
 import pickle  # nosec B403 - 仅用于可信缓存序列化
+import sys
 from collections import OrderedDict
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple
 
 from loguru import logger
 
 MASKED_SECRET = "***"  # 标记配置中脱敏的密码占位符  # nosec B105
+
+# 默认最大内存字节限制 (256MB)
+DEFAULT_MAX_MEMORY_BYTES = 256 * 1024 * 1024
 
 
 if TYPE_CHECKING:
@@ -42,6 +46,7 @@ class UnifiedCache:
     def __init__(
         self,
         memory_size: int = 1000,
+        max_bytes: int = DEFAULT_MAX_MEMORY_BYTES,
         redis_host: str = "localhost",
         redis_port: int = 6379,
         redis_db: int = 0,
@@ -53,7 +58,8 @@ class UnifiedCache:
         初始化缓存
 
         Args:
-            memory_size: 内存缓存大小
+            memory_size: 内存缓存条目数上限
+            max_bytes: 内存缓存字节上限 (默认 256MB)
             redis_host: Redis 主机
             redis_port: Redis 端口
             redis_db: Redis 数据库号
@@ -62,8 +68,10 @@ class UnifiedCache:
             default_ttl: 默认过期时间（秒）
         """
         # L1: 内存缓存 - 使用 OrderedDict 实现 O(1) LRU 操作
-        self.memory_cache: OrderedDict[str, Any] = OrderedDict()
+        self.memory_cache: OrderedDict[str, Tuple[Any, int]] = OrderedDict()  # (value, size_bytes)
         self.memory_size = memory_size
+        self.max_bytes = max_bytes
+        self._current_bytes = 0  # 当前内存使用字节数
 
         self.redis_host = redis_host
         self.redis_port = redis_port
@@ -161,16 +169,44 @@ class UnifiedCache:
             return f"{namespace}:{key}"
         return key
 
-    def _update_lru(self, key: str):
+    def _estimate_size(self, value: Any) -> int:
+        """估算对象的内存大小（字节）"""
+        try:
+            # 使用 pickle 序列化来估算大小（更准确但较慢）
+            return len(pickle.dumps(value))
+        except Exception:
+            # 回退到 sys.getsizeof（可能不准确但快速）
+            try:
+                return sys.getsizeof(value)
+            except Exception:
+                return 1024  # 默认估算 1KB
+
+    def _update_lru(self, key: str) -> None:
         """更新 LRU 访问顺序 - O(1) 操作"""
         if key in self.memory_cache:
             # 移动到末尾（最近访问）
             self.memory_cache.move_to_end(key)
 
-        # 如果超过大小限制，移除最老的（第一个）
+    def _evict_if_needed(self) -> None:
+        """如果超过限制，淘汰最老的缓存项"""
+        # 检查条目数限制
         while len(self.memory_cache) > self.memory_size:
-            oldest_key, _ = self.memory_cache.popitem(last=False)
-            logger.debug(f"LRU 淘汰: {oldest_key}")
+            oldest_key, (_, size) = self.memory_cache.popitem(last=False)
+            self._current_bytes -= size
+            logger.debug(f"LRU 淘汰 (条目数): {oldest_key}, 释放 {size / 1024:.1f}KB")
+
+        # 检查字节限制
+        evicted_count = 0
+        while self._current_bytes > self.max_bytes and self.memory_cache:
+            oldest_key, (_, size) = self.memory_cache.popitem(last=False)
+            self._current_bytes -= size
+            evicted_count += 1
+
+        if evicted_count > 0:
+            logger.info(
+                f"LRU 淘汰 (字节限制): {evicted_count} 条, "
+                f"当前使用 {self._current_bytes / 1024 / 1024:.1f}MB / {self.max_bytes / 1024 / 1024:.0f}MB"
+            )
 
     def get(self, key: str, namespace: str = "") -> Optional[Any]:
         """
@@ -191,7 +227,8 @@ class UnifiedCache:
             self.stats["memory_hits"] += 1
             self._update_lru(full_key)
             logger.debug(f"内存缓存命中: {full_key}")
-            return self.memory_cache[full_key]
+            value, _ = self.memory_cache[full_key]
+            return value
 
         self.stats["memory_misses"] += 1
 
@@ -204,8 +241,11 @@ class UnifiedCache:
                     # 反序列化
                     data = pickle.loads(value)  # nosec B301 - 缓存内容来源于受控内部序列化
                     # 更新到内存缓存
-                    self.memory_cache[full_key] = data
+                    size = self._estimate_size(data)
+                    self.memory_cache[full_key] = (data, size)
+                    self._current_bytes += size
                     self._update_lru(full_key)
+                    self._evict_if_needed()
                     logger.debug(f"Redis 缓存命中: {full_key}")
                     return data
                 else:
@@ -230,8 +270,17 @@ class UnifiedCache:
         ttl = ttl or self.default_ttl
 
         # L1: 设置内存缓存
-        self.memory_cache[full_key] = value
+        size = self._estimate_size(value)
+
+        # 如果已存在，先减去旧的大小
+        if full_key in self.memory_cache:
+            _, old_size = self.memory_cache[full_key]
+            self._current_bytes -= old_size
+
+        self.memory_cache[full_key] = (value, size)
+        self._current_bytes += size
         self._update_lru(full_key)
+        self._evict_if_needed()
 
         # L2: 设置 Redis 缓存
         if self.redis_client:
@@ -255,6 +304,8 @@ class UnifiedCache:
 
         # 从内存删除
         if full_key in self.memory_cache:
+            _, size = self.memory_cache[full_key]
+            self._current_bytes -= size
             del self.memory_cache[full_key]
 
         # 从 Redis 删除
@@ -274,6 +325,8 @@ class UnifiedCache:
         # 清理内存缓存
         keys_to_remove = [k for k in self.memory_cache if pattern in k]
         for key in keys_to_remove:
+            _, size = self.memory_cache[key]
+            self._current_bytes -= size
             del self.memory_cache[key]
 
         # 清理 Redis 缓存
@@ -287,6 +340,7 @@ class UnifiedCache:
     def clear(self):
         """清空所有缓存"""
         self.memory_cache.clear()
+        self._current_bytes = 0
 
         if self.redis_client:
             try:
@@ -309,6 +363,9 @@ class UnifiedCache:
         return {
             "memory_size": len(self.memory_cache),
             "memory_limit": self.memory_size,
+            "memory_bytes": self._current_bytes,
+            "memory_bytes_limit": self.max_bytes,
+            "memory_bytes_usage_pct": f"{(self._current_bytes / self.max_bytes) * 100:.1f}%",
             "memory_hit_rate": f"{(self.stats['memory_hits'] / max(total_requests, 1)) * 100:.1f}%",
             "redis_hit_rate": f"{(self.stats['redis_hits'] / max(total_requests, 1)) * 100:.1f}%",
             "overall_hit_rate": f"{(total_hits / max(total_requests, 1)) * 100:.1f}%",

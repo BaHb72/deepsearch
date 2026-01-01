@@ -93,6 +93,7 @@ class LoggerManager:
         self._archive_after_days: int = DEFAULT_LOG_ARCHIVE_AFTER_DAYS
         self._archive_purge_days: Optional[int] = None
         self._archive_directory_name: str = DEFAULT_LOG_ARCHIVE_DIRECTORY
+        self._organize_by_month: bool = True  # 按月份组织归档
         self._module_logging_enabled: bool = False
         self._module_directory_name: str = DEFAULT_LOG_MODULE_DIRECTORY
         self._module_max_depth: int = DEFAULT_LOG_MODULE_MAX_DEPTH
@@ -441,6 +442,7 @@ class LoggerManager:
         effective_days = retention_days or self._archive_after_days
         effective_days = max(effective_days, 1)
         archive_enabled = self._archive_enabled and self._archive_format == "zip"
+        organize_by_month = self._organize_by_month
 
         def _handler(files: Sequence[str]) -> None:
             now = datetime.now()
@@ -457,19 +459,45 @@ class LoggerManager:
                     continue
                 if mtime <= cutoff:
                     if archive_enabled:
-                        self._compress_log_file(file_path, archive_base)
+                        # 按月份组织归档目录
+                        if organize_by_month:
+                            month_dir = archive_base / mtime.strftime("%Y-%m")
+                        else:
+                            month_dir = archive_base
+                        self._compress_log_file(file_path, month_dir)
                     else:
                         file_path.unlink(missing_ok=True)
 
+            # 清理过期归档
             if archive_enabled and self._archive_purge_days is not None and archive_base.exists():
                 purge_cutoff = now - timedelta(days=self._archive_purge_days)
-                for archive_file in archive_base.glob("*.zip"):
-                    try:
-                        archive_mtime = datetime.fromtimestamp(archive_file.stat().st_mtime)
-                    except OSError:
-                        continue
-                    if archive_mtime <= purge_cutoff:
-                        archive_file.unlink(missing_ok=True)
+                # 遍历所有子目录（按月份组织时）
+                if organize_by_month:
+                    for month_subdir in archive_base.iterdir():
+                        if month_subdir.is_dir():
+                            for archive_file in month_subdir.glob("*.zip"):
+                                try:
+                                    archive_mtime = datetime.fromtimestamp(
+                                        archive_file.stat().st_mtime
+                                    )
+                                except OSError:
+                                    continue
+                                if archive_mtime <= purge_cutoff:
+                                    archive_file.unlink(missing_ok=True)
+                            # 删除空目录
+                            try:
+                                if not any(month_subdir.iterdir()):
+                                    month_subdir.rmdir()
+                            except OSError:
+                                pass
+                else:
+                    for archive_file in archive_base.glob("*.zip"):
+                        try:
+                            archive_mtime = datetime.fromtimestamp(archive_file.stat().st_mtime)
+                        except OSError:
+                            continue
+                        if archive_mtime <= purge_cutoff:
+                            archive_file.unlink(missing_ok=True)
 
         return _handler
 

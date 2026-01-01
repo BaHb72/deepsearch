@@ -658,7 +658,19 @@ async def lifespan(app: FastAPI):
         logger.warning("Lifespan 启动时无运行中的事件循环")
 
     # === STARTUP ===
-    # 首先初始化数据库组件（确保在正确的事件循环中）
+    # 首先确保日志系统已正确初始化
+    try:
+        from deepsearch.observability.logger import logger_manager
+
+        if not logger_manager._started:
+            logger_manager.start()
+            logger.info("日志系统已在 lifespan 中初始化")
+        else:
+            logger.debug("日志系统已启动，跳过重复初始化")
+    except Exception as e:
+        logger.warning(f"日志系统初始化检查失败: {e}")
+
+    # 初始化数据库组件（确保在正确的事件循环中）
     try:
         from deepsearch.core.component_factory import DatabaseComponentFactory
         from deepsearch.core.runtime.context import get_context
@@ -710,10 +722,30 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"通知推送服务初始化失败（非致命）: {e}")
 
+    # 启动定时 GC 任务 (每 5 分钟执行一次)
+    try:
+        from deepsearch.webui.api.endpoints.system.memory import get_memory_manager
+
+        memory_manager = get_memory_manager()
+        await memory_manager.start_periodic_gc()
+        logger.info("定时 GC 任务已启动")
+    except Exception as e:
+        logger.warning(f"定时 GC 任务启动失败（非致命）: {e}")
+
     yield  # 应用运行中
 
     # === SHUTDOWN ===
-    # 先清理数据库连接池
+    # 停止定时 GC 任务
+    try:
+        from deepsearch.webui.api.endpoints.system.memory import get_memory_manager
+
+        memory_manager = get_memory_manager()
+        await memory_manager.stop_periodic_gc()
+        logger.info("定时 GC 任务已停止")
+    except Exception as e:
+        logger.warning(f"停止定时 GC 任务失败: {e}")
+
+    # 清理数据库连接池
     db_component_raw = getattr(app.state, "db_component", None)
     if db_component_raw is not None and hasattr(db_component_raw, "disconnect_async"):
         try:
@@ -860,6 +892,7 @@ def create_app() -> FastAPI:
     from deepsearch.webui.api.endpoints.system.config import router as system_config_router
     from deepsearch.webui.api.endpoints.system.health import router as system_health_router
     from deepsearch.webui.api.endpoints.system.logs import router as system_logs_router
+    from deepsearch.webui.api.endpoints.system.memory import router as memory_router
     from deepsearch.webui.api.endpoints.system.system import router as system_router
     from deepsearch.webui.api.endpoints.system.system_info import router as system_info_router
     from deepsearch.webui.api.endpoints.trading.chart import router as trading_chart_router
@@ -876,6 +909,9 @@ def create_app() -> FastAPI:
     app.include_router(system_router, prefix="/api/system", tags=["System"])
     app.include_router(system_info_router)  # 系统信息路由
     app.include_router(system_logs_router, prefix="/api/system/logs", tags=["Logs"])
+    app.include_router(
+        memory_router, tags=["Memory Management"]
+    )  # 内存管理路由，已包含 /api/system/memory 前缀
 
     app.include_router(
         data_source_endpoints_router, tags=["DataSource"]
@@ -1053,6 +1089,17 @@ def create_app() -> FastAPI:
     except ImportError as e:
         logger.warning(f"策略中心API模块加载失败: {e}")
 
+    # Positions API (通用持仓管理)
+    try:
+        from deepsearch.webui.api.endpoints.positions import router as positions_router
+
+        app.include_router(
+            positions_router, prefix="/api", tags=["Positions"]
+        )  # 通用持仓API: /api/positions/*
+        logger.info("通用持仓管理API已注册")
+    except ImportError as e:
+        logger.warning(f"通用持仓管理API模块加载失败: {e}")
+
     # Data Source Monitor API
     try:
         from deepsearch.webui.api.monitor.data_source_api import (
@@ -1223,6 +1270,86 @@ async def websocket_basic(websocket: WebSocket):
                 await websocket.send_json({"type": "unknown", "received": message})
     except WebSocketDisconnect:
         pass
+
+
+# 持仓管理 WebSocket 端点
+@app.websocket("/ws/positions")
+async def websocket_positions(websocket: WebSocket):
+    """持仓数据 WebSocket 端点
+
+    支持的消息类型:
+    - {"type": "ping"} → {"type": "pong"}
+    - {"type": "subscribe"} → 订阅持仓变更
+    - {"type": "get_positions"} → 获取当前持仓
+    - {"type": "get_summary"} → 获取持仓汇总
+    """
+    await websocket.accept()
+
+    try:
+        while True:
+            message = await websocket.receive_json()
+            msg_type = message.get("type")
+
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+
+            elif msg_type == "subscribe":
+                await websocket.send_json(
+                    {"type": "subscribed", "channel": "positions", "ok": True}
+                )
+
+            elif msg_type == "get_positions":
+                # 获取持仓列表
+                try:
+                    from deepsearch.application.services.position_service import PositionService
+                    from deepsearch.core.components.data_components import DatabaseComponent
+
+                    db_component = DatabaseComponent.get_instance()
+                    async with db_component.get_session() as session:
+                        service = PositionService(session)
+                        positions = await service.get_all()
+                        await websocket.send_json(
+                            {"type": "positions", "data": [p.to_dict() for p in positions]}
+                        )
+                except Exception as e:
+                    logger.error(f"获取持仓失败: {e}")
+                    await websocket.send_json({"type": "error", "message": str(e)})
+
+            elif msg_type == "get_summary":
+                # 获取持仓汇总
+                try:
+                    from deepsearch.application.services.position_service import PositionService
+                    from deepsearch.core.components.data_components import DatabaseComponent
+
+                    db_component = DatabaseComponent.get_instance()
+                    async with db_component.get_session() as session:
+                        service = PositionService(session)
+                        positions = await service.get_all()
+                        prices = {p.symbol: p.cost_price for p in positions}
+                        summary = await service.calc_portfolio_summary(prices)
+                        await websocket.send_json(
+                            {
+                                "type": "summary",
+                                "data": {
+                                    "total_positions": summary.total_positions,
+                                    "total_market_value": summary.total_market_value,
+                                    "total_cost_value": summary.total_cost_value,
+                                    "total_unrealized_pnl": summary.total_unrealized_pnl,
+                                    "total_pnl_ratio": summary.total_pnl_ratio,
+                                },
+                            }
+                        )
+                except Exception as e:
+                    logger.error(f"获取持仓汇总失败: {e}")
+                    await websocket.send_json({"type": "error", "message": str(e)})
+
+            else:
+                await websocket.send_json({"type": "unknown", "received": message})
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error(f"持仓 WebSocket 错误: {e}")
 
 
 @app.get("/health")

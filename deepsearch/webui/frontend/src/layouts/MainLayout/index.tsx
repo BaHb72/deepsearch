@@ -127,6 +127,10 @@ const MainLayout: React.FC = () => {
             name: '日志查看',
             icon: <FileTextOutlined />,
           },
+          {
+            path: '/system/memory',
+            name: '内存管理',
+          },
         ]
       },
       {

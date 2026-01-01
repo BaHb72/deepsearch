@@ -7,6 +7,7 @@ from .base import Base
 from .ingestion import IngestionBatch, IngestionJob, RawProviderPayload
 from .market import Market1Min, MarketSnapshot, MarketTick
 from .module_source import ModuleSourceConfig
+from .watchlist import PositionDB, SignalHistoryDB, TTradingRecordDB, WatchlistItemDB
 
 __all__ = [
     "Base",
@@ -17,4 +18,8 @@ __all__ = [
     "IngestionBatch",
     "RawProviderPayload",
     "ModuleSourceConfig",
+    "WatchlistItemDB",
+    "SignalHistoryDB",
+    "TTradingRecordDB",
+    "PositionDB",
 ]

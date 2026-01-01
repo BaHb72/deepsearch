@@ -28,6 +28,15 @@ from .runner import MarketDataStreamingRunner
 from .service import BoardStockListFetcher, RealTimeMarketDataService
 from .trading_guard import PhaseState, TradingSessionGuard
 
+# Arrow 文件缓存
+try:
+    from deepsearch.adapters.market_data.snapshot_cache_adapter import ArrowSnapshotCacheAdapter
+
+    ARROW_CACHE_AVAILABLE = True
+except ImportError:
+    ArrowSnapshotCacheAdapter = None  # type: ignore
+    ARROW_CACHE_AVAILABLE = False
+
 if TYPE_CHECKING:
     from deepsearch.infrastructure.providers.implementations.amazingdata import AmazingDataProvider
 
@@ -80,6 +89,7 @@ def create_realtime_market_data_service(
     capital_windows: Optional[Sequence[WindowSpec]] = None,
     order_window: Optional[WindowSpec] = None,
     auction_window: Optional[WindowSpec] = None,
+    enable_snapshot_cache: bool = True,  # 新增: Arrow 快照缓存
 ) -> RealTimeMarketDataService:
     """Assemble a RealTimeMarketDataService backed by provided adapter/registry."""
 
@@ -126,6 +136,18 @@ def create_realtime_market_data_service(
         board_source = build_board_source(provider)
         board_fetcher = board_source.fetch_records
 
+    # 初始化 Arrow 快照缓存
+    snapshot_cache = None
+    if enable_snapshot_cache and ARROW_CACHE_AVAILABLE:
+        try:
+            snapshot_cache = ArrowSnapshotCacheAdapter(
+                namespace="realtime_snapshot",
+                ttl=5,  # 5秒过期
+            )
+            logger.info("实时行情 Arrow 快照缓存已启用")
+        except Exception as e:
+            logger.warning("初始化 Arrow 快照缓存失败: {}", e)
+
     return RealTimeMarketDataService(
         registry=registry,
         snapshot_buffer=snapshot_buffer,
@@ -137,6 +159,7 @@ def create_realtime_market_data_service(
         auction_window=auction_window,
         board_universe=board_universe,
         stock_list_fetcher=board_fetcher,
+        snapshot_cache=snapshot_cache,
     )
 
 

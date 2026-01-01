@@ -274,8 +274,9 @@ request.interceptors.response.use(
                 clearPortCache()
             }
 
-            if (error.config?.url?.includes('/status') ||
-                error.config?.url?.includes('/statistics')) {
+            // 静默处理周期性轮询请求的错误，避免频繁弹窗
+            const silentUrls = ['/status', '/statistics', '/memory/', '/all-processes', '/jobs/']
+            if (silentUrls.some(url => error.config?.url?.includes(url))) {
                 showError = false
                 debugLog('SILENT_ERROR', `#${requestId} 静默处理周期性请求错误`, {
                     url: error.config?.url

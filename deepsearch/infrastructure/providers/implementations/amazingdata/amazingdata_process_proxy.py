@@ -146,6 +146,36 @@ _SDK_DEFAULT_TIMEOUT = 60.0  # 默认 SDK 调用超时时间（秒）
 _SDK_LOGIN_TIMEOUT = 90.0  # 登录操作超时时间（秒）
 _SDK_LOGOUT_TIMEOUT = 10.0  # 登出操作超时时间（秒）
 
+# 全局共享线程池，避免每次调用创建新线程池导致线程泄漏
+# max_workers=4 足以处理并发 SDK 调用，同时限制线程数量
+_SDK_EXECUTOR: Optional[ThreadPoolExecutor] = None
+_SDK_EXECUTOR_LOCK = threading.Lock()
+
+
+def _get_sdk_executor() -> ThreadPoolExecutor:
+    """获取或创建全局 SDK 线程池"""
+    global _SDK_EXECUTOR
+    if _SDK_EXECUTOR is None:
+        with _SDK_EXECUTOR_LOCK:
+            if _SDK_EXECUTOR is None:
+                _SDK_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="sdk_shared")
+                logger.debug("Created shared SDK ThreadPoolExecutor with 4 workers")
+    return _SDK_EXECUTOR
+
+
+def _shutdown_sdk_executor() -> None:
+    """关闭全局 SDK 线程池（在进程退出时调用）"""
+    global _SDK_EXECUTOR
+    if _SDK_EXECUTOR is not None:
+        with _SDK_EXECUTOR_LOCK:
+            if _SDK_EXECUTOR is not None:
+                try:
+                    _SDK_EXECUTOR.shutdown(wait=False, cancel_futures=True)
+                except TypeError:
+                    _SDK_EXECUTOR.shutdown(wait=False)
+                _SDK_EXECUTOR = None
+                logger.debug("Shutdown shared SDK ThreadPoolExecutor")
+
 
 def _execute_with_timeout(
     func: Callable[..., Any],
@@ -155,7 +185,7 @@ def _execute_with_timeout(
     operation_name: str = "SDK call",
 ) -> Any:
     """
-    使用 ThreadPoolExecutor 包装可能阻塞的 SDK 调用，添加超时保护。
+    使用共享 ThreadPoolExecutor 包装可能阻塞的 SDK 调用，添加超时保护。
 
     Args:
         func: 要执行的函数
@@ -172,12 +202,13 @@ def _execute_with_timeout(
         Exception: 原始异常
 
     Note:
+        使用共享线程池避免每次调用创建新线程池导致线程泄漏。
         Python 线程无法被强制终止。超时后，底层线程可能仍在运行，
         但主线程不会等待它完成。阻塞的线程最终会在 SDK 调用返回后自然结束。
         由于这些调用在 Worker 进程中执行，进程终止时线程也会被强制终止。
     """
     kwargs = kwargs or {}
-    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sdk_timeout")
+    executor = _get_sdk_executor()
     future = executor.submit(func, *args, **kwargs)
     try:
         return future.result(timeout=timeout)
@@ -190,14 +221,6 @@ def _execute_with_timeout(
         # 取消未开始的 future（对于已开始的无效，但这是最佳实践）
         future.cancel()
         raise TimeoutError(f"{operation_name} timed out after {timeout:.1f}s")
-    finally:
-        # 使用 wait=False 避免阻塞主线程，cancel_futures=True 取消队列中的任务
-        # Python 3.9+ 支持 cancel_futures 参数
-        try:
-            executor.shutdown(wait=False, cancel_futures=True)
-        except TypeError:
-            # Python 3.8 不支持 cancel_futures 参数
-            executor.shutdown(wait=False)
 
 
 def _attach_worker_file_sink(level: str) -> None:

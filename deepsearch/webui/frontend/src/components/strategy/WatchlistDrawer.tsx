@@ -44,7 +44,8 @@ const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
     onOpenChange,
 }) => {
     const [internalOpen, setInternalOpen] = useState(false);
-    const [searchValue, setSearchValue] = useState('');
+    // 存储选中的股票信息
+    const [selectedStock, setSelectedStock] = useState<{ symbol: string; name: string } | null>(null);
 
     // 支持受控和非受控模式
     const isControlled = controlledOpen !== undefined;
@@ -52,24 +53,30 @@ const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
     const setOpen = isControlled ? (onOpenChange || (() => { })) : setInternalOpen;
 
     const handleAdd = () => {
-        if (!searchValue) {
+        if (!selectedStock) {
             message.warning('请先搜索并选择股票');
             return;
         }
-        // searchValue 格式: "代码 名称"
-        const parts = searchValue.split(' ');
-        if (parts.length >= 2) {
-            const symbol = parts[0];
-            const name = parts.slice(1).join(' ');
 
-            if (watchlist.some(s => s.symbol === symbol)) {
-                message.warning('股票已在监控列表中');
-                return;
-            }
+        if (watchlist.some(s => s.symbol === selectedStock.symbol)) {
+            message.warning('股票已在监控列表中');
+            return;
+        }
 
-            onAdd(symbol, name);
-            setSearchValue('');
-            message.success(`已添加 ${name}`);
+        onAdd(selectedStock.symbol, selectedStock.name);
+        setSelectedStock(null);
+    };
+
+    // 处理股票选择变更
+    const handleStockChange = (symbol: string, name?: string) => {
+        if (symbol && name) {
+            setSelectedStock({ symbol, name });
+        } else if (symbol) {
+            // 如果没有名称，尝试从监控列表查找
+            const existing = watchlist.find(s => s.symbol === symbol);
+            setSelectedStock({ symbol, name: existing?.name || symbol });
+        } else {
+            setSelectedStock(null);
         }
     };
 
@@ -88,8 +95,8 @@ const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
             <div style={{ marginBottom: 16 }}>
                 <Space.Compact style={{ width: '100%' }}>
                     <UniversalStockSearch
-                        value={searchValue}
-                        onChange={setSearchValue}
+                        value={selectedStock?.symbol || ''}
+                        onChange={handleStockChange}
                         placeholder="搜索股票代码/名称"
                         style={{ flex: 1 }}
                     />
@@ -102,6 +109,7 @@ const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                     </Button>
                 </Space.Compact>
             </div>
+
 
             {/* 股票列表 */}
             <List

@@ -107,6 +107,52 @@ class TTradingService:
         """获取 Redis 客户端"""
         return await _get_redis_client()
 
+    def _subscribe_realtime(self, strategy_id: str, symbol: str) -> None:
+        """订阅实时数据（内部使用）"""
+        try:
+            from deepsearch.adapters.market_data.memory_scheduler import get_memory_scheduler
+            from deepsearch.adapters.market_data.subscription_manager import (
+                get_subscription_manager,
+            )
+            from deepsearch.adapters.trading.ttrading_subscriber import get_ttrading_subscriber
+
+            subscriber = get_ttrading_subscriber()
+            manager = get_subscription_manager()
+
+            # 绑定调度器
+            if manager._scheduler is None:
+                manager.set_scheduler(get_memory_scheduler())
+
+            # 注册策略并订阅
+            subscriber.register_strategy(strategy_id, symbol)
+            manager.subscribe(symbol, subscriber)
+
+            self._logger.info(f"策略 {strategy_id} 已订阅 {symbol} 实时数据")
+        except Exception as e:
+            self._logger.warning(f"订阅实时数据失败 (不影响策略功能): {e}")
+
+    def _unsubscribe_realtime(self, strategy_id: str, symbol: str) -> None:
+        """取消订阅实时数据（内部使用）"""
+        try:
+            from deepsearch.adapters.market_data.subscription_manager import (
+                get_subscription_manager,
+            )
+            from deepsearch.adapters.trading.ttrading_subscriber import get_ttrading_subscriber
+
+            subscriber = get_ttrading_subscriber()
+            manager = get_subscription_manager()
+
+            # 注销策略
+            subscriber.unregister_strategy(strategy_id, symbol)
+
+            # 如果该股票没有其他策略订阅，则取消订阅
+            if not subscriber.get_strategies_for_code(symbol):
+                manager.unsubscribe(symbol, subscriber)
+
+            self._logger.info(f"策略 {strategy_id} 已取消订阅 {symbol}")
+        except Exception as e:
+            self._logger.warning(f"取消订阅失败 (不影响策略功能): {e}")
+
     # ==================== CRUD 操作 ====================
 
     async def create_strategy(self, strategy: TTradingStrategy) -> TTradingStrategy:
@@ -120,6 +166,11 @@ class TTradingService:
         await redis.sadd(self.REDIS_LIST_KEY, strategy.id)
 
         self._logger.info(f"创建策略: {strategy.id} - {strategy.name}")
+
+        # 自动订阅实时数据 (策略默认 active)
+        if strategy.status == "active":
+            self._subscribe_realtime(strategy.id, strategy.symbol)
+
         return strategy
 
     async def get_strategy(self, strategy_id: str) -> Optional[TTradingStrategy]:
@@ -171,6 +222,9 @@ class TTradingService:
 
     async def delete_strategy(self, strategy_id: str) -> bool:
         """删除策略"""
+        # 先获取策略信息用于取消订阅
+        strategy = await self.get_strategy(strategy_id)
+
         redis = await self._get_redis()
         key = f"{self.REDIS_KEY_PREFIX}{strategy_id}"
 
@@ -179,6 +233,9 @@ class TTradingService:
 
         if result:
             self._logger.info(f"删除策略: {strategy_id}")
+            # 取消订阅实时数据
+            if strategy and strategy.status == "active":
+                self._unsubscribe_realtime(strategy_id, strategy.symbol)
         return bool(result)
 
     async def toggle_strategy(self, strategy_id: str) -> Optional[TTradingStrategy]:
@@ -187,8 +244,18 @@ class TTradingService:
         if not strategy:
             return None
 
+        old_status = strategy.status
         new_status = "paused" if strategy.status == "active" else "active"
-        return await self.update_strategy(strategy_id, {"status": new_status})
+        result = await self.update_strategy(strategy_id, {"status": new_status})
+
+        # 订阅/取消订阅实时数据
+        if result:
+            if new_status == "active":
+                self._subscribe_realtime(strategy_id, strategy.symbol)
+            elif old_status == "active":
+                self._unsubscribe_realtime(strategy_id, strategy.symbol)
+
+        return result
 
     # ==================== 信号管理 ====================
 

@@ -1347,9 +1347,17 @@ class ProcessIsolatedAmazingDataProvider(DataProvider):
 
     async def get_realtime_quote(
         self,
-        symbols: Sequence[str] | str,
+        symbols: Sequence[str] | str | None = None,
+        *,
+        symbol: str | None = None,
         **kwargs: Any,
     ) -> Optional[Dict[str, Any]]:
+        # 兼容调用方使用 symbol 或 symbols 参数名
+        if symbols is None and symbol is not None:
+            symbols = symbol
+        if symbols is None:
+            logger.warning("get_realtime_quote 未提供 symbols 或 symbol 参数")
+            return None
         today = self._current_date_int()
         market_code = str(kwargs.get("market") or self._resolve_market_code())
 

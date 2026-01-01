@@ -33,6 +33,8 @@ import {
     DatasourceStatus,
     WatchlistItem,
     IntradayDataResponse,
+    buyPosition,
+    sellPosition,
 } from '../../api/strategy-center';
 import { timestampToBeijingTime } from '../../utils/timeFormat';
 import TradingViewChart from '../../components/charts/TradingViewChart';
@@ -43,6 +45,8 @@ import {
     BacktestResultPanel,
     BacktestResult,
     TradeRecord,
+    PositionPanel,
+    PositionSizer,
 } from '../../components/strategy';
 
 const { Text, Title } = Typography;
@@ -447,6 +451,8 @@ const TTrading: React.FC = () => {
                                     })) || []}
                                 />
                                 {/* 日期选择器 */}
+
+                                {/* 日期选择器 (保留 ECharts 版作为通用选择器) */}
                                 <div style={{ marginTop: 12 }}>
                                     <DateRangeSelector
                                         symbol={selectedSymbol}
@@ -456,7 +462,7 @@ const TTrading: React.FC = () => {
                                             loadIntradayDataByDate(selectedSymbol, date);
                                         }}
                                         days={15}
-                                        height={70}
+                                        height={40}
                                     />
                                 </div>
                             </>
@@ -476,6 +482,41 @@ const TTrading: React.FC = () => {
                         loading={backtestLoading}
                         stockName={selectedSymbolName}
                         date={selectedDate}
+                    />
+
+                    {/* 持仓管理 */}
+                    <PositionPanel
+                        symbol={selectedSymbol}
+                        onBuy={(sym, qty) => {
+                            message.info(`推荐买入 ${sym} ${qty}股`);
+                            // TODO: 打开下单弹窗
+                        }}
+                        onSell={(sym, qty) => {
+                            message.info(`推荐卖出 ${sym} ${qty}股`);
+                            // TODO: 打开下单弹窗
+                        }}
+                    />
+
+                    {/* 仓位控制器 */}
+                    <PositionSizer
+                        symbol={selectedSymbol}
+                        currentQty={1000}
+                        availableQty={1000}
+                        costPrice={analysis?.current_price || 10}
+                        currentPrice={analysis?.current_price || 10}
+                        onExecute={async (direction, quantity, price) => {
+                            try {
+                                if (direction === 'buy') {
+                                    await buyPosition(selectedSymbol, quantity, price, 'A', 'manual');
+                                    message.success(`买入成功: ${quantity} 股 @ ¥${price.toFixed(2)}`);
+                                } else {
+                                    await sellPosition(selectedSymbol, quantity, price, 'manual');
+                                    message.success(`卖出成功: ${quantity} 股 @ ¥${price.toFixed(2)}`);
+                                }
+                            } catch (error: any) {
+                                message.error(`下单失败: ${error?.message || '未知错误'}`);
+                            }
+                        }}
                     />
                 </>
             ) : (

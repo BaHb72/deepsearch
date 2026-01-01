@@ -24,6 +24,8 @@ from typing import Any, Callable, Dict, List, Optional, cast
 
 import pandas as pd
 
+# Arrow Cache for high-performance file-based caching
+from deepsearch.infrastructure.cache import ArrowCacheManager
 from deepsearch.infrastructure.providers.interfaces.base import DataProvider, DataProviderError
 
 # AmazingData SDK
@@ -265,7 +267,7 @@ class OptimizedHeartbeat:
 class OptimizedCacheManager:
     """优化的缓存管理器"""
 
-    def __init__(self, ttl=300, max_size=200):
+    def __init__(self, ttl=300, max_size=32):
         self.cache = {}
         self.ttl = ttl
         self.max_size = max_size  # 缓存最大条数
@@ -556,10 +558,10 @@ class OptimizedDataConverter:
 class RateLimiter:
     """令牌桶限流器"""
 
-    def __init__(self, rate=100, burst=20):
+    def __init__(self, rate: float = 100, burst: int = 20):
         self.rate = rate  # 每秒令牌数
         self.burst = burst  # 突发容量
-        self.tokens = burst
+        self.tokens = float(burst)
         self.last_update = time.time()
         self._lock = asyncio.Lock()
 
@@ -730,7 +732,8 @@ class OptimizedAmazingDataProvider(DataProvider):
 
         # 优化的组件
         self.thread_pool = OptimizedThreadPoolManager()
-        self.cache = OptimizedCacheManager(ttl=300)
+        # 使用 Arrow IPC 文件缓存，支持跨进程共享和持久化
+        self.cache = ArrowCacheManager(namespace="amazingdata", ttl=300)
         self.subscription_manager = SubscriptionManager()
         self.heartbeat = OptimizedHeartbeat(provider_config, self._require_sdk)
 

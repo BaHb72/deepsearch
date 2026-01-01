@@ -91,14 +91,18 @@ class VWAPAnalyzer(TechnicalAnalyzer):
         )
 
     def _calculate_vwap(self, bars: pd.DataFrame) -> float:
-        """计算VWAP"""
-        if "amount" in bars.columns and bars["amount"].sum() > 0:
-            # 使用成交额计算
-            return float(bars["amount"].sum() / bars["volume"].sum())
-        else:
-            # 使用典型价格计算
-            typical_price = (bars["high"] + bars["low"] + bars["close"]) / 3
-            return float((typical_price * bars["volume"]).sum() / bars["volume"].sum())
+        """
+        计算VWAP - 使用标准公式
+
+        VWAP = Σ(Typical Price × Volume) / Σ(Volume)
+        Typical Price = (High + Low + Close) / 3
+        """
+        if bars.empty or bars["volume"].sum() == 0:
+            return 0.0
+
+        # 使用标准典型价格公式（避免 amount/volume 单位不一致问题）
+        typical_price = (bars["high"] + bars["low"] + bars["close"]) / 3
+        return float((typical_price * bars["volume"]).sum() / bars["volume"].sum())
 
     def _normalize_columns(self, bars: pd.DataFrame) -> pd.DataFrame:
         """标准化列名"""

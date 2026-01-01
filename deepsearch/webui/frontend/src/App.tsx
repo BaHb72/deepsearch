@@ -9,6 +9,7 @@ const Dashboard = lazy(() => import('./pages/dashboard'))
 const EventSystem = lazy(() => import('./pages/EventSystem'))
 const MarketData = lazy(() => import('./pages/market'))
 const LogCenter = lazy(() => import('./pages/System/LogCenter'))
+const MemoryManagement = lazy(() => import('./pages/System/MemoryManagement'))
 const SystemConfig = lazy(() => import('./pages/SystemConfig'))
 const MarketMonitor = lazy(() => import('./pages/Monitor/MarketMonitor'))
 const CacheSystem = lazy(() => import('./pages/Monitor/CacheSystem'))
@@ -51,6 +52,7 @@ const App: React.FC = () => {
           <Route path="events" element={<EventSystem />} />
           <Route path="market/*" element={<MarketData />} />
           <Route path="system/logs" element={<LogCenter />} />
+          <Route path="system/memory" element={<MemoryManagement />} />
           <Route path="system/config" element={<SystemConfig />} />
 
           <Route path="datasource/explorer" element={<DataExplorer />} />

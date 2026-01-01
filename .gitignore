@@ -104,6 +104,8 @@ cloudflare-deploy/*.min.js
 wrangler*.toml
 
 # ==================== Data Artifacts ====================
+data/**/*.db-wal
+data/**/*.db-shm
 data/**/*.db
 data/**/*.duckdb
 data/**/*.duckdb.wal
@@ -154,6 +156,7 @@ debug_api.py
 # 根目录临时测试文件
 /test_*.py
 /verify_*.py
+/diagnose_*.py
 /check_*.py
 /_tmp_*.json
 /test_request.json
@@ -164,6 +167,8 @@ debug_api.py
 # scripts目录下的输出文件
 scripts/*_output.txt
 scripts/*_test_full.txt
+scripts/analyze_*.py
+scripts/verify_*.py
 
 # tests目录下的日志文件
 tests/*_log.txt

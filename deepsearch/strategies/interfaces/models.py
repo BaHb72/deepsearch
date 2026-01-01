@@ -477,9 +477,37 @@ class WatchlistItem(BaseModel):
     alert_enabled: bool = True
     notes: Optional[str] = None
 
+    # 仓位配置
+    total_value: Optional[float] = None  # 用户输入的总市值
+    grid_levels: int = 5  # 网格层数
+    trading_ratio: float = 50.0  # 做T仓位比例%
+
 
 class WatchlistResponse(BaseModel):
     """监控列表响应"""
 
     items: List[WatchlistItem]
     total: int
+
+
+# ============================================
+# Position Calculation (仓位计算)
+# ============================================
+
+
+class PositionCalcResult(BaseModel):
+    """仓位计算结果"""
+
+    symbol: str
+    current_price: float
+    total_value: float
+
+    # 计算结果
+    total_shares: int  # 总股数
+    base_shares: int  # 底仓股数
+    trading_shares: int  # 做T仓位股数
+    per_level_shares: int  # 每层网格股数
+
+    # 配置回显
+    grid_levels: int
+    trading_ratio: float

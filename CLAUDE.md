@@ -194,6 +194,71 @@ def test_with_mock_provider(mock_data_provider):
 - ✅ Local file caching
 - ✅ Memory optimization techniques
 
+## ⚠️ CRITICAL: System Design Principles
+
+### 全自动化 + 可手动调整
+
+**系统默认全自动运行，同时提供手动干预能力：**
+
+- ✅ **自动化优先**：功能默认自动触发、自动管理、自动清理
+- ✅ **手动可覆盖**：提供 API/UI 允许用户手动调整自动行为
+- ✅ **透明可观测**：自动行为的状态、日志、指标对用户可见
+- ❌ 禁止"纯手动"设计：不要创建只能手动操作的功能
+
+**设计模式示例**：
+
+```text
+自动模式：系统检测到条件 → 自动执行动作 → 记录日志
+手动模式：用户通过 UI/API 主动触发 → 覆盖自动逻辑 → 记录为手动操作
+```
+
+### 配置热重载
+
+**所有配置必须支持运行时热重载：**
+
+- ✅ **YAML 配置文件**：`settings.dev.yaml` / `settings.prod.yaml`
+- ✅ **热重载机制**：配置变更后无需重启服务即可生效
+- ✅ **配置 API**：提供 GET/PUT 端点读取和修改配置
+- ✅ **验证保护**：配置变更前校验，防止无效配置
+
+**配置层级**：
+
+```text
+YAML 文件（持久化）→ 运行时内存 → API/UI 修改 → 写回 YAML
+```
+
+### 前端 UI 管理
+
+**所有可配置项必须有对应的前端 UI：**
+
+- ✅ **可视化配置**：开关、输入框、下拉选择等
+- ✅ **实时反馈**：操作后立即显示结果
+- ✅ **状态展示**：显示当前配置值和生效状态
+- ✅ **操作记录**：保留配置变更历史（可选）
+
+**UI 设计原则**：
+
+- 使用 Ant Design Pro 组件库
+- 配置项分组清晰
+- 提供默认值和范围限制
+- 危险操作需要确认
+
+### 内存管理策略
+
+**针对不同场景选择合适的内存策略：**
+
+| 场景 | 策略 | 原因 |
+|------|------|------|
+| 大量数据（5000+ 条目） | Off-heap（Arrow/mmap） | 避免 Python GC 压力 |
+| 少量高频数据（交易标的） | Pure RAM | 最低延迟，无 IO 抖动 |
+| 配置/元数据 | Python 对象 | 访问频率低，便于操作 |
+
+**内存限制必须可配置**：
+
+- 通过 `settings.yaml` 设置上限
+- 前端 UI 提供调整入口
+- 超限时自动淘汰或拒绝新增
+
 ## ⚠️ CRITICAL: Configuration File Management
 
 ### 配置文件安全规范
@@ -451,17 +516,23 @@ Port conflicts are automatically detected on startup using `PortChecker` utility
 
 ### Common Issues and Solutions
 
-1. **Circular Import**: The codebase uses delayed imports in several places to avoid circular dependencies. When adding new imports, especially in `__init__.py` files, use delayed imports within functions when necessary.
+1. **Circular Import**: The codebase uses delayed imports to avoid circular
+   dependencies. Use delayed imports within functions when necessary.
 
-2. **Windows Process Cleanup**: The system includes special handling for Windows process cleanup in `engine.py` and `runner.py` to ensure ports are properly released.
+2. **Windows Process Cleanup**: Special handling in `engine.py` and
+   `runner.py` to ensure ports are properly released.
 
-3. **Configuration Loading**: Use `from deepsearch.config import get_config` to get the global configuration object. The function returns a `Settings` instance with all configuration values.
+3. **Configuration Loading**: Use `from deepsearch.config import get_config`
+   to get the global `Settings` instance with all configuration values.
 
-4. **React Performance Issues**: Use `React.memo` and `useMemo` for optimization. Implement RAF batching for high-frequency updates to avoid flickering.
+4. **React Performance Issues**: Use `React.memo` and `useMemo` for
+   optimization. Implement RAF batching for high-frequency updates.
 
-5. **ResizeObserver Warnings**: Always use debounce wrapper for resize handlers to avoid "loop completed with undelivered notifications" warnings.
+5. **ResizeObserver Warnings**: Use debounce wrapper for resize handlers
+   to avoid "loop completed with undelivered notifications" warnings.
 
-6. **ECharts Performance**: Disable animation, use `showSymbol: false` for line series, and connect charts for synchronized zooming.
+6. **ECharts Performance**: Disable animation, use `showSymbol: false` for
+   line series, and connect charts for synchronized zooming.
 
 ### Testing Strategy
 
