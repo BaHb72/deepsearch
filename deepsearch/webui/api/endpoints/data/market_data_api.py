@@ -15,6 +15,11 @@ from loguru import logger
 from pydantic import BaseModel
 
 from deepsearch.utils.data_sources import DataSourceManager, DataSourceType, get_data_source_manager
+
+# New imports for UnifiedDataFeed
+from deepsearch.application.services.unified_data import get_unified_feed
+from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest
+from deepsearch.ports.data.semantic_types import AssetSpec, Timeframe, AdjustType, TimeRange
 from deepsearch.webui.api.common.response_format import (
     APIResponse,
     ErrorCodes,
@@ -208,35 +213,41 @@ async def get_stock_info(
         if response:
             response.headers["Cache-Control"] = "public, max-age=300"
 
-        manager = get_data_source_manager()
+        # 从 ReferenceDataCapability 缓存获取
         try:
-            result = await manager.execute_with_fallback("get_stock_info", symbol=symbol)
-            source = manager.get_last_success_source()
-            use_stub = False
-            if not result or (isinstance(result, dict) and not result.get("symbol")):
-                logger.warning(f"未能从数据源获取 {symbol} 的实时信息，返回示例数据")
-                result = _build_stub_stock_info(symbol)
-                use_stub = True
+            feed = get_unified_feed()
+            # 尝试解析为标准格式
+            try:
+                asset = AssetSpec.from_code(symbol)
+                key = asset.to_standard()
+            except ValueError:
+                # 简单代码，尝试两个交易所
+                key = f"{symbol}.SH" if symbol.startswith(("6", "5")) else f"{symbol}.SZ"
 
+            info = feed.reference.get_instrument(key) if feed.reference else None
+
+            if info:
+                result = {
+                    "symbol": info.asset.to_standard(),
+                    "code": info.asset.symbol,
+                    "name": info.name,
+                    "status": info.status.value,
+                    "industry": info.industry,
+                    "is_st": info.is_st,
+                }
+                if response:
+                    response.headers["X-Data-Source"] = "reference_cache"
+                return success_response(result)
+
+            # 缓存未命中，返回 stub
+            logger.warning(f"未能从缓存获取 {symbol} 的信息，返回示例数据")
+            result = _build_stub_stock_info(symbol)
             if response:
-                source_label = _resolve_source_label(manager, source, prefer_stub=use_stub)
-                response.headers["X-Data-Source"] = source_label
-                try:
-                    payload = json.dumps(result, sort_keys=True, ensure_ascii=False).encode("utf-8")
-                    etag = hashlib.md5(
-                        payload, usedforsecurity=False
-                    ).hexdigest()  # nosec B324 - 仅用于缓存 ETag
-                    response.headers["ETag"] = f'W/"{etag}"'
-                except Exception as header_error:
-                    logger.debug(f"生成ETag失败: {header_error}")
-                response.headers["Last-Modified"] = datetime.utcnow().strftime(
-                    "%a, %d %b %Y %H:%M:%S GMT"
-                )
-
+                response.headers["X-Data-Source"] = "stub"
             return success_response(result)
 
         except Exception as data_error:
-            logger.error(f"从数据源获取股票信息失败: {data_error}")
+            logger.error(f"获取股票信息失败: {data_error}")
             return error_response(f"获取股票信息失败: {str(data_error)}")
     except Exception as e:
         logger.error(f"获取股票信息失败: {e}")
@@ -280,30 +291,72 @@ async def get_kline_data(
         if response:
             response.headers["Cache-Control"] = "public, max-age=60"
 
-        # 从数据源获取K线数据
-        manager = get_data_source_manager()
+        # 周期映射
+        period_map = {
+            "1m": Timeframe.M1, "5m": Timeframe.M5, "15m": Timeframe.M15,
+            "30m": Timeframe.M30, "60m": Timeframe.H1, "1d": Timeframe.D1,
+            "1w": Timeframe.W1, "1M": Timeframe.MO1,
+        }
+
+        # 从 UnifiedDataFeed 获取K线数据
         try:
-            result = await manager.execute_with_fallback(
-                "get_kline_data",
-                symbol=symbol,
-                period=period,
-                start_date=start_date,
-                end_date=end_date,
+            asset = AssetSpec.from_code(symbol)
+        except ValueError:
+            logger.warning(f"无效的股票代码格式: {symbol}，返回示例数据")
+            result = _build_stub_kline(symbol)
+            if response:
+                response.headers["X-Data-Source"] = STUB_SOURCE_LABEL
+            return success_response(result)
+
+        # 构建时间范围
+        timeframe = period_map.get(period, Timeframe.D1)
+        if start_date and end_date:
+            time_range = TimeRange.between(
+                datetime.strptime(start_date, "%Y-%m-%d"),
+                datetime.strptime(end_date, "%Y-%m-%d"),
             )
-            source = manager.get_last_success_source()
-            use_stub = False
-            if not result:
+        elif start_date:
+            time_range = TimeRange.between(
+                datetime.strptime(start_date, "%Y-%m-%d"),
+                datetime.now(),
+            )
+        else:
+            time_range = TimeRange.last_days(100)
+
+        try:
+            feed = get_unified_feed()
+            kline_request = KlineRequest(
+                asset=asset,
+                timeframe=timeframe,
+                range=time_range,
+                adjust=AdjustType.FORWARD,
+            )
+            kline_response = await feed.get_kline(kline_request)
+
+            if kline_response.is_empty():
                 logger.warning(f"未能获取 {symbol} 的K线数据，返回示例数据")
                 result = _build_stub_kline(symbol)
-                use_stub = True
+                if response:
+                    response.headers["X-Data-Source"] = STUB_SOURCE_LABEL
+                return success_response(result)
+
+            # 转换为前端期望格式
+            result = []
+            for bar in kline_response.bars:
+                result.append({
+                    "date": bar.timestamp.strftime("%Y-%m-%d"),
+                    "open": float(bar.open),
+                    "high": float(bar.high),
+                    "low": float(bar.low),
+                    "close": float(bar.close),
+                    "volume": bar.volume,
+                })
 
             if response:
-                source_label = _resolve_source_label(manager, source, prefer_stub=use_stub)
-                response.headers["X-Data-Source"] = source_label
-
+                response.headers["X-Data-Source"] = "unified_feed"
             return success_response(result)
         except Exception as data_error:
-            logger.error(f"从数据源获取K线数据失败: {data_error}")
+            logger.error(f"从 UnifiedDataFeed 获取K线数据失败: {data_error}")
             return error_response(f"获取K线数据失败: {str(data_error)}")
     except HTTPException:
         raise
@@ -324,16 +377,42 @@ async def get_realtime_quote(symbol: str = Path(..., description="股票代码")
         实时行情数据
     """
     try:
-        # 从数据源获取实时行情
-        manager = get_data_source_manager()
+        # 解析资产
         try:
-            result = await manager.execute_with_fallback("get_realtime_quote", symbol=symbol)
-            if not result:
+            asset = AssetSpec.from_code(symbol)
+        except ValueError:
+            logger.warning(f"无效的股票代码格式: {symbol}，返回示例数据")
+            return success_response(_build_stub_realtime(symbol))
+
+        # 从 UnifiedDataFeed 获取实时行情
+        try:
+            feed = get_unified_feed()
+            request = RealtimeQuoteRequest(assets=[asset])
+            response = await feed.get_realtime(request)
+
+            if len(response) == 0:
                 logger.warning(f"未能获取 {symbol} 的实时行情，返回示例数据")
-                result = _build_stub_realtime(symbol)
+                return success_response(_build_stub_realtime(symbol))
+
+            quote = response.quotes[0]
+            result = {
+                "symbol": symbol,
+                "name": "",
+                "last_price": float(quote.last_price),
+                "current": float(quote.last_price),
+                "open": float(quote.open),
+                "high": float(quote.high),
+                "low": float(quote.low),
+                "pre_close": float(quote.pre_close),
+                "volume": quote.volume,
+                "amount": float(quote.amount),
+                "change": float(quote.change),
+                "change_pct": float(quote.change_pct),
+                "timestamp": quote.timestamp.isoformat() if quote.timestamp else None,
+            }
             return success_response(result)
         except Exception as data_error:
-            logger.error(f"从数据源获取实时行情失败: {data_error}")
+            logger.error(f"从 UnifiedDataFeed 获取实时行情失败: {data_error}")
             return error_response(f"获取实时行情失败: {str(data_error)}")
     except Exception as e:
         logger.error(f"获取实时行情失败: {e}")
@@ -352,23 +431,58 @@ async def get_batch_realtime_quotes(request: BatchQuoteRequest):
         批量行情数据
     """
     try:
-        # 从数据源批量获取实时行情
-        manager = get_data_source_manager()
+        # 解析所有资产
+        assets = []
+        invalid_symbols = []
+        for symbol in request.symbols:
+            try:
+                asset = AssetSpec.from_code(symbol)
+                assets.append(asset)
+            except ValueError:
+                logger.warning(f"无效的股票代码格式: {symbol}")
+                invalid_symbols.append(symbol)
+
+        if not assets:
+            # 所有代码都无效，返回示例数据
+            quotes = [_build_stub_realtime(s) for s in request.symbols]
+            return success_response(quotes)
+
+        # 从 UnifiedDataFeed 批量获取实时行情
         try:
+            feed = get_unified_feed()
+            realtime_request = RealtimeQuoteRequest(assets=assets)
+            response = await feed.get_realtime(realtime_request)
+
+            # 构建结果
             quotes = []
-            for symbol in request.symbols:
-                result = await manager.execute_with_fallback("get_realtime_quote", symbol=symbol)
-                if not result:
-                    logger.warning(f"无法获取股票 {symbol} 的实时行情，使用示例数据")
-                    result = _build_stub_realtime(symbol)
+            for i, quote in enumerate(response.quotes):
+                result = {
+                    "symbol": assets[i].to_standard() if i < len(assets) else "",
+                    "name": "",
+                    "last_price": float(quote.last_price),
+                    "current": float(quote.last_price),
+                    "open": float(quote.open),
+                    "high": float(quote.high),
+                    "low": float(quote.low),
+                    "pre_close": float(quote.pre_close),
+                    "volume": quote.volume,
+                    "amount": float(quote.amount),
+                    "change": float(quote.change),
+                    "change_pct": float(quote.change_pct),
+                    "timestamp": quote.timestamp.isoformat() if quote.timestamp else None,
+                }
                 quotes.append(result)
+
+            # 为无效代码添加示例数据
+            for symbol in invalid_symbols:
+                quotes.append(_build_stub_realtime(symbol))
 
             if quotes:
                 return success_response(quotes)
             else:
                 return error_response("无法获取任何股票的实时行情")
         except Exception as data_error:
-            logger.error(f"批量获取实时行情失败: {data_error}")
+            logger.error(f"从 UnifiedDataFeed 批量获取实时行情失败: {data_error}")
             return error_response(f"批量获取实时行情失败: {str(data_error)}")
     except Exception as e:
         logger.error(f"批量获取实时行情失败: {e}")

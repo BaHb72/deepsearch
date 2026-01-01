@@ -44,6 +44,11 @@ from deepsearch.infrastructure.providers.managers.data_source_manager import Sto
 from deepsearch.observability.logger import logger
 from deepsearch.utils.data_sources import DataSourceManager, get_data_source_manager
 
+# New imports for UnifiedDataFeed
+from deepsearch.application.services.unified_data import get_unified_feed
+from deepsearch.ports.data.requests import KlineRequest
+from deepsearch.ports.data.semantic_types import AssetSpec, Timeframe, AdjustType, TimeRange
+
 if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
     pass
 
@@ -641,16 +646,64 @@ async def get_kline_data(
                     ),
                 )
 
-        data_service = get_data_service()
-        kline_data = await data_service.get_kline_data(
-            symbol=symbol, period=period, start_date=start_date, end_date=end_date, limit=limit
+        # 周期映射
+        period_map: Dict[str, Timeframe] = {
+            "1m": Timeframe.M1, "5m": Timeframe.M5, "15m": Timeframe.M15,
+            "30m": Timeframe.M30, "60m": Timeframe.H1, "1d": Timeframe.D1,
+            "1w": Timeframe.W1, "1M": Timeframe.MO1,
+            "daily": Timeframe.D1, "weekly": Timeframe.W1, "monthly": Timeframe.MO1,
+        }
+
+        # 解析资产
+        try:
+            asset = AssetSpec.from_code(symbol)
+        except ValueError:
+            if test_mode:
+                from deepsearch.webui.api.common.response_format import APIResponse
+                return APIResponse.success([])
+            return []
+
+        # 构建时间范围
+        timeframe = period_map.get(period, Timeframe.D1)
+        if start_date and end_date:
+            time_range = TimeRange.between(
+                datetime.strptime(start_date, "%Y-%m-%d"),
+                datetime.strptime(end_date, "%Y-%m-%d"),
+            )
+        elif start_date:
+            time_range = TimeRange.between(
+                datetime.strptime(start_date, "%Y-%m-%d"),
+                datetime.now(),
+            )
+        else:
+            time_range = TimeRange.last_n(limit)
+
+        # 构建请求并调用 UnifiedDataFeed
+        kline_request = KlineRequest(
+            asset=asset,
+            timeframe=timeframe,
+            range=time_range,
+            adjust=AdjustType.FORWARD,
         )
-        payload = cast(List[Dict[str, Any]], kline_data or [])
+
+        feed = get_unified_feed()
+        response = await feed.get_kline(kline_request)
+
+        # 转换为前端期望格式
+        payload: List[Dict[str, Any]] = []
+        for bar in response.bars[-limit:]:
+            payload.append({
+                "date": bar.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                "open": float(bar.open),
+                "high": float(bar.high),
+                "low": float(bar.low),
+                "close": float(bar.close),
+                "volume": bar.volume,
+            })
+
         if test_mode:
             from deepsearch.webui.api.common.response_format import APIResponse
-
             return APIResponse.success(payload)
-        # 非测试模式：返回裸列表以兼容 WebUI 端到端测试
         return payload
     except HTTPException:
         # 透传明确抛出的 HTTP 异常（例如 400）

@@ -16,6 +16,12 @@ from deepsearch.webui.api.common.response_format import success_response
 from deepsearch.webui.api.endpoints.data import data as data_module
 from deepsearch.webui.api.utils import sanitize_for_json
 
+# New imports for UnifiedDataFeed
+from datetime import datetime
+from deepsearch.application.services.unified_data import get_unified_feed
+from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest, StockListRequest
+from deepsearch.ports.data.semantic_types import AssetSpec, Timeframe, AdjustType, TimeRange
+
 router = APIRouter(prefix="/api/data", tags=["unified_data"])
 
 
@@ -82,30 +88,67 @@ async def get_stock_history(
     自动选择最优数据源，支持故障切换
     """
     try:
-        # 解析数据源类型
-        preferred_source = None
-        if source:
-            try:
-                preferred_source = DataSourceType(source.lower())
-            except ValueError:
-                logger.warning(f"无效的数据源类型: {source}")
+        # 周期映射
+        period_map = {
+            "daily": Timeframe.D1, "weekly": Timeframe.W1, "monthly": Timeframe.MO1,
+            "1": Timeframe.M1, "5": Timeframe.M5, "15": Timeframe.M15,
+            "30": Timeframe.M30, "60": Timeframe.H1,
+            "1m": Timeframe.M1, "5m": Timeframe.M5, "15m": Timeframe.M15,
+            "30m": Timeframe.M30, "60m": Timeframe.H1, "1d": Timeframe.D1,
+        }
 
-        # 获取管理器
-        manager = get_data_source_manager()
+        # 复权映射
+        adjust_map = {"qfq": AdjustType.FORWARD, "hfq": AdjustType.BACKWARD}
 
-        # 获取数据
-        result = await manager.get_stock_hist(
-            symbol=symbol,
-            period=period,
-            start_date=start_date,
-            end_date=end_date,
-            adjust=adjust,
-            preferred_source=preferred_source,
+        # 解析资产
+        try:
+            asset = AssetSpec.from_code(symbol)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"无效的股票代码: {symbol}")
+
+        # 构建时间范围
+        timeframe = period_map.get(period, Timeframe.D1)
+        adjust_type = adjust_map.get(adjust, AdjustType.NONE)
+
+        if start_date and end_date:
+            time_range = TimeRange.between(
+                datetime.strptime(start_date, "%Y-%m-%d"),
+                datetime.strptime(end_date, "%Y-%m-%d"),
+            )
+        elif start_date:
+            time_range = TimeRange.between(
+                datetime.strptime(start_date, "%Y-%m-%d"),
+                datetime.now(),
+            )
+        else:
+            time_range = TimeRange.last_days(100)
+
+        # 调用 UnifiedDataFeed
+        feed = get_unified_feed()
+        request = KlineRequest(
+            asset=asset,
+            timeframe=timeframe,
+            range=time_range,
+            adjust=adjust_type,
         )
+        response = await feed.get_kline(request)
 
-        # 清理 NaN 值
+        # 转换为前端期望格式
+        result = []
+        for bar in response.bars:
+            result.append({
+                "date": bar.timestamp.strftime("%Y-%m-%d"),
+                "open": float(bar.open),
+                "high": float(bar.high),
+                "low": float(bar.low),
+                "close": float(bar.close),
+                "volume": bar.volume,
+            })
+
         return success_response(sanitize_for_json(result))
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取历史数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -122,19 +165,39 @@ async def get_stock_quote(
     返回最新的价格、成交量等信息
     """
     try:
-        preferred_source = None
-        if source:
-            try:
-                preferred_source = DataSourceType(source.lower())
-            except ValueError:
-                pass
+        # 解析资产
+        try:
+            asset = AssetSpec.from_code(symbol)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"无效的股票代码: {symbol}")
 
-        manager = get_data_source_manager()
-        result = await manager.get_realtime_quote(symbol=symbol, preferred_source=preferred_source)
+        # 调用 UnifiedDataFeed
+        feed = get_unified_feed()
+        request = RealtimeQuoteRequest(assets=[asset])
+        response = await feed.get_realtime(request)
 
-        # 清理 NaN 值
+        if len(response) == 0:
+            raise HTTPException(status_code=404, detail=f"未找到 {symbol} 的实时行情")
+
+        quote = response.quotes[0]
+        result = {
+            "symbol": symbol,
+            "last_price": float(quote.last_price),
+            "open": float(quote.open),
+            "high": float(quote.high),
+            "low": float(quote.low),
+            "pre_close": float(quote.pre_close),
+            "volume": quote.volume,
+            "amount": float(quote.amount),
+            "change": float(quote.change),
+            "change_pct": float(quote.change_pct),
+            "timestamp": quote.timestamp.isoformat() if quote.timestamp else None,
+        }
+
         return success_response(sanitize_for_json(result))
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取实时行情失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -191,62 +254,53 @@ async def get_stock_list(source: Optional[str] = Query(None, description="指定
     获取股票列表，返回并行的领域结构与旧结构映射。
     """
     try:
-        manager = get_data_source_manager()
+        # 使用 UnifiedDataFeed 获取股票列表（带强缓存）
+        feed = get_unified_feed()
+        request = StockListRequest()
+        response = await feed.list_instruments(request)
 
-        # 优先尝试 Cloudflare/QMT 等直接数据源，便于灰度
-        for source_type in [DataSourceType.CLOUDFLARE, DataSourceType.QMT]:
-            provider = manager.providers.get(source_type)
-            if not provider or not hasattr(provider, "fetch_stock_list"):
-                continue
-            try:
-                stocks = await provider.fetch_stock_list()
-            except Exception as error:
-                logger.debug("%s 获取股票列表失败: %s", source_type.value, error)
-                continue
-
-            records, legacy = _normalize_stock_records(stocks)
-            if not records and not legacy:
-                continue
-            payload = {
-                "records": records,
-                "legacy": legacy,
-                "source": source_type.value,
-                "count": len(records) or len(legacy),
-                "schema_version": "v2",
+        # 转换为前端期望的格式
+        records = []
+        legacy = []
+        for stock in response.stocks:
+            record = {
+                "symbol": stock.asset.to_standard(),
+                "name": stock.name,
+                "status": stock.status.value,
+                "industry": stock.industry,
+                "is_st": stock.is_st,
             }
-            return success_response(sanitize_for_json(payload))
+            records.append(record)
+            # 兼容旧版格式
+            legacy.append({
+                "symbol": stock.asset.symbol,
+                "code": stock.asset.symbol,
+                "name": stock.name,
+            })
 
+        payload = {
+            "records": records,
+            "legacy": legacy,
+            "source": response.source.value,
+            "count": len(records),
+            "schema_version": "v2",
+        }
+        return success_response(sanitize_for_json(payload))
+
+    except RuntimeError as e:
+        # ReferenceDataCapability 未配置，回退到旧实现
+        logger.warning(f"使用旧实现获取股票列表: {e}")
         service = data_module.get_data_service()
         stock_result = await service.get_stock_list(limit=None)
         records, legacy = _normalize_stock_records(stock_result)
-        if records or legacy:
-            source_name = "manager"
-            mismatch = 0
-            if isinstance(stock_result, StockListFetchResult):
-                source_name = stock_result.source
-                mismatch = stock_result.mismatch
-            if mismatch:
-                logger.warning(
-                    "股票列表双写存在差异 source=%s mismatch=%d",
-                    source_name,
-                    mismatch,
-                )
-            payload = {
-                "records": records,
-                "legacy": legacy,
-                "source": source_name,
-                "count": len(records) or len(legacy),
-                "schema_version": "v2",
-            }
-            return success_response(sanitize_for_json(payload))
-
-        fallback = {
-            "records": [],
-            "legacy": [],
-            "source": "none",
-            "error": "无法获取股票列表",
+        payload = {
+            "records": records,
+            "legacy": legacy,
+            "source": "fallback",
+            "count": len(records) or len(legacy),
+            "schema_version": "v2",
         }
-        return success_response(sanitize_for_json(fallback))
+        return success_response(sanitize_for_json(payload))
 
     except Exception as exc:
         logger.error(f"获取股票列表失败: {exc}")

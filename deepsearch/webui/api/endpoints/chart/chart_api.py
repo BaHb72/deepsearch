@@ -13,25 +13,43 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.config import get_config
-from deepsearch.utils.data_sources import DataSourceManager
+from deepsearch.application.services.unified_data import get_unified_feed
+from deepsearch.infrastructure.providers.binder import UnifiedDataFeed
+from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest
+from deepsearch.ports.data.semantic_types import AssetSpec, Timeframe, AdjustType, TimeRange
 
 # 创建路由器
 router = APIRouter(prefix="/chart", tags=["图表数据管理"])
 
-# 全局数据源管理器实例
-_data_manager: Optional[DataSourceManager] = None
-
 IndicatorEntry = Dict[str, Union[float, str, None]]
 
+# 周期字符串到 Timeframe 的映射
+_PERIOD_MAP: Dict[str, Timeframe] = {
+    "1m": Timeframe.M1,
+    "5m": Timeframe.M5,
+    "15m": Timeframe.M15,
+    "30m": Timeframe.M30,
+    "60m": Timeframe.H1,
+    "1d": Timeframe.D1,
+    "1w": Timeframe.W1,
+    "1M": Timeframe.MO1,
+    # 兼容老格式
+    "1": Timeframe.M1,
+    "5": Timeframe.M5,
+    "15": Timeframe.M15,
+    "30": Timeframe.M30,
+    "60": Timeframe.H1,
+    "daily": Timeframe.D1,
+    "weekly": Timeframe.W1,
+    "monthly": Timeframe.MO1,
+}
 
-def get_data_manager() -> DataSourceManager:
-    """获取数据源管理器实例（单例模式）"""
-    global _data_manager
-    if _data_manager is None:
-        config = get_config()
-        _data_manager = DataSourceManager(config)
-    return _data_manager
+# 复权类型映射
+_ADJUST_MAP: Dict[str, AdjustType] = {
+    "qfq": AdjustType.FORWARD,
+    "hfq": AdjustType.BACKWARD,
+    "none": AdjustType.NONE,
+}
 
 
 def _data_unavailable(endpoint: str) -> HTTPException:
@@ -94,7 +112,6 @@ async def get_chart_series(
     start_date: Optional[str] = Query(None, description="开始日期YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期YYYY-MM-DD"),
     limit: int = Query(100, description="数据条数", ge=1, le=5000),
-    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> ChartSeriesResponse:
     """
     获取图表K线数据序列
@@ -102,92 +119,71 @@ async def get_chart_series(
     支持多种时间周期和复权方式，返回OHLCV数据
     """
     try:
-        # 默认时间范围
-        if not end_date:
-            end_date = datetime.now().strftime("%Y-%m-%d")
-        if not start_date:
-            # 根据周期计算默认开始日期
-            days_map = {
-                "1m": 1,
-                "5m": 5,
-                "15m": 7,
-                "30m": 10,
-                "60m": 20,
-                "1d": 100,
-                "1w": 365,
-                "1M": 365 * 3,
-            }
-            days = days_map.get(period, 100)
-            start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-
-        # 映射周期格式
-        period_map = {
-            "1m": "1",
-            "5m": "5",
-            "15m": "15",
-            "30m": "30",
-            "60m": "60",
-            "1d": "daily",
-            "1w": "weekly",
-            "1M": "monthly",
-        }
-        mapped_period = period_map.get(period, period)
-
-        # 获取K线数据
+        # 解析资产
         try:
-            raw_kline = await data_manager.get_kline_data(
-                symbol=symbol,
-                period=mapped_period,
-                start_date=start_date,
-                end_date=end_date,
-                limit=limit,
-                adjust=adjust,
+            asset = AssetSpec.from_code(symbol)
+        except ValueError:
+            return ChartSeriesResponse(
+                success=False, data={}, message=f"无效的股票代码格式: {symbol}"
             )
 
-            if not raw_kline:
+        # 解析时间周期
+        timeframe = _PERIOD_MAP.get(period, Timeframe.D1)
+
+        # 解析复权类型
+        adjust_type = _ADJUST_MAP.get(adjust, AdjustType.FORWARD)
+
+        # 构建时间范围
+        if start_date and end_date:
+            time_range = TimeRange.between(
+                datetime.strptime(start_date, "%Y-%m-%d"),
+                datetime.strptime(end_date, "%Y-%m-%d"),
+            )
+        elif start_date:
+            time_range = TimeRange.between(
+                datetime.strptime(start_date, "%Y-%m-%d"),
+                datetime.now(),
+            )
+        else:
+            days_map = {
+                "1m": 1, "5m": 5, "15m": 7, "30m": 10, "60m": 20,
+                "1d": 100, "1w": 365, "1M": 365 * 3,
+            }
+            days = days_map.get(period, 100)
+            time_range = TimeRange.last_days(days)
+
+        # 构建请求并调用 UnifiedDataFeed
+        request = KlineRequest(
+            asset=asset,
+            timeframe=timeframe,
+            range=time_range,
+            adjust=adjust_type,
+        )
+
+        try:
+            feed = get_unified_feed()
+            response = await feed.get_kline(request)
+
+            if response.is_empty():
                 return ChartSeriesResponse(
                     success=False, data={}, message=f"未获取到{symbol}的K线数据"
                 )
 
-            # 转换数据格式
+            # 转换为前端期望格式
             series_data = []
-            for entry in raw_kline[-limit:]:
-                date_value = (
-                    entry.get("date")
-                    or entry.get("trade_date")
-                    or entry.get("datetime")
-                    or entry.get("time")
-                )
-                if date_value is not None:
-                    try:
-                        parsed_obj = pd.to_datetime(date_value, errors="coerce")
-                        if isinstance(parsed_obj, pd.Series):
-                            parsed_value = parsed_obj.iloc[0] if not parsed_obj.empty else None
-                        else:
-                            parsed_value = parsed_obj
-                        if isinstance(parsed_value, pd.Timestamp) and not pd.isna(parsed_value):
-                            formatted_date = parsed_value.to_pydatetime().strftime(
-                                "%Y-%m-%d %H:%M:%S"
-                            )
-                        else:
-                            formatted_date = str(date_value)
-                    except Exception:
-                        formatted_date = str(date_value)
-                else:
-                    formatted_date = ""
-                row = entry if isinstance(entry, dict) else {}
-                series_data.append(
-                    {
-                        "date": formatted_date,
-                        "open": float(row.get("开盘", row.get("open", 0.0)) or 0.0),
-                        "high": float(row.get("最高", row.get("high", 0.0)) or 0.0),
-                        "low": float(row.get("最低", row.get("low", 0.0)) or 0.0),
-                        "close": float(row.get("收盘", row.get("close", 0.0)) or 0.0),
-                        "volume": float(row.get("成交量", row.get("volume", 0.0)) or 0.0),
-                    }
-                )
+            for bar in response.bars[-limit:]:
+                series_data.append({
+                    "date": bar.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    "open": float(bar.open),
+                    "high": float(bar.high),
+                    "low": float(bar.low),
+                    "close": float(bar.close),
+                    "volume": bar.volume,
+                })
 
-            # 限制返回数量
+            # 返回结果
+            actual_start = response.bars[0].timestamp.strftime("%Y-%m-%d") if response.bars else ""
+            actual_end = response.bars[-1].timestamp.strftime("%Y-%m-%d") if response.bars else ""
             return ChartSeriesResponse(
                 success=True,
                 data={
@@ -196,13 +192,13 @@ async def get_chart_series(
                     "adjust": adjust,
                     "count": len(series_data),
                     "series": series_data,
-                    "start_date": start_date,
-                    "end_date": end_date,
+                    "start_date": actual_start,
+                    "end_date": actual_end,
                 },
             )
 
         except Exception as e:
-            logger.warning(f"��ȡK������ʧ��: {e}")
+            logger.warning(f"通过 UnifiedDataFeed 获取K线数据失败: {e}")
             raise _data_unavailable("chart.series") from e
 
     except Exception as e:
@@ -212,7 +208,7 @@ async def get_chart_series(
 
 @router.post("/indicators")
 async def calculate_indicators(
-    request: TechnicalIndicatorRequest, data_manager: DataSourceManager = Depends(get_data_manager)
+    request: TechnicalIndicatorRequest,
 ) -> TechnicalIndicatorResponse:
     """
     计算技术指标
@@ -220,55 +216,52 @@ async def calculate_indicators(
     支持MA、MACD、RSI、KDJ、BOLL等常用技术指标
     """
     try:
-        # 获取基础K线数据
-        end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-
-        raw_kline = await data_manager.get_kline_data(
-            symbol=request.symbol,
-            period="daily",
-            start_date=start_date,
-            end_date=end_date,
-            limit=500,
-            adjust="qfq",
-        )
-
-        if not raw_kline:
+        # 解析资产
+        try:
+            asset = AssetSpec.from_code(request.symbol)
+        except ValueError:
             return TechnicalIndicatorResponse(
                 success=False, indicator=request.indicator, values=[], params=request.params or {}
             )
 
-        kline_df = pd.DataFrame(raw_kline)
+        # 构建请求 - 获取最近一年的日线数据
+        kline_request = KlineRequest(
+            asset=asset,
+            timeframe=Timeframe.D1,
+            range=TimeRange.last_days(365),
+            adjust=AdjustType.FORWARD,
+        )
+
+        # 调用 UnifiedDataFeed
+        feed = get_unified_feed()
+        response = await feed.get_kline(kline_request)
+
+        if response.is_empty():
+            return TechnicalIndicatorResponse(
+                success=False, indicator=request.indicator, values=[], params=request.params or {}
+            )
+
+        # 转换为 DataFrame
+        kline_df = pd.DataFrame([
+            {
+                "date": bar.timestamp,
+                "open": float(bar.open),
+                "high": float(bar.high),
+                "low": float(bar.low),
+                "close": float(bar.close),
+                "volume": bar.volume,
+            }
+            for bar in response.bars
+        ])
+
         if kline_df.empty:
             return TechnicalIndicatorResponse(
                 success=False, indicator=request.indicator, values=[], params=request.params or {}
             )
 
-        # 统一列名
-        column_mapping = {
-            "开盘": "open",
-            "最高": "high",
-            "最低": "low",
-            "收盘": "close",
-            "成交量": "volume",
-        }
-        for source, target in column_mapping.items():
-            if source in kline_df.columns and target not in kline_df.columns:
-                kline_df[target] = kline_df[source]
-
-        date_column = None
-        for candidate in ("date", "trade_date", "datetime", "time"):
-            if candidate in kline_df.columns:
-                date_column = candidate
-                break
-        if date_column:
-            kline_df[date_column] = pd.to_datetime(kline_df[date_column], errors="coerce")
-            kline_df = kline_df.dropna(subset=[date_column])
-            kline_df = kline_df.sort_values(date_column)
-            kline_df = kline_df.set_index(date_column)
-
-        if "close" not in kline_df.columns:
-            raise HTTPException(status_code=500, detail="缺少收盘价列，无法计算指标")
+        # 设置日期索引
+        kline_df["date"] = pd.to_datetime(kline_df["date"])
+        kline_df = kline_df.sort_values("date").set_index("date")
 
         # 计算指标
         indicator_values: List[IndicatorEntry] = []
@@ -343,7 +336,6 @@ async def calculate_indicators(
 async def get_chip_distribution(
     symbol: str = Query(..., description="股票代码"),
     date: Optional[str] = Query(None, description="日期YYYY-MM-DD"),
-    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> JSONResponse:
     """
     获取筹码分布数据
@@ -356,7 +348,6 @@ async def get_chip_distribution(
 @router.get("/realtime")
 async def get_realtime_data(
     symbol: str = Query(..., description="股票代码"),
-    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> JSONResponse:
     """
     获取实时行情数据
@@ -364,9 +355,34 @@ async def get_realtime_data(
     返回股票的最新价格、涨跌幅等实时信息
     """
     try:
-        realtime_data = await data_manager.get_realtime_quote(symbol)
-        if not realtime_data:
+        # 解析资产
+        try:
+            asset = AssetSpec.from_code(symbol)
+        except ValueError:
             raise _data_unavailable("chart.realtime")
+
+        # 调用 UnifiedDataFeed
+        feed = get_unified_feed()
+        request = RealtimeQuoteRequest(assets=[asset])
+        response = await feed.get_realtime(request)
+
+        if len(response) == 0:
+            raise _data_unavailable("chart.realtime")
+
+        quote = response.quotes[0]
+        realtime_data = {
+            "symbol": symbol,
+            "last_price": float(quote.last_price),
+            "open": float(quote.open),
+            "high": float(quote.high),
+            "low": float(quote.low),
+            "pre_close": float(quote.pre_close),
+            "volume": quote.volume,
+            "amount": float(quote.amount),
+            "change": float(quote.change),
+            "change_pct": float(quote.change_pct),
+        }
+
         return JSONResponse(
             {
                 "success": True,
@@ -385,7 +401,6 @@ async def get_realtime_data(
 @router.get("/market-depth")
 async def get_market_depth(
     symbol: str = Query(..., description="股票代码"),
-    data_manager: DataSourceManager = Depends(get_data_manager),
 ) -> JSONResponse:
     """
     获取五档盘口数据
