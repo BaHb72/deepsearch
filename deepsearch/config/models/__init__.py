@@ -9,6 +9,18 @@ from .app import AppConfig, AppEnvironment
 from .bus import BusInstanceConfig, MessageBusConfig, RouteConfig
 from .cache import RedisConfig
 from .cloudflare_workers import CloudflareWorkersConfig
+from .capability_routing import (
+    CapabilityRoutingConfig,
+    CapabilityRoutingRule,
+    KlineCapabilitySpec,
+    ProviderCapabilitiesSpec,
+    QualityMetrics,
+    RealtimeQuoteCapabilitySpec,
+    RoutingConfig,
+    ScenarioRouting,
+    StockListCapabilitySpec,
+    TickCapabilitySpec,
+)
 from .data_sources import (
     CircuitBreakerConfig,
     DataSourceProviderConfig,
@@ -113,4 +125,15 @@ __all__ = [
     "NotificationBaseUrls",
     # Data source schedulers
     "DataSourcePrefetchConfig",
+    # Capability routing
+    "CapabilityRoutingConfig",
+    "CapabilityRoutingRule",
+    "KlineCapabilitySpec",
+    "ProviderCapabilitiesSpec",
+    "QualityMetrics",
+    "RealtimeQuoteCapabilitySpec",
+    "RoutingConfig",
+    "ScenarioRouting",
+    "StockListCapabilitySpec",
+    "TickCapabilitySpec",
 ]

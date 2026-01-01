@@ -28,7 +28,6 @@ import pandas as pd
 # TYPE_CHECKING 模式：mypy 静态分析时导入，运行时不导入
 if TYPE_CHECKING:
     import pyarrow as pa
-    import pyarrow.ipc as ipc
 
 # 运行时导入
 try:

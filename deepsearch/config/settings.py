@@ -19,6 +19,7 @@ from .loader import load_yaml_config
 from .models import (
     AmazingDataConfig,
     AppConfig,
+    CapabilityRoutingConfig,
     CloudflareWorkersConfig,
     DatabaseConfig,
     DatabaseConnectionConfigModel,
@@ -64,8 +65,10 @@ class Settings(BaseSettings):
     data_providers: Optional[DataFeedConfig] = None
     data_sources: Optional[DataSourcesConfig] = None  # 统一的数据源配置
     market_data: Optional[MarketDataConfig] = None  # 市场数据实时配置
-    database_connections: Optional[List[DatabaseConnectionConfigModel]] = None  # �����������б�
+    database_connections: Optional[List[DatabaseConnectionConfigModel]] = None  # 数据库连接列表
     data_source_prefetch: Optional[DataSourcePrefetchConfig] = None  # 数据源预取调度
+    capability_routing: Optional[CapabilityRoutingConfig] = None  # 能力路由配置
+
 
     @property
     def zeromq(self) -> ZeroMQConfig:
@@ -94,6 +97,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         populate_by_name=True,
         case_sensitive=False,
+        extra="ignore",
     )
 
     @classmethod

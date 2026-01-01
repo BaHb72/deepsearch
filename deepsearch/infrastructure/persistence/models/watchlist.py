@@ -69,6 +69,7 @@ class WatchlistItemDB(Base):
             "trading_ratio": self.trading_ratio,
         }
 
+
 class SignalHistoryDB(Base):
     """T-Trading 信号历史记录。
 
@@ -213,7 +214,9 @@ class PositionDB(Base):
     last_buy_date: Mapped[Optional[datetime]] = mapped_column(nullable=True)  # 最近买入日期
 
     # 分类
-    position_type: Mapped[str] = mapped_column(String(16), nullable=False, default="trading")  # base/trading
+    position_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="trading"
+    )  # base/trading
 
     # 时间戳
     created_at: Mapped[datetime] = mapped_column(
@@ -258,4 +261,3 @@ class PositionDB(Base):
 
 
 __all__ = ["WatchlistItemDB", "SignalHistoryDB", "TTradingRecordDB", "PositionDB"]
-
