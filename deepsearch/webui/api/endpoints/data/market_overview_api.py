@@ -8,7 +8,10 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Query
 from loguru import logger
 
-from deepsearch.utils.data_sources import get_data_source_manager
+# New imports for UnifiedDataFeed
+from deepsearch.application.services.unified_data import get_unified_feed
+from deepsearch.ports.data.requests import RealtimeQuoteRequest
+from deepsearch.ports.data.semantic_types import AssetSpec
 from deepsearch.webui.api.common.response_format import APIResponse, ErrorCodes
 
 router = APIRouter(prefix="/api/data")
@@ -111,10 +114,8 @@ def _build_stub_ranking(direction: str, limit: int) -> List[Dict[str, Any]]:
 async def get_market_overview() -> Dict[str, Any]:
     """获取市场概览数据"""
     try:
-        manager = get_data_source_manager()
-
-        # 获取主要指数数据
-        indices = ["000001", "399001", "399006"]  # 上证指数、深圳成指、创业板指
+        # 主要指数代码
+        indices = ["000001", "399001", "399006"]  # 上证指数、深证成指、创业板指
         index_name_map = {
             "000001": "sh_index",
             "399001": "sz_index",
@@ -122,29 +123,61 @@ async def get_market_overview() -> Dict[str, Any]:
         }
         result = {}
 
+        # 解析资产
+        assets = []
         for index_code in indices:
-            alias = index_name_map[index_code]
             try:
-                # 尝试获取实时行情
-                data = await manager.execute_with_fallback("get_realtime_quote", symbol=index_code)
+                # 指数简码需要补充交易所
+                if index_code.startswith("000"):
+                    asset = AssetSpec.from_code(f"{index_code}.SH")
+                else:
+                    asset = AssetSpec.from_code(f"{index_code}.SZ")
+                assets.append(asset)
+            except ValueError:
+                logger.warning(f"无效的指数代码: {index_code}")
 
-                if data:
-                    result[alias] = {
-                        "current": data.get("price", 0),
-                        "change": data.get("change", 0),
-                        "change_pct": data.get("change_pct", 0),
-                        "volume": data.get("volume", 0),
-                        "amount": data.get("amount", 0),
-                        "timestamp": data.get("timestamp") or datetime.utcnow().isoformat() + "Z",
-                    }
-                    continue
-            except Exception as e:
-                logger.error(f"获取指数{index_code}数据失败: {e}")
+        if not assets:
+            # 所有代码都无效，返回示例数据
+            for index_code in indices:
+                alias = index_name_map[index_code]
+                result[alias] = _build_stub_index_payload(alias)
+            return APIResponse.success(result)
 
-            logger.warning(f"指数 {index_code} 未返回实时行情，使用示例数据填充")
-            result[alias] = _build_stub_index_payload(alias)
+        # 调用 UnifiedDataFeed
+        try:
+            feed = get_unified_feed()
+            request = RealtimeQuoteRequest(assets=assets)
+            response = await feed.get_realtime(request)
 
-        # 如果没有获取到任何数据，返回错误信息
+            for i, quote in enumerate(response.quotes):
+                if i >= len(indices):
+                    break
+                alias = index_name_map[indices[i]]
+                result[alias] = {
+                    "current": float(quote.last_price),
+                    "change": float(quote.change),
+                    "change_pct": float(quote.change_pct),
+                    "volume": quote.volume,
+                    "amount": float(quote.amount),
+                    "timestamp": (
+                        quote.timestamp.isoformat() + "Z"
+                        if quote.timestamp
+                        else datetime.utcnow().isoformat() + "Z"
+                    ),
+                }
+
+            # 填充未获取到的指数
+            for index_code in indices:
+                alias = index_name_map[index_code]
+                if alias not in result:
+                    result[alias] = _build_stub_index_payload(alias)
+
+        except Exception as e:
+            logger.error(f"从 UnifiedDataFeed 获取指数数据失败: {e}")
+            for index_code in indices:
+                alias = index_name_map[index_code]
+                result[alias] = _build_stub_index_payload(alias)
+
         if not result:
             return APIResponse.error(
                 code=ErrorCodes.DATA_SOURCE_ERROR,
@@ -165,15 +198,27 @@ async def get_market_overview() -> Dict[str, Any]:
 async def search_stocks(keyword: str = Query(..., description="搜索关键字")) -> Dict[str, Any]:
     """搜索股票"""
     try:
-        manager = get_data_source_manager()
+        # 使用 ReferenceDataCapability 缓存进行搜索
+        feed = get_unified_feed()
+        if feed.reference and feed.reference.is_loaded:
+            # 从缓存中搜索
+            matches = []
+            keyword_lower = keyword.lower()
+            for symbol, info in feed.reference._cache.items():
+                if keyword_lower in symbol.lower() or keyword_lower in info.name.lower():
+                    matches.append(
+                        {
+                            "symbol": symbol,
+                            "code": info.asset.symbol,
+                            "name": info.name,
+                        }
+                    )
+                    if len(matches) >= 20:  # 限制返回数量
+                        break
+            return APIResponse.success(matches)
 
-        # 调用搜索方法
-        result = await manager.execute_with_fallback("search_stocks", keyword=keyword)
-
-        if result:
-            return APIResponse.success(result)
-
-        # 如果没有搜索结果，返回空列表
+        # 缓存未加载，返回空
+        logger.warning("股票搜索：ReferenceDataCapability 缓存未加载")
         return APIResponse.success([])
 
     except Exception as e:
@@ -187,16 +232,13 @@ async def search_stocks(keyword: str = Query(..., description="搜索关键字")
 async def get_top_gainers(limit: int = Query(10, description="返回数量限制")) -> Dict[str, Any]:
     """获取涨幅榜"""
     try:
-        manager = get_data_source_manager()
+        from deepsearch.application.services.aggregation import get_cache
 
-        # 获取涨幅榜数据
-        result = await manager.execute_with_fallback("get_top_gainers", limit=limit)
-
-        if result:
-            return APIResponse.success(result[:limit])
-
-        logger.warning("涨幅榜无可用数据，返回示例排行用于演示")
-        return APIResponse.success(_build_stub_ranking("gainers", limit))
+        data = get_cache().get("top_gainers")
+        if data is None:
+            # 聚合引擎未启动或缓存为空
+            return APIResponse.success({"loading": True, "data": []})
+        return APIResponse.success(data[:limit])
 
     except Exception as e:
         logger.error(f"获取涨幅榜失败: {e}")
@@ -209,16 +251,13 @@ async def get_top_gainers(limit: int = Query(10, description="返回数量限制
 async def get_top_losers(limit: int = Query(10, description="返回数量限制")) -> Dict[str, Any]:
     """获取跌幅榜"""
     try:
-        manager = get_data_source_manager()
+        from deepsearch.application.services.aggregation import get_cache
 
-        # 获取跌幅榜数据
-        result = await manager.execute_with_fallback("get_top_losers", limit=limit)
-
-        if result:
-            return APIResponse.success(result[:limit])
-
-        logger.warning("跌幅榜无可用数据，返回示例排行用于演示")
-        return APIResponse.success(_build_stub_ranking("losers", limit))
+        data = get_cache().get("top_losers")
+        if data is None:
+            # 聚合引擎未启动或缓存为空
+            return APIResponse.success({"loading": True, "data": []})
+        return APIResponse.success(data[:limit])
 
     except Exception as e:
         logger.error(f"获取跌幅榜失败: {e}")

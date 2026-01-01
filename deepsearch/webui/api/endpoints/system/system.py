@@ -625,4 +625,68 @@ async def get_data_sources_health() -> Dict[str, Any]:
     )
 
 
+# ==================== 聚合引擎管理 API ====================
+
+
+@router.get("/aggregation/status")
+async def get_aggregation_status() -> Dict[str, Any]:
+    """获取聚合引擎状态。"""
+    try:
+        from deepsearch.application.services.aggregation import get_cache, get_engine
+
+        engine = get_engine()
+        cache = get_cache()
+
+        return _ok(
+            {
+                "running": engine.is_running,
+                "tasks": list(engine._tasks.keys()) if engine._tasks else [],
+                "cache_keys": cache.keys(),
+            }
+        )
+    except Exception as exc:
+        logger.error(f"获取聚合引擎状态失败: {exc}")
+        return _ok({"running": False, "error": str(exc)})
+
+
+@router.post("/aggregation/start")
+async def start_aggregation() -> Dict[str, Any]:
+    """启动聚合引擎。"""
+    try:
+        from deepsearch.application.services.unified_data import start_aggregation_engine
+
+        start_aggregation_engine()
+
+        return {
+            "status": "started",
+            "message": "聚合引擎启动成功",
+            "timestamp": datetime.now().isoformat(),
+        }
+    except RuntimeError as exc:
+        if "已启动" in str(exc) or "already" in str(exc).lower():
+            return {"status": "already_running", "message": "聚合引擎已在运行"}
+        raise HTTPException(status_code=500, detail=f"启动失败: {str(exc)}") from exc
+    except Exception as exc:
+        logger.error(f"启动聚合引擎失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"启动失败: {str(exc)}") from exc
+
+
+@router.post("/aggregation/stop")
+async def stop_aggregation() -> Dict[str, Any]:
+    """停止聚合引擎。"""
+    try:
+        from deepsearch.application.services.unified_data import stop_aggregation_engine
+
+        stop_aggregation_engine()
+
+        return {
+            "status": "stopped",
+            "message": "聚合引擎已停止",
+            "timestamp": datetime.now().isoformat(),
+        }
+    except Exception as exc:
+        logger.error(f"停止聚合引擎失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"停止失败: {str(exc)}") from exc
+
+
 router.include_router(modules_router)
