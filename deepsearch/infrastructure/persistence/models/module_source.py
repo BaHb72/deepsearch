@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, func
+from datetime import datetime
+from typing import Any, Optional
+
+from sqlalchemy import String, func
+from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
 
@@ -15,26 +20,30 @@ class ModuleSourceConfig(Base):
 
     __tablename__ = "module_source_configs"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    module_name = Column(String(64), unique=True, nullable=False, index=True)
-    label = Column(String(128), nullable=True)
-    description = Column(String(512), nullable=True)
-    category = Column(String(32), nullable=True, default="general")
-    primary_source = Column(String(32), nullable=True)
-    fallback_sources = Column(JSON, nullable=True, default=list)
-    enabled = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True),
-        nullable=False,
+    # 必填字段
+    module_name: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+
+    # 可选字段
+    label: Mapped[Optional[str]] = mapped_column(String(128), default=None)
+    description: Mapped[Optional[str]] = mapped_column(String(512), default=None)
+    category: Mapped[Optional[str]] = mapped_column(String(32), default="general")
+    primary_source: Mapped[Optional[str]] = mapped_column(String(32), default=None)
+    fallback_sources: Mapped[Optional[list[Any]]] = mapped_column(JSON, default_factory=list)
+    enabled: Mapped[bool] = mapped_column(default=True)
+
+    # 自动生成字段
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now(), init=False)
+    updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(),
         onupdate=func.now(),
+        init=False,
     )
 
     def __repr__(self) -> str:
         return f"<ModuleSourceConfig(module_name='{self.module_name}', primary='{self.primary_source}')>"
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式。"""
         return {
             "id": self.id,

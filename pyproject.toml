@@ -173,8 +173,7 @@ module = [
     "asyncpg", "asyncpg.*",
     "click", "click.*",
     "starlette", "starlette.*",
-    "sqlalchemy.dialects.*",
-    "sqlalchemy.sql.*",
+    "sqlalchemy", "sqlalchemy.*",
     "pyarrow.ipc", "pyarrow.ipc.*",
     "pypinyin", "pypinyin.*",
     "akshare", "akshare.*",
@@ -197,13 +196,3 @@ module = [
     "deepsearch.domain.value_objects", "deepsearch.domain.value_objects.*",
 ]
 ignore_missing_imports = true
-
-# TODO: SQLAlchemy 2.0 类型系统迁移后移除此规则
-# 问题：ORM 模型的 __init__ 类型推断需要 MappedAsDataclass + 每个字段的 init 参数配置
-# 参见：docs/plans/sqlalchemy_type_migration.md
-[[tool.mypy.overrides]]
-module = [
-    "deepsearch.infrastructure.persistence.models.*",
-    "deepsearch.infrastructure.persistence.watchlist_repository",
-]
-ignore_errors = true

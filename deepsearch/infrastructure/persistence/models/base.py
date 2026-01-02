@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, MappedAsDataclass
 
 
-class Base(DeclarativeBase):
+class Base(MappedAsDataclass, DeclarativeBase):
     """所有数据库 ORM 模型的 Declarative 基类。
 
-    使用 SQLAlchemy 2.0 的 DeclarativeBase 配合 Mapped + mapped_column 语法，
-    mypy 可以正确识别 ORM 模型的属性类型。
+    使用 SQLAlchemy 2.0 的 MappedAsDataclass + DeclarativeBase，
+    配合 Mapped + mapped_column 语法实现完整的类型安全。
 
-    注意：不使用 MappedAsDataclass 以避免强制执行 dataclass 的参数顺序规则，
-    这可能会破坏现有代码中使用关键字参数创建 ORM 实例的地方。
+    MappedAsDataclass 特性：
+    - 自动生成 __init__, __repr__, __eq__ 方法
+    - 完整的 mypy 类型推断
+    - 字段需按 dataclass 规则排序：必填在前，可选在后
 
-    参考：https://docs.sqlalchemy.org/en/20/orm/mapping_api.html
+    参考：https://docs.sqlalchemy.org/en/20/orm/dataclasses.html
     """
 
     pass

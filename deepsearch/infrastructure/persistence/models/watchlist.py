@@ -19,34 +19,31 @@ class WatchlistItemDB(Base):
 
     __tablename__ = "ttrading_watchlist"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    symbol: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
-    name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # 必填字段
+    symbol: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+
+    # 可选字段（有默认值）
+    name: Mapped[Optional[str]] = mapped_column(String(128), default=None)
+    last_price: Mapped[Optional[float]] = mapped_column(default=None)
+    last_signal: Mapped[Optional[str]] = mapped_column(String(32), default=None)
+    last_signal_time: Mapped[Optional[datetime]] = mapped_column(default=None)
+    success_rate: Mapped[Optional[float]] = mapped_column(default=None)
+    alert_enabled: Mapped[bool] = mapped_column(default=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    total_value: Mapped[Optional[float]] = mapped_column(default=None)
+    grid_levels: Mapped[int] = mapped_column(default=5)
+    trading_ratio: Mapped[float] = mapped_column(default=50.0)
+
+    # 自动生成字段（init=False）
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
     added_at: Mapped[datetime] = mapped_column(
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(timezone.utc),
+        init=False,
     )
-
-    # 最新状态
-    last_price: Mapped[Optional[float]] = mapped_column(nullable=True)
-    last_signal: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    last_signal_time: Mapped[Optional[datetime]] = mapped_column(nullable=True)
-    success_rate: Mapped[Optional[float]] = mapped_column(nullable=True)
-
-    # 配置
-    alert_enabled: Mapped[bool] = mapped_column(nullable=False, default=True)
-    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # 仓位配置（新增）
-    total_value: Mapped[Optional[float]] = mapped_column(nullable=True)  # 用户输入的总市值
-    grid_levels: Mapped[int] = mapped_column(nullable=False, default=5)  # 网格层数
-    trading_ratio: Mapped[float] = mapped_column(nullable=False, default=50.0)  # 做T仓位比例%
-
-    # 时间戳
     updated_at: Mapped[datetime] = mapped_column(
-        nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+        init=False,
     )
 
     def __repr__(self) -> str:
@@ -78,28 +75,27 @@ class SignalHistoryDB(Base):
 
     __tablename__ = "ttrading_signal_history"
 
+    # 必填字段（由调用方提供）
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    signal_type: Mapped[str] = mapped_column(String(16), nullable=False)  # "high" or "low"
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    signal_type: Mapped[str] = mapped_column(String(16))  # "high" or "low"
+    signal_time: Mapped[datetime] = mapped_column(index=True)
+    signal_price: Mapped[float] = mapped_column()
 
-    # 信号发出时的信息
-    signal_time: Mapped[datetime] = mapped_column(nullable=False, index=True)
-    signal_price: Mapped[float] = mapped_column(nullable=False)
-    confidence: Mapped[float] = mapped_column(nullable=False, default=0.5)
-    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # 可选字段（有默认值）
+    confidence: Mapped[float] = mapped_column(default=0.5)
+    reason: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    close_price: Mapped[Optional[float]] = mapped_column(default=None)
+    actual_high: Mapped[Optional[float]] = mapped_column(default=None)
+    actual_low: Mapped[Optional[float]] = mapped_column(default=None)
+    is_success: Mapped[Optional[bool]] = mapped_column(default=None)
+    verified_at: Mapped[Optional[datetime]] = mapped_column(default=None)
 
-    # 验证结果（盘后填充）
-    close_price: Mapped[Optional[float]] = mapped_column(nullable=True)
-    actual_high: Mapped[Optional[float]] = mapped_column(nullable=True)
-    actual_low: Mapped[Optional[float]] = mapped_column(nullable=True)
-    is_success: Mapped[Optional[bool]] = mapped_column(nullable=True)
-
-    # 时间戳
+    # 自动生成字段
     created_at: Mapped[datetime] = mapped_column(
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(timezone.utc),
+        init=False,
     )
-    verified_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -133,38 +129,31 @@ class TTradingRecordDB(Base):
 
     __tablename__ = "ttrading_records"
 
+    # 必填字段（由调用方提供）
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    entry_time: Mapped[datetime] = mapped_column(index=True)
+    entry_price: Mapped[float] = mapped_column()
+    direction: Mapped[str] = mapped_column(String(16))  # "buy_first" / "sell_first"
+    quantity: Mapped[int] = mapped_column()
 
-    # 入场信息
-    entry_time: Mapped[datetime] = mapped_column(nullable=False, index=True)
-    entry_price: Mapped[float] = mapped_column(nullable=False)
-    entry_signal: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # 触发信号类型
+    # 可选字段（有默认值）
+    entry_signal: Mapped[Optional[str]] = mapped_column(String(32), default=None)
+    exit_time: Mapped[Optional[datetime]] = mapped_column(default=None)
+    exit_price: Mapped[Optional[float]] = mapped_column(default=None)
+    exit_signal: Mapped[Optional[str]] = mapped_column(String(32), default=None)
+    pnl: Mapped[Optional[float]] = mapped_column(default=None)
+    pnl_ratio: Mapped[Optional[float]] = mapped_column(default=None)
+    trading_cost: Mapped[Optional[float]] = mapped_column(default=None)
+    is_success: Mapped[Optional[bool]] = mapped_column(default=None)
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    closed_at: Mapped[Optional[datetime]] = mapped_column(default=None)
 
-    # 出场信息（平仓后填充）
-    exit_time: Mapped[Optional[datetime]] = mapped_column(nullable=True)
-    exit_price: Mapped[Optional[float]] = mapped_column(nullable=True)
-    exit_signal: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-
-    # 交易详情
-    direction: Mapped[str] = mapped_column(String(16), nullable=False)  # "buy_first" / "sell_first"
-    quantity: Mapped[int] = mapped_column(nullable=False)  # 股数
-
-    # 收益（平仓时自动计算）
-    pnl: Mapped[Optional[float]] = mapped_column(nullable=True)  # 绝对收益
-    pnl_ratio: Mapped[Optional[float]] = mapped_column(nullable=True)  # 收益率%
-    trading_cost: Mapped[Optional[float]] = mapped_column(nullable=True)  # 交易成本
-    is_success: Mapped[Optional[bool]] = mapped_column(nullable=True)  # 是否盈利
-
-    # 状态
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")  # open / closed
-
-    # 时间戳
+    # 自动生成字段
     created_at: Mapped[datetime] = mapped_column(
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(timezone.utc),
+        init=False,
     )
-    closed_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
     def __repr__(self) -> str:
         return f"<TTradingRecordDB(id='{self.id}', symbol='{self.symbol}', direction='{self.direction}')>"
@@ -200,33 +189,28 @@ class PositionDB(Base):
 
     __tablename__ = "ttrading_positions"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    symbol: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
-    market: Mapped[str] = mapped_column(String(8), nullable=False, default="A")  # A/HK/US
+    # 必填字段
+    symbol: Mapped[str] = mapped_column(String(32), unique=True, index=True)
 
-    # 持仓信息
-    quantity: Mapped[int] = mapped_column(nullable=False, default=0)  # 持有数量
-    cost_price: Mapped[float] = mapped_column(nullable=False, default=0.0)  # 成本价
+    # 可选字段（有默认值）
+    market: Mapped[str] = mapped_column(String(8), default="A")  # A/HK/US
+    quantity: Mapped[int] = mapped_column(default=0)
+    cost_price: Mapped[float] = mapped_column(default=0.0)
+    available_qty: Mapped[int] = mapped_column(default=0)
+    frozen_qty: Mapped[int] = mapped_column(default=0)
+    last_buy_date: Mapped[Optional[datetime]] = mapped_column(default=None)
+    position_type: Mapped[str] = mapped_column(String(16), default="trading")
 
-    # T+1 规则（仅A股生效）
-    available_qty: Mapped[int] = mapped_column(nullable=False, default=0)  # 可卖数量
-    frozen_qty: Mapped[int] = mapped_column(nullable=False, default=0)  # 冻结数量（当日买入）
-    last_buy_date: Mapped[Optional[datetime]] = mapped_column(nullable=True)  # 最近买入日期
-
-    # 分类
-    position_type: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="trading"
-    )  # base/trading
-
-    # 时间戳
+    # 自动生成字段（init=False）
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
     created_at: Mapped[datetime] = mapped_column(
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(timezone.utc),
+        init=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+        init=False,
     )
 
     def __repr__(self) -> str:

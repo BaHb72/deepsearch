@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any, Optional
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import ForeignKey, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
-
-JSONType = JSON
 
 
 class MarketTick(Base):
@@ -17,39 +18,19 @@ class MarketTick(Base):
 
     __tablename__ = "market_tick"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    time = Column(DateTime(timezone=True), index=True, nullable=False)
-    symbol = Column(String(32), index=True, nullable=False)
-    last_price = Column(Numeric(18, 4), nullable=False)
-    volume = Column(Integer, nullable=False)
-    turnover = Column(Numeric(20, 4), nullable=False)
-    bid_prices = Column(JSONType, nullable=False)
-    ask_prices = Column(JSONType, nullable=False)
-    bid_volumes = Column(JSONType, nullable=False)
-    ask_volumes = Column(JSONType, nullable=False)
+    # 必填字段
+    time: Mapped[datetime] = mapped_column(index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    last_price: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    volume: Mapped[int] = mapped_column()
+    turnover: Mapped[Decimal] = mapped_column(Numeric(20, 4))
+    bid_prices: Mapped[list[Any]] = mapped_column(JSON)
+    ask_prices: Mapped[list[Any]] = mapped_column(JSON)
+    bid_volumes: Mapped[list[Any]] = mapped_column(JSON)
+    ask_volumes: Mapped[list[Any]] = mapped_column(JSON)
 
-    def __init__(
-        self,
-        *,
-        time: datetime,
-        symbol: str,
-        last_price: Decimal,
-        volume: int,
-        turnover: Decimal,
-        bid_prices: list[Decimal],
-        ask_prices: list[Decimal],
-        bid_volumes: list[int],
-        ask_volumes: list[int],
-    ) -> None:
-        self.time = time
-        self.symbol = symbol
-        self.last_price = last_price
-        self.volume = volume
-        self.turnover = turnover
-        self.bid_prices = bid_prices
-        self.ask_prices = ask_prices
-        self.bid_volumes = bid_volumes
-        self.ask_volumes = ask_volumes
+    # 自动生成字段
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
 
 
 class Market1Min(Base):
@@ -57,36 +38,18 @@ class Market1Min(Base):
 
     __tablename__ = "market_1min"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    time = Column(DateTime(timezone=True), index=True, nullable=False)
-    symbol = Column(String(32), index=True, nullable=False)
-    open = Column(Numeric(18, 4), nullable=False)
-    high = Column(Numeric(18, 4), nullable=False)
-    low = Column(Numeric(18, 4), nullable=False)
-    close = Column(Numeric(18, 4), nullable=False)
-    volume = Column(Integer, nullable=False)
-    turnover = Column(Numeric(20, 4), nullable=False)
+    # 必填字段
+    time: Mapped[datetime] = mapped_column(index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    open: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    high: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    low: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    close: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    volume: Mapped[int] = mapped_column()
+    turnover: Mapped[Decimal] = mapped_column(Numeric(20, 4))
 
-    def __init__(
-        self,
-        *,
-        time: datetime,
-        symbol: str,
-        open: Decimal,
-        high: Decimal,
-        low: Decimal,
-        close: Decimal,
-        volume: int,
-        turnover: Decimal,
-    ) -> None:
-        self.time = time
-        self.symbol = symbol
-        self.open = open
-        self.high = high
-        self.low = low
-        self.close = close
-        self.volume = volume
-        self.turnover = turnover
+    # 自动生成字段
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
 
 
 class MarketSnapshot(Base):
@@ -94,38 +57,42 @@ class MarketSnapshot(Base):
 
     __tablename__ = "market_snapshots"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    job_id = Column(
+    # 必填字段
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    name: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    data_source: Mapped[str] = mapped_column(String(32), index=True)
+    access_type: Mapped[str] = mapped_column(String(32))
+    ingested_at: Mapped[datetime] = mapped_column(index=True)
+
+    # 可选字段
+    job_id: Mapped[Optional[str]] = mapped_column(
         String(64),
         ForeignKey("ingestion_jobs.id", ondelete="SET NULL"),
-        nullable=True,
         index=True,
+        default=None,
     )
-    batch_id = Column(
-        Integer,
+    batch_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("ingestion_batches.id", ondelete="SET NULL"),
-        nullable=True,
         index=True,
+        default=None,
     )
-    symbol = Column(String(32), nullable=False, index=True)
-    name = Column(String(64), nullable=False)
-    board = Column(String(64))
-    boards = Column(JSONType)
-    exchange = Column(String(16))
-    market = Column(String(16))
-    security_type = Column(String(32))
-    status = Column(String(32))
-    list_date = Column(String(16))
-    delist_date = Column(String(16))
-    payload = Column(JSONType, nullable=False)
-    snapshot_metadata = Column(JSONType)
-    data_source = Column(String(32), nullable=False, index=True)
-    access_type = Column(String(32), nullable=False)
-    as_of = Column(DateTime(timezone=True), nullable=True, index=True)
-    ingested_at = Column(DateTime(timezone=True), nullable=False, index=True)
-    record_hash = Column(String(64))
-    tags = Column(JSONType)
-    notes = Column(Text)
+    board: Mapped[Optional[str]] = mapped_column(String(64), default=None)
+    boards: Mapped[Optional[list[Any]]] = mapped_column(JSON, default=None)
+    exchange: Mapped[Optional[str]] = mapped_column(String(16), default=None)
+    market: Mapped[Optional[str]] = mapped_column(String(16), default=None)
+    security_type: Mapped[Optional[str]] = mapped_column(String(32), default=None)
+    status: Mapped[Optional[str]] = mapped_column(String(32), default=None)
+    list_date: Mapped[Optional[str]] = mapped_column(String(16), default=None)
+    delist_date: Mapped[Optional[str]] = mapped_column(String(16), default=None)
+    snapshot_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, default=None)
+    as_of: Mapped[Optional[datetime]] = mapped_column(index=True, default=None)
+    record_hash: Mapped[Optional[str]] = mapped_column(String(64), default=None)
+    tags: Mapped[Optional[list[Any]]] = mapped_column(JSON, default=None)
+    notes: Mapped[Optional[str]] = mapped_column(Text, default=None)
+
+    # 自动生成字段
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
 
 
 __all__ = ["MarketTick", "Market1Min", "MarketSnapshot"]
