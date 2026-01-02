@@ -325,13 +325,23 @@ class RealtimeDataOrchestrator:
         registry: MarketDataPortRegistry = PortBundleRegistry(bundle)
         board_fetcher = bundle.board.fetch_records if bundle.board else None
 
+        # 创建使用适配器日历的加载器
+        async def _adapter_calendar_loader(market: str):
+            if hasattr(adapter, "get_calendar"):
+                try:
+                    return await adapter.get_calendar(market)
+                except Exception as exc:
+                    logger.warning("适配器日历获取失败 {}: {}", adapter.name, exc)
+            return ()
+
         service, cache_writer, pipeline, runner = create_realtime_streaming_pipeline(
             provider=None,
             registry=registry,
             board_fetcher=board_fetcher,
             data_source_name=adapter.name,
             realtime_config=realtime_cfg,
-            enable_session_guard=False,
+            enable_session_guard=True,
+            calendar_loader=_adapter_calendar_loader,
         )
         cache_reader = MarketDataCacheReader(cache_writer)
 

@@ -20,22 +20,33 @@ if "%1"=="dev" (
 echo.
 
 :: 1. 简单清理Python进程（可选）
-echo [1/3] 清理旧进程...
+echo [1/4] 清理旧进程...
 taskkill /F /IM python.exe 2>nul
 timeout /t 2 /nobreak >nul
 
-:: 2. 启动后端服务
+:: 2. 启动 Docker 基础设施服务
 echo.
-echo [2/3] 启动后端服务 [%ENV_NAME%]...
+echo [2/4] 启动 Docker 基础设施服务 (RabbitMQ, Redis, Dask)...
+docker-compose up -d
+if errorlevel 1 (
+    echo [警告] Docker 服务启动失败，请确保 Docker Desktop 正在运行
+    echo 按任意键继续或 Ctrl+C 退出...
+    pause >nul
+)
+timeout /t 5 /nobreak >nul
+
+:: 3. 启动后端服务
+echo.
+echo [3/4] 启动后端服务 [%ENV_NAME%]...
 start "DeepSearch Backend [%ENV_NAME%]" cmd /k "set APP__ENV=%APP__ENV% && python -m deepsearch run --no-frontend"
 
 :: 等待后端启动
 echo 等待后端服务启动（10秒）...
 timeout /t 10 /nobreak >nul
 
-:: 3. 启动前端服务
+:: 4. 启动前端服务
 echo.
-echo [3/3] 启动前端服务 [%ENV_NAME%]...
+echo [4/4] 启动前端服务 [%ENV_NAME%]...
 cd deepsearch\webui\frontend
 start "DeepSearch Frontend [%ENV_NAME%]" cmd /k "npm run dev"
 

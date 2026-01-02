@@ -1,0 +1,49 @@
+# =============================================================================
+# DeepSearch Dask Worker Dockerfile
+# =============================================================================
+# 构建包含 deepsearch 核心模块的自定义 Dask Worker 镜像
+# 仅安装 Worker 执行聚合任务所需的最小依赖
+#
+# 用法:
+#   docker-compose build dask-scheduler
+#   docker-compose up -d
+# =============================================================================
+
+FROM daskdev/dask:dev-py3.13
+
+LABEL maintainer="DeepSearch Team"
+LABEL description="Dask Worker with DeepSearch core modules"
+
+WORKDIR /app
+
+# 复制精简依赖文件
+COPY docker/pyproject.worker.toml ./pyproject.toml
+
+# 复制必要的 deepsearch 模块
+# 核心
+COPY deepsearch/__init__.py ./deepsearch/
+COPY deepsearch/observability/ ./deepsearch/observability/
+COPY deepsearch/constants/ ./deepsearch/constants/
+
+# 应用层（聚合框架）
+COPY deepsearch/application/ ./deepsearch/application/
+
+# 计算层（Dask 客户端）
+COPY deepsearch/compute/ ./deepsearch/compute/
+
+# 配置层（部分）
+COPY deepsearch/config/__init__.py ./deepsearch/config/
+COPY deepsearch/config/loader.py ./deepsearch/config/
+COPY deepsearch/config/models/ ./deepsearch/config/models/
+
+# 创建空的 infrastructure 模块存根（避免导入错误）
+RUN mkdir -p deepsearch/infrastructure/providers && \
+    echo '"""Infrastructure stub for worker."""' > deepsearch/infrastructure/__init__.py && \
+    echo '"""Providers stub."""' > deepsearch/infrastructure/providers/__init__.py && \
+    echo 'class UnifiedDataFeed:\n    """Stub for UnifiedDataFeed."""\n    pass' > deepsearch/infrastructure/providers/binder.py
+
+# 安装依赖
+RUN pip install --no-cache-dir -e .
+
+# 默认启动 Dask Worker
+CMD ["dask", "worker", "dask-scheduler:8786"]

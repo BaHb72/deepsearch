@@ -180,6 +180,7 @@ def create_realtime_streaming_pipeline(
     interval_seconds: float = 5.0,
     realtime_config: Optional[MarketRealtimeConfig] = None,
     enable_session_guard: bool = True,
+    calendar_loader: Optional[Callable[[str], Awaitable[Sequence[int]]]] = None,
 ) -> Tuple[
     RealTimeMarketDataService,
     MarketDataCacheWriter,
@@ -280,7 +281,7 @@ def create_realtime_streaming_pipeline(
         capital_limit=capital_limit_final,
     )
 
-    async def _load_calendar(market_code: str):
+    async def _load_calendar_default(market_code: str):
         normalized_code = _normalize_calendar_market_code(market_code)
         if provider is None:
             logger.debug(
@@ -307,6 +308,9 @@ def create_realtime_streaming_pipeline(
             return ()
         return tuple(result or ())
 
+    # 使用注入的 calendar_loader 或默认实现
+    effective_calendar_loader = calendar_loader or _load_calendar_default
+
     phase_intervals_override: dict[PhaseState, float] | None = None
     phase_timeouts_override: dict[PhaseState, float] | None = None
     if config:
@@ -332,7 +336,7 @@ def create_realtime_streaming_pipeline(
     session_guard: TradingSessionGuard | None = None
     if enable_session_guard:
         session_guard = TradingSessionGuard(
-            calendar_loader=_load_calendar,
+            calendar_loader=effective_calendar_loader,
             snapshot_supplier=service.snapshot_buffer.latest_snapshot,
             markets=(
                 tuple(config.include_markets) if config and config.include_markets else ("SH", "SZ")

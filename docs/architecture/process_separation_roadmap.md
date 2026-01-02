@@ -77,58 +77,47 @@ Qlib 使用 **RabbitMQ + Redis** 实现进程分离：
 
 ---
 
-## Stage 3: 核心分离 (远期)
+## Stage 3: 核心分离 (终极架构)
 
-学习 Qlib，使用 **MQ + Redis** 实现完全分离。
+实现真正的微服务架构：**Web Server (FastAPI) 与 Core System (DeepSearch Main) 完全分离**。
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Web Server     │────▶│     Redis       │◀────│  Core System    │
-│  (FastAPI)      │◀────│  (Aggregation   │     │  (独立进程)      │
-│                 │     │   Cache)        │     │                 │
-│  - HTTP API     │     └─────────────────┘     │  - Aggregation  │
-│  - 只读缓存     │            ▲                │  - Strategy     │
-└─────────────────┘            │                │  - 写缓存       │
-                               │                └─────────────────┘
-                               │
-                        ┌──────┴──────┐
-                        │  RabbitMQ   │
-                        │ (Task MQ)   │
-                        └─────────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              ▼                ▼                ▼
-       ┌───────────┐    ┌───────────┐    ┌───────────┐
-       │  Worker 1 │    │  Worker 2 │    │  Worker 3 │
-       │ (回测)    │    │ (因子)    │    │ (训练)    │
-       └───────────┘    └───────────┘    └───────────┘
+┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+│ Web Server  │──────►│  RabbitMQ   │──────►│ Core System │
+│ (FastAPI)   │       │ (MQ Broker) │       │ (Main Proc) │
+│             │◄──────│             │◄──────│             │
+└─────────────┘       └─────────────┘       └─────────────┘
+  [轻量级网关]                                 [系统核心]
+  - HTTP/WS 接入                              - 策略引擎
+  - 权限/鉴权                                 - 因子计算
+  - 简单查询 (Redis)                          - 模型训练
+  - 仅负责转发                                - 加载重依赖
 ```
 
-**组件职责**：
+**架构变革**：
 
-| 组件 | 职责 |
-|------|------|
-| **Web Server** | HTTP API，只读 Redis |
-| **Core System** | 调度聚合/策略，写 Redis |
-| **RabbitMQ** | 重任务异步派发（回测、训练） |
-| **Redis** | 结果缓存 + Session + 分布式锁 |
-| **Worker Pool** | 执行耗时任务 |
+1. **Web Server (FastAPI)**：
+    - **角色**：纯粹的 API 网关。
+    - **特点**：极速启动，低内存，不加载 heavy libraries (backtrader, torch)。
+    - **职责**：接收请求 -> 丢进 MQ -> 立即返回 -> 等待 Bark/WS 通知。
+
+2. **Core System (DeepSearch Main)**：
+    - **角色**：真正的业务主体。
+    - **启动**：`python -m deepsearch.main` (不再启动 uvicorn)。
+    - **职责**：消费 MQ 任务 -> 执行计算 -> 写入 DB/Redis -> 发送通知。
+
+3. **RabbitMQ**：
+    - **角色**：系统的神经中枢。
+    - **职责**：解耦 Web 和 Core，确保任务不丢失，平衡负载。
 
 ---
 
-## 迁移步骤
+## 迁移步骤 (Revised)
 
-### Stage 1 → Stage 2
-
-1. `uv add redis`
-2. 实现 `RedisAggregationCache` 适配器。
-3. 配置 `REDIS_URL` 环境变量。
-
-### Stage 2 → Stage 3
-
-1. 创建 `core_runner.py`，启动独立 Core 进程。
-2. Web Server 移除 `start_aggregation_engine()` 调用。
-3. 引入 RabbitMQ，重任务走 MQ。
+1. **基础建设**：集成 RabbitMQ (`aio-pika`)，实现 `RabbitMQMessageBus`。
+2. **分离点识别**：识别哪些 Service 是"重业务"，必须移入 Core。
+3. **Core 进程构建**：创建 `CoreRunner`，只启动核心服务，连接 MQ。
+4. **Web 瘦身**：FastAPI 移除核心服务引用，改为 MQ RPC 调用。
 
 ---
 

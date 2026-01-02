@@ -9,13 +9,24 @@ echo [配置] 设置开发环境 (APP__ENV=dev)...
 set APP__ENV=dev
 
 :: 1. 简单清理Python进程（可选）
-echo [1/3] 清理旧进程...
+echo [1/4] 清理旧进程...
 taskkill /F /IM python.exe 2>nul
 timeout /t 2 /nobreak >nul
 
-:: 2. 启动后端服务（开发模式）
+:: 2. 启动 Docker 基础设施服务
 echo.
-echo [2/3] 启动后端服务（开发模式）...
+echo [2/4] 启动 Docker 基础设施服务 (RabbitMQ, Redis, Dask)...
+docker-compose up -d
+if errorlevel 1 (
+    echo [警告] Docker 服务启动失败，请确保 Docker Desktop 正在运行
+    echo 按任意键继续或 Ctrl+C 退出...
+    pause >nul
+)
+timeout /t 5 /nobreak >nul
+
+:: 3. 启动后端服务（开发模式）
+echo.
+echo [3/4] 启动后端服务（开发模式）...
 echo 配置文件: settings.dev.yaml
 :: 使用虚拟环境的Python以确保正确加载依赖
 start "DeepSearch Backend [DEV]" cmd /k "call .venv\Scripts\activate.bat && set APP__ENV=dev && python -m deepsearch run --no-frontend --log-level DEBUG"
@@ -24,9 +35,9 @@ start "DeepSearch Backend [DEV]" cmd /k "call .venv\Scripts\activate.bat && set 
 echo 等待后端服务启动（10秒）...
 timeout /t 10 /nobreak >nul
 
-:: 3. 启动前端服务（开发模式）
+:: 4. 启动前端服务（开发模式）
 echo.
-echo [3/3] 启动前端服务（开发模式）...
+echo [4/4] 启动前端服务（开发模式）...
 cd deepsearch\webui\frontend
 start "DeepSearch Frontend [DEV]" cmd /k "npm run dev"
 

@@ -104,6 +104,10 @@ class ZeroMQMessageBus(MessageBus[T], Generic[T]):
     """
     ZeroMQ-based message bus implementation.
 
+    .. deprecated:: 1.0.0
+        ZeroMQ message bus is deprecated. Use :class:`RabbitMQMessageBus` instead.
+        ZeroMQ will be removed in a future version.
+
     Provides distributed messaging using ZeroMQ PUB/SUB pattern.
     Supports wildcard patterns in topic subscriptions.
     """
@@ -121,6 +125,9 @@ class ZeroMQMessageBus(MessageBus[T], Generic[T]):
         """
         Initialize ZeroMQ message bus.
 
+        .. deprecated:: 1.0.0
+            Use :class:`RabbitMQMessageBus` instead.
+
         Args:
             host: Host address
             pub_port: Publisher port
@@ -130,6 +137,14 @@ class ZeroMQMessageBus(MessageBus[T], Generic[T]):
             recv_hwm: Receive high water mark
             verbose: Enable verbose logging
         """
+        import warnings
+
+        warnings.warn(
+            "ZeroMQMessageBus is deprecated and will be removed in a future version. "
+            "Use RabbitMQMessageBus instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.host = host
         self.pub_port = pub_port
         self.sub_port = sub_port

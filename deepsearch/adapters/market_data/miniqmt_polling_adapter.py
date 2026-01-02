@@ -428,5 +428,30 @@ class MiniQMTPollingAdapter(RealtimeAdapter):
         self._started = False
         logger.info("MiniQMT 适配器已停止")
 
+    async def get_calendar(self, market: str = "SH") -> list[int]:
+        """获取交易日历，供 TradingSessionGuard 使用。
+
+        Args:
+            market: 市场代码 (SH/SZ/BJ)
+
+        Returns:
+            交易日列表 (格式: 20250102)
+        """
+        try:
+            from xtquant import xtdata
+
+            loop = asyncio.get_event_loop()
+            # xtdata.get_trading_dates 返回格式如 ['20250101', '20250102', ...]
+            dates = await loop.run_in_executor(None, xtdata.get_trading_dates, market.upper())
+            if dates:
+                return [int(d) for d in dates if d and str(d).isdigit()]
+            return []
+        except ImportError:
+            logger.warning("xtquant 未安装，无法获取交易日历")
+            return []
+        except Exception as exc:
+            logger.warning("获取 MiniQMT 交易日历失败: {}", exc)
+            return []
+
 
 __all__ = ["MiniQMTPollingAdapter", "MiniQMTPollingStreamPort", "MiniQMTBoardUniversePort"]

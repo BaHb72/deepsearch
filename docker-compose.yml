@@ -1,0 +1,74 @@
+services:
+  # =============================================================================
+  # RabbitMQ - 消息队列 (任务分发 + 进程通信)
+  # =============================================================================
+  rabbitmq:
+    image: rabbitmq:management-alpine
+    container_name: deepsearch-rabbitmq
+    ports:
+      - "5672:5672" # AMQP
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: deepsearch
+      RABBITMQ_DEFAULT_PASS: deepsearch123
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "check_running" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # =============================================================================
+  # Redis Stack - 缓存 + TimeSeries + Search
+  # =============================================================================
+  redis:
+    image: redis/redis-stack:latest
+    container_name: deepsearch-redis
+    ports:
+      - "6379:6379" # Redis
+      - "8001:8001" # RedisInsight UI
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # =============================================================================
+  # Dask Scheduler - 分布式计算调度器
+  # =============================================================================
+  dask-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.dask
+    image: deepsearch-dask:latest
+    container_name: deepsearch-dask-scheduler
+    command: [ "dask", "scheduler" ]
+    ports:
+      - "8786:8786" # Scheduler
+      - "8787:8787" # Dashboard
+    restart: unless-stopped
+
+  # =============================================================================
+  # Dask Worker - 分布式计算节点 (可扩展多个)
+  # =============================================================================
+  dask-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dask
+    image: deepsearch-dask:latest
+    # 注意: 使用 replicas 时不能设置 container_name
+    command: [ "dask", "worker", "dask-scheduler:8786", "--resources", "LINUX=1", "--name", "linux-worker" ]
+    depends_on:
+      - dask-scheduler
+    deploy:
+      replicas: 2 # 默认启动 2 个 Worker
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
+  redis_data:

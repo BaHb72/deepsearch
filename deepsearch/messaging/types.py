@@ -18,18 +18,19 @@ class BusName(str, Enum):
 
     Each bus type provides different capabilities:
     - INMEM: In-memory message bus for single-process applications
-    - ZMQ: ZeroMQ-based distributed message bus
-    - TIMESERIES: ZeroMQ with Redis TimeSeries persistence
+    - ZMQ: ZeroMQ-based distributed message bus (deprecated)
+    - TIMESERIES: ZeroMQ with Redis TimeSeries persistence (deprecated)
+    - RABBITMQ: RabbitMQ-based distributed message bus (recommended)
     """
 
     INMEM = "inmem"  # In-memory message bus
-    ZMQ = "zmq"  # ZeroMQ message bus
-    TIMESERIES = "timeseries"  # ZeroMQ with TimeSeries persistence
+    ZMQ = "zmq"  # ZeroMQ message bus (deprecated)
+    TIMESERIES = "timeseries"  # ZeroMQ with TimeSeries persistence (deprecated)
+    RABBITMQ = "rabbitmq"  # RabbitMQ message bus (recommended)
 
     # Reserved for future implementations
     # REDIS = "redis"  # Pure Redis-based message bus
     # KAFKA = "kafka"  # Apache Kafka message bus
-    # RABBITMQ = "rabbitmq"  # RabbitMQ message bus
 
 
 # ==============================================================================

@@ -1,0 +1,98 @@
+# =============================================================================
+# 基础设施配置 - 生产环境
+# 包含: database, cache, message_bus, dask
+# =============================================================================
+
+database:
+  cache:
+    auto_start_windows: true
+    db: 0
+    enabled: true
+    health_check_interval: 30
+    host: localhost
+    idle_check_interval: 60
+    max_idle_time: 300
+    password: ''
+    pool_size: 10
+    port: 6379
+    retry_on_timeout: true
+    socket_connect_timeout: 5
+    socket_keepalive: true
+    socket_timeout: 5
+    startup_command:
+    - wsl.exe
+    - -d
+    - Ubuntu
+    - -u
+    - root
+    - service
+    - redis-server
+    - start
+    wsl:
+      auto_resolve_ip: true
+      distro: Ubuntu
+      enabled: true
+      service_name: redis-server
+      user: root
+  main:
+    auto_connect: true
+    database: deepsearch
+    echo: false
+    enabled: true
+    host: localhost
+    password: '123456'
+    path: ./data/deepsearch.db
+    port: 5432
+    type: postgresql
+    username: postgres
+
+cache:
+  arrow:
+    base_dir: null
+    default_ttl: 300
+    enabled: true
+    namespaces:
+      amazingdata:
+        ttl: 600
+      miniqmt:
+        ttl: 300
+
+message_bus:
+  buses:
+    inmem:
+      config: {}
+      enabled: true
+      type: inmem
+  routes:
+  - buses:
+    - inmem
+    match: '*'
+
+# =============================================================================
+# Dask 分布式计算配置
+# =============================================================================
+dask:
+  scheduler_address: "localhost:8786"
+
+  windows_workers:
+    enabled: true
+    auto_start: false  # 生产环境手动启动
+    num_workers: 4
+    threads_per_worker: 2
+    memory_limit: "8GB"
+    name_prefix: "windows-worker"
+    resources:
+      WIN: 1
+
+  task_routing:
+    windows_tasks:
+      - data_fetch
+      - amazingdata_*
+      - miniqmt_*
+      - akshare_*
+      - realtime_quote
+    linux_tasks:
+      - compute_*
+      - backtest_*
+      - train_*
+      - factor_*

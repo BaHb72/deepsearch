@@ -58,6 +58,9 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
     """
     支持 RedisTimeSeries 持久化的 ZeroMQ 消息总线
 
+    .. deprecated:: 1.0.0
+        TimeSeriesZeroMQBus 已废弃。请使用 RabbitMQMessageBus 配合 Redis 持久化替代。
+
     扩展标准 ZeroMQ 消息总线，添加消息持久化功能。
     消息会被发布到 ZeroMQ 通道，同时存储到 RedisTimeSeries。
     """
@@ -74,6 +77,9 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
         """
         初始化支持 RedisTimeSeries 持久化的 ZeroMQ 消息总线
 
+        .. deprecated:: 1.0.0
+            请使用 RabbitMQMessageBus 配合 Redis 持久化替代。
+
         Args:
             host: ZeroMQ 主机地址
             pub_port: 发布端口
@@ -82,6 +88,15 @@ class TimeSeriesZeroMQBus(ZeroMQMessageBus):
             enable_persistence: 是否启用消息持久化
             persistence_rule: 持久化规则，默认为 AlwaysPersist
         """
+        import warnings
+
+        warnings.warn(
+            "TimeSeriesZeroMQBus is deprecated and will be removed in a future version. "
+            "Use RabbitMQMessageBus with Redis persistence instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         # 创建ZeroMQ配置对象传递给父类
         from deepsearch.config.models import ZeroMQConfig
 

@@ -1,0 +1,87 @@
+# =============================================================================
+# 基础设施配置 - 测试环境
+# 包含: database, cache, message_bus, dask
+# =============================================================================
+
+database:
+  main:
+    enabled: true
+    type: postgresql
+    host: updated-host
+    port: 5432
+    database: deepsearch
+    username: postgres
+    password: updated-secret
+    path: ./data/deepsearch.db
+    auto_connect: false
+    echo: false
+  cache:
+    enabled: true
+    host: localhost
+    port: 6379
+    username: ''
+    password: updated-cache
+    db: 0
+    pool_size: 10
+    socket_timeout: 5
+    socket_connect_timeout: 5
+    socket_keepalive: true
+    retry_on_timeout: true
+    health_check_interval: 30
+    max_idle_time: 300
+    idle_check_interval: 60
+    auto_start_windows: true
+    windows_service_names:
+      - Redis
+      - redis
+    startup_binary_path: C:/Program Files/Redis/redis-server.exe
+    startup_arguments: []
+    startup_command: []
+    wsl:
+      enabled: false
+      distro: Ubuntu
+      auto_resolve_ip: true
+      service_name: redis-server
+      user: root
+
+cache:
+  arrow:
+    base_dir: null
+    default_ttl: 60
+    enabled: true
+
+message_bus:
+  buses:
+    zmq:
+      type: zmq
+      enabled: true
+      config:
+        host: localhost
+        pub_port: 5556
+        sub_port: 5557
+  routes:
+    - match: '*'
+      buses:
+      - zmq
+
+# =============================================================================
+# Dask 分布式计算配置 - 测试环境
+# =============================================================================
+dask:
+  scheduler_address: "localhost:8786"
+
+  windows_workers:
+    enabled: false  # 测试环境禁用
+    num_workers: 1
+    threads_per_worker: 1
+    memory_limit: "2GB"
+    name_prefix: "test-worker"
+    resources:
+      WIN: 1
+
+  task_routing:
+    windows_tasks:
+      - data_fetch
+      - amazingdata_*
+    linux_tasks:
+      - compute_*

@@ -37,7 +37,7 @@ class MessageBusConfig(BaseModel):
         default_factory=lambda: MessageBusConfig._create_default_buses(), description="总线实例配置"
     )
     routes: List[RouteConfig] = Field(
-        default_factory=lambda: [RouteConfig(match="*", buses=[BusName.ZMQ])],
+        default_factory=lambda: [RouteConfig(match="*", buses=[BusName.RABBITMQ])],
         description="消息路由配置",
     )
 
@@ -48,9 +48,27 @@ class MessageBusConfig(BaseModel):
         redis_defaults = RedisConfig()
 
         default_configs = {
+            # RabbitMQ - 推荐用于分布式消息传递
+            "rabbitmq": {
+                "type": "rabbitmq",
+                "enabled": True,
+                "config": {
+                    "host": "localhost",
+                    "port": 5672,
+                    "username": "deepsearch",
+                    "password": "deepsearch123",
+                    "virtual_host": "/",
+                    "exchange": "deepsearch.events",
+                    "exchange_type": "topic",
+                    "durable": True,
+                },
+            },
+            # InMemory - 用于单进程或测试
+            "inmem": {"type": "inmem", "enabled": False, "config": {}},
+            # ZeroMQ - 已废弃，保留用于向后兼容
             "zmq": {
                 "type": "zmq",
-                "enabled": True,
+                "enabled": False,  # 默认禁用
                 "config": {
                     "host": "127.0.0.1",
                     "pub_port": 5556,
@@ -60,7 +78,7 @@ class MessageBusConfig(BaseModel):
                     "verbose": True,
                 },
             },
-            "inmem": {"type": "inmem", "enabled": False, "config": {}},
+            # TimeSeries - 已废弃
             "timeseries": {
                 "type": "timeseries",
                 "enabled": False,

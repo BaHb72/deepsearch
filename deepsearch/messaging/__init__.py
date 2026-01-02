@@ -12,6 +12,7 @@ __all__ = [
     "CompositeMessageBus",
     "MessageBusFactory",
     "InMemoryMessageBus",
+    "RabbitMQMessageBus",
     "ZeroMQMessageBus",
     "BusName",
     "MessageEnvelope",
@@ -22,6 +23,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .bus import CompositeMessageBus, MessageBus
     from .factory import MessageBusFactory
     from .implementations.inmemory import InMemoryMessageBus
+    from .implementations.rabbitmq import RabbitMQMessageBus
     from .implementations.zeromq import ZeroMQMessageBus
     from .types import BusName, MessageEnvelope, MessageHeaders
 
@@ -30,6 +32,7 @@ _lazy_imports = {
     "CompositeMessageBus": (".bus", "CompositeMessageBus"),
     "MessageBusFactory": (".factory", "MessageBusFactory"),
     "InMemoryMessageBus": (".implementations.inmemory", "InMemoryMessageBus"),
+    "RabbitMQMessageBus": (".implementations.rabbitmq", "RabbitMQMessageBus"),
     "ZeroMQMessageBus": (".implementations.zeromq", "ZeroMQMessageBus"),
     "BusName": (".types", "BusName"),
     "MessageEnvelope": (".types", "MessageEnvelope"),

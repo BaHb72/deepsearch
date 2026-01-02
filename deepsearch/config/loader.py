@@ -85,6 +85,10 @@ def load_yaml_config() -> Dict[str, Any]:
         with env_config_path.open("r", encoding=YAML_ENCODING) as f:
             config = yaml.safe_load(f) or {}
 
+        # 加载拆分的配置文件
+        config = _load_infrastructure_config(config, config_dir, env)
+        config = _load_market_data_config(config, config_dir, env)
+
         # 加载独立的 data_sources.yaml（替换原有的 providers.yaml 逻辑）
         config = _load_data_sources_config(config, config_dir)
 
@@ -245,3 +249,83 @@ def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> None:
             _deep_merge(base[key], value)
         else:
             base[key] = value
+
+
+def _load_infrastructure_config(
+    config: Dict[str, Any], config_dir: Path, env: str
+) -> Dict[str, Any]:
+    """加载基础设施配置文件。
+
+    包含: database, cache, message_bus, dask
+
+    Args:
+        config: 已加载的主配置字典
+        config_dir: 配置文件目录
+        env: 环境名称
+
+    Returns:
+        合并后的配置字典
+    """
+    infra_path = config_dir / f"infrastructure.{env}.yaml"
+    if not infra_path.exists():
+        return config
+
+    try:
+        with infra_path.open("r", encoding=YAML_ENCODING) as f:
+            infra_config = yaml.safe_load(f) or {}
+
+        if infra_config:
+            # 将基础设施配置合并到主配置
+            for key in ("database", "cache", "message_bus", "dask"):
+                if key in infra_config:
+                    if key not in config:
+                        config[key] = {}
+                    if isinstance(config[key], dict) and isinstance(infra_config[key], dict):
+                        _deep_merge(config[key], infra_config[key])
+                    else:
+                        config[key] = infra_config[key]
+
+            print(f"[INFO] Loaded infrastructure config: infrastructure.{env}.yaml")
+    except Exception as e:
+        print(f"[WARNING] Failed to load infrastructure.{env}.yaml: {e}", file=sys.stderr)
+
+    return config
+
+
+def _load_market_data_config(config: Dict[str, Any], config_dir: Path, env: str) -> Dict[str, Any]:
+    """加载市场数据配置文件。
+
+    包含: market_data, capability_routing
+
+    Args:
+        config: 已加载的主配置字典
+        config_dir: 配置文件目录
+        env: 环境名称
+
+    Returns:
+        合并后的配置字典
+    """
+    market_path = config_dir / f"market_data.{env}.yaml"
+    if not market_path.exists():
+        return config
+
+    try:
+        with market_path.open("r", encoding=YAML_ENCODING) as f:
+            market_config = yaml.safe_load(f) or {}
+
+        if market_config:
+            # 将市场数据配置合并到主配置
+            for key in ("market_data", "capability_routing"):
+                if key in market_config:
+                    if key not in config:
+                        config[key] = {}
+                    if isinstance(config[key], dict) and isinstance(market_config[key], dict):
+                        _deep_merge(config[key], market_config[key])
+                    else:
+                        config[key] = market_config[key]
+
+            print(f"[INFO] Loaded market data config: market_data.{env}.yaml")
+    except Exception as e:
+        print(f"[WARNING] Failed to load market_data.{env}.yaml: {e}", file=sys.stderr)
+
+    return config

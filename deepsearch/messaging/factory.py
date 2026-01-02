@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 from .bus import MessageBus
 from .implementations.inmemory import InMemoryMessageBus
+from .implementations.rabbitmq import RabbitMQMessageBus
 from .implementations.zeromq import ZeroMQMessageBus
 
 
@@ -20,7 +21,11 @@ class MessageBusFactory:
         Create a message bus instance based on the specified type.
 
         Args:
-            bus_type: Type of message bus to create ("inmem", "zmq", "timeseries")
+            bus_type: Type of message bus to create
+                - "inmem": In-memory bus (single process)
+                - "rabbitmq": RabbitMQ bus (recommended for distributed)
+                - "zmq": ZeroMQ bus (deprecated)
+                - "timeseries": ZeroMQ with TimeSeries (deprecated)
             config: Configuration dictionary for the bus
 
         Returns:
@@ -34,8 +39,28 @@ class MessageBusFactory:
             # InMemoryMessageBus doesn't need configuration
             return InMemoryMessageBus()
 
+        elif bus_type == "rabbitmq":
+            # RabbitMQMessageBus - recommended for distributed messaging
+            return RabbitMQMessageBus(
+                host=config.get("host", "localhost"),
+                port=config.get("port", 5672),
+                username=config.get("username", "deepsearch"),
+                password=config.get("password", "deepsearch123"),
+                virtual_host=config.get("virtual_host", "/"),
+                exchange=config.get("exchange", "deepsearch.events"),
+                exchange_type=config.get("exchange_type", "topic"),
+                durable=config.get("durable", True),
+            )
+
         elif bus_type == "zmq":
-            # ZeroMQMessageBus needs host and port configuration
+            # ZeroMQMessageBus - deprecated, use rabbitmq instead
+            import warnings
+
+            warnings.warn(
+                "ZeroMQ message bus is deprecated. Use 'rabbitmq' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
             return ZeroMQMessageBus(
                 host=config.get("host", "127.0.0.1"),
                 pub_port=config.get("pub_port", 5556),
@@ -44,14 +69,15 @@ class MessageBusFactory:
             )
 
         elif bus_type == "timeseries":
-            # TimeSeriesMessageBus is not yet implemented
+            # TimeSeriesMessageBus - deprecated
             raise NotImplementedError(
-                "TimeSeries message bus is not yet implemented. "
-                "Please use 'inmem' or 'zmq' for now."
+                "TimeSeries message bus is deprecated. "
+                "Please use 'rabbitmq' for distributed messaging "
+                "with Redis for persistence."
             )
 
         else:
             raise ValueError(
                 f"Unknown message bus type: '{bus_type}'. "
-                f"Supported types are: 'inmem', 'zmq', 'timeseries'"
+                f"Supported types are: 'inmem', 'rabbitmq', 'zmq' (deprecated)"
             )
