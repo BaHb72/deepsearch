@@ -168,9 +168,7 @@ class MiniQMTAdapter:
             client = await get_dask_client()
             # 尝试获取一个简单数据验证连接
             future = client.submit(_fetch_calendar, "SH", resources={"WIN": 1})
-            result = await asyncio.wait_for(
-                asyncio.wrap_future(future), timeout=10.0
-            )
+            result = await asyncio.wait_for(asyncio.wrap_future(future), timeout=10.0)
             self._available = bool(result)
         except Exception as e:
             logger.warning("MiniQMT 可用性检查失败: {}", e)
@@ -265,6 +263,14 @@ class MiniQMTAdapter:
                     prev_close=Decimal(str(data.get("pre_close", 0))),
                     amount=Decimal(str(data.get("amount", 0))),
                     volume=int(data.get("volume", 0)),
+                    num_trades=None,
+                    bid_prices=[],
+                    bid_volumes=[],
+                    ask_prices=[],
+                    ask_volumes=[],
+                    upper_limit=None,
+                    lower_limit=None,
+                    trading_phase=None,
                 )
             )
 

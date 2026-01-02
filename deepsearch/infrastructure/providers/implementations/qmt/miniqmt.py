@@ -97,7 +97,8 @@ class MiniQMTProvider(DataProvider):
         self.data_queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue(maxsize=10000)
 
         # Arrow IPC 文件缓存，支持跨进程共享
-        cache_ttl = config.config.get("cache_ttl", 60) if config.config else 60
+        cache_ttl_raw = config.config.get("cache_ttl", 60) if config.config else 60
+        cache_ttl = int(str(cache_ttl_raw)) if cache_ttl_raw is not None else 60
         self.cache = ArrowCacheManager(namespace="miniqmt", ttl=cache_ttl)
 
     def get_capabilities(self) -> set[DataCapability]:

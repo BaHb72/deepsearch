@@ -13,13 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Sequence
 
-from .semantic_types import (
-    AdjustType,
-    AssetSpec,
-    LatencyHint,
-    Timeframe,
-    TimeRange,
-)
+from .semantic_types import AdjustType, AssetSpec, LatencyHint, Timeframe, TimeRange
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +97,9 @@ class OrderbookRequest:
 
 
 # 请求类型联合
-DataRequest = KlineRequest | RealtimeQuoteRequest | TickRequest | StockListRequest | OrderbookRequest
+DataRequest = (
+    KlineRequest | RealtimeQuoteRequest | TickRequest | StockListRequest | OrderbookRequest
+)
 
 
 __all__ = [

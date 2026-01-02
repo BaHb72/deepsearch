@@ -32,6 +32,7 @@ class DataSourceType(StrEnum):
     DATABASE = "database"
     DEFAULT = "default"
     CUSTOM = "custom"
+    UNKNOWN = "unknown"
 
 
 class DataAccessType(StrEnum):

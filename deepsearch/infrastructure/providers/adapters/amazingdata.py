@@ -19,21 +19,9 @@ from deepsearch.config.models.capability_routing import (
     ProviderCapabilitiesSpec,
     RealtimeQuoteCapabilitySpec,
 )
-from deepsearch.ports.data.requests import (
-    KlineRequest,
-    RealtimeQuoteRequest,
-)
-from deepsearch.ports.data.responses import (
-    KlineBar,
-    KlineResponse,
-    Quote,
-    RealtimeQuoteResponse,
-)
-from deepsearch.ports.data.semantic_types import (
-    AdjustType,
-    AssetSpec,
-    Timeframe,
-)
+from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest
+from deepsearch.ports.data.responses import KlineBar, KlineResponse, Quote, RealtimeQuoteResponse
+from deepsearch.ports.data.semantic_types import AdjustType, AssetSpec, Timeframe
 from deepsearch.ports.data_sources import DataSourceType
 
 from .base import (

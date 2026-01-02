@@ -6,14 +6,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Type, TypeVar
+from typing import TYPE_CHECKING, Dict, List, TypeVar
 
 from loguru import logger
 
-from deepsearch.config.models.capability_routing import (
-    CapabilityRoutingConfig,
-    CapabilityRoutingRule,
-)
+from deepsearch.config.models.capability_routing import CapabilityRoutingConfig
 from deepsearch.ports.data.capabilities import DataCapability
 from deepsearch.ports.data.requests import (
     DataRequest,
@@ -25,10 +22,7 @@ from deepsearch.ports.data.requests import (
 )
 from deepsearch.ports.data.semantic_types import LatencyHint
 
-from .adapters.base import (
-    BaseProviderAdapter,
-    CapabilityNotSupportedError,
-)
+from .adapters.base import BaseProviderAdapter
 
 if TYPE_CHECKING:
     pass

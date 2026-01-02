@@ -183,18 +183,18 @@ class TGWError(DataProviderError):
 
 class DataProvider(ABC):
     """数据提供者基类
-    
+
     .. deprecated::
         此类已废弃，请使用新的 UnifiedDataFeed 和 Adapter 架构：
-        
+
         旧方式:
             provider = get_registry().get_provider_instance("miniqmt")
             data = await provider.get_kline_data(symbol="000001.SZ", ...)
-            
+
         新方式:
             from deepsearch.application.services.unified_data import get_unified_feed
             from deepsearch.ports.data.requests import KlineRequest
-            
+
             feed = get_unified_feed()
             data = await feed.query(KlineRequest(asset=..., timeframe=...))
     """
@@ -217,7 +217,7 @@ class DataProvider(ABC):
         self, limit: Optional[int] = None, **kwargs
     ) -> Optional[List[Dict[str, Any]]]:
         """获取股票列表
-        
+
         .. deprecated:: 建议使用 UnifiedDataFeed.query(StockListRequest())
         """
         pass
@@ -233,14 +233,14 @@ class DataProvider(ABC):
         **kwargs,
     ) -> Optional[List[Dict[str, Any]]]:
         """获取K线数据
-        
+
         .. deprecated:: 建议使用 UnifiedDataFeed.query(KlineRequest(...))
         """
         pass
 
     async def get_realtime_quotes(self, symbols: List[str]) -> Optional[List[Dict[str, Any]]]:
         """获取实时行情
-        
+
         .. deprecated:: 建议使用 UnifiedDataFeed.query(RealtimeQuoteRequest(...))
         """
         pass
@@ -251,7 +251,7 @@ class DataProvider(ABC):
 
     async def get_order_book(self, symbol: str) -> Optional[Dict[str, Any]]:
         """获取订单簿
-        
+
         .. deprecated:: 建议使用 UnifiedDataFeed.query(OrderbookRequest(...))
         """
         pass
@@ -271,7 +271,6 @@ class DataProvider(ABC):
     def get_statistics(self) -> Dict[str, object]:
         """提供基础统计结构，默认返回空字典。"""
         return {}
-
 
 
 class IDataSource(Protocol):

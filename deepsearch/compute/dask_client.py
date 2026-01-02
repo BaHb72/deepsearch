@@ -389,9 +389,7 @@ async def get_dask_client(scheduler_address: str = DEFAULT_SCHEDULER_ADDRESS) ->
 
     except Exception as e:
         logger.error(f"Dask 集群连接失败: {e}")
-        raise RuntimeError(
-            "Dask 集群不可用，请检查: 1) Docker 服务 2) Windows Worker 脚本"
-        ) from e
+        raise RuntimeError("Dask 集群不可用，请检查: 1) Docker 服务 2) Windows Worker 脚本") from e
 
 
 async def close_dask_client() -> None:
@@ -406,4 +404,3 @@ async def close_dask_client() -> None:
             logger.warning(f"关闭 Dask Client 时出错: {e}")
         finally:
             _global_client = None
-

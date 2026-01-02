@@ -95,7 +95,9 @@ class IOrderbookProvider(Protocol):
 
 
 # 能力接口类型联合
-ProviderAdapter = IKlineProvider | IRealtimeProvider | ITickProvider | IStockListProvider | IOrderbookProvider
+ProviderAdapter = (
+    IKlineProvider | IRealtimeProvider | ITickProvider | IStockListProvider | IOrderbookProvider
+)
 
 
 # ============================================================================

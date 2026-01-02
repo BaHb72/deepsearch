@@ -588,7 +588,7 @@ class PositionRepository:
             position.frozen_qty += quantity
 
         await self.session.flush()
-        await self.session.refresh(position)  # type: ignore[attr-defined]
+        await self.session.refresh(position)
         self.logger.info(f"Position buy: {symbol} +{quantity}@{price}")
         return position.to_dict()
 
@@ -652,7 +652,7 @@ class PositionRepository:
         position.available_qty -= quantity
 
         await self.session.flush()
-        await self.session.refresh(position)  # type: ignore[attr-defined]
+        await self.session.refresh(position)
         self.logger.info(f"Position sell: {symbol} -{quantity}@{price}")
         return position.to_dict()
 

@@ -930,15 +930,18 @@ def create_app() -> FastAPI:
     app.include_router(
         data_unified_router, tags=["UnifiedData"]
     )  # 统一数据API，已包含 /api/data 前缀
-    
+
     # 新架构数据查询 API (统一查询接口)
     try:
         from deepsearch.webui.api.endpoints.data.unified_query import router as unified_query_router
-        app.include_router(unified_query_router, tags=["UnifiedQuery"])  # 新架构数据API，已包含 /api/v1/data 前缀
+
+        app.include_router(
+            unified_query_router, tags=["UnifiedQuery"]
+        )  # 新架构数据API，已包含 /api/v1/data 前缀
         logger.info("统一数据查询API已注册")
     except ImportError as e:
         logger.warning(f"统一数据查询API模块加载失败: {e}")
-    
+
     app.include_router(
         data_router, prefix="/api/data", tags=["Data"]
     )  # 基础数据API，提供 /stocks、/kline 等
@@ -1312,8 +1315,11 @@ async def websocket_positions(websocket: WebSocket):
                 try:
                     from deepsearch.application.services.position_service import PositionService
                     from deepsearch.core.components.data_components import DatabaseComponent
+                    from deepsearch.core.runtime.context import get_context
 
-                    db_component = DatabaseComponent.get_instance()
+                    db_component = get_context().get_component("database")
+                    if not isinstance(db_component, DatabaseComponent):
+                        raise RuntimeError("数据库组件类型错误")
                     async with db_component.get_session() as session:
                         service = PositionService(session)
                         positions = await service.get_all()
@@ -1329,8 +1335,11 @@ async def websocket_positions(websocket: WebSocket):
                 try:
                     from deepsearch.application.services.position_service import PositionService
                     from deepsearch.core.components.data_components import DatabaseComponent
+                    from deepsearch.core.runtime.context import get_context
 
-                    db_component = DatabaseComponent.get_instance()
+                    db_component = get_context().get_component("database")
+                    if not isinstance(db_component, DatabaseComponent):
+                        raise RuntimeError("数据库组件类型错误")
                     async with db_component.get_session() as session:
                         service = PositionService(session)
                         positions = await service.get_all()

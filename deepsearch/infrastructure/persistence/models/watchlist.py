@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -52,7 +52,7 @@ class WatchlistItemDB(Base):
     def __repr__(self) -> str:
         return f"<WatchlistItemDB(symbol='{self.symbol}', name='{self.name}')>"
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """转换为 Pydantic 模型兼容的字典。"""
         return {
             "symbol": self.symbol,
@@ -106,7 +106,7 @@ class SignalHistoryDB(Base):
             f"<SignalHistoryDB(id='{self.id}', symbol='{self.symbol}', type='{self.signal_type}')>"
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """转换为 Pydantic 模型兼容的字典。"""
         return {
             "id": self.id,
@@ -169,7 +169,7 @@ class TTradingRecordDB(Base):
     def __repr__(self) -> str:
         return f"<TTradingRecordDB(id='{self.id}', symbol='{self.symbol}', direction='{self.direction}')>"
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典。"""
         return {
             "id": self.id,
@@ -232,7 +232,7 @@ class PositionDB(Base):
     def __repr__(self) -> str:
         return f"<PositionDB(symbol='{self.symbol}', qty={self.quantity}, available={self.available_qty})>"
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典。"""
         return {
             "id": self.id,

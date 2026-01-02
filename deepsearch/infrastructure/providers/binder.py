@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Dict
 
 from loguru import logger
 
@@ -231,7 +231,9 @@ class UnifiedDataFeed:
 
 
 # 延迟导入避免循环依赖
-from deepsearch.infrastructure.providers.reference_capability import ReferenceDataCapability  # noqa: E402
+from deepsearch.infrastructure.providers.reference_capability import (  # noqa: E402
+    ReferenceDataCapability,
+)
 
 __all__ = [
     "FallbackStrategy",

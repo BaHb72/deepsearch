@@ -9,12 +9,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from deepsearch.ports.data.semantic_types import AdjustType, Timeframe
-
 
 # ============================================================================
 # 能力规格定义
@@ -193,15 +192,9 @@ class CapabilityRoutingConfig(BaseModel):
 
     def get_providers_for_capability(self, capability: str) -> List[str]:
         """获取支持某能力的所有 Provider"""
-        return [
-            name
-            for name, spec in self.capabilities.items()
-            if spec.supports(capability)
-        ]
+        return [name for name, spec in self.capabilities.items() if spec.supports(capability)]
 
-    def get_provider_capability(
-        self, provider: str, capability: str
-    ) -> BaseModel | None:
+    def get_provider_capability(self, provider: str, capability: str) -> BaseModel | None:
         """获取指定 Provider 的能力规格"""
         spec = self.capabilities.get(provider)
         if spec is None:

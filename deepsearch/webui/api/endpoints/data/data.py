@@ -34,6 +34,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.sql import Select, and_
 
+# New imports for UnifiedDataFeed
+from deepsearch.application.services.unified_data import get_unified_feed
 from deepsearch.core.components.data_components import DatabaseComponent
 from deepsearch.data.cleaner import DataCleaner
 from deepsearch.indicators.simple import SimpleIndicators
@@ -42,12 +44,9 @@ from deepsearch.infrastructure.persistence.database import DatabaseService
 from deepsearch.infrastructure.persistence.models.market import Market1Min, MarketTick
 from deepsearch.infrastructure.providers.managers.data_source_manager import StockListFetchResult
 from deepsearch.observability.logger import logger
-from deepsearch.utils.data_sources import DataSourceManager, get_data_source_manager
-
-# New imports for UnifiedDataFeed
-from deepsearch.application.services.unified_data import get_unified_feed
 from deepsearch.ports.data.requests import KlineRequest
-from deepsearch.ports.data.semantic_types import AssetSpec, Timeframe, AdjustType, TimeRange
+from deepsearch.ports.data.semantic_types import AdjustType, AssetSpec, Timeframe, TimeRange
+from deepsearch.utils.data_sources import DataSourceManager, get_data_source_manager
 
 if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
     pass
@@ -648,10 +647,17 @@ async def get_kline_data(
 
         # 周期映射
         period_map: Dict[str, Timeframe] = {
-            "1m": Timeframe.M1, "5m": Timeframe.M5, "15m": Timeframe.M15,
-            "30m": Timeframe.M30, "60m": Timeframe.H1, "1d": Timeframe.D1,
-            "1w": Timeframe.W1, "1M": Timeframe.MO1,
-            "daily": Timeframe.D1, "weekly": Timeframe.W1, "monthly": Timeframe.MO1,
+            "1m": Timeframe.M1,
+            "5m": Timeframe.M5,
+            "15m": Timeframe.M15,
+            "30m": Timeframe.M30,
+            "60m": Timeframe.H1,
+            "1d": Timeframe.D1,
+            "1w": Timeframe.W1,
+            "1M": Timeframe.MO1,
+            "daily": Timeframe.D1,
+            "weekly": Timeframe.W1,
+            "monthly": Timeframe.MO1,
         }
 
         # 解析资产
@@ -660,6 +666,7 @@ async def get_kline_data(
         except ValueError:
             if test_mode:
                 from deepsearch.webui.api.common.response_format import APIResponse
+
                 return APIResponse.success([])
             return []
 
@@ -692,17 +699,20 @@ async def get_kline_data(
         # 转换为前端期望格式
         payload: List[Dict[str, Any]] = []
         for bar in response.bars[-limit:]:
-            payload.append({
-                "date": bar.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                "open": float(bar.open),
-                "high": float(bar.high),
-                "low": float(bar.low),
-                "close": float(bar.close),
-                "volume": bar.volume,
-            })
+            payload.append(
+                {
+                    "date": bar.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    "open": float(bar.open),
+                    "high": float(bar.high),
+                    "low": float(bar.low),
+                    "close": float(bar.close),
+                    "volume": bar.volume,
+                }
+            )
 
         if test_mode:
             from deepsearch.webui.api.common.response_format import APIResponse
+
             return APIResponse.success(payload)
         return payload
     except HTTPException:

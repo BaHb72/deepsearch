@@ -144,6 +144,8 @@ def Query(
     description: Optional[str] = ...,
     ge: Optional[float] = ...,
     le: Optional[float] = ...,
+    gt: Optional[float] = ...,
+    lt: Optional[float] = ...,
     regex: Optional[str] = ...,
 ) -> Any: ...
 def Body(default: Any = ..., *args: Any, **kwargs: Any) -> Any: ...

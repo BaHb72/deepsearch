@@ -56,7 +56,7 @@ class TickRingBuffer:
         self.last_access = datetime.now()
         count = min(count, self.size)
         if count == 0:
-            return np.empty((0, 6), dtype=np.float64)
+            return np.empty((0, 6), dtype=np.float64)  # type: ignore[attr-defined]
 
         if self.head >= count:
             return self.data[self.head - count : self.head]
@@ -66,7 +66,7 @@ class TickRingBuffer:
             return np.concatenate([self.data[self.capacity - tail_count :], self.data[: self.head]])
 
     def memory_bytes(self) -> int:
-        return self.data.nbytes
+        return self.data.nbytes  # type: ignore[attr-defined]
 
 
 @dataclass

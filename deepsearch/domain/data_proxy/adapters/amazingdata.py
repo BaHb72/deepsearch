@@ -120,9 +120,7 @@ class AmazingDataAdapter:
                 actor=True,
                 resources={"WIN": 1},
             )
-            self._actor = await asyncio.wait_for(
-                asyncio.wrap_future(actor_future), timeout=60.0
-            )
+            self._actor = await asyncio.wait_for(asyncio.wrap_future(actor_future), timeout=60.0)
 
             # 登录
             logger.info("正在登录 AmazingData...")
@@ -156,9 +154,7 @@ class AmazingDataAdapter:
     async def _ensure_actor(self) -> Any:
         """确保 Actor 已初始化"""
         if not self._actor_initialized or not self._actor:
-            raise RuntimeError(
-                "AmazingData Actor 未初始化，请先调用 initialize_actor()"
-            )
+            raise RuntimeError("AmazingData Actor 未初始化，请先调用 initialize_actor()")
         return self._actor
 
     async def get_kline(
@@ -232,6 +228,14 @@ class AmazingDataAdapter:
                         prev_close=Decimal("0"),
                         amount=Decimal(str(data.get("amount", 0))),
                         volume=int(data.get("volume", 0)),
+                        num_trades=None,
+                        bid_prices=[],
+                        bid_volumes=[],
+                        ask_prices=[],
+                        ask_volumes=[],
+                        upper_limit=None,
+                        lower_limit=None,
+                        trading_phase=None,
                     )
                 )
             return snapshots

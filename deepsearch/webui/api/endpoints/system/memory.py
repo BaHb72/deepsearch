@@ -69,6 +69,7 @@ class MemoryManager:
 
     _instance: Optional["MemoryManager"] = None
     _lock = threading.Lock()
+    _initialized: bool
 
     def __new__(cls) -> "MemoryManager":
         if cls._instance is None:
@@ -89,6 +90,7 @@ class MemoryManager:
         self._gc_log_enabled = True
         self._last_gc_time: Optional[datetime] = None
         self._gc_history: List[Dict[str, Any]] = []  # 内存中的历史记录（兼容）
+        self._gc_persistence: Any = None  # GC 持久化服务
 
         # 初始化 GC 持久化服务
         try:
@@ -110,7 +112,7 @@ class MemoryManager:
             threads = process.num_threads()
 
             try:
-                open_files = len(process.open_files())
+                open_files = len(process.open_files())  # type: ignore[attr-defined]
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 open_files = -1
 
@@ -149,8 +151,8 @@ class MemoryManager:
                 ["pid", "name", "memory_info", "num_threads", "cmdline"]
             ):
                 try:
-                    pinfo = proc.info
-                    if "python" not in pinfo["name"].lower():
+                    pinfo: Dict[str, Any] = proc.info  # type: ignore[attr-defined]
+                    if "python" not in str(pinfo.get("name", "")).lower():
                         continue
 
                     # 只包含 DeepSearch 相关进程：
@@ -604,6 +606,7 @@ class MemoryTracer:
 
     _instance: Optional["MemoryTracer"] = None
     _lock = threading.Lock()
+    _initialized: bool
 
     def __new__(cls) -> "MemoryTracer":
         if cls._instance is None:
@@ -759,7 +762,7 @@ class MemoryTracer:
             "new_snapshot": new_name,
             "total_increase_mb": round(total_diff / 1024 / 1024, 2),
             "increases": increases,
-            "potential_leaks": len([i for i in increases if i["size_diff_mb"] > 1]),
+            "potential_leaks": len([i for i in increases if float(str(i["size_diff_mb"])) > 1]),
         }
 
     def get_status(self) -> Dict[str, Any]:
@@ -1001,11 +1004,11 @@ async def analyze_large_objects(limit: int = 20) -> Dict[str, Any]:
                         }
                     )
             elif isinstance(obj, pd.Series):
-                size = int(obj.memory_usage(deep=True))
+                size = int(obj.memory_usage(deep=True))  # type: ignore[attr-defined]
                 type_stats["Series"]["count"] += 1
                 type_stats["Series"]["size"] += size
             elif isinstance(obj, np.ndarray):
-                size = obj.nbytes
+                size = int(obj.nbytes)  # type: ignore[attr-defined]
                 type_stats["ndarray"]["count"] += 1
                 type_stats["ndarray"]["size"] += size
             elif isinstance(obj, dict):

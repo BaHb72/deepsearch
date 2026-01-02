@@ -284,7 +284,7 @@ def _build_notification_response(config: NotificationsConfig) -> Dict[str, Any]:
                     "image": t.image,
                     "group": t.group,
                     "url": t.url,
-                    "copy": t.copy,
+                    "copy": t.copy_content,
                     "autoCopy": t.auto_copy,
                     "isArchive": t.is_archive,
                     "call": t.call,

@@ -253,7 +253,7 @@ class TaskRouter:
             scheduler_info = self._client.scheduler_info()
             workers = scheduler_info.get("workers", {})
 
-            status = {
+            status: dict[str, Any] = {
                 "connected": True,
                 "scheduler": self._scheduler_address,
                 "total_workers": len(workers),
@@ -275,9 +275,9 @@ class TaskRouter:
                 status["workers"][addr] = worker_info
 
                 if resources.get("WIN"):
-                    status["windows_workers"] += 1
+                    status["windows_workers"] = int(status["windows_workers"]) + 1
                 elif resources.get("LINUX"):
-                    status["linux_workers"] += 1
+                    status["linux_workers"] = int(status["linux_workers"]) + 1
 
             return status
         except Exception as exc:

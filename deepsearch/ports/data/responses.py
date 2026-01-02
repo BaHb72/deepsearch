@@ -41,7 +41,11 @@ class KlineBar:
     def from_dict(cls, data: dict) -> "KlineBar":
         """从字典创建"""
         return cls(
-            timestamp=data["timestamp"] if isinstance(data["timestamp"], datetime) else datetime.fromisoformat(str(data["timestamp"])),
+            timestamp=(
+                data["timestamp"]
+                if isinstance(data["timestamp"], datetime)
+                else datetime.fromisoformat(str(data["timestamp"]))
+            ),
             open=Decimal(str(data["open"])),
             high=Decimal(str(data["high"])),
             low=Decimal(str(data["low"])),

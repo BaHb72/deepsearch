@@ -5,12 +5,7 @@ This module provides interfaces for submitting tasks to the Dask distributed clu
 Supports hybrid Windows/Docker architecture with automatic task routing.
 """
 
-from .dask_client import (
-    DaskTaskClient,
-    close_dask_client,
-    get_dask_client,
-    submit_to_dask,
-)
+from .dask_client import DaskTaskClient, close_dask_client, get_dask_client, submit_to_dask
 from .task_routing import (
     TaskEnvironment,
     TaskRouter,
@@ -34,4 +29,3 @@ __all__ = [
     "submit_to_dask",
     "submit_windows_task",
 ]
-

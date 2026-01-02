@@ -20,25 +20,15 @@ from deepsearch.config.models.capability_routing import (
     RealtimeQuoteCapabilitySpec,
     TickCapabilitySpec,
 )
-from deepsearch.ports.data.capabilities import DataCapability
-from deepsearch.ports.data.requests import (
-    KlineRequest,
-    RealtimeQuoteRequest,
-    TickRequest,
-)
+from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest, TickRequest
 from deepsearch.ports.data.responses import (
     KlineBar,
     KlineResponse,
     Quote,
     RealtimeQuoteResponse,
-    TickData,
     TickResponse,
 )
-from deepsearch.ports.data.semantic_types import (
-    AdjustType,
-    AssetSpec,
-    Timeframe,
-)
+from deepsearch.ports.data.semantic_types import AdjustType, AssetSpec, Timeframe
 from deepsearch.ports.data_sources import DataSourceType
 
 from .base import (
@@ -50,9 +40,7 @@ from .base import (
 )
 
 if TYPE_CHECKING:
-    from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import (
-        MiniQMTProvider,
-    )
+    from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTProvider
 
 
 class MiniQMTRequestMapper:

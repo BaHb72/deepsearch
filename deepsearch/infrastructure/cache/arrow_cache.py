@@ -21,23 +21,21 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 import pandas as pd
 
-# TYPE_CHECKING 模式：mypy 静态分析时导入，运行时不导入
-if TYPE_CHECKING:
-    import pyarrow as pa
+# TYPE_CHECKING 模式：不再需要导入 pyarrow 类型，使用 Any 表示可选依赖类型
 
 # 运行时导入
 try:
     import pyarrow as pa_runtime
-    import pyarrow.ipc as ipc_runtime
+    import pyarrow.ipc as ipc_runtime  # type: ignore[import-untyped]
 
     PYARROW_AVAILABLE = True
 except ImportError:
     pa_runtime = None  # type: ignore[assignment]
-    ipc_runtime = None  # type: ignore[assignment]
+    ipc_runtime = None
     PYARROW_AVAILABLE = False
 
 
@@ -187,7 +185,8 @@ class ArrowCacheManager:
         """加载索引文件"""
         if self.index_path.exists():
             try:
-                return json.loads(self.index_path.read_text(encoding="utf-8"))
+                data = json.loads(self.index_path.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else {}
             except (json.JSONDecodeError, OSError):
                 return {}
         return {}
@@ -206,7 +205,7 @@ class ArrowCacheManager:
         hash_key = hashlib.md5(key.encode()).hexdigest()
         return self.cache_dir / f"{hash_key}.arrow"
 
-    def get(self, key: str, as_arrow: bool = False) -> Optional[Union[pd.DataFrame, "pa.Table"]]:
+    def get(self, key: str, as_arrow: bool = False) -> Optional[Union[pd.DataFrame, Any]]:
         """
         获取缓存
 
@@ -238,8 +237,8 @@ class ArrowCacheManager:
 
         # 使用内存映射读取
         try:
-            with pa_runtime.memory_map(str(file_path), "r") as source:
-                reader = ipc_runtime.open_file(source)
+            with pa_runtime.memory_map(str(file_path), "r") as source:  # type: ignore[attr-defined]
+                reader = ipc_runtime.open_file(source)  # type: ignore[attr-defined]
                 table = reader.read_all()
 
             self._stats["hits"] += 1
@@ -250,7 +249,7 @@ class ArrowCacheManager:
             self._stats["misses"] += 1
             return None
 
-    def set(self, key: str, data: Union[pd.DataFrame, "pa.Table"]) -> None:
+    def set(self, key: str, data: Union[pd.DataFrame, Any]) -> None:
         """
         设置缓存
 
@@ -262,15 +261,15 @@ class ArrowCacheManager:
 
         # 转换为 Arrow Table
         if isinstance(data, pd.DataFrame):
-            table = pa_runtime.Table.from_pandas(data)
+            table = pa_runtime.Table.from_pandas(data)  # type: ignore[attr-defined]
         else:
             table = data
 
         # 写入（带锁保证线程安全）
         with self._lock:
             try:
-                with pa_runtime.OSFile(str(file_path), "wb") as sink:
-                    writer = ipc_runtime.new_file(sink, table.schema)
+                with pa_runtime.OSFile(str(file_path), "wb") as sink:  # type: ignore[attr-defined]
+                    writer = ipc_runtime.new_file(sink, table.schema)  # type: ignore[attr-defined]
                     writer.write_table(table)
                     writer.close()
 

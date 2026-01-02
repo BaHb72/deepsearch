@@ -4,8 +4,6 @@
 提供全面的市场数据服务
 """
 
-import hashlib
-import json
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -14,12 +12,11 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
 
-from deepsearch.utils.data_sources import DataSourceManager, DataSourceType, get_data_source_manager
-
 # New imports for UnifiedDataFeed
 from deepsearch.application.services.unified_data import get_unified_feed
 from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest
-from deepsearch.ports.data.semantic_types import AssetSpec, Timeframe, AdjustType, TimeRange
+from deepsearch.ports.data.semantic_types import AdjustType, AssetSpec, Timeframe, TimeRange
+from deepsearch.utils.data_sources import DataSourceManager, DataSourceType, get_data_source_manager
 from deepsearch.webui.api.common.response_format import (
     APIResponse,
     ErrorCodes,
@@ -293,9 +290,14 @@ async def get_kline_data(
 
         # 周期映射
         period_map = {
-            "1m": Timeframe.M1, "5m": Timeframe.M5, "15m": Timeframe.M15,
-            "30m": Timeframe.M30, "60m": Timeframe.H1, "1d": Timeframe.D1,
-            "1w": Timeframe.W1, "1M": Timeframe.MO1,
+            "1m": Timeframe.M1,
+            "5m": Timeframe.M5,
+            "15m": Timeframe.M15,
+            "30m": Timeframe.M30,
+            "60m": Timeframe.H1,
+            "1d": Timeframe.D1,
+            "1w": Timeframe.W1,
+            "1M": Timeframe.MO1,
         }
 
         # 从 UnifiedDataFeed 获取K线数据
@@ -343,14 +345,16 @@ async def get_kline_data(
             # 转换为前端期望格式
             result = []
             for bar in kline_response.bars:
-                result.append({
-                    "date": bar.timestamp.strftime("%Y-%m-%d"),
-                    "open": float(bar.open),
-                    "high": float(bar.high),
-                    "low": float(bar.low),
-                    "close": float(bar.close),
-                    "volume": bar.volume,
-                })
+                result.append(
+                    {
+                        "date": bar.timestamp.strftime("%Y-%m-%d"),
+                        "open": float(bar.open),
+                        "high": float(bar.high),
+                        "low": float(bar.low),
+                        "close": float(bar.close),
+                        "volume": bar.volume,
+                    }
+                )
 
             if response:
                 response.headers["X-Data-Source"] = "unified_feed"

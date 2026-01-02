@@ -36,9 +36,7 @@ def get_unified_feed() -> UnifiedDataFeed:
     """
     global _unified_feed
     if _unified_feed is None:
-        raise RuntimeError(
-            "UnifiedDataFeed not initialized. Call initialize_unified_feed() first."
-        )
+        raise RuntimeError("UnifiedDataFeed not initialized. Call initialize_unified_feed() first.")
     return _unified_feed
 
 
@@ -185,7 +183,8 @@ def start_aggregation_engine() -> None:
     from deepsearch.application.services.aggregation import impl as _  # noqa: F401
 
     engine = get_engine()
-    engine.set_feed(_unified_feed)
+    if _unified_feed is not None:
+        engine.set_feed(_unified_feed)
     engine.start()
     _aggregation_engine_started = True
     logger.info("聚合引擎已启动")
@@ -213,4 +212,3 @@ __all__ = [
     "start_aggregation_engine",
     "stop_aggregation_engine",
 ]
-

@@ -4,19 +4,18 @@
 提供K线数据、技术指标、实时行情等图表相关功能
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
 
 from deepsearch.application.services.unified_data import get_unified_feed
-from deepsearch.infrastructure.providers.binder import UnifiedDataFeed
 from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest
-from deepsearch.ports.data.semantic_types import AssetSpec, Timeframe, AdjustType, TimeRange
+from deepsearch.ports.data.semantic_types import AdjustType, AssetSpec, Timeframe, TimeRange
 
 # 创建路由器
 router = APIRouter(prefix="/chart", tags=["图表数据管理"])
@@ -146,8 +145,14 @@ async def get_chart_series(
             )
         else:
             days_map = {
-                "1m": 1, "5m": 5, "15m": 7, "30m": 10, "60m": 20,
-                "1d": 100, "1w": 365, "1M": 365 * 3,
+                "1m": 1,
+                "5m": 5,
+                "15m": 7,
+                "30m": 10,
+                "60m": 20,
+                "1d": 100,
+                "1w": 365,
+                "1M": 365 * 3,
             }
             days = days_map.get(period, 100)
             time_range = TimeRange.last_days(days)
@@ -172,14 +177,16 @@ async def get_chart_series(
             # 转换为前端期望格式
             series_data = []
             for bar in response.bars[-limit:]:
-                series_data.append({
-                    "date": bar.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                    "open": float(bar.open),
-                    "high": float(bar.high),
-                    "low": float(bar.low),
-                    "close": float(bar.close),
-                    "volume": bar.volume,
-                })
+                series_data.append(
+                    {
+                        "date": bar.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                        "open": float(bar.open),
+                        "high": float(bar.high),
+                        "low": float(bar.low),
+                        "close": float(bar.close),
+                        "volume": bar.volume,
+                    }
+                )
 
             # 返回结果
             actual_start = response.bars[0].timestamp.strftime("%Y-%m-%d") if response.bars else ""
@@ -242,17 +249,19 @@ async def calculate_indicators(
             )
 
         # 转换为 DataFrame
-        kline_df = pd.DataFrame([
-            {
-                "date": bar.timestamp,
-                "open": float(bar.open),
-                "high": float(bar.high),
-                "low": float(bar.low),
-                "close": float(bar.close),
-                "volume": bar.volume,
-            }
-            for bar in response.bars
-        ])
+        kline_df = pd.DataFrame(
+            [
+                {
+                    "date": bar.timestamp,
+                    "open": float(bar.open),
+                    "high": float(bar.high),
+                    "low": float(bar.low),
+                    "close": float(bar.close),
+                    "volume": bar.volume,
+                }
+                for bar in response.bars
+            ]
+        )
 
         if kline_df.empty:
             return TechnicalIndicatorResponse(

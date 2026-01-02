@@ -8,7 +8,6 @@ from .amazingdata import AmazingDataConfig
 from .app import AppConfig, AppEnvironment
 from .bus import BusInstanceConfig, MessageBusConfig, RouteConfig
 from .cache import RedisConfig
-from .cloudflare_workers import CloudflareWorkersConfig
 from .capability_routing import (
     CapabilityRoutingConfig,
     CapabilityRoutingRule,
@@ -21,6 +20,7 @@ from .capability_routing import (
     StockListCapabilitySpec,
     TickCapabilitySpec,
 )
+from .cloudflare_workers import CloudflareWorkersConfig
 from .data_sources import (
     CircuitBreakerConfig,
     DataSourceProviderConfig,

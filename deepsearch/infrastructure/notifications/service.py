@@ -203,8 +203,8 @@ class NotificationService:
                         effective_group = template.group
                     if template.url and not url:
                         effective_url = template.url
-                    if template.copy and not copy:
-                        effective_copy = template.copy
+                    if template.copy_content and not copy:
+                        effective_copy = template.copy_content
                     if template.auto_copy and not auto_copy:
                         effective_auto_copy = template.auto_copy
                     if template.is_archive is not None and is_archive is None:

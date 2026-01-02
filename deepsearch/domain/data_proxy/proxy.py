@@ -112,7 +112,6 @@ class UnifiedDataProxy:
         Raises:
             RuntimeError: 所有数据源都失败
         """
-        import pandas as pd
 
         # 选择数据源
         if source == "auto":
@@ -161,9 +160,7 @@ class UnifiedDataProxy:
                     start_date=start_date,
                     end_date=end_date,
                     limit=limit,
-                    source=await self._router.select_source(
-                        CAPABILITY_KLINE, exclude=[source_name]
-                    )
+                    source=await self._router.select_source(CAPABILITY_KLINE, exclude=[source_name])
                     or "",
                 )
             raise

@@ -10,19 +10,20 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, Protocol, Sequence
+from typing import TYPE_CHECKING, Dict, Protocol, Sequence, runtime_checkable
 
 from loguru import logger
 
 from deepsearch.ports.data.requests import StockListRequest
 from deepsearch.ports.data.responses import StockInfo, StockListResponse
-from deepsearch.ports.data.semantic_types import AssetSpec, InstrumentStatus
+from deepsearch.ports.data.semantic_types import InstrumentStatus
 from deepsearch.ports.data_sources import DataSourceType
 
 if TYPE_CHECKING:
     pass
 
 
+@runtime_checkable
 class IStockListProvider(Protocol):
     """股票列表能力接口"""
 
@@ -140,9 +141,7 @@ class ReferenceDataCapability:
                 self._loaded_at = datetime.now()
                 self._source = response.source
 
-                logger.info(
-                    f"从 {response.source} 加载参考数据成功，共 {len(response.stocks)} 条"
-                )
+                logger.info(f"从 {response.source} 加载参考数据成功，共 {len(response.stocks)} 条")
                 return response
 
             except Exception as e:

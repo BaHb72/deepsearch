@@ -10,27 +10,21 @@
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest
 from deepsearch.ports.data.semantic_types import (
-    AssetSpec,
-    Timeframe,
     AdjustType,
-    TimeRange,
+    AssetSpec,
     LatencyHint,
-)
-from deepsearch.ports.data.requests import (
-    KlineRequest,
-    RealtimeQuoteRequest,
+    Timeframe,
+    TimeRange,
 )
 from deepsearch.webui.api.common.response_format import success_response
-from deepsearch.webui.api.utils import sanitize_for_json
-
 
 router = APIRouter(prefix="/api/v1/data", tags=["data_query"])
 
@@ -333,10 +327,12 @@ async def get_capabilities():
     try:
         feed = _get_unified_feed()
         if feed is None:
-            return success_response({
-                "available": False,
-                "message": "UnifiedDataFeed 未初始化",
-            })
+            return success_response(
+                {
+                    "available": False,
+                    "message": "UnifiedDataFeed 未初始化",
+                }
+            )
 
         # 获取路由器信息
         router_info = feed.router
@@ -351,20 +347,28 @@ async def get_capabilities():
                 "stock_list": bool(caps.stock_list and caps.stock_list.supported),
             }
 
-        return success_response({
-            "available": True,
-            "providers": providers,
-            "routing": {
-                "kline": list(router_info._config.routing.kline.priority) if router_info._config.routing.kline else [],
-            },
-        })
+        return success_response(
+            {
+                "available": True,
+                "providers": providers,
+                "routing": {
+                    "kline": (
+                        list(router_info._config.routing.kline.priority)
+                        if router_info._config.routing.kline
+                        else []
+                    ),
+                },
+            }
+        )
 
     except Exception as e:
         logger.error(f"获取能力信息失败: {e}")
-        return success_response({
-            "available": False,
-            "error": str(e),
-        })
+        return success_response(
+            {
+                "available": False,
+                "error": str(e),
+            }
+        )
 
 
 __all__ = ["router"]

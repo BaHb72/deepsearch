@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import ClassVar
@@ -54,18 +54,26 @@ class Timeframe(StrEnum):
     W1 = "1w"
     MO1 = "1mo"
 
-    def __lt__(self, other: "Timeframe") -> bool:
+    def __lt__(self, other: object) -> bool:
         """支持周期比较"""
+        if not isinstance(other, Timeframe):
+            return NotImplemented  # type: ignore[return-value]
         order = list(Timeframe)
         return order.index(self) < order.index(other)
 
-    def __le__(self, other: "Timeframe") -> bool:
+    def __le__(self, other: object) -> bool:
+        if not isinstance(other, Timeframe):
+            return NotImplemented  # type: ignore[return-value]
         return self == other or self < other
 
-    def __gt__(self, other: "Timeframe") -> bool:
+    def __gt__(self, other: object) -> bool:
+        if not isinstance(other, Timeframe):
+            return NotImplemented  # type: ignore[return-value]
         return not self <= other
 
-    def __ge__(self, other: "Timeframe") -> bool:
+    def __ge__(self, other: object) -> bool:
+        if not isinstance(other, Timeframe):
+            return NotImplemented  # type: ignore[return-value]
         return not self < other
 
 

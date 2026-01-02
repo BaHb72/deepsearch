@@ -4,23 +4,22 @@
 提供单一入口访问所有数据源
 """
 
+# New imports for UnifiedDataFeed
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
 
+from deepsearch.application.services.unified_data import get_unified_feed
 from deepsearch.domain.market_data import StockListRecord
 from deepsearch.infrastructure.providers.managers.data_source_manager import StockListFetchResult
+from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest, StockListRequest
+from deepsearch.ports.data.semantic_types import AdjustType, AssetSpec, Timeframe, TimeRange
 from deepsearch.utils.data_sources import DataSourceType, get_data_source_manager
 from deepsearch.webui.api.common.response_format import success_response
 from deepsearch.webui.api.endpoints.data import data as data_module
 from deepsearch.webui.api.utils import sanitize_for_json
-
-# New imports for UnifiedDataFeed
-from datetime import datetime
-from deepsearch.application.services.unified_data import get_unified_feed
-from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest, StockListRequest
-from deepsearch.ports.data.semantic_types import AssetSpec, Timeframe, AdjustType, TimeRange
 
 router = APIRouter(prefix="/api/data", tags=["unified_data"])
 
@@ -90,11 +89,20 @@ async def get_stock_history(
     try:
         # 周期映射
         period_map = {
-            "daily": Timeframe.D1, "weekly": Timeframe.W1, "monthly": Timeframe.MO1,
-            "1": Timeframe.M1, "5": Timeframe.M5, "15": Timeframe.M15,
-            "30": Timeframe.M30, "60": Timeframe.H1,
-            "1m": Timeframe.M1, "5m": Timeframe.M5, "15m": Timeframe.M15,
-            "30m": Timeframe.M30, "60m": Timeframe.H1, "1d": Timeframe.D1,
+            "daily": Timeframe.D1,
+            "weekly": Timeframe.W1,
+            "monthly": Timeframe.MO1,
+            "1": Timeframe.M1,
+            "5": Timeframe.M5,
+            "15": Timeframe.M15,
+            "30": Timeframe.M30,
+            "60": Timeframe.H1,
+            "1m": Timeframe.M1,
+            "5m": Timeframe.M5,
+            "15m": Timeframe.M15,
+            "30m": Timeframe.M30,
+            "60m": Timeframe.H1,
+            "1d": Timeframe.D1,
         }
 
         # 复权映射
@@ -136,14 +144,16 @@ async def get_stock_history(
         # 转换为前端期望格式
         result = []
         for bar in response.bars:
-            result.append({
-                "date": bar.timestamp.strftime("%Y-%m-%d"),
-                "open": float(bar.open),
-                "high": float(bar.high),
-                "low": float(bar.low),
-                "close": float(bar.close),
-                "volume": bar.volume,
-            })
+            result.append(
+                {
+                    "date": bar.timestamp.strftime("%Y-%m-%d"),
+                    "open": float(bar.open),
+                    "high": float(bar.high),
+                    "low": float(bar.low),
+                    "close": float(bar.close),
+                    "volume": bar.volume,
+                }
+            )
 
         return success_response(sanitize_for_json(result))
 
@@ -260,8 +270,8 @@ async def get_stock_list(source: Optional[str] = Query(None, description="指定
         response = await feed.list_instruments(request)
 
         # 转换为前端期望的格式
-        records = []
-        legacy = []
+        records: list[Any] = []
+        legacy: list[Any] = []
         for stock in response.stocks:
             record = {
                 "symbol": stock.asset.to_standard(),
@@ -272,11 +282,13 @@ async def get_stock_list(source: Optional[str] = Query(None, description="指定
             }
             records.append(record)
             # 兼容旧版格式
-            legacy.append({
-                "symbol": stock.asset.symbol,
-                "code": stock.asset.symbol,
-                "name": stock.name,
-            })
+            legacy.append(
+                {
+                    "symbol": stock.asset.symbol,
+                    "code": stock.asset.symbol,
+                    "name": stock.name,
+                }
+            )
 
         payload = {
             "records": records,
@@ -292,7 +304,9 @@ async def get_stock_list(source: Optional[str] = Query(None, description="指定
         logger.warning(f"使用旧实现获取股票列表: {e}")
         service = data_module.get_data_service()
         stock_result = await service.get_stock_list(limit=None)
-        records, legacy = _normalize_stock_records(stock_result)
+        normalized = _normalize_stock_records(stock_result)
+        records = normalized[0]
+        legacy = normalized[1]
         payload = {
             "records": records,
             "legacy": legacy,

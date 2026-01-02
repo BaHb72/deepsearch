@@ -156,41 +156,54 @@ dev = [
 python_version = "3.13"
 # 为第三方依赖补充的本地类型桩
 mypy_path = ["typings"]
+# 暂时关闭以专注于真正的错误，后续开启进行清理
 warn_unused_ignores = false
 warn_return_any = false
 show_error_codes = true
 pretty = true
+# SQLAlchemy 2.0 官方 mypy 插件已弃用（只支持 mypy<=1.10.1）
+# SQLAlchemy 2.0 的 Mapped + mapped_column 语法原生支持 mypy，无需插件
 
-# 忽略历史遗留类型问题较多的模块
+# 第三方库缺少类型存根
 [[tool.mypy.overrides]]
 module = [
-    "deepsearch.webui.*",
-    "deepsearch.infrastructure.*",
-    "deepsearch.adapters.*",
-    "deepsearch.memory.*",
-    "deepsearch.compute.*",
-    "deepsearch.application.services.*",
-    "deepsearch.application.data.handlers",
-    "deepsearch.strategies.*",
-    "deepsearch.ports.data.semantic_types",
-    "deepsearch.core.utils.status_display",
-    "deepsearch.core.components.data_components",
-    "deepsearch.domain.data_proxy.*",
-    "pika.*",
+    "pika", "pika.*",
+    "win32api", "win32api.*",
+    "amazingdata", "amazingdata.*",
+    "asyncpg", "asyncpg.*",
+    "click", "click.*",
+    "starlette", "starlette.*",
+    "sqlalchemy.dialects.*",
+    "sqlalchemy.sql.*",
+    "pyarrow.ipc", "pyarrow.ipc.*",
+    "pypinyin", "pypinyin.*",
+    "akshare", "akshare.*",
+    "tigeropen", "tigeropen.*",
+    "xtquant", "xtquant.*",
+    "tgw", "tgw.*",
+    "backtrader", "backtrader.*",
+    "apscheduler", "apscheduler.*",
+    "distributed", "distributed.*",
+    "dask", "dask.*",
+    "uvicorn", "uvicorn.*",
+    "platformdirs", "platformdirs.*",
+    "aiohttp", "aiohttp.*",
+    "httpx", "httpx.*",
+    "websockets", "websockets.*",
+    "schedule", "schedule.*",
+    "rich", "rich.*",
+    "pytest", "pytest.*",
+    "deepsearch.domain.interfaces.*",
+    "deepsearch.domain.value_objects", "deepsearch.domain.value_objects.*",
 ]
-ignore_errors = true
-
-# pika 是第三方库，忽略 import
-[[tool.mypy.overrides]]
-module = ["pika", "pika.*", "win32api", "win32api.*"]
 ignore_missing_imports = true
 
-# config.manager 使用动态导入
+# TODO: SQLAlchemy 2.0 类型系统迁移后移除此规则
+# 问题：ORM 模型的 __init__ 类型推断需要 MappedAsDataclass + 每个字段的 init 参数配置
+# 参见：docs/plans/sqlalchemy_type_migration.md
 [[tool.mypy.overrides]]
 module = [
-    "deepsearch.config.manager",
-    "deepsearch.core.*",
-    "deepsearch.backtest.*",
-    "deepsearch.constants.*",
+    "deepsearch.infrastructure.persistence.models.*",
+    "deepsearch.infrastructure.persistence.watchlist_repository",
 ]
 ignore_errors = true

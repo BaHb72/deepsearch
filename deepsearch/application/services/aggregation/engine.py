@@ -88,6 +88,7 @@ class AggregationEngine:
     """
 
     _instance: Optional["AggregationEngine"] = None
+    _initialized: bool
 
     def __new__(cls) -> "AggregationEngine":
         if cls._instance is None:
@@ -259,12 +260,16 @@ class AggregationEngine:
     async def _refresh_via_dask(self, name: str, agg_cls: type) -> None:
         """通过 Dask 刷新聚合。"""
         try:
+            if self._dask_client is None:
+                raise RuntimeError("Dask client not initialized")
             future = self._dask_client.submit_task(
                 _run_aggregation_on_worker,
                 agg_cls.__name__,
                 agg_cls.__module__,
                 key=f"refresh-{name}",
             )
+            if self._dask_client is None:
+                raise RuntimeError("Dask client not initialized")
             result = self._dask_client.get_result(future, timeout=30)
             get_cache().set(name, result)
             logger.info(f"手动刷新聚合完成 (Dask): {name}")
@@ -352,7 +357,7 @@ class AggregationEngine:
 
     def get_status(self) -> Dict[str, Any]:
         """获取引擎状态。"""
-        status = {
+        status: Dict[str, Any] = {
             "running": self._running,
             "mode": self._mode.value,
         }

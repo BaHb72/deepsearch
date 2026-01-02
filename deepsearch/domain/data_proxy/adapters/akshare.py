@@ -15,11 +15,7 @@ from loguru import logger
 
 from deepsearch.compute import get_dask_client, requires_windows
 
-from ..interfaces import (
-    CAPABILITY_CALENDAR,
-    CAPABILITY_KLINE,
-    CAPABILITY_STOCK_LIST,
-)
+from ..interfaces import CAPABILITY_CALENDAR, CAPABILITY_KLINE, CAPABILITY_STOCK_LIST
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -176,9 +172,7 @@ class AkShareAdapter:
         try:
             client = await get_dask_client()
             future = client.submit(_fetch_calendar, resources={"WIN": 1})
-            result = await asyncio.wait_for(
-                asyncio.wrap_future(future), timeout=30.0
-            )
+            result = await asyncio.wait_for(asyncio.wrap_future(future), timeout=30.0)
             self._available = bool(result)
         except Exception as e:
             logger.warning("AkShare 可用性检查失败: {}", e)
