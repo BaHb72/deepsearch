@@ -344,3 +344,66 @@ def submit_to_dask(
     with DaskTaskClient(scheduler_address=scheduler_address) as client:
         future = client.submit_task(func, *args, **kwargs)
         return client.get_result(future)
+
+
+# ==================== 异步单例管理 ====================
+
+_global_client: Optional[Any] = None  # distributed.Client
+
+
+async def get_dask_client(scheduler_address: str = DEFAULT_SCHEDULER_ADDRESS) -> Any:
+    """获取全局 Dask Client 单例 (异步)
+
+    Args:
+        scheduler_address: Dask scheduler 地址
+
+    Returns:
+        distributed.Client 实例
+
+    Raises:
+        RuntimeError: 如果无法连接到 Dask 集群
+    """
+    global _global_client
+
+    if _global_client is not None:
+        try:
+            # 检查连接是否仍然有效
+            status = _global_client.status
+            if status == "running":
+                return _global_client
+        except Exception:
+            _global_client = None
+
+    try:
+        from distributed import Client
+
+        logger.info(f"连接到 Dask Scheduler: {scheduler_address}...")
+        _global_client = await Client(
+            scheduler_address,
+            asynchronous=True,
+            timeout=30,
+            name="deepsearch-async",
+        )
+        logger.info("Dask Client 连接成功")
+        return _global_client
+
+    except Exception as e:
+        logger.error(f"Dask 集群连接失败: {e}")
+        raise RuntimeError(
+            "Dask 集群不可用，请检查: 1) Docker 服务 2) Windows Worker 脚本"
+        ) from e
+
+
+async def close_dask_client() -> None:
+    """关闭全局 Dask Client"""
+    global _global_client
+
+    if _global_client is not None:
+        try:
+            await _global_client.close()
+            logger.info("Dask Client 已关闭")
+        except Exception as e:
+            logger.warning(f"关闭 Dask Client 时出错: {e}")
+        finally:
+            _global_client = None
+

@@ -31,8 +31,9 @@ repos:
     rev: v1.13.0
     hooks:
       - id: mypy
+        args: [--config-file=pyproject.toml]
         additional_dependencies: [types-PyYAML, types-redis, types-requests, types-pytz]
-        exclude: ^(tests|docs|tools|typings|scripts|deepsearch/strategies|deepsearch/webui/api/endpoints/(strategy_center|amazingdata|qmt)|deepsearch/infrastructure/providers/implementations/amazingdata)/
+        exclude: ^(tests|docs|tools|typings|scripts)/
 
   # 通用文件格式检查
   - repo: https://github.com/pre-commit/pre-commit-hooks

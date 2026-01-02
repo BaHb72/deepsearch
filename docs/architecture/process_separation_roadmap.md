@@ -134,7 +134,11 @@ Qlib 使用 **RabbitMQ + Redis** 实现进程分离：
 
 ## 当前系统 MQ 状态
 
-**尚未集成 MQ**。如需引入，推荐：
+**已集成 RabbitMQ**。
 
-- **轻量级**：Redis Pub/Sub 或 Redis Stream
-- **企业级**：RabbitMQ (Qlib 选择)
+- **消息总线**: `RabbitMQMessageBus` 作为主要分布式消息实现
+- **任务调度**: `Dask` 分布式计算框架
+- **状态持久化**: `Redis Stack` (TimeSeries + 缓存)
+- **消息抽象**: `MessageBusFactory` 统一创建接口，业务代码与 MQ 实现解耦
+
+> 原有 ZeroMQ 实现已于 2026-01 完全移除。

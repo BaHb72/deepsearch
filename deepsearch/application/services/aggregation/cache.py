@@ -20,13 +20,15 @@ class AggregationCache:
 
     _instance: Optional["AggregationCache"] = None
     _lock = threading.Lock()
+    _store: Dict[str, Tuple[Any, datetime]]
 
     def __new__(cls) -> "AggregationCache":
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._store: Dict[str, Tuple[Any, datetime]] = {}
+                    instance = super().__new__(cls)
+                    instance._store = {}
+                    cls._instance = instance
         return cls._instance
 
     def set(self, name: str, value: Any) -> None:

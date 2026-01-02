@@ -19,7 +19,9 @@ __all__ = [
     "EventEngine",
     "CompositeMessageBus",
     "InMemoryMessageBus",
-    "ZeroMQMessageBus",
+    "RabbitMQMessageBus",
+    "MessageBus",
+    "MessageBusFactory",
     "BaseGateway",
     "Gateway",
 ]
@@ -27,7 +29,7 @@ __all__ = [
 if TYPE_CHECKING:  # pragma: no cover
     from .event.engine.engine import Event, EventEngine
     from .gateway.gateway import BaseGateway, Gateway
-    from .messaging import InMemoryMessageBus, ZeroMQMessageBus
+    from .messaging import InMemoryMessageBus, MessageBus, MessageBusFactory, RabbitMQMessageBus
     from .messaging.bus import CompositeMessageBus
 
 _lazy_imports = {
@@ -35,7 +37,9 @@ _lazy_imports = {
     "EventEngine": (".event.engine.engine", "EventEngine"),
     "CompositeMessageBus": (".messaging.bus", "CompositeMessageBus"),
     "InMemoryMessageBus": (".messaging", "InMemoryMessageBus"),
-    "ZeroMQMessageBus": (".messaging", "ZeroMQMessageBus"),
+    "RabbitMQMessageBus": (".messaging", "RabbitMQMessageBus"),
+    "MessageBus": (".messaging", "MessageBus"),
+    "MessageBusFactory": (".messaging", "MessageBusFactory"),
     "BaseGateway": (".gateway.gateway", "BaseGateway"),
     "Gateway": (".gateway.gateway", "Gateway"),
 }

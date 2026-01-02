@@ -69,25 +69,36 @@ class Settings(BaseSettings):
     data_source_prefetch: Optional[DataSourcePrefetchConfig] = None  # 数据源预取调度
     capability_routing: Optional[CapabilityRoutingConfig] = None  # 能力路由配置
 
-
     @property
     def zeromq(self) -> ZeroMQConfig:
-        """向后兼容的 ZeroMQ 配置视图。"""
-        zmq_config = self.message_bus.get_bus_config("zmq")
-        return ZeroMQConfig.model_validate(zmq_config)
+        """向后兼容的 ZeroMQ 配置视图。
+
+        .. deprecated:: 1.0.0
+            ZeroMQ 已移除，返回默认配置用于旧代码兼容。
+        """
+        import warnings
+
+        warnings.warn(
+            "ZeroMQ has been removed. Use RabbitMQ instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return ZeroMQConfig()
 
     def get_timeseries_config(self) -> Dict[str, Any]:
-        """获取时间序列 ZeroMQ 配置。"""
-        try:
-            config = self.message_bus.get_bus_config("timeseries")
-        except ValueError:
-            # 如果未配置，返回默认配置
-            buses = MessageBusConfig._create_default_buses()
-            timeseries_bus = buses.get("timeseries")
-            if timeseries_bus is not None:
-                return cast(Dict[str, Any], timeseries_bus.config)
-            return {}
-        return cast(Dict[str, Any], config)
+        """获取时间序列配置。
+
+        .. deprecated:: 1.0.0
+            TimeSeriesZeroMQBus 已移除，请使用 RabbitMQ + Redis TimeSeries。
+        """
+        import warnings
+
+        warnings.warn(
+            "TimeSeriesZeroMQBus has been removed. Use RabbitMQ + Redis instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return {}
 
     @property
     def log_dir(self) -> Path:

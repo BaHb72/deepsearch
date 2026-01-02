@@ -507,8 +507,7 @@ def status():
         ports_to_check = {
             8000: "WebUI Backend",
             3000: "WebUI Frontend",
-            5556: "ZeroMQ Pub",
-            5557: "ZeroMQ Sub",
+            5672: "RabbitMQ",
         }
 
         for port, service in ports_to_check.items():
@@ -559,15 +558,13 @@ def cleanup(all, force):
 
         ports_to_clean = [config.webui.backend_port, config.webui.frontend_port]
 
-        # 添加 ZMQ 端口（如果配置存在）
-        if "zmq" in config.message_bus.buses:
-            zmq_config = config.message_bus.buses["zmq"].config
-            if hasattr(zmq_config, "pub_port"):
-                ports_to_clean.append(zmq_config.pub_port)
-                ports_to_clean.append(zmq_config.sub_port)
-            elif isinstance(zmq_config, dict):
-                ports_to_clean.append(zmq_config.get("pub_port", 5556))
-                ports_to_clean.append(zmq_config.get("sub_port", 5557))
+        # 添加 RabbitMQ 端口（如果配置存在）
+        if "rabbitmq" in config.message_bus.buses:
+            rabbitmq_config = config.message_bus.buses["rabbitmq"].config
+            if hasattr(rabbitmq_config, "port"):
+                ports_to_clean.append(rabbitmq_config.port)
+            elif isinstance(rabbitmq_config, dict):
+                ports_to_clean.append(rabbitmq_config.get("port", 5672))
 
         cleaned = 0
         for conn in psutil.net_connections():
@@ -726,9 +723,9 @@ def init(output):
         },
         "message_bus": {
             "buses": {
-                "zmq": {
-                    "type": "zeromq",
-                    "config": {"host": "127.0.0.1", "pub_port": 5556, "sub_port": 5557},
+                "rabbitmq": {
+                    "type": "rabbitmq",
+                    "config": {"host": "localhost", "port": 5672, "exchange": "deepsearch.events"},
                 }
             }
         },
