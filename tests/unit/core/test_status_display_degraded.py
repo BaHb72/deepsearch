@@ -25,8 +25,8 @@ class TestStatusDisplayDegradedMode:
                 mock_modules[name] = sys.modules.pop(name, None)
 
         # 移除已缓存的 status_display
-        if "deepsearch.core.utils.status_display" in sys.modules:
-            del sys.modules["deepsearch.core.utils.status_display"]
+        if "core.core.utils.status_display" in sys.modules:
+            del sys.modules["core.core.utils.status_display"]
 
         try:
             # 在 rich 不可用时尝试导入
@@ -52,7 +52,7 @@ class TestStatusDisplayDegradedMode:
 
     def test_get_status_display_returns_instance(self):
         """测试 get_status_display 返回单例实例"""
-        from deepsearch.core.utils.status_display import get_status_display
+        from core.core.utils.status_display import get_status_display
 
         display1 = get_status_display()
         display2 = get_status_display()
@@ -62,7 +62,7 @@ class TestStatusDisplayDegradedMode:
 
     def test_status_display_can_update_source(self):
         """测试可以更新数据源状态"""
-        from deepsearch.core.utils.status_display import get_status_display
+        from core.core.utils.status_display import get_status_display
 
         display = get_status_display()
 
@@ -75,7 +75,7 @@ class TestStatusDisplayDegradedMode:
 
     def test_status_display_enable_disable(self):
         """测试启用/禁用不会崩溃"""
-        from deepsearch.core.utils.status_display import get_status_display
+        from core.core.utils.status_display import get_status_display
 
         display = get_status_display()
 
@@ -95,7 +95,7 @@ class TestDataSourceMetrics:
 
     def test_metrics_dataclass(self):
         """测试 DataSourceMetrics 数据类"""
-        from deepsearch.core.utils.status_display import DataSourceMetrics
+        from core.core.utils.status_display import DataSourceMetrics
 
         metrics = DataSourceMetrics(name="test_source")
 
@@ -109,7 +109,7 @@ class TestDataSourceMetrics:
 
     def test_metrics_success_rate(self):
         """测试成功率计算"""
-        from deepsearch.core.utils.status_display import DataSourceMetrics
+        from core.core.utils.status_display import DataSourceMetrics
 
         metrics = DataSourceMetrics(name="test", requests=10, success=8)
 

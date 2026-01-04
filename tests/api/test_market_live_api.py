@@ -7,7 +7,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.requests import Request
 
-from deepsearch.webui.api.endpoints.market_data import live_api
+from apps.api.api.endpoints.market_data import live_api
 
 
 @pytest.mark.parametrize(

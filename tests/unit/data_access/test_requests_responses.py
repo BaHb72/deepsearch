@@ -4,35 +4,13 @@ Requests 和 Responses 单元测试。
 测试 ports/data/requests.py 和 ports/data/responses.py。
 """
 
-import pytest
 from datetime import datetime
 from decimal import Decimal
 
-from deepsearch.ports.data.semantic_types import (
-    AssetSpec,
-    Exchange,
-    Timeframe,
-    AdjustType,
-    TimeRange,
-    LatencyHint,
-)
-from deepsearch.ports.data.requests import (
-    KlineRequest,
-    RealtimeQuoteRequest,
-    TickRequest,
-    StockListRequest,
-)
-from deepsearch.ports.data.responses import (
-    KlineBar,
-    KlineResponse,
-    Quote,
-    RealtimeQuoteResponse,
-    TickData,
-    TickResponse,
-    StockInfo,
-    StockListResponse,
-)
-from deepsearch.ports.data_sources import DataSourceType
+from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest
+from core.ports.data.responses import KlineBar, KlineResponse, Quote, StockInfo, StockListResponse
+from core.ports.data.semantic_types import AdjustType, AssetSpec, LatencyHint, Timeframe, TimeRange
+from core.ports.data_sources import DataSourceType
 
 
 class TestKlineRequest:

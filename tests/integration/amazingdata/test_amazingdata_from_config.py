@@ -11,8 +11,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
-
-from deepsearch.config import get_config
+from core.config import get_config
 
 
 def test_amazingdata_config():

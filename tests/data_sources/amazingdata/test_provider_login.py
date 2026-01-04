@@ -8,11 +8,11 @@ import pytest
 # 使用桩模块替代真实 SDK，确保测试可在离线环境执行
 os.environ.setdefault("DEEPSEARCH_AMAZINGDATA_STUB", "tests.stubs.amazingdata_stub")
 
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+from core.infrastructure.providers.implementations.amazingdata.amazingdata import (
     AmazingDataConfig,
     AmazingDataProvider,
 )
-from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
+from core.infrastructure.providers.interfaces.base import DataProviderError
 
 
 @pytest.mark.asyncio
@@ -30,9 +30,7 @@ async def test_safe_login_masks_system_exit():
     )
 
     # 打补丁的位置必须与 _login 实际调用的 ad.login 完全一致
-    patch_target = (
-        "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.ad.login"
-    )
+    patch_target = "core.infrastructure.providers.implementations.amazingdata.amazingdata.ad.login"
 
     with patch(patch_target, side_effect=SystemExit(1)):
         with pytest.raises(DataProviderError) as error:

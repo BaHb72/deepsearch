@@ -8,13 +8,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from deepsearch.infrastructure.providers.managers.data_source_manager import (
+from core.infrastructure.providers.managers.data_source_manager import (
     DataSourceConfig,
     DataSourceManager,
     DataSourceRegistry,
 )
-from deepsearch.ports.data_sources import DataSourceType
+from core.ports.data_sources import DataSourceType
 
 
 @pytest.fixture

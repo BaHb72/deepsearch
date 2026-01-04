@@ -131,7 +131,7 @@ class TestLogManagement:
             {
                 "timestamp": "2025-09-13 10:00:00",
                 "level": "INFO",
-                "logger": "deepsearch.engine",
+                "logger": "core.engine",
                 "message": "Engine started successfully",
             },
             {
@@ -177,7 +177,7 @@ class TestLogManagement:
                 "CRITICAL": 100,
             },
             "by_logger": {
-                "deepsearch.engine": 2000,
+                "core.engine": 2000,
                 "deepsearch.webui": 3000,
                 "deepsearch.data_providers": 5000,
             },

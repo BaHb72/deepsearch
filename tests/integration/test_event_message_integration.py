@@ -11,10 +11,9 @@ import zlib
 from collections.abc import Mapping
 
 import pytest
-
-from deepsearch.event.engine.engine import EventEngine
-from deepsearch.event.schema import Event
-from deepsearch.messaging.bus import CompositeMessageBus
+from core.event.engine.engine import EventEngine
+from core.event.schema import Event
+from core.messaging.bus import CompositeMessageBus
 
 
 def decode_message_payload(message):
@@ -46,8 +45,8 @@ class TestEventMessageIntegration:
     async def message_bus(self):
         """创建消息总线实例"""
         # 使用内存总线进行测试
-        from deepsearch.config.models.bus import RouteConfig
-        from deepsearch.messaging.factory import MessageBusFactory
+        from core.config.models.bus import RouteConfig
+        from core.messaging.factory import MessageBusFactory
 
         # 创建内存总线实例
         memory_bus = MessageBusFactory.create("inmem", {})
@@ -426,8 +425,8 @@ class TestMessageBusFeatures:
     @pytest.mark.asyncio
     async def test_wildcard_subscription(self):
         """测试通配符订阅"""
-        from deepsearch.config.models.bus import RouteConfig
-        from deepsearch.messaging.factory import MessageBusFactory
+        from core.config.models.bus import RouteConfig
+        from core.messaging.factory import MessageBusFactory
 
         memory_bus = MessageBusFactory.create("inmem", {})
         buses = {"inmem": memory_bus}
@@ -458,8 +457,8 @@ class TestMessageBusFeatures:
     @pytest.mark.asyncio
     async def test_message_compression_roundtrip(self):
         """验证启用压缩后的消息可以被正确解码。"""
-        from deepsearch.config.models.bus import RouteConfig
-        from deepsearch.messaging.factory import MessageBusFactory
+        from core.config.models.bus import RouteConfig
+        from core.messaging.factory import MessageBusFactory
 
         memory_bus = MessageBusFactory.create("inmem", {})
         buses = {"inmem": memory_bus}
@@ -495,8 +494,8 @@ class TestMessageBusFeatures:
     @pytest.mark.asyncio
     async def test_message_deduplication(self):
         """验证消息去重策略避免重复投递。"""
-        from deepsearch.config.models.bus import RouteConfig
-        from deepsearch.messaging.factory import MessageBusFactory
+        from core.config.models.bus import RouteConfig
+        from core.messaging.factory import MessageBusFactory
 
         memory_bus = MessageBusFactory.create("inmem", {})
         buses = {"inmem": memory_bus}
@@ -535,8 +534,8 @@ class TestMessageBusFeatures:
     @pytest.mark.asyncio
     async def test_statistics_reset(self):
         """验证统计信息复位逻辑。"""
-        from deepsearch.config.models.bus import RouteConfig
-        from deepsearch.messaging.factory import MessageBusFactory
+        from core.config.models.bus import RouteConfig
+        from core.messaging.factory import MessageBusFactory
 
         memory_bus = MessageBusFactory.create("inmem", {})
         buses = {"inmem": memory_bus}
@@ -592,8 +591,8 @@ class TestMessageBusFeatures:
     @pytest.mark.asyncio
     async def test_dynamic_bus_registration(self):
         """验证动态新增总线与路由后消息可正确分发。"""
-        from deepsearch.config.models.bus import RouteConfig
-        from deepsearch.messaging.factory import MessageBusFactory
+        from core.config.models.bus import RouteConfig
+        from core.messaging.factory import MessageBusFactory
 
         primary_bus = MessageBusFactory.create("inmem", {})
         composite = CompositeMessageBus(buses={"inmem": primary_bus}, routes=[])
@@ -625,8 +624,8 @@ class TestMessageBusFeatures:
     @pytest.mark.asyncio
     async def test_async_publish_requires_start(self):
         """验证未启动时的异步发布会抛出异常。"""
-        from deepsearch.config.models.bus import RouteConfig
-        from deepsearch.messaging.factory import MessageBusFactory
+        from core.config.models.bus import RouteConfig
+        from core.messaging.factory import MessageBusFactory
 
         bus = CompositeMessageBus(
             buses={"inmem": MessageBusFactory.create("inmem", {})},
@@ -639,8 +638,8 @@ class TestMessageBusFeatures:
     @pytest.mark.asyncio
     async def test_async_subscription_flow(self):
         """验证异步订阅与发布的桥接逻辑。"""
-        from deepsearch.config.models.bus import RouteConfig
-        from deepsearch.messaging.factory import MessageBusFactory
+        from core.config.models.bus import RouteConfig
+        from core.messaging.factory import MessageBusFactory
 
         memory_bus = MessageBusFactory.create("inmem", {})
         buses = {"inmem": memory_bus}

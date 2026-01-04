@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from deepsearch.domain.market_data import StockListRecord
+from core.domain.market_data import StockListRecord
 
 
 def test_stock_record_from_payload_normalizes_symbol_and_boards() -> None:

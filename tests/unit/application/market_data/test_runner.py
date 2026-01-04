@@ -3,9 +3,8 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
-from deepsearch.application.market_data.runner import MarketDataStreamingRunner
-from deepsearch.application.market_data.trading_guard import PhaseState
+from core.application.market_data.runner import MarketDataStreamingRunner
+from core.application.market_data.trading_guard import PhaseState
 
 
 class FakeService:

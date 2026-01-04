@@ -4,23 +4,17 @@ Adapter 单元测试。
 测试 infrastructure/providers/adapters/ 中的适配器。
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock
 
 import pandas as pd
-
-from deepsearch.ports.data.semantic_types import (
-    AssetSpec,
-    Timeframe,
-    AdjustType,
-    TimeRange,
-)
-from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest
-from deepsearch.ports.data.responses import KlineResponse
-from deepsearch.ports.data_sources import DataSourceType
-from deepsearch.infrastructure.providers.adapters.base import CapabilityNotSupportedError
+import pytest
+from core.infrastructure.providers.adapters.base import CapabilityNotSupportedError
+from core.ports.data.requests import KlineRequest
+from core.ports.data.responses import KlineResponse
+from core.ports.data.semantic_types import AdjustType, AssetSpec, Timeframe, TimeRange
+from core.ports.data_sources import DataSourceType
 
 
 class TestMiniQMTRequestMapper:
@@ -28,7 +22,7 @@ class TestMiniQMTRequestMapper:
 
     def test_timeframe_mapping(self):
         """测试周期映射"""
-        from deepsearch.infrastructure.providers.adapters.miniqmt import MiniQMTRequestMapper
+        from core.infrastructure.providers.adapters.miniqmt import MiniQMTRequestMapper
 
         mapper = MiniQMTRequestMapper()
 
@@ -38,7 +32,7 @@ class TestMiniQMTRequestMapper:
 
     def test_adjust_mapping(self):
         """测试复权映射"""
-        from deepsearch.infrastructure.providers.adapters.miniqmt import MiniQMTRequestMapper
+        from core.infrastructure.providers.adapters.miniqmt import MiniQMTRequestMapper
 
         mapper = MiniQMTRequestMapper()
 
@@ -47,7 +41,7 @@ class TestMiniQMTRequestMapper:
 
     def test_map_kline_request(self):
         """测试请求转换"""
-        from deepsearch.infrastructure.providers.adapters.miniqmt import MiniQMTRequestMapper
+        from core.infrastructure.providers.adapters.miniqmt import MiniQMTRequestMapper
 
         mapper = MiniQMTRequestMapper()
         request = KlineRequest(
@@ -68,7 +62,7 @@ class TestAmazingDataRequestMapper:
 
     def test_timeframe_mapping(self):
         """测试周期映射"""
-        from deepsearch.infrastructure.providers.adapters.amazingdata import AmazingDataRequestMapper
+        from core.infrastructure.providers.adapters.amazingdata import AmazingDataRequestMapper
 
         mapper = AmazingDataRequestMapper()
 
@@ -78,7 +72,7 @@ class TestAmazingDataRequestMapper:
 
     def test_adjust_mapping(self):
         """测试复权映射"""
-        from deepsearch.infrastructure.providers.adapters.amazingdata import AmazingDataRequestMapper
+        from core.infrastructure.providers.adapters.amazingdata import AmazingDataRequestMapper
 
         mapper = AmazingDataRequestMapper()
 
@@ -92,7 +86,7 @@ class TestAKShareRequestMapper:
 
     def test_timeframe_mapping(self):
         """测试周期映射"""
-        from deepsearch.infrastructure.providers.adapters.akshare import AKShareRequestMapper
+        from core.infrastructure.providers.adapters.akshare import AKShareRequestMapper
 
         mapper = AKShareRequestMapper()
 
@@ -102,7 +96,7 @@ class TestAKShareRequestMapper:
 
     def test_supports_timeframe(self):
         """测试周期支持检查"""
-        from deepsearch.infrastructure.providers.adapters.akshare import AKShareRequestMapper
+        from core.infrastructure.providers.adapters.akshare import AKShareRequestMapper
 
         mapper = AKShareRequestMapper()
 
@@ -125,7 +119,7 @@ class TestMiniQMTAdapter:
     @pytest.fixture
     def adapter(self, mock_provider):
         """适配器实例"""
-        from deepsearch.infrastructure.providers.adapters.miniqmt import MiniQMTAdapter
+        from core.infrastructure.providers.adapters.miniqmt import MiniQMTAdapter
 
         return MiniQMTAdapter(provider=mock_provider)
 
@@ -184,7 +178,7 @@ class TestAmazingDataAdapter:
     @pytest.fixture
     def adapter(self, mock_provider):
         """适配器实例"""
-        from deepsearch.infrastructure.providers.adapters.amazingdata import AmazingDataAdapter
+        from core.infrastructure.providers.adapters.amazingdata import AmazingDataAdapter
 
         return AmazingDataAdapter(provider=mock_provider)
 
@@ -231,7 +225,7 @@ class TestAKShareAdapter:
     @pytest.fixture
     def adapter(self, mock_provider):
         """适配器实例"""
-        from deepsearch.infrastructure.providers.adapters.akshare import AKShareAdapter
+        from core.infrastructure.providers.adapters.akshare import AKShareAdapter
 
         return AKShareAdapter(provider=mock_provider)
 

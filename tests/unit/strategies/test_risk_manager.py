@@ -3,9 +3,8 @@
 from typing import cast
 
 import pytest
-
-from deepsearch.strategies.interfaces.types import StrategyOrder
-from deepsearch.strategies.managers.risk_manager import RiskManager
+from core.strategies.interfaces.types import StrategyOrder
+from core.strategies.managers.risk_manager import RiskManager
 
 
 @pytest.fixture

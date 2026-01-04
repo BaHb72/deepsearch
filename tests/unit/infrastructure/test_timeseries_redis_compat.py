@@ -7,7 +7,7 @@ import redis
 
 
 def test_timeseries_import_patches_redis_compat() -> None:
-    module_name = "deepsearch.infrastructure.persistence.timeseries"
+    module_name = "core.infrastructure.persistence.timeseries"
     sys.modules.pop(module_name, None)
 
     sys.modules.pop("redis._compat", None)

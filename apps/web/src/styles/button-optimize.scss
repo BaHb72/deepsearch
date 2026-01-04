@@ -1,0 +1,342 @@
+// 按钮优化样式 - 确保汉字有足够显示空间
+// Button optimization styles - Ensure Chinese characters have enough space
+
+// ============================================
+// 按钮尺寸规范
+// ============================================
+
+.el-button {
+  // 默认尺寸 - 适合 2-4 个汉字
+  &--default {
+    min-width: 88px;
+    padding: 10px 20px;
+    height: 36px;
+    font-size: 14px;
+
+    // 带图标时的调整
+    &.el-button--icon {
+      padding: 10px 16px;
+
+      .el-icon {
+        font-size: 16px;
+        vertical-align: middle;
+
+        + span {
+          margin-left: 6px;
+        }
+      }
+    }
+  }
+
+  // 大按钮 - 适合 4-6 个汉字
+  &--large {
+    min-width: 108px;
+    padding: 12px 24px;
+    height: 40px;
+    font-size: 15px;
+
+    .el-icon {
+      font-size: 18px;
+    }
+  }
+
+  // 小按钮 - 适合 2-3 个汉字
+  &--small {
+    min-width: 72px;
+    padding: 8px 15px;
+    height: 32px;
+    font-size: 13px;
+
+    .el-icon {
+      font-size: 14px;
+    }
+  }
+
+  // 迷你按钮 - 适合 1-2 个汉字
+  &--mini {
+    min-width: 56px;
+    padding: 6px 12px;
+    height: 28px;
+    font-size: 12px;
+
+    .el-icon {
+      font-size: 12px;
+    }
+  }
+}
+
+// ============================================
+// 特定用途按钮宽度
+// ============================================
+
+// 操作按钮组
+.button-group {
+  .el-button {
+    // 常见操作按钮最小宽度
+    &.btn-save { min-width: 80px; }      // 保存
+    &.btn-cancel { min-width: 80px; }    // 取消
+    &.btn-confirm { min-width: 80px; }   // 确定
+    &.btn-submit { min-width: 80px; }    // 提交
+    &.btn-delete { min-width: 80px; }    // 删除
+    &.btn-edit { min-width: 80px; }      // 编辑
+    &.btn-add { min-width: 80px; }       // 新增
+    &.btn-query { min-width: 80px; }     // 查询
+    &.btn-export { min-width: 80px; }    // 导出
+    &.btn-import { min-width: 80px; }    // 导入
+    &.btn-refresh { min-width: 80px; }   // 刷新
+    &.btn-reset { min-width: 80px; }     // 重置
+
+    // 长文本按钮
+    &.btn-batch-delete { min-width: 100px; }     // 批量删除
+    &.btn-batch-export { min-width: 100px; }     // 批量导出
+    &.btn-save-continue { min-width: 120px; }    // 保存并继续
+    &.btn-save-close { min-width: 120px; }       // 保存并关闭
+  }
+}
+
+// ============================================
+// 按钮文字处理
+// ============================================
+
+.el-button {
+  // 确保文字不换行
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  // 文字垂直居中
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  // 字体优化
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+               'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue',
+               Helvetica, Arial, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.5px;  // 轻微的字间距，提高可读性
+
+  // 禁用时的样式
+  &.is-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+// ============================================
+// 按钮组样式
+// ============================================
+
+.el-button-group {
+  .el-button {
+    // 按钮组中的按钮不需要最小宽度限制
+    min-width: auto;
+
+    &:first-child {
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+
+    &:last-child {
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+    }
+
+    &:not(:first-child):not(:last-child) {
+      border-radius: 0;
+    }
+  }
+}
+
+// ============================================
+// 对话框底部按钮
+// ============================================
+
+.el-dialog__footer {
+  .el-button {
+    min-width: 88px;
+
+    // 主要操作按钮稍宽
+    &--primary {
+      min-width: 96px;
+    }
+  }
+
+  // 按钮间距
+  .el-button + .el-button {
+    margin-left: 12px;
+  }
+}
+
+// ============================================
+// 表单按钮
+// ============================================
+
+.el-form-item__content {
+  .el-button {
+    // 表单内的按钮
+    &.form-button {
+      min-width: 88px;
+    }
+
+    // 搜索按钮
+    &.search-button {
+      min-width: 80px;
+    }
+
+    // 重置按钮
+    &.reset-button {
+      min-width: 80px;
+    }
+  }
+}
+
+// ============================================
+// 工具栏按钮
+// ============================================
+
+.toolbar {
+  .el-button {
+    // 工具栏按钮可以稍小
+    min-width: 72px;
+
+    // 仅图标按钮
+    &.icon-only {
+      min-width: auto;
+      width: 36px;
+      padding: 8px;
+
+      .el-icon {
+        margin: 0;
+      }
+    }
+  }
+}
+
+// ============================================
+// 响应式设计
+// ============================================
+
+// 平板设备
+@media (max-width: 768px) {
+  .el-button {
+    // 减小内边距但保持最小宽度
+    padding: 8px 16px;
+    min-width: 72px;
+
+    &--large {
+      padding: 10px 20px;
+      min-width: 88px;
+    }
+
+    &--small {
+      padding: 6px 12px;
+      min-width: 64px;
+    }
+  }
+
+  // 对话框按钮全宽
+  .el-dialog__footer {
+    .el-button {
+      &--block-mobile {
+        width: 100%;
+        margin: 8px 0;
+
+        + .el-button {
+          margin-left: 0;
+        }
+      }
+    }
+  }
+}
+
+// 手机设备
+@media (max-width: 480px) {
+  .el-button {
+    // 手机上进一步减小
+    padding: 7px 14px;
+    min-width: 64px;
+    font-size: 13px;
+
+    &--large {
+      padding: 9px 18px;
+      min-width: 80px;
+      font-size: 14px;
+    }
+
+    &--small {
+      padding: 5px 10px;
+      min-width: 56px;
+      font-size: 12px;
+    }
+  }
+
+  // 移动端全宽按钮
+  .mobile-full-width {
+    .el-button {
+      width: 100%;
+      margin: 8px 0;
+    }
+  }
+}
+
+// ============================================
+// 特殊状态样式
+// ============================================
+
+.el-button {
+  // 加载状态
+  &.is-loading {
+    pointer-events: none;
+
+    .el-icon-loading {
+      animation: rotating 2s linear infinite;
+    }
+  }
+
+  // 聚焦状态
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+  }
+
+  // 活动状态
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+// ============================================
+// 动画效果
+// ============================================
+
+@keyframes rotating {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+// ============================================
+// 工具类
+// ============================================
+
+// 块级按钮
+.el-button--block {
+  width: 100%;
+  display: block;
+}
+
+// 圆角按钮
+.el-button--rounded {
+  border-radius: 20px;
+}
+
+// 胶囊按钮
+.el-button--pill {
+  border-radius: 999px;
+  padding-left: 24px;
+  padding-right: 24px;
+}

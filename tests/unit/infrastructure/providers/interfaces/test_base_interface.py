@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from deepsearch.infrastructure.providers.interfaces.base import (
+from core.infrastructure.providers.interfaces.base import (
     DataProviderConfig,
     DataRequest,
     DataResponse,

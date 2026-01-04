@@ -1,0 +1,195 @@
+// Ant Design 自定义样式覆盖
+
+// 主题变量
+:root {
+  --primary-color: #1890ff;
+  --success-color: #52c41a;
+  --warning-color: #faad14;
+  --error-color: #f5222d;
+  --info-color: #1890ff;
+  --text-color: rgba(0, 0, 0, 0.85);
+  --text-color-secondary: rgba(0, 0, 0, 0.45);
+  --border-color: #d9d9d9;
+  --bg-color: #f0f2f5;
+  --card-bg: #ffffff;
+}
+
+// 暗色主题
+.dark {
+  --text-color: rgba(255, 255, 255, 0.85);
+  --text-color-secondary: rgba(255, 255, 255, 0.45);
+  --border-color: #434343;
+  --bg-color: #141414;
+  --card-bg: #1f1f1f;
+
+  .ant-layout {
+    background: var(--bg-color);
+  }
+
+  .ant-layout-sider {
+    background: var(--card-bg);
+  }
+
+  .ant-menu {
+    background: transparent;
+    color: var(--text-color);
+  }
+
+  .ant-layout-header {
+    background: var(--card-bg);
+    border-bottom-color: var(--border-color);
+  }
+}
+
+// 布局样式
+.ant-layout {
+  min-height: 100vh;
+}
+
+.ant-layout-sider {
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+
+  .logo {
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+
+    h2 {
+      margin: 0;
+      color: var(--primary-color);
+      font-size: 20px;
+      font-weight: 600;
+    }
+  }
+}
+
+.ant-layout-header {
+  background: #fff;
+  padding: 0 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .header-left {
+    h3 {
+      margin: 0;
+      font-size: 18px;
+      color: var(--text-color);
+    }
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+}
+
+.ant-layout-content {
+  margin: 24px;
+  padding: 24px;
+  background: var(--card-bg);
+  border-radius: 8px;
+  min-height: calc(100vh - 64px - 48px);
+}
+
+// 菜单样式
+.ant-menu-item {
+  margin: 4px 8px;
+  border-radius: 4px;
+
+  &:hover {
+    color: var(--primary-color);
+    background-color: rgba(24, 144, 255, 0.05);
+  }
+
+  &.ant-menu-item-selected {
+    background-color: rgba(24, 144, 255, 0.1);
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 24px;
+      background: var(--primary-color);
+      border-radius: 0 2px 2px 0;
+    }
+  }
+}
+
+// 按钮样式增强
+.ant-btn {
+  border-radius: 4px;
+  font-weight: 500;
+  transition: all 0.3s;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  &.ant-btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+
+    &:hover {
+      background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    }
+  }
+}
+
+// 卡片样式
+.ant-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s;
+
+  &:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  }
+}
+
+// 表格样式
+.ant-table {
+  .ant-table-thead > tr > th {
+    background: #fafafa;
+    font-weight: 600;
+  }
+
+  .ant-table-tbody > tr {
+    &:hover {
+      background: #f5f5f5;
+    }
+  }
+}
+
+// 标签样式
+.ant-tag {
+  border-radius: 4px;
+  padding: 2px 8px;
+
+  &.ant-tag-success {
+    background: rgba(82, 196, 26, 0.1);
+    border-color: #52c41a;
+    color: #52c41a;
+  }
+
+  &.ant-tag-warning {
+    background: rgba(250, 173, 20, 0.1);
+    border-color: #faad14;
+    color: #faad14;
+  }
+
+  &.ant-tag-error {
+    background: rgba(245, 34, 45, 0.1);
+    border-color: #f5222d;
+    color: #f5222d;
+  }
+}

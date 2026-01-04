@@ -17,7 +17,7 @@ async def test_proxy_connection_valid(real_amazingdata_provider):
 @pytest.mark.asyncio
 async def test_proxy_query_execution(real_amazingdata_provider):
     """测试通过代理执行查询。"""
-    from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+    from core.infrastructure.providers.implementations.amazingdata.query_manager import (
         AmazingDataQueryManager,
     )
 

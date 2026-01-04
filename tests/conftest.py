@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi.testclient import TestClient
 
-from deepsearch.webui.server import app
+from apps.api.server import app
 
 os.environ.setdefault("DEEPSEARCH_TEST_MODE", "true")
 
@@ -166,7 +166,7 @@ def real_amazingdata_sdk():
     except ImportError:
         pytest.skip("AmazingData SDK 未安装")
 
-    from deepsearch.config import get_config
+    from core.config import get_config
 
     config = get_config()
 
@@ -245,10 +245,8 @@ async def real_amazingdata_provider():
     使用 DataSourceManager 获取已配置的 Provider。
     如果未配置或未启用，自动跳过测试。
     """
-    from deepsearch.infrastructure.providers.managers.data_source_manager import (
-        get_data_source_manager,
-    )
-    from deepsearch.ports.data_sources import DataSourceType
+    from core.infrastructure.providers.managers.data_source_manager import get_data_source_manager
+    from core.ports.data_sources import DataSourceType
 
     manager = get_data_source_manager()
     await manager.initialize()
@@ -266,7 +264,7 @@ async def real_amazingdata_provider():
 @pytest.fixture(scope="function")
 def real_query_manager(real_amazingdata_provider):
     """提供真实的 AmazingDataQueryManager 实例。"""
-    from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+    from core.infrastructure.providers.implementations.amazingdata.query_manager import (
         AmazingDataQueryManager,
     )
 

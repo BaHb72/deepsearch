@@ -3,8 +3,7 @@
 import asyncio
 
 import pytest
-
-from deepsearch.infrastructure.providers import unified_proxy
+from core.infrastructure.providers import unified_proxy
 
 
 @pytest.mark.asyncio

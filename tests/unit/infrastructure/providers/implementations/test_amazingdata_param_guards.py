@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import pytest
-
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_types import (
+from core.infrastructure.providers.implementations.amazingdata.amazingdata_types import (
     AmazingDataPeriod,
     AmazingDataSecurityType,
 )
-from deepsearch.infrastructure.providers.implementations.amazingdata.param_guards import (
+from core.infrastructure.providers.implementations.amazingdata.param_guards import (
     CacheParamMode,
     CachePolicy,
     normalize_security_type,
     validate_security_period,
 )
-from deepsearch.infrastructure.providers.interfaces.base import DataProviderError
+from core.infrastructure.providers.interfaces.base import DataProviderError
 
 
 def test_cache_policy_local_mode_trims_path() -> None:

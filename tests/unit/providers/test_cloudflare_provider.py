@@ -1,8 +1,5 @@
 import pytest
-
-from deepsearch.infrastructure.providers.implementations.cloudflare.cloudflare import (
-    ProxyDataProvider,
-)
+from core.infrastructure.providers.implementations.cloudflare.cloudflare import ProxyDataProvider
 
 
 @pytest.mark.asyncio

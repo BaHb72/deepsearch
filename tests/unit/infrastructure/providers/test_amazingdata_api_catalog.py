@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from deepsearch.infrastructure.providers.implementations.amazingdata.api_catalog import (
+from core.infrastructure.providers.implementations.amazingdata.api_catalog import (
     AMAZINGDATA_API_CATALOG,
     catalog_to_json,
 )

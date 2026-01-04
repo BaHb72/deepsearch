@@ -1,9 +1,8 @@
 import asyncio
 
 import pytest
-
-from deepsearch.infrastructure.providers.executor import DataSourceExecutor
-from deepsearch.ports.data_sources import DataAccessType, DataSourceType
+from core.infrastructure.providers.executor import DataSourceExecutor
+from core.ports.data_sources import DataAccessType, DataSourceType
 
 
 class DummyMonitor:

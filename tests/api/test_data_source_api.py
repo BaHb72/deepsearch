@@ -344,12 +344,12 @@ class TestDataSourceAPI:
     def test_manager_stub_recovery(self, test_client, api_helper, monkeypatch):
         """验证当管理器模块被替换为桩实现时仍可恢复真实依赖"""
 
-        stub_module = ModuleType("deepsearch.infrastructure.providers.managers.data_source_manager")
+        stub_module = ModuleType("core.infrastructure.providers.managers.data_source_manager")
         stub_module.DataSourceManager = object
         stub_module.get_data_source_manager = lambda: None
         monkeypatch.setitem(
             sys.modules,
-            "deepsearch.infrastructure.providers.managers.data_source_manager",
+            "core.infrastructure.providers.managers.data_source_manager",
             stub_module,
         )
 

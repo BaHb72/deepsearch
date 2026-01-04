@@ -3,7 +3,7 @@ import os
 import zipfile
 from datetime import datetime, timedelta
 
-from deepsearch.observability.logger import LoggerManager
+from core.observability.logger import LoggerManager
 
 
 def test_retention_handler_archives_expired_logs(tmp_path):
@@ -53,7 +53,7 @@ def test_module_sink_writes_logs(tmp_path):
 
     try:
         manager.start()
-        logging.getLogger("deepsearch.core.runtime.engine").info("module log ping")
+        logging.getLogger("core.core.runtime.engine").info("module log ping")
     finally:
         manager.stop()
 

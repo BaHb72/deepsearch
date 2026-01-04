@@ -1,7 +1,6 @@
 import pytest
-
-from deepsearch.domain.market_data import StockListRecord
-from deepsearch.infrastructure.providers.implementations.amazingdata.board_source import (
+from core.domain.market_data import StockListRecord
+from core.infrastructure.providers.implementations.amazingdata.board_source import (
     AmazingDataBoardSource,
 )
 

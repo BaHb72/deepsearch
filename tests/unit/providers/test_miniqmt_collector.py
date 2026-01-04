@@ -19,7 +19,7 @@ import pytest
 
 # 尝试导入 xtquant 检查可用性
 try:
-    from xtquant import xtdata
+    from xtquant import xtdata  # noqa: F401
 
     XTQUANT_AVAILABLE = True
 except ImportError:
@@ -32,7 +32,7 @@ class TestMiniQMTCollectorInit:
 
     def test_collector_init(self):
         """测试采集器初始化"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 
@@ -44,7 +44,7 @@ class TestMiniQMTCollectorInit:
 
     def test_get_connection_status(self):
         """测试获取连接状态"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 
@@ -61,7 +61,7 @@ class TestMiniQMTCollectorCache:
 
     def test_cache_data(self):
         """测试数据缓存"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 
@@ -76,7 +76,7 @@ class TestMiniQMTCollectorCache:
 
     def test_clear_cache(self):
         """测试清空缓存"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 
@@ -99,7 +99,7 @@ class TestMiniQMTCollectorHistoryData:
     @pytest.mark.integration
     def test_download_history_data_daily(self):
         """测试下载日线历史数据"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 
@@ -125,7 +125,7 @@ class TestMiniQMTCollectorHistoryData:
     @pytest.mark.integration
     def test_download_history_data_minute(self):
         """测试下载分钟线历史数据"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 
@@ -154,7 +154,7 @@ class TestMiniQMTCollectorMarketData:
     @pytest.mark.integration
     def test_get_market_data(self):
         """测试获取市场数据"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 
@@ -178,7 +178,7 @@ class TestMiniQMTCollectorMarketData:
     @pytest.mark.integration
     def test_get_full_tick(self):
         """测试获取全量 Tick 数据（含五档盘口）"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 
@@ -203,7 +203,7 @@ class TestMiniQMTCollectorSubscription:
     @pytest.mark.integration
     def test_subscribe_and_unsubscribe(self):
         """测试订阅和取消订阅"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 
@@ -242,7 +242,7 @@ class TestMiniQMTCollectorInstrument:
     @pytest.mark.integration
     def test_get_instrument_detail(self):
         """测试获取合约详细信息"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 
@@ -262,7 +262,7 @@ class TestMiniQMTCollectorInstrument:
     @pytest.mark.integration
     def test_get_stock_list_in_sector(self):
         """测试获取板块成分股"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 

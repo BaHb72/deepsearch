@@ -153,7 +153,7 @@ class TestMiniQMTAPIWithMock:
     def test_status_with_mock(self, client: TestClient, mock_provider):
         """使用 Mock 测试状态接口"""
         with patch(
-            "deepsearch.webui.api.endpoints.qmt.miniqmt.get_miniqmt_provider",
+            "apps.api.api.endpoints.qmt.miniqmt.get_miniqmt_provider",
             return_value=mock_provider,
         ):
             response = client.get("/api/miniqmt/status")

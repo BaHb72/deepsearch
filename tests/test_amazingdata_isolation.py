@@ -9,11 +9,7 @@ import os
 from unittest.mock import patch
 
 import pytest
-
-from deepsearch.infrastructure.monitoring.provider_health import (
-    ProviderHealthMonitor,
-    ProviderStatus,
-)
+from core.infrastructure.monitoring.provider_health import ProviderHealthMonitor, ProviderStatus
 
 # 确保加载测试桩模块，避免真实 SDK 依赖阻塞单测
 os.environ.setdefault("DEEPSEARCH_AMAZINGDATA_STUB", "tests.stubs.amazingdata_stub")
@@ -22,12 +18,13 @@ os.environ.setdefault("DEEPSEARCH_AMAZINGDATA_STUB", "tests.stubs.amazingdata_st
 SKIP_NETWORK_PROVIDERS = os.environ.get("DEEPSEARCH_TEST_ENABLE_NETWORK_PROVIDERS") != "1"
 
 # 测试导入
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (  # noqa: E402
+from core.infrastructure.providers.implementations.amazingdata.amazingdata import (  # noqa: E402
     AmazingDataConfig,
     AmazingDataProvider,
 )
-from deepsearch.infrastructure.providers.mock.error_provider import MockErrorProvider  # noqa: E402
-from deepsearch.webui.api.providers import DataProviderFactory  # noqa: E402
+from core.infrastructure.providers.mock.error_provider import MockErrorProvider  # noqa: E402
+
+from apps.api.api.providers import DataProviderFactory  # noqa: E402
 
 
 class TestSDKIsolation:
@@ -52,7 +49,7 @@ class TestSDKIsolation:
         """
         # 模拟SDK调用exit(0)
         with patch(
-            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.ad.login"
+            "core.infrastructure.providers.implementations.amazingdata.amazingdata.ad.login"
         ) as mock_login:
             mock_login.side_effect = SystemExit(0)
 
@@ -69,7 +66,7 @@ class TestSDKIsolation:
         测试: safe_login能够捕获SystemExit(1)
         """
         with patch(
-            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.ad.login"
+            "core.infrastructure.providers.implementations.amazingdata.amazingdata.ad.login"
         ) as mock_login:
             mock_login.side_effect = SystemExit(1)
 
@@ -119,7 +116,7 @@ class TestDataProviderFactory:
 
         # 模拟AmazingData初始化失败
         with patch(
-            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.AmazingDataProvider.initialize"
+            "core.infrastructure.providers.implementations.amazingdata.amazingdata.AmazingDataProvider.initialize"
         ) as mock_init:
             mock_init.side_effect = Exception("SDK尝试强制退出程序")
 
@@ -146,10 +143,10 @@ class TestDataProviderFactory:
 
         # 模拟所有提供者都失败
         with patch(
-            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.AmazingDataProvider.initialize"
+            "core.infrastructure.providers.implementations.amazingdata.amazingdata.AmazingDataProvider.initialize"
         ) as mock_ad_init:
             with patch(
-                "deepsearch.infrastructure.providers.implementations.akshare.akshare.AkShareProxyProvider.initialize"
+                "core.infrastructure.providers.implementations.akshare.akshare.AkShareProxyProvider.initialize"
             ) as mock_ak_init:
                 mock_ad_init.side_effect = Exception("AmazingData failed")
                 mock_ak_init.side_effect = Exception("AkShare failed")
@@ -356,7 +353,7 @@ async def test_integration_sdk_exit_protection():
         assert "amazingdata" in health_status["providers"]
 
         # 如果降级成功，provider应该不是AmazingDataProvider
-        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (  # noqa: E402
+        from core.infrastructure.providers.implementations.amazingdata.amazingdata import (  # noqa: E402
             AmazingDataProvider,
         )
 

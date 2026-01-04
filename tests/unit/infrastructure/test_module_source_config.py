@@ -2,12 +2,12 @@
 模块级数据源配置解析器的单元测试。
 """
 
-from deepsearch.infrastructure.providers.managers.module_source_config import (
+from core.infrastructure.providers.managers.module_source_config import (
     ModuleSourceConfig,
     ModuleSourceResolver,
     create_resolver_from_config,
 )
-from deepsearch.ports.data_sources import DataAccessType, DataSourceType
+from core.ports.data_sources import DataAccessType, DataSourceType
 
 
 class TestModuleSourceConfig:

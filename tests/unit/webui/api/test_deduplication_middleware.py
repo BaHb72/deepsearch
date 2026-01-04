@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from deepsearch.webui.api.middleware.deduplication import RequestDeduplicator
+from apps.api.api.middleware.deduplication import RequestDeduplicator
 
 
 @pytest.mark.asyncio

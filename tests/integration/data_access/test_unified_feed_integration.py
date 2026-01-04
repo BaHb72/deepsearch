@@ -7,29 +7,11 @@ UnifiedDataFeed 集成测试。
 2. MiniQMT/AmazingData 服务可用（或使用 skip markers）
 """
 
-import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from deepsearch.ports.data.semantic_types import (
-    AssetSpec,
-    Timeframe,
-    AdjustType,
-    TimeRange,
-    LatencyHint,
-)
-from deepsearch.ports.data.requests import (
-    KlineRequest,
-    RealtimeQuoteRequest,
-    StockListRequest,
-)
-from deepsearch.ports.data.responses import (
-    KlineResponse,
-    RealtimeQuoteResponse,
-    StockListResponse,
-)
-from deepsearch.config.models.capability_routing import (
+import pytest
+from core.config.models.capability_routing import (
     CapabilityRoutingConfig,
     CapabilityRoutingRule,
     KlineCapabilitySpec,
@@ -38,9 +20,11 @@ from deepsearch.config.models.capability_routing import (
     RoutingConfig,
     ScenarioRouting,
 )
-from deepsearch.infrastructure.providers.capability_router import CapabilityRouter
-from deepsearch.infrastructure.providers.binder import UnifiedDataFeed, FallbackStrategy
-
+from core.infrastructure.providers.binder import FallbackStrategy, UnifiedDataFeed
+from core.infrastructure.providers.capability_router import CapabilityRouter
+from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest
+from core.ports.data.responses import KlineResponse, RealtimeQuoteResponse
+from core.ports.data.semantic_types import AdjustType, AssetSpec, LatencyHint, Timeframe, TimeRange
 
 # =============================================================================
 # Fixtures
@@ -112,10 +96,7 @@ class TestRoutingIntegration:
 
     def test_realtime_scenario_routes_to_miniqmt(self, sample_config):
         """实时场景应路由到 MiniQMT"""
-        from deepsearch.infrastructure.providers.adapters.base import (
-            BaseProviderAdapter,
-            IKlineProvider,
-        )
+        from core.infrastructure.providers.adapters.base import BaseProviderAdapter, IKlineProvider
 
         class MockAdapter(BaseProviderAdapter, IKlineProvider):
             async def initialize(self):
@@ -143,10 +124,7 @@ class TestRoutingIntegration:
 
     def test_historical_scenario_routes_to_akshare(self, sample_config):
         """历史场景应路由到 AKShare"""
-        from deepsearch.infrastructure.providers.adapters.base import (
-            BaseProviderAdapter,
-            IKlineProvider,
-        )
+        from core.infrastructure.providers.adapters.base import BaseProviderAdapter, IKlineProvider
 
         class MockAdapter(BaseProviderAdapter, IKlineProvider):
             async def initialize(self):
@@ -174,10 +152,7 @@ class TestRoutingIntegration:
 
     def test_monthly_timeframe_routes_to_capable_provider(self, sample_config):
         """月线请求应路由到支持的 Provider"""
-        from deepsearch.infrastructure.providers.adapters.base import (
-            BaseProviderAdapter,
-            IKlineProvider,
-        )
+        from core.infrastructure.providers.adapters.base import BaseProviderAdapter, IKlineProvider
 
         class MockAdapter(BaseProviderAdapter, IKlineProvider):
             async def initialize(self):
@@ -213,7 +188,7 @@ class TestConfigLoading:
     """配置加载集成测试"""
 
     @pytest.mark.skipif(
-        not pytest.importorskip("deepsearch.config", reason="Config module not available"),
+        not pytest.importorskip("core.config", reason="Config module not available"),
         reason="Config module required",
     )
     def test_load_capability_routing_from_config(self):
@@ -222,7 +197,7 @@ class TestConfigLoading:
 
         os.environ["APP__ENV"] = "dev"
 
-        from deepsearch.config import get_config
+        from core.config import get_config
 
         config = get_config()
         cr = config.capability_routing
@@ -233,9 +208,7 @@ class TestConfigLoading:
 
     def test_parse_yaml_capability_spec(self):
         """测试解析 YAML 格式的能力声明"""
-        from deepsearch.config.models.capability_routing import (
-            CapabilityRoutingConfig,
-        )
+        from core.config.models.capability_routing import CapabilityRoutingConfig
 
         yaml_data = {
             "capabilities": {
@@ -273,11 +246,8 @@ class TestEndToEndWithMocks:
     @pytest.mark.asyncio
     async def test_complete_kline_query_flow(self, sample_config):
         """完整的 Kline 查询流程"""
-        from deepsearch.infrastructure.providers.adapters.base import (
-            BaseProviderAdapter,
-            IKlineProvider,
-        )
-        from deepsearch.ports.data_sources import DataSourceType
+        from core.infrastructure.providers.adapters.base import BaseProviderAdapter, IKlineProvider
+        from core.ports.data_sources import DataSourceType
 
         class MockKlineAdapter(BaseProviderAdapter, IKlineProvider):
             def __init__(self, name, capabilities):
@@ -289,7 +259,7 @@ class TestEndToEndWithMocks:
 
             async def query_kline(self, request):
                 self.call_count += 1
-                from deepsearch.ports.data.responses import KlineBar, KlineResponse
+                from core.ports.data.responses import KlineBar, KlineResponse
 
                 return KlineResponse(
                     asset=request.asset,
@@ -334,15 +304,11 @@ class TestEndToEndWithMocks:
         assert response.bars[0].close == Decimal("10.5")
         assert miniqmt.call_count == 1
 
-
     @pytest.mark.asyncio
     async def test_fallback_on_first_provider_failure(self, sample_config):
         """第一个 Provider 失败时降级"""
-        from deepsearch.infrastructure.providers.adapters.base import (
-            BaseProviderAdapter,
-            IKlineProvider,
-        )
-        from deepsearch.ports.data_sources import DataSourceType
+        from core.infrastructure.providers.adapters.base import BaseProviderAdapter, IKlineProvider
+        from core.ports.data_sources import DataSourceType
 
         class FailingAdapter(BaseProviderAdapter, IKlineProvider):
             async def initialize(self):
@@ -356,7 +322,7 @@ class TestEndToEndWithMocks:
                 return True
 
             async def query_kline(self, request):
-                from deepsearch.ports.data.responses import KlineResponse
+                from core.ports.data.responses import KlineResponse
 
                 return KlineResponse(
                     asset=request.asset,
@@ -368,9 +334,7 @@ class TestEndToEndWithMocks:
 
         adapters = {
             "miniqmt": FailingAdapter("miniqmt", sample_config.capabilities["miniqmt"]),
-            "amazingdata": WorkingAdapter(
-                "amazingdata", sample_config.capabilities["amazingdata"]
-            ),
+            "amazingdata": WorkingAdapter("amazingdata", sample_config.capabilities["amazingdata"]),
         }
 
         router = CapabilityRouter(sample_config, adapters)
@@ -383,27 +347,22 @@ class TestEndToEndWithMocks:
         )
 
         # 使用降级策略
-        response = await feed.query_with_fallback(
-            request, strategy=FallbackStrategy.SEQUENTIAL
-        )
+        response = await feed.query_with_fallback(request, strategy=FallbackStrategy.SEQUENTIAL)
 
         assert isinstance(response, KlineResponse)
 
     @pytest.mark.asyncio
     async def test_type_safe_convenience_methods(self, sample_config):
         """测试类型安全的便捷方法"""
-        from deepsearch.infrastructure.providers.adapters.base import (
-            BaseProviderAdapter,
-            IKlineProvider,
-        )
-        from deepsearch.ports.data_sources import DataSourceType
+        from core.infrastructure.providers.adapters.base import BaseProviderAdapter, IKlineProvider
+        from core.ports.data_sources import DataSourceType
 
         class MockAdapter(BaseProviderAdapter, IKlineProvider):
             async def initialize(self):
                 return True
 
             async def query_kline(self, request):
-                from deepsearch.ports.data.responses import KlineResponse
+                from core.ports.data.responses import KlineResponse
 
                 return KlineResponse(
                     asset=request.asset,
@@ -435,7 +394,6 @@ class TestEndToEndWithMocks:
         assert isinstance(response, KlineResponse)
 
 
-
 # =============================================================================
 # Realtime 能力测试
 # =============================================================================
@@ -447,18 +405,18 @@ class TestRealtimeCapability:
     @pytest.mark.asyncio
     async def test_realtime_quote_request(self, sample_config):
         """测试实时行情请求"""
-        from deepsearch.infrastructure.providers.adapters.base import (
+        from core.infrastructure.providers.adapters.base import (
             BaseProviderAdapter,
             IRealtimeProvider,
         )
-        from deepsearch.ports.data_sources import DataSourceType
+        from core.ports.data_sources import DataSourceType
 
         class MockRealtimeAdapter(BaseProviderAdapter, IRealtimeProvider):
             async def initialize(self):
                 return True
 
             async def query_realtime(self, request):
-                from deepsearch.ports.data.responses import Quote, RealtimeQuoteResponse
+                from core.ports.data.responses import Quote, RealtimeQuoteResponse
 
                 quotes = []
                 for asset in request.assets:

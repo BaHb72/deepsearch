@@ -8,7 +8,7 @@ from loguru import logger
 async def test_amazingdata_init():
     """测试 AmazingData 初始化"""
     try:
-        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+        from core.infrastructure.providers.implementations.amazingdata.amazingdata import (
             AmazingDataConfig,
             AmazingDataProvider,
         )
@@ -28,7 +28,7 @@ async def test_amazingdata_init():
 async def test_request_optimizer():
     """测试 RequestOptimizer"""
     try:
-        from deepsearch.infrastructure.providers.implementations.akshare.request_optimizer import (
+        from core.infrastructure.providers.implementations.akshare.request_optimizer import (
             RequestOptimizer,
             RequestPriority,
         )

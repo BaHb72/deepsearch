@@ -1,6 +1,6 @@
 import pytest
 
-from deepsearch.webui.api.utils.json_utils import sanitize_for_json
+from apps.api.api.utils.json_utils import sanitize_for_json
 
 
 def test_sanitize_for_json_handles_dataframe_with_nan_and_inf():

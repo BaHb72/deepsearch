@@ -1,1 +1,0 @@
-"""QMT data provider implementation."""

@@ -31,9 +31,7 @@ class TestDataSourceManager:
     @pytest.fixture
     def data_source_manager(self, mock_config):
         """创建数据源管理器实例"""
-        from deepsearch.infrastructure.providers.managers.data_source_manager import (
-            DataSourceManager,
-        )
+        from core.infrastructure.providers.managers.data_source_manager import DataSourceManager
 
         manager = DataSourceManager(config=mock_config)
         return manager
@@ -137,7 +135,7 @@ class TestChartService:
     @pytest.fixture
     def chart_service(self):
         """创建图表服务实例"""
-        from deepsearch.webui.api.endpoints.trading.chart import ChartService
+        from apps.api.api.endpoints.trading.chart import ChartService
 
         service = ChartService()
         return service
@@ -303,7 +301,7 @@ class TestTechnicalIndicators:
     @pytest.fixture
     def indicators(self):
         """创建技术指标实例"""
-        from deepsearch.indicators.technical import TechnicalIndicators
+        from core.indicators.technical import TechnicalIndicators
 
         return TechnicalIndicators()
 

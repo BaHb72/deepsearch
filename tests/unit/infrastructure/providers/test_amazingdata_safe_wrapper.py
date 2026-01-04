@@ -18,7 +18,7 @@ async def test_safe_wrapper_connection(real_amazingdata_provider):
 @pytest.mark.asyncio
 async def test_safe_wrapper_execute_query(real_amazingdata_provider):
     """测试安全包装器执行查询。"""
-    from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+    from core.infrastructure.providers.implementations.amazingdata.query_manager import (
         AmazingDataQueryManager,
     )
 
@@ -33,7 +33,7 @@ async def test_safe_wrapper_execute_query(real_amazingdata_provider):
 @pytest.mark.asyncio
 async def test_safe_wrapper_multiple_queries(real_amazingdata_provider):
     """测试安全包装器多次查询。"""
-    from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+    from core.infrastructure.providers.implementations.amazingdata.query_manager import (
         AmazingDataQueryManager,
     )
 

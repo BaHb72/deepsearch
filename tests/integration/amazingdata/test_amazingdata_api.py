@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pandas as pd
 
 # 导入项目依赖
-from deepsearch.config import get_config
+from core.config import get_config
 
 
 def check_amazingdata_sdk():
@@ -111,7 +111,7 @@ async def test_amazingdata_provider():
     print("=" * 60)
 
     try:
-        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+        from core.infrastructure.providers.implementations.amazingdata.amazingdata import (
             HAS_AMAZINGDATA,
             AmazingDataConfig,
             AmazingDataProvider,
@@ -207,7 +207,7 @@ async def test_amazingdata_provider():
     # 测试获取股票列表
     try:
         print("\n测试2: 获取股票列表...")
-        from deepsearch.infrastructure.providers.interfaces.base import DataRequest
+        from core.infrastructure.providers.interfaces.base import DataRequest
 
         request = DataRequest(data_type="stock_list", params={})
 

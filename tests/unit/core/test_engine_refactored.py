@@ -7,8 +7,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-from deepsearch.core.runtime.engine_refactored import (
+from core.core.runtime.engine_refactored import (
     EngineBuilder,
     EngineCore,
     IComponent,
@@ -264,22 +263,22 @@ class TestNoCyclicDependencies:
         """验证引擎核心不导入其他业务模块"""
         import inspect
 
-        from deepsearch.core.runtime import engine_refactored
+        from core.core.runtime import engine_refactored
 
         # 获取模块源代码
         source = inspect.getsource(engine_refactored)
 
         # 检查不应该出现的导入
         forbidden_imports = [
-            "from deepsearch.config",
-            "from deepsearch.observability",
-            "from deepsearch.event",
-            "from deepsearch.messaging",
-            "from deepsearch.gateway",
-            "from deepsearch.webui",
-            "from deepsearch.data",
-            "from deepsearch.infrastructure",
-            "from deepsearch.application",
+            "from core.config",
+            "from core.observability",
+            "from core.event",
+            "from core.messaging",
+            "from core.gateway",
+            "from apps.api",
+            "from core.data",
+            "from core.infrastructure",
+            "from core.application",
         ]
 
         for forbidden in forbidden_imports:

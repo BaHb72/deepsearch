@@ -11,15 +11,15 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import yaml
+from core.config import get_config, reload_config
+from core.constants import YAML_ENCODING
+from core.domain.market_data import StockListRecord
+from core.infrastructure.providers.managers.data_source_manager import StockListFetchResult
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
-from deepsearch.config import get_config, reload_config
-from deepsearch.constants import YAML_ENCODING
-from deepsearch.domain.market_data import StockListRecord
-from deepsearch.infrastructure.providers.managers.data_source_manager import StockListFetchResult
-from deepsearch.webui.api.services.system_data_service import ComponentNotFoundError
-from deepsearch.webui.server import app
+from apps.api.api.services.system_data_service import ComponentNotFoundError
+from apps.api.server import app
 
 
 class TestHealthEndpoints:
@@ -78,7 +78,7 @@ class TestSystemEndpoints:
         data = response.json()
         assert isinstance(data, dict)
 
-    @patch("deepsearch.webui.api.endpoints.system.system.system_data_service.get_metrics")
+    @patch("apps.api.api.endpoints.system.system.system_data_service.get_metrics")
     def test_system_metrics(self, mock_metrics, client: TestClient):
         """系统指标接口返回聚合数据。"""
         mock_metrics.return_value = {"cpu": {"usage_percent": 10.5}}
@@ -87,7 +87,7 @@ class TestSystemEndpoints:
         data = response.json()
         assert data["cpu"]["usage_percent"] == 10.5
 
-    @patch("deepsearch.webui.api.endpoints.system.system.system_data_service.list_components")
+    @patch("apps.api.api.endpoints.system.system.system_data_service.list_components")
     def test_system_components(self, mock_list, client: TestClient):
         """组件列表接口使用聚合服务。"""
         mock_list.return_value = {"components": {}}
@@ -95,14 +95,14 @@ class TestSystemEndpoints:
         assert response.status_code == 200
         assert "components" in response.json()
 
-    @patch("deepsearch.webui.api.endpoints.system.system.system_data_service.get_component")
+    @patch("apps.api.api.endpoints.system.system.system_data_service.get_component")
     def test_system_component_not_found(self, mock_get_component, client: TestClient):
         """组件不存在时返回 404。"""
         mock_get_component.side_effect = ComponentNotFoundError("missing")
         response = client.get("/api/system/components/missing")
         assert response.status_code == 404
 
-    @patch("deepsearch.webui.api.endpoints.system.config.get_config")
+    @patch("apps.api.api.endpoints.system.config.get_config")
     def test_system_config_error(self, mock_config, client: TestClient):
         """测试配置获取错误处理"""
         mock_config.side_effect = Exception("Config error")
@@ -220,7 +220,7 @@ class TestDataEndpoints:
     @pytest.fixture
     def mock_data_service(self):
         """模拟数据服务"""
-        with patch("deepsearch.webui.api.endpoints.data.data.get_data_service") as mock:
+        with patch("apps.api.api.endpoints.data.data.get_data_service") as mock:
             service = Mock()
             service.get_stock_list = AsyncMock(
                 return_value=StockListFetchResult(
@@ -299,7 +299,7 @@ class TestTradingEndpoints:
     @pytest.fixture
     def mock_market_service(self):
         """模拟市场服务"""
-        with patch("deepsearch.webui.api.endpoints.trading.market.get_market_service") as mock:
+        with patch("apps.api.api.endpoints.trading.market.get_market_service") as mock:
             service = Mock()
             service.get_market_overview = AsyncMock(
                 return_value={

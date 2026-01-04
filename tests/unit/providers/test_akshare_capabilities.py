@@ -9,8 +9,7 @@ AKShareDirectProvider 能力和接口真实测试
 import asyncio
 
 import pytest
-
-from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
+from core.infrastructure.providers.interfaces.capabilities import DataCapability
 
 # 全局速率限制：每次测试后等待
 RATE_LIMIT_SECONDS = 2.0
@@ -22,7 +21,7 @@ class TestAKShareDirectProviderCapabilities:
     @pytest.fixture
     def provider(self):
         """创建真实的 Provider 实例"""
-        from deepsearch.infrastructure.providers.implementations.akshare.akshare_direct import (
+        from core.infrastructure.providers.implementations.akshare.akshare_direct import (
             AKShareDirectProvider,
         )
 
@@ -76,7 +75,7 @@ class TestAKShareDirectProviderRealAPI:
     @pytest.fixture
     async def provider(self):
         """创建并初始化真实的 Provider 实例"""
-        from deepsearch.infrastructure.providers.implementations.akshare.akshare_direct import (
+        from core.infrastructure.providers.implementations.akshare.akshare_direct import (
             AKShareDirectProvider,
         )
 
@@ -151,7 +150,7 @@ class TestAKShareDirectProviderExtendedAPI:
     @pytest.fixture
     async def provider(self):
         """创建并初始化真实的 Provider 实例"""
-        from deepsearch.infrastructure.providers.implementations.akshare.akshare_direct import (
+        from core.infrastructure.providers.implementations.akshare.akshare_direct import (
             AKShareDirectProvider,
         )
 

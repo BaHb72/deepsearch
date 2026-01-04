@@ -14,8 +14,7 @@ from unittest.mock import AsyncMock, Mock
 
 import aiohttp
 import pytest
-
-from deepsearch.infrastructure.providers.implementations.akshare.worker_manager import (
+from core.infrastructure.providers.implementations.akshare.worker_manager import (
     WorkerManager,
     WorkerState,
 )

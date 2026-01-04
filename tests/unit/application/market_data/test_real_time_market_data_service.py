@@ -4,14 +4,13 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
-
-from deepsearch.application.market_data import (
+from core.application.market_data import (
     MarketDataStreamingRunner,
     create_realtime_market_data_service,
     create_realtime_streaming_pipeline,
 )
-from deepsearch.application.market_data.trading_guard import PhaseState
-from deepsearch.config.models.market_data import (
+from core.application.market_data.trading_guard import PhaseState
+from core.config.models.market_data import (
     MarketRealtimeConfig,
     MarketRedisConfig,
     MarketWindowConfig,

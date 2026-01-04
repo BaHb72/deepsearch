@@ -22,7 +22,7 @@ import pytest
 
 # 检查 xtquant 可用性
 try:
-    from xtquant import xtdata
+    from xtquant import xtdata  # noqa: F401
 
     XTQUANT_AVAILABLE = True
 except ImportError:
@@ -189,7 +189,7 @@ class TestMiniQMTPerformance:
         stocks = [f"00000{i}.SZ" for i in range(1, 10)] + [f"60000{i}.SH" for i in range(0, 10)]
 
         start_time = time.time()
-        result = xtdata.get_full_tick(stocks[:20])
+        _ = xtdata.get_full_tick(stocks[:20])
         end_time = time.time()
 
         latency = (end_time - start_time) * 1000  # 毫秒
@@ -222,7 +222,7 @@ class TestMiniQMTProviderIntegration:
 
     def test_provider_with_real_xtdata(self, miniqmt_connection_check):
         """使用真实 xtdata 测试 Provider"""
-        from deepsearch.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
+        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
             MiniQMTCollector,
         )
 

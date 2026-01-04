@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from deepsearch.config import get_config
+from core.config import get_config
 
 
 def get_amazingdata_config():

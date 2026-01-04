@@ -5,18 +5,17 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-
-from deepsearch.application.market_data.orchestrator import (
+from core.application.market_data.orchestrator import (
     RealtimeDataOrchestrator,
     RealtimeRuntimeHandle,
 )
-from deepsearch.config.models import MarketDataConfig
-from deepsearch.config.models.data_sources import (
+from core.config.models import MarketDataConfig
+from core.config.models.data_sources import (
     DataSourcesConfig,
     RealtimeAdapterSpec,
     RealtimeDataSourceConfig,
 )
-from deepsearch.ports.market_data import RealtimeAdapterCapabilities, RealtimePortBundle
+from core.ports.market_data import RealtimeAdapterCapabilities, RealtimePortBundle
 
 
 class _DummyWriter:
@@ -102,7 +101,7 @@ async def test_start_adapter_respects_realtime_config(monkeypatch):
         raising=False,
     )
     monkeypatch.setattr(
-        "deepsearch.application.market_data.orchestrator.AkSharePollingAdapter",
+        "core.application.market_data.orchestrator.AkSharePollingAdapter",
         DummyPollingAdapter,
     )
 

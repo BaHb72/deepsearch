@@ -7,8 +7,7 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from deepsearch.infrastructure.monitoring.performance_tracker import (
+from core.infrastructure.monitoring.performance_tracker import (
     Alert,
     AlertSeverity,
     ApplicationMetrics,
@@ -257,7 +256,7 @@ class TestPerformanceTracker:
         assert not tracker._running
         assert len(tracker.alert_rules) > 0  # 有默认规则
 
-    @patch("deepsearch.infrastructure.monitoring.performance_tracker.psutil")
+    @patch("core.infrastructure.monitoring.performance_tracker.psutil")
     def test_collect_system_metrics(self, mock_psutil, tracker):
         """测试系统指标采集"""
         # 模拟psutil返回值
@@ -511,7 +510,7 @@ class TestPerformanceTracker:
         assert "数据库性能" in report
         assert "应用性能" in report
 
-    @patch("deepsearch.infrastructure.monitoring.performance_tracker.threading.Thread")
+    @patch("core.infrastructure.monitoring.performance_tracker.threading.Thread")
     def test_start_stop(self, mock_thread, tracker):
         """测试启动和停止"""
         mock_thread_instance = MagicMock()
@@ -551,7 +550,7 @@ class TestPerformanceTracker:
 class TestGlobalFunctions:
     """测试全局函数"""
 
-    @patch("deepsearch.infrastructure.monitoring.performance_tracker._tracker", None)
+    @patch("core.infrastructure.monitoring.performance_tracker._tracker", None)
     def test_get_tracker(self):
         """测试获取全局跟踪器"""
         tracker1 = get_tracker()
@@ -563,7 +562,7 @@ class TestGlobalFunctions:
         # 清理
         tracker1.stop()
 
-    @patch("deepsearch.infrastructure.monitoring.performance_tracker.get_tracker")
+    @patch("core.infrastructure.monitoring.performance_tracker.get_tracker")
     def test_record_db_metrics_shortcut(self, mock_get_tracker):
         """测试数据库指标快捷记录"""
         mock_tracker = MagicMock()
@@ -579,7 +578,7 @@ class TestGlobalFunctions:
         assert call_args.total_queries == 3000
         assert call_args.slow_queries == 50
 
-    @patch("deepsearch.infrastructure.monitoring.performance_tracker.get_tracker")
+    @patch("core.infrastructure.monitoring.performance_tracker.get_tracker")
     def test_record_app_metrics_shortcut(self, mock_get_tracker):
         """测试应用指标快捷记录"""
         mock_tracker = MagicMock()

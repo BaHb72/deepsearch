@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, "D:\\Stock\\code\\deepsearch")
 
-from deepsearch.webui.api.endpoints.datasources.amazingdata_test_helper import (
+from apps.api.api.endpoints.datasources.amazingdata_test_helper import (
     test_amazingdata_connection,
     validate_amazingdata_config,
 )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from deepsearch.domain.market_data import BoardUniverse
+from core.domain.market_data import BoardUniverse
 
 
 def test_board_universe_update_from_records() -> None:

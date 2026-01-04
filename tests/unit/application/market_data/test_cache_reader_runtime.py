@@ -4,9 +4,8 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
-
-from deepsearch.application.market_data import MarketDataCacheReader, MarketDataCacheWriter
-from deepsearch.ports.market_data import (
+from core.application.market_data import MarketDataCacheReader, MarketDataCacheWriter
+from core.ports.market_data import (
     AuctionQualityEntry,
     CapitalPulseEntry,
     OrderImbalanceEntry,

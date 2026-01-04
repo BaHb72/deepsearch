@@ -37,7 +37,7 @@ class DummyDataSourceConfig:
 
 
 # 注入精简版本 data_source_manager，避免真实依赖触发导入失败
-stub_manager_module = ModuleType("deepsearch.infrastructure.providers.managers.data_source_manager")
+stub_manager_module = ModuleType("core.infrastructure.providers.managers.data_source_manager")
 setattr(stub_manager_module, "DataSourceConfig", DummyDataSourceConfig)
 setattr(stub_manager_module, "DataSourceType", DummyDataSourceType)
 setattr(
@@ -60,11 +60,9 @@ setattr(
 setattr(stub_manager_module, "DataSourceManager", object)
 setattr(stub_manager_module, "get_data_source_manager", lambda: None)
 setattr(stub_manager_module, "initialize_data_sources", lambda: None)
-sys.modules["deepsearch.infrastructure.providers.managers.data_source_manager"] = (
-    stub_manager_module
-)
+sys.modules["core.infrastructure.providers.managers.data_source_manager"] = stub_manager_module
 
-from deepsearch.webui.api.endpoints.datasources import datasource_manager as module  # noqa: E402
+from apps.api.api.endpoints.datasources import datasource_manager as module  # noqa: E402
 
 
 class FakeRegistry:

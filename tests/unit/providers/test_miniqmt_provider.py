@@ -15,13 +15,12 @@ MiniQMT Provider 测试套件
 from typing import Any, Dict, List, Optional
 
 import pytest
-
-from deepsearch.infrastructure.providers.interfaces.base import (
+from core.infrastructure.providers.interfaces.base import (
     DataProviderConfig,
     DataRequest,
     DataSourceType,
 )
-from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
+from core.infrastructure.providers.interfaces.capabilities import DataCapability
 
 
 def _create_testable_provider(config: Optional[DataProviderConfig] = None):
@@ -30,7 +29,7 @@ def _create_testable_provider(config: Optional[DataProviderConfig] = None):
     由于 MiniQMTProvider 继承自 DataProvider 但未实现所有抽象方法，
     我们创建一个测试子类来实现这些方法
     """
-    from deepsearch.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTProvider
+    from core.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTProvider
 
     class TestMiniQMT(MiniQMTProvider):
         async def initialize(self) -> bool:

@@ -7,25 +7,25 @@ on:
     branches: [ main, dev, master ]
 
 env:
-  PYTHON_VERSION: "3.11"
-  UV_VERSION: "0.1.24"
-  NODE_VERSION: "18"
+  PYTHON_VERSION: "3.13"
+  UV_VERSION: "0.5.0"
+  NODE_VERSION: "20"
 
 jobs:
   lint:
     name: Lint Code
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install UV
         run: |
-          pip install uv==${{ env.UV_VERSION }}
+          pip install uv
 
       - name: Install dependencies
         run: |
@@ -36,30 +36,30 @@ jobs:
       - name: Run Black
         run: |
           source .venv/bin/activate
-          black --check deepsearch tests
+          black --check packages/core apps tests
 
       - name: Run isort
         run: |
           source .venv/bin/activate
-          isort --check-only deepsearch tests
+          isort --check-only packages/core apps tests
 
-      - name: Run pylint
+      - name: Run ruff
         run: |
           source .venv/bin/activate
-          pylint deepsearch --exit-zero
+          ruff check packages/core apps
 
       - name: Run mypy
         run: |
           source .venv/bin/activate
-          mypy deepsearch --ignore-missing-imports
+          mypy packages/core --ignore-missing-imports
 
   test-backend:
     name: Test Backend
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.10", "3.11", "3.12"]
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
 
     services:
       postgres:
@@ -87,21 +87,21 @@ jobs:
           - 6379:6379
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install UV
         run: |
-          pip install uv==${{ env.UV_VERSION }}
+          pip install uv
 
       - name: Install dependencies
         run: |
           uv venv
-          source .venv/bin/activate || .venv\Scripts\activate
+          source .venv/bin/activate || .venv\\Scripts\\activate
           uv sync --all-extras
 
       - name: Run unit tests
@@ -109,20 +109,20 @@ jobs:
           DATABASE_URL: postgresql://test:test@localhost:5432/deepsearch_test
           REDIS_URL: redis://localhost:6379
         run: |
-          source .venv/bin/activate || .venv\Scripts\activate
-          pytest tests/unit -v --cov=deepsearch --cov-report=xml
+          source .venv/bin/activate || .venv\\Scripts\\activate
+          pytest tests/unit -v --cov=packages/core --cov-report=xml
 
       - name: Run integration tests
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/deepsearch_test
           REDIS_URL: redis://localhost:6379
         run: |
-          source .venv/bin/activate || .venv\Scripts\activate
+          source .venv/bin/activate || .venv\\Scripts\\activate
           pytest tests/integration -v
 
       - name: Upload coverage
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
-        uses: codecov/codecov-action@v3
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
           fail_ci_if_error: false
@@ -131,56 +131,56 @@ jobs:
     name: Test Frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: deepsearch/webui/frontend/package-lock.json
+          cache-dependency-path: apps/web/package-lock.json
 
       - name: Install dependencies
-        working-directory: deepsearch/webui/frontend
+        working-directory: apps/web
         run: npm ci
 
       - name: Run ESLint
-        working-directory: deepsearch/webui/frontend
+        working-directory: apps/web
         run: npm run lint
 
       - name: Run tests
-        working-directory: deepsearch/webui/frontend
+        working-directory: apps/web
         run: npm test -- --coverage --watchAll=false
 
       - name: Build frontend
-        working-directory: deepsearch/webui/frontend
+        working-directory: apps/web
         run: npm run build
 
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
         run: |
-          pip install safety bandit
+          pip install pip-audit bandit
 
-      - name: Run Safety check
+      - name: Run pip-audit check
         run: |
-          safety check --json || true
+          pip-audit --desc || true
 
       - name: Run Bandit
         run: |
-          bandit -r deepsearch -f json -o bandit-report.json || true
+          bandit -r packages/core -f json -o bandit-report.json || true
 
       - name: Upload security reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: security-reports
           path: |
@@ -191,13 +191,13 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: false
@@ -237,16 +237,16 @@ jobs:
           - 6379:6379
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install UV
         run: |
-          pip install uv==${{ env.UV_VERSION }}
+          pip install uv
 
       - name: Install dependencies
         run: |
@@ -262,7 +262,7 @@ jobs:
         run: |
           source .venv/bin/activate
           # 启动服务器
-          python -m deepsearch run --no-frontend &
+          uv run deepsearch run --no-frontend &
           SERVER_PID=$!
           sleep 10
 
@@ -292,16 +292,16 @@ jobs:
           - 5432:5432
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install UV
         run: |
-          pip install uv==${{ env.UV_VERSION }}
+          pip install uv
 
       - name: Install dependencies
         run: |
@@ -315,7 +315,7 @@ jobs:
         run: |
           source .venv/bin/activate
           # 运行迁移
-          python -m deepsearch db upgrade
+          uv run deepsearch db upgrade
 
           # 检查是否有未提交的迁移
-          python -m deepsearch db check
+          uv run deepsearch db check

@@ -1,0 +1,44 @@
+src/pages/Monitor/MarketMonitor.tsx(88,7): error TS6133: 'formatDateTime' is declared but its value is never read.
+src/pages/Monitor/MarketMonitor.tsx(104,10): error TS6133: 'loading' is declared but its value is never read.
+src/pages/Monitor/MarketMonitor.tsx(104,19): error TS6133: 'setLoading' is declared but its value is never read.
+src/pages/Monitor/MarketMonitor.tsx(105,23): error TS6133: 'setAutoRefresh' is declared but its value is never read.
+src/pages/Monitor/MarketMonitor.tsx(107,10): error TS6133: 'selectedSource' is declared but its value is never read.
+src/pages/Monitor/MarketMonitor.tsx(107,26): error TS6133: 'setSelectedSource' is declared but its value is never read.
+src/pages/Monitor/MarketMonitor.tsx(108,10): error TS6133: 'timeRange' is declared but its value is never read.
+src/pages/Monitor/MarketMonitor.tsx(108,21): error TS6133: 'setTimeRange' is declared but its value is never read.
+src/pages/SystemConfig/DataSourceConfig.tsx(73,6): error TS6196: 'DataSourceRow' is declared but never used.
+src/pages/SystemConfig/DataSourceConfig.tsx(151,52): error TS2551: Property 'login_throttle' does not exist on type 'Partial<DataSource>'. Did you mean 'loginThrottle'?
+src/pages/SystemConfig/DataSourceConfig.tsx(156,31): error TS2551: Property 'pending_login' does not exist on type 'Partial<DataSource>'. Did you mean 'pendingLogin'?
+src/pages/SystemConfig/DataSourceConfig.tsx(157,25): error TS2551: Property 'pending_login' does not exist on type 'Partial<DataSource>'. Did you mean 'pendingLogin'?
+src/pages/SystemConfig/DataSourceConfig.tsx(175,57): error TS2551: Property 'has_saved_credential' does not exist on type 'Partial<DataSource>'. Did you mean 'hasSavedCredential'?
+src/pages/SystemConfig/DataSourceConfig.tsx(179,27): error TS2339: Property 'rememberCredential' does not exist on type 'Partial<DataSource>'.
+src/pages/SystemConfig/DataSourceConfig.tsx(180,23): error TS2339: Property 'rememberCredential' does not exist on type 'Partial<DataSource>'.
+src/pages/SystemConfig/DataSourceConfig.tsx(224,70): error TS2551: Property 'last_test_time' does not exist on type 'Partial<DataSource>'. Did you mean 'lastTestTime'?
+src/pages/SystemConfig/DataSourceConfig.tsx(226,50): error TS2551: Property 'test_summary' does not exist on type 'Partial<DataSource>'. Did you mean 'testSummary'?
+src/pages/SystemConfig/DataSourceConfig.tsx(334,35): error TS2339: Property 'datasource' does not exist on type 'DataSourceTestResult'.
+src/pages/SystemConfig/DataSourceConfig.tsx(340,18): error TS2339: Property 'errorFields' does not exist on type '{}'.
+src/pages/SystemConfig/DataSourceConfig.tsx(343,42): error TS2339: Property 'message' does not exist on type '{}'.
+src/pages/SystemConfig/DataSourceConfig.tsx(735,9): error TS2322: Type 'Dispatch<SetStateAction<number>>' is not assignable to type '(value: number | null) => void'.
+  Types of parameters 'value' and 'value' are incompatible.
+    Type 'number | null' is not assignable to type 'SetStateAction<number>'.
+      Type 'null' is not assignable to type 'SetStateAction<number>'.
+src/pages/SystemConfig/DataSourceConfig.tsx(880,39): error TS2339: Property 'success' does not exist on type '{}'.
+src/pages/SystemConfig/DataSourceConfig.tsx(883,36): error TS2339: Property 'message' does not exist on type '{}'.
+src/pages/SystemConfig/DataSourceConfig.tsx(884,39): error TS2339: Property 'data' does not exist on type '{}'.
+src/pages/SystemConfig/DataSourceConfig.tsx(884,71): error TS2339: Property 'data' does not exist on type '{}'.
+src/pages/SystemConfig/DataSourceConfig.tsx(921,11): error TS2322: Type 'string | number' is not assignable to type 'string | undefined'.
+  Type 'number' is not assignable to type 'string'.
+src/pages/SystemConfig/DataSourceConfig.tsx(922,11): error TS2322: Type 'string | number' is not assignable to type 'string | undefined'.
+  Type 'number' is not assignable to type 'string'.
+src/pages/SystemConfig/DataSourceConfig.tsx(946,30): error TS18046: 'error' is of type 'unknown'.
+src/pages/SystemConfig/DataSourceConfig.tsx(946,63): error TS18046: 'error' is of type 'unknown'.
+src/pages/SystemConfig/DataSourceConfig.tsx(1412,49): error TS7053: Element implicitly has an 'any' type because expression of type 'string | number' can't be used to index type '{}'.
+  No index signature with a parameter of type 'string' was found on type '{}'.
+src/pages/SystemConfig/DataSourceConfig.tsx(1416,50): error TS7053: Element implicitly has an 'any' type because expression of type 'string | number' can't be used to index type '{}'.
+  No index signature with a parameter of type 'string' was found on type '{}'.
+src/pages/SystemConfig/DataSourceConfig.tsx(1449,21): error TS2352: Conversion of type 'DataSource' to type 'Record<string, unknown>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Index signature for type 'string' is missing in type 'DataSource'.
+src/pages/SystemConfig/DataSourceConfig.tsx(1450,54): error TS2352: Conversion of type 'DataSource' to type 'Record<string, unknown>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Index signature for type 'string' is missing in type 'DataSource'.
+src/pages/SystemConfig/DataSourceConfig.tsx(1575,9): error TS2322: Type '{ children: Element; title: string; style: { marginBottom: number; }; extra: Element; maskClosable: boolean; }' is not assignable to type 'IntrinsicAttributes & CardProps & RefAttributes<HTMLDivElement>'.
+  Property 'maskClosable' does not exist on type 'IntrinsicAttributes & CardProps & RefAttributes<HTMLDivElement>'.

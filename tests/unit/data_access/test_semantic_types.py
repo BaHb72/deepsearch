@@ -4,16 +4,16 @@ Semantic Types 单元测试。
 测试 ports/data/semantic_types.py 中的类型定义。
 """
 
-import pytest
 from datetime import datetime, timedelta
 
-from deepsearch.ports.data.semantic_types import (
+import pytest
+from core.ports.data.semantic_types import (
+    AdjustType,
     AssetSpec,
     Exchange,
-    Timeframe,
-    AdjustType,
-    TimeRange,
     LatencyHint,
+    Timeframe,
+    TimeRange,
 )
 
 

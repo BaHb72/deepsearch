@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from deepsearch.domain.market_data import (
+from core.domain.market_data import (
     AuctionQualityCalculator,
     CapitalPulseCalculator,
     OrderImbalanceCalculator,
     SnapshotBuffer,
 )
-from deepsearch.ports.market_data import MarketSnapshot, WindowSpec
+from core.ports.market_data import MarketSnapshot, WindowSpec
 
 
 def _make_snapshot(

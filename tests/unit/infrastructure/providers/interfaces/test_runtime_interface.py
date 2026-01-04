@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from deepsearch.infrastructure.providers.interfaces import runtime
+from core.infrastructure.providers.interfaces import runtime
 
 
 def test_create_empty_batch_stats_returns_pristine_template() -> None:

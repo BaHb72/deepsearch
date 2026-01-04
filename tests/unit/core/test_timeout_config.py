@@ -9,8 +9,7 @@
 """
 
 import pytest
-
-from deepsearch.core.utils.timeout_config import (
+from core.core.utils.timeout_config import (
     TimeoutCategory,
     TimeoutConfig,
     TimeoutManager,

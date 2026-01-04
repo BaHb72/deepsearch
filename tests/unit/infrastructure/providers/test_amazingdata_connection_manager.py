@@ -26,7 +26,7 @@ async def test_connection_manager_maintains_session(real_amazingdata_provider):
 @pytest.mark.asyncio
 async def test_connection_state_after_query(real_amazingdata_provider):
     """测试查询后连接状态保持正常。"""
-    from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+    from core.infrastructure.providers.implementations.amazingdata.query_manager import (
         AmazingDataQueryManager,
     )
 

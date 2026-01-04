@@ -17,7 +17,7 @@ import pytest
 
 sys.modules["AmazingData"] = MagicMock()
 
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized import (  # noqa: E402
+from core.infrastructure.providers.implementations.amazingdata.amazingdata_optimized import (  # noqa: E402
     CircuitBreaker,
     MonitoringSystem,
     OptimizedAmazingDataProvider,
@@ -28,7 +28,7 @@ from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata
     RateLimiter,
     SubscriptionManager,
 )
-from deepsearch.infrastructure.providers.interfaces.base import DataProviderConfig  # noqa: E402
+from core.infrastructure.providers.interfaces.base import DataProviderConfig  # noqa: E402
 
 
 class TestOptimizedThreadPoolManager:
@@ -468,7 +468,7 @@ class TestOptimizedAmazingDataProvider:
     async def test_provider_initialization(self, config):
         """测试提供者初始化"""
         with patch(
-            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA",
+            "core.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA",
             True,
         ):
             provider = OptimizedAmazingDataProvider(config)
@@ -486,11 +486,11 @@ class TestOptimizedAmazingDataProvider:
     async def test_cache_integration(self, config):
         """测试缓存集成"""
         with patch(
-            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA",
+            "core.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA",
             True,
         ):
             with patch(
-                "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.ad"
+                "core.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.ad"
             ) as mock_ad:
                 provider = OptimizedAmazingDataProvider(config)
 
@@ -533,7 +533,7 @@ class TestOptimizedAmazingDataProvider:
     async def test_health_status(self, config):
         """测试健康状态报告"""
         with patch(
-            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA",
+            "core.infrastructure.providers.implementations.amazingdata.amazingdata_optimized.HAS_AMAZINGDATA",
             True,
         ):
             provider = OptimizedAmazingDataProvider(config)

@@ -5,15 +5,14 @@ from __future__ import annotations
 from typing import cast
 
 import pytest
-from httpx import Request, Response
-
-from deepsearch.config.models.notifications import NotificationCategoryConfig, NotificationsConfig
-from deepsearch.infrastructure.notifications import (
+from core.config.models.notifications import NotificationCategoryConfig, NotificationsConfig
+from core.infrastructure.notifications import (
     NotificationQuotaGuard,
     NotificationService,
     QuotaExceededError,
 )
-from deepsearch.infrastructure.notifications.client import XtuisClient
+from core.infrastructure.notifications.client import XtuisClient
+from httpx import Request, Response
 
 
 class DummyClient:

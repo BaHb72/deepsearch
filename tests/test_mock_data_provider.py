@@ -9,8 +9,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from deepsearch.config import get_config
+from core.config import get_config
 
 
 class MockDataProvider:
@@ -84,7 +83,7 @@ class TestMockDataProvider:
 
     def test_mock_provider_only_in_test_env(self):
         """测试Mock Provider只能在测试环境中创建"""
-        with patch("deepsearch.config.get_config") as mock_get_config:
+        with patch("core.config.get_config") as mock_get_config:
             # 模拟生产环境
             config = MagicMock()
             config.app.env = "prod"
@@ -130,10 +129,11 @@ class TestAPIWithMockData:
     @pytest.mark.asyncio
     async def test_api_endpoint_with_mock(self, mock_config):
         """测试 API 工厂在测试环境返回可用的数据源实例"""
-        from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata import (
+        from core.infrastructure.providers.implementations.amazingdata.amazingdata import (
             AmazingDataProvider,
         )
-        from deepsearch.webui.api.providers import DataProviderFactory
+
+        from apps.api.api.providers import DataProviderFactory
 
         # 清除现有实例
         DataProviderFactory.clear_all()
@@ -154,24 +154,24 @@ class TestAPIWithMockData:
     @pytest.mark.asyncio
     async def test_api_fallback_in_production(self):
         """测试生产环境中API降级到真实数据源"""
-        with patch("deepsearch.config.get_config") as mock_get_config:
+        with patch("core.config.get_config") as mock_get_config:
             # 模拟生产环境
             config = MagicMock()
             config.app.env = "prod"
             mock_get_config.return_value = config
 
-            from deepsearch.webui.api.providers import DataProviderFactory
+            from apps.api.api.providers import DataProviderFactory
 
             # 清除现有实例
             DataProviderFactory.clear_all()
 
             # 在生产环境中应在 AmazingData 初始化失败时降级到 AkShare
             with patch(
-                "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata.ensure_amazingdata_provider_config",
+                "core.infrastructure.providers.implementations.amazingdata.amazingdata.ensure_amazingdata_provider_config",
                 side_effect=RuntimeError("invalid config"),
             ) as mock_ensure:
                 with patch(
-                    "deepsearch.infrastructure.providers.implementations.akshare.akshare.AkShareProxyProvider"
+                    "core.infrastructure.providers.implementations.akshare.akshare.AkShareProxyProvider"
                 ) as MockAkShare:
                     mock_akshare = MagicMock()
                     mock_akshare.initialize = AsyncMock(return_value=None)

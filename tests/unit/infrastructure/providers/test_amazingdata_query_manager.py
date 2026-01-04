@@ -10,11 +10,10 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import pytest
-
-from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+from core.infrastructure.providers.implementations.amazingdata.query_manager import (
     AmazingDataQueryManager,
 )
-from deepsearch.infrastructure.providers.interfaces.base import DataRequest
+from core.infrastructure.providers.interfaces.base import DataRequest
 
 # ============================================================================
 # K线数据测试

@@ -10,8 +10,7 @@ from typing import Any, Dict, List, cast
 from unittest.mock import Mock
 
 import pytest
-
-from deepsearch.event.engine.engine import BatchHandler, Event, EventEngine, HandlerManager
+from core.event.engine.engine import BatchHandler, Event, EventEngine, HandlerManager
 
 
 def _event_payload(event: Event) -> Dict[str, Any]:

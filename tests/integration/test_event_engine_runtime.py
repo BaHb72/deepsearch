@@ -3,9 +3,8 @@ import time
 from typing import Any, Callable, List, Tuple, cast
 
 import pytest
-
-from deepsearch.core.interfaces.component import MonitoringHook
-from deepsearch.event.engine.engine import BatchHandler, Event, EventEngine
+from core.core.interfaces.component import MonitoringHook
+from core.event.engine.engine import BatchHandler, Event, EventEngine
 
 
 def _event_payload(event: Event) -> dict[str, Any]:

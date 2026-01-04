@@ -2,9 +2,7 @@
 
 from datetime import datetime, timezone
 
-from deepsearch.infrastructure.persistence.runtime_state.database_status_store import (
-    DatabaseStatusStore,
-)
+from core.infrastructure.persistence.runtime_state.database_status_store import DatabaseStatusStore
 
 
 def test_save_activation_and_connectivity(tmp_path):

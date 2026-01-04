@@ -1,0 +1,211 @@
+@import '@/styles/variables.scss';
+
+.dashboard {
+  padding: 24px;
+  background: var(--bg-secondary);
+  min-height: 100vh;
+  position: relative;
+
+  // 页面标题
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border-light);
+
+    h2 {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      &::before {
+        content: '';
+        width: 4px;
+        height: 28px;
+        background: linear-gradient(180deg, var(--primary-color), var(--primary-light));
+        border-radius: 2px;
+      }
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .update-time {
+      padding: 6px 12px;
+      background: var(--bg-primary);
+      border-radius: 8px;
+      border: 1px solid var(--border-lighter);
+      font-size: 14px;
+    }
+  }
+
+  // 状态卡片
+  .status-cards {
+    margin-bottom: 24px;
+  }
+
+  // 图表区域
+  .chart-area {
+    margin-bottom: 24px;
+
+    .chart-container {
+      height: 380px;
+      padding: 12px 0;
+    }
+  }
+
+  // 组件管理卡片
+  .components-card {
+    margin-bottom: 24px;
+    border-radius: 12px;
+
+    .ant-card-head {
+      background: linear-gradient(135deg, var(--card-bg) 0%, rgba(24, 144, 255, 0.05) 100%);
+      border-bottom: 1px solid var(--border-lighter);
+    }
+
+    .ant-table {
+      font-size: 14px;
+
+      .ant-table-row {
+        transition: all 0.3s;
+
+        &:hover {
+          background-color: rgba(24, 144, 255, 0.02);
+        }
+      }
+    }
+  }
+
+  // 告警卡片
+  .alerts-card {
+    margin-bottom: 24px;
+    border-radius: 12px;
+
+    .ant-timeline {
+      padding: 16px 0;
+
+      .ant-timeline-item {
+        padding-bottom: 24px;
+
+        &:last-child {
+          padding-bottom: 0;
+        }
+      }
+    }
+  }
+
+  // WebSocket状态
+  .ws-status {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 1000;
+
+    .ant-tag {
+      padding: 8px 16px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+    }
+  }
+}
+
+// 动画效果
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(24, 144, 255, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(24, 144, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(24, 144, 255, 0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+// 响应式
+@media (max-width: 768px) {
+  .dashboard {
+    padding: 12px;
+
+    .page-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+
+      h2 {
+        font-size: 20px;
+      }
+    }
+
+    .header-actions {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .chart-container {
+      height: 300px;
+    }
+
+    .ws-status {
+      bottom: 16px;
+      right: 16px;
+    }
+  }
+}
+
+// 暗色主题
+.dark {
+  .dashboard {
+    background: #141414;
+
+    .page-header {
+      border-bottom-color: #303030;
+    }
+
+    .components-card {
+      .ant-card-head {
+        background: linear-gradient(135deg, #1f1f1f 0%, rgba(24, 144, 255, 0.1) 100%);
+      }
+    }
+
+    .ws-status {
+      .ant-tag {
+        background: rgba(0, 0, 0, 0.8);
+        border: 1px solid #303030;
+      }
+    }
+  }
+}

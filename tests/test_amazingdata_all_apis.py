@@ -12,8 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pandas as pd
 import pytest
-
-from deepsearch.infrastructure.providers.implementations.amazingdata import (
+from core.infrastructure.providers.implementations.amazingdata import (
     AmazingDataExtended,
     AmazingDataRealtime,
     SnapshotAlignPolicy,
@@ -55,11 +54,11 @@ async def provider(mock_ad):
     config = {"username": "test", "password": "test", "host": "localhost", "port": 8600}
 
     with patch(
-        "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_extended.ad",
+        "core.infrastructure.providers.implementations.amazingdata.amazingdata_extended.ad",
         mock_ad,
     ):
         with patch(
-            "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_extended.HAS_AMAZINGDATA",
+            "core.infrastructure.providers.implementations.amazingdata.amazingdata_extended.HAS_AMAZINGDATA",
             True,
         ):
             provider = AmazingDataExtended(config)

@@ -1,10 +1,9 @@
 import asyncio
 
 import pytest
-
-from deepsearch.event.const import EVENT_TICK
-from deepsearch.event.engine import Event, EventEngine
-from deepsearch.event.schema import TickSchema, schema_validated
+from core.event.const import EVENT_TICK
+from core.event.engine import Event, EventEngine
+from core.event.schema import TickSchema, schema_validated
 
 
 async def wait_for(predicate, timeout=0.5, interval=0.01):
@@ -88,7 +87,7 @@ async def test_schema_validated_records_validation_failure():
 
 
 def test_schema_registry_dynamic_registration_roundtrip():
-    from deepsearch.event.schema import SchemaBuilder, schema_registry
+    from core.event.schema import SchemaBuilder, schema_registry
 
     event_type = "CUSTOM_TEST_EVENT"
     builder = SchemaBuilder("CustomTestSchema")

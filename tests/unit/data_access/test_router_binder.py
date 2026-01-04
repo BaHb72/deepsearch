@@ -4,44 +4,34 @@ CapabilityRouter 和 UnifiedDataFeed 单元测试。
 测试 infrastructure/providers/capability_router.py 和 binder.py。
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
 from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock
 
-from deepsearch.ports.data.semantic_types import (
-    AssetSpec,
-    Timeframe,
-    AdjustType,
-    TimeRange,
-    LatencyHint,
-)
-from deepsearch.ports.data.requests import KlineRequest, RealtimeQuoteRequest
-from deepsearch.ports.data.responses import KlineBar, KlineResponse
-from deepsearch.ports.data.capabilities import DataCapability
-from deepsearch.ports.data_sources import DataSourceType
-from deepsearch.config.models.capability_routing import (
+import pytest
+from core.config.models.capability_routing import (
     CapabilityRoutingConfig,
     CapabilityRoutingRule,
     KlineCapabilitySpec,
     ProviderCapabilitiesSpec,
-    RealtimeQuoteCapabilitySpec,
     RoutingConfig,
     ScenarioRouting,
 )
-from deepsearch.infrastructure.providers.capability_router import (
+from core.infrastructure.providers.adapters.base import BaseProviderAdapter, IKlineProvider
+from core.infrastructure.providers.binder import (
+    AllProvidersFailedError,
+    FallbackStrategy,
+    UnifiedDataFeed,
+)
+from core.infrastructure.providers.capability_router import (
     CapabilityRouter,
     NoProviderAvailableError,
 )
-from deepsearch.infrastructure.providers.binder import (
-    UnifiedDataFeed,
-    FallbackStrategy,
-    AllProvidersFailedError,
-)
-from deepsearch.infrastructure.providers.adapters.base import (
-    BaseProviderAdapter,
-    IKlineProvider,
-)
+from core.ports.data.capabilities import DataCapability
+from core.ports.data.requests import KlineRequest
+from core.ports.data.responses import KlineBar, KlineResponse
+from core.ports.data.semantic_types import AdjustType, AssetSpec, LatencyHint, Timeframe, TimeRange
+from core.ports.data_sources import DataSourceType
 
 
 class MockKlineAdapter(BaseProviderAdapter, IKlineProvider):

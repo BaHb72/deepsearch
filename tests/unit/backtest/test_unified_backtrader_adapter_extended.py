@@ -13,8 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
-
-from deepsearch.backtest.adapters.unified_backtrader_adapter import UnifiedBacktraderAdapter
+from core.backtest.adapters.unified_backtrader_adapter import UnifiedBacktraderAdapter
 
 
 class TestRunSync:
@@ -23,9 +22,7 @@ class TestRunSync:
     @pytest.fixture
     def adapter(self):
         """创建 adapter 实例（mock data_manager）"""
-        with patch(
-            "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
-        ) as mock:
+        with patch("core.backtest.adapters.unified_backtrader_adapter.get_data_manager") as mock:
             mock.return_value = MagicMock()
             adapter = UnifiedBacktraderAdapter()
             yield adapter
@@ -69,9 +66,7 @@ class TestEnsureDataFrame:
 
     @pytest.fixture
     def adapter(self):
-        with patch(
-            "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
-        ) as mock:
+        with patch("core.backtest.adapters.unified_backtrader_adapter.get_data_manager") as mock:
             mock.return_value = MagicMock()
             adapter = UnifiedBacktraderAdapter()
             yield adapter
@@ -120,9 +115,7 @@ class TestResampleToWeekly:
 
     @pytest.fixture
     def adapter(self):
-        with patch(
-            "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
-        ) as mock:
+        with patch("core.backtest.adapters.unified_backtrader_adapter.get_data_manager") as mock:
             mock.return_value = MagicMock()
             adapter = UnifiedBacktraderAdapter()
             yield adapter
@@ -178,9 +171,7 @@ class TestValidateData:
 
     @pytest.fixture
     def adapter(self):
-        with patch(
-            "deepsearch.backtest.adapters.unified_backtrader_adapter.get_data_manager"
-        ) as mock:
+        with patch("core.backtest.adapters.unified_backtrader_adapter.get_data_manager") as mock:
             mock.return_value = MagicMock()
             adapter = UnifiedBacktraderAdapter()
             yield adapter

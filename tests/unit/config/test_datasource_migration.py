@@ -1,6 +1,6 @@
 """数据源配置迁移工具的单元测试。"""
 
-from deepsearch.config.migrations import migrate_data_source_config
+from core.config.migrations import migrate_data_source_config
 
 
 def test_migrate_legacy_provider_blocks():

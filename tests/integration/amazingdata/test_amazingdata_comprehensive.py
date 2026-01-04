@@ -21,9 +21,8 @@ from typing import Any, Dict, Iterable, List, Protocol, TypeVar, cast
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
+from core.config import get_config
 from helpers import fetch_code_list
-
-from deepsearch.config import get_config
 
 # 为 colorama 定义最小协议，确保缺失依赖时依旧具备类型约束
 

@@ -7,8 +7,8 @@ import pytest
 
 MODULE_PATH = (
     Path(__file__).resolve().parents[3]
-    / "deepsearch"
-    / "webui"
+    / "apps"
+    / "api"
     / "api"
     / "endpoints"
     / "system"

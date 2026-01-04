@@ -17,7 +17,7 @@ async def test_process_adapter_connection(real_amazingdata_provider):
 @pytest.mark.asyncio
 async def test_process_adapter_execute_query(real_amazingdata_provider):
     """测试进程适配器执行查询。"""
-    from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+    from core.infrastructure.providers.implementations.amazingdata.query_manager import (
         AmazingDataQueryManager,
     )
 

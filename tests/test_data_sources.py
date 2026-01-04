@@ -11,8 +11,7 @@ Endpoints tested:
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-
-from deepsearch.infrastructure.providers.managers.data_source_manager import (
+from core.infrastructure.providers.managers.data_source_manager import (
     DataSourceConfig,
     DataSourceManager,
     DataSourceType,
@@ -29,7 +28,7 @@ class TestDataSourceStatus:
         manager.initialized = False
 
         with patch(
-            "deepsearch.infrastructure.providers.managers.data_source_manager.get_data_source_manager",
+            "core.infrastructure.providers.managers.data_source_manager.get_data_source_manager",
             return_value=manager,
         ):
             # Manager should initialize when not ready
@@ -62,7 +61,7 @@ class TestDataSourceStatus:
     async def test_refresh_data_sources(self):
         """Test refreshing all data sources."""
         with patch(
-            "deepsearch.infrastructure.providers.managers.data_source_manager.DataSourceRegistry.get_config",
+            "core.infrastructure.providers.managers.data_source_manager.DataSourceRegistry.get_config",
             return_value=DataSourceConfig(enabled=True, priority=1),
         ):
             manager = DataSourceManager()
@@ -79,7 +78,7 @@ class TestDataSourceValidation:
         """Test AmazingData configuration validation."""
         config = mock_config
         config.amazingdata.connection.username = "test_user"
-        config.amazingdata.connection.password = "test_pass"
+        config.amazingdata.connection.password = "test_pass"  # pragma: allowlist secret
         config.amazingdata.connection.host = "test.host"
         config.amazingdata.connection.port = 8600
 

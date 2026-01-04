@@ -4,32 +4,15 @@ Realtime 和 Tick 能力单元测试。
 测试 adapters 中的 Realtime 和 Tick 实现。
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
 from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock
 
-from deepsearch.ports.data.semantic_types import (
-    AssetSpec,
-    Timeframe,
-    TimeRange,
-)
-from deepsearch.ports.data.requests import (
-    RealtimeQuoteRequest,
-    TickRequest,
-)
-from deepsearch.ports.data.responses import (
-    Quote,
-    RealtimeQuoteResponse,
-    TickData,
-    TickResponse,
-)
-from deepsearch.ports.data_sources import DataSourceType
-from deepsearch.config.models.capability_routing import (
-    ProviderCapabilitiesSpec,
-    RealtimeQuoteCapabilitySpec,
-    TickCapabilitySpec,
-)
+import pytest
+from core.ports.data.requests import RealtimeQuoteRequest, TickRequest
+from core.ports.data.responses import RealtimeQuoteResponse, TickData, TickResponse
+from core.ports.data.semantic_types import AssetSpec, TimeRange
+from core.ports.data_sources import DataSourceType
 
 
 class TestMiniQMTRealtimeCapability:
@@ -46,7 +29,7 @@ class TestMiniQMTRealtimeCapability:
     @pytest.fixture
     def adapter(self, mock_provider):
         """适配器实例"""
-        from deepsearch.infrastructure.providers.adapters.miniqmt import MiniQMTAdapter
+        from core.infrastructure.providers.adapters.miniqmt import MiniQMTAdapter
 
         return MiniQMTAdapter(provider=mock_provider)
 
@@ -67,9 +50,7 @@ class TestMiniQMTRealtimeCapability:
             }
         ]
 
-        request = RealtimeQuoteRequest(
-            assets=[AssetSpec.from_code("000001.SZ")]
-        )
+        request = RealtimeQuoteRequest(assets=[AssetSpec.from_code("000001.SZ")])
 
         response = await adapter.query_realtime(request)
 
@@ -138,9 +119,7 @@ class TestMiniQMTRealtimeCapability:
             }
         ]
 
-        request = RealtimeQuoteRequest(
-            assets=[AssetSpec.from_code("000001.SZ")]
-        )
+        request = RealtimeQuoteRequest(assets=[AssetSpec.from_code("000001.SZ")])
 
         response = await adapter.query_realtime(request)
 
@@ -163,7 +142,7 @@ class TestMiniQMTTickCapability:
     @pytest.fixture
     def adapter(self, mock_provider):
         """适配器实例"""
-        from deepsearch.infrastructure.providers.adapters.miniqmt import MiniQMTAdapter
+        from core.infrastructure.providers.adapters.miniqmt import MiniQMTAdapter
 
         return MiniQMTAdapter(provider=mock_provider)
 
@@ -196,9 +175,7 @@ class TestAmazingDataRealtimeCapability:
     @pytest.fixture
     def adapter(self, mock_provider):
         """适配器实例"""
-        from deepsearch.infrastructure.providers.adapters.amazingdata import (
-            AmazingDataAdapter,
-        )
+        from core.infrastructure.providers.adapters.amazingdata import AmazingDataAdapter
 
         return AmazingDataAdapter(provider=mock_provider)
 
@@ -219,15 +196,12 @@ class TestAmazingDataRealtimeCapability:
             }
         ]
 
-        request = RealtimeQuoteRequest(
-            assets=[AssetSpec.from_code("000001.SZ")]
-        )
+        request = RealtimeQuoteRequest(assets=[AssetSpec.from_code("000001.SZ")])
 
         response = await adapter.query_realtime(request)
 
         assert isinstance(response, RealtimeQuoteResponse)
         assert len(response.quotes) >= 1
-
 
 
 class TestTickData:
@@ -257,15 +231,12 @@ class TestTickData:
         assert tick.order_id == "ORD12345"
 
 
-
 class TestRealtimeQuoteRequest:
     """RealtimeQuoteRequest 测试"""
 
     def test_request_with_single_asset(self):
         """测试单资产请求"""
-        request = RealtimeQuoteRequest(
-            assets=[AssetSpec.from_code("000001.SZ")]
-        )
+        request = RealtimeQuoteRequest(assets=[AssetSpec.from_code("000001.SZ")])
         assert len(request.assets) == 1
 
     def test_request_with_multiple_assets(self):
@@ -281,14 +252,13 @@ class TestRealtimeQuoteRequest:
 
     def test_request_with_latency_hint(self):
         """测试带延迟提示的请求"""
-        from deepsearch.ports.data.semantic_types import LatencyHint
+        from core.ports.data.semantic_types import LatencyHint
 
         request = RealtimeQuoteRequest(
             assets=[AssetSpec.from_code("000001.SZ")],
             latency=LatencyHint.REALTIME,
         )
         assert request.latency == LatencyHint.REALTIME
-
 
 
 class TestTickRequest:

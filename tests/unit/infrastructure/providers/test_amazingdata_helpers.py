@@ -2,8 +2,7 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
-
-from deepsearch.infrastructure.providers.implementations.amazingdata import helpers as sut
+from core.infrastructure.providers.implementations.amazingdata import helpers as sut
 
 
 def test_coalesce_skips_blank_strings() -> None:

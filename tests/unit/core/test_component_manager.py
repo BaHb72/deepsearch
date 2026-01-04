@@ -6,10 +6,9 @@ import asyncio
 from datetime import datetime
 
 import pytest
-
-from deepsearch.core.interfaces.component import ComponentStatus, ComponentType
-from deepsearch.core.managers.component_manager import ComponentInfo, ComponentManager
-from deepsearch.core.utils.exceptions import ComponentError
+from core.core.interfaces.component import ComponentStatus, ComponentType
+from core.core.managers.component_manager import ComponentInfo, ComponentManager
+from core.core.utils.exceptions import ComponentError
 
 
 class MockComponent:

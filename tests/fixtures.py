@@ -244,7 +244,7 @@ def mock_data_provider():
 @pytest.fixture
 def mock_component():
     """模拟组件"""
-    from deepsearch.core.interfaces import ComponentStatus, ComponentType
+    from core.core.interfaces import ComponentStatus, ComponentType
 
     component = Mock()
     component.name = "test_component"
@@ -268,7 +268,7 @@ def mock_component():
 @pytest.fixture
 def sample_market_event():
     """示例市场数据事件"""
-    from deepsearch.event.schema import Event, EventType
+    from core.event.schema import Event, EventType
 
     return Event(
         type=EventType.MARKET_DATA,
@@ -284,7 +284,7 @@ def sample_market_event():
 @pytest.fixture
 def sample_order_event():
     """示例订单事件"""
-    from deepsearch.event.schema import Event, EventType
+    from core.event.schema import Event, EventType
 
     return Event(
         type=EventType.ORDER,
@@ -303,7 +303,7 @@ def sample_order_event():
 @pytest.fixture
 def sample_trade_event():
     """示例成交事件"""
-    from deepsearch.event.schema import Event, EventType
+    from core.event.schema import Event, EventType
 
     return Event(
         type=EventType.TRADE,

@@ -12,8 +12,8 @@ from typing import Any, Generic, TypeVar
 import pytest
 
 # `stock_repository_impl` 依赖的 stock 实体模块在当前工作区缺失，为保证测试可导入，这里构造最小 stub。
-entities_module = ModuleType("deepsearch.infrastructure.providers.entities")
-stock_module = ModuleType("deepsearch.infrastructure.providers.entities.stock")
+entities_module = ModuleType("core.infrastructure.providers.entities")
+stock_module = ModuleType("core.infrastructure.providers.entities.stock")
 
 
 class StockMarket(str, Enum):
@@ -35,14 +35,12 @@ setattr(stock_module, "StockMarket", StockMarket)
 setattr(stock_module, "StockStatus", StockStatus)
 setattr(stock_module, "StockEntity", StockEntity)
 
-sys.modules.setdefault("deepsearch.infrastructure.providers.entities", entities_module)
-sys.modules["deepsearch.infrastructure.providers.entities.stock"] = stock_module
+sys.modules.setdefault("core.infrastructure.providers.entities", entities_module)
+sys.modules["core.infrastructure.providers.entities.stock"] = stock_module
 
-interfaces_module = ModuleType("deepsearch.infrastructure.providers.interfaces")
-repositories_module = ModuleType("deepsearch.infrastructure.providers.interfaces.repositories")
-repositories_base_module = ModuleType(
-    "deepsearch.infrastructure.providers.interfaces.repositories.base"
-)
+interfaces_module = ModuleType("core.infrastructure.providers.interfaces")
+repositories_module = ModuleType("core.infrastructure.providers.interfaces.repositories")
+repositories_base_module = ModuleType("core.infrastructure.providers.interfaces.repositories.base")
 
 EntityT = TypeVar("EntityT")
 KeyT = TypeVar("KeyT")
@@ -69,22 +67,16 @@ class QueryOptions:
 setattr(repositories_base_module, "IRepository", IRepository)
 setattr(repositories_base_module, "QueryOptions", QueryOptions)
 
-sys.modules.setdefault("deepsearch.infrastructure.providers.interfaces", interfaces_module)
-sys.modules.setdefault(
-    "deepsearch.infrastructure.providers.interfaces.repositories", repositories_module
-)
-sys.modules["deepsearch.infrastructure.providers.interfaces.repositories.base"] = (
-    repositories_base_module
-)
+sys.modules.setdefault("core.infrastructure.providers.interfaces", interfaces_module)
+sys.modules.setdefault("core.infrastructure.providers.interfaces.repositories", repositories_module)
+sys.modules["core.infrastructure.providers.interfaces.repositories.base"] = repositories_base_module
 
 
-from deepsearch.infrastructure.persistence.types import (  # noqa: E402
+from core.infrastructure.persistence.types import (  # noqa: E402
     DatabaseServiceProtocol,
     DatabaseSessionProtocol,
 )
-from deepsearch.infrastructure.repositories.stock_repository_impl import (  # noqa: E402
-    StockRepository,
-)
+from core.infrastructure.repositories.stock_repository_impl import StockRepository  # noqa: E402
 
 
 class RecordingResult:

@@ -4,13 +4,9 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Sequence
 
 import pytest
-
-from deepsearch.application.services.data_sources import (
-    DataSourcePrefetchScheduler,
-    IngestionJobSummary,
-)
-from deepsearch.config.models import DataSourcePrefetchConfig
-from deepsearch.ports.data_sources import DataAccessType, DataSourceType
+from core.application.services.data_sources import DataSourcePrefetchScheduler, IngestionJobSummary
+from core.config.models import DataSourcePrefetchConfig
+from core.ports.data_sources import DataAccessType, DataSourceType
 
 
 class StubIngestionService:

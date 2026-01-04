@@ -7,16 +7,15 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 import pytest
-
-from deepsearch.infrastructure.providers.interfaces.base import (
+from core.infrastructure.providers.interfaces.base import (
     DataProvider,
     DataProviderConfig,
     DataRequest,
     DataResponse,
     DataSourceType,
 )
-from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
-from deepsearch.infrastructure.providers.managers.manager import DataProviderManager
+from core.infrastructure.providers.interfaces.capabilities import DataCapability
+from core.infrastructure.providers.managers.manager import DataProviderManager
 
 
 class DummyProvider(DataProvider):

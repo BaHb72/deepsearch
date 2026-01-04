@@ -25,9 +25,7 @@ class TestDatabaseStatus:
         mock_db = AsyncMock()
         mock_db.execute = AsyncMock(return_value=Mock(scalar=Mock(return_value=1)))
 
-        with patch(
-            "deepsearch.infrastructure.persistence.database.get_connection", return_value=mock_db
-        ):
+        with patch("core.infrastructure.persistence.database.get_connection", return_value=mock_db):
             # Should return connected status
             status = {
                 "connected": True,
@@ -46,9 +44,7 @@ class TestDatabaseStatus:
         mock_db = AsyncMock()
         mock_db.execute = AsyncMock(side_effect=Exception("Connection refused"))
 
-        with patch(
-            "deepsearch.infrastructure.persistence.database.get_connection", return_value=mock_db
-        ):
+        with patch("core.infrastructure.persistence.database.get_connection", return_value=mock_db):
             status = {"connected": False, "error": "Connection refused"}
             assert not status["connected"]
             assert "error" in status

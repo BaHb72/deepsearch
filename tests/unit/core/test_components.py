@@ -12,14 +12,13 @@
 from unittest.mock import Mock
 
 import pytest
-
-from deepsearch.core.components.analytics_components import AnalyticsComponent
-from deepsearch.core.components.backtest_components import BacktestComponent
-from deepsearch.core.components.gateway_components import GatewayComponent, QMTGatewayComponent
+from core.core.components.analytics_components import AnalyticsComponent
+from core.core.components.backtest_components import BacktestComponent
+from core.core.components.gateway_components import GatewayComponent, QMTGatewayComponent
 
 # 导入要测试的组件
-from deepsearch.core.components.monitoring_components import MonitorComponent
-from deepsearch.core.components.ui_components import WebUIComponent
+from core.core.components.monitoring_components import MonitorComponent
+from core.core.components.ui_components import WebUIComponent
 
 
 class TestMonitorComponent:
@@ -336,7 +335,7 @@ class TestComponentIntegration:
     @pytest.mark.asyncio
     async def test_all_components_import(self):
         """测试所有组件可以正常导入"""
-        from deepsearch.core.components import (
+        from core.core.components import (
             AnalyticsComponent,
             BacktestComponent,
             GatewayComponent,
@@ -357,9 +356,9 @@ class TestComponentIntegration:
     async def test_backward_compatibility(self):
         """测试向后兼容性"""
         # 验证从unified_components导入的组件与从components导入的是同一个
-        from deepsearch.core.components import GatewayComponent as NewGateway
-        from deepsearch.core.components import MonitorComponent as NewMonitor
-        from deepsearch.core.unified_components import GatewayComponent, MonitorComponent
+        from core.core.components import GatewayComponent as NewGateway
+        from core.core.components import MonitorComponent as NewMonitor
+        from core.core.unified_components import GatewayComponent, MonitorComponent
 
         assert MonitorComponent is NewMonitor
         assert GatewayComponent is NewGateway

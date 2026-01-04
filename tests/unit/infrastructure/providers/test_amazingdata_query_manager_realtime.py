@@ -6,8 +6,7 @@
 from __future__ import annotations
 
 import pytest
-
-from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+from core.infrastructure.providers.implementations.amazingdata.query_manager import (
     AmazingDataQueryManager,
 )
 

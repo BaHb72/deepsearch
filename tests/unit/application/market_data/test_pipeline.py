@@ -5,10 +5,9 @@ from decimal import Decimal
 from typing import Sequence
 
 import pytest
-
-from deepsearch.application.market_data.cache_writer import MarketDataCacheWriter
-from deepsearch.application.market_data.pipeline import MarketDataRealtimePipeline
-from deepsearch.ports.market_data import (
+from core.application.market_data.cache_writer import MarketDataCacheWriter
+from core.application.market_data.pipeline import MarketDataRealtimePipeline
+from core.ports.market_data import (
     AuctionQualityEntry,
     CapitalPulseEntry,
     OrderImbalanceEntry,

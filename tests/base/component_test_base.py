@@ -11,10 +11,9 @@ from typing import Any, Awaitable, Callable, Dict, Optional, Type
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from core.core.async_component import AsyncComponent
+from core.core.interfaces import Component, ComponentStatus, ComponentType
 from pytest_mock import MockerFixture
-
-from deepsearch.core.async_component import AsyncComponent
-from deepsearch.core.interfaces import Component, ComponentStatus, ComponentType
 
 
 class ComponentTestBase:

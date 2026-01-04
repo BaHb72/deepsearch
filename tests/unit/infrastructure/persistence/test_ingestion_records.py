@@ -5,19 +5,18 @@ from datetime import datetime, timedelta, timezone
 from typing import AsyncIterator
 
 import pytest
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-from deepsearch.domain.market_data import StockListRecord
-from deepsearch.infrastructure.persistence.ingestion_records import DataSourceRecordPersistence
-from deepsearch.infrastructure.persistence.models import Base
-from deepsearch.infrastructure.persistence.types import (
+from core.domain.market_data import StockListRecord
+from core.infrastructure.persistence.ingestion_records import DataSourceRecordPersistence
+from core.infrastructure.persistence.models import Base
+from core.infrastructure.persistence.types import (
     DatabaseServiceProtocol,
     DatabaseSessionProtocol,
     RowDict,
     SQLParams,
 )
-from deepsearch.ports.data_sources import DataAccessType, DataSourceType
+from core.ports.data_sources import DataAccessType, DataSourceType
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 class SQLiteDatabaseService(DatabaseServiceProtocol):

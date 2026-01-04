@@ -3,13 +3,13 @@
 from datetime import datetime
 from types import SimpleNamespace
 
-from deepsearch.observability.logger import logger_manager
+from core.observability.logger import logger_manager
 
 
 def test_normalize_module_with_alias():
     """带有前缀的模块名应匹配中文别名"""
 
-    result = logger_manager._normalize_module_name("deepsearch.core.runtime.engine_adapter")
+    result = logger_manager._normalize_module_name("core.core.runtime.engine_adapter")
     assert result == "运行时调度"
 
 
@@ -47,7 +47,7 @@ def test_format_console_uses_translated_module(tmp_path):
         "line": 42,
         "message": "AkShare 接口日志",
         "extra": {"module": "akshare_direct"},
-        "name": "deepsearch.infrastructure.providers.akshare",
+        "name": "core.infrastructure.providers.akshare",
         "file": SimpleNamespace(path=str(fake_file)),
     }
 

@@ -4,8 +4,8 @@ os.environ.setdefault("DEEPSEARCH_AMAZINGDATA_STUB", "tests.stubs.amazingdata_st
 import pandas as pd
 import pytest
 
-from deepsearch.webui.api.endpoints.amazingdata import basic_data, history, margin, shareholder
-from deepsearch.webui.api.endpoints.amazingdata.base import DEFAULT_LOCAL_PATH
+from apps.api.api.endpoints.amazingdata import basic_data, history, margin, shareholder
+from apps.api.api.endpoints.amazingdata.base import DEFAULT_LOCAL_PATH
 
 
 @pytest.mark.asyncio

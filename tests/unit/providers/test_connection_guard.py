@@ -11,8 +11,7 @@ MiniQMT ConnectionGuard 测试套件
 import time
 
 import pytest
-
-from deepsearch.infrastructure.providers.implementations.qmt.connection_guard import (
+from core.infrastructure.providers.implementations.qmt.connection_guard import (
     MiniQMTConnectionGuard,
 )
 

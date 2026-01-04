@@ -4,21 +4,18 @@ CapabilityRoutingConfig 单元测试。
 测试 config/models/capability_routing.py 中的配置模型。
 """
 
-import pytest
-
-from deepsearch.ports.data.semantic_types import AdjustType, Timeframe
-from deepsearch.config.models.capability_routing import (
+from core.config.models.capability_routing import (
     CapabilityRoutingConfig,
     CapabilityRoutingRule,
     KlineCapabilitySpec,
     ProviderCapabilitiesSpec,
-    QualityMetrics,
     RealtimeQuoteCapabilitySpec,
     RoutingConfig,
     ScenarioRouting,
     StockListCapabilitySpec,
     TickCapabilitySpec,
 )
+from core.ports.data.semantic_types import AdjustType, Timeframe
 
 
 class TestKlineCapabilitySpec:

@@ -8,10 +8,9 @@ from pathlib import Path
 from typing import AsyncGenerator, Generator
 
 import pytest
+from core.observability import get_logger, logger_manager
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
-
-from deepsearch.observability import get_logger, logger_manager
 
 # 配置日志
 logger_manager.start()
@@ -29,7 +28,7 @@ def event_loop():
 @pytest.fixture(scope="session")
 def test_client() -> Generator[TestClient, None, None]:
     """创建测试客户端"""
-    from deepsearch.webui.server import app
+    from apps.api.server import app
 
     headers = {"X-Test-Mode": "true"}
     with TestClient(app, headers=headers) as client:
@@ -39,7 +38,7 @@ def test_client() -> Generator[TestClient, None, None]:
 @pytest.fixture(scope="session")
 async def async_client() -> AsyncGenerator[AsyncClient, None]:
     """创建异步测试客户端"""
-    from deepsearch.webui.server import app
+    from apps.api.server import app
 
     transport = ASGITransport(app=app)
     headers = {"X-Test-Mode": "true"}

@@ -2,12 +2,11 @@ import asyncio
 from typing import Dict
 
 import pytest
-
-from deepsearch.config import get_config, reload_config
-from deepsearch.config.loader import ensure_env_config_file
-from deepsearch.config.models.notifications import NotificationsConfig
-from deepsearch.core.runtime.context import get_context
-from deepsearch.infrastructure.notifications import NotificationQuotaGuard, NotificationService
+from core.config import get_config, reload_config
+from core.config.loader import ensure_env_config_file
+from core.config.models.notifications import NotificationsConfig
+from core.core.runtime.context import get_context
+from core.infrastructure.notifications import NotificationQuotaGuard, NotificationService
 
 CONFIG_PATH = ensure_env_config_file("dev")
 

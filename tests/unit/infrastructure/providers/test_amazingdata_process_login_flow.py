@@ -18,7 +18,7 @@ async def test_login_flow_success(real_amazingdata_provider):
 @pytest.mark.asyncio
 async def test_login_state_maintained(real_amazingdata_provider):
     """测试登录状态保持。"""
-    from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+    from core.infrastructure.providers.implementations.amazingdata.query_manager import (
         AmazingDataQueryManager,
     )
 
@@ -34,7 +34,7 @@ async def test_login_state_maintained(real_amazingdata_provider):
 @pytest.mark.asyncio
 async def test_login_allows_queries(real_amazingdata_provider):
     """测试登录后允许查询。"""
-    from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+    from core.infrastructure.providers.implementations.amazingdata.query_manager import (
         AmazingDataQueryManager,
     )
 

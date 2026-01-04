@@ -10,9 +10,8 @@ from typing import Iterator
 
 import pytest
 import redis
-
-from deepsearch.event.engine.engine import Event
-from deepsearch.infrastructure.persistence.timeseries import RedisTimeSeriesStorage
+from core.event.engine.engine import Event
+from core.infrastructure.persistence.timeseries import RedisTimeSeriesStorage
 
 _TIMESERIES_ENV = "REDIS_TIMESERIES_LIB"
 

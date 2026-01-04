@@ -7,20 +7,15 @@ import asyncio
 from datetime import datetime
 
 import pytest
-
-from deepsearch.core.utils.async_timeout import run_with_timeout, with_timeout
-from deepsearch.infrastructure.providers.base.provider_base import BaseDataProvider
-from deepsearch.infrastructure.providers.factory import (
+from core.core.utils.async_timeout import run_with_timeout, with_timeout
+from core.infrastructure.providers.base.provider_base import BaseDataProvider
+from core.infrastructure.providers.factory import (
     CircuitBreaker,
     CircuitBreakerState,
     DataProviderFactory,
     SelectionStrategy,
 )
-from deepsearch.infrastructure.providers.registry import (
-    DataProviderRegistry,
-    ProviderInfo,
-    ProviderType,
-)
+from core.infrastructure.providers.registry import DataProviderRegistry, ProviderInfo, ProviderType
 
 
 class MockDataProvider(BaseDataProvider):
@@ -91,7 +86,7 @@ class TestDataProviderRegistry:
         """设置测试环境"""
         # 清除全局注册表
         global _registry
-        from deepsearch.infrastructure.providers import registry
+        from core.infrastructure.providers import registry
 
         registry._registry = None
         self.registry = DataProviderRegistry()

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from deepsearch.infrastructure.providers.interfaces import payloads
+from core.infrastructure.providers.interfaces import payloads
 
 
 def test_payloads_module_exports_expected_symbols() -> None:

@@ -1,8 +1,7 @@
 import pytest
-
-from deepsearch.config.models.database import CacheDatabaseConfig, CacheDatabaseWSLConfig
-from deepsearch.utils.system import redis_startup
-from deepsearch.utils.system.redis_startup import RedisStartupError
+from core.config.models.database import CacheDatabaseConfig, CacheDatabaseWSLConfig
+from core.utils.system import redis_startup
+from core.utils.system.redis_startup import RedisStartupError
 
 
 def _noop_echo(_message: str) -> None:

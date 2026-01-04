@@ -8,7 +8,7 @@ import pytest
 
 os.environ.setdefault("DEEPSEARCH_AMAZINGDATA_STUB", "tests.stubs.amazingdata_stub")
 
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_proxy import (
+from core.infrastructure.providers.implementations.amazingdata.amazingdata_process_proxy import (
     AmazingDataProcessProxy,
     RequestType,
 )

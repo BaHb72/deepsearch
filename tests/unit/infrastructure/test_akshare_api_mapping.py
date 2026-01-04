@@ -2,7 +2,7 @@
 AkShare API 映射加载测试
 """
 
-from deepsearch.infrastructure.providers.implementations.akshare.akshare_api_mapping import (
+from core.infrastructure.providers.implementations.akshare.akshare_api_mapping import (
     AkShareAPIMapping,
 )
 

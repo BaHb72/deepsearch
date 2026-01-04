@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from deepsearch.infrastructure.providers.interfaces.repositories import QueryOptions
+from core.infrastructure.providers.interfaces.repositories import QueryOptions
 
 
 def test_query_options_normalizes_inputs() -> None:

@@ -3,8 +3,7 @@
 from datetime import datetime, timedelta
 
 import pytest
-
-from deepsearch.workers.proxy_manager import WorkersProxyManager
+from core.workers.proxy_manager import WorkersProxyManager
 
 
 @pytest.fixture

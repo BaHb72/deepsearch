@@ -11,9 +11,8 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import pytest
+from core.infrastructure.providers.managers.data_source_manager import StockListFetchResult
 from loguru import logger
-
-from deepsearch.infrastructure.providers.managers.data_source_manager import StockListFetchResult
 
 # 配置日志
 logger.add("test_data_sources.log", rotation="10 MB")
@@ -43,9 +42,7 @@ class DataSourceTestSuite:
     async def setup(self):
         """初始化测试环境"""
         try:
-            from deepsearch.infrastructure.providers.managers.data_source_manager import (
-                DataSourceManager,
-            )
+            from core.infrastructure.providers.managers.data_source_manager import DataSourceManager
 
             self.manager = DataSourceManager.get_instance()
             await self.manager.initialize()

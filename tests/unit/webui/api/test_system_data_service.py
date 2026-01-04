@@ -6,10 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from deepsearch.webui.api.services.system_data_service import (
-    ComponentNotFoundError,
-    SystemDataService,
-)
+from apps.api.api.services.system_data_service import ComponentNotFoundError, SystemDataService
 
 
 @pytest.fixture

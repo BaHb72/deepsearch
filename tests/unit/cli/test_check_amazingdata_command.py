@@ -4,11 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
+from core.config.models.amazingdata import AmazingDataConfig as SettingsAmazingDataConfig
+from core.config.models.amazingdata import AmazingDataConnectionConfig
 
-from deepsearch.config.models.amazingdata import AmazingDataConfig as SettingsAmazingDataConfig
-from deepsearch.config.models.amazingdata import AmazingDataConnectionConfig
-
-cli_main = import_module("deepsearch.cli.main")
+cli_main = import_module("core.cli.main")
 cli = cli_main.cli
 
 
@@ -27,7 +26,7 @@ def test_check_amazingdata_outputs_tgw_snippet(monkeypatch, tmp_path):
 
     connection = AmazingDataConnectionConfig(
         username="real_user",
-        password="real_pass",
+        password="real_pass",  # pragma: allowlist secret
         host="101.230.159.234",
         port=8600,
         tgw_log_path=str(log_file),
@@ -35,7 +34,7 @@ def test_check_amazingdata_outputs_tgw_snippet(monkeypatch, tmp_path):
     settings_config = SettingsAmazingDataConfig(enabled=True, connection=connection)
 
     monkeypatch.setattr(
-        "deepsearch.config.get_config",
+        "core.config.get_config",
         lambda: SimpleNamespace(amazingdata=settings_config),
     )
 

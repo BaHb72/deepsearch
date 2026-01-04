@@ -3,13 +3,11 @@
 from types import SimpleNamespace
 
 import pytest
+from core.infrastructure.providers.managers.data_source_manager import DataSourceLifecycleStatus
+from core.utils.data_sources import DataSourceType
 
-from deepsearch.infrastructure.providers.managers.data_source_manager import (
-    DataSourceLifecycleStatus,
-)
-from deepsearch.utils.data_sources import DataSourceType
-from deepsearch.webui.api.common.response_format import ErrorCodes
-from deepsearch.webui.api.endpoints.datasources import datasource_manager
+from apps.api.api.common.response_format import ErrorCodes
+from apps.api.api.endpoints.datasources import datasource_manager
 
 
 class _DummyManager:

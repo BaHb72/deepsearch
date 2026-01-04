@@ -6,14 +6,13 @@ from types import ModuleType, SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 import pytest
-
-from deepsearch.infrastructure.providers.implementations.akshare.akshare_refactored import (
+from core.infrastructure.providers.implementations.akshare.akshare_refactored import (
     AkShareProxyProvider,
 )
-from deepsearch.infrastructure.providers.implementations.qmt.unified_qmt_provider import (
+from core.infrastructure.providers.implementations.qmt.unified_qmt_provider import (
     UnifiedQMTProvider,
 )
-from deepsearch.infrastructure.providers.interfaces.capabilities import DataCapability
+from core.infrastructure.providers.interfaces.capabilities import DataCapability
 
 
 @pytest.fixture()
@@ -27,7 +26,7 @@ def test_akshare_proxy_capabilities(
     monkeypatch: pytest.MonkeyPatch, dummy_config: SimpleNamespace
 ) -> None:
     monkeypatch.setattr(
-        "deepsearch.infrastructure.providers.implementations.akshare.akshare_refactored.get_config",
+        "core.infrastructure.providers.implementations.akshare.akshare_refactored.get_config",
         lambda: dummy_config,
     )
 
@@ -55,22 +54,22 @@ def test_amazingdata_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
     stub_module.AmazingDataRealtime = object()
     monkeypatch.setitem(
         sys.modules,
-        "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_realtime",
+        "core.infrastructure.providers.implementations.amazingdata.amazingdata_realtime",
         stub_module,
     )
     monkeypatch.delitem(
         sys.modules,
-        "deepsearch.infrastructure.providers.implementations.amazingdata",
+        "core.infrastructure.providers.implementations.amazingdata",
         raising=False,
     )
     monkeypatch.delitem(
         sys.modules,
-        "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata",
+        "core.infrastructure.providers.implementations.amazingdata.amazingdata",
         raising=False,
     )
 
     module = importlib.import_module(
-        "deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata"
+        "core.infrastructure.providers.implementations.amazingdata.amazingdata"
     )
     AmazingDataConfig = module.AmazingDataConfig
     AmazingDataProvider = module.AmazingDataProvider
@@ -159,7 +158,7 @@ def test_miniqmt_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
     stub_base.DataProviderError = _DataProviderError
     stub_base.DataRequest = _DataRequest
 
-    module_name = "deepsearch.infrastructure.providers.implementations.qmt"
+    module_name = "core.infrastructure.providers.implementations.qmt"
     base_name = f"{module_name}.base"
     miniqmt_name = f"{module_name}.miniqmt"
 

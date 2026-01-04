@@ -33,7 +33,7 @@ async def test_provider_not_in_degraded_mode(real_amazingdata_provider):
 @pytest.mark.asyncio
 async def test_provider_can_execute_queries(real_amazingdata_provider):
     """测试登录后可以执行查询。"""
-    from deepsearch.infrastructure.providers.implementations.amazingdata.query_manager import (
+    from core.infrastructure.providers.implementations.amazingdata.query_manager import (
         AmazingDataQueryManager,
     )
 
