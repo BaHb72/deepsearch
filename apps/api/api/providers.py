@@ -252,11 +252,261 @@ class DataProviderFactory:
             return cls._instances[normalized_type]
 
     @classmethod
+    async def _create_amazingdata_actor(cls) -> Any:
+        """创建新的 AmazingData Actor 并返回包装器"""
+        import asyncio
+
+        from core.compute import get_dask_client
+        from core.compute.actors import AmazingDataActor
+        from core.core.runtime.di_container import _get_amazingdata_config
+
+        config = _get_amazingdata_config()
+        client = await get_dask_client()
+
+        logger.info("正在创建 AmazingData Actor...")
+        actor_future = client.submit(
+            AmazingDataActor,
+            config,
+            actor=True,
+            resources={"WIN": 1},
+        )
+
+        loop = asyncio.get_event_loop()
+        actor = await asyncio.wait_for(
+            loop.run_in_executor(None, actor_future.result), timeout=60.0
+        )
+
+        # 登录
+        logger.info("正在登录 AmazingData...")
+        login_result = await actor.login(config["username"], config["password"])
+        if not login_result:
+            raise RuntimeError("AmazingData 登录失败")
+
+        # 用本地包装类包装 Actor，提供 _connected 等属性和健康检查
+        class ActorWrapper:
+            """Dask Actor 本地包装器，提供 API 层所需的属性"""
+
+            def __init__(self, actor, connected: bool = True):
+                self._actor = actor
+                self._is_connected = connected
+                self._creation_time = datetime.now()
+
+            @property
+            def _connected(self) -> bool:
+                return self._is_connected
+
+            @property
+            def _degraded_mode(self) -> bool:
+                return False
+
+            @property
+            def _sdk_available(self) -> bool:
+                return True
+
+            async def check_health(self) -> bool:
+                """检查 Actor 是否仍然活跃"""
+                try:
+                    import asyncio
+
+                    # 尝试调用一个简单方法验证 Actor 存活
+                    result = await asyncio.wait_for(self._actor.is_logged_in(), timeout=5.0)
+                    return result is True
+                except Exception as e:
+                    logger.warning(f"Actor 健康检查失败: {e}")
+                    self._is_connected = False
+                    return False
+
+            def __getattr__(self, name: str):
+                # 委托所有其他调用到 Actor
+                return getattr(self._actor, name)
+
+        wrapper = ActorWrapper(actor, connected=True)
+        logger.info("AmazingData Actor 创建并登录成功")
+        return wrapper
+
+    @classmethod
+    async def _create_miniqmt_actor(cls) -> Any:
+        """创建新的 MiniQMT Actor 并返回包装器"""
+        import asyncio
+
+        from core.compute import get_dask_client
+        from core.compute.actors import MiniQMTActor
+
+        client = await get_dask_client()
+
+        logger.info("正在创建 MiniQMT Actor...")
+        actor_future = client.submit(
+            MiniQMTActor,
+            {},  # 配置
+            actor=True,
+            resources={"WIN": 1},
+        )
+
+        loop = asyncio.get_event_loop()
+        actor = await asyncio.wait_for(
+            loop.run_in_executor(None, actor_future.result), timeout=60.0
+        )
+
+        # 初始化
+        logger.info("正在初始化 MiniQMT Actor...")
+        init_result = await actor.initialize()
+        if not init_result:
+            logger.warning("MiniQMT Actor 初始化返回 False，但继续使用（SDK 可能部分可用）")
+
+        # 用本地包装类包装 Actor
+        class MiniQMTActorWrapper:
+            """MiniQMT Dask Actor 本地包装器"""
+
+            def __init__(self, actor, connected: bool = True):
+                self._actor = actor
+                self._is_connected = connected
+                self._creation_time = datetime.now()
+
+            @property
+            def _connected(self) -> bool:
+                return self._is_connected
+
+            @property
+            def _degraded_mode(self) -> bool:
+                return False
+
+            @property
+            def _sdk_available(self) -> bool:
+                return True
+
+            async def check_health(self) -> bool:
+                """检查 Actor 是否仍然活跃"""
+                try:
+                    import asyncio
+
+                    status = await asyncio.wait_for(self._actor.get_status(), timeout=5.0)
+                    return status.get("initialized", False)
+                except Exception as e:
+                    logger.warning(f"MiniQMT Actor 健康检查失败: {e}")
+                    self._is_connected = False
+                    return False
+
+            def __getattr__(self, name: str):
+                return getattr(self._actor, name)
+
+        wrapper = MiniQMTActorWrapper(actor, connected=True)
+        logger.info("MiniQMT Actor 创建并初始化成功")
+        return wrapper
+
+    @classmethod
     async def get_provider_async(cls, provider_type: ProviderKey = "akshare") -> Any:
         """Get or create singleton provider instance (asynchronous version)."""
         normalized_type = cls._normalize_provider_type(provider_type)
 
         instance = cls._instances.get(normalized_type)
+
+        # 对 amazingdata 进行特殊处理：检查缓存实例健康状态
+        if normalized_type == "amazingdata" and instance is not None:
+            try:
+                is_healthy = await instance.check_health()
+                if not is_healthy:
+                    logger.warning("缓存的 AmazingData Actor 已失效，重新创建...")
+                    # 清理失效实例
+                    cls._instances.pop(normalized_type, None)
+                    instance = None
+            except Exception as e:
+                logger.warning(f"AmazingData 健康检查异常: {e}，重新创建...")
+                cls._instances.pop(normalized_type, None)
+                instance = None
+
+        # 对 miniqmt 进行特殊处理：检查缓存实例健康状态
+        if normalized_type == "miniqmt" and instance is not None:
+            try:
+                is_healthy = await instance.check_health()
+                if not is_healthy:
+                    logger.warning("缓存的 MiniQMT Actor 已失效，重新创建...")
+                    cls._instances.pop(normalized_type, None)
+                    instance = None
+            except Exception as e:
+                logger.warning(f"MiniQMT 健康检查异常: {e}，重新创建...")
+                cls._instances.pop(normalized_type, None)
+                instance = None
+
+        # amazingdata 特殊处理：在锁外创建 Actor 避免死锁
+        if normalized_type == "amazingdata" and instance is None:
+            # 使用双检锁模式，但 await 操作在锁外执行
+            need_create = False
+            with cls._lock:
+                instance = cls._instances.get(normalized_type)
+                if instance is None:
+                    need_create = True
+
+            if need_create:
+                logger.info("Creating amazingdata Actor instance (async, outside lock)")
+                try:
+                    new_instance = await cls._create_amazingdata_actor()
+                    # 创建成功后再加锁保存
+                    with cls._lock:
+                        # 再次检查是否已被其他请求创建
+                        if cls._instances.get(normalized_type) is None:
+                            cls._instances[normalized_type] = new_instance
+                            instance = new_instance
+                            cls._provider_health[normalized_type] = {
+                                "status": "healthy",
+                                "provider": "amazingdata",
+                                "initialized_at": datetime.now().isoformat(),
+                                "source": "dask_actor",
+                            }
+                            logger.info("Created amazingdata provider instance (async)")
+                        else:
+                            instance = cls._instances[normalized_type]
+                            logger.info(
+                                "Using existing amazingdata instance created by another request"
+                            )
+                except Exception as e:
+                    logger.error(f"Failed to create AmazingData Actor: {e}")
+                    cls._record_provider_failure("amazingdata", "INIT_FAILED", str(e))
+                    cls._provider_health[normalized_type] = {
+                        "status": "failed",
+                        "provider": "error",
+                        "error": str(e),
+                        "initialized_at": datetime.now().isoformat(),
+                    }
+                    raise RuntimeError(f"AmazingData Actor 创建失败: {e}") from e
+
+        # miniqmt 特殊处理：在锁外创建 Actor 避免死锁
+        if normalized_type == "miniqmt" and instance is None:
+            need_create = False
+            with cls._lock:
+                instance = cls._instances.get(normalized_type)
+                if instance is None:
+                    need_create = True
+
+            if need_create:
+                logger.info("Creating miniqmt Actor instance (async, outside lock)")
+                try:
+                    new_instance = await cls._create_miniqmt_actor()
+                    with cls._lock:
+                        if cls._instances.get(normalized_type) is None:
+                            cls._instances[normalized_type] = new_instance
+                            instance = new_instance
+                            cls._provider_health[normalized_type] = {
+                                "status": "healthy",
+                                "provider": "miniqmt",
+                                "initialized_at": datetime.now().isoformat(),
+                                "source": "dask_actor",
+                            }
+                            logger.info("Created miniqmt provider instance (async)")
+                        else:
+                            instance = cls._instances[normalized_type]
+                            logger.info(
+                                "Using existing miniqmt instance created by another request"
+                            )
+                except Exception as e:
+                    logger.error(f"Failed to create MiniQMT Actor: {e}")
+                    cls._record_provider_failure("miniqmt", "INIT_FAILED", str(e))
+                    cls._provider_health[normalized_type] = {
+                        "status": "failed",
+                        "provider": "error",
+                        "error": str(e),
+                        "initialized_at": datetime.now().isoformat(),
+                    }
+                    raise RuntimeError(f"MiniQMT Actor 创建失败: {e}") from e
 
         if instance is None:
             with cls._lock:
@@ -291,239 +541,28 @@ class DataProviderFactory:
                         instance = None
 
                     elif normalized_type == "amazingdata":
-                        init_success = False
-                        fallback_reason = None
-                        chosen_instance: Any | None = None
+                        # 已在上面的特殊处理中创建，不应到达这里
+                        pass
 
-                        # 优先从 DI 容器获取 Singleton 实例
-                        try:
-                            from core.core.runtime.container_access import get_container
-
-                            container = get_container()
-                            provider = container.amazingdata_provider()
-
-                            # 延迟初始化
-                            if not getattr(provider, "_di_initialized", False):
-                                await provider.initialize()
-                                provider._di_initialized = True
-
-                            chosen_instance = provider
-                            init_success = True
-                            logger.info(
-                                "AmazingData provider resolved from DI container successfully"
-                            )
-                            cls._provider_health[normalized_type] = {
-                                "status": "healthy",
-                                "provider": "amazingdata",
-                                "initialized_at": datetime.now().isoformat(),
-                                "source": "di_container",
-                            }
-                            cls._fallback_status.pop(normalized_type, None)
-                        except Exception as di_exc:
-                            fallback_reason = (
-                                f"Failed to resolve AmazingData from DI container: {di_exc}"
-                            )
-                            logger.warning(fallback_reason)
-                            cls._record_provider_failure(
-                                "amazingdata", "DI_RESOLVE_FAILED", str(di_exc)
-                            )
-
-                        # 降级: 如果 DI 容器解析失败，尝试直接创建
-                        if not init_success:
-                            logger.info("Falling back to direct AmazingDataExtended creation")
-                            try:
-                                from core.config import get_config
-                                from core.infrastructure.providers.implementations.amazingdata.amazingdata import (
-                                    ensure_amazingdata_provider_config,
-                                )
-
-                                app_config = get_config()
-                                data_sources_cfg = getattr(app_config, "data_sources", {})
-
-                                if data_sources_cfg:
-                                    if hasattr(data_sources_cfg, "model_dump"):
-                                        data_sources_payload = data_sources_cfg.model_dump()
-                                    elif isinstance(data_sources_cfg, dict):
-                                        data_sources_payload = dict(data_sources_cfg)
-                                    else:
-                                        data_sources_payload = dict(
-                                            getattr(data_sources_cfg, "__dict__", {})
-                                        )
-                                else:
-                                    data_sources_payload = {}
-
-                                providers_cfg = data_sources_payload.get("providers", {})
-                                if hasattr(providers_cfg, "model_dump"):
-                                    providers_cfg = providers_cfg.model_dump()
-                                elif not isinstance(providers_cfg, dict):
-                                    providers_cfg = dict(getattr(providers_cfg, "__dict__", {}))
-
-                                provider_entry = providers_cfg.get("amazingdata", {})
-                                if hasattr(provider_entry, "model_dump"):
-                                    provider_entry = provider_entry.model_dump()
-                                elif not isinstance(provider_entry, dict):
-                                    provider_entry = dict(getattr(provider_entry, "__dict__", {}))
-
-                                raw_config = provider_entry.get("config", {})
-
-                                connection_cfg = raw_config.get("connection", {})
-                                subscription_cfg = raw_config.get("subscription", {})
-                                cache_cfg = raw_config.get("cache", {})
-
-                                config_payload = {
-                                    "username": connection_cfg.get("username", ""),
-                                    "password": connection_cfg.get("password", ""),
-                                    "host": connection_cfg.get("host", "101.230.159.234"),
-                                    "port": connection_cfg.get("port", 8600),
-                                    "timeout": float(connection_cfg.get("timeout", 10)),
-                                    "retry_count": int(connection_cfg.get("max_retries", 3)),
-                                    "heartbeat_interval": connection_cfg.get(
-                                        "heartbeat_interval", 60
-                                    ),
-                                    "auto_reconnect": connection_cfg.get("auto_reconnect", True),
-                                    "reconnect_interval": connection_cfg.get(
-                                        "reconnect_interval", 10
-                                    ),
-                                    "subscription_batch_size": subscription_cfg.get(
-                                        "batch_size", 100
-                                    ),
-                                    "max_subscriptions": subscription_cfg.get("max_symbols", 500),
-                                    "subscription_enabled": subscription_cfg.get("enabled", True),
-                                    "cache_enabled": cache_cfg.get("enabled", True),
-                                    "cache_ttl": cache_cfg.get("ttl", 300),
-                                    "worker_env": provider_entry.get("worker_env", {}),
-                                    "tgw_log_path": connection_cfg.get("tgw_log_path", ""),
-                                }
-
-                                provider_config = ensure_amazingdata_provider_config(config_payload)
-
-                                from core.infrastructure.providers.implementations.amazingdata.amazingdata_extended import (
-                                    AmazingDataExtended,
-                                )
-
-                                provider = AmazingDataExtended(provider_config)
-                                await provider.initialize()
-                                chosen_instance = provider
-                                init_success = True
-                                logger.info("AmazingData extended provider initialized (fallback)")
-                                cls._provider_health[normalized_type] = {
-                                    "status": "healthy",
-                                    "provider": "amazingdata",
-                                    "initialized_at": datetime.now().isoformat(),
-                                    "source": "direct_fallback",
-                                }
-                                cls._fallback_status.pop(normalized_type, None)
-                            except Exception as legacy_exc:
-                                legacy_reason = (
-                                    fallback_reason
-                                    or f"Failed to initialize AmazingData provider: {legacy_exc}"
-                                )
-                                fallback_reason = legacy_reason
-                                logger.error(legacy_reason)
-                                if "SDK尝试强制退出" in str(legacy_exc):
-                                    logger.critical(
-                                        "CRITICAL: AmazingData SDK attempted to exit the process"
-                                    )
-                                    cls._record_provider_failure(
-                                        "amazingdata", "SDK_EXIT", str(legacy_exc)
-                                    )
-                                else:
-                                    cls._record_provider_failure(
-                                        "amazingdata", "INIT_FAILED", str(legacy_exc)
-                                    )
-
-                        if not init_success:
-                            reason_text = fallback_reason or "unknown failure"
-                            logger.warning(f"Falling back to AkShare due to: {reason_text}")
-                            akshare_provider = None
-                            try:
-                                manager_for_fallback = get_data_source_manager()
-                                await manager_for_fallback.initialize()
-                                if manager_for_fallback.is_provider_enabled(
-                                    RegistryDataSourceType.AKSHARE
-                                ):
-                                    akshare_provider = manager_for_fallback.get_provider(
-                                        RegistryDataSourceType.AKSHARE
-                                    )
-                                    if akshare_provider is None:
-                                        logger.warning(
-                                            "AkShare provider configured but unavailable; skip AkShare fallback"
-                                        )
-                                else:
-                                    logger.info(
-                                        "AkShare provider disabled in configuration; skip AkShare fallback"
-                                    )
-                            except Exception as akshare_exc:
-                                logger.error(f"Failed to resolve AkShare fallback: {akshare_exc}")
-                                cls._record_provider_failure(
-                                    "akshare", "NOT_AVAILABLE", str(akshare_exc)
-                                )
-
-                            if akshare_provider:
-                                chosen_instance = akshare_provider
-                                init_success = True
-
-                                cls._fallback_status[normalized_type] = {
-                                    "original": "amazingdata",
-                                    "fallback": "akshare",
-                                    "reason": reason_text,
-                                    "timestamp": datetime.now().isoformat(),
-                                }
-                                cls._provider_health[normalized_type] = {
-                                    "status": "degraded",
-                                    "provider": "akshare",
-                                    "initialized_at": datetime.now().isoformat(),
-                                    "fallback_reason": reason_text,
-                                }
-
-                                logger.info(
-                                    "Successfully resolved AkShare provider via DataSourceManager"
-                                )
-
-                        if not init_success:
-                            reason_text = fallback_reason or "unknown failure"
-                            logger.critical(
-                                "All data providers failed, using ErrorProvider as last resort"
-                            )
-                            try:
-                                from core.infrastructure.providers.mock.error_provider import (
-                                    MockErrorProvider,
-                                )
-
-                                chosen_instance = MockErrorProvider(reason_text)
-                            except Exception:
-
-                                class TempErrorProvider:
-                                    def __init__(self, error_msg):
-                                        self.error_msg = error_msg
-
-                                    async def get_data(self, *args, **kwargs):
-                                        return {
-                                            "error": self.error_msg,
-                                            "status": "all_providers_failed",
-                                        }
-
-                                chosen_instance = TempErrorProvider(reason_text)
-
-                            cls._provider_health[normalized_type] = {
-                                "status": "failed",
-                                "provider": "error",
-                                "error": reason_text,
-                                "initialized_at": datetime.now().isoformat(),
-                            }
-
-                        instance = chosen_instance
+                    elif normalized_type == "miniqmt":
+                        # 已在上面的特殊处理中创建，不应到达这里
+                        pass
 
                     else:
                         raise ValueError(f"Unknown provider type: {provider_type}")
 
-                    if instance is None:
+                    if instance is None and normalized_type not in (
+                        "qmt",
+                        "amazingdata",
+                        "miniqmt",
+                    ):
                         raise RuntimeError(
                             f"Failed to create provider instance for {provider_type}"
                         )
 
-                    cls._instances[normalized_type] = instance
-                    logger.info(f"Created {normalized_type} provider instance (async)")
+                    if instance is not None:
+                        cls._instances[normalized_type] = instance
+                        logger.info(f"Created {normalized_type} provider instance (async)")
 
         instance = cls._instances.get(normalized_type)
 

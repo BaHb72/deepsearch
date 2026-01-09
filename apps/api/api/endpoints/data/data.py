@@ -389,10 +389,10 @@ async def import_csv_data(
         if clean_data:
             cleaner = DataCleaner()
             if data_type == "daily":
-                dataframe = cleaner.clean_kline_data(dataframe)
+                dataframe = cleaner.clean_kline_data(dataframe)  # type: ignore[attr-defined]
             elif data_type == "tick":
-                dataframe = cleaner.clean_tick_data(dataframe)
-            dataframe = cleaner.standardize_symbols(dataframe)
+                dataframe = cleaner.clean_tick_data(dataframe)  # type: ignore[attr-defined]
+            dataframe = cleaner.standardize_symbols(dataframe)  # type: ignore[attr-defined]
 
         if data_type == "daily":
             analytics_db = get_analytics_db()

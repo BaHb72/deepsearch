@@ -78,7 +78,7 @@ async def get_calendar(
 
     try:
         provider = await get_amazingdata_provider()
-        result = await provider.get_calendar(data_type=data_type, market=market)
+        result = await provider.get_calendar(market=market)  # Actor 只接受 market 参数
         filtered = result
         if result is not None and (begin_date is not None or end_date is not None):
             start = begin_date if begin_date is not None else end_date

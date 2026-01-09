@@ -1,0 +1,225 @@
+app:
+  author: BaHb
+  data_dir: ./data
+  debug: false
+  env: prod
+  name: DeepSearch
+data_sources:
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    half_open_attempts: 3
+    recovery_timeout: 60
+  default: amazingdata
+  failover:
+    backoff_factor: 2
+    enabled: true
+    retry_count: 3
+    timeout: 5
+  fallback_order:
+  - amazingdata
+  - cloudflare
+  - akshare
+  providers:
+    akshare:
+      config:
+        mode: direct
+        proxy:
+          enabled: false
+        timeout: 30
+      enabled: true
+      priority: 3
+    amazingdata:
+      config:
+        cache:
+          enabled: true
+          max_size: 10000
+          ttl: 300
+        connection:
+          auto_reconnect: true
+          heartbeat_interval: 60
+          host: 101.230.159.234
+          max_retries: 3
+          network_provider: telecom
+          password: your_amazingdata_password
+          port: 8600
+          python_interpreter_path: runtime/interpreters/py39/Scripts/python.exe
+          reconnect_interval: 10
+          tgw_log_path: C:/Galaxy/gateway/logs
+          timeout: 10
+          username: your_amazingdata_username
+        local:
+          path: D:/AmazingData/cache
+          use_local: false
+        monitoring:
+          enabled: true
+          log_slow_requests: true
+          metrics_enabled: true
+          report_interval: 60
+          slow_request_threshold: 1000
+        subscription:
+          auto_resubscribe: true
+          batch_size: 100
+          enabled: true
+          max_symbols: 500
+        timeout: 5000
+      enabled: false
+      fallback_sources:
+      - cloudflare
+      - akshare
+      has_saved_credential: false
+      priority: 1
+      worker_env: {}
+    cloudflare:
+      config:
+        retry_count: 3
+        timeout: 30
+        worker_url: https://your-cloudflare-worker.example.com
+      enabled: true
+      has_saved_credential: false
+      priority: 2
+database:
+  cache:
+    auto_start_windows: true
+    db: 0
+    enabled: true
+    health_check_interval: 30
+    host: localhost
+    idle_check_interval: 60
+    max_idle_time: 300
+    password: ''
+    pool_size: 10
+    port: 6379
+    retry_on_timeout: true
+    socket_connect_timeout: 5
+    socket_keepalive: true
+    socket_timeout: 5
+    startup_arguments: []
+    startup_binary_path: null
+    startup_command:
+    - wsl.exe
+    - -d
+    - Ubuntu
+    - -u
+    - root
+    - service
+    - redis-server
+    - start
+    username: ''
+    windows_service_names: []
+    wsl:
+      auto_resolve_ip: true
+      distro: Ubuntu
+      enabled: true
+      service_name: redis-server
+      user: root
+  main:
+    auto_connect: false
+    database: deepsearch
+    echo: false
+    enabled: true
+    host: localhost
+    password: encrypted:Z0FBQUFBQm85S1lyZ2o1bmZBSjhlNWFXTU45dm1YZVZEMFk3ZXVocE90U3l4c0ltbHptbFg2bEVZeG9QYkZrUGYwQUVVRUptQ2JDVjJwM0FEbjZSTGNXbEt0U2k1UGw1OUE9PQ==
+    path: ./data/deepsearch.db
+    port: 5432
+    type: postgresql
+    username: postgres
+database_connections:
+- id: 1
+  name: 主数据库
+  type: postgresql
+  host: localhost
+  port: 5432
+  database: deepsearch
+  username: postgres
+  password: encrypted:Z0FBQUFBQnBQYXY4M0VLaGN6ck5DOFZhSHdHZklGVmJBbFNhaE90bVlIZ2hzTXBKX0tvWXlBUzY1N3lIalFMYnozbURkbFZ2WjZ3TUN6QnpLbEN1Z05YRHR5YzRFVkFNb2c9PQ==
+  enabled: true
+  status: active
+  options: {}
+  created_at: 2025-09-23 00:56:19.933532+00:00
+  updated_at: 2025-11-08 03:05:25.145291+00:00
+  last_test_time: 2025-10-28 16:11:10.079795+00:00
+  last_test_result: '连接失败: Logger.opt() got an unexpected keyword argument ''once'''
+- id: 2
+  name: 分析数据库
+  type: duckdb
+  host: localhost
+  port: 0
+  database: data/analytics/market.duckdb
+  password: ''
+  enabled: true
+  status: unknown
+  options: {}
+  created_at: 2025-09-23 00:56:19.933556+00:00
+  updated_at: 2025-10-19 16:49:41.454483+00:00
+- id: 3
+  name: 缓存数据库
+  type: redis
+  host: localhost
+  port: 6379
+  database: '0'
+  username: default
+  password: ''
+  enabled: true
+  status: unknown
+  options: {}
+  created_at: 2025-09-23 00:56:19.933560+00:00
+  updated_at: 2025-10-21 10:34:32.702471+00:00
+log:
+  active: true
+  enable_json: false
+  level: INFO
+  retention_days: 7
+  rotation: 00:00
+message_bus:
+  buses:
+    zmq:
+      config:
+        host: localhost
+        pub_port: 5556
+        sub_port: 5557
+      enabled: true
+      type: zmq
+  routes:
+  - buses:
+    - zmq
+    match: '*'
+notifications:
+  bark_token: unit-test-token
+  base_urls:
+    bark: https://bark.xtuis.cn
+    wechat: https://wx.xtuis.cn
+  body_template: 最新价格：{price}
+  categories:
+    alert:
+      channels:
+      - wechat
+      enabled: true
+      max_per_window: 3
+      window_seconds: 180
+    info:
+      channels:
+      - wechat
+      - bark
+      enabled: true
+      max_per_window: 10
+      window_seconds: 600
+  default_channel: wechat
+  enabled: true
+  request_timeout: 6.5
+  retry_attempts: 2
+  retry_delay: 1.0
+  title_template: 测试默认标题 {symbol}
+  wechat_token: unit-test-token
+runtime:
+  mode: full
+webui:
+  backend_host: 0.0.0.0
+  backend_port: 8000
+  enable_cors: true
+  enabled: true
+  frontend_enabled: true
+  frontend_host: localhost
+  frontend_port: 3000
+  reload: false
+  workers: null

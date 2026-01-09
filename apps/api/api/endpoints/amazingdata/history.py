@@ -7,7 +7,9 @@ from collections.abc import Mapping
 from typing import Dict, List, Optional
 
 import pandas as pd
-from core.infrastructure.providers.implementations.amazingdata import SnapshotAlignPolicy
+from core.infrastructure.providers.implementations.amazingdata.snapshot_policy import (
+    SnapshotAlignPolicy,
+)
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 

@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 from core.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTProvider
 
 # 兼容新旧管理器
-from core.infrastructure.providers.managers.manager import DataProviderManager
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel
@@ -57,58 +56,18 @@ class RealtimeRequest(BaseModel):
     symbols: List[str]
 
 
-def get_miniqmt_provider() -> MiniQMTProvider:
-    """获取 MiniQMT 提供者实例"""
-    global _miniqmt_provider
+async def get_miniqmt_provider() -> Any:
+    """获取 MiniQMT Actor 实例（通过 Dask Actor）"""
+    from apps.api.api.providers import DataProviderFactory, DataSourceType
 
-    if _miniqmt_provider is None:
-        # 尝试从数据管理器获取
-        try:
-            from core.core.runtime.context import get_context
-
-            # 获取数据提供者管理器
-            data_manager = get_context().get_component("data_provider_manager")
-            # 兼容检查：支持新旧两种管理器
-            if isinstance(data_manager, DataProviderManager) or (
-                DataSourceManager is not None and isinstance(data_manager, DataSourceManager)
-            ):
-                provider_candidate = data_manager.get_provider("miniqmt")
-                if isinstance(provider_candidate, MiniQMTProvider):
-                    _miniqmt_provider = provider_candidate
-        except Exception as e:
-            logger.warning(f"从管理器获取 MiniQMT 提供者失败: {e}")
-
-    if _miniqmt_provider is None:
-        # Fallback: 直接创建一个可用的 Provider 实例
-        try:
-
-            # 创建一个实现了抽象方法的测试子类
-            class _DirectMiniQMTProvider(MiniQMTProvider):
-                async def initialize(self) -> bool:
-                    return True
-
-                async def get_stock_list(self, limit=None, **kwargs):
-                    return []
-
-                async def get_kline_data(
-                    self,
-                    symbol,
-                    period="1d",
-                    start_date=None,
-                    end_date=None,
-                    limit=100,
-                    adjust="none",
-                    **kwargs,
-                ):
-                    return []
-
-            _miniqmt_provider = _DirectMiniQMTProvider()
-            logger.info("已创建直接 MiniQMT 提供者实例")
-        except Exception as e:
-            logger.error(f"创建 MiniQMT 提供者失败: {e}")
-            raise HTTPException(status_code=503, detail="MiniQMT 服务不可用")
-
-    return _miniqmt_provider
+    try:
+        provider = await DataProviderFactory.get_provider_async(DataSourceType.MINIQMT)
+        if provider is None:
+            raise HTTPException(status_code=503, detail="MiniQMT Actor 不可用")
+        return provider
+    except Exception as e:
+        logger.error(f"获取 MiniQMT Actor 失败: {e}")
+        raise HTTPException(status_code=503, detail=f"MiniQMT 服务不可用: {e}")
 
 
 @router.get("/status")
@@ -120,21 +79,11 @@ async def get_status() -> Dict[str, Any]:
         连接状态信息
     """
     try:
-        provider = get_miniqmt_provider()
-        status_raw = provider.get_connection_status()
-        if not isinstance(status_raw, Mapping):
-            raise HTTPException(status_code=500, detail="MiniQMT 状态格式无效")
-        status_payload: Dict[str, Any] = dict(status_raw)
-
-        # 添加连接统计信息
-        stats_raw = provider.get_statistics()
-        if isinstance(stats_raw, Mapping):
-            statistics = dict(stats_raw)
-        else:
-            statistics = {"raw": stats_raw}
-        status_payload.update({"statistics": statistics, "timestamp": datetime.now().isoformat()})
-
-        return status_payload
+        provider = await get_miniqmt_provider()
+        # Actor 使用 get_status() 方法
+        status = await provider.get_status()
+        status["timestamp"] = datetime.now().isoformat()
+        return status
 
     except HTTPException:
         raise
@@ -155,7 +104,7 @@ async def subscribe_symbols(request: SubscribeRequest) -> Dict[str, Any]:
         订阅结果
     """
     try:
-        provider = get_miniqmt_provider()
+        provider = await get_miniqmt_provider()
 
         # 执行订阅
         success = await provider.subscribe(request.symbols)
@@ -189,7 +138,7 @@ async def unsubscribe_symbols(request: UnsubscribeRequest) -> Dict[str, Any]:
         取消订阅结果
     """
     try:
-        provider = get_miniqmt_provider()
+        provider = await get_miniqmt_provider()
 
         # 执行取消订阅
         success = await provider.unsubscribe(request.symbols)
@@ -225,7 +174,7 @@ async def get_realtime_data(
         实时行情数据
     """
     try:
-        provider = get_miniqmt_provider()
+        provider = await get_miniqmt_provider()
 
         # 解析股票列表
         symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
@@ -297,7 +246,7 @@ async def get_history_data(
         历史K线数据
     """
     try:
-        provider = get_miniqmt_provider()
+        provider = await get_miniqmt_provider()
 
         # 创建数据请求
         from core.infrastructure.providers.interfaces.base import DataRequest
@@ -363,7 +312,7 @@ async def get_minute_data(
         分钟K线数据
     """
     try:
-        provider = get_miniqmt_provider()
+        provider = await get_miniqmt_provider()
 
         # 创建数据请求
         from core.infrastructure.providers.interfaces.base import DataRequest
@@ -426,7 +375,7 @@ async def reconnect() -> Dict[str, Any]:
 
         MiniQMTConnectionGuard.reset()
 
-        provider = get_miniqmt_provider()
+        provider = await get_miniqmt_provider()
 
         # 先断开
         await provider._disconnect()
@@ -466,13 +415,14 @@ async def get_subscriptions() -> Dict[str, Any]:
         订阅的股票列表
     """
     try:
-        provider = get_miniqmt_provider()
-        status = provider.get_connection_status()
+        provider = await get_miniqmt_provider()
+        # Actor 通过 get_status 返回状态
+        status = await provider.get_status()
 
         return {
             "success": True,
-            "subscribed_symbols": status.get("subscribed_symbols", []),
-            "count": len(status.get("subscribed_symbols", [])),
+            "subscribed_symbols": [],  # Actor 暂不支持订阅
+            "count": 0,
             "timestamp": datetime.now().isoformat(),
         }
 
@@ -492,10 +442,11 @@ async def get_statistics() -> Dict[str, Any]:
         统计信息
     """
     try:
-        provider = get_miniqmt_provider()
-        stats = provider.get_statistics()
+        provider = await get_miniqmt_provider()
+        # Actor 使用 get_status 返回包含统计信息的状态
+        status = await provider.get_status()
 
-        return {"success": True, "statistics": stats, "timestamp": datetime.now().isoformat()}
+        return {"success": True, "statistics": status, "timestamp": datetime.now().isoformat()}
 
     except HTTPException:
         raise

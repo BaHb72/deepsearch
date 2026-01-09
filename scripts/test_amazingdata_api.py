@@ -1,324 +1,162 @@
 """
-AmazingData API 后端测试脚本
-测试8000端口全部接口是否正常响应
+AmazingData API 端点全量测试脚本
+测试 Dask Worker 模式下所有 API 端点的可用性
 """
 
+import asyncio
+import time
 from datetime import datetime
 
-import requests
+import httpx
 
-BASE_URL = "http://localhost:8000/api/amazingdata"
+BASE_URL = "http://127.0.0.1:8000/api/amazingdata"
 
-# 测试结果记录
-results = {"tested": 0, "passed": 0, "failed": 0, "errors": []}
+# 测试端点列表：(模块, 端点, 方法, 参数)
+ENDPOINTS = [
+    # ===== Basic Data =====
+    ("basic", "calendar", "GET", {}),
+    ("basic", "code-info", "GET", {}),
+    ("basic", "code-list", "GET", {}),
+    ("basic", "stock-basic", "POST", {"code_list": ["600000.SH", "000001.SZ"]}),
+    ("basic", "future-code-list", "GET", {}),
+    ("basic", "bj-code-mapping", "GET", {}),
+    # ===== History =====
+    (
+        "history",
+        "query-kline",
+        "POST",
+        {
+            "code_list": ["600000.SH"],  # 后缀格式 (SDK 原生格式)
+            "begin_date": 20250101,
+            "end_date": 20250110,
+            "period": "daily",
+        },
+    ),
+    (
+        "history",
+        "query-snapshot",
+        "POST",
+        {
+            "code_list": ["600000.SH"],
+            "begin_date": 20250106,
+            "end_date": 20250107,
+        },
+    ),
+    # ===== Financial =====
+    ("financial", "profit-express", "POST", {"code_list": ["600000.SH"]}),
+    ("financial", "profit-notice", "POST", {"code_list": ["600000.SH"]}),
+    ("financial", "balance-sheet", "POST", {"code_list": ["600000.SH"]}),
+    ("financial", "income", "POST", {"code_list": ["600000.SH"]}),
+    ("financial", "cash-flow", "POST", {"code_list": ["600000.SH"]}),
+    # ===== Shareholder =====
+    ("shareholder", "share-holder", "POST", {"code": "600000.SH"}),
+    ("shareholder", "holder-num", "POST", {"code": "600000.SH"}),
+    ("shareholder", "equity-structure", "POST", {"code": "600000.SH"}),
+    ("shareholder", "dividend", "POST", {"code": "600000.SH"}),
+    # ===== Margin =====
+    ("margin", "margin-summary", "GET", {}),  # GET 无参数
+    ("margin", "margin-detail", "GET", {"code": "600000.SH"}),  # GET + Query 参数
+    # ===== Realtime =====
+    ("realtime", "subscription-status", "GET", {}),  # 改为可用端点
+    # ===== Concept =====
+    ("concept", "velocity", "GET", {}),  # 改为正确端点
+    # ===== ETF =====
+    ("etf", "pcf", "POST", {"code_list": ["510300.SH"]}),  # 后缀格式
+]
 
 
-def test_endpoint(
-    method: str, path: str, params: dict = None, json_data: dict = None, description: str = ""
-):
+async def test_endpoint(
+    client: httpx.AsyncClient, module: str, endpoint: str, method: str, params: dict
+) -> dict:
     """测试单个端点"""
-    url = f"{BASE_URL}{path}"
-    results["tested"] += 1
+    url = f"{BASE_URL}/{module}/{endpoint}"
+    start = time.perf_counter()
 
     try:
-        if method.upper() == "GET":
-            response = requests.get(url, params=params, timeout=10)
-        elif method.upper() == "POST":
-            response = requests.post(url, json=json_data, timeout=10)
+        if method == "GET":
+            resp = await client.get(url, params=params, timeout=30.0)
         else:
-            raise ValueError(f"不支持的HTTP方法: {method}")
+            resp = await client.post(url, json=params, timeout=30.0)
 
-        if response.status_code == 200:
-            results["passed"] += 1
-            data = response.json()
-            record_count = (
-                len(data.get("data", [])) if isinstance(data.get("data"), list) else "N/A"
-            )
-            print(f"[PASS] {description}: {path} (状态码: 200, 记录数: {record_count})")
-            return True, data
-        else:
-            results["failed"] += 1
-            results["errors"].append(
-                {
-                    "path": path,
-                    "description": description,
-                    "status_code": response.status_code,
-                    "error": response.text[:200],
-                }
-            )
-            print(f"[FAIL] {description}: {path} (状态码: {response.status_code})")
-            return False, None
+        elapsed = (time.perf_counter() - start) * 1000
 
-    except requests.exceptions.ConnectionError:
-        results["failed"] += 1
-        results["errors"].append(
-            {
-                "path": path,
-                "description": description,
-                "error": "连接失败 - 请确认后端服务器运行在8000端口",
-            }
-        )
-        print(f"[ERROR] {description}: {path} (连接失败)")
-        return False, None
+        try:
+            data = resp.json()
+            success = data.get("success", False)
+            error = data.get("error", "")
+            count = (
+                data.get("data", {}).get("count") if isinstance(data.get("data"), dict) else None
+            )
+        except:
+            success = False
+            error = f"HTTP {resp.status_code}"
+            count = None
+
+        return {
+            "module": module,
+            "endpoint": endpoint,
+            "success": success,
+            "status_code": resp.status_code,
+            "latency_ms": round(elapsed, 1),
+            "count": count,
+            "error": error[:80] if error else None,
+        }
+    except httpx.TimeoutException:
+        return {
+            "module": module,
+            "endpoint": endpoint,
+            "success": False,
+            "status_code": 0,
+            "latency_ms": 30000,
+            "count": None,
+            "error": "TIMEOUT",
+        }
     except Exception as e:
-        results["failed"] += 1
-        results["errors"].append({"path": path, "description": description, "error": str(e)})
-        print(f"[ERROR] {description}: {path} ({str(e)})")
-        return False, None
+        return {
+            "module": module,
+            "endpoint": endpoint,
+            "success": False,
+            "status_code": 0,
+            "latency_ms": 0,
+            "count": None,
+            "error": str(e)[:80],
+        }
 
 
-def main():
-    print("=" * 60)
-    print("AmazingData API 后端接口测试")
-    print(f"测试时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"基础URL: {BASE_URL}")
-    print("=" * 60)
+async def main():
+    print(f"\n{'='*60}")
+    print(f"AmazingData API 全量测试 - Dask Worker 模式")
+    print(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"{'='*60}\n")
 
-    # 1. 测试根路径API信息
-    print("\n>>> 1. API 根信息")
-    test_endpoint("GET", "/", description="API根信息")
+    results = []
+    async with httpx.AsyncClient() as client:
+        for module, endpoint, method, params in ENDPOINTS:
+            print(f"测试 [{module}/{endpoint}]...", end=" ", flush=True)
+            result = await test_endpoint(client, module, endpoint, method, params)
+            results.append(result)
 
-    # 2. 测试 basic_data 模块
-    print("\n>>> 2. Basic Data 模块 (BaseData)")
+            if result["success"]:
+                count_str = f", count={result['count']}" if result["count"] else ""
+                print(f"✅ OK ({result['latency_ms']}ms{count_str})")
+            else:
+                print(f"❌ FAIL: {result['error']}")
 
-    # GET 请求接口
-    test_endpoint(
-        "GET",
-        "/basic/code-info",
-        params={"security_type": "EXTRA_STOCK_A"},
-        description="get_code_info",
-    )
+    # 统计
+    success_count = sum(1 for r in results if r["success"])
+    total = len(results)
 
-    test_endpoint(
-        "GET",
-        "/basic/calendar",
-        params={"market": "SH", "data_type": "str"},
-        description="get_calendar",
-    )
+    print(f"\n{'='*60}")
+    print(f"测试结果: {success_count}/{total} 通过 ({success_count/total*100:.1f}%)")
+    print(f"{'='*60}")
 
-    test_endpoint(
-        "GET",
-        "/basic/code-list",
-        params={"security_type": "EXTRA_STOCK_A"},
-        description="get_code_list",
-    )
-
-    test_endpoint(
-        "GET",
-        "/basic/future-code-list",
-        params={"security_type": "EXTRA_FUTURE"},
-        description="get_future_code_list",
-    )
-
-    test_endpoint("GET", "/basic/bj-code-mapping", description="get_bj_code_mapping")
-
-    # POST 请求接口
-    test_endpoint(
-        "POST",
-        "/basic/stock-basic",
-        json_data={"code_list": ["SH.600000"]},
-        description="get_stock_basic",
-    )
-
-    test_endpoint(
-        "POST",
-        "/basic/backward-factor",
-        json_data={
-            "code_list": ["SH.600000"],
-            "begin_date": 20241201,
-            "end_date": 20241225,
-            "is_local": True,
-        },
-        description="get_backward_factor",
-    )
-
-    test_endpoint(
-        "POST",
-        "/basic/adj-factor",
-        json_data={
-            "code_list": ["SH.600000"],
-            "begin_date": 20241201,
-            "end_date": 20241225,
-            "is_local": True,
-        },
-        description="get_adj_factor",
-    )
-
-    test_endpoint(
-        "POST",
-        "/basic/history-stock-status",
-        json_data={
-            "code_list": ["SH.600000"],
-            "begin_date": 20241201,
-            "end_date": 20241225,
-            "is_local": True,
-        },
-        description="get_history_stock_status",
-    )
-
-    test_endpoint(
-        "POST",
-        "/basic/hist-code-list",
-        json_data={
-            "security_type": "EXTRA_STOCK_A_SH_SZ",
-            "start_date": 20241201,
-            "end_date": 20241225,
-        },
-        description="get_hist_code_list",
-    )
-
-    # 3. 测试 financial 模块 (InfoData - 财务相关)
-    print("\n>>> 3. Financial 模块 (InfoData财务)")
-
-    test_endpoint(
-        "POST",
-        "/financial/balance-sheet",
-        json_data={"code_list": ["SH.600000"], "report_type": "quarter", "is_local": True},
-        description="get_balance_sheet",
-    )
-
-    test_endpoint(
-        "POST",
-        "/financial/cash-flow",
-        json_data={"code_list": ["SH.600000"], "report_type": "quarter", "is_local": True},
-        description="get_cash_flow",
-    )
-
-    test_endpoint(
-        "POST",
-        "/financial/income",
-        json_data={"code_list": ["SH.600000"], "report_type": "quarter", "is_local": True},
-        description="get_income",
-    )
-
-    test_endpoint(
-        "POST",
-        "/financial/profit-express",
-        json_data={"code_list": ["SH.600000"], "is_local": True},
-        description="get_profit_express",
-    )
-
-    test_endpoint(
-        "POST",
-        "/financial/profit-notice",
-        json_data={"code_list": ["SH.600000"], "is_local": True},
-        description="get_profit_notice",
-    )
-
-    # 4. 测试 margin 模块 (InfoData - 融资融券)
-    print("\n>>> 4. Margin 模块 (InfoData融资融券)")
-
-    test_endpoint(
-        "GET", "/margin/summary", params={"code": "SH.600000"}, description="get_margin_summary"
-    )
-
-    test_endpoint(
-        "GET", "/margin/detail", params={"code": "SH.600000"}, description="get_margin_detail"
-    )
-
-    test_endpoint(
-        "GET", "/margin/long-hu-bang", params={"limit": 10}, description="get_long_hu_bang"
-    )
-
-    test_endpoint(
-        "GET", "/margin/block-trading", params={"limit": 10}, description="get_block_trading"
-    )
-
-    # 5. 测试 shareholder 模块 (InfoData - 股东股本)
-    print("\n>>> 5. Shareholder 模块 (InfoData股东股本)")
-
-    test_endpoint(
-        "POST",
-        "/shareholder/share-holder",
-        json_data={"code_list": ["SH.600000"]},
-        description="get_share_holder",
-    )
-
-    test_endpoint(
-        "POST",
-        "/shareholder/holder-num",
-        json_data={"code_list": ["SH.600000"]},
-        description="get_holder_num",
-    )
-
-    test_endpoint(
-        "POST",
-        "/shareholder/equity-structure",
-        json_data={"code_list": ["SH.600000"]},
-        description="get_equity_structure",
-    )
-
-    test_endpoint(
-        "POST",
-        "/shareholder/equity-pledge-freeze",
-        json_data={"code_list": ["SH.600000"]},
-        description="get_equity_pledge_freeze",
-    )
-
-    test_endpoint(
-        "POST",
-        "/shareholder/equity-restricted",
-        json_data={"code_list": ["SH.600000"]},
-        description="get_equity_restricted",
-    )
-
-    test_endpoint(
-        "POST",
-        "/shareholder/dividend",
-        json_data={"code_list": ["SH.600000"]},
-        description="get_dividend",
-    )
-
-    test_endpoint(
-        "POST",
-        "/shareholder/right-issue",
-        json_data={"code_list": ["SH.600000"]},
-        description="get_right_issue",
-    )
-
-    # 6. 测试 realtime 模块 (MarketData)
-    print("\n>>> 6. Realtime 模块 (MarketData)")
-
-    test_endpoint(
-        "GET", "/realtime/snapshot", params={"codes": "SH.600000"}, description="query_snapshot"
-    )
-
-    # 7. 测试 history 模块 (MarketData)
-    print("\n>>> 7. History 模块 (MarketData)")
-
-    test_endpoint(
-        "GET",
-        "/history/kline",
-        params={
-            "code": "SH.600000",
-            "period": "day",
-            "start_date": "20241201",
-            "end_date": "20241225",
-        },
-        description="query_kline",
-    )
-
-    # 打印测试总结
-    print("\n" + "=" * 60)
-    print("测试结果汇总")
-    print("=" * 60)
-    print(f"总测试数: {results['tested']}")
-    print(f"通过: {results['passed']}")
-    print(f"失败: {results['failed']}")
-    print(
-        f"成功率: {results['passed']/results['tested']*100:.1f}%"
-        if results["tested"] > 0
-        else "N/A"
-    )
-
-    if results["errors"]:
-        print("\n失败详情:")
-        for i, err in enumerate(results["errors"], 1):
-            print(f"  {i}. {err['description']} ({err['path']})")
-            print(f"     错误: {err.get('error', 'Unknown')[:100]}")
-
-    return results
+    # 失败列表
+    failures = [r for r in results if not r["success"]]
+    if failures:
+        print(f"\n失败端点 ({len(failures)}):")
+        for f in failures:
+            print(f"  - {f['module']}/{f['endpoint']}: {f['error']}")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

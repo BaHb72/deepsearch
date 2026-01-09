@@ -396,15 +396,16 @@ class WebUIRunner:
 
         def signal_handler(signum, frame):
             print("\n收到退出信号...")
-            self._running = False
-            self._shutdown_event.set()
+            # 直接调用 shutdown 清理所有子进程
+            self.shutdown()
+            # 强制退出，避免残留
+            sys.exit(0)
 
         signal.signal(signal.SIGINT, signal_handler)
         if sys.platform != "win32":
             signal.signal(signal.SIGTERM, signal_handler)
-        else:
-            # Windows上注册atexit处理器
-            atexit.register(self.shutdown)
+        # Windows上注册atexit处理器作为备份
+        atexit.register(self.shutdown)
 
 
 def run_standalone(

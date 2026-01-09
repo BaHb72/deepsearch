@@ -35,7 +35,7 @@ dependencies = [
     "duckdb>=1.4.1",
     "aiosqlite>=0.20.0",
     # ==== Web UI 依赖 ====
-    "fastapi==0.119.0",
+    "fastapi>=0.128.0",
     "uvicorn[standard]>=0.37.0",
     "python-multipart>=0.0.20",
     "websockets>=15.0.1",
@@ -72,6 +72,7 @@ dependencies = [
     "apscheduler>=3.11.1",
     "pyarrow>=22.0.0",
     "dependency-injector>=4.48.3",
+    "lz4==4.4.5",
 ]
 
 [project.optional-dependencies]
@@ -116,7 +117,8 @@ exclude = [
 [tool.ruff.lint]
 # E402: 模块级导入不在文件顶部（某些文件需要条件导入）
 # E501: 行太长（black已处理，ruff不检查）
-ignore = ["E402", "E501"]
+# F841: 未使用变量（允许保留用于调试或未来使用）
+ignore = ["E402", "E501", "F841"]
 
 
 [tool.isort]
@@ -196,11 +198,20 @@ module = [
     "pytest", "pytest.*",
     "core.domain.interfaces.*",
     "core.domain.value_objects", "core.domain.value_objects.*",
+    # 运行时条件导入或可选模块
+    "deepsearch", "deepsearch.*",
+    "core.memory", "core.memory.*",
+    "core.infrastructure.providers.datafeed.qmt", "core.infrastructure.providers.datafeed.qmt.*",
+    "core.domain.data_proxy.adapters.amazingdata",
+    "core.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper",
+    "dependency_injector", "dependency_injector.*",
 ]
 ignore_missing_imports = true
 
-# apps/api/api/providers.py 使用运行时条件导入 core.* 路径
-# mypy 无法静态解析这些路径，需要忽略该文件的 import-not-found 错误
+# 运行时条件导入：这些文件包含动态/条件导入，mypy 无法静态解析
 [[tool.mypy.overrides]]
-module = "apps.api.api.providers"
+module = [
+    "apps.api.api.providers",
+    "core.infrastructure.providers.implementations.amazingdata.amazingdata_extended",
+]
 disable_error_code = ["import-not-found"]

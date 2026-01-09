@@ -1,0 +1,285 @@
+app:
+  name: DeepSearch
+  author: BaHb
+  env: test
+  debug: true
+  data_dir: ./data/test
+runtime:
+  mode: full
+log:
+  active: true
+  level: INFO
+  rotation: 00:00
+  retention_days: 7
+  enable_json: false
+  archive:
+    enabled: true
+    format: zip
+    archive_after_days: 7
+    purge_after_days: 30
+  modules:
+    enabled: false
+    directory: modules
+    max_depth: 2
+    rotation: 00:00
+    retention_days: 7
+database:
+  main:
+    enabled: true
+    type: postgresql
+    host: updated-host
+    port: 5432
+    database: deepsearch
+    username: postgres
+    password: updated-secret
+    path: ./data/deepsearch.db
+    auto_connect: false
+    echo: false
+  cache:
+    enabled: true
+    host: localhost
+    port: 6379
+    username: ''
+    password: updated-cache
+    db: 0
+    pool_size: 10
+    socket_timeout: 5
+    socket_connect_timeout: 5
+    socket_keepalive: true
+    retry_on_timeout: true
+    health_check_interval: 30
+    max_idle_time: 300
+    idle_check_interval: 60
+    auto_start_windows: true
+    windows_service_names:
+      - Redis
+      - redis
+    startup_binary_path: C:/Program Files/Redis/redis-server.exe
+    startup_arguments: []
+    startup_command: []
+    wsl:
+      enabled: false
+      distro: Ubuntu
+      auto_resolve_ip: true
+      service_name: redis-server
+      user: root
+message_bus:
+  buses:
+    zmq:
+      type: zmq
+      enabled: true
+      config:
+        host: localhost
+        pub_port: 5556
+        sub_port: 5557
+  routes:
+    - match: '*'
+      buses:
+        - zmq
+webui:
+  enabled: true
+  backend_host: 0.0.0.0
+  backend_port: 8000
+  frontend_enabled: true
+  frontend_host: localhost
+  frontend_port: 3000
+  enable_cors: true
+  reload: false
+  workers: null
+data_sources:
+  default: amazingdata
+  fallback_order:
+    - amazingdata
+    - akshare
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    recovery_timeout: 60
+    half_open_attempts: 3
+  failover:
+    enabled: true
+    timeout: 5
+    retry_count: 3
+    backoff_factor: 2
+  providers:
+    amazingdata:
+      enabled: true
+      priority: 1
+      fallback_sources:
+        - akshare
+      has_saved_credential: false
+      worker_env:
+        DEEPSEARCH_AMAZINGDATA_STUB: tests.stubs.amazingdata_stub
+      config:
+        implementation_mode: process
+        connection:
+          username: your_username_here
+          password: your_password_here
+          host: 101.230.159.234
+          port: 8600
+          timeout: 10
+          heartbeat_interval: 60
+          auto_reconnect: true
+          reconnect_interval: 10
+          max_retries: 3
+          network_provider: telecom
+        subscription:
+          enabled: true
+          batch_size: 100
+          max_symbols: 500
+          auto_resubscribe: true
+        cache:
+          enabled: true
+          ttl: 300
+          max_size: 10000
+      source_type: AmazingData
+      module_path: deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process
+      class_name: ProcessIsolatedAmazingDataProvider
+      timeout: 30.0
+      retry_count: 3
+      fallback_enabled: true
+    akshare:
+      enabled: true
+      priority: 3
+      config:
+        mode: proxy
+        timeout: 30
+        proxy:
+          enabled: true
+          worker_url: https://your-cloudflare-worker.example.com
+          timeout: 15
+          retry_count: 3
+          fallback_to_direct: true
+          cache:
+            enabled: true
+            ttl: 300
+      source_type: AkShare
+      module_path: deepsearch.infrastructure.providers.implementations.akshare.akshare
+      class_name: AkShareProxyProvider
+      timeout: 30.0
+      retry_count: 3
+    qmt:
+      enabled: true
+      priority: 2
+      source_type: QMT
+      module_path: deepsearch.infrastructure.providers.implementations.qmt.unified_qmt_provider
+      class_name: UnifiedQMTProvider
+      timeout: 30.0
+      retry_count: 3
+      config:
+        mode: auto
+  realtime:
+    health_check_interval: 120
+    alert_policy:
+      enabled: true
+      failure_threshold: 3
+      window_seconds: 300
+      channels: []
+    adapters:
+      - name: amazingdata
+        driver: amazingdata
+        priority: 1
+        enabled: true
+        health:
+          probe_timeout_seconds: 5
+          failure_threshold: 3
+          cool_down_seconds: 30
+      - name: cloudflare
+        driver: akshare_polling
+        priority: 2
+        enabled: true
+        options:
+          use_proxy: true
+          batch_size: 50
+      - name: akshare
+        driver: akshare_polling
+        priority: 3
+        enabled: true
+        options:
+          use_proxy: false
+          batch_size: 50
+  health_check:
+    enabled: true
+    interval: 60
+    timeout: 10
+  module_overrides: null
+  access_type_overrides: null
+data_source_prefetch:
+  enabled: false
+  interval_seconds: 300
+  job_type: prefetch_stock_basics
+  max_job_age_minutes: 45
+market_data:
+  realtime:
+    enabled: false
+    boards: []
+    include_markets: []
+    interval_seconds: 1.0
+    request_timeout_seconds: 3.0
+    capital_windows: []
+    order_window: null
+    auction_window: null
+    capital_limit: 50
+    order_limit: 100
+    initial_step_timeout_seconds: 12.0
+    off_day_interval_seconds: 120.0
+    no_trade_interval_seconds: 45.0
+    auction_interval_seconds: 5.0
+    continuous_interval_seconds: 1.0
+    off_day_timeout_seconds: 5.0
+    no_trade_timeout_seconds: 5.0
+    auction_timeout_seconds: 3.0
+    continuous_timeout_seconds: 3.0
+    redis:
+      url: redis://localhost:6379/6
+      strength_ttl: 180
+      imbalance_ttl: 180
+      auction_ttl: 180
+      max_strength_entries: 50
+  modules:
+    strength:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - off_day
+            - no_trade
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+            - SESSION_EXPIRED
+          cache_ttl_seconds: 90
+          min_interval_seconds: 15
+    board_overview:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - off_day
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+          cache_ttl_seconds: 120
+          min_interval_seconds: 30
+    order_imbalance:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - off_day
+            - no_trade
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+          cache_ttl_seconds: 60
+          min_interval_seconds: 15
+    auction_quality:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases:
+            - auction
+            - off_day
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+          cache_ttl_seconds: 45
+          min_interval_seconds: 10
+notifications:
+  enabled: false

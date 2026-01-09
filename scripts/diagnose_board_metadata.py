@@ -1,24 +1,33 @@
 from __future__ import annotations
 
 import asyncio
+import sys
+from pathlib import Path
 from typing import Sequence
 
-from deepsearch.config.models.amazingdata import AmazingDataConnectionConfig as Conn
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process import (
+# 添加项目路径
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from core.config import get_config
+from core.config.models.amazingdata import AmazingDataConnectionConfig as Conn
+from core.infrastructure.providers.implementations.amazingdata.amazingdata_process import (
     ProcessIsolatedAmazingDataProvider,
 )
 
 
 async def diagnose(symbols: Sequence[str]) -> None:
-    # 从 dev 配置复制的账号参数（仅用于本地快速诊断；生产请改为加载 settings.dev.yaml）
+    # 从配置文件读取凭据
+    config = get_config()
+    ad_conn = config.amazingdata.connection
+
     cfg = Conn(
-        username="212200038719",
-        password="212200038719@2025",
-        host="101.230.159.234",
-        port=8600,
-        timeout=5000,
-        heartbeat_interval=60,
-        auto_reconnect=True,
+        username=ad_conn.username,
+        password=ad_conn.password,
+        host=ad_conn.host,
+        port=ad_conn.port,
+        timeout=getattr(ad_conn, "timeout", 5000),
+        heartbeat_interval=getattr(ad_conn, "heartbeat_interval", 60),
+        auto_reconnect=getattr(ad_conn, "auto_reconnect", True),
     )
 
     provider = ProcessIsolatedAmazingDataProvider(cfg)
@@ -34,7 +43,5 @@ async def diagnose(symbols: Sequence[str]) -> None:
 
 
 if __name__ == "__main__":
-    # 可选：若现场没有 AmazingData SDK，可先用 stub 进行代码路径验证
-    # os.environ.setdefault("DEEPSEARCH_AMAZINGDATA_STUB", "tests.stubs.amazingdata_stub")
     symbols = ["600519.SH", "300750.SZ", "510050.SH", "588000.SH"]
     asyncio.run(diagnose(symbols))

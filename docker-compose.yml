@@ -55,14 +55,17 @@ services:
 
   # =============================================================================
   # Dask Worker - 分布式计算节点 (可扩展多个)
+  # Linux 环境运行 AmazingData SDK，支持 replicas 扩展
+  # 名称由 Dask 自动分配确保唯一性
   # =============================================================================
   dask-worker:
     build:
       context: .
       dockerfile: Dockerfile.dask
     image: deepsearch-dask:latest
-    # 注意: 使用 replicas 时不能设置 container_name
-    command: [ "dask", "worker", "dask-scheduler:8786", "--resources", "LINUX=1", "--name", "linux-worker" ]
+    # 注意: 使用 replicas 时不能设置 container_name，也不能指定固定 --name
+    # Dask 会自动分配唯一 worker ID，资源标签 LINUX=1 用于任务路由
+    command: [ "dask", "worker", "dask-scheduler:8786", "--resources", "LINUX=1" ]
     depends_on:
       - dask-scheduler
     deploy:

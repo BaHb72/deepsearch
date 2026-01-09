@@ -12,12 +12,14 @@ import json
 from typing import Any, Dict, List, Literal, Mapping, Optional, TypedDict, cast
 
 import pandas as pd
-from core.infrastructure.providers.implementations.amazingdata import SnapshotAlignPolicy
 from core.infrastructure.providers.implementations.amazingdata.amazingdata_extended import (
     AmazingDataExtended,
 )
 from core.infrastructure.providers.implementations.amazingdata.amazingdata_realtime import (
     AmazingDataRealtime,
+)
+from core.infrastructure.providers.implementations.amazingdata.snapshot_policy import (
+    SnapshotAlignPolicy,
 )
 from fastapi import APIRouter, Body, HTTPException, Query
 from loguru import logger

@@ -42,6 +42,7 @@ async def get_amazingdata_provider():
     Raises:
         HTTPException: 获取提供者失败时
     """
+    import asyncio
     import time
 
     start_time = time.time()
@@ -50,7 +51,18 @@ async def get_amazingdata_provider():
     try:
         logger.debug("[DEBUG] 调用 DataProviderFactory.get_provider_async(AMAZINGDATA)...")
         step_start = time.time()
-        provider = await DataProviderFactory.get_provider_async(DataSourceType.AMAZINGDATA)
+        # 添加 90s 超时保护（Dask Actor 创建 60s + TGW 登录时间）
+        try:
+            provider = await asyncio.wait_for(
+                DataProviderFactory.get_provider_async(DataSourceType.AMAZINGDATA),
+                timeout=90.0,
+            )
+        except asyncio.TimeoutError:
+            logger.error("[DEBUG] get_provider_async 超时 (90s)")
+            raise HTTPException(
+                status_code=504,
+                detail="AmazingData provider 获取超时 (90s)，可能是 TGW 连接问题",
+            )
         logger.debug(
             f"[DEBUG] get_provider_async 完成, 耗时: {time.time() - step_start:.2f}秒, 类型: {type(provider).__name__}"
         )

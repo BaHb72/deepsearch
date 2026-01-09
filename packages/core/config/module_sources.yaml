@@ -1,0 +1,93 @@
+# 模块数据源配置
+# 独立配置文件，管理各功能模块的数据源优先级
+
+# =============================================================================
+# 模块配置
+# 每个已注册模块可独立指定 primary 数据源和 fallback 列表
+# =============================================================================
+modules:
+  # --- 行情分析模块 ---
+  block_trade_detector:
+    primary: amazingdata
+    fallback: [ akshare ]
+
+  limit_statistics:
+    primary: akshare
+    fallback: [ ]
+
+  market_strength:
+    primary: amazingdata
+    fallback: [ akshare ]
+
+  board_overview:
+    primary: amazingdata
+    fallback: [ akshare ]
+
+  order_imbalance:
+    primary: amazingdata
+    fallback: [ akshare ]
+
+  auction_quality:
+    primary: amazingdata
+    fallback: [ akshare ]
+
+  # --- 实时行情模块 ---
+  realtime_quotes:
+    primary: amazingdata
+    fallback: [ akshare ]
+
+  # --- 数据同步模块 ---
+  historical_sync:
+    primary: akshare
+    fallback: [ ]
+
+  stock_list_sync:
+    primary: akshare
+    fallback: [ amazingdata ]
+
+# =============================================================================
+# 按访问类型的默认配置（当模块未显式配置时使用）
+# =============================================================================
+access_types:
+  realtime_quote:
+    primary: amazingdata
+    fallback: [ akshare ]
+
+  historical_kline:
+    primary: akshare
+    fallback: [ amazingdata ]
+
+  stock_list:
+    primary: akshare
+    fallback: [ amazingdata ]
+
+  orderbook:
+    primary: amazingdata
+    fallback: [ ]
+
+# =============================================================================
+# 全局默认配置（最低优先级）
+# =============================================================================
+defaults:
+  primary: amazingdata
+  fallback: [ akshare ]
+
+# =============================================================================
+# 模块分类定义
+# =============================================================================
+categories:
+  market_analysis:
+    label: "行情分析"
+    description: "实时行情分析与监控模块"
+
+  data_sync:
+    label: "数据同步"
+    description: "历史数据同步与更新模块"
+
+  trading:
+    label: "交易执行"
+    description: "交易相关模块"
+
+  general:
+    label: "通用"
+    description: "其他通用模块"

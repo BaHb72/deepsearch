@@ -62,15 +62,30 @@ async def get_balance_sheet(request: FinancialReportRequest) -> JSONDict:
     Returns:
         资产负债表数据
     """
+    import asyncio
+
     try:
         provider = await get_amazingdata_provider()
         local_path = request.local_path or DEFAULT_LOCAL_PATH
 
-        raw_result = await provider.get_balance_sheet(
-            code_list=request.code_list,
-            local_path=local_path,
-            is_local=request.is_local,
-        )
+        # 添加 30s 超时保护
+        try:
+            raw_result = await asyncio.wait_for(
+                provider.get_balance_sheet(
+                    code_list=request.code_list,
+                    local_path=local_path,
+                    is_local=request.is_local,
+                ),
+                timeout=30.0,
+            )
+        except asyncio.TimeoutError:
+            return format_response(
+                success=False,
+                data=None,
+                error="获取资产负债表超时 (30s)",
+                code_count=len(request.code_list),
+            )
+
         filtered_df = ensure_dataframe(raw_result)
         if filtered_df is not None and request.report_date is not None:
             filtered_df = filter_dataframe_by_dates(
@@ -98,6 +113,7 @@ async def get_balance_sheet(request: FinancialReportRequest) -> JSONDict:
             statement_type="balance_sheet",
         )
     except Exception as e:
+
         return handle_api_error("get_balance_sheet", e)
 
 

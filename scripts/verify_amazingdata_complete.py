@@ -11,8 +11,19 @@ API结构:
 """
 
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "d:/Stock/code/deepsearch")
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from core.config import get_config
+
+# 从配置读取凭据
+_config = get_config()
+_ad_config = _config.amazingdata.connection
+_USERNAME = _ad_config.username
+_PASSWORD = _ad_config.password
+_HOST = _ad_config.host
+_PORT = _ad_config.port
 
 
 def verify_amazingdata_complete():
@@ -40,9 +51,7 @@ def verify_amazingdata_complete():
     print("\n[0] 登录 API")
     print("-" * 50)
     try:
-        result = ad.login(
-            username="212200038719", password="212200038719@2025", host="101.230.159.234", port=8600
-        )
+        result = ad.login(username=_USERNAME, password=_PASSWORD, host=_HOST, port=_PORT)
         if result == 0 or result is True:
             print("  [OK] 登录成功")
         else:
@@ -311,7 +320,7 @@ def verify_amazingdata_complete():
 
     # 登出
     try:
-        ad.logout("212200038719")
+        ad.logout(_USERNAME)
         print("\n  [INFO] 已登出")
     except:
         pass

@@ -692,6 +692,18 @@ async def lifespan(app: FastAPI):
         app.state.db_component = None
         app.state.db_service = None
 
+    # 启动 Windows Dask Workers（在市场数据服务之前）
+    try:
+        from core.compute.dask_worker_manager import ensure_windows_workers
+
+        worker_started = await ensure_windows_workers()
+        if worker_started:
+            logger.info("Windows Dask Workers 自启动成功")
+        else:
+            logger.warning("Windows Dask Workers 自启动失败（将继续启动，但数据源功能可能受限）")
+    except Exception as e:
+        logger.warning(f"Windows Dask Workers 自启动异常: {e}")
+
     # 然后执行其他启动逻辑
     startup_handler = create_startup_handler(app_state)
     await startup_handler()
@@ -763,6 +775,14 @@ async def lifespan(app: FastAPI):
                 logger.info("通知推送服务已关闭")
     except Exception as e:
         logger.warning(f"关闭通知推送服务失败: {e}")
+
+    # 停止 Windows Dask Workers
+    try:
+        from core.compute.dask_worker_manager import stop_windows_workers
+
+        await stop_windows_workers()
+    except Exception as e:
+        logger.warning(f"停止 Windows Dask Workers 失败: {e}")
 
     shutdown_handler = create_shutdown_handler(app_state)
     await shutdown_handler()

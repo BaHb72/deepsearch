@@ -1,0 +1,123 @@
+# =============================================================================
+# 基础设施配置 - 开发环境
+# 包含: database, cache, message_bus, dask
+# =============================================================================
+
+database:
+  cache:
+    auto_start_windows: true
+    db: 0
+    enabled: true
+    health_check_interval: 30
+    host: localhost
+    idle_check_interval: 60
+    max_idle_time: 300
+    pool_size: 10
+    port: 6379
+    retry_on_timeout: true
+    socket_connect_timeout: 5
+    socket_keepalive: true
+    socket_timeout: 5
+    startup_command:
+    - wsl.exe
+    - -d
+    - Ubuntu
+    - -u
+    - root
+    - service
+    - redis-server
+    - start
+    username: default
+    windows_service_names:
+    - Redis
+    - redis
+    wsl:
+      auto_resolve_ip: true
+      distro: Ubuntu
+      enabled: false
+      service_name: redis-server
+      user: root
+  main:
+    auto_connect: true
+    database: deepsearch
+    echo: false
+    enabled: true
+    host: localhost
+    password: encrypted:Z0FBQUFBQm85S1lyZ2o1bmZBSjhlNWFXTU45dm1YZVZEMFk3ZXVocE90U3l4c0ltbHptbFg2bEVZeG9QYkZrUGYwQUVVRUptQ2JDVjJwM0FEbjZSTGNXbEt0U2k1UGw1OUE9PQ==
+    path: ./data/deepsearch.db
+    port: 5432
+    type: postgresql
+    username: postgres
+
+cache:
+  arrow:
+    base_dir: null
+    default_ttl: 60
+    enabled: true
+    namespaces:
+      amazingdata:
+        ttl: 300
+      miniqmt:
+        ttl: 600
+
+message_bus:
+  buses:
+    inmem:
+      enabled: false
+      type: inmem
+    timeseries:
+      config:
+        enable_persistence: true
+        storage_config:
+          db: 0
+          duplicate_policy: LAST
+          host: localhost
+          key_prefix: 'deepsearch:ts:'
+          port: 6379
+          retention_ms: 86400000
+        url: tcp://127.0.0.1:5555
+      enabled: false
+      type: timeseries
+    zmq:
+      config:
+        host: 127.0.0.1
+        pub_port: 5556
+        recv_hwm: 1000
+        send_hwm: 1000
+        sub_port: 5557
+        verbose: true
+      enabled: true
+      type: zmq
+  routes:
+  - buses:
+    - zmq
+    match: '*'
+
+# =============================================================================
+# Dask 分布式计算配置
+# =============================================================================
+dask:
+  scheduler_address: "localhost:8786"
+
+  windows_workers:
+    enabled: true
+    auto_start: true
+    num_workers: 2
+    threads_per_worker: 2
+    memory_limit: "4GB"
+    name_prefix: "windows-worker"
+    resources:
+      WIN: 1
+
+  task_routing:
+    windows_tasks:
+      - data_fetch
+      - amazingdata_*
+      - miniqmt_*
+      - akshare_*
+      - realtime_quote
+    linux_tasks:
+      - compute_*
+      - backtest_*
+      - train_*
+      - factor_*
