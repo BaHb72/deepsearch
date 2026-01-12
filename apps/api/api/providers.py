@@ -303,6 +303,16 @@ class DataProviderFactory:
             def _sdk_available(self) -> bool:
                 return True
 
+            @property
+            def name(self) -> str:
+                """数据源名称 (IDataFeed)"""
+                return "amazingdata"
+
+            @property
+            def is_connected(self) -> bool:
+                """是否已连接 (IDataFeed)"""
+                return self._is_connected
+
             async def check_health(self) -> bool:
                 """检查 Actor 是否仍然活跃"""
                 try:
@@ -315,6 +325,51 @@ class DataProviderFactory:
                     logger.warning(f"Actor 健康检查失败: {e}")
                     self._is_connected = False
                     return False
+
+            # ==================== 显式代理关键方法 ====================
+            # 这些方法需要被 getattr() 检测到，所以显式声明而不依赖 __getattr__
+
+            async def get_calendar(self, *args, **kwargs):
+                """获取交易日历 - 显式代理"""
+                return await self._actor.get_calendar(*args, **kwargs)
+
+            async def get_stock_list(self, *args, **kwargs):
+                """获取股票列表 - 显式代理"""
+                return await self._actor.get_code_list(*args, **kwargs)
+
+            async def get_stock_list_records(self, *args, **kwargs):
+                """获取股票列表记录 - 显式代理"""
+                return await self._actor.get_code_info(*args, **kwargs)
+
+            async def fetch_stock_list(self, *args, **kwargs):
+                """获取股票列表 - 显式代理"""
+                return await self._actor.get_code_list(*args, **kwargs)
+
+            async def get_stock_basic(self, *args, **kwargs):
+                """获取股票基础信息 - 显式代理"""
+                return await self._actor.get_stock_basic(*args, **kwargs)
+
+            async def get_stock_info(self, *args, **kwargs):
+                """获取股票信息 - 显式代理"""
+                return await self._actor.get_stock_info(*args, **kwargs)
+
+            async def get_kline_data(self, *args, **kwargs):
+                """获取K线数据 - 显式代理"""
+                return await self._actor.query_kline(*args, **kwargs)
+
+            async def query_kline(self, *args, **kwargs):
+                """查询K线数据 - 显式代理"""
+                return await self._actor.query_kline(*args, **kwargs)
+
+            def normalize_symbol(self, symbol: str) -> str:
+                """标准化股票代码 - 显式代理"""
+                # 使用静态方法，无需调用 Actor
+                from core.compute.actors.amazingdata_actor import AmazingDataActor
+                return AmazingDataActor._convert_code_to_sdk_format(symbol)
+
+            def standardize_symbol(self, symbol: str) -> str:
+                """标准化股票代码 - 显式代理"""
+                return symbol
 
             def __getattr__(self, name: str):
                 # 委托所有其他调用到 Actor
