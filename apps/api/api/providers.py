@@ -329,10 +329,12 @@ class DataProviderFactory:
             # ==================== 显式代理关键方法 ====================
             # 这些方法需要被 getattr() 检测到，所以显式声明而不依赖 __getattr__
 
+            # 交易日历
             async def get_calendar(self, *args, **kwargs):
                 """获取交易日历 - 显式代理"""
                 return await self._actor.get_calendar(*args, **kwargs)
 
+            # 股票列表相关
             async def get_stock_list(self, *args, **kwargs):
                 """获取股票列表 - 显式代理"""
                 return await self._actor.get_code_list(*args, **kwargs)
@@ -345,6 +347,15 @@ class DataProviderFactory:
                 """获取股票列表 - 显式代理"""
                 return await self._actor.get_code_list(*args, **kwargs)
 
+            async def get_code_list(self, *args, **kwargs):
+                """获取代码列表 - 显式代理"""
+                return await self._actor.get_code_list(*args, **kwargs)
+
+            async def get_code_info(self, *args, **kwargs):
+                """获取代码信息 - 显式代理"""
+                return await self._actor.get_code_info(*args, **kwargs)
+
+            # 股票基础信息
             async def get_stock_basic(self, *args, **kwargs):
                 """获取股票基础信息 - 显式代理"""
                 return await self._actor.get_stock_basic(*args, **kwargs)
@@ -353,6 +364,7 @@ class DataProviderFactory:
                 """获取股票信息 - 显式代理"""
                 return await self._actor.get_stock_info(*args, **kwargs)
 
+            # K线数据
             async def get_kline_data(self, *args, **kwargs):
                 """获取K线数据 - 显式代理"""
                 return await self._actor.query_kline(*args, **kwargs)
@@ -361,10 +373,46 @@ class DataProviderFactory:
                 """查询K线数据 - 显式代理"""
                 return await self._actor.query_kline(*args, **kwargs)
 
+            async def get_stock_hist(self, *args, **kwargs):
+                """获取历史数据 - 映射到 query_kline - 显式代理"""
+                return await self._actor.query_kline(*args, **kwargs)
+
+            # 实时行情
+            async def get_realtime_quotes(self, *args, **kwargs):
+                """获取实时行情（批量）- 显式代理"""
+                return await self._actor.get_realtime_quotes(*args, **kwargs)
+
+            async def get_realtime_quote(self, symbol: str, *args, **kwargs):
+                """获取实时行情（单个）- 显式代理"""
+                result = await self._actor.get_realtime_quotes([symbol], *args, **kwargs)
+                return result[0] if result else None
+
+            # 盘口数据（AmazingData 暂不支持，返回空）
+            async def get_orderbook(self, *args, **kwargs):
+                """获取盘口数据 - 暂不支持"""
+                return None
+
+            async def get_latest_orderbook(self, *args, **kwargs):
+                """获取最新盘口数据 - 暂不支持"""
+                return None
+
+            # 连接状态
+            async def connection_status(self) -> dict:
+                """获取连接状态 - 显式代理"""
+                status = await self._actor.get_status()
+                return {
+                    "connected": self._is_connected,
+                    "logged_in": status.get("logged_in", False),
+                    "error_count": status.get("error_count", 0),
+                    "last_activity": status.get("last_activity", 0),
+                }
+
+            # 代码格式转换
             def normalize_symbol(self, symbol: str) -> str:
                 """标准化股票代码 - 显式代理"""
                 # 使用静态方法，无需调用 Actor
                 from core.compute.actors.amazingdata_actor import AmazingDataActor
+
                 return AmazingDataActor._convert_code_to_sdk_format(symbol)
 
             def standardize_symbol(self, symbol: str) -> str:
@@ -429,6 +477,16 @@ class DataProviderFactory:
             def _sdk_available(self) -> bool:
                 return True
 
+            @property
+            def name(self) -> str:
+                """数据源名称 (IDataFeed)"""
+                return "miniqmt"
+
+            @property
+            def is_connected(self) -> bool:
+                """是否已连接 (IDataFeed)"""
+                return self._is_connected
+
             async def check_health(self) -> bool:
                 """检查 Actor 是否仍然活跃"""
                 try:
@@ -440,6 +498,38 @@ class DataProviderFactory:
                     logger.warning(f"MiniQMT Actor 健康检查失败: {e}")
                     self._is_connected = False
                     return False
+
+            # ==================== 显式代理关键方法 ====================
+            # 这些方法需要被 getattr() 检测到，所以显式声明而不依赖 __getattr__
+
+            async def get_calendar(self, *args, **kwargs):
+                """获取交易日历 - 显式代理"""
+                return await self._actor.get_calendar(*args, **kwargs)
+
+            async def get_stock_list(self, *args, **kwargs):
+                """获取股票列表 - 显式代理"""
+                return await self._actor.get_stock_list(*args, **kwargs)
+
+            async def get_stock_list_records(self, *args, **kwargs):
+                """获取股票列表记录 - 显式代理"""
+                return await self._actor.get_stock_list_records(*args, **kwargs)
+
+            async def get_kline_data(self, *args, **kwargs):
+                """获取K线数据 - 显式代理"""
+                return await self._actor.get_kline_data(*args, **kwargs)
+
+            async def get_realtime_quotes(self, *args, **kwargs):
+                """获取实时行情 - 显式代理"""
+                return await self._actor.get_realtime_quotes(*args, **kwargs)
+
+            async def connection_status(self) -> dict:
+                """获取连接状态 - 显式代理"""
+                status = await self._actor.get_status()
+                return {
+                    "connected": self._is_connected,
+                    "initialized": status.get("initialized", False),
+                    "sdk_version": status.get("sdk_version", "unknown"),
+                }
 
             def __getattr__(self, name: str):
                 return getattr(self._actor, name)
