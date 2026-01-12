@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-react/
+.env
+.DS_Store
+coverage/
+*.log
+
+jsx-backup-*/

@@ -1,0 +1,797 @@
+"""
+重构后的AkShare代理提供者
+通过模块化设计提高可维护性和可测试性
+"""
+
+import asyncio
+import time
+from typing import Any, Dict, Iterable, List, Optional, cast
+
+import pandas as pd
+from core.config import get_config
+from core.infrastructure.providers.interfaces.base import (
+    DataProviderConfig,
+    DataProviderError,
+    DataRequest,
+    DataResponse,
+    DataSourceType,
+)
+from core.infrastructure.providers.interfaces.capabilities import DataCapability
+from core.utils.network.akshare_proxy import patch_akshare
+from loguru import logger
+
+from .api_methods import AkShareAPIMethods
+from .async_wrapper import get_async_wrapper
+from .cache_manager import get_cache_manager
+from .request_handler import RequestHandler
+from .request_optimizer import RequestOptimizer
+from .worker_manager import WorkerManager
+
+
+class AkShareProxyProvider:
+    """
+    重构后的AkShare代理提供者
+
+    通过Cloudflare Workers提供稳定的数据访问
+    采用模块化设计，分离职责：
+    - WorkerManager: 管理Worker节点健康和负载均衡
+    - RequestHandler: 处理请求和重试逻辑
+    - AkShareAPIMethods: 实现具体的API方法
+    - CacheManager: 管理缓存策略
+    - RequestOptimizer: 优化请求队列和优先级
+    """
+
+    def __init__(self):
+        """初始化AkShare代理提供者"""
+        self.name = "akshare_proxy"
+        self.display_name = "AkShare 代理提供者"
+
+        self.config = DataProviderConfig(
+            name="akshare",
+            source_type=DataSourceType.AKSHARE,
+            enabled=True,
+            priority=3,
+        )
+        self.status = "inactive"
+
+        # 延迟初始化标记
+        self._initialized = False
+        self._patch_applied = False
+
+        # 获取配置
+        config = get_config()
+
+        # 从配置读取Worker URLs
+        worker_urls = self._load_worker_urls(config)
+
+        # 确定负载均衡策略
+        strategy = "round_robin" if len(worker_urls) > 1 else "single"
+
+        # 初始化核心组件
+        self.worker_manager = WorkerManager(worker_urls, strategy)
+        self.request_handler = RequestHandler(self.worker_manager)
+        self.api_methods = AkShareAPIMethods(self.request_handler)
+
+        # 缓存管理器
+        self.cache_manager = get_cache_manager()
+
+        # 请求优化器
+        self.request_optimizer = RequestOptimizer()
+
+        # 异步包装器（用于兼容同步调用）
+        self._async_wrapper = None
+
+        # 监控任务
+        self._monitor_task = None
+
+        self.strategy = self.worker_manager.strategy
+
+        # 交易日历缓存，避免重复拉取
+
+        self._calendar_cache: Dict[str, tuple[list[int], float]] = {}
+
+        self._calendar_cache_ttl_seconds = 600.0
+
+        logger.info(f"AkShare代理提供者初始化完成，Worker数量: {len(worker_urls)}")
+
+    def get_capabilities(self) -> set[DataCapability]:
+        """返回数据能力集合。"""
+
+        return {
+            DataCapability.REALTIME_QUOTE,
+            DataCapability.REALTIME_QUOTES,
+            DataCapability.KLINE_DATA,
+            DataCapability.MINUTE_DATA,
+            DataCapability.TICK_DATA,
+            DataCapability.ORDER_BOOK,
+            DataCapability.SECTOR_DATA,
+            DataCapability.ANOMALY_DETECTION,
+            DataCapability.CAPITAL_FLOW,
+            DataCapability.NORTH_FLOW,
+        }
+
+    @staticmethod
+    def _normalize_symbol(symbol: Optional[str]) -> str:
+        """标准化股票代码为 6 位数字字符串。"""
+
+        if not symbol:
+            return ""
+        normalized = symbol.split(".")[0]
+        if len(normalized) < 6:
+            normalized = normalized.zfill(6)
+        return normalized
+
+    def _load_worker_urls(self, config) -> List[str]:
+        """
+        从配置加载Worker URLs
+
+        Args:
+            config: 配置对象
+
+        Returns:
+            Worker URL列表
+        """
+        worker_urls = []
+
+        if config and hasattr(config, "cloudflare_workers") and config.cloudflare_workers:
+            # 读取单个URL配置
+            if hasattr(config.cloudflare_workers, "url") and config.cloudflare_workers.url:
+                url = config.cloudflare_workers.url
+                if not url.startswith(("http://", "https://")):
+                    url = f"https://{url}"
+                worker_urls.append(url)
+                logger.info(f"使用配置的Worker URL: {url}")
+
+            # 支持多个workers
+            elif (
+                hasattr(config.cloudflare_workers, "workers") and config.cloudflare_workers.workers
+            ):
+                for url in config.cloudflare_workers.workers:
+                    if not url.startswith(("http://", "https://")):
+                        url = f"https://{url}"
+                    worker_urls.append(url)
+                logger.info(f"使用配置的Workers列表: {worker_urls}")
+
+        # 使用默认值
+        if not worker_urls:
+            worker_urls = ["https://akshare-proxy.934073514.workers.dev"]
+            logger.info("使用默认Worker URL")
+
+        return worker_urls
+
+    async def initialize(self):
+        """
+        初始化提供者
+
+        执行异步初始化任务：
+        1. 初始化Worker管理器
+        2. 初始化请求处理器
+        3. 检查Worker健康状态
+        4. 应用AkShare补丁
+        5. 启动健康监控
+        """
+        if self._initialized:
+            return
+
+        try:
+            logger.info("开始初始化AkShare代理提供者...")
+
+            # 初始化Worker管理器
+            await self.worker_manager.initialize()
+
+            # 初始化请求处理器
+            await self.request_handler.initialize()
+
+            # 应用补丁（如果需要）
+            if not self._patch_applied:
+                try:
+                    if hasattr(patch_akshare, "__call__"):
+                        patch_akshare()
+                        self._patch_applied = True
+                        logger.info("AkShare补丁应用成功")
+                except Exception as e:
+                    logger.warning(f"应用AkShare补丁失败: {e}")
+
+            # 启动健康监控任务
+            if not self._monitor_task:
+                self._monitor_task = asyncio.create_task(self._run_health_monitor())
+                logger.info("健康监控任务已启动")
+
+            # 初始化异步包装器
+            self._async_wrapper = get_async_wrapper()
+
+            self._initialized = True
+            self.status = "running"
+            logger.info("AkShare代理提供者初始化完成")
+
+        except Exception as e:
+            logger.error(f"初始化失败: {e}")
+            raise
+
+    async def _run_health_monitor(self):
+        """运行健康监控任务"""
+        try:
+            await self.worker_manager.monitor_health(interval=60)
+        except asyncio.CancelledError:
+            logger.info("健康监控任务已取消")
+        except Exception as e:
+            logger.error(f"健康监控任务异常: {e}")
+
+    # ==================== 状态工具 ====================
+
+    def is_connected(self) -> bool:
+        """初始化成功且存在可用 Worker 即视为已连接"""
+
+        if not self._initialized or self.status != "running":
+            return False
+
+        try:
+
+            health_flags = self.worker_manager.get_health_flags()
+
+        except Exception:
+
+            return True
+
+        return any(health_flags.values()) or bool(self.worker_manager.worker_urls)
+
+    # ==================== IDataFeed 接口兼容层 ====================
+
+    @staticmethod
+    def normalize_symbol(symbol: str) -> str:
+        """将任意格式转为 SDK 需要的格式 (IDataFeed)
+
+        AkShare 使用纯 6 位数字格式
+        """
+        if not symbol:
+            return symbol
+        # 提取纯数字部分
+        normalized = symbol.split(".")[0]
+        if len(normalized) < 6:
+            normalized = normalized.zfill(6)
+        return normalized
+
+    @staticmethod
+    def standardize_symbol(symbol: str) -> str:
+        """将 SDK 返回的格式转为标准后缀格式 (IDataFeed)
+
+        AkShare 返回可能不含市场后缀，根据代码判断
+        """
+        if not symbol or "." in symbol:
+            return symbol
+        # 根据代码前缀判断市场
+        if symbol.startswith("6"):
+            return f"{symbol}.SH"
+        elif symbol.startswith(("0", "3")):
+            return f"{symbol}.SZ"
+        elif symbol.startswith(("4", "8")):
+            return f"{symbol}.BJ"
+        return symbol
+
+    async def get_kline(
+        self,
+        symbols: list[str],
+        start: int,
+        end: int,
+        period: str = "daily",
+        adjust: str | None = None,
+    ) -> dict[str, list]:
+        """获取K线数据 (IDataFeed)
+
+        代理到 get_history_data 方法。
+        """
+        result: dict[str, list] = {}
+        period_map = {"daily": "daily", "1d": "daily", "weekly": "weekly", "monthly": "monthly"}
+        mapped_period = period_map.get(period, "daily")
+
+        for symbol in symbols:
+            data = await self.get_history_data(
+                symbol=self._normalize_symbol(symbol),
+                start_date=str(start),
+                end_date=str(end),
+                period=mapped_period,
+                adjust=adjust or "",
+            )
+            if data is not None and not data.empty:
+                result[symbol] = data.to_dict("records")  # type: ignore[assignment]
+        return result
+
+    async def get_realtime_quote(self, symbols: list[str]) -> dict[str, dict]:
+        """获取实时行情 (IDataFeed)
+
+        代理到 get_realtime_data 方法。
+        """
+        data = await self.get_realtime_data(symbols)
+        if isinstance(data, dict) and "data" in data:
+            items = data["data"]
+            if isinstance(items, dict):
+                return {str(k): v for k, v in items.items()}
+            if isinstance(items, list):
+                return {
+                    item.get("代码", item.get("symbol", str(i))): item
+                    for i, item in enumerate(items)
+                }
+        return {}
+
+    async def get_stock_info(self, symbols: list[str]) -> list[dict]:
+        """获取股票基础信息 (IDataFeed)
+
+        返回基础信息列表。
+        """
+        # AkShare 实时数据包含基础信息
+        result = []
+        data = await self.get_realtime_data(symbols)
+        if isinstance(data, dict) and "data" in data:
+            items = data["data"]
+            if isinstance(items, list):
+                result = items
+            elif isinstance(items, dict):
+                result = list(items.values())
+        return result
+
+    async def get_calendar(
+        self, *, market: str = "SH", data_type: str = "int"
+    ) -> list[int] | list[str]:
+        """使用 AkShare 交易日历供 TradingSessionGuard 判断开闭市"""
+
+        normalized_market = (market or "SH").strip().upper() or "SH"
+
+        now = time.time()
+
+        cache_entry = self._calendar_cache.get(normalized_market)
+
+        if cache_entry and (now - cache_entry[1]) <= self._calendar_cache_ttl_seconds:
+
+            base_dates = list(cache_entry[0])
+
+        else:
+
+            if not self._initialized:
+                await self.initialize()
+
+            base_dates = await asyncio.to_thread(self._load_calendar_dates, normalized_market)
+
+            self._calendar_cache[normalized_market] = (list(base_dates), now)
+
+        if data_type.lower() == "str":
+            return [f"{value:08d}" for value in base_dates]
+
+        return base_dates
+
+    def _load_calendar_dates(self, market: str) -> list[int]:
+
+        raw_dates = self._fetch_calendar_dates_sync(market)
+
+        normalized = self._normalize_trade_dates(raw_dates)
+
+        if not normalized:
+            logger.warning("AkShare 未返回交易日历: market={}", market)
+
+        return normalized
+
+    def _fetch_calendar_dates_sync(self, market: str) -> list[str]:
+        """同步调用 AkShare 的交易日历接口"""
+
+        try:
+
+            import akshare as ak
+
+        except Exception as exc:  # pragma: no cover - 记录环境异常
+
+            logger.error("AkShare 未安装或导入失败，无法获取交易日历: {}", exc)
+
+            return []
+
+        calendar_func = getattr(ak, "tool_trade_date_hist_sina", None)
+
+        if calendar_func is None:
+            logger.error("akshare.tool_trade_date_hist_sina 不可用，无法获取交易日历")
+
+            return []
+
+        try:
+
+            df = calendar_func()
+
+        except Exception as exc:
+
+            logger.error("获取 AkShare 交易日历失败 market={} error={}", market, exc)
+
+            return []
+
+        if df is None or "trade_date" not in df.columns:
+            logger.warning("AkShare 返回的交易日历缺少 trade_date 列 market={}", market)
+
+            return []
+
+        return [str(item) for item in df["trade_date"].tolist()]
+
+    @staticmethod
+    def _normalize_trade_dates(raw_dates: Iterable[str | int]) -> list[int]:
+        """将字符串日期规范成 20250101 形式并去重"""
+
+        normalized: list[int] = []
+
+        seen: set[int] = set()
+
+        for entry in raw_dates:
+
+            digits = "".join(ch for ch in str(entry) if ch.isdigit())
+
+            if len(digits) != 8:
+                continue
+
+            try:
+
+                value = int(digits)
+
+            except ValueError:
+
+                continue
+
+            if value in seen:
+                continue
+
+            seen.add(value)
+
+            normalized.append(value)
+
+        normalized.sort()
+
+        return normalized
+
+    # ==================== API方法代理 ====================
+
+    async def get_data(self, request: DataRequest) -> DataResponse:
+        """根据 `DataRequest` 获取数据并封装响应。"""
+
+        metadata = {
+            "source": self.config.name or self.name,
+            "request_type": request.request_type,
+        }
+
+        try:
+            if not self._initialized:
+                await self.initialize()
+
+            request_type = (request.request_type or "").lower()
+
+            if request_type == "realtime_quotes":
+                symbols = request.symbols or ([] if request.symbol is None else [request.symbol])
+                result = await self.get_realtime_data(symbols)
+
+                if isinstance(result, dict):
+                    data_block = result.get("data")
+                    if isinstance(data_block, dict):
+                        dataframe = pd.DataFrame.from_dict(data_block, orient="index")
+                        dataframe.reset_index(drop=True, inplace=True)
+                        return DataResponse(success=True, data=dataframe, metadata=metadata)
+                    if isinstance(data_block, list):
+                        return DataResponse(
+                            success=True,
+                            data=pd.DataFrame(data_block),
+                            metadata=metadata,
+                        )
+                    error_msg = result.get("error") or "未返回实时行情"
+                    return DataResponse(success=False, error=str(error_msg), metadata=metadata)
+
+                if isinstance(result, pd.DataFrame):
+                    return DataResponse(success=True, data=result, metadata=metadata)
+
+                if result:
+                    return DataResponse(success=True, data=result, metadata=metadata)
+
+                raise DataProviderError("未获取到实时行情数据")
+
+            if request_type == "historical_kline":
+                symbol = self._normalize_symbol(request.symbol)
+                if not symbol:
+                    raise DataProviderError("historical_kline 请求缺少 symbol")
+
+                period_alias = (request.period or "1d").lower()
+                period_mapping = {
+                    "1d": "daily",
+                    "1w": "weekly",
+                    "1m": "monthly",
+                    "1mo": "monthly",
+                    "1y": "yearly",
+                }
+                period = period_mapping.get(period_alias, "daily")
+
+                history_df = await self.get_history_data(
+                    symbol=symbol,
+                    start_date=request.start_date,
+                    end_date=request.end_date,
+                    period=period,
+                    adjust=request.adjust or "",
+                )
+
+                if history_df is None:
+                    raise DataProviderError("未获取到历史数据")
+
+                return DataResponse(success=True, data=history_df, metadata=metadata)
+
+            if request_type == "minute_kline":
+                symbol = self._normalize_symbol(request.symbol)
+                if not symbol:
+                    raise DataProviderError("minute_kline 请求缺少 symbol")
+
+                period_token = (request.period or "1m").lower()
+                if period_token.endswith("m"):
+                    period_token = period_token[:-1]
+                if not period_token.isdigit():
+                    period_token = "1"
+
+                params = {"symbol": symbol, "period": period_token}
+                if request.start_date:
+                    params["start_date"] = request.start_date
+                if request.end_date:
+                    params["end_date"] = request.end_date
+
+                payload = await self.request_handler.call_api(
+                    "stock_zh_a_hist_min_em",
+                    params,
+                )
+
+                if isinstance(payload, list):
+                    dataframe = pd.DataFrame(payload)
+                    return DataResponse(success=True, data=dataframe, metadata=metadata)
+                if isinstance(payload, dict) and payload.get("data"):
+                    dataframe = pd.DataFrame(payload["data"])
+                    return DataResponse(success=True, data=dataframe, metadata=metadata)
+                if payload is not None:
+                    return DataResponse(success=True, data=payload, metadata=metadata)
+
+                raise DataProviderError("未获取到分钟数据")
+
+            raise DataProviderError(f"AkShare 不支持的请求类型: {request.request_type}")
+
+        except DataProviderError as exc:
+            return DataResponse(success=False, error=str(exc), metadata=metadata)
+        except Exception as exc:  # pragma: no cover - 防御日志
+            logger.exception("AkShare 获取数据异常: {}", exc)
+            return DataResponse(success=False, error=str(exc), metadata=metadata)
+
+    async def get_realtime_data(self, symbols: List[str]) -> Dict[str, Any]:
+        """获取实时行情数据"""
+        if not self._initialized:
+            await self.initialize()
+        result = await self.api_methods.get_realtime_data(symbols)
+        return cast(Dict[str, Any], result)
+
+    async def get_history_data(
+        self,
+        symbol: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        period: str = "daily",
+        adjust: str = "",
+    ) -> Optional[pd.DataFrame]:
+        """获取历史K线数据"""
+        if not self._initialized:
+            await self.initialize()
+        result = await self.api_methods.get_history_data(
+            symbol, start_date, end_date, period, adjust
+        )
+        return cast(Optional[pd.DataFrame], result)
+
+    async def fetch_sector_data(self, api_name: str, params: Dict[str, Any]) -> Any:
+        """获取板块数据"""
+        if not self._initialized:
+            await self.initialize()
+        result = await self.api_methods.fetch_sector_data(api_name, params)
+        return result
+
+    async def fetch_anomaly_data(self, api_name: str, params: Dict[str, Any]) -> Any:
+        """获取异动数据"""
+        if not self._initialized:
+            await self.initialize()
+        result = await self.api_methods.fetch_anomaly_data(api_name, params)
+        return result
+
+    async def fetch_hsgt_data(self, api_name: str, params: Dict[str, Any]) -> Any:
+        """获取沪深港通数据"""
+        if not self._initialized:
+            await self.initialize()
+        result = await self.api_methods.fetch_hsgt_data(api_name, params)
+        return result
+
+    async def fetch_all_realtime_quotes(self) -> Any:
+        """获取所有股票实时行情"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_all_realtime_quotes()
+
+    async def fetch_intraday_data(self, symbol: str) -> Any:
+        """获取分时数据"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_intraday_data(symbol)
+
+    async def fetch_orderbook_data(self, symbol: str) -> Any:
+        """获取盘口数据"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_orderbook_data(symbol)
+
+    async def fetch_fund_flow_data(self, symbol: Optional[str] = None) -> Any:
+        """获取资金流向数据"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_fund_flow_data(symbol)
+
+    async def fetch_concept_data(self) -> Any:
+        """获取概念板块数据"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_concept_data()
+
+    async def fetch_industry_data(self) -> Any:
+        """获取行业板块数据"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_industry_data()
+
+    async def fetch_etf_data(self) -> Any:
+        """获取ETF数据"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_etf_data()
+
+    async def fetch_index_data(self) -> Any:
+        """获取指数数据"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_index_data()
+
+    async def fetch_futures_data(self, symbol: Optional[str] = None) -> Any:
+        """获取期货数据"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_futures_data(symbol)
+
+    async def fetch_option_data(self, symbol: Optional[str] = None) -> Any:
+        """获取期权数据"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_option_data(symbol)
+
+    async def fetch_financial_data(self, symbol: str, report_type: str = "main") -> Any:
+        """获取财务数据"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_financial_data(symbol, report_type)
+
+    async def fetch_holder_data(self, symbol: str) -> Any:
+        """获取股东数据"""
+        if not self._initialized:
+            await self.initialize()
+        return await self.api_methods.fetch_holder_data(symbol)
+
+    # ==================== 通用API调用 ====================
+
+    async def call_api(self, api_name: str, params: Dict[str, Any]) -> Any:
+        """
+        通用API调用接口
+
+        Args:
+            api_name: API名称
+            params: 请求参数
+
+        Returns:
+            API响应数据
+        """
+        if not self._initialized:
+            await self.initialize()
+        return await self.request_handler.call_api(api_name, params)
+
+    async def _fetch_with_fallback(
+        self, api_name: str, params: Dict[str, Any], *, max_retries: int = 3, use_cache: bool = True
+    ) -> Dict[str, Any]:
+        if not self._initialized:
+            await self.initialize()
+        result = await self.request_handler._fetch_with_fallback(
+            api_name, params, max_retries=max_retries, use_cache=use_cache
+        )
+        return cast(Dict[str, Any], result)
+
+    # ==================== 管理方法 ====================
+
+    @property
+    def worker_urls(self) -> List[str]:
+        return list(self.worker_manager.worker_urls)
+
+    def _build_worker_stats(self) -> Dict[str, Dict[str, Any]]:
+        snapshot: Dict[str, Dict[str, Any]] = {}
+        for url, info in self.worker_manager.workers.items():
+            snapshot[url] = {
+                "state": info["state"].value,
+                "total_requests": info["requests"],
+                "success_count": info["requests"] - info["errors"],
+                "fail_count": info["errors"],
+                "fail_streak": 0,
+                "success_streak": 0,
+                "avg_latency": info["response_time"],
+                "last_check": info["last_check"],
+            }
+        return snapshot
+
+    @property
+    def worker_stats(self) -> Dict[str, Dict[str, Any]]:
+        return self._build_worker_stats()
+
+    @property
+    def worker_health(self) -> Dict[str, bool]:
+        return cast(Dict[str, bool], self.worker_manager.get_health_flags())
+
+    async def _check_worker_health(self, url: str) -> bool:
+        return bool(await self.worker_manager.check_worker_health(url))
+
+    def reset_worker(self, url: str) -> None:
+        self.worker_manager.reset_worker(url)
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """
+        获取统计信息
+
+        Returns:
+            包含Worker状态、缓存命中率等统计信息
+        """
+        stats = {
+            "provider": self.name,
+            "initialized": self._initialized,
+            "worker_stats": self.worker_manager.get_statistics() if self._initialized else {},
+            "cache_stats": self.cache_manager.get_stats() if self.cache_manager else {},
+            "optimizer_stats": self.request_optimizer.get_stats() if self.request_optimizer else {},
+        }
+        return stats
+
+    async def cleanup(self):
+        """清理资源"""
+        try:
+            logger.info("开始清理AkShare代理提供者资源...")
+
+            # 取消监控任务
+            if self._monitor_task:
+                self._monitor_task.cancel()
+                try:
+                    await self._monitor_task
+                except asyncio.CancelledError:
+                    pass
+                self._monitor_task = None
+
+            # 清理请求处理器
+            if self.request_handler:
+                await self.request_handler.cleanup()
+
+            # 清理Worker管理器
+            if self.worker_manager:
+                await self.worker_manager.cleanup()
+
+            # 清理请求优化器
+            if self.request_optimizer:
+                await self.request_optimizer.cleanup()
+
+            self._initialized = False
+            logger.info("AkShare代理提供者资源清理完成")
+
+        except Exception as e:
+            logger.error(f"清理资源时发生错误: {e}")
+
+    async def close(self) -> None:
+        """Expose cleanup hook for factory-managed lifecycles."""
+        await self.cleanup()
+
+    def __str__(self):
+        """字符串表示"""
+        return f"AkShareProxyProvider(workers={len(self.worker_manager.worker_urls) if self.worker_manager else 0})"
+
+    def __repr__(self):
+        """详细表示"""
+        return (
+            f"AkShareProxyProvider("
+            f"name='{self.name}', "
+            f"initialized={self._initialized}, "
+            f"workers={self.worker_manager.worker_urls if self.worker_manager else []}"
+            f")"
+        )

@@ -1,0 +1,170 @@
+# Git配置文件 - 包含实用别名和设置
+# 使用方法:
+# 1. 全局应用: git config --global include.path "$(pwd)/.gitconfig"
+# 2. 项目应用: git config --local include.path ../.gitconfig
+
+[alias]
+    # 基础命令简化
+    st = status -sb                    # 简洁状态
+    co = checkout                       # 检出
+    br = branch                        # 分支
+    ci = commit                        # 提交
+    cl = clone                         # 克隆
+    cp = cherry-pick                   # 选择提交
+
+    # 常用组合命令
+    aa = add --all                     # 添加所有文件
+    cm = commit -m                     # 快速提交
+    cam = commit -am                   # 添加并提交
+    amend = commit --amend --no-edit  # 修改上次提交
+
+    # 分支操作
+    bd = branch -d                     # 删除分支
+    bD = branch -D                     # 强制删除分支
+    bm = branch --merged               # 已合并分支
+    bnm = branch --no-merged           # 未合并分支
+
+    # 拉取和推送
+    pl = pull                          # 拉取
+    ps = push                          # 推送
+    psu = push -u origin HEAD          # 推送并设置上游
+    psf = push --force-with-lease     # 安全强制推送
+
+    # 日志查看
+    lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+    lgp = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit -p
+    last = log -1 HEAD                # 最后一次提交
+    today = log --since=midnight      # 今天的提交
+
+    # 差异查看
+    df = diff                          # 差异
+    dfc = diff --cached               # 暂存区差异
+    dfw = diff --word-diff            # 单词级差异
+
+    # 撤销操作
+    unstage = reset HEAD --           # 取消暂存
+    undo = reset --soft HEAD~1        # 撤销上次提交（保留更改）
+    reset-hard = reset --hard HEAD    # 硬重置到HEAD
+
+    # 清理操作
+    cleanup = !git branch --merged | grep -v '\\*\\|master\\|main\\|dev' | xargs -n 1 git branch -d
+    prune-all = !git remote prune origin && git gc --aggressive
+
+    # 查找和统计
+    find = !git ls-files | grep -i     # 查找文件
+    who = shortlog -sne                # 贡献者统计
+    count = rev-list --all --count     # 提交总数
+
+    # 交互式操作
+    rb = rebase                        # 变基
+    rbi = rebase -i                    # 交互式变基
+    rbc = rebase --continue           # 继续变基
+    rba = rebase --abort              # 中止变基
+
+    # 暂存操作
+    stash-all = stash save --include-untracked
+    sl = stash list                    # 暂存列表
+    sp = stash pop                     # 弹出暂存
+    sa = stash apply                   # 应用暂存
+
+    # 标签操作
+    tags = tag -l                      # 列出标签
+    tag-latest = describe --tags --abbrev=0  # 最新标签
+
+    # 工作流快捷命令
+    feature = "!f() { git checkout dev && git pull && git checkout -b feature/$1; }; f"
+    bugfix = "!f() { git checkout dev && git pull && git checkout -b bugfix/$1; }; f"
+    hotfix = "!f() { git checkout master && git pull && git checkout -b hotfix/$1; }; f"
+    done = "!f() { git checkout dev && git merge --no-ff $1 && git branch -d $1; }; f"
+
+    # 实用工具
+    aliases = config --get-regexp alias  # 显示所有别名
+    ignore = "!gi() { curl -L -s https://www.gitignore.io/api/$@ ;}; gi"  # 生成gitignore
+
+    # 提交规范化
+    feat = "!f() { git commit -m \"feat: $1\"; }; f"
+    fix = "!f() { git commit -m \"fix: $1\"; }; f"
+    docs = "!f() { git commit -m \"docs: $1\"; }; f"
+    style = "!f() { git commit -m \"style: $1\"; }; f"
+    refactor = "!f() { git commit -m \"refactor: $1\"; }; f"
+    perf = "!f() { git commit -m \"perf: $1\"; }; f"
+    test = "!f() { git commit -m \"test: $1\"; }; f"
+    chore = "!f() { git commit -m \"chore: $1\"; }; f"
+
+[core]
+    # 编辑器设置
+    editor = code --wait               # 使用VSCode作为默认编辑器
+
+    # 换行符处理
+    autocrlf = false                   # Windows设置为true，其他为false
+
+    # 文件权限
+    filemode = false                   # 忽略文件权限变化
+
+    # 大小写敏感
+    ignorecase = false                 # 区分大小写
+
+[color]
+    # 启用颜色
+    ui = auto
+    diff = auto
+    status = auto
+    branch = auto
+    interactive = auto
+
+[color "branch"]
+    current = yellow reverse
+    local = yellow
+    remote = green
+
+[color "diff"]
+    meta = yellow bold
+    frag = magenta bold
+    old = red bold
+    new = green bold
+
+[color "status"]
+    added = green
+    changed = yellow
+    untracked = cyan
+
+[push]
+    # 推送设置
+    default = current                  # 推送当前分支
+    followTags = true                  # 推送时包含标签
+
+[pull]
+    # 拉取设置
+    rebase = false                     # 使用merge而非rebase
+
+[merge]
+    # 合并设置
+    tool = vscode                      # 合并工具
+    conflictstyle = diff3              # 冲突显示风格
+
+[mergetool "vscode"]
+    cmd = code --wait $MERGED
+
+[diff]
+    # 差异设置
+    tool = vscode                      # 差异工具
+    algorithm = patience               # 使用耐心算法
+
+[difftool "vscode"]
+    cmd = code --wait --diff $LOCAL $REMOTE
+
+[fetch]
+    # 获取设置
+    prune = true                       # 自动清理远程已删除的分支
+
+[help]
+    # 帮助设置
+    autocorrect = 1                    # 自动纠正拼写错误
+
+[credential]
+    # 凭据设置 (Windows)
+    helper = manager-core
+
+[init]
+    # 初始化设置
+    defaultBranch = main               # 默认分支名称

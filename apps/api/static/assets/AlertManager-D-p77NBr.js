@@ -1,0 +1,1 @@
+import{j as t,cp as e,B as r,cm as s}from"./index-BJyCZ31M.js";import{P as a}from"./index-fo3-jmep.js";const n=()=>t.jsx(a,{header:{title:"告警管理",ghost:!0},children:t.jsx(e,{icon:t.jsx(s,{}),title:"功能开发中",subTitle:"告警管理功能即将上线，敬请期待。",extra:t.jsx(r,{type:"primary",children:"返回首页"})})});export{n as default};

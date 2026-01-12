@@ -1,0 +1,33 @@
+# =============================================================================
+# DeepSearch Dask Worker 精简依赖
+# =============================================================================
+# 仅包含 Dask Worker 执行聚合任务所需的核心依赖
+# 排除了平台特定的包（如 amazingdata, tgw, xtquant 等 Windows-only 包）
+# =============================================================================
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deepsearch-worker"
+version = "0.1.0"
+description = "DeepSearch Dask Worker 精简包"
+requires-python = ">=3.13,<3.14"
+
+dependencies = [
+    # ==== 核心依赖 ====
+    "anyio>=4.11.0",
+    "loguru>=0.7.3",
+    "pydantic>=2.12.2",
+    "pydantic-settings>=2.11.0",
+    "pyyaml>=6.0.3",
+    "redis>=6.4.0",
+    "pika>=1.3.0",
+    "distributed>=2024.1.0",
+    # ==== 数据处理 ====
+    "numpy>=2.4.0",
+    "pandas>=2.3.3,<2.4.0",
+    "pyarrow>=22.0.0",
+    "lz4>=4.4.0",
+]

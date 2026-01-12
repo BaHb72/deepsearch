@@ -1,0 +1,16 @@
+from typing import Any, Awaitable, Callable, Mapping, MutableMapping, Protocol
+
+class Scope(Protocol):
+    def __getitem__(self, key: str) -> Any: ...
+    def __setitem__(self, key: str, value: Any) -> None: ...
+    def get(self, key: str, default: Any = ...) -> Any: ...
+
+class Receive(Protocol):
+    async def __call__(self) -> Mapping[str, Any]: ...
+
+class Send(Protocol):
+    async def __call__(self, message: Mapping[str, Any]) -> None: ...
+
+ASGIApp = Callable[[Scope, Receive, Send], Awaitable[None]]
+
+__all__ = ["Scope", "Receive", "Send", "ASGIApp"]

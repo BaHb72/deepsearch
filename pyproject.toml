@@ -1,0 +1,217 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "core"
+version = "0.1.0"
+description = "DeepSearch 高性能量化交易事件系统核心库"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "BaHb", email = "bahb@example.com" },
+]
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    # ==== 核心依赖 ====
+    "anyio>=4.11.0",
+    "loguru>=0.7.3",
+    "matplotlib>=3.10.7",
+    "platformdirs>=4.5.0",
+    "pydantic>=2.12.2",
+    "pydantic-settings>=2.11.0",
+    "python-dotenv>=1.1.1",
+    "pyyaml>=6.0.3",
+    "twisted>=25.5.0",
+    "redis>=6.4.0",
+    "redistimeseries>=1.4.3",
+    "cryptography>=46.0.2",
+    "pika>=1.3.0",  # RabbitMQ Python 客户端
+    "distributed>=2024.1.0",  # Dask 分布式客户端
+    # ==== 数据库依赖 ====
+    "sqlalchemy>=2.0.44",
+    "asyncpg>=0.30.0",
+    "psycopg[binary]>=3.2.10",
+    "duckdb>=1.4.1",
+    "aiosqlite>=0.20.0",
+    # ==== Web UI 依赖 ====
+    "fastapi>=0.128.0",
+    "uvicorn[standard]>=0.37.0",
+    "python-multipart>=0.0.20",
+    "websockets>=15.0.1",
+    "httpx>=0.28.1",
+    "python-jose[cryptography]>=3.5.0",
+    # ==== 数据获取依赖 ====
+    "amazingdata==1.0.23",
+    "tgw==1.0.8.5",
+    "akshare==1.17.65",
+    "aiohttp>=3.13.0",
+    "numpy>=1.24.0",
+    "pandas>=2.3.3,<2.4.0",
+    # ==== 其他依赖 ====
+    "psutil>=7.1.0",
+    "aioredis>=2.0.1",
+    "tabulate>=0.9.0",
+    "notebook>=7.4.7",
+    "backtrader>=1.9.78.123",
+    "setuptools>=80.9.0",
+    "click==8.3.0",
+    "scipy>=1.16.2",
+    "ta-lib>=0.6.7",
+    "xxhash>=3.6.0",
+    "pandas-stubs>=2.3.2.250926,<2.4.0",
+    "schedule>=1.2.2",
+    "chardet>=5.2.0",
+    "python-dateutil>=2.9.0.post0",
+    "types-pywin32>=311.0.0.20251008",
+    "xtquant>=250516.1.1",
+    "tigeropen>=3.4.4",
+    "python-docx>=1.2.0",
+    "tables>=3.10.2",
+    "pypinyin>=0.55.0",
+    "apscheduler>=3.11.1",
+    "pyarrow>=22.0.0",
+    "dependency-injector>=4.48.3",
+    "lz4==4.4.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.10",
+    "pytest-tornasync>=0.6.0.post2",
+    "pytest-trio>=0.8.0",
+    "pytest-twisted>=1.14.3",
+    "pytest-xdist>=3.6.1",
+    "isort>=5.12",
+    "mypy>=1.0",
+    "types-PyYAML>=6.0.12",
+    "ipython>=9.6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/BaHb/deepsearch"
+Repository = "https://github.com/BaHb/deepsearch.git"
+
+[project.scripts]
+deepsearch = "core.main:main"
+
+[tool.setuptools]
+package-dir = {"core" = "packages/core", "apps" = "apps"}
+packages = ["core", "apps", "apps.api"]
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
+exclude = [
+    "packages/core/infrastructure/providers/datafeed/qmt/scripts",
+    "examples/akshare_resources/getakshare.ipynb",
+    "typings",
+    "scripts",
+    "apps/web/node_modules",
+]
+
+[tool.ruff.lint]
+# E402: 模块级导入不在文件顶部（某些文件需要条件导入）
+# E501: 行太长（black已处理，ruff不检查）
+# F841: 未使用变量（允许保留用于调试或未来使用）
+ignore = ["E402", "E501", "F841"]
+
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.uv]
+python-preference = "only-system"
+compile-bytecode = true
+
+[tool.uv.sources]
+amazingdata = { path = "packages/AmazingData-1.0.23-cp313-none-any.whl" }
+tgw = { path = "packages/tgw-1.0.8.5-py3-none-any.whl" }
+
+[tool.uv.pip]
+index-url = "https://pypi.org/simple"
+
+[dependency-groups]
+dev = [
+    "bandit>=1.8.6",
+    "black>=25.9.0",
+    "mypy>=1.18.2",
+    "pre-commit>=4.5.1",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-benchmark>=5.1.0",
+    "pytest-cov>=6.3.0",
+    "pytest-mock>=3.15.0",
+    "ruff>=0.14.0",
+    "types-PyYAML>=6.0.12",
+]
+[tool.mypy]
+python_version = "3.13"
+# 为第三方依赖补充的本地类型桩
+mypy_path = ["typings"]
+# 暂时关闭以专注于真正的错误，后续开启进行清理
+warn_unused_ignores = false
+warn_return_any = false
+show_error_codes = true
+pretty = true
+# SQLAlchemy 2.0 官方 mypy 插件已弃用（只支持 mypy<=1.10.1）
+# SQLAlchemy 2.0 的 Mapped + mapped_column 语法原生支持 mypy，无需插件
+
+# 第三方库缺少类型存根
+[[tool.mypy.overrides]]
+module = [
+    "pika", "pika.*",
+    "win32api", "win32api.*",
+    "amazingdata", "amazingdata.*",
+    "asyncpg", "asyncpg.*",
+    "click", "click.*",
+    "starlette", "starlette.*",
+    "sqlalchemy", "sqlalchemy.*",
+    "pyarrow.ipc", "pyarrow.ipc.*",
+    "pypinyin", "pypinyin.*",
+    "akshare", "akshare.*",
+    "tigeropen", "tigeropen.*",
+    "xtquant", "xtquant.*",
+    "tgw", "tgw.*",
+    "backtrader", "backtrader.*",
+    "apscheduler", "apscheduler.*",
+    "distributed", "distributed.*",
+    "dask", "dask.*",
+    "uvicorn", "uvicorn.*",
+    "platformdirs", "platformdirs.*",
+    "aiohttp", "aiohttp.*",
+    "httpx", "httpx.*",
+    "websockets", "websockets.*",
+    "schedule", "schedule.*",
+    "rich", "rich.*",
+    "pytest", "pytest.*",
+    "core.domain.interfaces.*",
+    "core.domain.value_objects", "core.domain.value_objects.*",
+    # 运行时条件导入或可选模块
+    "deepsearch", "deepsearch.*",
+    "core.memory", "core.memory.*",
+    "core.infrastructure.providers.datafeed.qmt", "core.infrastructure.providers.datafeed.qmt.*",
+    "core.domain.data_proxy.adapters.amazingdata",
+    "core.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper",
+    "dependency_injector", "dependency_injector.*",
+]
+ignore_missing_imports = true
+
+# 运行时条件导入：这些文件包含动态/条件导入，mypy 无法静态解析
+[[tool.mypy.overrides]]
+module = [
+    "apps.api.api.providers",
+    "core.infrastructure.providers.implementations.amazingdata.amazingdata_extended",
+]
+disable_error_code = ["import-not-found"]

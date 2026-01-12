@@ -1,0 +1,79 @@
+# 交易时段配置
+# 独立配置文件，管理各市场交易时段参数
+#
+# 设计原则：只记录交易时段，非交易时段自动跳过轮询
+
+calendar_ttl_minutes: 10
+
+# 交易阶段判断配置
+session_guard:
+  enabled: true                  # 是否启用智能交易阶段判断
+  calendar_source: amazingdata   # 日历数据源: amazingdata, miniqmt, auto
+  market: SH                     # 市场代码: SH, SZ, BJ, HK 等
+
+defaults:
+  off_day:
+    interval_seconds: 120.0
+    timeout_seconds: 5.0
+    skip_polling: true
+  no_trade:
+    interval_seconds: 45.0
+    timeout_seconds: 5.0
+    skip_polling: true
+  auction:
+    interval_seconds: 5.0
+    timeout_seconds: 3.0
+  continuous:
+    interval_seconds: 2.0
+    timeout_seconds: 10.0
+markets:
+  CN:
+    enabled: true
+    timezone: Asia/Shanghai
+    aliases:
+    - SH
+    - SZ
+    - STAR
+    - BSE
+    sessions:
+      auction:
+        windows:
+        - start: 09:15
+          end: 09:25
+        - start: '14:57'
+          end: '15:00'
+      continuous:
+        windows:
+        - start: 09:30
+          end: '11:30'
+        - start: '13:00'
+          end: '14:57'
+  HK:
+    enabled: false
+    timezone: Asia/Hong_Kong
+    aliases:
+    - HKEX
+    sessions:
+      auction:
+        windows:
+        - start: 09:00
+          end: 09:30
+        - start: '16:00'
+          end: '16:10'
+      continuous:
+        windows:
+        - start: 09:30
+          end: '12:00'
+        - start: '13:00'
+          end: '16:00'
+  US:
+    enabled: false
+    timezone: America/New_York
+    aliases:
+    - NYSE
+    - NASDAQ
+    sessions:
+      continuous:
+        windows:
+        - start: 09:30
+          end: '16:00'

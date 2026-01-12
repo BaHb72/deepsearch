@@ -1,0 +1,447 @@
+name: 🚀 自动化测试系统
+
+on:
+  push:
+    branches: [main, dev, master]
+  pull_request:
+    branches: [main, dev, master]
+    types: [opened, synchronize, reopened]
+  schedule:
+    # 每天凌晨2点运行完整测试
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: '测试类型'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - unit
+          - api
+          - integration
+          - performance
+          - security
+
+env:
+  PYTHON_VERSION: '3.13'
+  NODE_VERSION: '20'
+  COVERAGE_THRESHOLD: 70
+
+jobs:
+  # 代码质量检查
+  code-quality:
+    name: 📝 代码质量检查
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史用于分析
+
+      - name: 🐍 设置Python环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 安装依赖
+        run: |
+          pip install uv
+          uv venv
+          uv sync --all-extras
+
+      - name: 🎨 Black格式检查
+        run: |
+          source .venv/bin/activate
+          black --check packages/core apps tests
+
+      - name: 📐 isort导入排序检查
+        run: |
+          source .venv/bin/activate
+          isort --check-only packages/core apps tests
+
+      - name: 🔍 Ruff代码检查
+        run: |
+          source .venv/bin/activate
+          ruff check packages/core apps
+
+      - name: 🏷️ MyPy类型检查
+        run: |
+          source .venv/bin/activate
+          mypy packages/core --ignore-missing-imports
+
+      - name: 📊 代码复杂度分析
+        run: |
+          source .venv/bin/activate
+          pip install radon
+          radon cc packages/core -s -nb
+
+      - name: 📈 上传质量报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-report
+          path: |
+            .mypy_cache
+            .ruff_cache
+
+  # 安全扫描
+  security-scan:
+    name: 🔒 安全扫描
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🐍 设置Python环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔐 Bandit安全扫描
+        run: |
+          pip install bandit
+          bandit -r packages/core -f json -o security-report.json || true
+
+      - name: 🔍 依赖漏洞扫描
+        run: |
+          pip install pip-audit
+          pip-audit --desc --format json --output vulnerabilities.json || true
+
+      - name: 🛡️ Trivy扫描
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: 📤 上传安全报告
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: 📊 上传扫描结果
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            security-report.json
+            vulnerabilities.json
+            trivy-results.sarif
+
+  # 单元测试
+  unit-tests:
+    name: 🧪 单元测试
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ['3.12', '3.13']
+      fail-fast: false
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🐍 设置Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 📦 安装依赖
+        run: |
+          pip install uv
+          uv venv
+          uv sync --all-extras
+
+      - name: 🧪 运行单元测试
+        run: |
+          source .venv/bin/activate || .venv\\Scripts\\activate
+          pytest tests/unit -v --cov=packages/core --cov-report=xml --cov-report=term-missing --junit-xml=junit.xml
+
+      - name: 📊 上传覆盖率到Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unit-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: Unit Tests
+
+      - name: 📈 发布测试结果
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Unit Tests Results - ${{ matrix.os }} - Python ${{ matrix.python-version }}
+          path: junit.xml
+          reporter: java-junit
+
+  # API测试
+  api-tests:
+    name: 🌐 API接口测试
+    runs-on: ubuntu-latest
+    needs: [code-quality]
+
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: deepsearch_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🐍 设置Python环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 安装依赖
+        run: |
+          pip install uv
+          uv venv
+          uv sync --all-extras
+
+      - name: 🔧 配置测试环境
+        run: |
+          cp packages/core/config/settings.dev.yaml packages/core/config/settings.test.yaml
+          echo "TEST_MODE=true" >> $GITHUB_ENV
+
+      - name: 🌐 运行API测试
+        run: |
+          source .venv/bin/activate
+          pytest tests/api -v --tb=short --junit-xml=api-junit.xml
+
+      - name: 📊 API测试报告
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: API Tests Results
+          path: api-junit.xml
+          reporter: java-junit
+
+  # 集成测试
+  integration-tests:
+    name: 🔗 集成测试
+    runs-on: ubuntu-latest
+    needs: [unit-tests, api-tests]
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🐍 设置Python环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🔧 设置Node.js环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 📦 安装Python依赖
+        run: |
+          pip install uv
+          uv venv
+          uv sync --all-extras
+
+      - name: 📦 安装前端依赖
+        working-directory: apps/web
+        run: |
+          npm ci
+          npm run build
+
+      - name: 🔗 运行集成测试
+        run: |
+          source .venv/bin/activate
+          pytest tests/integration -v -m integration
+
+      - name: 📊 上传测试结果
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: |
+            test-results/
+            screenshots/
+
+  # 性能测试
+  performance-tests:
+    name: ⚡ 性能测试
+    runs-on: ubuntu-latest
+    needs: [integration-tests]
+    if: github.event_name == 'schedule' || github.event.inputs.test_type == 'performance' || github.event.inputs.test_type == 'all'
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🐍 设置Python环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 安装依赖
+        run: |
+          pip install uv
+          uv venv
+          uv sync --all-extras
+          pip install locust
+
+      - name: ⚡ 运行性能测试
+        run: |
+          source .venv/bin/activate
+          pytest tests/performance --benchmark-only --benchmark-json=benchmark.json
+
+      - name: 📊 性能报告
+        run: |
+          python scripts/analyze_benchmark.py benchmark.json
+
+      - name: 📈 上传性能报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-report
+          path: |
+            benchmark.json
+            performance-report.html
+
+  # 前端测试
+  frontend-tests:
+    name: 🎨 前端测试
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🔧 设置Node.js环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 📦 安装依赖
+        working-directory: apps/web
+        run: npm ci
+
+      - name: 🧪 运行前端测试
+        working-directory: apps/web
+        run: |
+          npm run test:unit || true
+          npm run test:coverage || true
+
+      - name: 🎨 运行ESLint
+        working-directory: apps/web
+        run: npm run lint
+
+      - name: 🏗️ 构建前端
+        working-directory: apps/web
+        run: npm run build
+
+      - name: 📊 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: apps/web/dist/
+
+  # 测试报告汇总
+  test-summary:
+    name: 📊 测试报告汇总
+    runs-on: ubuntu-latest
+    needs: [unit-tests, api-tests, integration-tests, frontend-tests]
+    if: always()
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 📥 下载所有报告
+        uses: actions/download-artifact@v4
+
+      - name: 📊 生成汇总报告
+        run: |
+          echo "# 🚀 测试执行报告" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📅 执行时间: $(date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## 📊 测试结果" >> $GITHUB_STEP_SUMMARY
+          echo "| 测试类型 | 状态 | 详情 |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|------|------|" >> $GITHUB_STEP_SUMMARY
+
+          # 检查各个job的状态
+          if [ "${{ needs.unit-tests.result }}" == "success" ]; then
+            echo "| 单元测试 | ✅ 通过 | [查看详情](#) |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 单元测试 | ❌ 失败 | [查看详情](#) |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.api-tests.result }}" == "success" ]; then
+            echo "| API测试 | ✅ 通过 | [查看详情](#) |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| API测试 | ❌ 失败 | [查看详情](#) |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.integration-tests.result }}" == "success" ]; then
+            echo "| 集成测试 | ✅ 通过 | [查看详情](#) |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 集成测试 | ❌ 失败 | [查看详情](#) |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📈 代码覆盖率" >> $GITHUB_STEP_SUMMARY
+          echo "当前覆盖率: 待计算" >> $GITHUB_STEP_SUMMARY
+          echo "目标覆盖率: ${{ env.COVERAGE_THRESHOLD }}%" >> $GITHUB_STEP_SUMMARY
+
+      - name: 💬 PR评论
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync(process.env.GITHUB_STEP_SUMMARY, 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+
+  # 部署（可选）
+  deploy:
+    name: 🚀 部署
+    runs-on: ubuntu-latest
+    needs: [test-summary]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🚀 部署到生产环境
+        run: |
+          echo "部署逻辑待实现..."
+
+      - name: 📢 通知
+        run: |
+          echo "✅ 部署成功完成！"

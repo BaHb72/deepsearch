@@ -1,0 +1,321 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, dev, master ]
+  pull_request:
+    branches: [ main, dev, master ]
+
+env:
+  PYTHON_VERSION: "3.13"
+  UV_VERSION: "0.5.0"
+  NODE_VERSION: "20"
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install UV
+        run: |
+          pip install uv
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv sync --all-extras
+
+      - name: Run Black
+        run: |
+          source .venv/bin/activate
+          black --check packages/core apps tests
+
+      - name: Run isort
+        run: |
+          source .venv/bin/activate
+          isort --check-only packages/core apps tests
+
+      - name: Run ruff
+        run: |
+          source .venv/bin/activate
+          ruff check packages/core apps
+
+      - name: Run mypy
+        run: |
+          source .venv/bin/activate
+          mypy packages/core --ignore-missing-imports
+
+  test-backend:
+    name: Test Backend
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: deepsearch_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install UV
+        run: |
+          pip install uv
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate || .venv\\Scripts\\activate
+          uv sync --all-extras
+
+      - name: Run unit tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/deepsearch_test
+          REDIS_URL: redis://localhost:6379
+        run: |
+          source .venv/bin/activate || .venv\\Scripts\\activate
+          pytest tests/unit -v --cov=packages/core --cov-report=xml
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/deepsearch_test
+          REDIS_URL: redis://localhost:6379
+        run: |
+          source .venv/bin/activate || .venv\\Scripts\\activate
+          pytest tests/integration -v
+
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  test-frontend:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: apps/web
+        run: npm run lint
+
+      - name: Run tests
+        working-directory: apps/web
+        run: npm test -- --coverage --watchAll=false
+
+      - name: Build frontend
+        working-directory: apps/web
+        run: npm run build
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install pip-audit bandit
+
+      - name: Run pip-audit check
+        run: |
+          pip-audit --desc || true
+
+      - name: Run Bandit
+        run: |
+          bandit -r packages/core -f json -o bandit-report.json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+
+  build-docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: deepsearch:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  performance-test:
+    name: Performance Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test-backend]
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: deepsearch_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install UV
+        run: |
+          pip install uv
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv sync --all-extras
+          pip install locust
+
+      - name: Run performance tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/deepsearch_test
+          REDIS_URL: redis://localhost:6379
+        run: |
+          source .venv/bin/activate
+          # 启动服务器
+          uv run deepsearch run --no-frontend &
+          SERVER_PID=$!
+          sleep 10
+
+          # 运行性能测试
+          pytest tests/performance -v || true
+
+          # 停止服务器
+          kill $SERVER_PID
+
+  check-migrations:
+    name: Check Database Migrations
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: deepsearch_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install UV
+        run: |
+          pip install uv
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv sync --all-extras
+
+      - name: Check migrations
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/deepsearch_test
+        run: |
+          source .venv/bin/activate
+          # 运行迁移
+          uv run deepsearch db upgrade
+
+          # 检查是否有未提交的迁移
+          uv run deepsearch db check
