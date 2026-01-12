@@ -65,7 +65,12 @@ class AmazingDataWorkerPlugin:
         """
         # Check if this worker should handle AmazingData
         if self.only_on_windows:
-            resources = getattr(worker, "resources", {}) or {}
+            # 优先使用新 API (Dask 2025.12+) - worker.state.total_resources
+            resources = getattr(worker.state, "total_resources", {})
+            if not resources:
+                # 向后兼容：尝试旧 API (Dask < 2025.12)
+                resources = getattr(worker, "resources", {}) or {}
+
             if not resources.get("WIN"):
                 logger.info(
                     f"AmazingData plugin skipped on non-Windows worker | " f"resources={resources}"
