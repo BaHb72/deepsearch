@@ -6,6 +6,7 @@ HTTP 代理客户端
 import json
 import time
 from typing import Optional, TypedDict
+from urllib.parse import quote
 
 import requests
 from core.config import get_config
@@ -188,23 +189,34 @@ class ProxyClient:
         Returns:
             Response 对象
         """
-        # 构建代理 URL
-        proxy_url = f"{self.worker_url}/proxy"
-
-        # 准备参数
-        proxy_params = {"url": url}
-
         # 处理原始请求参数
         if method == "GET":
-            # GET 请求，参数已经在 URL 中
+            # GET 请求，如果有 params 参数，需要先合并到 URL
             if "params" in kwargs:
-                # 如果有额外参数，添加到 URL
-                from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+                # 如果有额外参数，需要合并到目标 URL
+                # 注意：不使用 urlencode，因为某些服务器（如东方财富）不接受 URL 编码的逗号
+                # 我们直接拼接参数，保持原始格式
+                from urllib.parse import urlparse, urlunparse
 
                 parsed = urlparse(url)
-                query_params = parse_qs(parsed.query)
-                query_params.update(kwargs.pop("params"))
-                new_query = urlencode(query_params, doseq=True)
+                # 获取额外的 params 参数
+                extra_params = kwargs.pop("params")
+
+                # 手动构建查询字符串，不编码特殊字符（如逗号）
+                # 只需要确保 key=value 格式正确
+                param_parts = []
+                for key, value in extra_params.items():
+                    # 将值转换为字符串
+                    param_parts.append(f"{key}={value}")
+                new_params_str = "&".join(param_parts)
+
+                # 合并现有查询字符串和新参数
+                if parsed.query:
+                    new_query = f"{parsed.query}&{new_params_str}"
+                else:
+                    new_query = new_params_str
+
+                # 重新构建完整 URL
                 url = urlunparse(
                     (
                         parsed.scheme,
@@ -215,10 +227,17 @@ class ProxyClient:
                         parsed.fragment,
                     )
                 )
-                proxy_params["url"] = url
 
-            # 发送 GET 请求到 Worker
-            response = self.session.get(proxy_url, params=proxy_params, **kwargs)
+        # 构建代理 URL
+        # 使用完全编码 (safe="") 确保目标 URL 正确作为 Worker 的查询参数传递
+        # Worker 的 decodeURIComponent 会正确解码所有编码字符
+        # 注意：由于不使用 urlencode 构建参数，逗号等字符保持原始格式
+        encoded_url = quote(url, safe="")
+        proxy_url = f"{self.worker_url}/proxy?url={encoded_url}"
+
+        if method == "GET":
+            # 发送 GET 请求到 Worker（不使用 params，URL 已完全编码）
+            response = self.session.get(proxy_url, **kwargs)
 
         elif method == "POST":
             # POST 请求，需要转发请求体
@@ -233,12 +252,11 @@ class ProxyClient:
             kwargs["headers"] = headers
 
             # 发送 POST 请求到 Worker
-            # 注意：这里仍然是 GET 到 Worker，因为 Worker 会根据参数转发
-            response = self.session.post(proxy_url, params=proxy_params, **kwargs)
+            response = self.session.post(proxy_url, **kwargs)
 
         else:
             # 其他方法
-            response = self.session.request(method, proxy_url, params=proxy_params, **kwargs)
+            response = self.session.request(method, proxy_url, **kwargs)
 
         return response
 

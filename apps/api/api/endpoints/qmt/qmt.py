@@ -650,60 +650,66 @@ async def websocket_endpoint(websocket: WebSocket):
         push_task = asyncio.create_task(push_data())
 
         # 处理客户端消息
-        while True:
+        try:
+            while True:
+                try:
+                    # 接收客户端消息
+                    data = await websocket.receive_text()
+                    msg = json.loads(data)
+
+                    action = msg.get("action")
+                    symbols = msg.get("symbols", [])
+
+                    if action == "subscribe":
+                        # 订阅股票
+                        for symbol in symbols:
+                            subscribed_symbols.add(symbol)
+
+                        await websocket.send_json(
+                            {
+                                "type": "subscribed",
+                                "data": {"symbols": symbols, "total": len(subscribed_symbols)},
+                            }
+                        )
+
+                    elif action == "unsubscribe":
+                        # 取消订阅
+                        for symbol in symbols:
+                            subscribed_symbols.discard(symbol)
+
+                        await websocket.send_json(
+                            {
+                                "type": "unsubscribed",
+                                "data": {"symbols": symbols, "total": len(subscribed_symbols)},
+                            }
+                        )
+
+                    elif action == "ping":
+                        # 心跳
+                        await websocket.send_json(
+                            {"type": "pong", "timestamp": asyncio.get_event_loop().time()}
+                        )
+
+                except WebSocketDisconnect:
+                    break
+                except json.JSONDecodeError:
+                    await websocket.send_json({"type": "error", "message": "Invalid JSON"})
+                except Exception as e:
+                    logger.error(f"处理WebSocket消息失败: {e}")
+                    break
+        finally:
+            # 正确取消并等待推送任务完成
+            push_task.cancel()
             try:
-                # 接收客户端消息
-                data = await websocket.receive_text()
-                msg = json.loads(data)
-
-                action = msg.get("action")
-                symbols = msg.get("symbols", [])
-
-                if action == "subscribe":
-                    # 订阅股票
-                    for symbol in symbols:
-                        subscribed_symbols.add(symbol)
-
-                    await websocket.send_json(
-                        {
-                            "type": "subscribed",
-                            "data": {"symbols": symbols, "total": len(subscribed_symbols)},
-                        }
-                    )
-
-                elif action == "unsubscribe":
-                    # 取消订阅
-                    for symbol in symbols:
-                        subscribed_symbols.discard(symbol)
-
-                    await websocket.send_json(
-                        {
-                            "type": "unsubscribed",
-                            "data": {"symbols": symbols, "total": len(subscribed_symbols)},
-                        }
-                    )
-
-                elif action == "ping":
-                    # 心跳
-                    await websocket.send_json(
-                        {"type": "pong", "timestamp": asyncio.get_event_loop().time()}
-                    )
-
-            except WebSocketDisconnect:
-                break
-            except json.JSONDecodeError:
-                await websocket.send_json({"type": "error", "message": "Invalid JSON"})
+                await push_task
+            except asyncio.CancelledError:
+                pass
             except Exception as e:
-                logger.error(f"处理WebSocket消息失败: {e}")
-                break
+                logger.warning(f"推送任务取消时发生异常: {e}")
 
     except Exception as e:
         logger.error(f"WebSocket错误: {e}")
     finally:
-        # 取消推送任务
-        if "push_task" in locals():
-            push_task.cancel()
-
         logger.info(f"WebSocket客户端断开: {client_id}")
 
 
@@ -735,3 +741,512 @@ async def get_statistics():
             "receiver": gateway.receiver.get_stats() if gateway.receiver else None,
         },
     }
+
+
+# ================== MiniQMT 板块数据 API ==================
+
+
+async def _get_miniqmt_provider():
+    """获取MiniQMT provider实例"""
+    from apps.api.api.providers import DataProviderFactory, DataSourceType
+
+    try:
+        provider = await DataProviderFactory.get_provider_async(DataSourceType.MINIQMT)
+        if provider is None:
+            return None
+        return provider
+    except Exception as e:
+        logger.error(f"获取MiniQMT provider失败: {e}")
+        return None
+
+
+@router.get("/calendar", summary="获取交易日历")
+async def get_trading_calendar(
+    market: str = Query("SH", description="市场类型，SH/SZ"),
+    start_date: str = Query(..., description="开始日期，格式YYYYMMDD"),
+    end_date: str = Query(..., description="结束日期，格式YYYYMMDD"),
+):
+    """
+    获取交易日历
+
+    通过 xtquant SDK 获取指定市场的交易日历
+
+    Args:
+        market: 市场类型，SH或SZ
+        start_date: 开始日期
+        end_date: 结束日期
+
+    Returns:
+        交易日期列表
+    """
+    provider = await _get_miniqmt_provider()
+
+    if not provider:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "MiniQMT provider 不可用"},
+        )
+
+    try:
+        result = await provider.get_calendar(market, start_date, end_date)
+        return {
+            "status": "success",
+            "market": market,
+            "start_date": start_date,
+            "end_date": end_date,
+            "count": len(result),
+            "data": result,
+        }
+    except Exception as e:
+        logger.error(f"获取交易日历失败: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)},
+        )
+
+
+@router.get("/sectors", summary="获取所有板块列表")
+async def get_sector_list():
+    """
+    获取所有板块列表
+
+    通过 xtquant SDK 获取所有板块名称列表
+
+    Returns:
+        板块名称列表
+    """
+    provider = await _get_miniqmt_provider()
+
+    if not provider:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "MiniQMT provider 不可用"},
+        )
+
+    try:
+        result = await provider.get_sector_list()
+        return {
+            "status": "success",
+            "count": len(result),
+            "data": result,
+        }
+    except Exception as e:
+        logger.error(f"获取板块列表失败: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)},
+        )
+
+
+@router.get("/sectors/{sector}/stocks", summary="获取板块成分股")
+async def get_sector_stocks(sector: str):
+    """
+    获取板块成分股
+
+    通过 xtquant SDK 获取指定板块的成分股列表
+
+    Args:
+        sector: 板块名称，如 "沪深300"、"上证50" 等
+
+    Returns:
+        成分股代码列表
+    """
+    provider = await _get_miniqmt_provider()
+
+    if not provider:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "MiniQMT provider 不可用"},
+        )
+
+    try:
+        result = await provider.get_stock_list(sector)
+        return {
+            "status": "success",
+            "sector": sector,
+            "count": len(result),
+            "data": result,
+        }
+    except Exception as e:
+        logger.error(f"获取板块成分股失败: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)},
+        )
+
+
+@router.get("/instrument/{symbol}", summary="获取合约详情")
+async def get_instrument_detail(symbol: str):
+    """
+    获取股票/合约详细信息
+
+    通过 xtquant SDK 获取指定股票或合约的详细信息
+
+    Args:
+        symbol: 股票/合约代码，如 "000001.SZ"、"600000.SH"
+
+    Returns:
+        合约详情信息，包括:
+        - InstrumentID: 合约代码
+        - InstrumentName: 合约名称
+        - ExchangeID: 交易所代码
+        - ProductID: 品种代码
+        - VolumeMultiple: 合约乘数
+        - PriceTick: 最小变动价位
+        - ExpireDate: 到期日（如适用）
+        - 其他相关字段
+    """
+    provider = await _get_miniqmt_provider()
+
+    if not provider:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "MiniQMT provider 不可用"},
+        )
+
+    try:
+        # 添加交易所后缀
+        formatted_symbol = add_exchange_suffix(symbol)
+        result = await provider.get_stock_info(formatted_symbol)
+        return {
+            "status": "success",
+            "symbol": formatted_symbol,
+            "data": result,
+        }
+    except Exception as e:
+        logger.error(f"获取合约详情失败: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)},
+        )
+
+
+@router.get("/index/{index_code}/weight", summary="获取指数成分股权重")
+async def get_index_weight(index_code: str):
+    """
+    获取指数成分股权重
+
+    通过 xtquant SDK 获取指定指数的成分股权重
+
+    Args:
+        index_code: 指数代码，如 "000300.SH"（沪深300）、"000016.SH"（上证50）
+
+    Returns:
+        成分股权重字典，格式: {成分股代码: 权重(%)}
+
+    示例:
+        - 沪深300: 000300.SH
+        - 上证50: 000016.SH
+        - 中证500: 000905.SH
+    """
+    provider = await _get_miniqmt_provider()
+
+    if not provider:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "MiniQMT provider 不可用"},
+        )
+
+    try:
+        result = await provider.get_index_weight(index_code)
+        return {
+            "status": "success",
+            "index_code": index_code,
+            "constituent_count": len(result),
+            "data": result,
+        }
+    except Exception as e:
+        logger.error(f"获取指数权重失败: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)},
+        )
+
+
+@router.get("/kline", summary="获取K线数据")
+async def get_kline(
+    symbols: str = Query(..., description="股票代码列表，逗号分隔，如 '000001.SZ,600000.SH'"),
+    period: str = Query("1d", description="周期: 1m/5m/15m/30m/60m/1d/1w/1M"),
+    start_date: Optional[str] = Query(None, description="开始日期 YYYYMMDD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYYMMDD"),
+    adjust: str = Query("none", description="复权类型: none/qfq/hfq"),
+):
+    """
+    获取K线数据
+
+    通过 xtquant SDK 获取指定股票的K线数据
+
+    Args:
+        symbols: 股票代码列表，逗号分隔
+        period: 周期 (1m/5m/15m/30m/60m/1d/1w/1M)
+        start_date: 开始日期 YYYYMMDD
+        end_date: 结束日期 YYYYMMDD
+        adjust: 复权类型 (none/qfq/hfq)
+
+    Returns:
+        K线数据字典，格式: {代码: [K线记录列表]}
+    """
+    provider = await _get_miniqmt_provider()
+
+    if not provider:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "MiniQMT provider 不可用"},
+        )
+
+    try:
+        # 解析股票代码列表
+        symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+        # 添加交易所后缀
+        formatted_symbols = [add_exchange_suffix(s) for s in symbol_list]
+
+        result = await provider.get_kline(
+            symbols=formatted_symbols,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+            adjust=adjust,
+        )
+
+        # 统计返回的数据
+        total_records = sum(len(records) for records in result.values())
+
+        return {
+            "status": "success",
+            "symbols": formatted_symbols,
+            "period": period,
+            "adjust": adjust,
+            "symbol_count": len(result),
+            "total_records": total_records,
+            "data": result,
+        }
+    except Exception as e:
+        logger.error(f"获取K线数据失败: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)},
+        )
+
+
+@router.get("/realtime", summary="获取实时行情")
+async def get_realtime_quote(
+    symbols: str = Query(..., description="股票代码列表，逗号分隔，如 '000001.SZ,600000.SH'"),
+):
+    """
+    获取实时行情数据
+
+    通过 xtquant SDK 获取指定股票的实时行情
+
+    Args:
+        symbols: 股票代码列表，逗号分隔
+
+    Returns:
+        实时行情数据字典，格式: {代码: 行情数据}
+    """
+    provider = await _get_miniqmt_provider()
+
+    if not provider:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "MiniQMT provider 不可用"},
+        )
+
+    try:
+        # 解析股票代码列表
+        symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+        # 添加交易所后缀
+        formatted_symbols = [add_exchange_suffix(s) for s in symbol_list]
+
+        result = await provider.get_realtime_quote(formatted_symbols)
+
+        return {
+            "status": "success",
+            "symbols": formatted_symbols,
+            "quote_count": len(result),
+            "data": result,
+        }
+    except Exception as e:
+        logger.error(f"获取实时行情失败: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)},
+        )
+
+
+# ==================== VIP 功能端点 ====================
+
+
+@router.get("/north-flow", summary="获取北向资金流向")
+async def get_north_flow(
+    symbols: Optional[str] = Query(None, description="股票代码列表，逗号分隔（可选）"),
+    start_date: Optional[str] = Query(None, description="开始日期 YYYYMMDD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYYMMDD"),
+    period: str = Query("1d", description="周期: 1m(分钟级), 1d(日级)"),
+):
+    """
+    获取北向资金流向数据（沪港通/深港通）
+
+    通过 xtquant SDK 获取北向资金数据
+
+    注意: 此功能需要 MiniQMT 投研版 VIP 权限
+
+    Args:
+        symbols: 股票代码列表，逗号分隔（可选，为空获取市场整体数据）
+        start_date: 开始日期 YYYYMMDD
+        end_date: 结束日期 YYYYMMDD
+        period: 周期类型 (1m=分钟级, 1d=日级)
+
+    Returns:
+        北向资金数据列表
+    """
+    provider = await _get_miniqmt_provider()
+
+    if not provider:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "MiniQMT provider 不可用"},
+        )
+
+    try:
+        # 解析股票代码列表
+        symbol_list = None
+        if symbols:
+            symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+            symbol_list = [add_exchange_suffix(s) for s in symbol_list]
+
+        result = await provider.get_north_flow(
+            symbols=symbol_list,
+            start_date=start_date,
+            end_date=end_date,
+            period=period,
+        )
+
+        return {
+            "status": "success",
+            "period": period,
+            "record_count": len(result) if result else 0,
+            "data": result or [],
+            "note": "此功能需要 MiniQMT 投研版 VIP 权限",
+        }
+    except Exception as e:
+        logger.error(f"获取北向资金失败: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)},
+        )
+
+
+@router.get("/dragon-tiger", summary="获取龙虎榜数据")
+async def get_dragon_tiger(
+    date: Optional[str] = Query(None, description="日期 YYYYMMDD，默认最新"),
+    symbols: Optional[str] = Query(None, description="股票代码列表，逗号分隔（用于过滤）"),
+):
+    """
+    获取龙虎榜数据
+
+    注意: 由于 xtquant SDK 不支持龙虎榜，数据来源于 AkShare
+
+    Args:
+        date: 查询日期 YYYYMMDD，为空获取最新数据
+        symbols: 股票代码列表，逗号分隔（可选，用于过滤结果）
+
+    Returns:
+        龙虎榜数据列表
+    """
+    provider = await _get_miniqmt_provider()
+
+    if not provider:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "MiniQMT provider 不可用"},
+        )
+
+    try:
+        # 解析股票代码列表
+        symbol_list = None
+        if symbols:
+            symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+
+        result = await provider.get_dragon_tiger(
+            date=date,
+            symbols=symbol_list,
+        )
+
+        return {
+            "status": "success",
+            "date": date or "latest",
+            "record_count": len(result) if result else 0,
+            "data": result or [],
+            "source": "akshare",
+            "note": "数据来源于 AkShare，非 xtquant SDK 原生数据",
+        }
+    except Exception as e:
+        logger.error(f"获取龙虎榜失败: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)},
+        )
+
+
+@router.get("/limit-performance", summary="获取涨跌表现数据")
+async def get_limit_up_performance(
+    symbols: str = Query(..., description="股票代码列表，逗号分隔"),
+    start_date: Optional[str] = Query(None, description="开始日期 YYYYMMDD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYYMMDD"),
+):
+    """
+    获取涨跌表现数据（连板、封板等）
+
+    通过 xtquant SDK 获取涨跌表现数据
+
+    返回字段说明:
+    - openVol: 开盘集合竞价成交量
+    - closeVol: 收盘集合竞价成交量
+    - startUp/endUp: 涨停开始/结束时间
+    - breakUp: 炸板次数
+    - upAmount: 涨停金额
+    - direct: 涨跌方向 (0-无, 1-涨停, 2-跌停)
+    - sealCount: 连板数
+
+    注意: 此功能需要 MiniQMT 投研版 VIP 权限
+
+    Args:
+        symbols: 股票代码列表，逗号分隔
+        start_date: 开始日期 YYYYMMDD
+        end_date: 结束日期 YYYYMMDD
+
+    Returns:
+        涨跌表现数据列表
+    """
+    provider = await _get_miniqmt_provider()
+
+    if not provider:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "MiniQMT provider 不可用"},
+        )
+
+    try:
+        # 解析股票代码列表
+        symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+        formatted_symbols = [add_exchange_suffix(s) for s in symbol_list]
+
+        result = await provider.get_limit_up_performance(
+            symbols=formatted_symbols,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        return {
+            "status": "success",
+            "symbols": formatted_symbols,
+            "record_count": len(result) if result else 0,
+            "data": result or [],
+            "note": "此功能需要 MiniQMT 投研版 VIP 权限",
+        }
+    except Exception as e:
+        logger.error(f"获取涨跌表现失败: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)},
+        )

@@ -1118,9 +1118,9 @@ async def update_data_source_config(request: Request, source: str, payload: Conf
         persist_payload["config"] = copy.deepcopy(config.config)
 
     if isinstance(config.config, dict):
-        config.config["implementation_mode"] = "process"
+        config.config.setdefault("implementation_mode", "optimized")
         if isinstance(persist_payload, dict) and isinstance(persist_payload.get("config"), dict):
-            persist_payload["config"]["implementation_mode"] = "process"
+            persist_payload["config"].setdefault("implementation_mode", "optimized")
 
     persisted_has_saved: Optional[bool] = None
     try:

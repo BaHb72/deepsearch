@@ -97,3 +97,15 @@ def check_connection():
     except Exception as e:
         logger.error(f"数据库连接失败: {e}")
         return False
+
+
+def dispose_engine():
+    """释放数据库引擎和连接池
+
+    应在应用关闭时调用此函数以正确释放所有数据库连接。
+    """
+    try:
+        engine.dispose()
+        logger.info("同步数据库引擎已释放")
+    except Exception as e:
+        logger.error(f"释放数据库引擎失败: {e}")

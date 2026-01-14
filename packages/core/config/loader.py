@@ -14,6 +14,49 @@ import yaml
 from core.config.migrations import migrate_data_source_config
 from core.constants import YAML_ENCODING
 
+# 配置文件目录（packages/core/config）
+CONFIG_DIR = Path(__file__).parent
+
+
+def get_config_dir() -> Path:
+    """获取配置文件目录路径。
+
+    返回：
+        配置目录的绝对路径 (packages/core/config)
+    """
+    return CONFIG_DIR
+
+
+def _detect_default_env() -> str:
+    """智能检测默认环境
+
+    优先级：
+    1. APP__ENV 环境变量（明确指定） → 使用指定值
+    2. Docker 容器环境 (/.dockerenv 文件存在) → prod
+    3. DEPLOY_ENV=production 环境变量 → prod
+    4. 默认 → dev（开发友好）
+
+    Returns:
+        环境名称 ("dev", "prod", "test" 等)
+    """
+    import os
+    from pathlib import Path
+
+    # 1. 明确指定 - 最高优先级
+    if "APP__ENV" in os.environ:
+        return os.environ["APP__ENV"]
+
+    # 2. Docker 环境检测
+    if Path("/.dockerenv").exists():
+        return "prod"
+
+    # 3. 部署环境标记
+    if os.getenv("DEPLOY_ENV") == "production":
+        return "prod"
+
+    # 4. 默认开发环境（开发友好）
+    return "dev"
+
 
 def ensure_env_config_file(env: str, config_dir: Optional[Path] = None) -> Path:
     """确保指定环境的配置文件存在。
@@ -51,10 +94,10 @@ def load_yaml_config() -> Dict[str, Any]:
     异常：
         SystemExit: 如果配置文件缺失或无效
     """
-    # 从环境变量获取环境设置，默认使用生产环境
+    # 智能检测环境（支持明确指定、Docker 检测、默认开发环境）
     import os
 
-    env = os.getenv("APP__ENV", "prod")
+    env = _detect_default_env()
 
     # 构建特定环境的配置文件路径
     config_dir = Path(__file__).parent
@@ -96,6 +139,20 @@ def load_yaml_config() -> Dict[str, Any]:
             _write_migrated_config(env_config_path, config)
 
         print(f"[INFO] Loaded environment config: {env_config_path.name} (env: {env})")
+
+        # 显示环境检测方式
+        detection_method = "explicit" if "APP__ENV" in os.environ else "auto-detected"
+        if detection_method == "auto-detected":
+            if Path("/.dockerenv").exists():
+                reason = "Docker container detected"
+            elif os.getenv("DEPLOY_ENV") == "production":
+                reason = "DEPLOY_ENV=production"
+            else:
+                reason = "default for development"
+            print(f"[INFO] Environment: {env} (auto-detected: {reason})")
+        else:
+            print(f"[INFO] Environment: {env} (explicitly set via APP__ENV)")
+
         return config
     except Exception as exc:
         print(f"[ERROR] Failed to parse config file {env_config_path}: {exc}", file=sys.stderr)

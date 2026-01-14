@@ -51,6 +51,13 @@ services:
     ports:
       - "8786:8786" # Scheduler
       - "8787:8787" # Dashboard
+    environment:
+      # 配置 Dask 允许从主机连接
+      - DASK_DISTRIBUTED__COMM__TIMEOUTS__CONNECT=60s
+      - DASK_DISTRIBUTED__WORKER__DAEMON=false
+    extra_hosts:
+      # 确保容器可以解析 host.docker.internal (Linux 容器需要)
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
   # =============================================================================

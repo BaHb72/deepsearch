@@ -32,15 +32,22 @@ class PostgreSQLUnitOfWork:
 
     async def __aenter__(self):
         """Begin transaction."""
-        self._connection = await self._pool.acquire()
-        self._transaction = self._connection.transaction()
-        await self._transaction.start()
+        try:
+            self._connection = await self._pool.acquire()
+            self._transaction = self._connection.transaction()
+            await self._transaction.start()
 
-        # Initialize repositories with the transaction connection
-        self._stock_repository = PostgreSQLStockRepository(self._connection)
+            # Initialize repositories with the transaction connection
+            self._stock_repository = PostgreSQLStockRepository(self._connection)
 
-        logger.debug("Transaction started")
-        return self
+            logger.debug("Transaction started")
+            return self
+        except Exception:
+            # 如果事务启动失败，释放连接
+            if self._connection:
+                await self._pool.release(self._connection)
+                self._connection = None
+            raise
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """End transaction (commit or rollback)."""

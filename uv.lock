@@ -1,6 +1,24 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = "==3.13.*"
+
+[[package]]
+name = "aiobreaker"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7f/eb/749ef48d3227fd62d500ff01fcd451f10111e00d822c200eb51782ba076a/aiobreaker-1.2.0.tar.gz", hash = "sha256:217a9cfa12e520bb2dd1934bace281d1d7deb8d7630dd183a6295fd22e323ce7", size = 15947, upload-time = "2021-05-17T11:58:05.278Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ff/c8/4cd4b2834012ffc71ae3fd69187f08a17f01f3937527b6b5e077f4f5d0db/aiobreaker-1.2.0-py3-none-any.whl", hash = "sha256:f275decad78bdd161715afeee67e5dde7967de54c836648b44f4eea1b5e41d60", size = 20700, upload-time = "2021-05-17T11:58:04.192Z" },
+]
+
+[[package]]
+name = "aiocache"
+version = "0.12.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/64/b945b8025a9d1e6e2138845f4022165d3b337f55f50984fbc6a4c0a1e355/aiocache-0.12.3.tar.gz", hash = "sha256:f528b27bf4d436b497a1d0d1a8f59a542c153ab1e37c3621713cb376d44c4713", size = 132196, upload-time = "2024-09-25T13:20:23.823Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/37/d7/15d67e05b235d1ed8c3ce61688fe4d84130e72af1657acadfaac3479f4cf/aiocache-0.12.3-py2.py3-none-any.whl", hash = "sha256:889086fc24710f431937b87ad3720a289f7fc31c4fd8b68e9f918b9bacd8270d", size = 28199, upload-time = "2024-09-25T13:20:22.688Z" },
+]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -122,6 +140,15 @@ version = "1.0.23"
 source = { path = "packages/AmazingData-1.0.23-cp313-none-any.whl" }
 wheels = [
     { filename = "amazingdata-1.0.23-cp313-none-any.whl", hash = "sha256:5afa141b1a57e8f121a887c106da533c177dccdc44b3780c9a3043efea9f7d3b" },
+]
+
+[[package]]
+name = "annotated-doc"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/57/ba/046ceea27344560984e26a590f90bc7f4a75b06701f653222458922b558c/annotated_doc-0.0.4.tar.gz", hash = "sha256:fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4", size = 7288, upload-time = "2025-11-10T22:07:42.062Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/d3/26bf1008eb3d2daa8ef4cacc7f3bfdc11818d111f7e2d0201bc6e3b49d45/annotated_doc-0.0.4-py3-none-any.whl", hash = "sha256:571ac1dc6991c450b25a9c2d84a3705e2ae7a53467b5d111c24fa8baabbed320", size = 5303, upload-time = "2025-11-10T22:07:40.673Z" },
 ]
 
 [[package]]
@@ -563,6 +590,8 @@ name = "core"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiobreaker" },
+    { name = "aiocache" },
     { name = "aiohttp" },
     { name = "aioredis" },
     { name = "aiosqlite" },
@@ -652,6 +681,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiobreaker", specifier = ">=1.2.0" },
+    { name = "aiocache", specifier = ">=0.12.3" },
     { name = "aiohttp", specifier = ">=3.13.0" },
     { name = "aioredis", specifier = ">=2.0.1" },
     { name = "aiosqlite", specifier = ">=0.20.0" },
@@ -667,7 +698,7 @@ requires-dist = [
     { name = "dependency-injector", specifier = ">=4.48.3" },
     { name = "distributed", specifier = ">=2024.1.0" },
     { name = "duckdb", specifier = ">=1.4.1" },
-    { name = "fastapi", specifier = "==0.119.0" },
+    { name = "fastapi", specifier = ">=0.128.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "ipython", marker = "extra == 'dev'", specifier = ">=9.6.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12" },
@@ -995,16 +1026,17 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.119.0"
+version = "0.128.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "annotated-doc" },
     { name = "pydantic" },
     { name = "starlette" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0a/f9/5c5bcce82a7997cc0eb8c47b7800f862f6b56adc40486ed246e5010d443b/fastapi-0.119.0.tar.gz", hash = "sha256:451082403a2c1f0b99c6bd57c09110ed5463856804c8078d38e5a1f1035dbbb7", size = 336756, upload-time = "2025-10-11T17:13:40.53Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/08/8c8508db6c7b9aae8f7175046af41baad690771c9bcde676419965e338c7/fastapi-0.128.0.tar.gz", hash = "sha256:1cc179e1cef10a6be60ffe429f79b829dce99d8de32d7acb7e6c8dfdf7f2645a", size = 365682, upload-time = "2025-12-27T15:21:13.714Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ce/70/584c4d7cad80f5e833715c0a29962d7c93b4d18eed522a02981a6d1b6ee5/fastapi-0.119.0-py3-none-any.whl", hash = "sha256:90a2e49ed19515320abb864df570dd766be0662c5d577688f1600170f7f73cf2", size = 107095, upload-time = "2025-10-11T17:13:39.048Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/05/5cbb59154b093548acd0f4c7c474a118eda06da25aa75c616b72d8fcd92a/fastapi-0.128.0-py3-none-any.whl", hash = "sha256:aebd93f9716ee3b4f4fcfe13ffb7cf308d99c9f3ab5622d8877441072561582d", size = 103094, upload-time = "2025-12-27T15:21:12.154Z" },
 ]
 
 [[package]]

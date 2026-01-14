@@ -83,11 +83,11 @@ database:
 
 # 数据源统一配置
 data_sources:
-  default: amazingdata
+  default: miniqmt
   fallback_order:
-    - amazingdata
-    - cloudflare
-    - akshare
+    - miniqmt      # 优先使用 MiniQMT (快速、稳定、本地 SDK)
+    - amazingdata  # 次选 AmazingData (功能全面、专业服务)
+    - akshare      # 最后备选 AkShare (速度慢、易被封，仅用于少量关键数据)
   circuit_breaker:
     enabled: true
     failure_threshold: 5
@@ -121,15 +121,27 @@ data_sources:
   #   fallback: [amazingdata]
 
   providers:
+    miniqmt:
+      enabled: true
+      priority: 1  # 最高优先级
+      config:
+        cache:
+          enabled: true
+          ttl: 300  # 5分钟缓存
+        redis_url: redis://localhost:6379
+        failure_threshold: 5
+        recovery_timeout: 60
+      timeout: 10.0
+      retry_count: 3
     amazingdata:
       enabled: true
-      priority: 1
+      priority: 2  # 次于 MiniQMT
       fallback_sources:
-        - cloudflare
+        - miniqmt
         - akshare
       has_saved_credential: false
       config:
-        implementation_mode: process
+        implementation_mode: optimized  # process 模式已废弃
         connection:
           username: your_amazingdata_username
           password: your_amazingdata_password

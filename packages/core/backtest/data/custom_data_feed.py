@@ -8,11 +8,12 @@ Version: 1.0.0
 
 import asyncio
 import os
-import threading
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from loguru import logger
+
+from .realtime_stream import RealtimeDataStream
 
 bt: Any
 
@@ -58,12 +59,14 @@ class DeepSearchLiveData(bt.DataBase):
         super().__init__()
 
         self.adapter = None
-        self.live_data_queue = []
+        self.live_data_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue(maxsize=1000)
         self.current_index = 0
         self.historical_data = None
         self.is_live = False
-        self._stop_event = threading.Event()
-        self._data_thread = None
+        self._stop_event = asyncio.Event()
+        self._stream: Optional[RealtimeDataStream] = None
+        self._stream_task: Optional[asyncio.Task[None]] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     def start(self):
         """启动数据源"""
@@ -108,39 +111,61 @@ class DeepSearchLiveData(bt.DataBase):
             logger.warning("⚠️ 未获取到历史数据")
 
     def _start_live_feed(self):
-        """启动实时数据推送"""
+        """启动实时数据推送（基于 AsyncIO）"""
         logger.info(f"启动实时数据推送: {self.p.symbol}")
 
-        self._stop_event.clear()
-        self._data_thread = threading.Thread(target=self._live_data_worker)
-        self._data_thread.daemon = True
-        self._data_thread.start()
+        # 获取或创建 event loop
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # 没有运行中的 loop，创建新的
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
+
+        # 创建 RealtimeDataStream
+        self._stream = RealtimeDataStream(provider=None, queue_size=1000)
+
+        # 订阅回调：将数据推送到队列
+        async def on_tick(tick: Dict[str, Any]) -> None:
+            """实时数据回调"""
+            try:
+                await self.live_data_queue.put(tick)
+            except asyncio.QueueFull:
+                logger.warning("数据队列已满，丢弃数据")
+
+        # 订阅股票
+        self._loop.run_until_complete(self._stream.subscribe([self.p.symbol], on_tick))
+
+        # 启动数据流
+        self._loop.run_until_complete(self._stream.start())
+
+        # 启动后台数据生成任务（仅测试环境）
+        self._stream_task = self._loop.create_task(self._live_data_worker())
 
         self.is_live = True
 
-    def _live_data_worker(self):
-        """实时数据工作线程"""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    async def _live_data_worker(self):
+        """实时数据工作协程（基于 AsyncIO）"""
+        if not _allow_mock_data():
+            logger.warning("mock live data generation is disabled outside tests")
+            return
 
-        async def subscribe_data():
-            """Subscribe real-time data stream."""
-            if not _allow_mock_data():
-                logger.warning("mock live data generation is disabled outside tests")
-                return
-            # TODO: connect to actual live data source
-            while not self._stop_event.is_set():
-                await asyncio.sleep(60)  # refresh every minute
-                new_data = self._generate_mock_tick()
-                if new_data:
-                    self.live_data_queue.append(new_data)
+        logger.info(f"启动模拟数据生成: {self.p.symbol}")
 
         try:
-            loop.run_until_complete(subscribe_data())
+            while not self._stop_event.is_set():
+                await asyncio.sleep(60)  # 每分钟生成一次
+                new_data = self._generate_mock_tick()
+                if new_data:
+                    # 添加 symbol 字段
+                    new_data["symbol"] = self.p.symbol
+                    # 推送到 stream
+                    if self._stream:
+                        await self._stream.push(new_data)
+        except asyncio.CancelledError:
+            logger.info("数据生成任务被取消")
         except Exception as e:
-            logger.error(f"实时数据线程错误: {e}")
-        finally:
-            loop.close()
+            logger.error(f"实时数据工作协程错误: {e}")
 
     def _generate_mock_tick(self) -> Optional[Dict]:
         """Generate mock tick data for tests only."""
@@ -184,31 +209,51 @@ class DeepSearchLiveData(bt.DataBase):
             self.current_index += 1
             return False  # 还有数据
 
-        elif self.is_live and self.live_data_queue:
-            # 加载实时数据
-            tick = self.live_data_queue.pop(0)
+        elif self.is_live:
+            # 加载实时数据（非阻塞）
+            try:
+                tick = self.live_data_queue.get_nowait()
 
-            self.lines.datetime[0] = bt.date2num(tick["datetime"])
-            self.lines.open[0] = tick["open"]
-            self.lines.high[0] = tick["high"]
-            self.lines.low[0] = tick["low"]
-            self.lines.close[0] = tick["close"]
-            self.lines.volume[0] = tick["volume"]
+                self.lines.datetime[0] = bt.date2num(tick["datetime"])
+                self.lines.open[0] = tick["open"]
+                self.lines.high[0] = tick["high"]
+                self.lines.low[0] = tick["low"]
+                self.lines.close[0] = tick["close"]
+                self.lines.volume[0] = tick["volume"]
 
-            return False  # 还有数据
+                return False  # 还有数据
+            except asyncio.QueueEmpty:
+                # 队列为空，继续等待
+                return False
 
         return True  # 没有更多数据
 
     def stop(self):
-        """停止数据源"""
+        """停止数据源（优雅关闭）"""
         logger.info("停止数据源")
 
-        self._stop_event.set()
+        # 设置停止信号
+        if self._loop:
+            self._loop.call_soon_threadsafe(self._stop_event.set)
 
-        if self._data_thread:
-            self._data_thread.join(timeout=5)
+        # 停止数据流
+        if self._stream and self._loop:
+            try:
+                self._loop.run_until_complete(self._stream.stop())
+            except Exception as e:
+                logger.error(f"停止数据流失败: {e}")
+
+        # 取消后台任务
+        if self._stream_task and not self._stream_task.done():
+            self._stream_task.cancel()
+            if self._loop:
+                try:
+                    self._loop.run_until_complete(asyncio.wait_for(self._stream_task, timeout=5))
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
 
         self.is_live = False
+        logger.info("数据源已停止")
 
 
 class DeepSearchCSVData(bt.feeds.GenericCSVData):

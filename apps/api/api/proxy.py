@@ -3,12 +3,11 @@
 直接从配置文件读取和保存配置
 """
 
-import os
 from datetime import datetime
 from typing import Any, NotRequired, TypedDict, cast
 
 import yaml
-from core.config import get_config
+from core.config import get_config, get_config_dir
 from fastapi import APIRouter, HTTPException, status
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -204,8 +203,9 @@ async def get_status() -> WorkersStatusResponse:
 async def update_config(request: WorkersConfigRequest) -> MessageResponse:
     """更新代理配置"""
     try:
-        # 读取当前配置文件
-        config_path = os.path.join(os.path.dirname(__file__), "../../config/settings.prod.yaml")
+        # 读取当前配置文件（使用统一的配置目录）
+        config_dir = get_config_dir()
+        config_path = config_dir / "settings.prod.yaml"
 
         with open(config_path, "r", encoding="utf-8") as f:
             config_data = yaml.safe_load(f)

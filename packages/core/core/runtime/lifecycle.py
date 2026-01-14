@@ -90,12 +90,19 @@ class LifecycleCoordinator:
                 if config and config.app.env == "dev":
                     self._initialize_debug_modules(components)
 
-                # 使用容器的异步初始化功能
-                await container.initialize_async_services(provider)
-
-                # 记录初始化成功的组件
+                # 直接初始化基础设施组件（支持 DI 容器模式）
+                # 业务组件由 start_business_components_async() 负责初始化和启动
+                infrastructure_components = [
+                    "event_engine",
+                    "message_bus",
+                    "database",
+                    "cache",
+                    "analytics",
+                ]
                 for name, component in components.items():
-                    if component.status == ComponentStatus.INITIALIZED:
+                    if name in infrastructure_components and hasattr(component, "initialize_async"):
+                        self._logger.info(f"Initializing component: {name}")
+                        await component.initialize_async()
                         initialized_components.append(name)
 
                 # 初始化 IPC 服务器
@@ -120,12 +127,13 @@ class LifecycleCoordinator:
             self._logger.debug("Initializing debug modules for development mode...")
 
             from core.debug.performance_profiler import profiler
+            from core.infrastructure.memory import get_memory_manager
             from core.infrastructure.persistence.query_optimizer import (
                 query_optimizer,
                 setup_query_monitoring,
             )
-            from core.memory.smart_memory import memory_manager
 
+            memory_manager = get_memory_manager()
             profiler.enable()
             profiler.set_threshold(100)
             memory_manager.auto_cleanup = True
@@ -209,13 +217,38 @@ class LifecycleCoordinator:
             started_components: List[str] = []
 
             try:
-                # 启动所有组件
-                await container.start_async_services(provider)
+                # 定义启动优先级
+                infrastructure_order = {
+                    "event_engine": 0,
+                    "message_bus": 1,
+                    "database": 2,
+                    "cache": 3,
+                }
 
-                # 记录启动成功的组件
+                # 分离基础设施和业务组件
+                infrastructure_components = []
+                business_components = []
+
                 for name, component in components.items():
-                    if component.status == ComponentStatus.RUNNING:
+                    if name in infrastructure_order:
+                        infrastructure_components.append(
+                            (infrastructure_order[name], name, component)
+                        )
+                    elif hasattr(component, "component_type"):
+                        from ..interfaces import ComponentType
+
+                        if component.component_type == ComponentType.BUSINESS:
+                            business_components.append((name, component))
+
+                # 按优先级顺序启动基础设施组件
+                for _, name, component in sorted(infrastructure_components, key=lambda x: x[0]):
+                    if hasattr(component, "start_async"):
+                        self._logger.info(f"Starting infrastructure component: {name}")
+                        await component.start_async()
                         started_components.append(name)
+
+                # 业务组件的启动由 _start_phased_async 中的 start_business_components_async() 处理
+                # 这里不启动业务组件，保持分阶段启动的灵活性
 
                 # 启动健康检查
                 if self._health_check_manager:

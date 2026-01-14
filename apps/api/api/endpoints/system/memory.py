@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 # 从 infrastructure 层导入核心类
+from core.config import get_config_dir
 from core.infrastructure.memory import MemoryConfig, get_memory_manager, get_memory_tracer
 from fastapi import APIRouter, HTTPException
 from loguru import logger
@@ -585,15 +586,15 @@ async def update_cache_config(update: CacheConfigUpdate) -> Dict[str, Any]:
 
     修改 settings.yaml 并触发热重载
     """
-    from pathlib import Path
+    import os
 
     import yaml
 
     try:
-        # 读取当前配置文件
-        config_path = Path("deepsearch/config/settings.dev.yaml")
-        if not config_path.exists():
-            config_path = Path("deepsearch/config/settings.yaml")
+        # 读取当前配置文件（使用统一的配置目录）
+        config_dir = get_config_dir()
+        env = os.getenv("APP__ENV", "dev")
+        config_path = config_dir / f"settings.{env}.yaml"
 
         with open(config_path, "r", encoding="utf-8") as f:
             settings = yaml.safe_load(f) or {}

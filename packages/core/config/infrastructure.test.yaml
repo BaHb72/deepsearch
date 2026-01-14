@@ -52,9 +52,12 @@ cache:
 
 message_bus:
   buses:
+    inmem:
+      type: inmem
+      enabled: true
     zmq:
       type: zmq
-      enabled: true
+      enabled: false  # ZMQ 已废弃
       config:
         host: localhost
         pub_port: 5556
@@ -62,7 +65,7 @@ message_bus:
   routes:
     - match: '*'
       buses:
-      - zmq
+        - inmem  # 测试环境使用 inmem
 
 # =============================================================================
 # Dask 分布式计算配置 - 测试环境
@@ -77,7 +80,7 @@ dask:
     memory_limit: "2GB"
     name_prefix: "test-worker"
     resources:
-      WIN: 1
+      WIN: 1.0  # Windows 资源标签（必须为浮点数，符合 Dask 要求）
 
   task_routing:
     windows_tasks:

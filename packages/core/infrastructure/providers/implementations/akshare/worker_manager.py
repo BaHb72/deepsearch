@@ -310,6 +310,41 @@ class WorkerManager:
     async def check_worker_health(self, url: str) -> bool:
         return await self._check_worker_health(url)
 
+    async def monitor_health(self, interval: int = 60) -> None:
+        """
+        持续监控所有 Worker 节点的健康状态
+
+        Args:
+            interval: 检查间隔（秒）
+        """
+        logger.info(f"启动健康监控任务，间隔: {interval}秒")
+
+        while True:
+            try:
+                # 并发检查所有 Worker 健康状态
+                check_tasks = []
+                for url in self.worker_urls:
+                    check_tasks.append(self._check_worker_health(url))
+
+                results = await asyncio.gather(*check_tasks, return_exceptions=True)
+
+                healthy_count = sum(1 for r in results if r is True)
+                logger.debug(f"健康检查完成: {healthy_count}/{len(self.worker_urls)} 节点健康")
+
+                # 如果所有节点都不健康，记录警告
+                if healthy_count == 0:
+                    logger.warning("所有 Worker 节点不健康")
+
+                # 等待下次检查
+                await asyncio.sleep(interval)
+
+            except asyncio.CancelledError:
+                logger.info("健康监控任务被取消")
+                raise
+            except Exception as e:
+                logger.error(f"健康监控任务异常: {e}")
+                await asyncio.sleep(interval)
+
     def reset_worker(self, url: str) -> None:
         if url not in self.workers:
             return

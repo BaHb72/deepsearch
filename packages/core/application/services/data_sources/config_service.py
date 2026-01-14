@@ -296,7 +296,7 @@ class DataSourceConfigService:
         )
         merged_config = deep_merge_dict(existing_config_section, new_config_section)
         merged_config = prune_empty(merged_config)
-        merged_config["implementation_mode"] = "process"
+        merged_config.setdefault("implementation_mode", "optimized")
 
         if remember_flag is False:
             persisted_config = sanitize_config_snapshot(merged_config)

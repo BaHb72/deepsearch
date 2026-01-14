@@ -11,7 +11,7 @@ MiniQMT API 端点测试套件
 使用 FastAPI TestClient 进行 HTTP 接口测试
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -135,9 +135,24 @@ class TestMiniQMTAPIWithMock:
 
     @pytest.fixture
     def mock_provider(self):
-        """模拟 MiniQMT Provider"""
+        """模拟 MiniQMT Provider (Dask Actor)"""
         provider = MagicMock()
         provider.connected = True
+        # 实际 API 使用 get_status() 异步方法，而非 get_connection_status()
+        provider.get_status = AsyncMock(
+            return_value={
+                "connected": True,
+                "initialized": True,
+                "error_count": 0,
+                "host": "127.0.0.1",
+                "port": 7777,
+                "subscribed_symbols": ["000001.SZ"],
+                "last_heartbeat": 1234567890,
+                "reconnect_attempts": 0,
+                "queue_size": 0,
+            }
+        )
+        # 保留 get_connection_status 用于兼容性
         provider.get_connection_status.return_value = {
             "connected": True,
             "host": "127.0.0.1",

@@ -831,14 +831,13 @@ def config_show(format):
 @click.option("--env", type=click.Choice(["dev", "prod"]), help="目标环境")
 def config_set(key, value, env):
     """设置配置项"""
-    from pathlib import Path
-
     import yaml
-    from core.config import settings
+    from core.config import get_config_dir, settings
 
     # 确定目标环境
     target_env = env or settings.env
-    config_file = Path(f"deepsearch/config/settings.{target_env}.yaml")
+    config_dir = get_config_dir()
+    config_file = config_dir / f"settings.{target_env}.yaml"
 
     if not config_file.exists():
         click.echo(f"[ERROR] 配置文件不存在: {config_file}")

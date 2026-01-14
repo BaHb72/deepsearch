@@ -905,6 +905,10 @@ class CacheComponent(AsyncComponent[Any]):
             self._connection_error = str(e)
             return False
 
+    def is_connected(self) -> bool:
+        """检查缓存是否已连接"""
+        return self._connected
+
     async def get_pool_stats(self) -> Dict[str, Any]:
         """获取连接池统计信息"""
         if not self._redis_client or not hasattr(self._redis_client, "connection_pool"):

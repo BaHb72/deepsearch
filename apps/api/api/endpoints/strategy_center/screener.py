@@ -112,21 +112,81 @@ async def batch_screen(request: BatchScreenRequest):
         stock_pool=request.stock_pool,
         limit=request.limit,
     )
-    # TODO: 支持自定义权重
-    return await screen_stocks(screening_request)
+
+    # 传递自定义权重
+    screening_service = await get_screening_service()
+    return await screening_service.screen_stocks(screening_request, weights=request.weights)
 
 
 @router.get("/stock-pools")
 async def list_stock_pools():
-    """获取可用股票池列表"""
-    # TODO: 从配置或数据库获取
-    return {
-        "pools": [
-            {"id": "all", "name": "全市场", "count": 5000},
-            {"id": "hs300", "name": "沪深300", "count": 300},
-            {"id": "zz500", "name": "中证500", "count": 500},
-            {"id": "cyb", "name": "创业板", "count": 1200},
-            {"id": "kcb", "name": "科创板", "count": 500},
-            {"id": "custom", "name": "自选股", "count": 0},
-        ]
-    }
+    """获取可用股票池列表（从配置文件读取）"""
+    from pathlib import Path
+
+    import yaml
+
+    try:
+        # 读取配置文件
+        config_path = (
+            Path(__file__).parents[5] / "packages" / "core" / "config" / "stock_pools.yaml"
+        )
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+
+        # 只返回 enabled=true 的股票池
+        pools = [pool for pool in config.get("pools", []) if pool.get("enabled", True)]
+
+        return {"pools": pools}
+
+    except FileNotFoundError:
+        logger.warning("stock_pools.yaml 配置文件不存在，使用默认配置")
+        # 降级：返回默认配置
+        return {
+            "pools": [
+                {
+                    "id": "all",
+                    "name": "全市场",
+                    "description": "全部A股",
+                    "count": 5000,
+                    "enabled": True,
+                },
+                {
+                    "id": "hs300",
+                    "name": "沪深300",
+                    "description": "沪深300指数成分股",
+                    "count": 300,
+                    "enabled": True,
+                },
+                {
+                    "id": "zz500",
+                    "name": "中证500",
+                    "description": "中证500指数成分股",
+                    "count": 500,
+                    "enabled": True,
+                },
+                {
+                    "id": "cyb",
+                    "name": "创业板",
+                    "description": "创业板股票",
+                    "count": 1200,
+                    "enabled": True,
+                },
+                {
+                    "id": "kcb",
+                    "name": "科创板",
+                    "description": "科创板股票",
+                    "count": 500,
+                    "enabled": True,
+                },
+                {
+                    "id": "custom",
+                    "name": "自选股",
+                    "description": "用户自定义股票池",
+                    "count": 0,
+                    "enabled": True,
+                },
+            ]
+        }
+    except Exception as e:
+        logger.error(f"读取股票池配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"配置读取失败: {str(e)}")

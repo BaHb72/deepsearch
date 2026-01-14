@@ -20,8 +20,8 @@ async def test_get_kline_returns_valid_dataframe(real_amazingdata_provider):
     df = await real_amazingdata_provider.get_kline(
         symbol="SZ000001",
         period="1d",
-        start_date=start_date.strftime("%Y-%m-%d"),
-        end_date=end_date.strftime("%Y-%m-%d"),
+        start_date=start_date.strftime("%Y%m%d"),
+        end_date=end_date.strftime("%Y%m%d"),
         count=30,
         adjust="none",
     )

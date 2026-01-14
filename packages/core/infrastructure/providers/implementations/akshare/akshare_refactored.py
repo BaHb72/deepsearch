@@ -329,6 +329,32 @@ class AkShareProxyProvider:
                 result = list(items.values())
         return result
 
+    async def fetch_stock_list(self) -> List[Dict[str, str]]:
+        """获取股票列表
+
+        通过 AkShare API 获取 A 股股票代码和名称列表。
+
+        Returns:
+            股票列表，每个元素包含 code 和 name 字段
+        """
+        try:
+            result = await self.request_handler.call_api("stock_info_a_code_name", {})
+            if result is None:
+                return []
+
+            # 转换 DataFrame 为 List[Dict]
+            if isinstance(result, pd.DataFrame):
+                stocks = []
+                for _, row in result.iterrows():
+                    stocks.append(
+                        {"code": str(row.get("code", "")), "name": str(row.get("name", ""))}
+                    )
+                return stocks
+            return []
+        except Exception as e:
+            logger.error(f"获取股票列表失败: {e}")
+            return []
+
     async def get_calendar(
         self, *, market: str = "SH", data_type: str = "int"
     ) -> list[int] | list[str]:

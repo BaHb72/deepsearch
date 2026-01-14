@@ -124,24 +124,48 @@ def _register_default_adapters(
     config: CapabilityRoutingConfig,
 ) -> None:
     """注册默认适配器"""
+    from core.infrastructure.providers.registry import get_registry
+
+    registry = get_registry()
+
+    # 注册 MiniQMT 适配器
     try:
-        # 尝试注册 MiniQMT 适配器
         from core.infrastructure.providers.adapters.miniqmt import MiniQMTAdapter
-        from core.infrastructure.providers.registry import get_registry
 
-        registry = get_registry()
         miniqmt_provider = registry.get_provider_instance("miniqmt")
-
         if miniqmt_provider:
-            # 获取能力声明
             capabilities = config.capabilities.get("miniqmt")
             adapter = MiniQMTAdapter(miniqmt_provider, capabilities)
             router.register_adapter("miniqmt", adapter)
-
+            logger.info("已注册 MiniQMT 适配器")
     except Exception as e:
         logger.warning(f"注册 MiniQMT 适配器失败: {e}")
 
-    # 可以继续注册其他适配器...
+    # 注册 AkShare 适配器
+    try:
+        from core.infrastructure.providers.adapters.akshare import AKShareAdapter
+
+        akshare_provider = registry.get_provider_instance("akshare")
+        if akshare_provider:
+            capabilities = config.capabilities.get("akshare")
+            adapter = AKShareAdapter(akshare_provider, capabilities)
+            router.register_adapter("akshare", adapter)
+            logger.info("已注册 AkShare 适配器")
+    except Exception as e:
+        logger.warning(f"注册 AkShare 适配器失败: {e}")
+
+    # 注册 AmazingData 适配器
+    try:
+        from core.infrastructure.providers.adapters.amazingdata import AmazingDataAdapter
+
+        amazingdata_provider = registry.get_provider_instance("amazingdata")
+        if amazingdata_provider:
+            capabilities = config.capabilities.get("amazingdata")
+            adapter = AmazingDataAdapter(amazingdata_provider, capabilities)
+            router.register_adapter("amazingdata", adapter)
+            logger.info("已注册 AmazingData 适配器")
+    except Exception as e:
+        logger.warning(f"注册 AmazingData 适配器失败: {e}")
 
 
 def reset_unified_feed() -> None:

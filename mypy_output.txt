@@ -1,0 +1,1023 @@
+apps\api\api\endpoints\qmt\qmt_subscription.py:49: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\qmt\qmt_subscription.py:50: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\qmt\qmt_subscription.py:56: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\qmt\qmt_subscription.py:59: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\base\provider_base.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\base\provider_base.py:148: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\compute\actors\miniqmt_actor.py:75: error: Module has no
+attribute "get_trading_calendar"; maybe "get_trading_dates"?  [attr-defined]
+                calendar = xtdata.get_trading_calendar("SH", "20250101", "...
+                           ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\compute\actors\miniqmt_actor.py:123: error: Module has no
+attribute "get_trading_calendar"; maybe "get_trading_dates"?  [attr-defined]
+                result = xtdata.get_trading_calendar(market, start_date, e...
+                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\compute\actors\miniqmt_actor.py:197: error: Missing positional
+argument "fields" in call to "get_market_data_ex"  [call-arg]
+                result = xtdata.get_market_data_ex(
+                         ^~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\config\manager.py:35: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\config\manager.py:36: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\config\manager.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\config\manager.py:38: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\scheduler\tasks\base.py:40: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\scheduler\tasks\base.py:41: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\scheduler\tasks\base.py:42: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\data\data_source_capability_api.py:311: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\data\data_source_capability_api.py:320: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\data\data_source_capability_api.py:347: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\data\data_feed.py:58: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\interfaces\analyzer.py:39: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "dropna"  [union-attr]
+            series = returns.dropna()
+                     ^~~~~~~~~~~~~~
+packages\core\backtest\interfaces\analyzer.py:39: error: Item "Sequence[float]"
+of "Series | ndarray | Sequence[float]" has no attribute "dropna"  [union-attr]
+            series = returns.dropna()
+                     ^~~~~~~~~~~~~~
+packages\core\backtest\interfaces\analyzer.py:69: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "dropna"  [union-attr]
+            series = returns.dropna()
+                     ^~~~~~~~~~~~~~
+packages\core\backtest\interfaces\analyzer.py:69: error: Item "Sequence[float]"
+of "Series | ndarray | Sequence[float]" has no attribute "dropna"  [union-attr]
+            series = returns.dropna()
+                     ^~~~~~~~~~~~~~
+packages\core\backtest\interfaces\analyzer.py:100: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "dropna"  [union-attr]
+            series = equity_curve.dropna()
+                     ^~~~~~~~~~~~~~~~~~~
+packages\core\backtest\interfaces\analyzer.py:100: error: Item
+"Sequence[float]" of "Series | ndarray | Sequence[float]" has no attribute
+"dropna"  [union-attr]
+            series = equity_curve.dropna()
+                     ^~~~~~~~~~~~~~~~~~~
+packages\core\backtest\interfaces\analyzer.py:212: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "dropna"  [union-attr]
+            series = returns.dropna()
+                     ^~~~~~~~~~~~~~
+packages\core\backtest\interfaces\analyzer.py:212: error: Item
+"Sequence[float]" of "Series | ndarray | Sequence[float]" has no attribute
+"dropna"  [union-attr]
+            series = returns.dropna()
+                     ^~~~~~~~~~~~~~
+packages\core\backtest\interfaces\analyzer.py:257: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "dropna"  [union-attr]
+            series = equity_curve.dropna()
+                     ^~~~~~~~~~~~~~~~~~~
+packages\core\backtest\interfaces\analyzer.py:257: error: Item
+"Sequence[float]" of "Series | ndarray | Sequence[float]" has no attribute
+"dropna"  [union-attr]
+            series = equity_curve.dropna()
+                     ^~~~~~~~~~~~~~~~~~~
+packages\core\strategies\ttrading\analyzers.py:628: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\strategies\ttrading\signal_generators.py:467: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\config\loader.py:67: error: Cannot find implementation or library
+stub for module named "deepsearch"  [import-not-found]
+                import deepsearch
+    ^
+packages\core\indicators\technical.py:529: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "iloc"  [union-attr]
+                    price_value = float(typical_price.iloc[i])
+                                        ^~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:529: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "iloc"  [union-attr]
+                    price_value = float(typical_price.iloc[i])
+                                        ^~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:530: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "iloc"  [union-attr]
+                    volume_value = float(volume_series.iloc[i])
+                                         ^~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:530: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "iloc"  [union-attr]
+                    volume_value = float(volume_series.iloc[i])
+                                         ^~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:543: error: Unsupported left operand type
+for * ("Sequence[float]")  [operator]
+    ...     cumulative_pv_series = cast(NumericSeries, (typical_price * volum...
+                                                        ^~~~~~~~~~~~~~~~~~~~~...
+packages\core\indicators\technical.py:543: note: Both left and right operands are unions
+packages\core\indicators\technical.py:544: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "cumsum"  [union-attr]
+    ...  cumulative_volume_series = cast(NumericSeries, volume_series.cumsum(...
+                                                        ^~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:545: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "replace"  [union-attr]
+                safe_denominator = cumulative_volume_series.replace(0.0, n...
+                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:545: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "replace"  [union-attr]
+                safe_denominator = cumulative_volume_series.replace(0.0, n...
+                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:546: error: Incompatible types in
+assignment (expression has type "Series | ndarray | Sequence[float]", variable
+has type "Series")  [assignment]
+                vwap_series = cast(NumericSeries, cumulative_pv_series / s...
+                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+packages\core\indicators\technical.py:673: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+            ma = cast(NumericSeries, price_series.rolling(period).mean())
+                                     ^~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:673: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+            ma = cast(NumericSeries, price_series.rolling(period).mean())
+                                     ^~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:674: error: Unsupported left operand type
+for - ("Sequence[float]")  [operator]
+            bias = cast(NumericSeries, (price_series - ma) / ma * 100)
+                                        ^~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:674: note: Both left and right operands are unions
+packages\core\indicators\technical.py:675: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "name"  [union-attr]
+            bias.name = f"BIAS_{period}"
+            ^~~~~~~~~
+packages\core\indicators\technical.py:675: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "name"  [union-attr]
+            bias.name = f"BIAS_{period}"
+            ^~~~~~~~~
+packages\core\indicators\technical.py:693: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+            avg_volume = cast(NumericSeries, volume_series.rolling(period)...
+                                             ^~~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:693: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+            avg_volume = cast(NumericSeries, volume_series.rolling(period)...
+                                             ^~~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:694: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "replace"  [union-attr]
+            safe_avg_volume = cast(NumericSeries, avg_volume.replace(0.0, ...
+                                                  ^~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:694: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "replace"  [union-attr]
+            safe_avg_volume = cast(NumericSeries, avg_volume.replace(0.0, ...
+                                                  ^~~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:697: error: Unsupported left operand type
+for / ("Sequence[float]")  [operator]
+            volume_ratio = cast(NumericSeries, volume_series / safe_avg_vo...
+                                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~...
+packages\core\indicators\technical.py:697: note: Both left and right operands are unions
+packages\core\indicators\technical.py:698: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "name"  [union-attr]
+            volume_ratio.name = f"VR_{period}"
+            ^~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:698: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "name"  [union-attr]
+            volume_ratio.name = f"VR_{period}"
+            ^~~~~~~~~~~~~~~~~
+packages\core\indicators\technical.py:777: error: Unsupported operand types for
+* ("float" and "Sequence[float]")  [operator]
+            upper_band = hl_avg + (multiplier * atr)
+                                   ^
+packages\core\indicators\technical.py:777: note: Right operand is of type "Series | ndarray | Sequence[float]"
+packages\core\indicators\technical.py:778: error: Unsupported operand types for
+* ("float" and "Sequence[float]")  [operator]
+            lower_band = hl_avg - (multiplier * atr)
+                                   ^
+packages\core\indicators\technical.py:778: note: Right operand is of type "Series | ndarray | Sequence[float]"
+packages\core\indicators\simple.py:44: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+            return cast(NumericSeries, price_series.rolling(window=period,...
+                                       ^~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:44: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+            return cast(NumericSeries, price_series.rolling(window=period,...
+                                       ^~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:49: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "ewm"  [union-attr]
+            return cast(NumericSeries, price_series.ewm(span=period, adjus...
+                                       ^~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:49: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "ewm"  [union-attr]
+            return cast(NumericSeries, price_series.ewm(span=period, adjus...
+                                       ^~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:63: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+                price_series.rolling(period, min_periods=1).apply(weighted...
+                ^~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:63: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+                price_series.rolling(period, min_periods=1).apply(weighted...
+                ^~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:75: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            ema_fast_filled = cast(NumericSeries, ema_fast.fillna(0.0))
+                                                  ^~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:75: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            ema_fast_filled = cast(NumericSeries, ema_fast.fillna(0.0))
+                                                  ^~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:76: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            ema_slow_filled = cast(NumericSeries, ema_slow.fillna(0.0))
+                                                  ^~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:76: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            ema_slow_filled = cast(NumericSeries, ema_slow.fillna(0.0))
+                                                  ^~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:77: error: Unsupported left operand type for
+- ("Sequence[float]")  [operator]
+            macd_line = cast(NumericSeries, ema_fast_filled - ema_slow_fil...
+                                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:77: note: Both left and right operands are unions
+packages\core\indicators\simple.py:80: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "ewm"  [union-attr]
+                macd_line.ewm(span=signal_period, adjust=False).mean().fil...
+                ^~~~~~~~~~~~~
+packages\core\indicators\simple.py:80: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "ewm"  [union-attr]
+                macd_line.ewm(span=signal_period, adjust=False).mean().fil...
+                ^~~~~~~~~~~~~
+packages\core\indicators\simple.py:82: error: Unsupported left operand type for
+- ("Sequence[float]")  [operator]
+            histogram = cast(NumericSeries, macd_line - signal_line)
+                                            ^~~~~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:82: note: Both left and right operands are unions
+packages\core\indicators\simple.py:93: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "diff"  [union-attr]
+            delta = cast(NumericSeries, price_series.diff())
+                                        ^~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:93: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "diff"  [union-attr]
+            delta = cast(NumericSeries, price_series.diff())
+                                        ^~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:96: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "clip"  [union-attr]
+                delta.clip(lower=0.0).rolling(window=period, min_periods=p...
+                ^~~~~~~~~~
+packages\core\indicators\simple.py:96: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "clip"  [union-attr]
+                delta.clip(lower=0.0).rolling(window=period, min_periods=p...
+                ^~~~~~~~~~
+packages\core\indicators\simple.py:100: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "clip"  [union-attr]
+                (-delta.clip(upper=0.0)).rolling(window=period, min_period...
+                  ^~~~~~~~~~
+packages\core\indicators\simple.py:100: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "clip"  [union-attr]
+                (-delta.clip(upper=0.0)).rolling(window=period, min_period...
+                  ^~~~~~~~~~
+packages\core\indicators\simple.py:102: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "replace"  [union-attr]
+            adjusted_loss = loss.replace(0.0, np.nan)
+                            ^~~~~~~~~~~~
+packages\core\indicators\simple.py:102: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "replace"  [union-attr]
+            adjusted_loss = loss.replace(0.0, np.nan)
+                            ^~~~~~~~~~~~
+packages\core\indicators\simple.py:104: error: Unsupported operand types for +
+("int" and "Sequence[float]")  [operator]
+            rsi = cast(NumericSeries, 100 - (100 / (1 + rs)))
+                                                    ^
+packages\core\indicators\simple.py:104: note: Right operand is of type "Series | ndarray | Sequence[float]"
+packages\core\indicators\simple.py:105: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            return rsi.fillna(0.0)
+                   ^~~~~~~~~~
+packages\core\indicators\simple.py:105: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            return rsi.fillna(0.0)
+                   ^~~~~~~~~~
+packages\core\indicators\simple.py:114: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+                NumericSeries, low_series.rolling(window=k_period, min_per...
+                               ^~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:114: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+                NumericSeries, low_series.rolling(window=k_period, min_per...
+                               ^~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:117: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+                NumericSeries, high_series.rolling(window=k_period, min_pe...
+                               ^~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:117: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+                NumericSeries, high_series.rolling(window=k_period, min_pe...
+                               ^~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:120: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+    ...       highest_high_filled = cast(NumericSeries, highest_high.fillna(0...
+                                                        ^~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:120: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+    ...       highest_high_filled = cast(NumericSeries, highest_high.fillna(0...
+                                                        ^~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:121: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            lowest_low_filled = cast(NumericSeries, lowest_low.fillna(0.0)...
+                                                    ^~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:121: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            lowest_low_filled = cast(NumericSeries, lowest_low.fillna(0.0)...
+                                                    ^~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:122: error: Unsupported left operand type
+for - ("Sequence[float]")  [operator]
+            price_range = cast(NumericSeries, highest_high_filled - lowest...
+                                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+packages\core\indicators\simple.py:122: note: Both left and right operands are unions
+packages\core\indicators\simple.py:123: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "where"  [union-attr]
+            price_range = price_range.where(price_range != 0, np.nan)
+                          ^~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:123: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "where"  [union-attr]
+            price_range = price_range.where(price_range != 0, np.nan)
+                          ^~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:124: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            price_diff = cast(NumericSeries, close_series.fillna(0.0) - lo...
+                                             ^~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:124: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            price_diff = cast(NumericSeries, close_series.fillna(0.0) - lo...
+                                             ^~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:125: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            k_percent = cast(NumericSeries, 100 * (price_diff / price_rang...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+packages\core\indicators\simple.py:125: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            k_percent = cast(NumericSeries, 100 * (price_diff / price_rang...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+packages\core\indicators\simple.py:126: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            d_percent = cast(
+                        ^~~~~
+packages\core\indicators\simple.py:126: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "fillna"  [union-attr]
+            d_percent = cast(
+                        ^~~~~
+packages\core\indicators\simple.py:140: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+            std = cast(NumericSeries, price_series.rolling(window=period, ...
+                                      ^~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:140: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+            std = cast(NumericSeries, price_series.rolling(window=period, ...
+                                      ^~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:142: error: Unsupported operand types for +
+("Sequence[float]" and "float")  [operator]
+            upper_band = cast(NumericSeries, middle_band + (std_dev * std)...
+                                             ^
+packages\core\indicators\simple.py:142: note: Both left and right operands are unions
+packages\core\indicators\simple.py:142: error: Unsupported operand types for *
+("float" and "Sequence[float]")  [operator]
+    ...       upper_band = cast(NumericSeries, middle_band + (std_dev * std))
+                                                              ^
+packages\core\indicators\simple.py:142: note: Right operand is of type "Series | ndarray | Sequence[float]"
+packages\core\indicators\simple.py:143: error: Unsupported operand types for -
+("Sequence[float]" and "float")  [operator]
+            lower_band = cast(NumericSeries, middle_band - (std_dev * std)...
+                                             ^
+packages\core\indicators\simple.py:143: note: Both left and right operands are unions
+packages\core\indicators\simple.py:143: error: Unsupported operand types for *
+("float" and "Sequence[float]")  [operator]
+    ...       lower_band = cast(NumericSeries, middle_band - (std_dev * std))
+                                                              ^
+packages\core\indicators\simple.py:143: note: Right operand is of type "Series | ndarray | Sequence[float]"
+packages\core\indicators\simple.py:155: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "shift"  [union-attr]
+            prev_close = cast(NumericSeries, close.shift())
+                                             ^~~~~~~~~~~
+packages\core\indicators\simple.py:155: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "shift"  [union-attr]
+            prev_close = cast(NumericSeries, close.shift())
+                                             ^~~~~~~~~~~
+packages\core\indicators\simple.py:157: error: Item "ndarray" of
+"Series | ndarray | Any" has no attribute "abs"  [union-attr]
+            high_low = cast(NumericSeries, (high - low).abs())
+                                           ^~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:157: error: Unsupported left operand type
+for - ("Sequence[float]")  [operator]
+            high_low = cast(NumericSeries, (high - low).abs())
+                                            ^~~~~~~~~~
+packages\core\indicators\simple.py:157: note: Both left and right operands are unions
+packages\core\indicators\simple.py:158: error: Item "ndarray" of
+"Series | ndarray | Any" has no attribute "abs"  [union-attr]
+            high_close = cast(NumericSeries, (high - prev_close).abs())
+                                             ^~~~~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:158: error: Unsupported left operand type
+for - ("Sequence[float]")  [operator]
+            high_close = cast(NumericSeries, (high - prev_close).abs())
+                                              ^~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:158: note: Both left and right operands are unions
+packages\core\indicators\simple.py:159: error: Item "ndarray" of
+"Series | ndarray | Any" has no attribute "abs"  [union-attr]
+            low_close = cast(NumericSeries, (low - prev_close).abs())
+                                            ^~~~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:159: error: Unsupported left operand type
+for - ("Sequence[float]")  [operator]
+            low_close = cast(NumericSeries, (low - prev_close).abs())
+                                             ^~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:159: note: Both left and right operands are unions
+packages\core\indicators\simple.py:164: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+            return cast(NumericSeries, true_range.rolling(window=period, m...
+                                       ^~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:164: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "rolling"  [union-attr]
+            return cast(NumericSeries, true_range.rolling(window=period, m...
+                                       ^~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:175: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "diff"  [union-attr]
+            close_diff = cast(NumericSeries, close_series.diff().fillna(0....
+                                             ^~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:175: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "diff"  [union-attr]
+            close_diff = cast(NumericSeries, close_series.diff().fillna(0....
+                                             ^~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:176: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "where"  [union-attr]
+            flow = volume_series.where(close_diff > 0, 0.0) - volume_serie...
+                   ^~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:176: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "where"  [union-attr]
+            flow = volume_series.where(close_diff > 0, 0.0) - volume_serie...
+                   ^~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:176: error: Unsupported operand types for <
+("int" and "Sequence[float]")  [operator]
+            flow = volume_series.where(close_diff > 0, 0.0) - volume_serie...
+                                       ^
+packages\core\indicators\simple.py:176: note: Left operand is of type "Series | ndarray | Sequence[float]"
+packages\core\indicators\simple.py:176: error: Unsupported operand types for >
+("int" and "Sequence[float]")  [operator]
+    ....where(close_diff > 0, 0.0) - volume_series.where(close_diff < 0, 0.0)
+                                                         ^
+packages\core\indicators\simple.py:192: error: Unsupported left operand type
+for + ("Sequence[float]")  [operator]
+            typical_price = cast(NumericSeries, (high + low + close) / 3)
+                                                 ^~~~~~~~~~
+packages\core\indicators\simple.py:192: note: Both left and right operands are unions
+packages\core\indicators\simple.py:193: error: Unsupported left operand type
+for * ("Sequence[float]")  [operator]
+            cumulative_pv = cast(NumericSeries, (typical_price * volume).c...
+                                                 ^~~~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:193: note: Both left and right operands are unions
+packages\core\indicators\simple.py:194: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "cumsum"  [union-attr]
+            cumulative_volume = cast(NumericSeries, volume.cumsum())
+                                                    ^~~~~~~~~~~~~
+packages\core\indicators\simple.py:195: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "replace"  [union-attr]
+            denominator = cumulative_volume.replace(0.0, np.nan)
+                          ^~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:195: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "replace"  [union-attr]
+            denominator = cumulative_volume.replace(0.0, np.nan)
+                          ^~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:198: error: Item "ndarray" of
+"Series | ndarray | Sequence[float]" has no attribute "ffill"  [union-attr]
+            return vwap_series.ffill().fillna(typical_price)
+                   ^~~~~~~~~~~~~~~~~
+packages\core\indicators\simple.py:198: error: Item "Sequence[float]" of
+"Series | ndarray | Sequence[float]" has no attribute "ffill"  [union-attr]
+            return vwap_series.ffill().fillna(typical_price)
+                   ^~~~~~~~~~~~~~~~~
+packages\core\event\engine\optimized_engine.py:187: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\errors.py:126: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\server_manager.py:48: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\server_manager.py:49: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\server_manager.py:51: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\tools\datasource_diagnostics\connectivity_tester.py:51: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\observability\logging\monitoring_logger.py:217: error: Argument
+"filter" to "add" of "Logger" has incompatible type "Callable[[Any], Any]";
+expected "Mapping[str, Any] | None"  [arg-type]
+                filter=lambda record: record.get("extra", {}).get("monitor...
+                       ^
+packages\core\infrastructure\messaging\event_publisher.py:27: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\messaging\event_publisher.py:30: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\debug\performance_profiler.py:125: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\debug\performance_profiler.py:128: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\debug\performance_profiler.py:140: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\utils\status_display.py:131: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\utils\status_display.py:135: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\utils\statistics.py:63: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\utils\statistics.py:64: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\utils\statistics.py:65: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\utils\statistics.py:66: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\utils\statistics.py:68: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\utils\container.py:196: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\utils\container.py:197: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\managers\process_manager.py:90: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\managers\process_manager.py:94: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\managers\process_manager.py:97: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\managers\process_manager.py:98: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\managers\process_manager.py:99: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\managers\process_manager.py:102: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\managers\component_manager.py:55: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\managers\component_manager.py:56: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\managers\component_manager.py:57: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\application\data\pipeline.py:155: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\adapters\trading\ttrading_subscriber.py:33: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\adapters\trading\ttrading_subscriber.py:34: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\adapters\trading\ttrading_subscriber.py:35: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\persistence\query_optimizer.py:150: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\persistence\query_optimizer.py:151: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\persistence\query_optimizer.py:153: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\persistence\query_optimizer.py:154: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\persistence\query_optimizer.py:155: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\persistence\query_optimizer.py:397: error:
+"Engine" has no attribute "execute"  [attr-defined]
+                    result = engine.execute(query, table=table, column=f"%...
+                             ^~~~~~~~~~~~~~
+packages\core\infrastructure\persistence\query_optimizer.py:409: error:
+"Engine" has no attribute "execute"  [attr-defined]
+                    result = engine.execute(query, table=table, column=col...
+                             ^~~~~~~~~~~~~~
+packages\core\infrastructure\persistence\query_optimizer.py:415: error:
+"Engine" has no attribute "execute"  [attr-defined]
+                    result = engine.execute(query)
+                             ^~~~~~~~~~~~~~
+packages\core\infrastructure\persistence\query_optimizer.py:481: error:
+"Engine" has no attribute "execute"  [attr-defined]
+                        engine.execute(text(sql))
+                        ^~~~~~~~~~~~~~
+packages\core\infrastructure\cache\multilevel_cache.py:464: error: Incompatible
+types in assignment (expression has type "ColumnElement[int]", variable has type
+"Column[int]")  [assignment]
+                    entry.access_count += 1
+                    ^~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\cache\multilevel_cache.py:465: error: Incompatible
+types in assignment (expression has type "datetime", variable has type
+"Column[datetime]")  [assignment]
+                    entry.last_accessed = datetime.now()
+                                          ^~~~~~~~~~~~~~
+packages\core\infrastructure\cache\multilevel_cache.py:488: error: Incompatible
+types in assignment (expression has type "bytes", variable has type
+"Column[bytes]")  [assignment]
+                    entry.value = serialized
+                                  ^~~~~~~~~~
+packages\core\infrastructure\cache\multilevel_cache.py:489: error: Incompatible
+types in assignment (expression has type "datetime", variable has type
+"Column[datetime]")  [assignment]
+                    entry.expires_at = expires_at
+                                       ^~~~~~~~~~
+packages\core\infrastructure\cache\multilevel_cache.py:490: error: Incompatible
+types in assignment (expression has type "datetime", variable has type
+"Column[datetime]")  [assignment]
+                    entry.last_accessed = datetime.now()
+                                          ^~~~~~~~~~~~~~
+packages\core\messaging\implementations\inmemory.py:29: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\messaging\implementations\inmemory.py:30: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\messaging\implementations\inmemory.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\messaging\implementations\inmemory.py:32: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\trading\market_overview.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\trading\market_overview.py:33: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\data\data_source_config_api.py:48: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\persistence\pool.py:172: error: No overload
+variant of "execute" of "Connection" matches argument type "str"
+[call-overload]
+                    await conn.run_sync(lambda c: c.execute("SELECT 1"))
+                                                  ^~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\persistence\pool.py:172: note: Possible overload variants:
+packages\core\infrastructure\persistence\pool.py:172: note:     def [_T: Any] execute(self, statement: TypedReturnsRows[_T], parameters: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _CoreKnownExecutionOptions | Mapping[str, Any] | None = ...) -> CursorResult[_T]
+packages\core\infrastructure\persistence\pool.py:172: note:     def execute(self, statement: Executable, parameters: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _CoreKnownExecutionOptions | Mapping[str, Any] | None = ...) -> CursorResult[Any]
+packages\core\infrastructure\persistence\pool.py:311: error: Argument 1 to
+"_row_to_dict" of "DatabasePool" has incompatible type "RowMapping"; expected
+"Mapping[str, object]"  [arg-type]
+                return [self._row_to_dict(row) for row in result.mappings(...
+                                          ^~~
+packages\core\infrastructure\persistence\pool.py:323: error: No overload
+variant of "execute" of "Connection" matches argument type "str"
+[call-overload]
+                    await conn.run_sync(lambda c: c.execute("SELECT 1"))
+                                                  ^~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\persistence\pool.py:323: note: Possible overload variants:
+packages\core\infrastructure\persistence\pool.py:323: note:     def [_T: Any] execute(self, statement: TypedReturnsRows[_T], parameters: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _CoreKnownExecutionOptions | Mapping[str, Any] | None = ...) -> CursorResult[_T]
+packages\core\infrastructure\persistence\pool.py:323: note:     def execute(self, statement: Executable, parameters: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None = ..., *, execution_options: _CoreKnownExecutionOptions | Mapping[str, Any] | None = ...) -> CursorResult[Any]
+packages\core\cli\debug_commands.py:36: error: Cannot find implementation or
+library stub for module named "core.memory.smart_memory"  [import-not-found]
+        from core.memory.smart_memory import memory_manager
+    ^
+packages\core\cli\debug_commands.py:36: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+packages\core\core\scheduler\cache_scheduler.py:27: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:520: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:665: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:666: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\implementations\qmt\unified_qmt_provider.py:667: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\strategies\ttrading\providers.py:43: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\ui_components.py:34: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\ui_components.py:35: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\ui_components.py:36: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\data_components.py:108: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\data_components.py:109: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\data_components.py:110: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\data_components.py:112: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\interfaces\strategy.py:519: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\interfaces\strategy.py:556: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\interfaces\strategy.py:590: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\interfaces\strategy.py:621: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\persistence\watchlist_repository.py:64: error:
+Unexpected keyword argument "added_at" for "WatchlistItemDB"  [call-arg]
+            item = WatchlistItemDB(
+                   ^~~~~~~~~~~~~~~~
+packages\core\infrastructure\persistence\watchlist_repository.py:132: error:
+"Result[Any]" has no attribute "rowcount"  [attr-defined]
+            deleted = (result.rowcount or 0) > 0
+                       ^~~~~~~~~~~~~~~
+packages\core\infrastructure\persistence\watchlist_repository.py:448: error:
+"Result[Any]" has no attribute "rowcount"  [attr-defined]
+            return (result.rowcount or 0) > 0
+                    ^~~~~~~~~~~~~~~
+packages\core\infrastructure\persistence\watchlist_repository.py:692: error:
+"Result[Any]" has no attribute "rowcount"  [attr-defined]
+            return (result.rowcount or 0) > 0
+                    ^~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\akshare\akshare_refactored.py:91: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\implementations\akshare\akshare_refactored.py:296: error:
+Incompatible types in assignment (expression has type "dict[str, Any]", target
+has type "list[Any]")  [assignment]
+                    result[symbol] = data.to_dict("records")
+                                     ^~~~~~~~~~~~~~~~~~~~~~~
+packages\core\core\component_factory.py:45: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\component_factory.py:46: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\component_factory.py:47: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\component_factory.py:48: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\strategies\managers\manager.py:40: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\strategies\managers\manager.py:41: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\strategies\managers\manager.py:42: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\strategies\managers\manager.py:43: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\event\schema.py:404: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\interfaces\datafeed_factory.py:106: error: Incompatible types in
+assignment (expression has type "IDataFeed | Awaitable[IDataFeed]", variable has
+type "IDataFeed")  [assignment]
+                instance = factory()
+                           ^~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:213: error: Cannot
+instantiate protocol class "BaseData"  [misc]
+                        self._base_data = sdk.BaseData()
+                                          ^~~~~~~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:225: error: Cannot
+instantiate protocol class "MarketData"  [misc]
+                        self._market_data = sdk.MarketData(calendar) if ca...
+                                            ^~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:226: error: Cannot
+instantiate protocol class "InfoData"  [misc]
+                        self._info_data = sdk.InfoData()
+                                          ^~~~~~~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:284: error: Cannot
+instantiate protocol class "BaseData"  [misc]
+                self._base_data = sdk.BaseData()
+                                  ^~~~~~~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:295: error: Cannot
+instantiate protocol class "MarketData"  [misc]
+                self._market_data = sdk.MarketData(calendar) if calendar e...
+                                    ^~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:296: error: Cannot
+instantiate protocol class "InfoData"  [misc]
+                self._info_data = sdk.InfoData()
+                                  ^~~~~~~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:523: error:
+"AmazingDataActor" has no attribute "_tgw"  [attr-defined]
+            if not self._logged_in or not self._tgw:
+                                          ^~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:533: error:
+"AmazingDataActor" has no attribute "_tgw"  [attr-defined]
+                data = self._tgw.get_snapshot(codes)
+                       ^~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:600: error:
+"AmazingDataActor" has no attribute "_tgw"  [attr-defined]
+            if not self._logged_in or not self._tgw:
+                                          ^~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:625: error:
+"AmazingDataActor" has no attribute "_tgw"  [attr-defined]
+                self._tgw.subscribe(codes, on_snapshot)
+                ^~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:641: error:
+"AmazingDataActor" has no attribute "_tgw"  [attr-defined]
+            if not self._logged_in or not self._tgw:
+                                          ^~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:646: error:
+"AmazingDataActor" has no attribute "_tgw"  [attr-defined]
+                self._tgw.unsubscribe(codes)
+                ^~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:1236: error: Incompatible
+return value type (got "dict[str, Any]", expected "list[dict[Any, Any]]")
+[return-value]
+                    return data.to_dict(orient="records")
+                           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:1857: error: Name
+"get_industry_weight" already defined on line 1112  [no-redef]
+        async def get_industry_weight(
+        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\compute\actors\amazingdata_actor.py:1893: error: Name
+"get_industry_daily" already defined on line 1092  [no-redef]
+        async def get_industry_daily(
+        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\__init__.py:31: error: Module "core.gateway.gateway" has no
+attribute "BaseGateway"; maybe "Gateway"?  [attr-defined]
+        from .gateway.gateway import BaseGateway, Gateway
+        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:257: error:
+Cannot find implementation or library stub for module named
+"core.domain.data_proxy.adapters.amazingdata"  [import-not-found]
+                from core.domain.data_proxy.adapters.amazingdata import Am...
+    ^
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:260: error:
+No overload variant of "dict" matches argument type "AmazingDataConfig"
+[call-overload]
+    ... = self.config if isinstance(self.config, dict) else dict(self.config)
+                                                            ^~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:260: note: Possible overload variants:
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:260: note:     def [_KT, _VT] __init__(self) -> dict[_KT, _VT]
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:260: note:     def [_KT, _VT] __init__(self, **kwargs: _VT) -> dict[str, _VT]
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:260: note:     def [_KT, _VT] __init__(self, SupportsKeysAndGetItem[_KT, _VT], /) -> dict[_KT, _VT]
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:260: note:     def [_KT, _VT] __init__(self, SupportsKeysAndGetItem[str, _VT], /, **kwargs: _VT) -> dict[str, _VT]
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:260: note:     def [_KT, _VT] __init__(self, Iterable[tuple[_KT, _VT]], /) -> dict[_KT, _VT]
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:260: note:     def [_KT, _VT] __init__(self, Iterable[tuple[str, _VT]], /, **kwargs: _VT) -> dict[str, _VT]
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:260: note:     def [_KT, _VT] __init__(self, Iterable[list[str]], /) -> dict[str, str]
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:260: note:     def [_KT, _VT] __init__(self, Iterable[list[bytes]], /) -> dict[bytes, bytes]
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:320: error:
+Cannot find implementation or library stub for module named
+"core.infrastructure.providers.implementations.amazingdata.process"
+[import-not-found]
+                from .process import ProcessIsolatedAmazingDataProvider
+    ^
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:321: error:
+Cannot find implementation or library stub for module named
+"core.infrastructure.providers.implementations.amazingdata.sdk_proxy"
+[import-not-found]
+                from .sdk_proxy import ProcessIsolatedSDKProxy
+    ^
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:985: error:
+Name "ProcessIsolatedAmazingDataProvider" is not defined  [name-defined]
+                    datetime.now(ProcessIsolatedAmazingDataProvider._LOCAL...
+                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:993: error:
+Name "ProcessIsolatedAmazingDataProvider" is not defined  [name-defined]
+                            or not ProcessIsolatedAmazingDataProvider._is_...
+                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:994: error:
+Name "ProcessIsolatedAmazingDataProvider" is not defined  [name-defined]
+                                datetime.now(ProcessIsolatedAmazingDataPro...
+                                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1001: error:
+Name "ProcessIsolatedAmazingDataProvider" is not defined  [name-defined]
+                        previous = ProcessIsolatedAmazingDataProvider._res...
+                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1194: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1239: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1270: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1315: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1350: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1391: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1425: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1461: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1497: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1533: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1569: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1603: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1644: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1684: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1726: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1766: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1859: error:
+Incompatible types in assignment (expression has type "str", target has type
+"int")  [assignment]
+                    kwargs["industry_code"] = industry_code
+                                              ^~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1860: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1895: error:
+Incompatible types in assignment (expression has type "str", target has type
+"int")  [assignment]
+                    kwargs["industry_code"] = industry_code
+                                              ^~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:1896: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:2282: error:
+Name "get_industry_daily" already defined on line 1837  [no-redef]
+        async def get_industry_daily(
+        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:2316: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:2425: error:
+Name "get_industry_weight" already defined on line 1873  [no-redef]
+        async def get_industry_weight(
+        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\infrastructure\providers\implementations\amazingdata\amazingdata_extended.py:2464: error:
+"AmazingDataExtended" has no attribute "_use_process_isolation"  [attr-defined]
+                if self._use_process_isolation and self._process_backend i...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\core\components\analytics_components.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\analytics_components.py:32: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\analytics_components.py:33: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\analytics_components.py:34: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\analytics_components.py:35: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\analytics_components.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\qmt_gateway_component.py:13: error: Cannot find
+implementation or library stub for module named
+"core.infrastructure.providers.datafeed.qmt.gateway"  [import-not-found]
+    from core.infrastructure.providers.datafeed.qmt.gateway import (
+    ^
+packages\core\core\components\qmt_gateway_component.py:20: error: Cannot find
+implementation or library stub for module named
+"core.infrastructure.providers.datafeed.qmt.models"  [import-not-found]
+    from core.infrastructure.providers.datafeed.qmt.models import OrderBoo...
+    ^
+packages\core\core\components\qmt_gateway_component.py:21: error: Cannot find
+implementation or library stub for module named
+"core.infrastructure.providers.datafeed.qmt.models.trade"  [import-not-found]
+    from core.infrastructure.providers.datafeed.qmt.models.trade import Or...
+    ^
+packages\core\core\components\qmt_gateway_component.py:22: error: Cannot find
+implementation or library stub for module named
+"core.infrastructure.providers.datafeed.qmt.receiver"  [import-not-found]
+    from core.infrastructure.providers.datafeed.qmt.receiver import QMTRec...
+    ^
+packages\core\core\components\qmt_gateway_component.py:468: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\managers\data_source_manager.py:38: error:
+Cannot find implementation or library stub for module named
+"core.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool"
+ [import-not-found]
+        from core.infrastructure.providers.implementations.amazingdata.ama...
+    ^
+packages\core\infrastructure\providers\managers\data_source_manager.py:386: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\managers\data_source_manager.py:389: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\managers\data_source_manager.py:390: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\managers\data_source_manager.py:391: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\managers\data_source_manager.py:392: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\managers\data_source_manager.py:395: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\managers\data_source_manager.py:401: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\providers\managers\data_source_manager.py:680: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\engines\engine.py:75: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\engines\backtest_engine.py:104: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\components\component.py:38: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\components\component.py:39: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\components\component.py:40: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\components\component.py:41: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\components\component.py:42: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\backtest\components\component.py:44: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\backtest_components.py:25: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\backtest_components.py:26: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\backtest_components.py:27: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\backtest_components.py:28: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\components\backtest_components.py:34: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\compute\dask_worker_manager.py:149: error: Item "int" of
+"str | int" has no attribute "startswith"  [union-attr]
+                if ip and not ip.startswith("127.") and not ip.startswith(...
+                              ^~~~~~~~~~~~~
+packages\core\compute\dask_worker_manager.py:151: error: Incompatible return
+value type (got "str | int", expected "str")  [return-value]
+                    return ip
+                           ^~
+packages\core\domain\data_proxy\adapters\miniqmt.py:141: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\domain\data_proxy\adapters\miniqmt.py:142: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\domain\data_proxy\adapters\miniqmt.py:143: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\domain\data_proxy\adapters\akshare.py:146: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\domain\data_proxy\adapters\akshare.py:147: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\domain\data_proxy\adapters\akshare.py:148: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\domain\data_proxy\adapters\akshare.py:149: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\domain\data_proxy\adapters\akshare.py:150: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\infrastructure\persistence\database.py:113: error: "Result[Any]"
+has no attribute "rowcount"  [attr-defined]
+                rowcount = result.rowcount
+                           ^~~~~~~~~~~~~~~
+packages\core\infrastructure\persistence\database.py:121: error: Argument 1 to
+"_normalize_row" of "DatabaseService" has incompatible type "RowMapping";
+expected "Mapping[str, object]"  [arg-type]
+                return [self._normalize_row(row) for row in result.mapping...
+                                            ^~~
+packages\core\infrastructure\persistence\database.py:131: error: Argument 1 to
+"_normalize_row" of "DatabaseService" has incompatible type "RowMapping";
+expected "Mapping[str, object]"  [arg-type]
+                return self._normalize_row(mapping)
+                                           ^~~~~~~
+packages\core\core\runtime\di_container.py:27: error: Incompatible types in
+assignment (expression has type "Any | None", variable has type "Settings")
+[assignment]
+                value = getattr(value, part, None)
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\core\runtime\di_container.py:239: error: Need type annotation for
+"graph"  [var-annotated]
+        graph = {name: [] for name in COMPONENT_DEPENDENCIES}
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\core\runtime\di_container.py:374: error: Item "None" of
+"Any | None" has no attribute "_instance"  [union-attr]
+            ee_instance = event_engine._instance if hasattr(event_engine, ...
+                          ^~~~~~~~~~~~~~~~~~~~~~
+packages\core\core\runtime\di_container.py:375: error: Item "None" of
+"Any | None" has no attribute "_instance"  [union-attr]
+            mb_instance = message_bus._instance if hasattr(message_bus, "_...
+                          ^~~~~~~~~~~~~~~~~~~~~
+packages\core\core\runtime\context.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\runtime\context.py:36: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\runtime\context.py:37: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\runtime\context.py:38: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\runtime\context.py:41: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\data\data_source_monitor_api.py:271: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\data\data.py:392: error: "DataCleaner" has no attribute
+"clean_kline_data"  [attr-defined]
+                    dataframe = cleaner.clean_kline_data(dataframe)
+                                ^~~~~~~~~~~~~~~~~~~~~~~~
+apps\api\api\endpoints\data\data.py:394: error: "DataCleaner" has no attribute
+"clean_tick_data"  [attr-defined]
+                    dataframe = cleaner.clean_tick_data(dataframe)
+                                ^~~~~~~~~~~~~~~~~~~~~~~
+apps\api\api\endpoints\data\data.py:395: error: "DataCleaner" has no attribute
+"standardize_symbols"  [attr-defined]
+                dataframe = cleaner.standardize_symbols(dataframe)
+                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\core\components\gateway_components.py:30: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\amazingdata\realtime.py:45: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\amazingdata\realtime.py:46: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\amazingdata\realtime.py:47: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\runtime\lifecycle.py:127: error: Cannot find implementation
+or library stub for module named "core.memory.smart_memory"  [import-not-found]
+                from core.memory.smart_memory import memory_manager
+    ^
+packages\core\core\runtime\bootstrap.py:223: error: Argument 1 to
+"get_all_components" has incompatible type "Any | None"; expected
+"ApplicationContainer"  [arg-type]
+            di_components = get_all_components(self._di_container, self._m...
+                                               ^~~~~~~~~~~~~~~~~~
+packages\core\core\runtime\engine.py:152: error: "ApplicationContext" has no
+attribute "component_manager"; maybe "_component_manager",
+"get_component_manager", or "set_component_manager"?  [attr-defined]
+                self._component_manager = get_context().component_manager
+                                          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+apps\api\server.py:414: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\server.py:415: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\server.py:416: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\server.py:417: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\server.py:418: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\server.py:426: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\server.py:428: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\server.py:429: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\server.py:432: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+apps\api\api\endpoints\datasources\datasource_manager.py:265: error: Cannot
+find implementation or library stub for module named
+"core.infrastructure.providers.implementations.amazingdata.amazingdata_safe_wrapper"
+ [import-not-found]
+        from core.infrastructure.providers.implementations.amazingdata.ama...
+    ^
+packages\core\core\runtime\engine_adapter.py:83: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\runtime\async_runner.py:28: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\runtime\async_runner.py:30: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\runtime\async_runner.py:31: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+packages\core\core\runtime\async_runner.py:82: error: "MainEngine" has no
+attribute "_start_phased_async"; maybe "start_phased"?  [attr-defined]
+            await engine._start_phased_async(
+                  ^~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\core\runtime\async_runner.py:95: error: "MainEngine" has no
+attribute "_start_phased_async"; maybe "start_phased"?  [attr-defined]
+            await engine._start_phased_async(
+                  ^~~~~~~~~~~~~~~~~~~~~~~~~~
+packages\core\core\runtime\async_runner.py:105: error: "MainEngine" has no
+attribute "_start_phased_async"; maybe "start_phased"?  [attr-defined]
+            await engine._start_phased_async(
+                  ^~~~~~~~~~~~~~~~~~~~~~~~~~
+Found 200 errors in 27 files (checked 474 source files)

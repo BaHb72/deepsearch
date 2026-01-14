@@ -1002,6 +1002,29 @@ class OptimizedAmazingDataProvider(DataProvider):
         """初始化数据源 - 实现抽象方法"""
         return await self.connect()
 
+    async def get_calendar(self, data_type: str = "int", market: str = "SH") -> list[int]:
+        """
+        获取交易日历
+
+        Args:
+            data_type: 返回数据类型，'int' 返回 YYYYMMDD 格式
+            market: 市场代码，'SH' 或 'SZ'
+
+        Returns:
+            交易日期列表
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            base_data = self._sdk.BaseData()
+            result = await loop.run_in_executor(None, base_data.get_calendar, data_type, market)
+            if not result:
+                return []
+            # 规范化为 int 列表
+            return [int(d) for d in result]
+        except Exception as e:
+            logger.error(f"获取交易日历失败: {e}")
+            return []
+
     async def get_stock_list(
         self, limit: Optional[int] = None, **kwargs
     ) -> Optional[list[dict[str, Any]]]:

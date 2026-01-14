@@ -644,8 +644,12 @@ class MultiLevelCache:
             if callable(close_coro):
                 await close_coro()
             else:
+                # 如果没有异步关闭方法，尝试同步关闭（在执行器中运行）
                 close_sync = getattr(self.l2_cache, "close", None)
                 if callable(close_sync):
-                    close_sync()
+                    import asyncio
+
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, close_sync)
 
         self._logger.info("多级缓存系统已关闭")

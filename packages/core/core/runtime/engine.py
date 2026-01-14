@@ -191,6 +191,48 @@ class MainEngine:
         except Exception as e:
             self._logger.error(f"Failed to start WebUI: {e}")
 
+    async def _start_phased_async(
+        self,
+        include_business: bool = True,
+        include_webui: bool = True,
+        include_frontend: bool = True,
+    ) -> None:
+        """
+        分阶段异步启动引擎
+
+        提供细粒度控制，允许选择性启动不同组件组合。
+
+        Args:
+            include_business: 是否启动业务组件
+            include_webui: 是否启动 WebUI 后端服务
+            include_frontend: 是否启动前端（预留参数，当前未使用）
+        """
+        with error_context("MainEngine", "_start_phased_async"):
+            if self._running:
+                self._logger.warning("Engine is already running")
+                return
+
+            self._logger.info("Starting DeepSearch System (phased)...")
+
+            # 设置信号处理
+            self._signal_handler.setup(self._signal_callback, self._stop_event)
+
+            # 启动基础设施（始终需要）
+            await self._lifecycle.start_phased(
+                self._container, self._require_provider(), self._components
+            )
+
+            # 根据参数启动业务组件
+            if include_business:
+                await self.start_business_components_async()
+
+            # 根据参数启动 WebUI
+            if include_webui:
+                await self._start_webui()
+
+            self._running = True
+            self._logger.info("[OK] DeepSearch System started (phased mode)")
+
     async def run(self) -> None:
         """运行引擎直到收到停止信号"""
         if not self._running:
@@ -281,11 +323,20 @@ class MainEngine:
 
     def get_component(self, component_type: type[Any]) -> Optional[Component]:
         """通过类型获取组件"""
+        # 优先从 _components 字典查找（支持新 DI 容器）
+        for component in self._components.values():
+            if isinstance(component, component_type):
+                return component
+
+        # Fallback：使用旧的 provider API（向后兼容）
         provider = self._provider
         if provider is None:
             return None
-        component = provider.get_service(cast(Type[Any], component_type))
-        return cast(Optional[Component], component)
+        try:
+            component = provider.get_service(cast(Type[Any], component_type))
+            return cast(Optional[Component], component)
+        except Exception:
+            return None
 
     def get_component_by_name(self, name: str) -> Optional[Component]:
         """通过名称获取组件"""
@@ -439,7 +490,9 @@ class MainEngine:
         include_frontend: bool = True,
     ) -> None:
         """分阶段启动引擎（同步包装器，向后兼容）"""
-        self._run_coroutine_from_sync(self.start())
+        self._run_coroutine_from_sync(
+            self._start_phased_async(include_business, include_webui, include_frontend)
+        )
 
 
 # ==================== 工厂函数 ====================

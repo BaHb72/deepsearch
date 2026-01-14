@@ -399,10 +399,38 @@ class ScreeningService:
             return 0.0
 
     async def _get_stock_name(self, symbol: str) -> str:
-        """获取股票名称"""
-        # TODO: 从缓存或数据库获取
+        """获取股票名称（从 DataProxy 缓存获取）"""
+        if not hasattr(self, "_stock_name_cache"):
+            # 首次调用时初始化缓存
+            self._stock_name_cache: Dict[str, str] = {}
+
+        # 检查内存缓存
+        if symbol in self._stock_name_cache:
+            return self._stock_name_cache[symbol]
+
+        # 从 DataProxy 获取股票列表（DataProxy 已有缓存机制）
+        try:
+            await self.initialize()
+            if self._data_proxy:
+                result = await self._data_proxy.get_stock_list()
+                # 构建缓存映射
+                for stock in result.legacy:
+                    code = stock.get("code", "")
+                    name = stock.get("name", "")
+                    if code:
+                        self._stock_name_cache[code] = name
+
+                # 再次查找
+                if symbol in self._stock_name_cache:
+                    return self._stock_name_cache[symbol]
+        except Exception as e:
+            logger.warning(f"获取股票名称失败: {e}")
+
+        # 降级：返回代码
         code = symbol.split(".")[0] if "." in symbol else symbol
-        return f"股票{code}"
+        fallback_name = f"股票{code}"
+        self._stock_name_cache[symbol] = fallback_name
+        return fallback_name
 
 
 # ============================================

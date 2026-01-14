@@ -1,0 +1,40 @@
+Bytecode compiled 12147 files in 584ms
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "D:\Stock\code\deepsearch\.venv\Scripts\deepsearch.exe\__main__.py", line 10, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "D:\Stock\code\deepsearch\packages\core\main.py", line 10, in main
+    cli(prog_name="deepsearch")
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Stock\code\deepsearch\.venv\Lib\site-packages\click\core.py", line 1462, in __call__
+    return self.main(*args, **kwargs)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "D:\Stock\code\deepsearch\.venv\Lib\site-packages\click\core.py", line 1383, in main
+    rv = self.invoke(ctx)
+  File "D:\Stock\code\deepsearch\.venv\Lib\site-packages\click\core.py", line 1850, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\Stock\code\deepsearch\.venv\Lib\site-packages\click\core.py", line 1246, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Stock\code\deepsearch\.venv\Lib\site-packages\click\core.py", line 814, in invoke
+    return callback(*args, **kwargs)
+  File "D:\Stock\code\deepsearch\packages\core\cli\main.py", line 65, in run
+    from core.config import get_config
+  File "D:\Stock\code\deepsearch\packages\core\config\__init__.py", line 14, in <module>
+    from .manager import ConfigManager, config_manager
+  File "D:\Stock\code\deepsearch\packages\core\config\manager.py", line 18, in <module>
+    from core.utils.system.singleton import Singleton
+  File "D:\Stock\code\deepsearch\packages\core\utils\__init__.py", line 7, in <module>
+    from .system.singleton import Singleton
+  File "D:\Stock\code\deepsearch\packages\core\utils\system\__init__.py", line 3, in <module>
+    from .redis_startup import RedisStartupError, ensure_redis_running
+  File "D:\Stock\code\deepsearch\packages\core\utils\system\redis_startup.py", line 18, in <module>
+    from core.config.models.database import CacheDatabaseConfig, CacheDatabaseWSLConfig
+  File "D:\Stock\code\deepsearch\packages\core\config\models\__init__.py", line 7, in <module>
+    from .akshare import (
+    ...<7 lines>...
+    )
+ModuleNotFoundError: No module named 'core.config.models.akshare'

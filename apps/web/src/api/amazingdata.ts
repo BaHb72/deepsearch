@@ -10,6 +10,11 @@
  * - margin: 融资融券 (融资融券数据、龙虎榜)
  * - shareholder: 股东信息 (股东持仓、分红配股等)
  * - concept: 概念板块 (资金流向、概念联动)
+ * - option: 期权数据 (期权代码、基本资料、合约属性)
+ * - etf: ETF数据 (申赎数据、基金份额、IOPV)
+ * - index: 指数数据 (成分股、权重)
+ * - industry: 行业数据 (基本信息、成分股、权重、日行情)
+ * - treasury: 国债数据 (收益率)
  */
 
 import request from './request'
@@ -526,12 +531,114 @@ export interface EtfPcfResult {
     etf_pcf_constituent: Record<string, DataFrameResult>
 }
 
+/** ETF基金份额/IOPV请求参数 */
+export interface FundDataRequest {
+    code_list: string[]
+    local_path?: string
+    is_local?: boolean
+    begin_date?: number
+    end_date?: number
+}
+
 export const etfApi = {
     /** 获取ETF每日申赎数据 */
     getPcf: (codeList: string[]) =>
         request.post<ApiResponse<EtfPcfResult>>(`${BASE_PATH}/etf/pcf`, {
             code_list: codeList,
         }),
+
+    /** 获取ETF基金份额 */
+    getFundShare: (data: FundDataRequest) =>
+        request.post<ApiResponse<DataFrameResult>>(`${BASE_PATH}/etf/fund-share`, data),
+
+    /** 获取ETF每日收盘IOPV */
+    getFundIopv: (data: FundDataRequest) =>
+        request.post<ApiResponse<DataFrameResult>>(`${BASE_PATH}/etf/fund-iopv`, data),
+}
+
+// ============= 指数数据 API =============
+
+/** 指数成分股请求参数 */
+export interface IndexConstituentRequest {
+    code_list: string[]
+    local_path?: string
+    is_local?: boolean
+}
+
+/** 指数权重请求参数 */
+export interface IndexWeightRequest {
+    code_list: string[]
+    local_path?: string
+    is_local?: boolean
+    begin_date?: number
+    end_date?: number
+}
+
+export const indexApi = {
+    /** 获取指数成分股 */
+    getConstituent: (data: IndexConstituentRequest) =>
+        request.post<ApiResponse<DataFrameResult>>(`${BASE_PATH}/index/constituent`, data),
+
+    /** 获取指数成分股日权重 */
+    getWeight: (data: IndexWeightRequest) =>
+        request.post<ApiResponse<DataFrameResult>>(`${BASE_PATH}/index/weight`, data),
+}
+
+// ============= 行业数据 API =============
+
+/** 行业成分股请求参数 */
+export interface IndustryConstituentRequest {
+    code_list: string[]
+    local_path?: string
+    is_local?: boolean
+}
+
+/** 行业权重/日行情请求参数 */
+export interface IndustryDataRequest {
+    code_list: string[]
+    local_path?: string
+    is_local?: boolean
+    begin_date?: number
+    end_date?: number
+}
+
+export const industryApi = {
+    /** 获取行业指数基本信息 */
+    getBaseInfo: (params?: { local_path?: string; is_local?: boolean }) =>
+        request.get<ApiResponse<DataFrameResult>>(`${BASE_PATH}/industry/base-info`, { params }),
+
+    /** 获取行业成分股 */
+    getConstituent: (data: IndustryConstituentRequest) =>
+        request.post<ApiResponse<DataFrameResult>>(`${BASE_PATH}/industry/constituent`, data),
+
+    /** 获取行业成分股日权重 */
+    getWeight: (data: IndustryDataRequest) =>
+        request.post<ApiResponse<DataFrameResult>>(`${BASE_PATH}/industry/weight`, data),
+
+    /** 获取行业指数日行情 */
+    getDaily: (data: IndustryDataRequest) =>
+        request.post<ApiResponse<DataFrameResult>>(`${BASE_PATH}/industry/daily`, data),
+}
+
+// ============= 国债数据 API =============
+
+/** 国债收益率请求参数 */
+export interface TreasuryYieldRequest {
+    code_list?: string[]
+    local_path?: string
+    is_local?: boolean
+    begin_date?: number
+    end_date?: number
+}
+
+export const treasuryApi = {
+    /** 获取国债收益率 */
+    getYield: (data: TreasuryYieldRequest) =>
+        request.post<ApiResponse<DataFrameResult>>(`${BASE_PATH}/treasury/yield`, data),
+
+    /** 获取最新国债收益率 */
+    getLatestYield: () =>
+        request.get<ApiResponse<DataFrameResult>>(`${BASE_PATH}/treasury/yield/latest`),
 }
 
 // ============= API 信息 =============
@@ -552,6 +659,9 @@ const amazingdataApi = {
     concept: conceptApi,
     option: optionApi,
     etf: etfApi,
+    index: indexApi,
+    industry: industryApi,
+    treasury: treasuryApi,
     getApiInfo,
 }
 

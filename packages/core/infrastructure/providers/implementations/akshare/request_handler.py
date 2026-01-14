@@ -43,6 +43,8 @@ class RequestHandler:
 
         # 请求优化器
         self.request_optimizer = RequestOptimizer()
+        # 设置请求执行器为带缓存和重试的请求方法
+        self.request_optimizer.executor = self._fetch_with_fallback
 
         # 缓存管理器
         self.cache_manager = get_cache_manager()

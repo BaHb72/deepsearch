@@ -550,3 +550,14 @@ def get_analytics_db(
         )
         _analytics_instance.init_schema()
     return _analytics_instance
+
+
+async def close_analytics_db() -> None:
+    """关闭全局 DuckDB 分析实例
+
+    应在应用关闭时调用此函数以正确释放资源。
+    """
+    global _analytics_instance
+    if _analytics_instance is not None:
+        await _analytics_instance.close()
+        _analytics_instance = None

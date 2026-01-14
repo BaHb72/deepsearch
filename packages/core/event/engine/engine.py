@@ -507,7 +507,7 @@ class EventEngine:
                 target=self._dispatcher, name="EventEngine-Dispatcher", daemon=False
             )
             self._scheduler_th = threading.Thread(
-                target=self._scheduler, name="EventEngine-Scheduler", daemon=False
+                target=self._scheduler, name="EventEngine-Scheduler", daemon=True
             )
 
             self._dispatcher_th.start()
@@ -1012,6 +1012,11 @@ class EventEngine:
 
                 # Execute task (outside of lock)
                 try:
+                    # Check stop flag before executing task
+                    if not self._running:
+                        logger.debug("Scheduler stopping before task execution")
+                        break
+
                     evt = Event(task.event_type, data=task.payload)
                     if not self.put(evt, priority=task.priority, block=False):
                         logger.warning(f"Failed to queue scheduled event: {task.event_type}")

@@ -232,10 +232,14 @@ class ServerManager:
 class GracefulShutdownServer(Server):
     """支持优雅关闭的服务器"""
 
+    # 关闭超时时间（秒）
+    SHUTDOWN_TIMEOUT = 3.0
+
     def __init__(self, config: Config, manager: ServerManager):
         super().__init__(config)
         self.manager = manager
         self._setup_logger()
+        self._shutdown_started = False
 
     def _setup_logger(self):
         """确保 logger 存在"""
@@ -243,13 +247,27 @@ class GracefulShutdownServer(Server):
             self.logger = get_logger("uvicorn.error")
 
     async def shutdown(self, sockets=None):
-        """优雅关闭服务器"""
+        """优雅关闭服务器，带超时控制"""
+        if self._shutdown_started:
+            return
+        self._shutdown_started = True
+
         self.logger.info("正在优雅关闭服务器...")
 
         # 设置关闭标志
         self.should_exit = True
 
-        # 等待请求完成
+        # 使用超时包装父类关闭
+        try:
+            await asyncio.wait_for(self._do_shutdown(sockets), timeout=self.SHUTDOWN_TIMEOUT)
+        except asyncio.TimeoutError:
+            self.logger.warning(f"服务器关闭超时({self.SHUTDOWN_TIMEOUT}s)，强制终止")
+        except Exception as e:
+            self.logger.debug(f"关闭时出错: {e}")
+
+    async def _do_shutdown(self, sockets=None):
+        """执行实际的关闭操作"""
+        # 短暂等待让当前请求完成
         await asyncio.sleep(0.1)
 
         # 调用父类关闭
@@ -258,8 +276,6 @@ class GracefulShutdownServer(Server):
         except (asyncio.CancelledError, RuntimeError, GeneratorExit):
             # 这些是正常的关闭异常
             pass
-        except Exception as e:
-            self.logger.error(f"关闭时出错: {e}")
 
     async def serve(self, sockets=None):
         """运行服务器"""

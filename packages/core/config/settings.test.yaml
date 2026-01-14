@@ -65,9 +65,12 @@ database:
       user: root
 message_bus:
   buses:
+    inmem:
+      type: inmem
+      enabled: true
     zmq:
       type: zmq
-      enabled: true
+      enabled: false  # ZMQ 已废弃
       config:
         host: localhost
         pub_port: 5556
@@ -75,7 +78,7 @@ message_bus:
   routes:
     - match: '*'
       buses:
-        - zmq
+        - inmem  # 测试环境使用 inmem
 webui:
   enabled: true
   backend_host: 0.0.0.0
@@ -87,10 +90,11 @@ webui:
   reload: false
   workers: null
 data_sources:
-  default: amazingdata
+  default: miniqmt
   fallback_order:
-    - amazingdata
-    - akshare
+    - miniqmt      # 优先使用 MiniQMT (快速、稳定、本地 SDK)
+    - amazingdata  # 次选 AmazingData (功能全面、专业服务)
+    - akshare      # 最后备选 AkShare (速度慢、易被封，仅用于少量关键数据)
   circuit_breaker:
     enabled: true
     failure_threshold: 5
@@ -102,16 +106,28 @@ data_sources:
     retry_count: 3
     backoff_factor: 2
   providers:
+    miniqmt:
+      enabled: true
+      priority: 1  # 最高优先级
+      config:
+        cache:
+          enabled: true
+          ttl: 300  # 5分钟缓存
+        redis_url: redis://localhost:6379
+        failure_threshold: 5
+        recovery_timeout: 60
+      timeout: 10.0
+      retry_count: 3
     amazingdata:
       enabled: true
-      priority: 1
+      priority: 2  # 次于 MiniQMT
       fallback_sources:
         - akshare
       has_saved_credential: false
       worker_env:
         DEEPSEARCH_AMAZINGDATA_STUB: tests.stubs.amazingdata_stub
       config:
-        implementation_mode: process
+        implementation_mode: optimized  # process 模式已废弃
         connection:
           username: your_username_here
           password: your_password_here

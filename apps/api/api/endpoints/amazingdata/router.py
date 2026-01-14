@@ -43,7 +43,7 @@ async def get_api_info():
     """
     return {
         "name": "AmazingData Web API",
-        "version": "2.2.0",
+        "version": "2.3.0",
         "description": "AmazingData SDK的RESTful API封装",
         "modules": {
             "basic_data": {
@@ -88,11 +88,11 @@ async def get_api_info():
             },
             "etf": {
                 "path": "/api/amazingdata/etf",
-                "description": "ETF数据接口",
-                "endpoints": 1,
+                "description": "ETF数据接口（申赎、份额、IOPV）",
+                "endpoints": 3,
             },
         },
-        "total_endpoints": 46,
+        "total_endpoints": 48,
         "features": [
             "模块化设计",
             "统一错误处理",

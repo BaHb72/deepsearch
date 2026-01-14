@@ -1,164 +1,242 @@
+# ============================================================
+# DeepSearch 开发环境配置示例
+# ============================================================
+#
+# 这是 settings.dev.yaml 的示例模板。
+# 复制此文件为 settings.dev.yaml 并填入您的实际配置。
+#
+# 使用方法:
+#   1. 复制此文件: cp settings.dev.yaml.example settings.dev.yaml
+#   2. 编辑 settings.dev.yaml，填入您的账号信息
+#   3. 确保 settings.dev.yaml 已加入 .gitignore（避免泄露敏感信息）
+#
+# ============================================================
+
 app:
-  name: DeepSearch
-  author: BaHb
-  env: dev
+  author: YOUR_NAME
+  data_dir: ./data
   debug: true
-  data_dir: ./data/dev
+  env: dev
+  name: DeepSearch
 
 runtime:
   mode: full
 
-log:
-  level: INFO
-  format: verbose
-  toFile: true
-  toConsole: true
-  active: true
-  rotation: 00:00
-  retention_days: 30
-  enable_json: false
-  archive:
+# =============================================================================
+# Arrow 内存缓存配置
+# =============================================================================
+cache:
+  arrow:
+    base_dir: null
+    default_ttl: 60
     enabled: true
-    format: zip
-    archive_after_days: 30
-    purge_after_days: 90
-  modules:
-    enabled: false
-    directory: modules
-    max_depth: 2
-    rotation: 00:00
-    retention_days: 30
+    namespaces:
+      amazingdata:
+        ttl: 300
+      miniqmt:
+        ttl: 600
 
-message_bus:
-  buses:
-    zmq:
-      type: zmq
-      enabled: true
-      config:
-        host: localhost
-        pub_port: 5556
-        sub_port: 5557
-  routes:
-    - match: '*'
-      buses:
-        - zmq
-
-webui:
-  enabled: true
-  backend_host: 0.0.0.0
-  backend_port: 8000
-  frontend_enabled: true
-  frontend_host: localhost
-  frontend_port: 3000
-  enable_cors: true
-  reload: false
-
-database:
-  main:
-    enabled: true
-    type: postgresql
-    host: localhost
-    port: 5432
-    database: deepsearch
-    username: your_database_username
-    password: your_database_password
-    auto_connect: true
-    path: ./data/deepsearch.db
-  cache:
-    enabled: true
-    host: localhost
-    port: 6379
-    username: default
-    password: your_redis_password
-    db: 0
-    pool_size: 10
-    socket_timeout: 5
-    socket_connect_timeout: 5
-    socket_keepalive: true
-    retry_on_timeout: true
-    health_check_interval: 30
-    max_idle_time: 300
-    idle_check_interval: 60
-    startup_command: []
-    wsl:
-      enabled: false
-      distro: Ubuntu
-      auto_resolve_ip: true
-
+# =============================================================================
+# 数据源配置
+# =============================================================================
 data_sources:
-  default: amazingdata
-  fallback_order:
-    - amazingdata
-    - cloudflare
-    - akshare
   circuit_breaker:
     enabled: true
     failure_threshold: 5
-    recovery_timeout: 60
     half_open_attempts: 3
+    recovery_timeout: 60
   failover:
-    enabled: true
-    timeout: 5
-    retry_count: 3
     backoff_factor: 2
+    enabled: true
+    retry_count: 3
+    timeout: 5
+  fallback_order:
+    - miniqmt      # 优先使用 MiniQMT (快速、稳定、本地 SDK)
+    - amazingdata  # 次选 AmazingData (功能全面、专业服务)
+    - akshare      # 最后备选 AkShare (速度慢、易被封，仅用于少量关键数据)
   providers:
-    amazingdata:
-      enabled: false
-      priority: 1
-      fallback_sources:
-        - cloudflare
-        - akshare
+    miniqmt:
+      enabled: true
+      priority: 1  # 最高优先级
       config:
-        implementation_mode: process
-        connection:
-          username: your_amazingdata_username
-          password: your_amazingdata_password
-          host: 101.230.159.234
-          port: 8600
-          timeout: 10
-          heartbeat_interval: 60
-          auto_reconnect: true
-          reconnect_interval: 10
-          max_retries: 3
-        subscription:
-          enabled: true
-          batch_size: 100
-          max_symbols: 500
         cache:
           enabled: true
-          ttl: 300
-    cloudflare:
-      enabled: true
-      priority: 2
-      config:
-        worker_url: https://your-cloudflare-worker.example.com
-        timeout: 30
-        retry_count: 3
-        fallback_to_direct: true
+          ttl: 300  # 5分钟缓存
+        redis_url: redis://localhost:6379
+        failure_threshold: 5
+        recovery_timeout: 60
+      timeout: 10.0
+      retry_count: 3
     akshare:
-      enabled: true
-      priority: 3
       config:
-        mode: proxy
-        timeout: 30
+        mode: direct
         proxy:
-          enabled: true
-          worker_url: https://akshare-proxy.example.com
-          timeout: 15
-          retry_count: 3
-          fallback_to_direct: true
           cache:
             enabled: true
             ttl: 300
+          enabled: true
+          fallback_to_direct: true
+          retry_count: 3
+          timeout: 15
+          worker_url: https://YOUR-CLOUDFLARE-WORKER.workers.dev
+        timeout: 30
+      enabled: true
+      priority: 3
+    amazingdata:
+      config:
+        cache:
+          enabled: true
+          ttl: 300
+        connection:
+          auto_reconnect: true
+          heartbeat_interval: 60
+          host: 101.230.159.234
+          max_retries: 3
+          # ========== 请填入您的账号 ==========
+          password: YOUR_AMAZINGDATA_PASSWORD
+          username: YOUR_AMAZINGDATA_USERNAME
+          # ===================================
+          port: 8600
+          reconnect_interval: 10
+          timeout: 5000
+        host: demo.example.com
+        implementation_mode: optimized  # process 模式已废弃
+        port: 8600
+        subscription:
+          batch_size: 100
+          enabled: true
+          max_symbols: 500
+        timeout: 5000
+        username: user
+      enabled: true
+      fallback_enabled: false
+      has_saved_credential: false
+      priority: 1
+      retry_count: 3
+      timeout: 5.0
+  realtime:
+    adapters:
+      - driver: amazingdata
+        enabled: true
+        health:
+          cool_down_seconds: 30
+          failure_threshold: 3
+          probe_timeout_seconds: 5
+        name: amazingdata
+        priority: 1
+      - driver: akshare_polling
+        enabled: true
+        name: cloudflare
+        options:
+          batch_size: 50
+          use_proxy: true
+        priority: 2
+      - driver: akshare_polling
+        enabled: true
+        name: akshare
+        options:
+          batch_size: 50
+          use_proxy: false
+        priority: 3
+    alert_policy:
+      enabled: true
+      failure_threshold: 3
+      window_seconds: 300
+    health_check_interval: 120
 
+# =============================================================================
+# 数据库配置
+# =============================================================================
+database:
+  cache:
+    auto_start_windows: true
+    db: 0
+    enabled: true
+    health_check_interval: 30
+    host: localhost
+    idle_check_interval: 60
+    max_idle_time: 300
+    pool_size: 10
+    port: 6379
+    retry_on_timeout: true
+    socket_connect_timeout: 5
+    socket_keepalive: true
+    socket_timeout: 5
+    startup_command:
+      - wsl.exe
+      - -d
+      - Ubuntu
+      - -u
+      - root
+      - service
+      - redis-server
+      - start
+    username: default
+    windows_service_names:
+      - Redis
+      - redis
+    wsl:
+      auto_resolve_ip: true
+      distro: Ubuntu
+      enabled: true
+      service_name: redis-server
+      user: root
+  main:
+    auto_connect: true
+    database: deepsearch
+    echo: false
+    enabled: true
+    host: localhost
+    # ========== 请填入您的数据库密码 ==========
+    password: YOUR_DATABASE_PASSWORD
+    # =========================================
+    path: ./data/deepsearch.db
+    port: 5432
+    type: postgresql
+    username: postgres
+
+# =============================================================================
+# 日志配置
+# =============================================================================
+log:
+  active: true
+  archive:
+    archive_after_days: 30
+    enabled: true
+    format: zip
+    purge_after_days: 120
+  enable_json: false
+  level: INFO
+  modules:
+    directory: modules
+    enabled: false
+    max_depth: 2
+    retention_days: 30
+    rotation: "00:00"
+  retention_days: 30
+  rotation: "00:00"
+
+# =============================================================================
+# 市场数据配置
+# =============================================================================
 market_data:
   realtime:
-    enabled: true
+    auction_interval_seconds: 5.0
+    auction_timeout_seconds: 3.0
     boards:
       - 主板
       - 创业板
       - 科创板
       - 北证
+    capital_limit: 50
+    capital_windows:
+      - duration_seconds: 60
+        name: 1m
+      - duration_seconds: 300
+        name: 5m
+    continuous_interval_seconds: 1.0
+    continuous_timeout_seconds: 3.0
+    enabled: true
     include_markets:
       - SH_MAIN
       - SZ_MAIN
@@ -167,49 +245,235 @@ market_data:
       - BSE
       - INDEX
       - ETF
-    interval_seconds: 1.0
-    request_timeout_seconds: 3.0
     initial_step_timeout_seconds: 12.0
-    off_day_interval_seconds: 60.0
-    no_trade_interval_seconds: 5.0
-    auction_interval_seconds: 1.0
-    continuous_interval_seconds: 1.0
-    off_day_timeout_seconds: 0.5
-    no_trade_timeout_seconds: 1.0
-    auction_timeout_seconds: 2.0
-    continuous_timeout_seconds: 3.5
-    capital_windows:
-      - name: 1m
-        duration_seconds: 60
-    order_window:
-      name: 1m
-      duration_seconds: 60
-    capital_limit: 50
+    interval_seconds: 1.0
+    no_trade_interval_seconds: 45.0
+    no_trade_timeout_seconds: 5.0
+    off_day_interval_seconds: 120.0
+    off_day_timeout_seconds: 5.0
     order_limit: 100
+    order_window:
+      duration_seconds: 60
+      name: 1m
     redis:
-      url: redis://localhost:6379/6
-      strength_ttl: 180
-      imbalance_ttl: 180
       auction_ttl: 180
+      imbalance_ttl: 180
       max_strength_entries: 50
+      strength_ttl: 180
+      url: redis://localhost:6379/6
+    request_timeout_seconds: 3.0
+  modules:
+    auction_quality:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases: [auction, off_day]
+          trigger_errors: [DATA_SOURCE_OFFLINE]
+          cache_ttl_seconds: 45
+          min_interval_seconds: 10
+    board_overview:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases: [off_day]
+          trigger_errors: [DATA_SOURCE_OFFLINE]
+          cache_ttl_seconds: 120
+          min_interval_seconds: 30
+    order_imbalance:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases: [off_day, no_trade]
+          trigger_errors: [DATA_SOURCE_OFFLINE]
+          cache_ttl_seconds: 60
+          min_interval_seconds: 15
+    strength:
+      primary: amazingdata
+      fallbacks:
+        - source: akshare
+          phases: [off_day, no_trade]
+          trigger_errors: [DATA_SOURCE_OFFLINE, SESSION_EXPIRED]
+          cache_ttl_seconds: 90
+          min_interval_seconds: 15
 
-notifications:
+# =============================================================================
+# 消息总线配置
+# =============================================================================
+message_bus:
+  buses:
+    inmem:
+      enabled: false
+      type: inmem
+    timeseries:
+      config:
+        enable_persistence: true
+        storage_config:
+          db: 0
+          duplicate_policy: LAST
+          host: localhost
+          key_prefix: "deepsearch:ts:"
+          port: 6379
+          retention_ms: 86400000
+        url: tcp://127.0.0.1:5555
+      enabled: false
+      type: timeseries
+    zmq:
+      config:
+        host: 127.0.0.1
+        pub_port: 5556
+        recv_hwm: 1000
+        send_hwm: 1000
+        sub_port: 5557
+        verbose: true
+      enabled: true
+      type: zmq
+  routes:
+    - buses:
+        - zmq
+      match: "*"
+
+# =============================================================================
+# WebUI 配置
+# =============================================================================
+webui:
+  backend_host: 127.0.0.1
+  backend_port: 8000
+  enable_cors: true
   enabled: true
-  default_channel: wechat
-  wechat_token: your_wechat_token
-  bark_token: your_bark_token
-  categories:
-    alert:
-      enabled: true
-      max_per_window: 5
-      window_seconds: 300
-      channels:
-        - wechat
-        - bark
-    info:
-      enabled: true
-      max_per_window: 20
-      window_seconds: 600
-      channels:
-        - wechat
-        - bark
+  frontend_enabled: true
+  frontend_host: localhost
+  frontend_port: 3000
+  reload: false
+
+# =============================================================================
+# 数据源预取配置
+# =============================================================================
+data_source_prefetch:
+  enabled: false  # 开发环境禁用
+  interval_seconds: 300
+  job_type: prefetch_stock_basics
+  max_job_age_minutes: 45
+
+# =============================================================================
+# 通知推送配置
+# =============================================================================
+notifications:
+  enabled: false  # 开发环境禁用
+  wechat_token: ""
+  bark_token: ""
+  bark_servers: []
+  base_urls:
+    wechat: ""
+    bark: ""
+  default_channel: []
+  categories: {}
+  request_timeout: 5.0
+  retry_attempts: 3
+  retry_delay: 1.0
+
+# =============================================================================
+# 能力路由配置 (Capability Routing)
+# =============================================================================
+capability_routing:
+  capabilities:
+    miniqmt:
+      kline:
+        supported: true
+        min_timeframe: "1m"
+        max_timeframe: "1d"
+        history_days: 90
+        adjust_types: [none, qfq]
+        realtime_capable: true
+      realtime_quote:
+        supported: true
+        max_symbols: 500
+        latency_ms: 100
+      tick:
+        supported: true
+        max_symbols: 50
+      quality:
+        reliability: 0.95
+        avg_latency_ms: 100
+    amazingdata:
+      kline:
+        supported: true
+        min_timeframe: "1m"
+        max_timeframe: "1mo"
+        history_days: 365
+        adjust_types: [none, qfq, hfq]
+        realtime_capable: true
+      realtime_quote:
+        supported: true
+        max_symbols: 1000
+        latency_ms: 200
+        premarket: true
+        afterhours: true
+      quality:
+        reliability: 0.9
+        avg_latency_ms: 200
+    akshare:
+      kline:
+        supported: true
+        min_timeframe: "1d"
+        max_timeframe: "1mo"
+        history_days: 3650
+        adjust_types: [none, qfq, hfq]
+        realtime_capable: false
+      stock_list:
+        supported: true
+        cache_ttl: 86400
+      quality:
+        reliability: 0.85
+        avg_latency_ms: 1000
+        rate_limit_per_minute: 60
+  routing:
+    kline:
+      scenarios:
+        realtime:
+          priority: [miniqmt, amazingdata]  # 实时K线优先用 MiniQMT
+          fallback: true
+        historical:
+          priority: [amazingdata, akshare]  # 历史数据 AmazingData 优先，AkShare 提供长历史
+          fallback: true
+      by_timeframe:
+        "1m": [miniqmt, amazingdata]
+        "5m": [miniqmt, amazingdata]
+        "1d": [amazingdata, akshare]  # 日线数据 AmazingData 优先
+      priority: [miniqmt, amazingdata, akshare]
+      fallback: true
+    realtime_quote:
+      priority: [miniqmt, amazingdata]  # MiniQMT 低延迟优先
+      fallback: true
+    tick:
+      priority: [miniqmt]
+      fallback: false
+    stock_list:
+      priority: [miniqmt, amazingdata, akshare]  # 优先使用 MiniQMT/AmazingData 进行全量股票轮询
+      cache_ttl: 86400
+
+# =============================================================================
+# Dask 分布式计算配置
+# =============================================================================
+dask:
+  scheduler_address: "localhost:8786"
+  windows_workers:
+    enabled: true
+    auto_start: true
+    num_workers: 2
+    threads_per_worker: 2
+    memory_limit: "4GB"
+    name_prefix: "windows-worker"
+    resources:
+      WIN: 1
+  task_routing:
+    windows_tasks:
+      - data_fetch
+      - amazingdata_*
+      - miniqmt_*
+      - akshare_*
+      - realtime_quote
+    linux_tasks:
+      - compute_*
+      - backtest_*
+      - train_*
+      - factor_*

@@ -79,7 +79,7 @@ class AsyncRunner:
         include_frontend = not config.get("no_frontend", False)
 
         engine = self._require_engine()
-        await engine._start_phased_async(  # type: ignore[attr-defined]
+        await engine._start_phased_async(
             include_business=True, include_webui=True, include_frontend=include_frontend
         )
 
@@ -92,7 +92,7 @@ class AsyncRunner:
     async def _start_engine_mode(self, config: Mapping[str, Any]) -> None:
         """仅启动引擎模式"""
         engine = self._require_engine()
-        await engine._start_phased_async(  # type: ignore[attr-defined]
+        await engine._start_phased_async(
             include_business=True, include_webui=False, include_frontend=False
         )
 
@@ -102,7 +102,7 @@ class AsyncRunner:
         include_frontend = config.get("include_frontend", False)
         include_webui = config.get("include_webui", False)
         engine = self._require_engine()
-        await engine._start_phased_async(  # type: ignore[attr-defined]
+        await engine._start_phased_async(
             include_business=not infrastructure_only,
             include_webui=include_webui,
             include_frontend=include_frontend,
@@ -120,20 +120,38 @@ class AsyncRunner:
                         sig, lambda s=sig: asyncio.create_task(self._handle_signal())
                     )
             else:
+                # Windows 平台: 使用改进的信号处理
+                signal_count = [0]  # 使用列表以便在闭包中修改
 
                 def _windows_signal_handler(signum, frame):
+                    signal_count[0] += 1
+
+                    if signal_count[0] >= 2:
+                        # 第二次 Ctrl+C: 强制退出
+                        self.logger.warning("收到第二次中断信号，强制退出")
+                        import os
+
+                        os._exit(1)
+
+                    # 第一次: 尝试优雅关闭
                     if loop.is_closed():
                         return
-                    loop.call_soon_threadsafe(asyncio.create_task, self._handle_signal())
+
+                    try:
+                        # 直接设置事件，比创建任务更可靠
+                        loop.call_soon_threadsafe(self._shutdown_event.set)
+                    except RuntimeError:
+                        # 事件循环已关闭，忽略
+                        pass
 
                 for sig in (signal.SIGINT, signal.SIGTERM):
                     previous_signal_handlers[sig] = signal.getsignal(sig)
                     signal.signal(sig, _windows_signal_handler)
 
-            # �ȴ�ֹͣ�ź�
+            # 等待停止信号
             await self._shutdown_event.wait()
 
-            # ֹͣ����
+            # 停止引擎
             if self.engine and self.engine.is_running():
                 await self.engine.stop_async()
         finally:

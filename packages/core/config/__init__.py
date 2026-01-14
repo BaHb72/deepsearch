@@ -53,6 +53,8 @@ def reload_config() -> Settings:
     return get_config()
 
 
+from .loader import get_config_dir
+
 __all__ = [
     "settings",
     "Settings",
@@ -60,6 +62,7 @@ __all__ = [
     "config_manager",
     "get_config",
     "get_config_value",
+    "get_config_dir",
     "set_config",
     "reload_config",
 ]

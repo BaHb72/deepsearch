@@ -233,56 +233,29 @@ class AmazingDataExtended(AmazingDataProvider):
         """
         初始化AmazingDataExtended
 
-        使用 Dask Actor 模式初始化，通过 Dask Worker 调用 SDK。
-        注意：跳过父类的 initialize() 调用，因为父类会尝试直接 SDK 登录。
+        初始化策略：
+        1. Dask Actor 模式（已废弃，总是跳过）
+        2. 回退到父类初始化（直接 SDK 登录或进程隔离模式）
         """
-        if self._use_dask_actor:
-            try:
-                logger.info("[AmazingDataExtended] 尝试 Dask Actor 初始化...")
-                if await self._initialize_dask_adapter():
-                    logger.info("[AmazingDataExtended] Dask Actor 初始化成功")
-                    return True
-            except Exception as e:
-                logger.error(f"[AmazingDataExtended] Dask Actor 初始化失败: {e}")
-                self._use_dask_actor = False
+        # Dask Actor Adapter 已废弃，跳过尝试
+        self._use_dask_actor = False
+        logger.info("[AmazingDataExtended] Dask Actor 模式已废弃，使用父类初始化")
 
-        raise TGWError(
-            "AmazingData 初始化失败：Dask Actor 不可用",
-            error_code="DASK_ACTOR_UNAVAILABLE",
-            is_recoverable=False,
-        )
+        # 回退到父类初始化
+        return await super().initialize()
 
     async def _initialize_dask_adapter(self) -> bool:
-        """初始化 Dask Actor 适配器"""
-        if self._dask_adapter is not None:
-            return True
+        """初始化 Dask Actor 适配器
 
-        try:
-            from core.domain.data_proxy.adapters.amazingdata import AmazingDataAdapter
+        注意：Dask Actor Adapter 已废弃（domain.data_proxy.adapters 已移除）。
+        此方法总是返回 False，使代码走回退路径（multiprocessing 或直接调用）。
 
-            # 将配置转换为 dict
-            config_dict = self.config if isinstance(self.config, dict) else self.config.model_dump()  # type: ignore[attr-defined]
-
-            self._dask_adapter = AmazingDataAdapter(config_dict)
-
-            # 初始化并登录
-            username = config_dict.get("username")
-            password = config_dict.get("password")
-            success = await self._dask_adapter.initialize_actor(username, password)
-
-            if success:
-                self._connected = True
-                self._sdk_available = True
-                self._initialized_objects = True
-                return True
-            else:
-                self._dask_adapter = None
-                return False
-
-        except Exception as e:
-            logger.error(f"[DaskActor] 初始化失败: {e}")
-            self._dask_adapter = None
-            raise
+        TODO: 未来版本应通过 AmazingDataActor.call() 统一远程调用。
+        """
+        # Dask Actor Adapter 已废弃，总是返回 False
+        # 代码会走回退路径：multiprocessing 或直接调用 _info_data
+        logger.debug("[DaskActor] Dask Actor Adapter 已废弃，使用回退模式")
+        return False
 
     async def _ensure_data_objects(self):
         """确保数据对象已初始化

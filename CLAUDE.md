@@ -1,149 +1,218 @@
-# CLAUDE.md
+# DeepSearch 项目规范
 
-**最后更新时间**: 2026-01-09 (UTC+8)
+## 项目简介
 
-Claude Code 指导文档。
+DeepSearch是一个高性能量化交易系统
 
-## 项目概述
+## 技术规范
 
-DeepSearch 是一个高性能量化交易系统，采用 Python Monorepo 架构。
-
-## 目录结构
-
-```text
-deepsearch/
-├── packages/
-│   ├── core/                    # 核心库
-│   │   ├── config/              # 配置文件 (settings.*.yaml)
-│   │   ├── infrastructure/      # 基础设施层
-│   │   │   ├── providers/       # 数据提供者 (AmazingData, MiniQMT, AkShare)
-│   │   │   ├── persistence/     # 持久化层 (DuckDB, PostgreSQL)
-│   │   │   ├── cache/           # 缓存
-│   │   │   └── messaging/       # 消息传递
-│   │   ├── core/                # 运行时、引擎
-│   │   ├── domain/              # 领域模型
-│   │   └── cli/                 # 命令行入口
-│   └── data/                    # 数据处理包
-├── apps/
-│   ├── api/                     # FastAPI 后端
-│   │   ├── api/endpoints/       # API 路由
-│   │   ├── server.py            # 服务器主文件
-│   │   └── runner.py            # 运行器
-│   └── web/                     # React 前端 (Ant Design Pro)
-├── tests/                       # 测试
-├── tools/                       # 开发工具
-└── docs/                        # 文档
-```
-
-## 开发命令
-
-### 包管理 (UV)
-
-```bash
-uv sync --all-extras          # 安装所有依赖
-uv add package-name           # 添加依赖
-uv add --group dev pkg        # 添加开发依赖
-```
-
-### 运行系统
-
-```bash
-# 后端
-uv run deepsearch run dev     # 开发环境
-uv run deepsearch run prod    # 生产环境
-uv run deepsearch run --mode webui  # 仅 WebUI
-
-# 前端 (在 apps/web/ 目录)
-npm run dev:react             # 开发模式
-npm run build:react           # 生产构建
-```
-
-### 开发工具
-
-```bash
-uv run pytest                 # 运行测试
-uv run mypy packages/core     # 类型检查
-uv run ruff check .           # 代码检查
-```
-
-## 关键约束
-
-### 1. 禁止生产代码中的 Mock 数据
-
-- 生产代码严禁硬编码假数据
-- 单元测试使用 pytest fixtures 实现 mocking
-
-### 2. 计算架构
-
-- **Dask** - 分布式计算框架
-- **RabbitMQ** - 消息队列
-- **Redis** - 缓存
-- **PostgreSQL/DuckDB** - 持久化
-
-### 3. 数据源优先级
-
-1. **AmazingData** (银河证券) - 主数据源
-2. **MiniQMT** (迅投) - 量化终端
-3. **AkShare** - 开源数据
-
-### 4. 凭据安全规范
-
-**严禁硬编码密码！** 所有敏感信息必须从配置文件读取。
-
-```python
-# ❌ 错误 - 硬编码密码
-USERNAME = "your_username"
-PASSWORD = "your_password"
-sdk.login(USERNAME, PASSWORD, HOST, PORT)
-
-# ✅ 正确 - 从配置读取
-from core.config import get_config
-config = get_config()
-ad = config.amazingdata.connection
-sdk.login(ad.username, ad.password, ad.host, ad.port)
-```
-
-**不提交到 Git 的文件：**
-
-- `settings.*.yaml` - 含数据库密码
-- `data_sources.yaml` - 含数据源凭据
-- `scripts/test_*.py` 等临时脚本
-
-**脚本中读取凭据：**
-
-```python
-# 使用 scripts/utils/credentials.py
-from scripts.utils import get_amazingdata_credentials
-creds = get_amazingdata_credentials()
-```
-
-## 配置文件位置
-
-```text
-packages/core/config/
-├── settings.dev.yaml          # 开发配置 (不提交)
-├── settings.prod.yaml         # 生产配置 (不提交)
-├── data_sources.yaml          # 数据源配置 (不提交)
-├── settings.dev.yaml.example  # 开发模板
-├── data_sources.yaml.example  # 数据源模板
-└── settings.template.yaml     # 完整模板
-```
-
-## 端口配置
-
-| 服务            | 默认端口 |
-| --------------- | -------- |
-| WebUI Backend   | 8000     |
-| WebUI Frontend  | 3000     |
+- 包管理使用UV
+- 禁止生产代码中的 Mock 数据
+- 支持数据源AmazingData MiniQMT(迅投) AkShare尽量保持最新版本
+- 所有配置信息必须从配置文件使用Pydamic读取
+- WebUI后端端口8000 前端端口3000
+- 严禁在代码和文档中使用 emoji 表情符号
 
 ## Git 提交规范
 
 - **不添加 Co-Authored-By** - 提交信息中不要添加 `Co-Authored-By: Claude` 署名
 - 提交信息使用中文，格式遵循 Conventional Commits
-- 示例: `fix(mypy): 修复类型检查错误`
 
-## 常见问题
+---
 
-1. **循环导入**: 使用函数内延迟导入
-2. **配置加载**: `from core.config import get_config`
-3. **端口冲突**: `uv run deepsearch check-ports`
+## 🎯 问题解决方法论：第一性原理思维
+
+### 核心原则
+
+**在遇到任何问题时，必须先从第一性原理出发思考，而不是直接通过补丁式修复实现功能。**
+
+### 思维框架
+
+#### 1. 问题本质分析（What）
+
+```
+表面问题是什么？
+↓
+本质问题是什么？（去掉所有假设）
+↓
+我们真正要解决的核心挑战是什么？
+```
+
+**示例**：
+
+- ❌ 表面："线程超时导致进程挂起"
+- ✅ 本质："资源生命周期管理不可靠"
+
+#### 2. 当前设计审视（Why）
+
+```
+当前实现基于什么假设？
+↓
+这些假设在现代技术栈下还成立吗？
+↓
+是否存在更本质的解决方案？
+```
+
+**常见反模式**：
+
+- 全局变量管理状态 → 应该用类封装
+- 手动线程管理 → 应该用 asyncio
+- 平面化资源列表 → 应该用树形依赖图
+
+#### 3. 直接设计最优方案（How）
+
+**核心原则：一次做对，避免过度设计阶段性方案**
+
+**问自己**：
+
+```
+如果从零开始设计这个模块，会怎么做？
+↓
+现在的实现和理想方案差距在哪？
+↓
+能否直接重构到理想方案？（答案通常是：能）
+```
+
+**常见陷阱**：
+
+- ❌ "先快速修复，再慢慢重构" → 技术债永远不会被还
+- ❌ "分3个阶段逐步迁移" → 新老代码共存导致更混乱
+- ❌ "保留兼容层以防万一" → 兼容层变成永久负担
+
+**正确做法**：
+
+- ✅ 直接实现最优方案（用现代技术栈，清晰的架构）
+- ✅ 一次性迁移（写好测试，big-bang 替换）
+- ✅ 删除旧代码（不留技术债）
+
+**唯一例外**（紧急线上故障）：
+
+1. **立即止损**：最小改动修复问题（几小时内）
+2. **立即规划**：在修复的同时，规划最优方案（当天完成设计）
+3. **立即实施**：下个迭代（1-2周内）直接重构到最优方案
+4. **删除补丁**：最优方案上线后，立即删除临时代码
+
+#### 4. 实施检查清单（When）
+
+**开始前**：
+
+- [ ] 是否真的理解了问题本质？（花够10分钟思考）
+- [ ] 是否设计了最优方案？（用现代技术栈）
+- [ ] 是否写了充分的测试？（覆盖率 > 80%）
+
+**实施中**：
+
+- [ ] 是否一次性重构？（不做分阶段）
+- [ ] 是否删除了旧代码？（不留兼容层）
+- [ ] 是否更新了文档？（架构图、API文档）
+
+**完成后**：
+
+- [ ] 代码是否清晰？（5年后还能看懂）
+- [ ] 是否消除了技术债？（不是增加）
+- [ ] 是否可以作为最佳实践？（值得推广）
+
+### 实践要求
+
+#### 必须执行的步骤
+
+1. **问题出现时**：
+
+   ```
+   ❌ 不要：立即写代码修复
+   ✅ 应该：花10分钟分析根本原因
+   ```
+
+2. **设计方案时**：
+
+   ```
+   ❌ 不要：只考虑当前功能实现
+   ✅ 应该：直接设计最优方案（如果重新写会怎么做？）
+   ```
+
+3. **代码审查时**：
+
+   ```
+   问自己：
+   - 这段代码5年后还能理解吗？
+   - 如果Python升级，需要改多少？
+   - 有没有用语言/框架的原生能力？
+   ```
+
+#### 判断标准
+
+**好的设计**：
+
+- ✅ 用类型系统避免bug（类 > 全局变量）
+- ✅ 用语言特性替代手工管理（asyncio > threading）
+- ✅ 用数据结构表达逻辑（树 > 平面列表）
+- ✅ 依赖注入 > 全局单例
+- ✅ 状态机 > if-else 堆砌
+
+**坏的设计**：
+
+- ❌ 魔法数字和字符串
+- ❌ 全局可变状态
+- ❌ 深层嵌套的if-else
+- ❌ 手动资源管理
+- ❌ 时序依赖的同步逻辑
+
+### 工具支持
+
+#### 自动触发检查
+
+创建了 `first-principles` skill，在计划阶段自动触发：
+
+```bash
+# 计划模式下自动执行
+/plan <任务描述>
+→ 自动触发 first-principles skill
+→ 分析当前问题的本质
+→ 提供重构建议
+```
+
+#### 人工触发
+
+```bash
+# 手动调用（任何时候）
+/first-principles
+
+# 或者在计划文件中标记
+## TODO: 需要第一性原理分析
+```
+
+### 参考案例
+
+#### 案例1：Actor 启动失败
+
+**问题本质**：全局变量管理状态，拼写错误无法被类型系统检测
+
+**临时修复**：修复 `_worker_process` 拼写错误（1行代码）- 线上紧急止损 ✅
+
+**最优方案**：创建 `DaskWorkerManager` 类 + 状态机（200行代码）
+
+- 类封装状态 → 类型安全（IDE会检查拼写）
+- 状态机保护 → 防止非法操作（如重复启动）
+- 依赖注入 → 易于测试
+- **实施**：下个迭代（1周）直接重构，删除全局变量
+
+#### 案例2：EventEngine 超时
+
+**问题本质**：手动线程管理 + 条件变量时序依赖 → 关闭不可靠
+
+**临时修复**：设置 `daemon=True`（1行代码）- 确保进程能退出 ✅
+
+**最优方案**：迁移到 asyncio.Task（300行代码）
+
+- asyncio.Event 替代 Condition → 无时序问题
+- Task 替代 Thread → 自动生命周期管理
+- async/await → 符合 FastAPI 生态
+- **实施**：当前迭代（1周）直接重写 EventEngine，删除线程代码
+
+---
+
+## 📚 延伸阅读
+
+- [第一性原理思维](https://fs.blog/first-principles/)
+- [重构：改善既有代码的设计](https://martinfowler.com/books/refactoring.html)
+- [架构整洁之道](https://www.amazon.com/Clean-Architecture-Craftsmans-Software-Structure/dp/0134494164)

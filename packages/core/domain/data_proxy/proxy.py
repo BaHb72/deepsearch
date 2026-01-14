@@ -60,10 +60,22 @@ class UnifiedDataProxy:
     ):
         """初始化数据代理
 
+        .. deprecated:: 2026-01
+            UnifiedDataProxy 已废弃，请使用新的 DataAccessProxy:
+            from core.infrastructure.providers.unified_proxy import get_data_proxy
+
         Args:
             router: 路由器实例
             default_preference: 默认路由偏好 ("latency" | "priority")
         """
+        import warnings
+
+        warnings.warn(
+            "UnifiedDataProxy 已废弃，请使用 core.infrastructure.providers.unified_proxy.DataAccessProxy",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         self._router = router or DataSourceRouter()
         self._default_preference = default_preference
         self._initialized = False
@@ -77,12 +89,38 @@ class UnifiedDataProxy:
         self._router.register_adapter(adapter)
 
     async def initialize(self) -> None:
-        """初始化所有适配器"""
+        """初始化所有适配器
+
+        .. deprecated:: 2026-01
+            UnifiedDataProxy 已废弃，请使用新的 DataAccessProxy:
+            from core.infrastructure.providers.unified_proxy import get_data_proxy
+
+            新实现已包含完整的初始化逻辑、熔断器、监控和重试功能。
+        """
+        import warnings
+
+        warnings.warn(
+            "UnifiedDataProxy 已废弃，请使用 core.infrastructure.providers.unified_proxy.DataAccessProxy",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         if self._initialized:
             return
-        # TODO: 初始化逻辑
+
+        # 简单初始化逻辑（保持向后兼容）
+        # 实际项目应迁移到 DataAccessProxy
+        for adapter_name in list(self._router._adapters.keys()):
+            adapter = self._router.get_adapter(adapter_name)
+            if adapter and hasattr(adapter, "initialize"):
+                try:
+                    await adapter.initialize()
+                    logger.debug(f"已初始化适配器: {adapter_name}")
+                except Exception as e:
+                    logger.warning(f"适配器 {adapter_name} 初始化失败: {e}")
+
         self._initialized = True
-        logger.info("UnifiedDataProxy 初始化完成")
+        logger.info("UnifiedDataProxy 初始化完成（已废弃，建议迁移到 DataAccessProxy）")
 
     # ==================== K 线数据 ====================
 

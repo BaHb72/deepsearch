@@ -1,0 +1,440 @@
+"""AmazingData Dask Adapter 单元测试
+
+测试 AmazingDataDaskAdapter 的核心功能：
+- 初始化和 Worker 发现
+- 远程调用机制
+- 错误处理和重试
+- DataProvider 接口方法
+"""
+
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+import pandas as pd
+import pytest
+
+
+@pytest.fixture
+def mock_dask_client() -> MagicMock:
+    """模拟 Dask Client"""
+    client = MagicMock()
+    client.scheduler = MagicMock()
+    client.scheduler.address = "tcp://localhost:8786"
+
+    # 模拟 scheduler_info
+    client.scheduler_info.return_value = {
+        "workers": {
+            "tcp://worker1:1234": {
+                "resources": {"WIN": 1.0},
+                "memory_limit": 8_000_000_000,
+            }
+        }
+    }
+
+    return client
+
+
+@pytest.fixture
+def mock_dask_client_no_windows() -> MagicMock:
+    """模拟无 Windows Worker 的 Dask Client"""
+    client = MagicMock()
+    client.scheduler = MagicMock()
+    client.scheduler.address = "tcp://localhost:8786"
+
+    # 没有 Windows Worker
+    client.scheduler_info.return_value = {
+        "workers": {
+            "tcp://linux-worker:5678": {
+                "resources": {},
+                "memory_limit": 8_000_000_000,
+            }
+        }
+    }
+
+    return client
+
+
+class TestAmazingDataDaskAdapterInit:
+    """初始化测试"""
+
+    def test_init_basic(self, mock_dask_client: MagicMock) -> None:
+        """测试基本初始化"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(mock_dask_client)
+
+        assert adapter.name == "amazingdata"
+        assert adapter._timeout == 30.0
+        assert adapter._retry_count == 3
+        assert adapter._windows_worker is None
+        assert adapter._actor_available is False
+        assert adapter._initialized is False
+
+    def test_init_custom_params(self, mock_dask_client: MagicMock) -> None:
+        """测试自定义参数初始化"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(
+            mock_dask_client,
+            timeout=60.0,
+            retry_count=5,
+        )
+
+        assert adapter._timeout == 60.0
+        assert adapter._retry_count == 5
+
+
+class TestAmazingDataDaskAdapterInitialize:
+    """initialize() 方法测试"""
+
+    @pytest.mark.asyncio
+    async def test_initialize_success(self, mock_dask_client: MagicMock) -> None:
+        """测试初始化成功"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(mock_dask_client)
+
+        # 模拟 _check_actor_available 返回 True
+        with patch.object(adapter, "_check_actor_available", return_value=True):
+            result = await adapter.initialize()
+
+        assert result is True
+        assert adapter._windows_worker == "tcp://worker1:1234"
+        assert adapter._actor_available is True
+        assert adapter._initialized is True
+        assert adapter.is_connected() is True
+
+    @pytest.mark.asyncio
+    async def test_initialize_no_windows_worker(
+        self, mock_dask_client_no_windows: MagicMock
+    ) -> None:
+        """测试无 Windows Worker"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(mock_dask_client_no_windows)
+        result = await adapter.initialize()
+
+        assert result is False
+        assert adapter._windows_worker is None
+        assert adapter.is_connected() is False
+
+    @pytest.mark.asyncio
+    async def test_initialize_actor_not_available(self, mock_dask_client: MagicMock) -> None:
+        """测试 Actor 不可用"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(mock_dask_client)
+
+        # 模拟 _check_actor_available 返回 False
+        with patch.object(adapter, "_check_actor_available", return_value=False):
+            result = await adapter.initialize()
+
+        assert result is False
+        assert adapter._windows_worker == "tcp://worker1:1234"
+        assert adapter._actor_available is False
+
+    @pytest.mark.asyncio
+    async def test_initialize_idempotent(self, mock_dask_client: MagicMock) -> None:
+        """测试重复初始化（幂等性）"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(mock_dask_client)
+
+        with patch.object(adapter, "_check_actor_available", return_value=True):
+            # 第一次初始化
+            result1 = await adapter.initialize()
+            # 第二次初始化应该直接返回 True
+            result2 = await adapter.initialize()
+
+        assert result1 is True
+        assert result2 is True
+
+
+class TestAmazingDataDaskAdapterCallActor:
+    """_call_actor() 方法测试"""
+
+    @pytest.mark.asyncio
+    async def test_call_actor_not_initialized(self, mock_dask_client: MagicMock) -> None:
+        """测试未初始化时调用"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+        from core.infrastructure.providers.interfaces.base import DataProviderError
+
+        adapter = AmazingDataDaskAdapter(mock_dask_client)
+
+        with pytest.raises(DataProviderError, match="Actor 不可用"):
+            await adapter._call_actor("query_kline", code_list=["000001.SZ"])
+
+    @pytest.mark.asyncio
+    async def test_call_actor_success(self, mock_dask_client: MagicMock) -> None:
+        """测试远程调用成功"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(mock_dask_client)
+        adapter._actor_available = True
+        adapter._windows_worker = "tcp://worker1:1234"
+
+        # 创建 mock Future
+        expected_result = [{"symbol": "000001.SZ", "close": 10.5}]
+        mock_future = MagicMock()
+        mock_async_future = asyncio.Future()
+        mock_async_future.set_result(expected_result)
+
+        with patch("asyncio.wrap_future", return_value=mock_async_future):
+            mock_dask_client.submit.return_value = mock_future
+            result = await adapter._call_actor(
+                "query_kline",
+                code_list=["000001.SZ"],
+                begin_date=20240101,
+                end_date=20240110,
+            )
+
+        assert result == expected_result
+        mock_dask_client.submit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_call_actor_timeout_retry(self, mock_dask_client: MagicMock) -> None:
+        """测试超时重试"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+        from core.infrastructure.providers.interfaces.base import DataProviderError
+
+        adapter = AmazingDataDaskAdapter(mock_dask_client, timeout=0.1, retry_count=2)
+        adapter._actor_available = True
+        adapter._windows_worker = "tcp://worker1:1234"
+
+        # 模拟永远不完成的 Future
+        async def slow_future() -> Any:
+            await asyncio.sleep(10)
+            return {}
+
+        mock_future = MagicMock()
+
+        with patch("asyncio.wrap_future", side_effect=lambda f: slow_future()):
+            mock_dask_client.submit.return_value = mock_future
+
+            with pytest.raises(DataProviderError, match="超时"):
+                await adapter._call_actor("query_kline")
+
+        # 应该重试 2 次 + 初始调用 = 3 次
+        assert mock_dask_client.submit.call_count == 3
+
+
+class TestAmazingDataDaskAdapterDataProviderMethods:
+    """DataProvider 接口方法测试"""
+
+    @pytest.fixture
+    def initialized_adapter(self, mock_dask_client: MagicMock) -> Any:
+        """已初始化的 Adapter"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(mock_dask_client)
+        adapter._actor_available = True
+        adapter._windows_worker = "tcp://worker1:1234"
+        adapter._initialized = True
+        return adapter
+
+    @pytest.mark.asyncio
+    async def test_query_kline(self, initialized_adapter: Any, mock_dask_client: MagicMock) -> None:
+        """测试 query_kline 接口"""
+        expected_result = {
+            "000001.SZ": [{"date": 20240101, "close": 10.5}],
+        }
+
+        mock_future = asyncio.Future()
+        mock_future.set_result(expected_result)
+
+        with patch.object(
+            initialized_adapter, "_call_actor", return_value=expected_result
+        ) as mock_call:
+            result = await initialized_adapter.query_kline(
+                code_list=["000001.SZ"],
+                begin_date=20240101,
+                end_date=20240110,
+                period="day",
+            )
+
+        assert result is not None
+        assert "000001.SZ" in result
+        mock_call.assert_called_once_with(
+            "query_kline",
+            code_list=["000001.SZ"],
+            begin_date=20240101,
+            end_date=20240110,
+            period="day",
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_code_list(
+        self, initialized_adapter: Any, mock_dask_client: MagicMock
+    ) -> None:
+        """测试 get_code_list 接口"""
+        expected_result = ["000001.SZ", "000002.SZ", "600000.SH"]
+
+        with patch.object(
+            initialized_adapter, "_call_actor", return_value=expected_result
+        ) as mock_call:
+            result = await initialized_adapter.get_code_list(security_type="EXTRA_STOCK_A")
+
+        assert result == expected_result
+        mock_call.assert_called_once_with("get_code_list", security_type="EXTRA_STOCK_A")
+
+    @pytest.mark.asyncio
+    async def test_get_calendar(
+        self, initialized_adapter: Any, mock_dask_client: MagicMock
+    ) -> None:
+        """测试 get_calendar 接口"""
+        expected_result = [20240102, 20240103, 20240104]
+
+        with patch.object(
+            initialized_adapter, "_call_actor", return_value=expected_result
+        ) as mock_call:
+            result = await initialized_adapter.get_calendar(begin_date=20240101, end_date=20240110)
+
+        assert result == expected_result
+        mock_call.assert_called_once_with("get_calendar", begin_date=20240101, end_date=20240110)
+
+    @pytest.mark.asyncio
+    async def test_get_balance_sheet(
+        self, initialized_adapter: Any, mock_dask_client: MagicMock
+    ) -> None:
+        """测试 get_balance_sheet 接口"""
+        expected_result = [
+            {"symbol": "000001.SZ", "total_assets": 1000000},
+        ]
+
+        with patch.object(
+            initialized_adapter, "_call_actor", return_value=expected_result
+        ) as mock_call:
+            result = await initialized_adapter.get_balance_sheet(
+                code_list=["000001.SZ"],
+                begin_date=20240101,
+                end_date=20240331,
+            )
+
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 1
+        mock_call.assert_called_once()
+
+
+class TestAmazingDataDaskAdapterShutdown:
+    """shutdown() 方法测试"""
+
+    @pytest.mark.asyncio
+    async def test_shutdown(self, mock_dask_client: MagicMock) -> None:
+        """测试关闭"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(mock_dask_client)
+        adapter._actor_available = True
+        adapter._initialized = True
+
+        await adapter.shutdown()
+
+        assert adapter._actor_available is False
+        assert adapter._initialized is False
+        assert adapter.is_connected() is False
+
+
+class TestAmazingDataActorCallSync:
+    """AmazingDataActor.call_sync() 方法测试"""
+
+    def test_call_sync_basic(self) -> None:
+        """测试 call_sync 基本功能"""
+        # 直接导入 amazingdata_actor 模块，避免触发 __init__.py 的导入
+        import importlib.util
+        import sys
+
+        # 动态加载模块
+        spec = importlib.util.spec_from_file_location(
+            "amazingdata_actor",
+            "packages/core/compute/actors/amazingdata_actor.py",
+        )
+        if spec is None or spec.loader is None:
+            pytest.skip("Unable to load amazingdata_actor module")
+            return
+
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["amazingdata_actor_test"] = module
+
+        try:
+            spec.loader.exec_module(module)
+        except Exception as e:
+            pytest.skip(f"Unable to execute amazingdata_actor module: {e}")
+            return
+
+        AmazingDataActor = module.AmazingDataActor
+        actor = AmazingDataActor()
+
+        # 模拟 call 方法
+        async def mock_call(method: str, **kwargs: Any) -> Any:
+            return {"method": method, "kwargs": kwargs}
+
+        with patch.object(actor, "call", side_effect=mock_call):
+            # call_sync 是同步方法
+            result = actor.call_sync("query_kline", code_list=["000001.SZ"])
+
+        assert result["method"] == "query_kline"
+        assert result["kwargs"]["code_list"] == ["000001.SZ"]
+
+
+class TestConfigValidation:
+    """配置验证测试"""
+
+    def test_distributed_mode_requires_scheduler(self) -> None:
+        """测试 distributed 模式需要 scheduler 地址"""
+        from core.config.models.amazingdata import AmazingDataConfig
+
+        # distributed 模式但没有 scheduler 地址应该报错
+        with pytest.raises(ValueError, match="distributed 模式需要配置"):
+            AmazingDataConfig(
+                enabled=False,  # 禁用以跳过连接验证
+                mode="distributed",
+                dask_scheduler_address=None,
+            )
+
+    def test_distributed_mode_with_scheduler(self) -> None:
+        """测试 distributed 模式配置正确"""
+        from core.config.models.amazingdata import AmazingDataConfig
+
+        # 正确配置应该通过
+        config = AmazingDataConfig(
+            enabled=False,
+            mode="distributed",
+            dask_scheduler_address="tcp://localhost:8786",
+        )
+
+        assert config.mode == "distributed"
+        assert config.dask_scheduler_address == "tcp://localhost:8786"
+
+    def test_local_mode_default(self) -> None:
+        """测试 local 模式默认值"""
+        from core.config.models.amazingdata import AmazingDataConfig
+
+        config = AmazingDataConfig(enabled=False)
+
+        assert config.mode == "local"
+        assert config.dask_scheduler_address is None

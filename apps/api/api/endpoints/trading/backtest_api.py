@@ -4,7 +4,9 @@ Backtest API
 """
 
 import logging
+import time
 import uuid
+from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, cast
 
@@ -42,11 +44,86 @@ STRATEGY_MAP = {
     "momentum": MomentumStrategy,
 }
 
-# 存储回测结果（实际应用中应使用数据库）
-backtest_results: Dict[str, "BacktestResult"] = {}
+
+class TTLCache:
+    """带 TTL（过期时间）和 LRU（最近最少使用）的缓存"""
+
+    def __init__(self, maxsize: int = 100, ttl_seconds: float = 3600):
+        self.maxsize = maxsize
+        self.ttl_seconds = ttl_seconds
+        self._cache: OrderedDict[str, tuple[Any, float]] = OrderedDict()
+
+    def get(self, key: str) -> Optional[Any]:
+        """获取缓存值，如果过期则删除并返回 None"""
+        if key not in self._cache:
+            return None
+
+        value, timestamp = self._cache[key]
+        if time.time() - timestamp > self.ttl_seconds:
+            # 过期，删除并返回 None
+            del self._cache[key]
+            return None
+
+        # 更新访问顺序（LRU）
+        self._cache.move_to_end(key)
+        return value
+
+    def set(self, key: str, value: Any) -> None:
+        """设置缓存值"""
+        # 如果已存在，先删除（为了更新顺序）
+        if key in self._cache:
+            del self._cache[key]
+
+        # 如果超过最大大小，删除最旧的
+        if len(self._cache) >= self.maxsize:
+            self._cache.popitem(last=False)  # FIFO: 删除最早加入的
+
+        # 添加新值
+        self._cache[key] = (value, time.time())
+
+    def __contains__(self, key: str) -> bool:
+        """检查 key 是否存在且未过期"""
+        return self.get(key) is not None
+
+    def __len__(self) -> int:
+        """返回当前缓存大小"""
+        return len(self._cache)
+
+    def clear(self) -> None:
+        """清空缓存"""
+        self._cache.clear()
+
+    def delete(self, key: str) -> None:
+        """删除指定key的缓存"""
+        if key in self._cache:
+            del self._cache[key]
+
+    def values(self) -> list[Any]:
+        """返回所有有效的缓存值（自动清理过期项）"""
+        current_time = time.time()
+        valid_values = []
+        expired_keys = []
+
+        for key, (value, timestamp) in self._cache.items():
+            if current_time - timestamp > self.ttl_seconds:
+                expired_keys.append(key)
+            else:
+                valid_values.append(value)
+
+        # 清理过期项
+        for key in expired_keys:
+            del self._cache[key]
+
+        return valid_values
+
+
+# 存储回测结果（带 TTL 防止内存泄漏）
+# 回测结果保留 1 小时，最多 100 个
+backtest_results = TTLCache(maxsize=100, ttl_seconds=3600)
 
 # 图表缓存，避免重复生成
-chart_cache: Dict[str, str] = {}
+# 图表缓存保留 30 分钟，最多 50 个
+chart_cache = TTLCache(maxsize=50, ttl_seconds=1800)
 
 
 # 请求/响应模型
@@ -166,7 +243,7 @@ async def run_backtest(config: BacktestConfig, background_tasks: BackgroundTasks
         created_at=datetime.now(),
     )
 
-    backtest_results[backtest_id] = result
+    backtest_results.set(backtest_id, result)
 
     # 在后台运行回测
     background_tasks.add_task(execute_backtest, backtest_id, config)
@@ -176,8 +253,12 @@ async def run_backtest(config: BacktestConfig, background_tasks: BackgroundTasks
 
 async def execute_backtest(backtest_id: str, config: BacktestConfig):
     """执行回测任务"""
-    result = backtest_results[backtest_id]
+    result = backtest_results.get(backtest_id)
+    if result is None:
+        logger.error(f"回测 {backtest_id} 结果对象不存在（可能已过期）")
+        return
 
+    engine = None
     try:
         logger.info(f"开始执行回测 {backtest_id}")
 
@@ -227,23 +308,19 @@ async def execute_backtest(backtest_id: str, config: BacktestConfig):
         chart: Optional[str] = None
 
         # 检查缓存
-        if chart_key in chart_cache:
+        cached_chart = chart_cache.get(chart_key)
+        if cached_chart is not None:
             logger.info(f"使用缓存的图表: {chart_key}")
-            chart = chart_cache[chart_key]
+            chart = cached_chart
         else:
             logger.info(f"生成新图表: {chart_key}")
             try:
                 # 调用plot_results，内部已经有超时保护
                 generated_chart = engine.plot_results(use_backtrader_plot=True)
 
-                # 如果图表生成成功，缓存它
+                # 如果图表生成成功，缓存它（TTLCache 自动管理大小）
                 if generated_chart:
-                    # 缓存图表（限制缓存大小）
-                    if len(chart_cache) > 50:  # 最多缓存50个图表
-                        # 删除最早的缓存项
-                        oldest_key = next(iter(chart_cache))
-                        del chart_cache[oldest_key]
-                    chart_cache[chart_key] = generated_chart
+                    chart_cache.set(chart_key, generated_chart)
                     chart = generated_chart
                 else:
                     logger.warning("图表生成失败，使用空图表")
@@ -271,14 +348,22 @@ async def execute_backtest(backtest_id: str, config: BacktestConfig):
         result.error = str(e)
         result.completed_at = datetime.now()
 
+    finally:
+        # 清理资源，帮助垃圾回收器尽快释放内存
+        if engine is not None:
+            # 清除 engine 持有的大对象引用
+            if hasattr(engine, "cerebro"):
+                engine.cerebro = None
+            engine = None
+            logger.debug(f"回测 {backtest_id} 资源已清理")
+
 
 @router.get("/results/{backtest_id}")
 async def get_backtest_result(backtest_id: str):
     """获取回测结果"""
-    if backtest_id not in backtest_results:
-        raise HTTPException(404, "回测结果不存在")
-
-    result = backtest_results[backtest_id]
+    result = backtest_results.get(backtest_id)
+    if result is None:
+        raise HTTPException(404, "回测结果不存在或已过期")
 
     return {
         "id": result.id,
@@ -345,6 +430,7 @@ async def optimize_parameters(config: OptimizationConfig, background_tasks: Back
 
 async def execute_optimization(task_id: str, config: OptimizationConfig):
     """执行参数优化"""
+    engine = None
     try:
         logger.info(f"开始参数优化 {task_id}")
 
@@ -371,14 +457,22 @@ async def execute_optimization(task_id: str, config: OptimizationConfig):
     except Exception as e:
         logger.error(f"参数优化 {task_id} 失败: {e}")
 
+    finally:
+        # 清理资源
+        if engine is not None:
+            if hasattr(engine, "cerebro"):
+                engine.cerebro = None
+            engine = None
+            logger.debug(f"参数优化 {task_id} 资源已清理")
+
 
 @router.delete("/results/{backtest_id}")
 async def delete_backtest_result(backtest_id: str):
     """删除回测结果"""
     if backtest_id not in backtest_results:
-        raise HTTPException(404, "回测结果不存在")
+        raise HTTPException(404, "回测结果不存在或已过期")
 
-    del backtest_results[backtest_id]
+    backtest_results.delete(backtest_id)
 
     return {"message": "回测结果已删除"}
 
@@ -397,10 +491,9 @@ async def get_backtest_plot(
     Returns:
         Base64编码的图表
     """
-    if backtest_id not in backtest_results:
-        raise HTTPException(404, "回测结果不存在")
-
-    result = backtest_results[backtest_id]
+    result = backtest_results.get(backtest_id)
+    if result is None:
+        raise HTTPException(404, "回测结果不存在或已过期")
 
     if result.status != "completed":
         raise HTTPException(400, "回测尚未完成")

@@ -1,0 +1,532 @@
+# ============================================================
+# DeepSearch 生产环境配置示例
+# ============================================================
+#
+# 这是 settings.prod.yaml 的示例模板。
+# 复制此文件为 settings.prod.yaml 并填入您的实际配置。
+#
+# 使用方法:
+#   1. 复制此文件: cp settings.prod.yaml.example settings.prod.yaml
+#   2. 编辑 settings.prod.yaml，填入您的账号信息
+#   3. 确保 settings.prod.yaml 已加入 .gitignore（避免泄露敏感信息）
+#
+# 生产环境注意事项:
+#   - debug 必须为 false
+#   - 所有密码建议使用加密格式: encrypted:XXXXX
+#   - 日志保留天数建议较短（节省存储）
+#   - 通知推送建议启用
+#
+# ============================================================
+
+app:
+  author: YOUR_NAME
+  data_dir: ./data
+  debug: false  # 生产环境必须为 false
+  env: prod
+  name: DeepSearch
+
+runtime:
+  mode: full
+
+# =============================================================================
+# Arrow 内存缓存配置
+# =============================================================================
+cache:
+  arrow:
+    base_dir: null
+    default_ttl: 60
+    enabled: true
+    namespaces:
+      amazingdata:
+        ttl: 300
+      miniqmt:
+        ttl: 600
+
+# =============================================================================
+# Cloudflare Workers 代理配置
+# =============================================================================
+cloudflare_workers:
+  url: https://YOUR-CLOUDFLARE-WORKER.workers.dev
+  auth_key: ""  # 公开访问时留空
+  timeout: 30
+  retry_count: 3
+  fallback_to_direct: true
+
+# =============================================================================
+# 数据源预取配置
+# =============================================================================
+data_source_prefetch:
+  enabled: true
+  interval_seconds: 300
+  job_type: prefetch_stock_basics
+  max_job_age_minutes: 45
+
+# =============================================================================
+# 数据源配置
+# =============================================================================
+data_sources:
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    half_open_attempts: 3
+    recovery_timeout: 60
+  default: miniqmt
+  failover:
+    backoff_factor: 2
+    enabled: true
+    retry_count: 3
+    timeout: 5
+  fallback_order:
+    - miniqmt      # 优先使用 MiniQMT (快速、稳定、本地 SDK)
+    - amazingdata  # 次选 AmazingData (功能全面、专业服务)
+    - akshare      # 最后备选 AkShare (速度慢、易被封，仅用于少量关键数据)
+  providers:
+    akshare:
+      config:
+        mode: direct
+        proxy:
+          cache:
+            enabled: true
+            ttl: 300
+          enabled: true
+          fallback_to_direct: true
+          retry_count: 3
+          timeout: 30
+          worker_url: https://YOUR-CLOUDFLARE-WORKER.workers.dev
+        timeout: 30
+      enabled: true
+      priority: 3
+    amazingdata:
+      config:
+        cache:
+          enabled: true
+          max_size: 10000
+          ttl: 300
+        connection:
+          auto_reconnect: true
+          heartbeat_interval: 60
+          host: 101.230.159.234
+          max_retries: 3
+          network_provider: telecom
+          # ========== 请填入您的账号 ==========
+          password: YOUR_AMAZINGDATA_PASSWORD
+          username: YOUR_AMAZINGDATA_USERNAME
+          # ===================================
+          port: 8600
+          python_interpreter_path: C:/Python313/python.exe
+          reconnect_interval: 10
+          tgw_log_path: C:/Galaxy/gateway/logs
+          timeout: 5000
+        host: 101.230.159.234
+        implementation_mode: optimized  # process 模式已废弃
+        monitoring:
+          enabled: true
+          log_slow_requests: true
+          metrics_enabled: true
+          report_interval: 60
+          slow_request_threshold: 1000
+          timeout: 5000
+        # ========== 冗余配置，与 connection 中保持一致 ==========
+        password: YOUR_AMAZINGDATA_PASSWORD
+        username: YOUR_AMAZINGDATA_USERNAME
+        # ======================================================
+        port: 8600
+        subscription:
+          auto_resubscribe: true
+          batch_size: 100
+          enabled: true
+          max_symbols: 500
+        timeout: 5000
+      enabled: true
+      fallback_enabled: false
+      fallback_sources:
+        - akshare
+      has_saved_credential: false
+      priority: 1
+      provider_name: amazingdata
+      retry_count: 3
+      timeout: 10.0
+    miniqmt:
+      config:
+        cache:
+          enabled: true
+          ttl: 60
+        host: localhost
+        port: 58610
+        timeout: 10
+      enabled: true
+      priority: 1
+  realtime:
+    adapters:
+      - driver: miniqmt
+        enabled: true
+        health:
+          cool_down_seconds: 30
+          failure_threshold: 3
+          probe_timeout_seconds: 5
+        name: miniqmt
+        priority: 1
+      - driver: amazingdata
+        enabled: true
+        health:
+          cool_down_seconds: 30
+          failure_threshold: 3
+          probe_timeout_seconds: 5
+        name: amazingdata
+        priority: 2
+      - driver: akshare_polling
+        enabled: false
+        name: akshare
+        options:
+          batch_size: 50
+          use_proxy: false
+        priority: 3
+    alert_policy:
+      channels:
+        - ops-bot
+      enabled: true
+      failure_threshold: 3
+      window_seconds: 300
+    health_check_interval: 120
+
+# =============================================================================
+# 数据库配置
+# =============================================================================
+database:
+  cache:
+    auto_start_windows: true
+    db: 0
+    enabled: true
+    health_check_interval: 30
+    host: localhost
+    idle_check_interval: 60
+    max_idle_time: 300
+    password: ""
+    pool_size: 10
+    port: 6379
+    retry_on_timeout: true
+    socket_connect_timeout: 5
+    socket_keepalive: true
+    socket_timeout: 5
+    username: default
+    windows_service_names:
+      - Redis
+      - redis
+    startup_command:
+      - wsl.exe
+      - -d
+      - Ubuntu
+      - -u
+      - root
+      - service
+      - redis-server
+      - start
+    wsl:
+      auto_resolve_ip: true
+      distro: Ubuntu
+      enabled: true
+      service_name: redis-server
+      user: root
+  main:
+    auto_connect: true
+    database: deepsearch
+    echo: false
+    enabled: true
+    host: localhost
+    # ========== 请填入您的数据库密码 ==========
+    # 建议使用加密格式: encrypted:XXXXX
+    password: YOUR_DATABASE_PASSWORD
+    # =========================================
+    path: ./data/deepsearch.db
+    port: 5432
+    type: postgresql
+    username: postgres
+
+# =============================================================================
+# 日志配置（生产环境保留天数较短）
+# =============================================================================
+log:
+  active: true
+  archive:
+    archive_after_days: 7
+    enabled: true
+    format: zip
+    purge_after_days: 60
+  enable_json: false
+  level: INFO
+  modules:
+    directory: modules
+    enabled: false
+    max_depth: 2
+    retention_days: 7
+    rotation: "00:00"
+  retention_days: 7
+  rotation: "00:00"
+
+# =============================================================================
+# 市场数据配置
+# =============================================================================
+market_data:
+  modules:
+    auction_quality:
+      fallbacks:
+        - cache_ttl_seconds: 45
+          min_interval_seconds: 10
+          phases:
+            - auction
+            - off_day
+          source: akshare
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+      primary: miniqmt
+    board_overview:
+      fallbacks:
+        - cache_ttl_seconds: 120
+          min_interval_seconds: 30
+          phases:
+            - off_day
+          source: akshare
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+      primary: miniqmt
+    order_imbalance:
+      fallbacks:
+        - cache_ttl_seconds: 60
+          min_interval_seconds: 15
+          phases:
+            - off_day
+            - no_trade
+          source: akshare
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+      primary: miniqmt
+    strength:
+      fallbacks:
+        - cache_ttl_seconds: 90
+          min_interval_seconds: 15
+          phases:
+            - off_day
+            - no_trade
+          source: akshare
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+            - SESSION_EXPIRED
+      primary: miniqmt
+  realtime:
+    auction_interval_seconds: 1.0
+    auction_timeout_seconds: 2.0
+    boards:
+      - 主板
+      - 创业板
+      - 科创板
+      - 北证
+    capital_limit: 50
+    capital_windows:
+      - duration_seconds: 60
+        name: 1m
+      - duration_seconds: 300
+        name: 5m
+    continuous_interval_seconds: 1.0
+    continuous_timeout_seconds: 3.5
+    enabled: true
+    include_markets:
+      - SH_MAIN
+      - SZ_MAIN
+      - STAR
+      - SZ_GEM
+      - BSE
+      - INDEX
+      - ETF
+    initial_step_timeout_seconds: 12.0
+    interval_seconds: 1.0
+    no_trade_interval_seconds: 5.0
+    no_trade_timeout_seconds: 1.0
+    off_day_interval_seconds: 60.0
+    off_day_timeout_seconds: 0.5
+    order_limit: 100
+    order_window:
+      duration_seconds: 60
+      name: 1m
+    redis:
+      auction_ttl: 180
+      imbalance_ttl: 180
+      max_strength_entries: 50
+      strength_ttl: 180
+      url: redis://localhost:6379/6
+    request_timeout_seconds: 3.0
+
+# =============================================================================
+# 消息总线配置（生产环境使用 inmem）
+# =============================================================================
+message_bus:
+  buses:
+    inmem:
+      config: {}
+      enabled: true
+      type: inmem
+  routes:
+    - buses:
+        - inmem
+      match: "*"
+
+# =============================================================================
+# 通知推送配置
+# =============================================================================
+notifications:
+  enabled: true
+  # ========== 请填入您的推送 Token ==========
+  wechat_token: YOUR_WECHAT_TOKEN
+  bark_token: YOUR_BARK_TOKEN
+  # =========================================
+  bark_servers:
+    - name: Bark Server 1
+      base_url: https://api.day.app/YOUR_BARK_KEY
+      token: ""
+      enabled: true
+  base_urls:
+    wechat: https://wx.xtuis.cn
+    bark: https://api.day.app
+  default_channel:
+    - wechat
+  categories:
+    alert:
+      enabled: true
+      max_per_window: 5
+      window_seconds: 300
+      channels:
+        - wechat
+        - bark
+  request_timeout: 5.0
+  retry_attempts: 3
+  retry_delay: 1.0
+  title_template: "{title}"
+  body_template: "{content}"
+  templates:
+    wechat: []
+    bark:
+      - name: DirectCall
+        title_template: "{title}"
+        body_template: "{content}"
+        use_markdown: false
+        auto_copy: false
+        call: false
+
+# =============================================================================
+# WebUI 配置
+# =============================================================================
+webui:
+  backend_host: 0.0.0.0  # 生产环境对外暴露
+  backend_port: 8000
+  enable_cors: true
+  enabled: true
+  frontend_enabled: true
+  frontend_host: localhost
+  frontend_port: 3000
+  reload: false
+
+# =============================================================================
+# 能力路由配置 (Capability Routing)
+# =============================================================================
+capability_routing:
+  capabilities:
+    miniqmt:
+      kline:
+        supported: true
+        min_timeframe: "1m"
+        max_timeframe: "1d"
+        history_days: 90
+        adjust_types: [none, qfq]
+        realtime_capable: true
+      realtime_quote:
+        supported: true
+        max_symbols: 500
+        latency_ms: 100
+      tick:
+        supported: true
+        max_symbols: 50
+      quality:
+        reliability: 0.95
+        avg_latency_ms: 100
+    amazingdata:
+      kline:
+        supported: true
+        min_timeframe: "1m"
+        max_timeframe: "1mo"
+        history_days: 365
+        adjust_types: [none, qfq, hfq]
+        realtime_capable: true
+      realtime_quote:
+        supported: true
+        max_symbols: 1000
+        latency_ms: 200
+        premarket: true
+        afterhours: true
+      quality:
+        reliability: 0.9
+        avg_latency_ms: 200
+    akshare:
+      kline:
+        supported: true
+        min_timeframe: "1d"
+        max_timeframe: "1mo"
+        history_days: 3650
+        adjust_types: [none, qfq, hfq]
+        realtime_capable: false
+      stock_list:
+        supported: true
+        cache_ttl: 86400
+      quality:
+        reliability: 0.85
+        avg_latency_ms: 1000
+        rate_limit_per_minute: 60
+  routing:
+    kline:
+      scenarios:
+        realtime:
+          priority: [miniqmt, amazingdata]
+          fallback: true
+        historical:
+          priority: [akshare, amazingdata]
+          fallback: true
+      by_timeframe:
+        "1m": [miniqmt, amazingdata]
+        "5m": [miniqmt, amazingdata]
+        "1d": [akshare, amazingdata]
+      priority: [miniqmt, amazingdata, akshare]
+      fallback: true
+    realtime_quote:
+      priority: [miniqmt, amazingdata]
+      fallback: true
+    tick:
+      priority: [miniqmt]
+      fallback: false
+    stock_list:
+      priority: [miniqmt, amazingdata, akshare]  # 优先使用 MiniQMT/AmazingData 进行全量股票轮询
+      cache_ttl: 86400
+
+# =============================================================================
+# Dask 分布式计算配置
+# =============================================================================
+dask:
+  scheduler_address: "localhost:8786"
+  windows_workers:
+    enabled: true
+    auto_start: true
+    num_workers: 2
+    threads_per_worker: 2
+    memory_limit: "4GB"
+    name_prefix: "windows-worker"
+    resources:
+      WIN: 1
+  task_routing:
+    windows_tasks:
+      - data_fetch
+      - amazingdata_*
+      - miniqmt_*
+      - akshare_*
+      - realtime_quote
+    linux_tasks:
+      - compute_*
+      - backtest_*
+      - train_*
+      - factor_*

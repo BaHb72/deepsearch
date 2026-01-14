@@ -36,8 +36,8 @@ from .base import (
 )
 
 if TYPE_CHECKING:
-    from core.infrastructure.providers.implementations.akshare.akshare_refactored import (
-        AkShareProxyProvider,
+    from core.infrastructure.providers.implementations.akshare.akshare_direct import (
+        AKShareDirectProvider,
     )
 
 
@@ -95,14 +95,14 @@ class AKShareAdapter(BaseProviderAdapter, IKlineProvider, IStockListProvider):
 
     def __init__(
         self,
-        provider: "AkShareProxyProvider",
+        provider: "AKShareDirectProvider",
         capabilities: Optional[ProviderCapabilitiesSpec] = None,
     ):
         """
         初始化 AKShare 适配器。
 
         Args:
-            provider: 底层 AkShareProxyProvider 实例
+            provider: 底层 AKShareDirectProvider 实例
             capabilities: 能力声明，可选
         """
         if capabilities is None:
@@ -163,8 +163,8 @@ class AKShareAdapter(BaseProviderAdapter, IKlineProvider, IStockListProvider):
         # 转换请求参数
         params = self._mapper.map_kline_request(request)
 
-        # 调用底层 Provider
-        df = await self._provider.get_history_data(**params)
+        # 调用底层 Provider（AKShareDirectProvider 使用 get_stock_hist）
+        df = await self._provider.get_stock_hist(**params)
 
         # 计算延迟
         self._last_latency_ms = int((time.perf_counter() - start_time) * 1000)
@@ -260,8 +260,8 @@ class AKShareAdapter(BaseProviderAdapter, IKlineProvider, IStockListProvider):
         """
         start_time = time.perf_counter()
 
-        # 调用底层 Provider 获取实时行情（包含股票列表信息）
-        raw_data = await self._provider.fetch_all_realtime_quotes()
+        # 调用底层 Provider 获取股票列表
+        raw_data = await self._provider.get_stock_list()
 
         self._last_latency_ms = int((time.perf_counter() - start_time) * 1000)
 

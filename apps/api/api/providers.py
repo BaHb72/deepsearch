@@ -255,143 +255,318 @@ class DataProviderFactory:
     async def _create_amazingdata_actor(cls) -> Any:
         """创建新的 AmazingData Actor 并返回包装器"""
         import asyncio
+        import time
 
         from core.compute import get_dask_client
         from core.compute.actors import AmazingDataActor
         from core.core.runtime.di_container import _get_amazingdata_config
 
         config = _get_amazingdata_config()
-        client = await get_dask_client()
 
-        logger.info("正在创建 AmazingData Actor...")
-        actor_future = client.submit(
-            AmazingDataActor,
-            config,
-            actor=True,
-            resources={"WIN": 1},
-        )
+        # 重试配置
+        max_retries = 3
+        base_delay = 2.0
 
-        loop = asyncio.get_event_loop()
-        actor = await asyncio.wait_for(
-            loop.run_in_executor(None, actor_future.result), timeout=60.0
-        )
+        for attempt in range(max_retries):
+            start_time = time.time()
+            try:
+                client = await get_dask_client()
 
-        # 登录
-        logger.info("正在登录 AmazingData...")
-        login_result = await actor.login(config["username"], config["password"])
-        if not login_result:
-            raise RuntimeError("AmazingData 登录失败")
+                logger.info(
+                    f"[ACTOR_CREATE] 开始创建 AmazingData Actor (尝试 {attempt + 1}/{max_retries})..."
+                )
+                actor_future = client.submit(
+                    AmazingDataActor,
+                    config,
+                    actor=True,
+                    resources={"WIN": 1},
+                )
 
-        # 用本地包装类包装 Actor，提供 _connected 等属性和健康检查
-        class ActorWrapper:
-            """Dask Actor 本地包装器，提供 API 层所需的属性"""
+                logger.debug("[ACTOR_CREATE] Dask Future 已提交 | future_key={}", actor_future.key)
 
-            def __init__(self, actor, connected: bool = True):
-                self._actor = actor
-                self._is_connected = connected
-                self._creation_time = datetime.now()
+                # Dask ActorFuture 实现了 __await__ 协议，可以直接 await
+                logger.debug("[ACTOR_CREATE] 等待 Future 完成...")
+                actor = await asyncio.wait_for(actor_future, timeout=60.0)
 
-            @property
-            def _connected(self) -> bool:
-                return self._is_connected
+                # 初始化（自动登录）
+                logger.info("[ACTOR_CREATE] 正在初始化 AmazingData...")
+                init_result = await asyncio.wait_for(actor.initialize(), timeout=30.0)
+                if not init_result:
+                    raise RuntimeError("AmazingData 初始化失败")
 
-            @property
-            def _degraded_mode(self) -> bool:
-                return False
+                # 创建后即时验证
+                logger.info("[ACTOR_CREATE] 验证 Actor 连接...")
+                status = await asyncio.wait_for(actor.get_status(), timeout=10.0)
+                if not status.get("logged_in"):
+                    raise RuntimeError("Actor 连接状态验证失败")
 
-            @property
-            def _sdk_available(self) -> bool:
-                return True
+                # 用本地包装类包装 Actor，提供 _connected 等属性和健康检查
+                class ActorWrapper:
+                    """Dask Actor 本地包装器，提供 API 层所需的属性"""
 
-            async def check_health(self) -> bool:
-                """检查 Actor 是否仍然活跃"""
-                try:
-                    import asyncio
+                    def __init__(self, actor, connected: bool = True):
+                        self._actor = actor
+                        self._is_connected = connected
+                        self._creation_time = datetime.now()
+                        self._last_health_check = datetime.now()
+                        self._consecutive_failures = 0
+                        self._max_failures_before_disconnect = 3
 
-                    # 尝试调用一个简单方法验证 Actor 存活
-                    result = await asyncio.wait_for(self._actor.is_logged_in(), timeout=5.0)
-                    return result is True
-                except Exception as e:
-                    logger.warning(f"Actor 健康检查失败: {e}")
-                    self._is_connected = False
-                    return False
+                    @property
+                    def _connected(self) -> bool:
+                        return self._is_connected
 
-            def __getattr__(self, name: str):
-                # 委托所有其他调用到 Actor
-                return getattr(self._actor, name)
+                    @property
+                    def _degraded_mode(self) -> bool:
+                        return self._consecutive_failures > 0
 
-        wrapper = ActorWrapper(actor, connected=True)
-        logger.info("AmazingData Actor 创建并登录成功")
-        return wrapper
+                    @property
+                    def _sdk_available(self) -> bool:
+                        return True
+
+                    async def check_health(self) -> bool:
+                        """检查 Actor 是否仍然活跃"""
+                        try:
+                            import asyncio
+
+                            # 尝试调用一个简单方法验证 Actor 存活
+                            result = await asyncio.wait_for(self._actor.heartbeat(), timeout=5.0)
+                            if result is True:
+                                self._consecutive_failures = 0
+                                self._last_health_check = datetime.now()
+                                return True
+                            else:
+                                self._consecutive_failures += 1
+
+                        except asyncio.TimeoutError:
+                            logger.warning("Actor 健康检查超时")
+                            self._consecutive_failures += 1
+                        except Exception as e:
+                            logger.warning(f"Actor 健康检查失败: {e}")
+                            self._consecutive_failures += 1
+
+                        # 如果连续失败次数超过阈值，标记为断连
+                        if self._consecutive_failures >= self._max_failures_before_disconnect:
+                            self._is_connected = False
+                            logger.error(
+                                f"Actor 健康检查连续失败 {self._consecutive_failures} 次，标记为断连"
+                            )
+                        return False
+
+                    async def get_calendar(
+                        self, data_type: str = "int", market: str = "SH"
+                    ) -> list[int]:
+                        """获取交易日历 - 代理到 Actor.call()"""
+                        try:
+                            result = await asyncio.wait_for(
+                                self._actor.call(
+                                    "get_calendar", data_type=data_type, market=market
+                                ),
+                                timeout=10.0,
+                            )
+                            if not result:
+                                return []
+                            return [int(d) for d in result]
+                        except Exception as e:
+                            logger.warning(f"获取交易日历失败: {e}")
+                            return []
+
+                    async def get_stock_list(
+                        self, limit: int | None = None, **kwargs
+                    ) -> list[dict] | None:
+                        """获取股票列表 - 代理到 Actor.call()"""
+                        try:
+                            result = await asyncio.wait_for(
+                                self._actor.call("get_stock_list", limit=limit, **kwargs),
+                                timeout=30.0,
+                            )
+                            return result
+                        except Exception as e:
+                            logger.warning(f"获取股票列表失败: {e}")
+                            return None
+
+                    def __getattr__(self, name: str):
+                        # 委托所有其他调用到 Actor
+                        return getattr(self._actor, name)
+
+                wrapper = ActorWrapper(actor, connected=True)
+                elapsed = time.time() - start_time
+                logger.info(
+                    "[ACTOR_CREATE] AmazingData Actor 创建、登录并验证成功 | 耗时={:.2f}s", elapsed
+                )
+                return wrapper
+
+            except asyncio.TimeoutError as e:
+                elapsed = time.time() - start_time
+                logger.warning(
+                    "[ACTOR_CREATE] Actor 创建超时 (尝试 {}/{}) | 耗时={:.2f}s | 错误={}",
+                    attempt + 1,
+                    max_retries,
+                    elapsed,
+                    e,
+                )
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)
+                    logger.info(f"等待 {delay}s 后重试...")
+                    await asyncio.sleep(delay)
+                else:
+                    raise RuntimeError("AmazingData Actor 创建超时，已达最大重试次数") from e
+
+            except Exception as e:
+                elapsed = time.time() - start_time
+                logger.error(
+                    "[ACTOR_CREATE] Actor 创建失败 (尝试 {}/{}) | 耗时={:.2f}s | 错误={}",
+                    attempt + 1,
+                    max_retries,
+                    elapsed,
+                    e,
+                )
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)
+                    logger.info(f"等待 {delay}s 后重试...")
+                    await asyncio.sleep(delay)
+                else:
+                    raise
 
     @classmethod
     async def _create_miniqmt_actor(cls) -> Any:
         """创建新的 MiniQMT Actor 并返回包装器"""
         import asyncio
+        import time
 
         from core.compute import get_dask_client
         from core.compute.actors import MiniQMTActor
 
-        client = await get_dask_client()
+        # 重试配置
+        max_retries = 3
+        base_delay = 2.0
 
-        logger.info("正在创建 MiniQMT Actor...")
-        actor_future = client.submit(
-            MiniQMTActor,
-            {},  # 配置
-            actor=True,
-            resources={"WIN": 1},
-        )
+        for attempt in range(max_retries):
+            start_time = time.time()
+            try:
+                client = await get_dask_client()
 
-        loop = asyncio.get_event_loop()
-        actor = await asyncio.wait_for(
-            loop.run_in_executor(None, actor_future.result), timeout=60.0
-        )
+                logger.info(
+                    f"[ACTOR_CREATE] 开始创建 MiniQMT Actor (尝试 {attempt + 1}/{max_retries})..."
+                )
+                actor_future = client.submit(
+                    MiniQMTActor,
+                    {},  # 配置
+                    actor=True,
+                    resources={"WIN": 1},
+                )
 
-        # 初始化
-        logger.info("正在初始化 MiniQMT Actor...")
-        init_result = await actor.initialize()
-        if not init_result:
-            logger.warning("MiniQMT Actor 初始化返回 False，但继续使用（SDK 可能部分可用）")
+                logger.debug("[ACTOR_CREATE] Dask Future 已提交 | future_key={}", actor_future.key)
 
-        # 用本地包装类包装 Actor
-        class MiniQMTActorWrapper:
-            """MiniQMT Dask Actor 本地包装器"""
+                # Dask ActorFuture 实现了 __await__ 协议，可以直接 await
+                logger.debug("[ACTOR_CREATE] 等待 Future 完成...")
+                actor = await asyncio.wait_for(actor_future, timeout=60.0)
 
-            def __init__(self, actor, connected: bool = True):
-                self._actor = actor
-                self._is_connected = connected
-                self._creation_time = datetime.now()
+                # 初始化
+                logger.info("[ACTOR_CREATE] 正在初始化 MiniQMT Actor...")
+                init_result = await asyncio.wait_for(actor.initialize(), timeout=30.0)
+                if not init_result:
+                    logger.warning("MiniQMT Actor 初始化返回 False，但继续使用（SDK 可能部分可用）")
 
-            @property
-            def _connected(self) -> bool:
-                return self._is_connected
+                # 创建后即时验证
+                logger.info("[ACTOR_CREATE] 验证 Actor 连接...")
+                status = await asyncio.wait_for(actor.get_status(), timeout=10.0)
+                if not status.get("initialized", False):
+                    logger.warning("MiniQMT Actor 状态验证显示未初始化，但继续使用")
 
-            @property
-            def _degraded_mode(self) -> bool:
-                return False
+                # 用本地包装类包装 Actor
+                class MiniQMTActorWrapper:
+                    """MiniQMT Dask Actor 本地包装器"""
 
-            @property
-            def _sdk_available(self) -> bool:
-                return True
+                    def __init__(self, actor, connected: bool = True):
+                        self._actor = actor
+                        self._is_connected = connected
+                        self._creation_time = datetime.now()
+                        self._last_health_check = datetime.now()
+                        self._consecutive_failures = 0
+                        self._max_failures_before_disconnect = 3
 
-            async def check_health(self) -> bool:
-                """检查 Actor 是否仍然活跃"""
-                try:
-                    import asyncio
+                    @property
+                    def _connected(self) -> bool:
+                        return self._is_connected
 
-                    status = await asyncio.wait_for(self._actor.get_status(), timeout=5.0)
-                    return status.get("initialized", False)
-                except Exception as e:
-                    logger.warning(f"MiniQMT Actor 健康检查失败: {e}")
-                    self._is_connected = False
-                    return False
+                    @property
+                    def _degraded_mode(self) -> bool:
+                        return self._consecutive_failures > 0
 
-            def __getattr__(self, name: str):
-                return getattr(self._actor, name)
+                    @property
+                    def _sdk_available(self) -> bool:
+                        return True
 
-        wrapper = MiniQMTActorWrapper(actor, connected=True)
-        logger.info("MiniQMT Actor 创建并初始化成功")
-        return wrapper
+                    async def check_health(self) -> bool:
+                        """检查 Actor 是否仍然活跃"""
+                        try:
+                            import asyncio
+
+                            status = await asyncio.wait_for(self._actor.get_status(), timeout=5.0)
+                            if status.get("initialized", False):
+                                self._consecutive_failures = 0
+                                self._last_health_check = datetime.now()
+                                return True
+                            else:
+                                self._consecutive_failures += 1
+
+                        except asyncio.TimeoutError:
+                            logger.warning("MiniQMT Actor 健康检查超时")
+                            self._consecutive_failures += 1
+                        except Exception as e:
+                            logger.warning(f"MiniQMT Actor 健康检查失败: {e}")
+                            self._consecutive_failures += 1
+
+                        # 如果连续失败次数超过阈值，标记为断连
+                        if self._consecutive_failures >= self._max_failures_before_disconnect:
+                            self._is_connected = False
+                            logger.error(
+                                f"MiniQMT Actor 健康检查连续失败 {self._consecutive_failures} 次，标记为断连"
+                            )
+                        return False
+
+                    def __getattr__(self, name: str):
+                        return getattr(self._actor, name)
+
+                wrapper = MiniQMTActorWrapper(actor, connected=True)
+                elapsed = time.time() - start_time
+                logger.info(
+                    "[ACTOR_CREATE] MiniQMT Actor 创建、初始化并验证成功 | 耗时={:.2f}s", elapsed
+                )
+                return wrapper
+
+            except asyncio.TimeoutError as e:
+                elapsed = time.time() - start_time
+                logger.warning(
+                    "[ACTOR_CREATE] Actor 创建超时 (尝试 {}/{}) | 耗时={:.2f}s | 错误={}",
+                    attempt + 1,
+                    max_retries,
+                    elapsed,
+                    e,
+                )
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)
+                    logger.info(f"等待 {delay}s 后重试...")
+                    await asyncio.sleep(delay)
+                else:
+                    raise RuntimeError("MiniQMT Actor 创建超时，已达最大重试次数") from e
+
+            except Exception as e:
+                elapsed = time.time() - start_time
+                logger.error(
+                    "[ACTOR_CREATE] Actor 创建失败 (尝试 {}/{}) | 耗时={:.2f}s | 错误={}",
+                    attempt + 1,
+                    max_retries,
+                    elapsed,
+                    e,
+                )
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)
+                    logger.info(f"等待 {delay}s 后重试...")
+                    await asyncio.sleep(delay)
+                else:
+                    raise
 
     @classmethod
     async def get_provider_async(cls, provider_type: ProviderKey = "akshare") -> Any:

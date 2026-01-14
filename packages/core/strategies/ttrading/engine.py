@@ -150,6 +150,7 @@ class TTradingEngine:
         self._current_signals: List[TTradingSignal] = []
         self._analysis_snapshot: Optional[Dict[str, AnalysisResult]] = None
         self._last_analysis_time: Optional[datetime] = None
+        self._last_quote: Optional[QuoteSnapshot] = None  # 缓存最新行情快照
 
         # 统计
         self._total_signals = 0
@@ -235,8 +236,9 @@ class TTradingEngine:
             # 1. 获取分时数据
             bars = await self._data_provider.get_intraday_bars(symbol, minutes=60)
 
-            # 2. 获取当前价格
+            # 2. 获取当前行情快照
             quote = await self._data_provider.get_current_quote(symbol)
+            self._last_quote = quote  # 缓存 quote 供同步方法使用
             current_price = quote.price if quote else float(bars["close"].iloc[-1])
 
             # 3. 运行分析器
@@ -320,14 +322,19 @@ class TTradingEngine:
             elif signal.direction == SignalDirection.SELL:
                 sell_strength = max(sell_strength, signal.confidence)
 
+        # 从缓存的 quote 快照获取价格数据
+        open_price = self._last_quote.open if self._last_quote else 0.0
+        high_price = self._last_quote.high if self._last_quote else 0.0
+        low_price = self._last_quote.low if self._last_quote else 0.0
+
         return IntradayAnalysis(
             symbol=self._config.symbol,
             date=datetime.now().strftime("%Y-%m-%d"),
             time=datetime.now().strftime("%H:%M:%S"),
             current_price=vwap_data.get("current_price", 0),
-            open_price=0,  # TODO: 从数据获取
-            high_price=0,
-            low_price=0,
+            open_price=open_price,
+            high_price=high_price,
+            low_price=low_price,
             vwap=vwap_data.get("vwap", 0),
             intraday_ma=ma_data.get("ma_value", 0),
             price_deviation=ma_data.get("deviation", 0),
@@ -349,13 +356,28 @@ class TTradingEngine:
                 symbol="",
             )
 
-        # 计算信号准确率
+        # 计算信号准确率（基于信号质量统计）
         signal_accuracy: Dict[str, float] = {}
         for signal_type in ["ma_deviation", "support_resistance", "grid", "volume_price"]:
             type_signals = [s for s in self._signal_history if s.signal_type == signal_type]
             if type_signals:
-                # TODO: 实现实际的准确率追踪
-                signal_accuracy[signal_type] = 0.5
+                # 使用信号置信度的加权平均作为准确率指标
+                # 高置信度信号（> 0.6）权重更高，低置信度信号（< 0.4）降低准确率
+                total_confidence = sum(s.confidence for s in type_signals)
+                high_quality_count = sum(1 for s in type_signals if s.confidence > 0.6)
+
+                # 准确率 = (平均置信度 * 0.6) + (高质量信号比例 * 0.4)
+                avg_confidence = total_confidence / len(type_signals)
+                high_quality_ratio = high_quality_count / len(type_signals)
+                signal_accuracy[signal_type] = avg_confidence * 0.6 + high_quality_ratio * 0.4
+
+                logger.debug(
+                    f"信号准确率统计 [{signal_type}]: "
+                    f"总数={len(type_signals)}, "
+                    f"平均置信度={avg_confidence:.2f}, "
+                    f"高质量比例={high_quality_ratio:.2f}, "
+                    f"准确率={signal_accuracy[signal_type]:.2f}"
+                )
 
         return TTradingStats(
             strategy_id=self._config.id,

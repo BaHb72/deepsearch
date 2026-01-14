@@ -142,7 +142,11 @@ class EngineIPCServer:
         return {
             "running": self.engine.is_running(),
             "mode": self.engine._mode,
-            "start_time": self.engine._start_time.isoformat() if self.engine._start_time else None,
+            "start_time": (
+                self.engine._lifecycle.start_time.isoformat()
+                if self.engine._lifecycle.start_time
+                else None
+            ),
             "components": {
                 name: {"status": comp.status.value, "type": comp.__class__.__name__}
                 for name, comp in self.engine._components.items()

@@ -63,7 +63,7 @@ cache:
 message_bus:
   buses:
     inmem:
-      enabled: false
+      enabled: true  # 开发环境使用内存消息总线
       type: inmem
     timeseries:
       config:
@@ -86,28 +86,33 @@ message_bus:
         send_hwm: 1000
         sub_port: 5557
         verbose: true
-      enabled: true
+      enabled: false  # ZMQ 已废弃，使用 inmem 或 rabbitmq
       type: zmq
   routes:
   - buses:
-    - zmq
+    - inmem  # 改用 inmem 消息总线
     match: '*'
 
 # =============================================================================
 # Dask 分布式计算配置
 # =============================================================================
 dask:
+  # Scheduler 地址 (Docker 容器运行，通过端口映射访问)
   scheduler_address: "localhost:8786"
 
   windows_workers:
     enabled: true
-    auto_start: true
+    auto_start: true  # 随后端 API 自动启动
     num_workers: 2
     threads_per_worker: 2
     memory_limit: "4GB"
     name_prefix: "windows-worker"
     resources:
-      WIN: 1
+      WIN: 1.0  # Windows 资源标签（必须为浮点数，符合 Dask 要求）
+
+    # Worker 注册地址说明:
+    # Worker 会自动使用 host.docker.internal 向 Scheduler 注册，
+    # 确保 Docker 容器内的 Scheduler 能够回连到主机上的 Worker
 
   task_routing:
     windows_tasks:

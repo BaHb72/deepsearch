@@ -107,18 +107,24 @@ class TestMiniQMTCollectorHistoryData:
 
         # 尝试下载数据（需要 MiniQMT 运行）
         try:
-            df = collector.download_history_data(
+            # download_history_data 返回 Dict[str, Any]，不是 DataFrame
+            result = collector.download_history_data(
                 stock_code="000001.SZ",
                 period="1d",
                 start_time="20240101",
                 end_time="20240110",
             )
 
-            if df is not None and not df.empty:
-                assert "close" in df.columns or "收盘" in df.columns
-                print(f"成功获取 {len(df)} 条日线数据")
+            if result.get("success") and result.get("data"):
+                assert "count" in result
+                assert result["count"] > 0
+                # 验证数据结构
+                first_record = result["data"][0]
+                assert "close" in first_record or "收盘" in first_record
+                print(f"成功获取 {result['count']} 条日线数据")
             else:
-                pytest.skip("MiniQMT 未运行或无数据返回")
+                error_msg = result.get("error", "未知错误")
+                pytest.skip(f"MiniQMT 未运行或无数据返回: {error_msg}")
         except Exception as e:
             pytest.skip(f"MiniQMT 连接失败: {e}")
 
@@ -132,17 +138,19 @@ class TestMiniQMTCollectorHistoryData:
         collector = MiniQMTCollector()
 
         try:
-            df = collector.download_history_data(
+            # download_history_data 返回 Dict[str, Any]，不是 DataFrame
+            result = collector.download_history_data(
                 stock_code="000001.SZ",
                 period="5m",
                 count=100,
             )
 
-            if df is not None and not df.empty:
-                assert len(df) > 0
-                print(f"成功获取 {len(df)} 条5分钟数据")
+            if result.get("success") and result.get("data"):
+                assert result["count"] > 0
+                print(f"成功获取 {result['count']} 条5分钟数据")
             else:
-                pytest.skip("MiniQMT 未运行或无数据返回")
+                error_msg = result.get("error", "未知错误")
+                pytest.skip(f"MiniQMT 未运行或无数据返回: {error_msg}")
         except Exception as e:
             pytest.skip(f"MiniQMT 连接失败: {e}")
 

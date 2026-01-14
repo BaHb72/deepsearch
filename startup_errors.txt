@@ -1,0 +1,139 @@
+[32m2026-01-14 16:34:11.676[0m | [1mINFO    [0m | [36mcore.core.utils.statistics[0m:[36m__init__[0m:[36m70[0m - [1mStatisticsCollector initialized[0m
+[32m2026-01-14 16:34:12.483[0m | [1mINFO    [0m | [36mcore.observability.monitoring.data_source_monitor[0m:[36m__init__[0m:[36m186[0m - [1mÊı¾İÔ´¼à¿ØÖĞĞÄ³õÊ¼»¯Íê³É[0m
+[32m2026-01-14 16:34:13.326[0m | [1mINFO    [0m | [36mcore.infrastructure.providers.implementations.amazingdata._sdk_loader[0m:[36m_load_sdk[0m:[36m37[0m - [1m[SDK¼ÓÔØ] AmazingData SDK¼ÓÔØ³É¹¦ (°üÃû: AmazingData): <module 'AmazingData' from 'D:\\Stock\\code\\deepsearch\\.venv\\Lib\\site-packages\\AmazingData\\__init__.pyc'>[0m
+[32m2026-01-14 16:34:13.360[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m812[0m - [1mÈ«¾ÖÒì³£´¦ÀíÆ÷ÒÑÅäÖÃ[0m
+[32m2026-01-14 16:34:13.366[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m840[0m - [1mÇëÇóÏŞÁ÷ºÍÈ¥ÖØÖĞ¼ä¼şÒÑÅäÖÃ[0m
+[32m2026-01-14 16:34:13.581[0m | [1mINFO    [0m | [36mapps.api.api.endpoints.qmt.qmt_subscription[0m:[36m__init__[0m:[36m70[0m - [1m¶©ÔÄ¹ÜÀíÆ÷³õÊ¼»¯Íê³É[0m
+[32m2026-01-14 16:34:13.731[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m951[0m - [1mÍ³Ò»Êı¾İ²éÑ¯APIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:13.828[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m976[0m - [1mÊı¾İÔ´¼à¿ØAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:13.831[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m989[0m - [1mÊı¾İÔ´ÄÜÁ¦¶Ô±ÈAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:13.836[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1001[0m - [1mÊı¾İÔ´ÅäÖÃAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:17.668[0m | [1mINFO    [0m | [36mapps.api.api.endpoints.system.database_manager[0m:[36m_load_connections_from_storage[0m:[36m570[0m - [1mÒÑ¼ÓÔØ 3 ÌõÊı¾İ¿âÁ¬½ÓÅäÖÃ[0m
+[32m2026-01-14 16:34:17.674[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1036[0m - [1mÊı¾İ¿âÁ¬½Ó¹ÜÀíAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:17.692[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1055[0m - [1mÊı¾İÔ´CRUD¹ÜÀíAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:17.699[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1066[0m - [1mÄ£¿éÊı¾İÔ´ÅäÖÃAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:17.705[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1077[0m - [1mAKShareÊı¾İÔ´APIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.171[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1086[0m - [1m»Ø²âAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.197[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1097[0m - [1mÈÕÄÚ×öT APIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.417[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1108[0m - [1m²ßÂÔÖĞĞÄAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.432[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1119[0m - [1mÍ¨ÓÃ³Ö²Ö¹ÜÀíAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.439[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1128[0m - [1mÊı¾İÔ´¼à¿ØAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.446[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1137[0m - [1m»º´æ¹ÜÀíAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.453[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1146[0m - [1mÍ¼±íÊı¾İAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.470[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1156[0m - [1mÊĞ³¡Êı¾İÊµÊ±APIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.470[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1157[0m - [1mÊĞ³¡·ÖÎöAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.477[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1166[0m - [1mÊĞ³¡Êı¾İAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.482[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1177[0m - [1mÊĞ³¡¸ÅÀÀºÍÅÅĞĞ°ñAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.585[0m | [1mINFO    [0m | [36mapps.api.api.endpoints.amazingdata.router[0m:[36m<module>[0m:[36m107[0m - [1mAmazingData APIÂ·ÓÉÆ÷ÒÑ³õÊ¼»¯[0m
+[32m2026-01-14 16:34:18.623[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1188[0m - [1mAmazingData APIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.623[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1199[0m - [1m¼à¿ØÖ¸±êAPIÒÑ×¢²á[0m
+[32m2026-01-14 16:34:18.625[0m | [1mINFO    [0m | [36mapps.api.server[0m:[36mcreate_app[0m:[36m1208[0m - [1mAPIÂ·ÓÉÊÊÅäÆ÷ÒÑ×¢²á£¬´¦ÀíÇ°ºó¶ËAPI²»Æ¥ÅäÎÊÌâ[0m
+[2m2026-01-14 16:34:18.645[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mlogging system started[0m [2m| Ä£¿é=¿É¹Û²â[0m
+[2m2026-01-14 16:34:18.662[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mApplicationContainer created with mode: webui[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.662[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mCreated dependency-injector container with mode: webui[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.662[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mLoaded 5 components in 0.3ms (avg: 0.1ms)[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.663[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mLoaded 5 components from DI container[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.663[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mSystem starting: webui mode, version: 0.1.0[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.664[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.d.performance_profiler:421           [0m [2m:[0m [2mĞÔÄÜ·ÖÎöÒÑÆôÓÃ[0m
+[2m2026-01-14 16:34:18.665[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.d.performance_profiler:416           [0m [2m:[0m [2mÂı²Ù×÷ãĞÖµÒÑÉèÖÃÎª 100ms[0m
+[2m2026-01-14 16:34:18.665[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.i.p.query_optimizer:574              [0m [2m:[0m [2mÂı²éÑ¯ãĞÖµÒÑÉèÖÃÎª 1.0Ãë[0m
+[2m2026-01-14 16:34:18.665[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mInitializing component: event_engine[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.665[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÕıÔÚ³õÊ¼»¯×é¼ş event_engine...[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.665[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m×é¼ş event_engine ³õÊ¼»¯³É¹¦[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.665[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mInitializing component: message_bus[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.665[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÕıÔÚ³õÊ¼»¯×é¼ş message_bus...[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.665[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m´´½¨ÏûÏ¢×ÜÏß: inmem (type=inmem)[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.666[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÏûÏ¢×ÜÏß³õÊ¼»¯Íê³É: 1 ¸ö×ÜÏß, 1 ÌõÂ·ÓÉ[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.666[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m×é¼ş message_bus ³õÊ¼»¯³É¹¦[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.666[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mInitializing component: database[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.666[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÕıÔÚ³õÊ¼»¯×é¼ş database...[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.796[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÊı¾İ¿âÁ¬½Ó³É¹¦ (localhost:5432)[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.798[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m[OK] Êı¾İ¿â×é¼ş³õÊ¼»¯³É¹¦[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.798[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m×é¼ş database ³õÊ¼»¯³É¹¦[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.798[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mInitializing component: cache[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:18.799[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÕıÔÚ³õÊ¼»¯×é¼ş cache...[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.828[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m³É¹¦Á¬½Óµ½ Redis localhost:6379[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.828[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m»º´æ×é¼ş³õÊ¼»¯Íê³É[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.829[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m×é¼ş cache ³õÊ¼»¯³É¹¦[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.829[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.c.u.ipc:76                           [0m [2m:[0m [2mEngine IPC Server initialized[0m
+[2m2026-01-14 16:34:20.829[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.c.u.ipc:201                          [0m [2m:[0m [2mEngine IPC Server started[0m
+[2m2026-01-14 16:34:20.829[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m[OK] IPC Server initialized and started[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.829[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.c.h.manager:55                       [0m [2m:[0m [2m½¡¿µ¼ì²é¹ÜÀíÆ÷³õÊ¼»¯: interval=30.0s, timeout=5.0s[0m
+[2m2026-01-14 16:34:20.830[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.c.h.manager:71                       [0m [2m:[0m [2m×¢²á½¡¿µ¼ì²éÆ÷: event_engine (enabled=True)[0m
+[2m2026-01-14 16:34:20.830[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.c.h.manager:71                       [0m [2m:[0m [2m×¢²á½¡¿µ¼ì²éÆ÷: message_bus (enabled=True)[0m
+[2m2026-01-14 16:34:20.830[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.c.h.manager:71                       [0m [2m:[0m [2m×¢²á½¡¿µ¼ì²éÆ÷: database (enabled=True)[0m
+[2m2026-01-14 16:34:20.830[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.c.h.manager:71                       [0m [2m:[0m [2m×¢²á½¡¿µ¼ì²éÆ÷: redis (enabled=True)[0m
+[2m2026-01-14 16:34:20.830[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m[OK] Health check manager initialized[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.831[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mSystem ready in 2.17s[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.831[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mStarting DeepSearch System (phased)...[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.831[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mStarting infrastructure component: event_engine[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.831[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÕıÔÚÆô¶¯×é¼ş event_engine...[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.834[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m×é¼ş event_engine Æô¶¯³É¹¦[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.834[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mStarting infrastructure component: message_bus[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.834[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÕıÔÚÆô¶¯×é¼ş message_bus...[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.835[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mIn-memory message bus started[0m [2m| Ä£¿é=×Ô¶¨Òå(InMemoryMessageBus)[0m
+[2m2026-01-14 16:34:20.835[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m×é¼ş message_bus Æô¶¯³É¹¦[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.835[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mStarting infrastructure component: database[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.835[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÕıÔÚÆô¶¯×é¼ş database...[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.835[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m×é¼ş database Æô¶¯³É¹¦[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.835[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mStarting infrastructure component: cache[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.836[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÕıÔÚÆô¶¯×é¼ş cache...[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.836[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m×é¼ş cache Æô¶¯³É¹¦[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.836[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.c.h.manager:262                      [0m [2m:[0m [2m½¡¿µ¼ì²é¹ÜÀíÆ÷ÒÑÆô¶¯[0m
+[2m2026-01-14 16:34:20.836[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m[OK] All components started successfully[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.836[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m[OK] DeepSearch System started (phased mode)[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:20.843[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÏµÍ³ÒıÇæÒÑÆô¶¯[0m [2m| Ä£¿é=Ö÷³ÌĞò[0m
+
+> deepsearch-webui@0.1.0 dev
+> vite
+
+
+  [32m[1mVITE[22m v7.1.10[39m  [2mready in [0m[1m716[22m[2m[0m ms[22m
+
+  [32mâœ[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m3000[22m/[39m
+[2m2026-01-14 16:34:23.854[0m  [31mERROR[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [31m¶Ë¿Ú 8000 ÒÑ±»Õ¼ÓÃ[0m [2m| Ä£¿é=Ö÷³ÌĞò[0m
+[2m2026-01-14 16:34:23.862[0m  [31mERROR[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [31mÕ¼ÓÃ½ø³Ì: python.exe (PID: 40400)[0m [2m| Ä£¿é=Ö÷³ÌĞò[0m
+[2m2026-01-14 16:34:23.863[0m  [31mERROR[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [31mºó¶Ë·şÎñÆ÷´íÎó: ¶Ë¿Ú 8000 ÒÑ±»Õ¼ÓÃ¡£ÇëÖ´ĞĞÒÔÏÂ²Ù×÷Ö®Ò»£º[0m [2m| Ä£¿é=Ö÷³ÌĞò[0m
+                                                                                                     [31m  1. ÔËĞĞ 'python -m deepsearch cleanup' ÇåÀí¶Ë¿Ú[0m
+                                                                                                     [31m  2. Í£Ö¹Õ¼ÓÃ¶Ë¿ÚµÄ½ø³Ì[0m
+                                                                                                     [31m  3. ĞŞ¸ÄÅäÖÃÎÄ¼şÖĞµÄ webui.backend_port[0m
+[2m2026-01-14 16:34:23.863[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÕıÔÚ¹Ø±ÕËùÓĞ·şÎñÆ÷...[0m [2m| Ä£¿é=×Ô¶¨Òå(server)¡¤¹ÜÀíÆ÷[0m
+[2m2026-01-14 16:34:23.863[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mËùÓĞ·şÎñÆ÷ÒÑ¹Ø±Õ[0m [2m| Ä£¿é=×Ô¶¨Òå(server)¡¤¹ÜÀíÆ÷[0m
+[2m2026-01-14 16:34:23.864[0m  [31mERROR[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [31mÔËĞĞ´íÎó: ¶Ë¿Ú 8000 ÒÑ±»Õ¼ÓÃ¡£ÇëÖ´ĞĞÒÔÏÂ²Ù×÷Ö®Ò»£º[0m [2m| Ä£¿é=Ö÷³ÌĞò[0m
+                                                                                                     [31m  1. ÔËĞĞ 'python -m deepsearch cleanup' ÇåÀí¶Ë¿Ú[0m
+                                                                                                     [31m  2. Í£Ö¹Õ¼ÓÃ¶Ë¿ÚµÄ½ø³Ì[0m
+                                                                                                     [31m  3. ĞŞ¸ÄÅäÖÃÎÄ¼şÖĞµÄ webui.backend_port[0m
+[2m2026-01-14 16:34:23.865[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mWebUI runner stopped[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:23.865[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mStopping DeepSearch System...[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:24.380[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.c.h.manager:275                      [0m [2m:[0m [2m½¡¿µ¼ì²é¹ÜÀíÆ÷ÒÑÍ£Ö¹[0m
+[2m2026-01-14 16:34:24.380[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mc.c.u.ipc:212                          [0m [2m:[0m [2mEngine IPC Server stopped[0m
+[2m2026-01-14 16:34:24.381[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mIPC Server stopped[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:24.381[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m[OK] DeepSearch System stopped (took 0.51s)[0m [2m| Ä£¿é=Éî¶ÈËÑË÷Æ½Ì¨[0m
+[2m2026-01-14 16:34:24.381[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÏµÍ³ÒıÇæÒÑÍ£Ö¹[0m [2m| Ä£¿é=Ö÷³ÌĞò[0m
+[2m2026-01-14 16:34:24.412[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÇ°¶Ë·şÎñÒÑÍ£Ö¹[0m [2m| Ä£¿é=Ö÷³ÌĞò[0m
+[2m2026-01-14 16:34:24.412[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m¿ªÊ¼¹Ø±ÕÊÜ¹Ü×ÊÔ´...[0m [2m| Ä£¿é=×Ô¶¨Òå(process)¡¤¹ÜÀíÆ÷[0m
+[2m2026-01-14 16:34:24.433[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2mÇåÀí¶Ë¿Ú 8000 (PID=40400)[0m [2m| Ä£¿é=×Ô¶¨Òå(process)¡¤¹ÜÀíÆ÷[0m
+[2m2026-01-14 16:34:24.473[0m  [32m INFO[0m [35m17848[0m [2m---[0m [[2m     MainThread[0m] [36mlogging:1737                           [0m [2m:[0m [2m×ÊÔ´¹Ø±ÕÍê³É£¬ÓÃÊ±: 0.06Ãë[0m [2m| Ä£¿é=×Ô¶¨Òå(process)¡¤¹ÜÀíÆ÷[0m
+[INFO] Loaded infrastructure config: infrastructure.dev.yaml
+[INFO] Loaded market data config: market_data.dev.yaml
+[INFO] Loaded data sources config: data_sources.yaml
+[INFO] Loaded environment config: settings.dev.yaml (env: dev)
+[INFO] Environment: dev (auto-detected: default for development)
+xtquantÎÄµµµØÖ·£ºhttp://dict.thinktrader.net/nativeApi/start_now.html
+
+============================================================
+  DeepSearch WebUI
+============================================================
+  ºó¶ËµØÖ·: http://127.0.0.1:8000
+  Ç°¶ËµØÖ·: http://localhost:3000
+  °´ Ctrl+C ÍË³ö
+============================================================
+
+Æô¶¯Ç°¶Ë·şÎñ (¶Ë¿Ú: 3000)...
+[OK] Frontend service started: http://localhost:3000
+
+ÕıÔÚ¹Ø±ÕÏµÍ³...
+ÏµÍ³ÒÑ¹Ø±Õ
+
+ÕıÔÚ¹Ø±ÕÏµÍ³...
+ÏµÍ³ÒÑ¹Ø±Õ

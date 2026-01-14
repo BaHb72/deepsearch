@@ -82,6 +82,8 @@ class TestAKShareDirectProviderRealAPI:
         provider = AKShareDirectProvider(config={})
         await provider.initialize()
         yield provider
+        # 清理资源
+        await provider.close()
         # 测试后等待，遵守速率限制
         await asyncio.sleep(RATE_LIMIT_SECONDS)
 
@@ -157,6 +159,8 @@ class TestAKShareDirectProviderExtendedAPI:
         provider = AKShareDirectProvider(config={})
         await provider.initialize()
         yield provider
+        # 清理资源
+        await provider.close()
         # 测试后等待
         await asyncio.sleep(RATE_LIMIT_SECONDS)
 

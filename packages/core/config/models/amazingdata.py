@@ -134,6 +134,14 @@ class AmazingDataConfig(BaseModel):
         default="optimized",
         description="指定实现模式：optimized 为增强实现，process 为子进程隔离方案",
     )
+    mode: Literal["local", "distributed"] = Field(
+        default="local",
+        description="运行模式: local=直接SDK调用, distributed=通过Dask分布式调用",
+    )
+    dask_scheduler_address: str | None = Field(
+        default=None,
+        description="Dask Scheduler 地址 (distributed 模式必需，如 tcp://localhost:8786)",
+    )
     priority: int = Field(default=1, description="优先级")
     worker_env: Dict[str, str] = Field(
         default_factory=dict, description="AmazingData Worker 环境变量覆盖"
@@ -198,6 +206,18 @@ class AmazingDataConfig(BaseModel):
             joined = "；".join(errors)
             raise ValueError(
                 f"AmazingData 连接配置无效：{joined}。请检查 settings.<env>.yaml 中 amazingdata.connection 的必填字段"
+            )
+
+        return self
+
+    @model_validator(mode="after")
+    def _validate_distributed_mode(self) -> "AmazingDataConfig":
+        """确保 distributed 模式时 dask_scheduler_address 已配置"""
+
+        if self.mode == "distributed" and not self.dask_scheduler_address:
+            raise ValueError(
+                "AmazingData distributed 模式需要配置 dask_scheduler_address，"
+                "请设置为 Dask Scheduler 地址，如 tcp://localhost:8786"
             )
 
         return self

@@ -1,109 +1,90 @@
-"""Dask Worker Plugin for AmazingData SDK session management.
+"""Dask Worker Plugin for AmazingData Actor management.
 
-This plugin ensures that AmazingData SDK login is properly coordinated
-across Dask workers, preventing multiple workers from attempting
-simultaneous logins.
+This plugin initializes and manages AmazingDataActor lifecycle on Dask Workers.
+使用 Dask 原生 setup/teardown 作为唯一的生命周期管理入口。
+
+架构设计:
+- Plugin.setup(): 创建并初始化 Actor，注册到 worker.actors
+- Plugin.teardown(): 清理 Actor 资源
+- Actor 保持 SDK 登录状态
 
 Usage:
     from distributed import Client
     from core.infrastructure.providers.implementations.amazingdata.dask_plugin import (
         AmazingDataWorkerPlugin,
     )
+    from core.compute.plugins.config import AmazingDataPluginConfig
 
     client = Client("tcp://scheduler:8786")
-    plugin = AmazingDataWorkerPlugin(redis_url="redis://localhost:6379")
+    config = AmazingDataPluginConfig(redis_url="redis://localhost:6379")
+    plugin = AmazingDataWorkerPlugin(config)
     client.register_plugin(plugin)
 """
 
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING, Any
 
+from core.compute.plugins.base_plugin import BaseWorkerPlugin
+from core.compute.plugins.config import AmazingDataPluginConfig
 from loguru import logger
 
 if TYPE_CHECKING:
-    from distributed import Worker
+    pass
 
 
-class AmazingDataWorkerPlugin:
-    """Dask Worker Plugin for AmazingData SDK session management.
+class AmazingDataWorkerPlugin(BaseWorkerPlugin):
+    """Dask Worker Plugin for AmazingData Actor.
 
-    This plugin:
-    1. Initializes AmazingData provider on worker startup
-    2. Uses distributed session management to coordinate login
-    3. Properly shuts down on worker teardown
+    继承 BaseWorkerPlugin，只需实现三个钩子方法:
+    - _load_dependencies: 加载依赖（AmazingData 无需加载 SDK）
+    - _create_actor: 创建 AmazingDataActor 实例
+    - _get_actor_name: 返回 Actor 注册名称
 
     Attributes:
-        name: Plugin name for Dask registration.
-        redis_url: Redis URL for distributed session management.
+        name: Plugin 名称
+        config: AmazingDataPluginConfig 配置对象
     """
 
-    name = "amazingdata-session"
+    name = "amazingdata-actor"
 
-    def __init__(
-        self,
-        redis_url: str = "redis://localhost:6379",
-        only_on_windows: bool = True,
-    ) -> None:
-        """Initialize the plugin.
+    def __init__(self, config: AmazingDataPluginConfig) -> None:
+        """初始化 Plugin
 
         Args:
-            redis_url: Redis URL for distributed session management.
-            only_on_windows: If True, only activate on Windows workers (WIN:1 resource).
+            config: AmazingDataPluginConfig 配置对象
         """
-        self.redis_url = redis_url
-        self.only_on_windows = only_on_windows
-        self._provider: Any = None
-        self._initialized = False
+        super().__init__(config)
 
-    def setup(self, worker: "Worker") -> None:
-        """Called when the plugin is attached to a worker.
+    async def _load_dependencies(self) -> None:
+        """加载依赖
 
-        This method runs synchronously. We schedule async initialization
-        to run in the worker's event loop.
+        AmazingData 使用 HTTP API，无需加载 SDK。
         """
-        # Check if this worker should handle AmazingData
-        if self.only_on_windows:
-            # 优先使用新 API (Dask 2025.12+) - worker.state.total_resources
-            resources = getattr(worker.state, "total_resources", {})
-            if not resources:
-                # 向后兼容：尝试旧 API (Dask < 2025.12)
-                resources = getattr(worker, "resources", {}) or {}
+        pass
 
-            if not resources.get("WIN"):
-                logger.info(
-                    f"AmazingData plugin skipped on non-Windows worker | " f"resources={resources}"
-                )
-                return
+    async def _create_actor(self) -> Any:
+        """创建 AmazingDataActor 实例
 
-        logger.info(f"AmazingData plugin setup on worker {worker.address}")
+        关键修复: 只提取 connection 内层字段，避免外层占位符污染。
 
-        # Schedule async initialization
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(self._async_setup(worker))
-        else:
-            loop.run_until_complete(self._async_setup(worker))
+        Returns:
+            AmazingDataActor 实例，失败时返回 None
+        """
+        from core.compute.actors.amazingdata_actor import AmazingDataActor
+        from core.config import get_config
 
-    async def _async_setup(self, worker: "Worker") -> None:
-        """Async setup of AmazingData provider."""
-        try:
-            from core.config import get_config
-            from core.infrastructure.providers.implementations.amazingdata.amazingdata import (
-                AmazingDataProvider,
-            )
-            from core.infrastructure.providers.implementations.amazingdata.config import (
-                ensure_amazingdata_provider_config,
-            )
+        app_config = get_config()
+        data_sources = getattr(app_config, "data_sources", None)
 
-            # Get configuration
-            app_config = get_config()
-            data_sources = getattr(app_config, "data_sources", None)
-            if not data_sources:
-                logger.warning("No data_sources configuration found")
-                return
+        # 构建 Actor 配置
+        actor_config: dict[str, Any] = {
+            "redis_url": self.config.redis_url,
+            "distributed_session_enabled": True,
+        }
 
+        # 提取 AmazingData 配置
+        if data_sources:
             providers = getattr(data_sources, "providers", {})
             if hasattr(providers, "model_dump"):
                 providers = providers.model_dump()
@@ -112,93 +93,65 @@ class AmazingDataWorkerPlugin:
             if hasattr(amazingdata_config, "model_dump"):
                 amazingdata_config = amazingdata_config.model_dump()
 
-            if not amazingdata_config.get("config"):
-                logger.warning("No AmazingData configuration found")
-                return
+            config_data = amazingdata_config.get("config", {})
 
-            # Inject redis_url into config
-            config_data = dict(amazingdata_config.get("config", {}))
-            config_data["distributed_session_enabled"] = True
-            config_data["redis_url"] = self.redis_url
+            # 关键修复: 只取 connection 内层，不取外层占位符
+            if "connection" in config_data:
+                connection = config_data["connection"]
+                for key in ("host", "port", "username", "password", "timeout"):
+                    if key in connection:
+                        actor_config[key] = connection[key]
 
-            # Create and initialize provider
-            provider_config = ensure_amazingdata_provider_config(
-                {
-                    **amazingdata_config,
-                    "config": config_data,
-                }
-            )
+                # 其他 connection 配置
+                for key in (
+                    "auto_reconnect",
+                    "heartbeat_interval",
+                    "max_retries",
+                    "reconnect_interval",
+                ):
+                    if key in connection:
+                        actor_config[key] = connection[key]
 
-            self._provider = AmazingDataProvider(provider_config)
-            await self._provider.initialize()
-            self._initialized = True
+            # 其他非敏感配置可以直接合并
+            for key in ("cache", "subscription", "implementation_mode"):
+                if key in config_data:
+                    actor_config[key] = config_data[key]
 
-            logger.info(
-                f"AmazingData provider initialized on worker | "
-                f"worker={worker.address}, "
-                f"connected={self._provider.is_connected()}"
-            )
+        # 脱敏日志
+        safe_config = {k: v for k, v in actor_config.items() if k != "password"}
+        logger.info(f"[AmazingData] Actor 配置: {safe_config}")
 
-        except Exception as exc:
-            logger.error(f"Failed to initialize AmazingData on worker: {exc}")
+        return AmazingDataActor(actor_config)
 
-    def teardown(self, worker: "Worker") -> None:
-        """Called when the plugin is removed or worker shuts down."""
-        if not self._initialized or self._provider is None:
-            return
+    def _get_actor_name(self) -> str:
+        """获取 Actor 名称
 
-        logger.info(f"AmazingData plugin teardown on worker {worker.address}")
-
-        # Schedule async cleanup
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(self._async_teardown())
-        else:
-            loop.run_until_complete(self._async_teardown())
-
-    async def _async_teardown(self) -> None:
-        """Async teardown of AmazingData provider."""
-        try:
-            if self._provider is not None:
-                await self._provider.stop_async()
-                logger.info("AmazingData provider stopped")
-        except Exception as exc:
-            logger.error(f"Error stopping AmazingData provider: {exc}")
-        finally:
-            self._provider = None
-            self._initialized = False
-
-    def transition(
-        self,
-        key: str,
-        start: str,
-        finish: str,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        """Called on task state transitions.
-
-        This can be used for monitoring or custom logic on task events.
-        Currently a no-op.
+        Returns:
+            Actor 在 worker.actors 中的注册名称
         """
-        pass
+        return "amazingdata"
 
 
 def register_amazingdata_plugin(
     client: Any,
     redis_url: str = "redis://localhost:6379",
     only_on_windows: bool = True,
-) -> None:
-    """Convenience function to register the AmazingData plugin.
+) -> AmazingDataWorkerPlugin:
+    """便捷函数：注册 AmazingData Plugin
 
     Args:
-        client: Dask distributed Client.
-        redis_url: Redis URL for session coordination.
-        only_on_windows: Only activate on Windows workers.
+        client: Dask distributed Client
+        redis_url: Redis URL for session coordination
+        only_on_windows: Only activate on Windows workers
+
+    Returns:
+        已注册的 Plugin 实例
     """
-    plugin = AmazingDataWorkerPlugin(
+    config = AmazingDataPluginConfig(
         redis_url=redis_url,
         only_on_windows=only_on_windows,
     )
+    plugin = AmazingDataWorkerPlugin(config)
     client.register_plugin(plugin)
     logger.info(f"AmazingData worker plugin registered | redis_url={redis_url}")
+    return plugin

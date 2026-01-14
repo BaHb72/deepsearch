@@ -260,6 +260,9 @@ async def real_amazingdata_provider():
 
     yield provider
 
+    # 清理资源
+    await manager.close()
+
 
 @pytest.fixture(scope="function")
 def real_query_manager(real_amazingdata_provider):

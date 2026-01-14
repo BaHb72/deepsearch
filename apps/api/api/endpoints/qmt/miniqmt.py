@@ -1138,47 +1138,114 @@ async def get_holidays() -> Dict[str, Any]:
 
 @router.get("/xtdata/financial")
 async def get_financial_data(
-    symbol: str = Query(..., description="股票代码"),
-    table: str = Query(
-        "Balance",
-        description="财务表类型: Balance(资产负债表), Income(利润表), CashFlow(现金流量表)",
+    symbols: str = Query(..., description="股票代码列表，逗号分隔，如: 000001.SZ,600000.SH"),
+    tables: Optional[str] = Query(
+        None,
+        description="财务表类型列表，逗号分隔: Balance(资产负债表), Income(利润表), CashFlow(现金流量表), Capital(股本), Holdernum(股东数), Top10holder(十大股东), Top10flowholder(十大流通股东), Pershareindex(每股指标)。为空获取三大报表",
     ),
+    start_date: Optional[str] = Query(None, description="开始日期 YYYYMMDD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYYMMDD"),
+    report_type: str = Query(
+        "report_time",
+        description="报告类型: report_time(按截止日期), announce_time(按披露日期)",
+    ),
+    auto_download: bool = Query(True, description="是否自动下载数据到本地缓存"),
 ) -> Dict[str, Any]:
     """
-    获取财务数据
+    获取财务数据（支持批量查询）
+
+    注意: 此功能需要 MiniQMT 投研版 VIP 权限
+
+    支持的财务表:
+    - Balance: 资产负债表
+    - Income: 利润表
+    - CashFlow: 现金流量表
+    - Capital: 股本结构表
+    - Holdernum: 股东数
+    - Top10holder: 十大股东
+    - Top10flowholder: 十大流通股东
+    - Pershareindex: 每股指标
 
     Args:
-        symbol: 股票代码
-        table: 财务报表类型
+        symbols: 股票代码列表，逗号分隔
+        tables: 财务表列表，逗号分隔（为空获取三大报表）
+        start_date: 开始日期 YYYYMMDD
+        end_date: 结束日期 YYYYMMDD
+        report_type: 报告类型
+        auto_download: 是否自动下载
 
     Returns:
-        财务数据
+        财务数据，格式: {symbol: {table: data}}
     """
     try:
         from xtquant import xtdata
 
-        # 先尝试下载财务数据
-        try:
-            xtdata.download_financial_data([symbol])
-        except Exception:
-            pass  # 忽略下载错误
+        # 解析股票代码列表
+        symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
 
-        result = xtdata.get_financial_data([symbol], [table])
+        # 解析财务表列表
+        table_list = None
+        if tables:
+            table_list = [t.strip() for t in tables.split(",") if t.strip()]
+        else:
+            table_list = ["Balance", "Income", "CashFlow"]
+
+        # 自动下载财务数据
+        if auto_download:
+            try:
+                xtdata.download_financial_data(symbol_list, table_list)
+            except Exception as download_err:
+                logger.warning(f"财务数据下载失败（将尝试读取缓存）: {download_err}")
+
+        # 获取财务数据
+        result = xtdata.get_financial_data(
+            stock_list=symbol_list,
+            table_list=table_list,
+            start_time=start_date or "",
+            end_time=end_date or "",
+            report_type=report_type,
+        )
 
         if not result:
             return {
                 "success": False,
-                "message": f"未获取到 '{symbol}' 的财务数据",
+                "message": "未获取到财务数据，可能需要 VIP 权限",
+                "symbols": symbol_list,
+                "tables": table_list,
                 "data": None,
                 "timestamp": datetime.now().isoformat(),
+                "note": "此功能需要 MiniQMT 投研版 VIP 权限",
             }
+
+        # 转换 DataFrame 为可序列化格式
+        formatted_result: Dict[str, Dict[str, Any]] = {}
+        for symbol, tables_data in result.items():
+            if tables_data:
+                formatted_result[symbol] = {}
+                for table_name, df in tables_data.items():
+                    if df is not None and hasattr(df, "empty") and not df.empty:
+                        formatted_result[symbol][table_name] = {
+                            "columns": list(df.columns),
+                            "data": df.values.tolist(),
+                            "index": [str(idx) for idx in df.index.tolist()],
+                            "count": len(df),
+                        }
+                    else:
+                        formatted_result[symbol][table_name] = {
+                            "columns": [],
+                            "data": [],
+                            "index": [],
+                            "count": 0,
+                        }
 
         return {
             "success": True,
-            "symbol": symbol,
-            "table": table,
-            "data": result,
+            "symbols": symbol_list,
+            "tables": table_list,
+            "symbol_count": len(formatted_result),
+            "data": formatted_result,
             "timestamp": datetime.now().isoformat(),
+            "note": "此功能需要 MiniQMT 投研版 VIP 权限",
         }
 
     except ImportError:

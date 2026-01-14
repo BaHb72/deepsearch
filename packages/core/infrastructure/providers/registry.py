@@ -501,19 +501,69 @@ class DataProviderRegistry:
                         return cached_instance
                     del self._instances[name]
 
-                # 所有模式统一使用 OptimizedAmazingDataProvider
-                # ProcessIsolatedAmazingDataProvider 已废弃并删除
-                provider_cls: type[DataProvider] = OptimizedAmazingDataProvider
+                # 检查是否使用 distributed 模式（通过 Dask 分布式调用）
+                run_mode = raw_config.get("mode", "local")
+                if run_mode == "distributed":
+                    # distributed 模式：使用 DaskAdapter 远程调用 Windows Worker
+                    from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+                        AmazingDataDaskAdapter,
+                    )
+                    from distributed import Client as DaskClient
 
-                config_obj = AmazingDataConfig(**payload)
-                instance = provider_cls(config_obj)
-                setattr(instance, "_implementation_mode", desired_mode)
+                    scheduler_address = raw_config.get(
+                        "dask_scheduler_address", "tcp://localhost:8786"
+                    )
+
+                    logger.info(
+                        "[Registry] 创建 AmazingData DaskAdapter | mode=distributed | scheduler={}",
+                        scheduler_address,
+                    )
+
+                    try:
+                        dask_client = DaskClient(scheduler_address, asynchronous=True)
+                        instance = AmazingDataDaskAdapter(
+                            dask_client=dask_client,
+                            timeout=float(raw_config.get("timeout", 30.0)),
+                            retry_count=int(raw_config.get("retry_count", 3)),
+                        )
+                        setattr(instance, "_implementation_mode", "distributed")
+                    except Exception as e:
+                        logger.error("[Registry] DaskAdapter 创建失败，回退到 local 模式: {}", e)
+                        # 回退到 local 模式
+                        run_mode = "local"
+
+                if run_mode == "local":
+                    # local 模式：直接使用 OptimizedAmazingDataProvider
+                    # ProcessIsolatedAmazingDataProvider 已废弃并删除
+                    provider_cls: type[DataProvider] = OptimizedAmazingDataProvider
+
+                    config_obj = AmazingDataConfig(**payload)
+                    instance = provider_cls(config_obj)
+                    setattr(instance, "_implementation_mode", desired_mode)
 
             elif resolved_config:
                 # 检查构造函数签名
                 sig = inspect.signature(provider_class.__init__)
                 if "config" in sig.parameters:
-                    instance = provider_class(config=resolved_config)
+                    # 特殊处理需要 DataProviderConfig 对象的 provider
+                    if name == "miniqmt":
+                        from core.infrastructure.providers.interfaces.base import DataProviderConfig
+                        from core.ports.data_sources import DataSourceType
+
+                        # 构造标准的 DataProviderConfig 对象
+                        provider_config = DataProviderConfig(
+                            name="miniqmt",
+                            source_type=DataSourceType.QMT,
+                            enabled=resolved_config.get("enabled", True),
+                            priority=resolved_config.get("priority", 100),
+                            timeout=resolved_config.get("timeout", 10.0),
+                            retry_count=resolved_config.get("retry_count", 3),
+                            retry_delay=resolved_config.get("retry_delay", 1.0),
+                            config=resolved_config,  # 原始 dict 作为 config 字段
+                        )
+                        instance = provider_class(config=provider_config)
+                    else:
+                        instance = provider_class(config=resolved_config)
                 else:
                     instance = provider_class(**resolved_config)
 

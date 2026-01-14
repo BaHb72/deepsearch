@@ -72,9 +72,29 @@ class ArrowSnapshotCacheAdapter(SnapshotCachePort):
         return len(records)
 
     def get_cached_snapshot(self, symbol: str) -> Optional[MarketSnapshot]:
-        """获取单个股票的缓存快照 (暂未实现完整查询)"""
-        # TODO: 完整实现需要构造 MarketSnapshot 所有必需字段
-        # 当前只用于缓存写入，读取暂不需要
+        """获取单个股票的缓存快照
+
+        注意: 当前实现仅支持批量写入场景，单个查询返回 None。
+        原因: Arrow IPC 缓存按时间戳 key 存储整个 DataFrame，
+        单个查询需要加载整个文件效率低。如未来需要单个查询，
+        建议使用 Redis 等 KV 存储或在应用层维护内存索引。
+
+        Args:
+            symbol: 股票代码
+
+        Returns:
+            None - 当前不支持单个查询
+        """
+        if not self._current_key:
+            return None
+
+        # 如果未来需要实现单个查询：
+        # 1. 使用 self._cache.get(self._current_key) 加载 DataFrame
+        # 2. 使用 self._symbol_index[symbol] 定位行
+        # 3. 构造 MarketSnapshot 对象返回
+        #
+        # 但当前业务场景不需要此功能（只需批量写入）
+
         return None
 
     def get_stats(self) -> Dict[str, Any]:

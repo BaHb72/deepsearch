@@ -33,9 +33,9 @@ def get_profiler():
 
 
 def get_memory_manager():
-    from core.memory.smart_memory import memory_manager
+    from core.infrastructure.memory import get_memory_manager as _get_memory_manager
 
-    return memory_manager
+    return _get_memory_manager()
 
 
 def get_query_optimizer():

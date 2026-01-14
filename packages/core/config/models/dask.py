@@ -20,10 +20,11 @@ class WindowsWorkersConfig(BaseModel):
     threads_per_worker: int = Field(default=2, description="每个 Worker 的线程数")
     memory_limit: str = Field(default="4GB", description="内存限制")
     name_prefix: str = Field(default="windows-worker", description="Worker 名称前缀")
-    resources: Dict[str, int] = Field(
-        default_factory=lambda: {"WIN": 1},
-        description="Worker 资源标签",
+    resources: Dict[str, float] = Field(
+        default_factory=lambda: {"WIN": 1.0},
+        description="Worker 资源标签（必须为浮点数，符合 Dask 内部要求）",
     )
+    port_range_start: int = Field(default=58200, description="Worker 端口范围起始值")
 
 
 class TaskRoutingConfig(BaseModel):

@@ -1,0 +1,44 @@
+# 股票池配置
+
+pools:
+  - id: all
+    name: 全市场
+    description: 全部A股
+    count: 5000
+    enabled: true
+
+  - id: hs300
+    name: 沪深300
+    description: 沪深300指数成分股
+    count: 300
+    enabled: true
+
+  - id: zz500
+    name: 中证500
+    description: 中证500指数成分股
+    count: 500
+    enabled: true
+
+  - id: cyb
+    name: 创业板
+    description: 创业板股票
+    count: 1200
+    enabled: true
+
+  - id: kcb
+    name: 科创板
+    description: 科创板股票
+    count: 500
+    enabled: true
+
+  - id: zz1000
+    name: 中证1000
+    description: 中证1000指数成分股
+    count: 1000
+    enabled: false
+
+  - id: custom
+    name: 自选股
+    description: 用户自定义股票池
+    count: 0
+    enabled: true

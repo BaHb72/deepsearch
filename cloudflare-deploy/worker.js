@@ -194,22 +194,39 @@ async function handleProxy(request, env, ctx) {
         const randomUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
         headers.set('User-Agent', randomUA);
 
-        // 设置必要的请求头（模拟真实浏览器）
-        headers.set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8');
-        headers.set('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8');
-        headers.set('Accept-Encoding', 'gzip, deflate, br');
+        // 根据请求类型设置不同的请求头
+        // 检测是否为 API 请求（datacenter/api 路径或 JSON 相关）
+        const isApiRequest = targetUrlObj.pathname.includes('/api/') ||
+                             targetUrlObj.pathname.includes('/data/') ||
+                             targetUrl.includes('datacenter');
 
-        // 添加更多浏览器特征头
-        headers.set('Cache-Control', 'no-cache');
-        headers.set('Pragma', 'no-cache');
-        headers.set('Sec-Ch-Ua', '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"');
-        headers.set('Sec-Ch-Ua-Mobile', '?0');
-        headers.set('Sec-Ch-Ua-Platform', '"Windows"');
-        headers.set('Sec-Fetch-Dest', 'document');
-        headers.set('Sec-Fetch-Mode', 'navigate');
-        headers.set('Sec-Fetch-Site', 'none');
-        headers.set('Sec-Fetch-User', '?1');
-        headers.set('Upgrade-Insecure-Requests', '1');
+        if (isApiRequest) {
+            // API 请求：使用 XHR/fetch 风格的请求头
+            headers.set('Accept', 'application/json, text/plain, */*');
+            headers.set('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8');
+            headers.set('Accept-Encoding', 'gzip, deflate, br');
+            headers.set('Cache-Control', 'no-cache');
+            headers.set('Pragma', 'no-cache');
+            // 使用 XHR/fetch 的 Sec-Fetch 头
+            headers.set('Sec-Fetch-Dest', 'empty');
+            headers.set('Sec-Fetch-Mode', 'cors');
+            headers.set('Sec-Fetch-Site', 'same-origin');
+        } else {
+            // 网页请求：使用浏览器导航风格的请求头
+            headers.set('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8');
+            headers.set('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8');
+            headers.set('Accept-Encoding', 'gzip, deflate, br');
+            headers.set('Cache-Control', 'no-cache');
+            headers.set('Pragma', 'no-cache');
+            headers.set('Sec-Ch-Ua', '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"');
+            headers.set('Sec-Ch-Ua-Mobile', '?0');
+            headers.set('Sec-Ch-Ua-Platform', '"Windows"');
+            headers.set('Sec-Fetch-Dest', 'document');
+            headers.set('Sec-Fetch-Mode', 'navigate');
+            headers.set('Sec-Fetch-Site', 'none');
+            headers.set('Sec-Fetch-User', '?1');
+            headers.set('Upgrade-Insecure-Requests', '1');
+        }
         headers.set('Dnt', '1');
 
         // 设置 Referer（根据目标站点）

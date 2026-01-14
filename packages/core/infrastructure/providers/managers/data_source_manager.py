@@ -1105,7 +1105,7 @@ class DataSourceManager:
 
         config_payload = self._extract_config_payload(data)
         if isinstance(config_payload, dict) and "implementation_mode" not in config_payload:
-            config_payload["implementation_mode"] = "process"
+            config_payload["implementation_mode"] = "optimized"
         has_saved = data.get("has_saved_credential")
         if has_saved is None:
             has_saved = self._infer_saved_credential_from_config(config_payload)

@@ -13,8 +13,9 @@ async def test_get_calendar_filters_results(monkeypatch):
     calls = {}
 
     class DummyProvider:
-        async def get_calendar(self, data_type: str = "str", market: str = "SH"):
-            calls["args"] = {"data_type": data_type, "market": market}
+        async def get_calendar(self, market: str = "SH"):
+            # 实际 Actor 只接受 market 参数，data_type 在 API 层处理
+            calls["args"] = {"market": market}
             # 混合符合与不符合过滤条件的数据
             return [20240102, 20240103, 20240105]
 
@@ -29,7 +30,7 @@ async def test_get_calendar_filters_results(monkeypatch):
         market="SZ", data_type="str", begin_date=20240103, end_date=20240104
     )
 
-    assert calls["args"] == {"data_type": "str", "market": "SZ"}
+    assert calls["args"] == {"market": "SZ"}
     assert response["success"] is True
     assert response["data"]["data"] == [20240103]
 

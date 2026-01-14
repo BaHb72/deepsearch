@@ -594,80 +594,241 @@ class MiniQMTProvider(DataProvider):
 
     async def get_dragon_tiger(
         self,
+        date: Optional[str] = None,
         symbols: Optional[List[str]] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
         **kwargs: Any,
     ) -> Optional[List[Dict[str, Any]]]:
         """
         获取龙虎榜数据
 
-        使用内置 Python 的 C.get_longhubang() 获取龙虎榜数据
+        由于 xtquant SDK 没有标准的龙虎榜 API，此方法通过 AkShare 获取数据
 
         Args:
-            symbols: 股票代码列表（可选，为空获取全部）
-            start_date: 开始日期 (格式: YYYYMMDD)
-            end_date: 结束日期 (格式: YYYYMMDD)
+            date: 查询日期 (格式: YYYYMMDD)，为空获取最新数据
+            symbols: 股票代码列表（可选，用于过滤结果）
             **kwargs: 其他参数
 
         Returns:
             龙虎榜数据列表，失败返回 None
+
+        Note:
+            数据来源于 AkShare，非 xtquant SDK 原生数据
         """
         try:
-            # 如果没有指定股票，获取沪深A股
-            if not symbols:
-                symbols = xtdata.get_stock_list_in_sector("沪深A股")[:100]
+            logger.info(f"龙虎榜查询: date={date}, symbols={len(symbols) if symbols else 'all'}")
 
-            # 龙虎榜数据需要通过内置 Python 调用
-            # 这里提供占位实现，实际需要在 QMT 终端内部执行
-            logger.info(
-                f"龙虎榜查询: symbols={len(symbols) if symbols else 0}, "
-                f"start={start_date}, end={end_date}"
-            )
+            # 尝试从 AkShare 获取龙虎榜数据
+            try:
+                # 延迟导入避免循环依赖
+                from apps.api.api.providers import DataProviderFactory, DataSourceType
 
-            # 返回空列表表示功能可用但无数据
+                akshare_provider = await DataProviderFactory.get_provider_async(
+                    DataSourceType.AKSHARE
+                )
+
+                # 调用 AkShare 的龙虎榜接口
+                # stock_lhb_detail_em - 东方财富龙虎榜详情
+                params: Dict[str, Any] = {}
+                if date:
+                    # 转换日期格式: YYYYMMDD -> YYYY-MM-DD
+                    formatted_date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
+                    params["start_date"] = formatted_date
+                    params["end_date"] = formatted_date
+
+                result = await akshare_provider.call_api(
+                    api_name="stock_lhb_detail_em",
+                    params=params,
+                )
+
+                if result is not None:
+                    # 将 DataFrame 转换为字典列表
+                    if hasattr(result, "to_dict"):
+                        records = result.to_dict("records")
+                    elif isinstance(result, list):
+                        records = result
+                    elif isinstance(result, dict) and "data" in result:
+                        records = result["data"]
+                    else:
+                        records = []
+
+                    # 如果指定了股票代码，过滤结果
+                    if symbols and records:
+                        # 尝试匹配股票代码字段
+                        filtered = []
+                        for record in records:
+                            code = record.get("代码") or record.get("symbol") or record.get("code")
+                            if code and any(s in str(code) for s in symbols):
+                                filtered.append(record)
+                        records = filtered
+
+                    # 添加数据来源标记
+                    for record in records:
+                        record["source"] = "akshare"
+                        record["data_type"] = "dragon_tiger"
+
+                    logger.info(f"获取龙虎榜成功: {len(records)} 条记录 (来源: AkShare)")
+                    return records
+
+            except ImportError:
+                logger.warning("AkShare 模块未找到，无法获取龙虎榜数据")
+            except Exception as akshare_err:
+                logger.warning(f"从 AkShare 获取龙虎榜失败: {akshare_err}")
+
+            # 如果 AkShare 失败，返回空列表
+            logger.warning("龙虎榜数据获取失败，xtquant SDK 不支持此功能")
             return []
 
-        # xtquant SDK 检查已在模块导入时完成
         except Exception as e:
             logger.error(f"获取龙虎榜失败: {e}")
 
         return None
 
-    async def get_north_flow(
+    async def get_limit_up_performance(
         self,
-        market: str = "HGT",
+        symbols: List[str],
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         **kwargs: Any,
     ) -> Optional[List[Dict[str, Any]]]:
         """
-        获取北向资金数据（沪港通/深港通）
+        获取涨跌表现数据（连板、封板等）
+
+        使用 xtdata.get_market_data_ex() 获取涨跌表现数据
+        period='limitupperformance'
+
+        返回字段说明:
+        - openVol: 开盘集合竞价成交量
+        - closeVol: 收盘集合竞价成交量
+        - startUp: 涨停开始时间
+        - endUp: 涨停结束时间
+        - breakUp: 炸板次数
+        - upAmount: 涨停金额
+        - startDn: 跌停开始时间
+        - endDn: 跌停结束时间
+        - breakDn: 跌停开板次数
+        - dnAmount: 跌停金额
+        - direct: 涨跌方向 (0-无, 1-涨停, 2-跌停)
+        - sealVolRatio: 封成比
+        - sealFreeRatio: 封流比
+        - sealCount: 连板数
 
         Args:
-            market: 市场类型 ('HGT'沪港通, 'SGT'深港通, 'GGT'港股通)
-            start_date: 开始日期
-            end_date: 结束日期
+            symbols: 股票代码列表
+            start_date: 开始日期 (格式: YYYYMMDD)
+            end_date: 结束日期 (格式: YYYYMMDD)
             **kwargs: 其他参数
 
         Returns:
-            北向资金数据列表，失败返回 None
+            涨跌表现数据列表，失败返回 None
+
+        Note:
+            此功能需要 MiniQMT 投研版 VIP 权限
         """
         try:
-            # 获取北向资金交易日历
-            trading_dates = xtdata.get_trading_dates(
-                market=market,
+            logger.info(f"涨跌表现查询: symbols={len(symbols)}, start={start_date}, end={end_date}")
+
+            # 获取涨跌表现数据
+            data = xtdata.get_market_data_ex(
+                fields=[],  # 空列表获取所有字段
+                stock_list=symbols,
+                period="limitupperformance",
                 start_time=start_date or "",
                 end_time=end_date or "",
             )
 
-            if trading_dates:
-                # 返回交易日期列表
-                return [
-                    {"date": d, "market": market, "source": "miniqmt"} for d in trading_dates[-30:]
-                ]  # 最近30个交易日
+            if data:
+                result = []
+                for symbol, df in data.items():
+                    if df is not None and not df.empty:
+                        # 转换 DataFrame 为字典列表
+                        records = df.reset_index().to_dict("records")
+                        for record in records:
+                            record["symbol"] = symbol
+                            record["source"] = "miniqmt"
+                            record["data_type"] = "limit_up_performance"
+                        result.extend(records)
 
-        # xtquant SDK 检查已在模块导入时完成
+                if result:
+                    logger.info(f"获取涨跌表现成功: {len(result)} 条记录")
+                    return result
+
+            # 如果无法获取数据，返回空列表
+            logger.warning("涨跌表现数据为空，可能需要 VIP 权限")
+            return []
+
+        except Exception as e:
+            logger.error(f"获取涨跌表现失败: {e}")
+
+        return None
+
+    async def get_north_flow(
+        self,
+        symbols: Optional[List[str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        period: str = "1d",
+        **kwargs: Any,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        获取北向资金流向数据（沪港通/深港通）
+
+        使用 xtdata.get_market_data_ex() 获取北向资金数据
+        period='northfinancechange1d' (日级) 或 'northfinancechange1m' (分钟级)
+
+        Args:
+            symbols: 股票代码列表（可选，为空获取市场整体数据）
+            start_date: 开始日期 (格式: YYYYMMDD)
+            end_date: 结束日期 (格式: YYYYMMDD)
+            period: 周期类型 ('1m' 分钟级, '1d' 日级)
+            **kwargs: 其他参数
+
+        Returns:
+            北向资金数据列表，失败返回 None
+
+        Note:
+            此功能需要 MiniQMT 投研版 VIP 权限
+        """
+        try:
+            # 周期映射
+            period_map = {
+                "1m": "northfinancechange1m",
+                "1d": "northfinancechange1d",
+            }
+            xt_period = period_map.get(period, "northfinancechange1d")
+
+            # 如果没有指定股票，获取沪深A股前100只作为示例
+            if not symbols:
+                symbols = xtdata.get_stock_list_in_sector("沪深A股")[:100]
+
+            # 获取北向资金数据
+            data = xtdata.get_market_data_ex(
+                fields=[],  # 空列表获取所有字段
+                stock_list=symbols,
+                period=xt_period,
+                start_time=start_date or "",
+                end_time=end_date or "",
+            )
+
+            if data:
+                result = []
+                for symbol, df in data.items():
+                    if df is not None and not df.empty:
+                        # 转换 DataFrame 为字典列表
+                        records = df.reset_index().to_dict("records")
+                        for record in records:
+                            record["symbol"] = symbol
+                            record["source"] = "miniqmt"
+                            record["period"] = period
+                        result.extend(records)
+
+                if result:
+                    logger.info(f"获取北向资金成功: {len(result)} 条记录")
+                    return result
+
+            # 如果无法获取数据，返回空列表（表示功能可用但无数据或无权限）
+            logger.warning("北向资金数据为空，可能需要 VIP 权限")
+            return []
+
         except Exception as e:
             logger.error(f"获取北向资金失败: {e}")
 
@@ -750,40 +911,117 @@ class MiniQMTProvider(DataProvider):
 
     async def get_financial_data(
         self,
-        symbol: str,
-        report_type: str = "income",
+        symbols: List[str],
+        tables: Optional[List[str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        report_type: str = "report_time",
+        auto_download: bool = True,
         **kwargs: Any,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[Dict[str, Dict[str, Any]]]:
         """
         获取财务数据
 
-        支持的报表类型：
-        - income: 利润表
-        - balance: 资产负债表
-        - cashflow: 现金流量表
+        使用 xtdata.get_financial_data() 获取财务数据
+
+        支持的财务表:
+        - Balance: 资产负债表
+        - Income: 利润表
+        - CashFlow: 现金流量表
+        - Capital: 股本结构表
+        - Holdernum: 股东数
+        - Top10holder: 十大股东
+        - Top10flowholder: 十大流通股东
+        - Pershareindex: 每股指标
 
         Args:
-            symbol: 股票代码
-            report_type: 报表类型
+            symbols: 股票代码列表
+            tables: 财务表列表（为空获取全部）
+            start_date: 开始日期 (格式: YYYYMMDD)
+            end_date: 结束日期 (格式: YYYYMMDD)
+            report_type: 报告类型 ('report_time'截止日期, 'announce_time'披露日期)
+            auto_download: 是否自动下载数据到本地缓存
             **kwargs: 其他参数
 
         Returns:
-            财务数据字典，失败返回 None
+            财务数据字典，格式: {symbol: {table_name: DataFrame_dict}}
+            失败返回 None
+
+        Note:
+            此功能需要 MiniQMT 投研版 VIP 权限
         """
         try:
-            # 财务数据需要 VIP 权限
-            logger.info(f"财务数据查询: symbol={symbol}, type={report_type}")
+            # 默认获取三大财务报表
+            table_list = tables or ["Balance", "Income", "CashFlow"]
 
-            # 返回基本结构
-            return {
-                "symbol": symbol,
-                "report_type": report_type,
-                "data": {},
-                "source": "miniqmt",
-                "note": "财务数据需要 VIP 权限",
-            }
+            logger.info(
+                f"财务数据查询: symbols={len(symbols)}, tables={table_list}, "
+                f"start={start_date}, end={end_date}, report_type={report_type}"
+            )
 
-        # xtquant SDK 检查已在模块导入时完成
+            # 自动下载财务数据到本地缓存
+            if auto_download:
+                try:
+                    # 转换为 list 避免类型问题
+                    symbol_list_copy = list(symbols)
+                    table_list_copy = list(table_list)
+                    await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: xtdata.download_financial_data(symbol_list_copy, table_list_copy),
+                    )
+                    logger.debug(f"财务数据下载完成: {len(symbols)} 只股票")
+                except Exception as download_err:
+                    logger.warning(f"财务数据下载失败（将尝试读取缓存）: {download_err}")
+
+            # 获取财务数据
+            symbol_list_final = list(symbols)
+            table_list_final = list(table_list) if table_list else None
+            start_time_param = start_date or ""
+            end_time_param = end_date or ""
+            report_type_param = report_type
+
+            data = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: xtdata.get_financial_data(
+                    stock_list=symbol_list_final,
+                    table_list=table_list_final,
+                    start_time=start_time_param,
+                    end_time=end_time_param,
+                    report_type=report_type_param,
+                ),
+            )
+
+            if data:
+                # 转换结果格式
+                result: Dict[str, Dict[str, Any]] = {}
+                for symbol, tables_data in data.items():
+                    if tables_data:
+                        result[symbol] = {}
+                        for table_name, df in tables_data.items():
+                            if df is not None and not df.empty:
+                                # 将 DataFrame 转换为可序列化的字典
+                                result[symbol][table_name] = {
+                                    "columns": list(df.columns),
+                                    "data": df.values.tolist(),
+                                    "index": [str(idx) for idx in df.index.tolist()],
+                                    "count": len(df),
+                                }
+                            else:
+                                result[symbol][table_name] = {
+                                    "columns": [],
+                                    "data": [],
+                                    "index": [],
+                                    "count": 0,
+                                }
+
+                if result:
+                    logger.info(f"获取财务数据成功: {len(result)} 只股票")
+                    return result
+
+            # 如果无法获取数据，返回空字典
+            logger.warning("财务数据为空，可能需要 VIP 权限或数据未下载")
+            return {}
+
         except Exception as e:
             logger.error(f"获取财务数据失败: {e}")
 

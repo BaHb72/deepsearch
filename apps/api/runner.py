@@ -393,13 +393,24 @@ class WebUIRunner:
 
     def _setup_signal_handlers(self):
         """设置信号处理器"""
+        self._signal_count = 0
 
         def signal_handler(signum, frame):
-            print("\n收到退出信号...")
-            # 直接调用 shutdown 清理所有子进程
-            self.shutdown()
-            # 强制退出，避免残留
-            sys.exit(0)
+            self._signal_count += 1
+            if self._signal_count == 1:
+                print("\n收到退出信号，正在优雅关闭...")
+                # 只设置关闭事件，让事件循环自然退出
+                # 不要调用 sys.exit()，否则会绕过 asyncio 的清理机制
+                self._shutdown_event.set()
+            elif self._signal_count >= 2:
+                # 第二次 Ctrl+C: 强制退出
+                print("\n强制退出...")
+                # 先尝试清理关键资源
+                try:
+                    self._stop_frontend_server()
+                except Exception:
+                    pass
+                os._exit(1)
 
         signal.signal(signal.SIGINT, signal_handler)
         if sys.platform != "win32":
