@@ -10,11 +10,17 @@ AmazingData Dask Actor
 - 业务逻辑、缓存、熔断器都在 Adapter/Provider 层
 - 保留分布式会话管理（AmazingData SDK 特殊需求）
 
+延迟初始化模式（v2.0）:
+- initialize() 只做轻量级准备（<100ms），不执行登录
+- 首次 call() 时自动触发登录（~15秒）
+- 解决 Dask Plugin 注册超时问题（原 ~15s → 现 <100ms）
+- 使用双重检查锁防止并发登录
+
 Usage:
     # 由 Plugin 自动创建和管理
     actor = AmazingDataActor(config)
-    result = await actor.initialize()  # 会自动调用 login
-    data = await actor.call("query_kline", code_list=["600000.SH"], ...)
+    await actor.initialize()  # 轻量级初始化（<100ms）
+    data = await actor.call("query_kline", code_list=["600000.SH"], ...)  # 首次调用触发登录
     await actor.shutdown()
 """
 
@@ -66,6 +72,11 @@ class AmazingDataActor:
         "get_stock_list": ("get_code_list", frozenset({"security_type"})),
     }
 
+    # 类级别缓存：交易日历（一年只变一次，可跨实例共享）
+    _calendar_cache: Any = None
+    _calendar_cache_time: float = 0
+    _CALENDAR_CACHE_TTL: float = 86400  # 24 小时缓存有效期
+
     def __init__(self, config: dict[str, Any] | None = None):
         """初始化 Actor
 
@@ -76,11 +87,13 @@ class AmazingDataActor:
                 - host: 服务器地址
                 - port: 服务器端口
                 - redis_url: Redis URL (用于分布式会话)
+                - prewarm: 是否在后台预热登录（默认 False）
         """
         self._config = config or {}
 
         # 核心状态
         self._logged_in = False
+        self._login_lock: asyncio.Lock | None = None  # 延迟创建，避免跨事件循环问题
         self._last_activity = time.time()
 
         # SDK 引用
@@ -89,6 +102,11 @@ class AmazingDataActor:
         self._market_data: Any = None  # MarketData 实例
         self._info_data: Any = None  # InfoData 实例
         self._tgw: Any = None  # TGW 实例（可选，用于实时行情）
+
+        # 方法路由映射（自动发现）
+        self._method_routes: dict[str, str] = (
+            {}
+        )  # 方法名 -> SDK对象类型 ("base_data"|"market_data"|"info_data")
 
         # 分布式会话管理（AmazingData SDK 特性）
         self._redis: AsyncRedis | None = None
@@ -120,47 +138,89 @@ class AmazingDataActor:
         """向后兼容：返回方法别名映射（仅方法名）"""
         return {k: v[0] for k, v in self.METHOD_CONFIG.items()}
 
-    # ==================== 初始化（自动登录）====================
+    # ==================== 初始化（延迟登录）====================
 
     async def initialize(self) -> bool:
-        """初始化 Actor - 自动执行登录
+        """初始化 Actor - 轻量级准备（延迟登录）
+
+        采用延迟初始化模式：
+        - 此方法只做轻量级准备工作（<100ms）
+        - 实际登录延迟到首次 call() 调用时执行
+        - 解决 Dask Plugin 注册超时问题（原耗时 ~15s，现 <100ms）
 
         Returns:
-            初始化是否成功
+            初始化是否成功（始终返回 True）
         """
-        if self._logged_in:
-            logger.debug("[{}] 已初始化，跳过", _ACTOR_ID)
-            return True
+        logger.info("[{}] 开始轻量级初始化（延迟登录模式）...", _ACTOR_ID)
 
         try:
-            logger.info("[{}] 开始初始化...", _ACTOR_ID)
-
-            # 1. 初始化 Redis 连接（可选）
+            # 1. 初始化 Redis 连接（用于分布式会话，快速操作）
             redis_ok = await self._init_redis()
             if not redis_ok:
                 logger.warning("[{}] Redis 连接失败，跨平台会话将不可用", _ACTOR_ID)
 
-            # 2. 检查分布式会话
-            if redis_ok and await self._check_distributed_session():
-                # 复用有效会话，初始化 SDK 数据对象
-                logger.info("[{}] 复用分布式会话", _ACTOR_ID)
-                if await self._init_sdk_objects_without_login():
-                    logger.info("[{}] 初始化完成（复用会话）", _ACTOR_ID)
-                    return True
-                logger.warning("[{}] 复用会话失败，回退到完整登录", _ACTOR_ID)
+            # 2. 可选：后台预热登录（不阻塞 setup）
+            if self._config.get("prewarm", False):
+                logger.info("[{}] 启动后台预热登录...", _ACTOR_ID)
+                asyncio.create_task(self._prewarm_login())
 
-            # 3. 执行完整登录
-            login_ok = await self._login()
-            if not login_ok:
-                logger.error("[{}] 登录失败", _ACTOR_ID)
-                return False
-
-            logger.info("[{}] 初始化完成", _ACTOR_ID)
+            logger.info("[{}] 轻量级初始化完成（登录将在首次调用时执行）", _ACTOR_ID)
             return True
 
         except Exception as e:
             logger.error("[{}] 初始化异常: {}", _ACTOR_ID, e)
-            return False
+            # 即使 Redis 失败也返回成功，登录可以独立工作
+            return True
+
+    async def _prewarm_login(self) -> None:
+        """后台预热登录（不阻塞主流程）"""
+        try:
+            await self._ensure_logged_in()
+            logger.info("[{}] 后台预热登录完成", _ACTOR_ID)
+        except Exception as e:
+            logger.warning("[{}] 后台预热登录失败: {}", _ACTOR_ID, e)
+
+    async def _ensure_logged_in(self) -> None:
+        """确保已登录（延迟初始化核心方法）
+
+        使用双重检查锁模式，确保：
+        1. 只有首次调用时执行登录
+        2. 并发调用时不会重复登录
+        3. 登录完成后快速返回
+
+        Raises:
+            RuntimeError: 登录失败时抛出
+        """
+        # 快速路径：已登录直接返回
+        if self._logged_in:
+            return
+
+        # 延迟创建锁（避免跨事件循环问题）
+        if self._login_lock is None:
+            self._login_lock = asyncio.Lock()
+
+        # 获取锁，执行登录
+        async with self._login_lock:
+            # 双重检查：可能在等待锁期间其他协程已完成登录
+            if self._logged_in:
+                return
+
+            logger.info("[{}] 首次调用，开始延迟登录...", _ACTOR_ID)
+
+            # 1. 检查分布式会话（快速复用）
+            if self._redis is not None and await self._check_distributed_session():
+                logger.info("[{}] 复用分布式会话", _ACTOR_ID)
+                if await self._init_sdk_objects_without_login():
+                    logger.info("[{}] 延迟初始化完成（复用会话）", _ACTOR_ID)
+                    return
+                logger.warning("[{}] 复用会话失败，回退到完整登录", _ACTOR_ID)
+
+            # 2. 执行完整登录
+            login_ok = await self._login()
+            if not login_ok:
+                raise RuntimeError("AmazingData SDK 登录失败")
+
+            logger.info("[{}] 延迟登录完成", _ACTOR_ID)
 
     async def _init_redis(self) -> bool:
         """初始化 Redis 连接（用于分布式会话）"""
@@ -223,14 +283,8 @@ class AmazingDataActor:
             self._sdk = sdk
             self._base_data = sdk.BaseData()  # type: ignore[misc]
 
-            # 获取交易日历（用于 MarketData）
-            calendar = await self._run_sdk_with_timeout(
-                lambda: self._base_data.get_calendar(),
-                "BaseData.get_calendar",
-                timeout=10.0,
-            )
-            if isinstance(calendar, dict):
-                calendar = calendar.get("data", calendar.get("calendar", []))
+            # 获取交易日历（优先使用缓存）
+            calendar = await self._get_calendar_cached()
 
             self._market_data = sdk.MarketData(calendar) if calendar else None  # type: ignore[misc]
             self._info_data = sdk.InfoData()  # type: ignore[misc]
@@ -247,6 +301,46 @@ class AmazingDataActor:
         except Exception as e:
             logger.warning("[{}] SDK 对象初始化失败: {}", _ACTOR_ID, e)
             return False
+
+    async def _get_calendar_cached(self) -> Any:
+        """获取交易日历（带类级别缓存）
+
+        交易日历一年只变一次，可以安全缓存 24 小时。
+        跨实例共享缓存，避免重复调用 SDK。
+
+        Returns:
+            交易日历数据（list 格式）
+        """
+        # 检查缓存是否有效
+        if (
+            AmazingDataActor._calendar_cache is not None
+            and time.time() - AmazingDataActor._calendar_cache_time < self._CALENDAR_CACHE_TTL
+        ):
+            logger.debug(
+                "[{}] 使用缓存的交易日历 | age={:.1f}s",
+                _ACTOR_ID,
+                time.time() - AmazingDataActor._calendar_cache_time,
+            )
+            return AmazingDataActor._calendar_cache
+
+        # 缓存无效，重新获取
+        logger.info("[{}] 缓存未命中，从 SDK 获取交易日历...", _ACTOR_ID)
+        calendar = await self._run_sdk_with_timeout(
+            lambda: self._base_data.get_calendar(),
+            "BaseData.get_calendar",
+            timeout=10.0,
+        )
+
+        # 标准化数据格式
+        if isinstance(calendar, dict):
+            calendar = calendar.get("data", calendar.get("calendar", []))
+
+        # 更新类级别缓存
+        AmazingDataActor._calendar_cache = calendar
+        AmazingDataActor._calendar_cache_time = time.time()
+        logger.info("[{}] 交易日历已缓存 | 记录数={}", _ACTOR_ID, len(calendar) if calendar else 0)
+
+        return calendar
 
     async def _login(self) -> bool:
         """执行 AmazingData SDK 登录"""
@@ -282,6 +376,33 @@ class AmazingDataActor:
                 _ACTOR_ID,
                 time_module.time() - step_start,
             )
+
+            # 步骤 1.5: 预清理 - 先 logout 释放可能残留的连接
+            # AmazingData SDK 限制同一账户的并发连接数，如果之前进程异常退出，
+            # 连接可能没有被正确释放，导致 "Connections exceed max limitation" 错误
+            # 注意：超时从 5.0 缩短到 1.0，logout 通常很快完成
+            step_start = time_module.time()
+            logger.info("[{}] [步骤1.5/5] 预清理: 尝试 logout 释放残留连接...", _ACTOR_ID)
+            try:
+                # sdk.logout() 需要 username 参数
+                await self._run_sdk_with_timeout(
+                    lambda: sdk.logout(username),
+                    "sdk.logout (预清理)",
+                    timeout=1.0,  # 从 5.0 缩短到 1.0（logout 通常很快）
+                )
+                logger.info(
+                    "[{}] [步骤1.5/5] 预清理 logout 完成 | 耗时={:.3f}s",
+                    _ACTOR_ID,
+                    time_module.time() - step_start,
+                )
+            except Exception as e:
+                # 预清理失败不影响后续登录，仅记录日志
+                logger.debug(
+                    "[{}] [步骤1.5/5] 预清理 logout 跳过（可能无残留连接）| 耗时={:.3f}s | 原因={}",
+                    _ACTOR_ID,
+                    time_module.time() - step_start,
+                    str(e),
+                )
 
             # 步骤 2: 调用 sdk.login()
             step_start = time_module.time()
@@ -331,21 +452,14 @@ class AmazingDataActor:
                 time_module.time() - step_start,
             )
 
-            # 步骤 4: 获取交易日历
+            # 步骤 4: 获取交易日历（优先使用缓存）
             step_start = time_module.time()
-            logger.info("[{}] [步骤4/5] 调用 BaseData.get_calendar()...", _ACTOR_ID)
+            logger.info("[{}] [步骤4/5] 获取交易日历（优先使用缓存）...", _ACTOR_ID)
             try:
-                calendar = await self._run_sdk_with_timeout(
-                    lambda: self._base_data.get_calendar(),
-                    "BaseData.get_calendar",
-                    timeout=10.0,
-                )
-                if isinstance(calendar, dict):
-                    calendar = calendar.get("data", calendar.get("calendar", []))
-
+                calendar = await self._get_calendar_cached()
                 calendar_count = len(calendar) if calendar else 0
                 logger.info(
-                    "[{}] [步骤4/5] get_calendar() 成功 | 耗时={:.3f}s | 记录数={}",
+                    "[{}] [步骤4/5] 交易日历获取完成 | 耗时={:.3f}s | 记录数={}",
                     _ACTOR_ID,
                     time_module.time() - step_start,
                     calendar_count,
@@ -448,24 +562,28 @@ class AmazingDataActor:
 
     # ==================== 核心方法代理 ====================
 
-    async def call(self, method: str, **kwargs: Any) -> Any:
+    async def call(self, method: str, *args: Any, **kwargs: Any) -> Any:
         """通用方法调用 - 简单代理，不包含缓存/熔断逻辑
 
         自动路由到 BaseData/MarketData/InfoData。
         供 RPC Client 通过 worker.actors["amazingdata"].call() 调用。
 
+        采用延迟初始化模式：首次调用时自动触发登录。
+        支持位置参数和关键字参数混用，自动使用 inspect.signature() 转换。
+
         Args:
             method: SDK 方法名 (如 "query_kline", "get_stock_basic")
-            **kwargs: 方法参数
+            *args: 位置参数（会自动转换为关键字参数）
+            **kwargs: 关键字参数
 
         Returns:
             API 返回数据（已标准化为可序列化格式）
 
         Raises:
-            RuntimeError: Actor 未登录或方法不存在
+            RuntimeError: 登录失败或方法不存在
         """
-        if not self._logged_in:
-            raise RuntimeError("Actor not logged in")
+        # 延迟初始化：首次调用时自动登录
+        await self._ensure_logged_in()
 
         # 在入口处统一转换别名并过滤参数
         config = self.METHOD_CONFIG.get(method)
@@ -486,6 +604,31 @@ class AmazingDataActor:
         sdk_obj = self._route_method(actual_method)
         if sdk_obj is None:
             raise RuntimeError(f"Method '{actual_method}' not found in any SDK object")
+
+        # 如果有位置参数，使用 inspect.signature() 转换为关键字参数
+        if args:
+            # 获取方法签名
+            method_func = getattr(sdk_obj, actual_method, None)
+            if method_func is None:
+                raise RuntimeError(f"Method '{actual_method}' not found on SDK object")
+
+            try:
+                import inspect
+
+                sig = inspect.signature(method_func)
+                # 绑定位置参数和关键字参数
+                bound = sig.bind(*args, **kwargs)
+                bound.apply_defaults()
+                # 转换为纯关键字参数
+                kwargs = dict(bound.arguments)
+            except Exception as e:
+                logger.warning(
+                    "[{}] 无法使用 inspect.signature() 转换参数，使用原始参数 | method={} | 错误={}",
+                    _ACTOR_ID,
+                    actual_method,
+                    e,
+                )
+                # 如果转换失败，保持原样（向后兼容）
 
         # 调用 SDK 方法（使用转换后的方法名，带超时保护）
         result = await self._call_sdk_method(sdk_obj, actual_method, kwargs)
@@ -519,8 +662,56 @@ class AmazingDataActor:
         finally:
             loop.close()
 
+    def _build_method_routes(self) -> None:
+        """自动发现 SDK 对象的方法并建立路由映射
+
+        扫描 BaseData、MarketData、InfoData 的所有公共方法，
+        建立方法名到 SDK 对象类型的映射，避免硬编码维护。
+        """
+        if not self._logged_in:
+            logger.warning("[{}] SDK 未登录，无法构建方法路由", _ACTOR_ID)
+            return
+
+        logger.info("[{}] 开始自动发现 SDK 方法路由...", _ACTOR_ID)
+
+        # 扫描每个 SDK 对象的方法
+        sdk_objects = [
+            ("base_data", self._base_data),
+            ("market_data", self._market_data),
+            ("info_data", self._info_data),
+        ]
+
+        route_count = 0
+        for obj_type, obj in sdk_objects:
+            if obj is None:
+                logger.debug("[{}] {} 对象未初始化，跳过", _ACTOR_ID, obj_type)
+                continue
+
+            # 获取对象的所有公共方法（不包括私有方法和魔术方法）
+            methods = [
+                name
+                for name in dir(obj)
+                if not name.startswith("_") and callable(getattr(obj, name, None))
+            ]
+
+            # 添加到路由映射
+            for method in methods:
+                # 如果方法已存在于其他对象中，跳过（优先级：base_data > market_data > info_data）
+                if method not in self._method_routes:
+                    self._method_routes[method] = obj_type
+                    route_count += 1
+
+        logger.info(
+            "[{}] 方法路由构建完成 | 总计 {} 个方法 | base_data={} | market_data={} | info_data={}",
+            _ACTOR_ID,
+            route_count,
+            len([v for v in self._method_routes.values() if v == "base_data"]),
+            len([v for v in self._method_routes.values() if v == "market_data"]),
+            len([v for v in self._method_routes.values() if v == "info_data"]),
+        )
+
     def _route_method(self, method: str) -> Any | None:
-        """路由方法到对应的 SDK 对象
+        """路由方法到对应的 SDK 对象（使用自动发现的路由映射）
 
         Args:
             method: 方法名（已经过别名转换）
@@ -528,25 +719,27 @@ class AmazingDataActor:
         Returns:
             对应的 SDK 对象，未找到返回 None
         """
-        # MarketData 方法（历史行情）
-        if method in ("query_kline", "query_snapshot"):
-            return self._market_data
+        # 如果路由映射为空，说明是首次调用，需要构建路由
+        if not self._method_routes:
+            self._build_method_routes()
 
-        # BaseData 方法（基础数据）
-        if method in (
-            "get_calendar",
-            "get_code_info",
-            "get_code_list",
-            "get_backward_factor",
-            "get_adj_factor",
-            "get_history_stock_status",
-            "get_hist_code_list",
-            "get_future_code_info",
-        ):
+        # 从路由映射中查找
+        obj_type = self._method_routes.get(method)
+
+        if obj_type == "base_data":
             return self._base_data
-
-        # InfoData 方法（财务/特色数据）- 默认路由
-        return self._info_data
+        elif obj_type == "market_data":
+            return self._market_data
+        elif obj_type == "info_data":
+            return self._info_data
+        else:
+            # 未找到路由，默认使用 InfoData（保持向后兼容）
+            logger.warning(
+                "[{}] 方法 '{}' 未在路由映射中找到，使用默认路由 (InfoData)",
+                _ACTOR_ID,
+                method,
+            )
+            return self._info_data
 
     async def _call_sdk_method(self, sdk_obj: Any, method: str, params: dict[str, Any]) -> Any:
         """调用 SDK 方法（带超时保护）

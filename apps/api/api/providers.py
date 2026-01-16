@@ -48,6 +48,59 @@ def _load_symbol(module_name: str, attr: str) -> Any:
 _MarketServiceImpl = cast(
     Any, _load_symbol("deepsearch.application.services.market.market_service", "MarketService")
 )
+
+
+def normalize_stock_code(code: str) -> str:
+    """
+    统一股票代码格式：SH.600000 -> 600000.SH
+
+    AmazingData SDK 期望的格式是 "代码.市场"（如 600000.SH），
+    而部分 API 使用 "市场.代码"（如 SH.600000）格式。
+    此函数自动检测并转换为 SDK 期望的格式。
+
+    参数:
+        code: 股票代码，可能是 "SH.600000" 或 "600000.SH" 格式
+
+    返回:
+        统一为 "600000.SH" 格式的代码
+    """
+    if "." not in code:
+        return code
+
+    parts = code.split(".")
+    if len(parts) != 2:
+        return code
+
+    # 如果第一部分是市场代码（SH/SZ/BJ），需要转换
+    if parts[0] in ("SH", "SZ", "BJ"):
+        return f"{parts[1]}.{parts[0]}"
+
+    # 已经是正确格式或其他格式，直接返回
+    return code
+
+
+def normalize_code_list(code_list: list[str] | str | None) -> list[str] | str | None:
+    """
+    批量转换股票代码格式
+
+    参数:
+        code_list: 股票代码列表、单个代码字符串或 None
+
+    返回:
+        转换后的代码列表/字符串
+    """
+    if code_list is None:
+        return None
+
+    if isinstance(code_list, str):
+        return normalize_stock_code(code_list)
+
+    if isinstance(code_list, list):
+        return [normalize_stock_code(code) for code in code_list]
+
+    return code_list
+
+
 _EastMoneyServiceImpl = cast(
     Any,
     _load_symbol("deepsearch.application.services.market.eastmoney_service", "EastMoneyService"),
@@ -252,6 +305,55 @@ class DataProviderFactory:
             return cls._instances[normalized_type]
 
     @classmethod
+    async def _check_dask_environment(cls) -> tuple[bool, str]:
+        """检查 Dask 环境是否可用
+
+        Returns:
+            (is_available, error_message) 元组
+        """
+        import socket
+
+        # 检查 Scheduler 是否可达
+        scheduler_host = "localhost"
+        scheduler_port = 8786
+
+        try:
+            with socket.create_connection((scheduler_host, scheduler_port), timeout=3):
+                pass
+        except (OSError, socket.timeout):
+            return False, f"Dask Scheduler 不可达 ({scheduler_host}:{scheduler_port})"
+
+        # 检查是否有可用的 Worker（特别是带 WIN 资源的）
+        try:
+            from distributed import Client
+
+            async with Client(
+                f"tcp://{scheduler_host}:{scheduler_port}",
+                asynchronous=True,
+                timeout="5s",
+            ) as client:
+                scheduler_info = client.scheduler_info()
+                workers = scheduler_info.get("workers", {})
+
+                if not workers:
+                    return False, "没有可用的 Dask Worker"
+
+                # 检查是否有带 WIN 资源的 Worker
+                win_workers = [
+                    addr
+                    for addr, info in workers.items()
+                    if info.get("resources", {}).get("WIN", 0) > 0
+                ]
+
+                if not win_workers:
+                    return False, "没有带 WIN 资源的 Dask Worker（Windows 特定任务需要）"
+
+                return True, ""
+
+        except Exception as e:
+            return False, f"Dask 环境检查失败: {e}"
+
+    @classmethod
     async def _create_amazingdata_actor(cls) -> Any:
         """创建新的 AmazingData Actor 并返回包装器"""
         import asyncio
@@ -260,6 +362,12 @@ class DataProviderFactory:
         from core.compute import get_dask_client
         from core.compute.actors import AmazingDataActor
         from core.core.runtime.di_container import _get_amazingdata_config
+
+        # 前置检查：确保 Dask 环境可用
+        is_available, error_msg = await cls._check_dask_environment()
+        if not is_available:
+            logger.error(f"[ACTOR_CREATE] Dask 环境不可用: {error_msg}")
+            raise RuntimeError(f"无法创建 AmazingData Actor: {error_msg}")
 
         config = _get_amazingdata_config()
 
@@ -288,13 +396,25 @@ class DataProviderFactory:
                 logger.debug("[ACTOR_CREATE] 等待 Future 完成...")
                 actor = await asyncio.wait_for(actor_future, timeout=60.0)
 
-                # 初始化（自动登录）
+                # 初始化（延迟登录模式）
                 logger.info("[ACTOR_CREATE] 正在初始化 AmazingData...")
                 init_result = await asyncio.wait_for(actor.initialize(), timeout=30.0)
                 if not init_result:
                     raise RuntimeError("AmazingData 初始化失败")
 
-                # 创建后即时验证
+                # 触发实际登录：调用一个简单方法以触发延迟登录
+                logger.info("[ACTOR_CREATE] 触发延迟登录...")
+                try:
+                    # get_calendar 是一个轻量级调用，会触发 _ensure_logged_in()
+                    await asyncio.wait_for(
+                        actor.call("get_calendar", market="SH"),
+                        timeout=30.0,
+                    )
+                except Exception as login_exc:
+                    logger.warning("[ACTOR_CREATE] 延迟登录调用失败: {}", login_exc)
+                    raise RuntimeError(f"AmazingData 登录失败: {login_exc}")
+
+                # 验证登录状态
                 logger.info("[ACTOR_CREATE] 验证 Actor 连接...")
                 status = await asyncio.wait_for(actor.get_status(), timeout=10.0)
                 if not status.get("logged_in"):
@@ -386,8 +506,29 @@ class DataProviderFactory:
                             return None
 
                     def __getattr__(self, name: str):
-                        # 委托所有其他调用到 Actor
-                        return getattr(self._actor, name)
+                        """动态代理方法调用到 Actor
+
+                        将 Python 对象方法调用转换为 Dask Actor.call() 调用。
+                        支持位置参数和关键字参数，由 Actor 端使用 inspect.signature() 自动转换。
+                        自动转换股票代码格式（SH.600000 -> 600000.SH）。
+                        """
+
+                        async def method_proxy(*args, **kwargs):
+                            # 统一股票代码格式：SH.600000 -> 600000.SH
+                            # 需要在转换前处理，因为 Actor 端的 signature 绑定会在转换后
+                            if "code" in kwargs:
+                                kwargs["code"] = normalize_stock_code(kwargs["code"])
+                            if "code_list" in kwargs:
+                                kwargs["code_list"] = normalize_code_list(kwargs["code_list"])
+
+                            # 直接传递参数给 Actor.call()
+                            # Actor 端会使用 inspect.signature() 自动转换位置参数
+                            return await asyncio.wait_for(
+                                self._actor.call(name, *args, **kwargs),
+                                timeout=30.0,
+                            )
+
+                        return method_proxy
 
                 wrapper = ActorWrapper(actor, connected=True)
                 elapsed = time.time() - start_time
@@ -436,6 +577,12 @@ class DataProviderFactory:
 
         from core.compute import get_dask_client
         from core.compute.actors import MiniQMTActor
+
+        # 前置检查：确保 Dask 环境可用
+        is_available, error_msg = await cls._check_dask_environment()
+        if not is_available:
+            logger.error(f"[ACTOR_CREATE] Dask 环境不可用: {error_msg}")
+            raise RuntimeError(f"无法创建 MiniQMT Actor: {error_msg}")
 
         # 重试配置
         max_retries = 3

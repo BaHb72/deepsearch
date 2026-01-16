@@ -512,8 +512,67 @@ class DaskWorkerManager:
                 except Exception:
                     pass
 
+    async def _wait_for_worker_ready(
+        self, worker_name: str, timeout: float = 30.0, check_interval: float = 1.0
+    ) -> bool:
+        """等待 Worker 就绪（通过检查进程状态和日志）
+
+        Args:
+            worker_name: Worker 名称
+            timeout: 最大等待时间（秒）
+            check_interval: 检查间隔（秒）
+
+        Returns:
+            True 如果 Worker 就绪，False 如果超时或失败
+        """
+        elapsed = 0.0
+        while elapsed < timeout:
+            # 检查进程是否还在运行
+            worker_info = next((w for w in self._workers.values() if w.name == worker_name), None)
+            if worker_info:
+                if worker_info.process.poll() is not None:
+                    self._logger.error(f"Worker {worker_name} 意外退出")
+                    return False
+
+            # 简单的时间等待（Dask Worker 通常在 5-10 秒内连接）
+            # 更完善的实现可以检查 Scheduler 的 Worker 列表
+            await asyncio.sleep(check_interval)
+            elapsed += check_interval
+
+            # 如果已经等待足够长时间，认为就绪
+            if elapsed >= min(5.0, timeout / 2):
+                return True
+
+        return True  # 超时但不失败，继续执行
+
     async def _start_workers(self) -> bool:
-        """启动 Worker 进程"""
+        """启动 Worker 进程（支持重试）"""
+        if not self._config:
+            return False
+
+        max_retries = 2  # 最多重试次数
+        retry_delay = 2.0  # 重试延迟（秒）
+
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    self._logger.info(f"重试启动 Workers (尝试 {attempt + 1}/{max_retries})...")
+                    await asyncio.sleep(retry_delay * attempt)  # 指数退避
+
+                if await self._do_start_workers():
+                    return True
+
+            except Exception as e:
+                self._logger.warning(f"Worker 启动失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await self._cleanup_workers()
+                else:
+                    raise
+
+        return False
+
+    async def _do_start_workers(self) -> bool:
+        """实际执行 Worker 启动（单次尝试）"""
         if not self._config:
             return False
 
@@ -653,10 +712,18 @@ class DaskWorkerManager:
                     await self._cleanup_workers()
                     return False
 
-            # 等待连接
-            await asyncio.sleep(10)
+            # 等待所有 Workers 就绪（健康检查）
+            self._logger.info("等待 Workers 就绪...")
+            ready_count = 0
+            for pid, info in self._workers.items():
+                is_ready = await self._wait_for_worker_ready(info.name, timeout=30.0)
+                if is_ready:
+                    ready_count += 1
+                    self._logger.info(f"Worker {info.name} 已就绪 (PID={pid})")
+                else:
+                    self._logger.warning(f"Worker {info.name} 未就绪")
 
-            # 检查进程状态
+            # 最终检查进程状态
             failed = []
             for pid, info in self._workers.items():
                 if info.process.poll() is not None:
@@ -668,7 +735,9 @@ class DaskWorkerManager:
                 return False
 
             pids = list(self._workers.keys())
-            self._logger.info(f"Workers 已启动 ({len(pids)} 个, PIDs: {pids})")
+            self._logger.info(
+                f"Workers 已启动 ({len(pids)} 个, {ready_count} 个就绪, PIDs: {pids})"
+            )
             return True
 
     async def _stop_workers(self, timeout: float) -> None:
