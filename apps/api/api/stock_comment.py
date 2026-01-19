@@ -13,6 +13,7 @@ import akshare as ak
 import numpy as np
 import pandas as pd
 from core.observability import get_logger
+from core.utils.time.market_time import now
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -67,7 +68,7 @@ def is_cache_valid(cache_item, duration=CACHE_DURATION):
     """检查缓存是否有效"""
     if cache_item["data"] is None or cache_item["time"] is None:
         return False
-    return (datetime.now() - cache_item["time"]).seconds < duration
+    return (now() - cache_item["time"]).seconds < duration
 
 
 @router.get("/list")
@@ -119,7 +120,7 @@ async def get_stock_comment_list(
 
             # 缓存数据
             cache["stock_comment"]["data"] = df
-            cache["stock_comment"]["time"] = datetime.now()
+            cache["stock_comment"]["time"] = now()
 
         # 搜索过滤
         if search:
@@ -183,7 +184,7 @@ async def get_stock_comment_list(
                 "topScore": top_score,
                 "topInstitution": top_institution,
             },
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now().isoformat(),
         }
 
     except Exception as e:
@@ -251,7 +252,7 @@ async def get_stock_detail(symbol: str, period: int = Query(30, ge=7, le=90)):
             "success": True,
             "data": result,
             "symbol": symbol,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now().isoformat(),
         }
 
     except Exception as e:
@@ -321,10 +322,10 @@ async def get_fund_flow():
             result["details"] = df_dict
 
         # 缓存结果
-        response = {"success": True, "data": result, "timestamp": datetime.now().isoformat()}
+        response = {"success": True, "data": result, "timestamp": now().isoformat()}
 
         cache["fund_flow"]["data"] = response
-        cache["fund_flow"]["time"] = datetime.now()
+        cache["fund_flow"]["time"] = now()
 
         return response
 
@@ -341,7 +342,7 @@ async def get_fund_flow():
                 "details": [],
             },
             "error": str(e),
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now().isoformat(),
         }
 
 
@@ -366,7 +367,7 @@ async def get_intraday_desire(symbol: str):
             "success": True,
             "data": df.to_dict("records"),
             "symbol": symbol,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now().isoformat(),
         }
 
     except Exception as e:
@@ -384,12 +385,12 @@ async def export_stock_comment(format: str = Query("excel", regex="^(excel|csv)$
         if not is_cache_valid(cache["stock_comment"]):
             df = await run_in_executor(ak.stock_comment_em)
             cache["stock_comment"]["data"] = df
-            cache["stock_comment"]["time"] = datetime.now()
+            cache["stock_comment"]["time"] = now()
         else:
             df = cast(pd.DataFrame, cache["stock_comment"]["data"]).copy()
 
         # 生成文件名
-        filename = f"stock_comment_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        filename = f"stock_comment_{now().strftime('%Y%m%d_%H%M%S')}"
 
         if format == "excel":
             # 导出为Excel

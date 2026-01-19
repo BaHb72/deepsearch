@@ -101,17 +101,32 @@ class MiniQMTActor:
         try:
             logger.info("[MiniQMTActor] 开始初始化...")
 
-            # 测试 xtdata SDK 连接（异步化）
-            calendar = await asyncio.to_thread(
-                xtdata.get_trading_calendar, "SH", "20250101", "20250110"  # type: ignore[attr-defined]
+            # 禁用欢迎消息
+            xtdata.enable_hello = False  # type: ignore[attr-defined]
+
+            # 连接 xtdata 服务
+            await asyncio.to_thread(xtdata.connect)  # type: ignore[attr-defined]
+
+            # 测试 xtdata SDK 连接 - 使用 get_trading_dates 替代 get_trading_calendar
+            # 注意: get_trading_calendar 在某些 QMT 版本中不支持
+            trading_dates = await asyncio.to_thread(
+                xtdata.get_trading_dates, "SH", "20250101", "20250110"  # type: ignore[attr-defined]
             )
 
-            if calendar:
-                logger.info(f"[MiniQMTActor] xtdata 连接成功，测试日历: {len(calendar)} 天")
+            if trading_dates:
+                logger.info(f"[MiniQMTActor] xtdata 连接成功，测试交易日: {len(trading_dates)} 天")
                 self._connected = True
             else:
-                logger.warning("[MiniQMTActor] xtdata 连接但日历为空")
-                self._connected = True  # SDK 可用但可能没数据
+                # 尝试另一个 API 验证连接
+                stocks = await asyncio.to_thread(
+                    xtdata.get_stock_list_in_sector, "沪深A股"  # type: ignore[attr-defined]
+                )
+                if stocks:
+                    logger.info(f"[MiniQMTActor] xtdata 连接成功，股票列表: {len(stocks)} 只")
+                    self._connected = True
+                else:
+                    logger.warning("[MiniQMTActor] xtdata 连接但数据为空")
+                    self._connected = True  # SDK 可用但可能没数据
 
             self._initialized = True
             self._last_activity = time.time()
@@ -223,9 +238,9 @@ class MiniQMTActor:
             return False
 
         try:
-            # 轻量级检测：获取当天交易日历
+            # 轻量级检测：使用 get_trading_dates 替代 get_trading_calendar
             await asyncio.to_thread(
-                xtdata.get_trading_calendar, "SH", "20250101", "20250102"  # type: ignore[attr-defined]
+                xtdata.get_trading_dates, "SH", "20250101", "20250102"  # type: ignore[attr-defined]
             )
             self._last_activity = time.time()
             self._connected = True

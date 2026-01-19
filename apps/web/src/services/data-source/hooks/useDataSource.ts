@@ -68,7 +68,7 @@ export function useDataSource<T = Record<string, unknown>>(
         if (autoFetch) {
             refresh()
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+
     }, [autoFetch, ...deps])
 
     return {

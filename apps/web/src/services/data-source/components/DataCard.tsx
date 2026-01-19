@@ -65,7 +65,7 @@ export const DataCard: React.FC<DataCardProps> = ({
 
     return (
         <Card
-            type={type}
+            type={type === 'inner' ? 'inner' : undefined}
             size="small"
             title={
                 <Space>

@@ -17,8 +17,28 @@ from .interfaces import HealthChecker, HealthCheckResult, HealthMetrics, HealthS
 class DatabaseHealthChecker(HealthChecker):
     """数据库健康检查器"""
 
-    def __init__(self):
+    # 默认配置
+    DEFAULT_LATENCY_THRESHOLD_MS = 1000.0
+
+    def __init__(self, latency_threshold_ms: float = DEFAULT_LATENCY_THRESHOLD_MS):
+        """
+        初始化数据库健康检查器
+
+        Args:
+            latency_threshold_ms: 查询延迟阈值（毫秒），超过此值触发 DEGRADED
+        """
         super().__init__("database")
+        self._latency_threshold_ms = latency_threshold_ms
+
+    def configure(self, latency_threshold_ms: float | None = None) -> None:
+        """
+        动态配置检查器参数
+
+        Args:
+            latency_threshold_ms: 查询延迟阈值（毫秒）
+        """
+        if latency_threshold_ms is not None:
+            self._latency_threshold_ms = latency_threshold_ms
 
     async def check(self) -> HealthCheckResult:
         """执行数据库健康检查"""
@@ -103,9 +123,9 @@ class DatabaseHealthChecker(HealthChecker):
             )
 
             # 确定健康状态
-            if query_time > 1000:  # 查询时间超过1秒
+            if query_time > self._latency_threshold_ms:
                 status = HealthStatus.DEGRADED
-                message = "Database response time is high"
+                message = f"Database response time is high ({query_time:.1f}ms > {self._latency_threshold_ms}ms)"
             elif pool_utilization > 0.8:  # 连接池使用率超过80%
                 status = HealthStatus.DEGRADED
                 message = "Database connection pool utilization is high"
@@ -136,8 +156,63 @@ class DatabaseHealthChecker(HealthChecker):
 class RedisHealthChecker(HealthChecker):
     """Redis缓存健康检查器"""
 
-    def __init__(self):
+    # 默认配置
+    DEFAULT_LATENCY_THRESHOLD_MS = 50.0
+    DEFAULT_LATENCY_SAMPLES = 3
+
+    def __init__(
+        self,
+        latency_threshold_ms: float = DEFAULT_LATENCY_THRESHOLD_MS,
+        latency_samples: int = DEFAULT_LATENCY_SAMPLES,
+    ):
+        """
+        初始化 Redis 健康检查器
+
+        Args:
+            latency_threshold_ms: 响应延迟阈值（毫秒），超过此值触发 DEGRADED
+            latency_samples: 延迟测量采样次数，取中位数以避免偶发毛刺
+        """
         super().__init__("redis")
+        self._latency_threshold_ms = latency_threshold_ms
+        self._latency_samples = max(1, min(latency_samples, 10))  # 限制范围 1-10
+
+    def configure(
+        self,
+        latency_threshold_ms: float | None = None,
+        latency_samples: int | None = None,
+    ) -> None:
+        """
+        动态配置检查器参数
+
+        Args:
+            latency_threshold_ms: 响应延迟阈值（毫秒）
+            latency_samples: 延迟测量采样次数
+        """
+        if latency_threshold_ms is not None:
+            self._latency_threshold_ms = latency_threshold_ms
+        if latency_samples is not None:
+            self._latency_samples = max(1, min(latency_samples, 10))
+
+    async def _measure_ping_latency(self) -> float:
+        """
+        测量 Redis ping 延迟，使用多次采样取中位数
+
+        Returns:
+            中位数延迟（毫秒）
+        """
+        latencies = []
+        for _ in range(self._latency_samples):
+            start_time = time.perf_counter()
+            await self._component._redis_client.ping()
+            latency = (time.perf_counter() - start_time) * 1000
+            latencies.append(latency)
+
+        # 返回中位数
+        latencies.sort()
+        mid = len(latencies) // 2
+        if len(latencies) % 2 == 0:
+            return (latencies[mid - 1] + latencies[mid]) / 2
+        return latencies[mid]
 
     async def check(self) -> HealthCheckResult:
         """执行Redis健康检查"""
@@ -155,15 +230,13 @@ class RedisHealthChecker(HealthChecker):
                     message="Redis not connected",
                     details={
                         "connected": False,
-                        "disconnect_reason": getattr(self._component, "_disconnect_reason", None),
+                        "disconnect_reason": getattr(self._component, "_connection_error", None),
                     },
                 )
 
-            # Ping测试
-            start_time = time.perf_counter()
+            # Ping测试（多次采样取中位数）
             try:
-                await self._component.redis_client.ping()
-                ping_time = (time.perf_counter() - start_time) * 1000
+                ping_time = await self._measure_ping_latency()
             except Exception as e:
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
@@ -173,7 +246,7 @@ class RedisHealthChecker(HealthChecker):
 
             # 获取Redis信息
             try:
-                info = await self._component.redis_client.info()
+                info = await self._component._redis_client.info()
                 redis_version = info.get("redis_version", "unknown")
                 connected_clients = info.get("connected_clients", 0)
                 used_memory = info.get("used_memory", 0)
@@ -204,9 +277,9 @@ class RedisHealthChecker(HealthChecker):
             )
 
             # 确定健康状态
-            if ping_time > 100:  # Ping时间超过100ms
+            if ping_time > self._latency_threshold_ms:
                 status = HealthStatus.DEGRADED
-                message = "Redis response time is high"
+                message = f"Redis response time is high ({ping_time:.1f}ms > {self._latency_threshold_ms}ms)"
             elif memory_usage_percent > 90:  # 内存使用率超过90%
                 status = HealthStatus.DEGRADED
                 message = "Redis memory usage is high"
@@ -251,7 +324,7 @@ class EventEngineHealthChecker(HealthChecker):
                 )
 
             # 检查引擎状态
-            engine = getattr(self._component, "engine", None)
+            engine = getattr(self._component, "resource", None)
             if not engine:
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY, message="EventEngine not initialized"
@@ -347,7 +420,7 @@ class MessageBusHealthChecker(HealthChecker):
                 )
 
             # 检查组件状态
-            status = getattr(self._component, "_status", ComponentStatus.UNKNOWN)
+            status = getattr(self._component, "status", ComponentStatus.UNKNOWN)
             if status != ComponentStatus.RUNNING:
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
@@ -355,7 +428,7 @@ class MessageBusHealthChecker(HealthChecker):
                 )
 
             # 获取消息总线实例
-            bus = getattr(self._component, "bus", None)
+            bus = getattr(self._component, "resource", None)
             if not bus:
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY, message="MessageBus instance not found"
@@ -404,8 +477,8 @@ class MessageBusHealthChecker(HealthChecker):
                 details={
                     "buses": bus_statuses,
                     "component_status": (
-                        self._component._status.value
-                        if hasattr(self._component, "_status")
+                        self._component.status.value
+                        if hasattr(self._component, "status")
                         else "unknown"
                     ),
                 },

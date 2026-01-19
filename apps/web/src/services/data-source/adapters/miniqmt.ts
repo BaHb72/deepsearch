@@ -20,7 +20,7 @@ const MINIQMT_CAPABILITIES: DataCapability[] = [
     'realtime_quote',
     'stock_kline',
     'tick_data',
-    'stock_basic',
+    // stock_basic 未实现真实 API，已移除
     'income_statement',
     'balance_sheet',
     'cash_flow',
@@ -64,7 +64,9 @@ const capabilityHandlers: Record<
         const symbols = params.codes?.join(',') || params.code || ''
         if (!symbols) return null
         const res = await realtimeApi.getQuote(symbols)
-        return { data: res.data || [] }
+        const rawData = res.data as unknown
+        const data = Array.isArray(rawData) ? rawData : ((rawData as Record<string, unknown>)?.data as unknown[] || [])
+        return { data }
     },
 
     stock_kline: async (params) => {
@@ -75,38 +77,45 @@ const capabilityHandlers: Record<
             period: (params.period as string) || '1d',
             count: params.limit || 100,
         })
-        return { data: res.data || [] }
+        const rawData = res.data as unknown
+        const data = Array.isArray(rawData) ? rawData : ((rawData as Record<string, unknown>)?.data as unknown[] || [])
+        return { data }
     },
 
     tick_data: async (params) => {
         const symbols = params.codes?.join(',') || params.code || ''
         if (!symbols) return null
         const res = await realtimeApi.getTick(symbols)
-        return { data: res.data || [] }
+        const rawData = res.data as unknown
+        const data = Array.isArray(rawData) ? rawData : ((rawData as Record<string, unknown>)?.data as unknown[] || [])
+        return { data }
     },
 
     income_statement: async (params) => {
         const symbol = params.code || params.codes?.[0] || ''
         if (!symbol) return null
         const res = await financialApi.getFinancial({ symbol, table: 'Income' })
-        return { data: res.data ? [res.data] : [] }
+        const rawData = res.data as unknown
+        return { data: rawData ? [rawData] : [] }
     },
 
     balance_sheet: async (params) => {
         const symbol = params.code || params.codes?.[0] || ''
         if (!symbol) return null
         const res = await financialApi.getFinancial({ symbol, table: 'Balance' })
-        return { data: res.data ? [res.data] : [] }
+        const rawData = res.data as unknown
+        return { data: rawData ? [rawData] : [] }
     },
 
     cash_flow: async (params) => {
         const symbol = params.code || params.codes?.[0] || ''
         if (!symbol) return null
         const res = await financialApi.getFinancial({ symbol, table: 'CashFlow' })
-        return { data: res.data ? [res.data] : [] }
+        const rawData = res.data as unknown
+        return { data: rawData ? [rawData] : [] }
     },
 
-    stock_basic: async (params) => {
+    stock_basic: async (_params) => {
         // MiniQMT 无对应 API，返回空
         return null
     },
@@ -189,7 +198,9 @@ export const miniqmtAdapter: DataSourceAdapter = {
     async isAvailable(): Promise<boolean> {
         try {
             const res = await statusApi.getStatus()
-            return res.data?.connected ?? false
+            const rawData = res.data as unknown as Record<string, unknown>
+            const connected = rawData?.connected ?? (rawData?.data as Record<string, unknown>)?.connected
+            return Boolean(connected)
         } catch {
             return false
         }

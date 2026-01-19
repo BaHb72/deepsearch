@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 
 from loguru import logger
 
+from ...config.models.health import HealthCheckConfig
 from .checkers import (
     DatabaseHealthChecker,
     EventEngineHealthChecker,
@@ -32,24 +33,36 @@ class HealthCheckManager:
     - 支持并发执行和超时保护
     """
 
-    def __init__(self, check_interval: float = 30.0, check_timeout: float = 5.0):
+    def __init__(
+        self,
+        check_interval: float = 30.0,
+        check_timeout: float = 5.0,
+        config: HealthCheckConfig | None = None,
+    ):
         """
         初始化健康检查管理器
 
         Args:
             check_interval: 健康检查间隔（秒）
             check_timeout: 单个健康检查超时时间（秒）
+            config: 健康检查配置（可选，优先于单独的参数）
         """
+        # 如果提供了配置，使用配置中的值
+        if config:
+            check_interval = config.interval
+            check_timeout = config.timeout
+
         self._checkers: Dict[str, HealthChecker] = {}
         self._check_interval = check_interval
         self._check_timeout = check_timeout
+        self._config = config or HealthCheckConfig()
         self._last_results: Dict[str, HealthCheckResult] = {}
         self._check_task: Optional[asyncio.Task] = None
         self._running = False
         self._enabled_checkers: Set[str] = set()
 
         # 健康检查历史记录
-        self._history_size = 100
+        self._history_size = self._config.history_size
         self._check_history: List[Dict[str, Any]] = []
 
         logger.info(f"健康检查管理器初始化: interval={check_interval}s, timeout={check_timeout}s")
@@ -96,9 +109,21 @@ class HealthCheckManager:
         Args:
             components: 组件字典 {name: component}
         """
+
+        def create_database_checker() -> HealthChecker:
+            return DatabaseHealthChecker(
+                latency_threshold_ms=self._config.database_latency_threshold_ms
+            )
+
+        def create_redis_checker() -> HealthChecker:
+            return RedisHealthChecker(
+                latency_threshold_ms=self._config.redis_latency_threshold_ms,
+                latency_samples=self._config.redis_latency_samples,
+            )
+
         checker_factories: Dict[str, Callable[[], HealthChecker]] = {
-            "database": DatabaseHealthChecker,
-            "cache": RedisHealthChecker,
+            "database": create_database_checker,
+            "cache": create_redis_checker,
             "event_engine": EventEngineHealthChecker,
             "message_bus": MessageBusHealthChecker,
             "monitor": MonitorHealthChecker,
@@ -284,7 +309,19 @@ class HealthCheckManager:
                 # 检查是否需要告警
                 overall_status = self.get_overall_status()
                 if overall_status in [HealthStatus.UNHEALTHY, HealthStatus.DEGRADED]:
-                    logger.warning(f"系统健康状态异常: {overall_status.value}")
+                    # 收集所有非健康组件的详情
+                    unhealthy_components = []
+                    for name, result in self._last_results.items():
+                        if result.status != HealthStatus.HEALTHY:
+                            detail = f"{name}={result.status.value}"
+                            if result.message:
+                                detail += f"({result.message})"
+                            unhealthy_components.append(detail)
+
+                    details = ", ".join(unhealthy_components) if unhealthy_components else "unknown"
+                    logger.warning(
+                        f"系统健康状态异常: {overall_status.value} | 问题组件: {details}"
+                    )
 
                 # 等待下次检查
                 await asyncio.sleep(self._check_interval)

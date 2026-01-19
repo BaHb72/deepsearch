@@ -53,19 +53,6 @@ type TestModalState = {
   target: DatabaseConnection | null
 }
 
-const formatTimestamp = (value?: number | string | null): string => {
-  if (value === null || value === undefined) {
-    return '未记录'
-  }
-
-  const date = typeof value === 'number' ? new Date(value) : new Date(String(value))
-  if (Number.isNaN(date.getTime()) || date.getTime() <= 0) {
-    return '未记录'
-  }
-
-  return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`
-}
-
 const formatConnectionAddress = (record: DatabaseConnection): string => {
   if (record.host) {
     return record.port ? `${record.host}:${record.port}` : record.host

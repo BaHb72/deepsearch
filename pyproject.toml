@@ -101,7 +101,11 @@ deepsearch = "core.main:main"
 
 [tool.setuptools]
 package-dir = {"core" = "packages/core", "apps" = "apps"}
-packages = ["core", "apps", "apps.api"]
+
+[tool.setuptools.packages.find]
+where = ["packages", "."]
+include = ["core*", "apps*"]
+exclude = ["tests*", "docs*", "scripts*"]
 
 [tool.black]
 line-length = 100

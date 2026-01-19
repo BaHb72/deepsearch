@@ -87,7 +87,7 @@ export function useIntradayData(
     /**
      * 加载更多历史数据
      */
-    const loadMore = useCallback(async (earliestTime: number) => {
+    const loadMore = useCallback(async (_earliestTime: number) => {
         if (!symbolRef.current || loadingMore) return null;
 
         setLoadingMore(true);

@@ -55,7 +55,7 @@ const SectorRadar: React.FC<SectorRadarProps> = ({ data }) => {
         return {
             backgroundColor: 'transparent',
             tooltip: {
-                formatter: function (params: any) {
+                formatter (params: any) {
                     const val = params.data.value;
                     return `
                         <div style="font-weight:bold">${params.data.name}</div>
@@ -85,7 +85,7 @@ const SectorRadar: React.FC<SectorRadarProps> = ({ data }) => {
             },
             series: [{
                 type: 'scatter',
-                symbolSize: function (data: any) {
+                symbolSize (data: any) {
                     // Log scale for size or clamped
                     const v = Math.abs(data[2] || 0);
                     return Math.min(Math.max(Math.log(v + 1) * 3 + 5, 10), 50);

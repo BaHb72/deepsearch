@@ -16,19 +16,14 @@ import {
     Typography,
     Empty,
     Badge,
-    Row,
-    Col,
     Spin,
 } from 'antd';
 import {
     ReloadOutlined,
-    ArrowUpOutlined,
-    ArrowDownOutlined,
     MenuOutlined,
 } from '@ant-design/icons';
 import {
     strategyCenterAPI,
-    TTradingSignal,
     IntradayAnalysis,
     DatasourceStatus,
     WatchlistItem,
@@ -49,7 +44,7 @@ import {
     PositionSizer,
 } from '../../components/strategy';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 const TTrading: React.FC = () => {
     // 数据源状态
@@ -220,7 +215,7 @@ const TTrading: React.FC = () => {
     }, [watchlist]);
 
     // 运行回测
-    const handleRunBacktest = useCallback(async (strategies: string[]) => {
+    const handleRunBacktest = useCallback(async (_strategies: string[]) => {
         if (!selectedSymbol) {
             message.warning('请先选择股票');
             return;
@@ -329,9 +324,9 @@ const TTrading: React.FC = () => {
             <WatchlistDrawer
                 watchlist={watchlist.map(w => ({
                     symbol: w.symbol,
-                    name: w.name,
-                    price: w.current_price,
-                    change: w.change_pct,
+                    name: w.name || '',
+                    price: w.last_price,
+                    change: undefined,
                 }))}
                 selectedSymbol={selectedSymbol}
                 onAdd={handleAddStock}
@@ -438,7 +433,6 @@ const TTrading: React.FC = () => {
                                         value: b.volume,
                                         date: b.date,
                                     }))}
-                                    vwapValue={intradayData?.vwap}
                                     basePrice={intradayData?.bars?.[0]?.open}
                                     height={350}
                                     chartType="line"

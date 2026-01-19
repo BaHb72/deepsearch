@@ -33,12 +33,14 @@ import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
+from core.utils.timeout import DataSourceState, get_timeout_manager
 from loguru import logger
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis as AsyncRedis
 
 _ACTOR_ID = "AMAZINGDATA_ACTOR"
+_SOURCE_NAME = "amazingdata"
 _SDK_TIMEOUT_SECONDS = 30.0
 
 _T = TypeVar("_T")
@@ -76,6 +78,9 @@ class AmazingDataActor:
     _calendar_cache: Any = None
     _calendar_cache_time: float = 0
     _CALENDAR_CACHE_TTL: float = 86400  # 24 小时缓存有效期
+
+    # 注意: Redis 同步连接池已改为实例级别（见 __init__）
+    # 原因: 类级别缓存不随实例释放，可能导致内存泄漏
 
     def __init__(self, config: dict[str, Any] | None = None):
         """初始化 Actor
@@ -115,10 +120,15 @@ class AmazingDataActor:
         self._session_key = "amazingdata:session"
         self._session_ttl = 60  # 秒
 
+        # 实例级别 Redis 同步连接池（从类级别改为实例级别，确保随实例释放）
+        self._sync_redis_pool: Any = None  # redis.ConnectionPool
+        self._sync_redis_pool_url: str | None = None  # 用于检测 URL 变化
+
         logger.info(
-            "[{}] AmazingDataActor 实例已创建 | worker_id={}",
+            "[{}] AmazingDataActor 实例已创建 | worker_id={} | redis_url={}",
             _ACTOR_ID,
             self._worker_id,
+            self._redis_url,
         )
 
     # ==================== 基础属性 ====================
@@ -159,12 +169,13 @@ class AmazingDataActor:
             if not redis_ok:
                 logger.warning("[{}] Redis 连接失败，跨平台会话将不可用", _ACTOR_ID)
 
-            # 2. 可选：后台预热登录（不阻塞 setup）
+            # 2. 可选：同步预热登录（阻塞 setup，消除首次调用延迟）
             if self._config.get("prewarm", False):
-                logger.info("[{}] 启动后台预热登录...", _ACTOR_ID)
-                asyncio.create_task(self._prewarm_login())
-
-            logger.info("[{}] 轻量级初始化完成（登录将在首次调用时执行）", _ACTOR_ID)
+                logger.info("[{}] 开始同步预热登录（阻塞直到完成）...", _ACTOR_ID)
+                await self._ensure_logged_in()
+                logger.info("[{}] 同步预热登录完成，首次调用无延迟", _ACTOR_ID)
+            else:
+                logger.info("[{}] 轻量级初始化完成（登录将在首次调用时执行）", _ACTOR_ID)
             return True
 
         except Exception as e:
@@ -207,15 +218,13 @@ class AmazingDataActor:
 
             logger.info("[{}] 首次调用，开始延迟登录...", _ACTOR_ID)
 
-            # 1. 检查分布式会话（快速复用）
-            if self._redis is not None and await self._check_distributed_session():
-                logger.info("[{}] 复用分布式会话", _ACTOR_ID)
-                if await self._init_sdk_objects_without_login():
-                    logger.info("[{}] 延迟初始化完成（复用会话）", _ACTOR_ID)
-                    return
-                logger.warning("[{}] 复用会话失败，回退到完整登录", _ACTOR_ID)
+            # 注意：不在此处调用 _check_distributed_session() 复用会话
+            # 原因：此方法可能在 call_sync() 的临时事件循环中被调用，
+            #      而 Redis 客户端绑定到 initialize() 时的主事件循环，
+            #      跨循环调用会导致 "Future attached to a different loop" 错误，
+            #      即使捕获异常也可能污染事件循环状态，导致后续操作失败
 
-            # 2. 执行完整登录
+            # 直接执行完整登录
             login_ok = await self._login()
             if not login_ok:
                 raise RuntimeError("AmazingData SDK 登录失败")
@@ -292,8 +301,10 @@ class AmazingDataActor:
             self._logged_in = True
             self._last_activity = time.time()
 
-            # 更新会话心跳
-            await self._update_session_heartbeat()
+            # 注意：不在此处调用 _update_session_heartbeat()
+            # 原因：此方法可能在 call_sync() 的临时事件循环中被调用，
+            #      而 Redis 客户端绑定到 initialize() 时的主事件循环
+            # 会话状态已在原始登录时通过 _publish_session_state() 发布
 
             logger.info("[{}] SDK 数据对象初始化成功（复用会话）", _ACTOR_ID)
             return True
@@ -328,7 +339,7 @@ class AmazingDataActor:
         calendar = await self._run_sdk_with_timeout(
             lambda: self._base_data.get_calendar(),
             "BaseData.get_calendar",
-            timeout=10.0,
+            timeout=30.0,  # 增加超时时间，网络波动时需要更长时间
         )
 
         # 标准化数据格式
@@ -347,6 +358,7 @@ class AmazingDataActor:
         import time as time_module
 
         overall_start = time_module.time()
+        timeout_manager = get_timeout_manager()
 
         username = self._config.get("username")
         password = self._config.get("password")
@@ -364,6 +376,9 @@ class AmazingDataActor:
             port,
             username,
         )
+
+        # 设置连接状态（登录可能需要 30-60 秒）
+        timeout_manager.set_state(_SOURCE_NAME, DataSourceState.CONNECTING, "sdk_login")
 
         try:
             # 步骤 1: 导入 SDK
@@ -495,14 +510,21 @@ class AmazingDataActor:
             self._logged_in = True
             self._last_activity = time.time()
 
-            # 发布会话状态到 Redis
-            await self._publish_session_state()
+            # 登录完成，恢复 IDLE 状态
+            timeout_manager.set_state(_SOURCE_NAME, DataSourceState.IDLE)
+
+            # 注意：不在此处调用 _publish_session_state()
+            # 原因：此方法可能在 call_sync() 的临时事件循环中被调用，
+            #      而 Redis 客户端绑定到 initialize() 时的主事件循环
+            # 分布式会话功能暂时禁用，避免跨事件循环问题
 
             total_elapsed = time_module.time() - overall_start
             logger.info("[{}] === 登录流程完成 === | 总耗时={:.3f}s", _ACTOR_ID, total_elapsed)
             return True
 
         except ImportError as e:
+            # 登录失败，设置错误状态
+            timeout_manager.set_state(_SOURCE_NAME, DataSourceState.ERROR, "import_error")
             logger.error(
                 "[{}] 无法导入 AmazingData SDK | 错误={} | 总耗时={:.3f}s",
                 _ACTOR_ID,
@@ -511,6 +533,8 @@ class AmazingDataActor:
             )
             return False
         except Exception as e:
+            # 登录失败，设置错误状态
+            timeout_manager.set_state(_SOURCE_NAME, DataSourceState.ERROR, "login_error")
             logger.error(
                 "[{}] 登录流程异常 | 错误={} | 总耗时={:.3f}s",
                 _ACTOR_ID,
@@ -560,6 +584,96 @@ class AmazingDataActor:
         except Exception as e:
             logger.debug("[{}] 更新心跳失败: {}", _ACTOR_ID, e)
 
+    # 内存监控：上次记录时间和调用计数器
+    _last_memory_log_time: float = 0
+    _memory_check_count: int = 0
+    _MEMORY_LOG_INTERVAL: float = 60.0  # 每 60 秒记录一次内存使用
+
+    def _check_memory_pressure(self, threshold: float = 0.80) -> bool:
+        """检查内存压力，必要时触发 GC
+
+        当 Worker 内存使用超过阈值时，主动触发垃圾回收，
+        防止内存持续增长导致 OOM。
+
+        增强功能：
+        - 定期记录内存使用日志（每 60 秒）
+        - 显示更详细的内存信息（RSS、VMS、系统可用）
+        - 记录调用次数，便于追踪内存增长趋势
+
+        Args:
+            threshold: 内存使用阈值（0.0-1.0），默认 80%
+
+        Returns:
+            True 如果触发了 GC，False 否则
+        """
+        import gc
+
+        try:
+            import psutil
+
+            process = psutil.Process()
+            memory_info = process.memory_info()
+
+            # 获取系统可用内存
+            virtual_mem = psutil.virtual_memory()
+
+            # 计算当前进程内存占系统可用内存的比例
+            rss_gb = memory_info.rss / (1024**3)
+            vms_gb = memory_info.vms / (1024**3)
+            memory_ratio = memory_info.rss / virtual_mem.total
+
+            # 增加调用计数
+            AmazingDataActor._memory_check_count += 1
+
+            # 定期记录内存使用日志（每 60 秒或首次调用）
+            current_time = time.time()
+            should_log = (
+                current_time - AmazingDataActor._last_memory_log_time > self._MEMORY_LOG_INTERVAL
+                or AmazingDataActor._last_memory_log_time == 0
+            )
+
+            if should_log:
+                AmazingDataActor._last_memory_log_time = current_time
+                logger.info(
+                    "[{}] Worker 内存监控 | "
+                    "RSS={:.2f}GB | VMS={:.2f}GB | 系统占比={:.1%} | "
+                    "系统可用={:.1f}GB | 检查次数={}",
+                    _ACTOR_ID,
+                    rss_gb,
+                    vms_gb,
+                    memory_ratio,
+                    virtual_mem.available / (1024**3),
+                    AmazingDataActor._memory_check_count,
+                )
+
+            if memory_ratio > threshold:
+                # 触发垃圾回收
+                collected = gc.collect()
+                # 再次获取内存信息，查看 GC 效果
+                memory_after = process.memory_info()
+                freed_mb = (memory_info.rss - memory_after.rss) / (1024**2)
+                logger.warning(
+                    "[{}] 内存压力告警，已触发 GC | "
+                    "GC 前={:.2f}GB | GC 后={:.2f}GB | 释放={:.1f}MB | "
+                    "回收对象={} | 阈值={:.0%}",
+                    _ACTOR_ID,
+                    rss_gb,
+                    memory_after.rss / (1024**3),
+                    freed_mb,
+                    collected,
+                    threshold,
+                )
+                return True
+
+            return False
+
+        except ImportError:
+            # psutil 不可用时跳过检查
+            return False
+        except Exception as e:
+            logger.debug("[{}] 内存压力检查失败: {}", _ACTOR_ID, e)
+            return False
+
     # ==================== 核心方法代理 ====================
 
     async def call(self, method: str, *args: Any, **kwargs: Any) -> Any:
@@ -582,6 +696,9 @@ class AmazingDataActor:
         Raises:
             RuntimeError: 登录失败或方法不存在
         """
+        # 内存压力检查：超过 80% 时触发 GC
+        self._check_memory_pressure(threshold=0.80)
+
         # 延迟初始化：首次调用时自动登录
         await self._ensure_logged_in()
 
@@ -597,8 +714,10 @@ class AmazingDataActor:
 
         self._last_activity = time.time()
 
-        # 更新心跳
-        await self._update_session_heartbeat()
+        # 注意：不在此处调用 _update_session_heartbeat()
+        # 原因：Redis 客户端绑定到 initialize() 时的事件循环，
+        #      call_sync() 创建的临时循环会导致 "Event loop is closed" 错误
+        # 心跳已在 _login() 成功后通过 _publish_session_state() 发布
 
         # 路由到对应的 SDK 对象（使用转换后的方法名）
         sdk_obj = self._route_method(actual_method)
@@ -634,14 +753,23 @@ class AmazingDataActor:
         result = await self._call_sdk_method(sdk_obj, actual_method, kwargs)
         return self._to_records(result)
 
-    def call_sync(self, method: str, **kwargs: Any) -> Any:
+    def call_sync(
+        self,
+        method: str,
+        task_id: str | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """同步版本的 call，供 Dask RPC 调用
 
         在 Dask Worker 的线程池中执行时使用此方法。
         内部创建临时事件循环来运行异步 call() 方法。
 
+        如果提供了 task_id，会将结果存入 Redis，用于绕过 Dask Future 返回机制。
+        这是为了解决 Dask tornado IOLoop 与 FastAPI asyncio 冲突的终极方案。
+
         Args:
             method: SDK 方法名 (如 "query_kline", "get_stock_basic")
+            task_id: 可选的任务ID，如果提供则将结果存入 Redis
             **kwargs: 方法参数
 
         Returns:
@@ -656,11 +784,275 @@ class AmazingDataActor:
             ...     actor = dask_worker.actors["amazingdata"]
             ...     return actor.call_sync("query_kline", code_list=["000001.SZ"])
         """
+        import time as time_module
+
+        start_time = time_module.time()
+        logger.info(
+            "[{}] call_sync 开始 | method={} | task_id={}",
+            _ACTOR_ID,
+            method,
+            task_id,
+        )
+
         loop = asyncio.new_event_loop()
         try:
-            return loop.run_until_complete(self.call(method, **kwargs))
+            result = loop.run_until_complete(self.call(method, **kwargs))
+            elapsed = time_module.time() - start_time
+            # 记录结果摘要（避免日志过大）
+            result_summary = (
+                f"len={len(result)}"
+                if isinstance(result, (list, dict))
+                else f"type={type(result).__name__}"
+            )
+            logger.info(
+                "[{}] call_sync 完成 | method={} | 耗时={:.2f}s | result={}",
+                _ACTOR_ID,
+                method,
+                elapsed,
+                result_summary,
+            )
+
+            # 如果提供了 task_id，将结果存入 Redis（使用同步客户端）
+            if task_id:
+                self._store_result_to_redis_sync(task_id, result, method)
+
+            return result
+        except Exception as e:
+            elapsed = time_module.time() - start_time
+            logger.error(
+                "[{}] call_sync 异常 | method={} | 耗时={:.2f}s | error={}",
+                _ACTOR_ID,
+                method,
+                elapsed,
+                str(e),
+            )
+
+            # 如果提供了 task_id，将错误存入 Redis（使用同步客户端）
+            if task_id:
+                self._store_error_to_redis_sync(task_id, str(e), method)
+
+            raise
         finally:
             loop.close()
+
+    async def _store_result_to_redis(
+        self,
+        task_id: str,
+        result: Any,
+        method: str,
+    ) -> None:
+        """将结果存入 Redis
+
+        使用 JSON 序列化结果，存储到 Redis 中供 Client 轮询获取。
+        这是绕过 Dask Future 返回机制的核心实现。
+
+        Args:
+            task_id: 任务唯一标识
+            result: 调用结果
+            method: 方法名（用于日志）
+        """
+        import json
+
+        key = f"dask_result:{task_id}"
+        data = {"status": "success", "result": result}
+
+        try:
+            # 使用 JSON 序列化，5分钟过期
+            await self._redis.set(key, json.dumps(data), ex=300)  # type: ignore
+            logger.info(
+                "[{}] 结果已存入 Redis | task_id={} | method={}",
+                _ACTOR_ID,
+                task_id,
+                method,
+            )
+        except Exception as e:
+            logger.error(
+                "[{}] 存储结果到 Redis 失败 | task_id={} | error={}",
+                _ACTOR_ID,
+                task_id,
+                str(e),
+            )
+
+    async def _store_error_to_redis(
+        self,
+        task_id: str,
+        error: str,
+        method: str,
+    ) -> None:
+        """将错误存入 Redis
+
+        Args:
+            task_id: 任务唯一标识
+            error: 错误信息
+            method: 方法名（用于日志）
+        """
+        import json
+
+        key = f"dask_result:{task_id}"
+        data = {"status": "error", "error": error}
+
+        try:
+            await self._redis.set(key, json.dumps(data), ex=300)  # type: ignore
+            logger.info(
+                "[{}] 错误已存入 Redis | task_id={} | method={}",
+                _ACTOR_ID,
+                task_id,
+                method,
+            )
+        except Exception as e:
+            logger.error(
+                "[{}] 存储错误到 Redis 失败 | task_id={} | error={}",
+                _ACTOR_ID,
+                task_id,
+                str(e),
+            )
+
+    def _get_sync_redis(self, redis_url: str) -> Any:
+        """获取同步 Redis 客户端（使用实例级别连接池）
+
+        通过连接池复用连接，避免每次调用创建新连接导致的连接泄漏。
+        连接池在实例级别管理，随实例 shutdown 时释放。
+
+        Args:
+            redis_url: Redis 连接 URL
+
+        Returns:
+            Redis 客户端实例（使用连接池）
+
+        Raises:
+            redis.ConnectionError: Redis 服务不可用时抛出
+        """
+        import redis
+
+        # 如果 URL 变化或池未初始化，创建新池
+        if self._sync_redis_pool is None or self._sync_redis_pool_url != redis_url:
+            if self._sync_redis_pool is not None:
+                try:
+                    self._sync_redis_pool.disconnect()
+                except Exception:
+                    pass
+
+            logger.info(
+                "[{}] 创建 Redis 同步连接池 | url={}",
+                _ACTOR_ID,
+                redis_url,
+            )
+
+            try:
+                self._sync_redis_pool = redis.ConnectionPool.from_url(
+                    redis_url,
+                    encoding="utf-8",
+                    decode_responses=True,
+                    max_connections=10,
+                    socket_connect_timeout=5,  # 连接超时 5 秒
+                )
+                self._sync_redis_pool_url = redis_url
+
+                # 立即测试连接，确保 Redis 服务可用
+                test_client = redis.Redis(connection_pool=self._sync_redis_pool)
+                test_client.ping()
+                logger.info("[{}] Redis 连接测试成功", _ACTOR_ID)
+
+            except redis.ConnectionError as e:
+                logger.error(
+                    "[{}] Redis 连接失败 | url={} | error={}",
+                    _ACTOR_ID,
+                    redis_url,
+                    str(e),
+                )
+                # 清理失败的连接池
+                self._sync_redis_pool = None
+                self._sync_redis_pool_url = None
+                raise
+
+        return redis.Redis(connection_pool=self._sync_redis_pool)
+
+    def _store_result_to_redis_sync(
+        self,
+        task_id: str,
+        result: Any,
+        method: str,
+    ) -> None:
+        """将结果存入 Redis（同步版本）
+
+        使用类级别连接池复用 Redis 连接，避免连接泄漏。
+        call_sync 创建临时事件循环，无法使用绑定到主循环的异步 Redis 客户端。
+
+        Args:
+            task_id: 任务唯一标识
+            result: 调用结果
+            method: 方法名（用于日志）
+        """
+        import json
+
+        key = f"dask_result:{task_id}"
+        data = {"status": "success", "result": result}
+
+        logger.info(
+            "[{}] 准备存储结果 | task_id={} | redis_url={} | key={}",
+            _ACTOR_ID,
+            task_id,
+            self._redis_url,
+            key,
+        )
+
+        try:
+            # 使用连接池获取 Redis 客户端（连接自动归还池）
+            sync_redis = self._get_sync_redis(self._redis_url)
+            sync_redis.set(key, json.dumps(data), ex=300)
+            # 注意：不调用 close()，连接由连接池管理
+            logger.info(
+                "[{}] 结果已存入 Redis (sync) | task_id={} | method={}",
+                _ACTOR_ID,
+                task_id,
+                method,
+            )
+        except Exception as e:
+            logger.error(
+                "[{}] 存储结果到 Redis 失败 (sync) | task_id={} | error={}",
+                _ACTOR_ID,
+                task_id,
+                str(e),
+            )
+
+    def _store_error_to_redis_sync(
+        self,
+        task_id: str,
+        error: str,
+        method: str,
+    ) -> None:
+        """将错误存入 Redis（同步版本）
+
+        使用类级别连接池复用 Redis 连接，避免连接泄漏。
+
+        Args:
+            task_id: 任务唯一标识
+            error: 错误信息
+            method: 方法名（用于日志）
+        """
+        import json
+
+        key = f"dask_result:{task_id}"
+        data = {"status": "error", "error": error}
+
+        try:
+            # 使用连接池获取 Redis 客户端（连接自动归还池）
+            sync_redis = self._get_sync_redis(self._redis_url)
+            sync_redis.set(key, json.dumps(data), ex=300)
+            # 注意：不调用 close()，连接由连接池管理
+            logger.info(
+                "[{}] 错误已存入 Redis (sync) | task_id={} | method={}",
+                _ACTOR_ID,
+                task_id,
+                method,
+            )
+        except Exception as e:
+            logger.error(
+                "[{}] 存储错误到 Redis 失败 (sync) | task_id={} | error={}",
+                _ACTOR_ID,
+                task_id,
+                str(e),
+            )
 
     def _build_method_routes(self) -> None:
         """自动发现 SDK 对象的方法并建立路由映射
@@ -916,13 +1308,23 @@ class AmazingDataActor:
         # 登出
         await self.logout()
 
-        # 关闭 Redis 连接
+        # 关闭异步 Redis 连接
         if self._redis is not None:
             try:
                 await self._redis.aclose()
             except Exception as e:
-                logger.warning("[{}] Redis 关闭异常: {}", _ACTOR_ID, e)
+                logger.warning("[{}] Redis 异步连接关闭异常: {}", _ACTOR_ID, e)
             self._redis = None
+
+        # 关闭同步 Redis 连接池（实例级别）
+        if self._sync_redis_pool is not None:
+            try:
+                self._sync_redis_pool.disconnect()
+                logger.debug("[{}] Redis 同步连接池已关闭", _ACTOR_ID)
+            except Exception as e:
+                logger.warning("[{}] Redis 同步连接池关闭异常: {}", _ACTOR_ID, e)
+            self._sync_redis_pool = None
+            self._sync_redis_pool_url = None
 
         logger.info("[{}] 已关闭", _ACTOR_ID)
 

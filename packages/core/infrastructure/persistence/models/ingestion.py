@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, func
+from core.utils.time.market_time import now
+from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,12 +24,14 @@ class IngestionJob(Base):
     data_source: Mapped[str] = mapped_column(String(32), index=True)
     access_type: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), index=True)
-    queued_at: Mapped[datetime] = mapped_column(index=True)
+    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
     # 可选字段
-    started_at: Mapped[Optional[datetime]] = mapped_column(default=None)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(index=True, default=None)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(default=None)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), index=True, default=None
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
     parameters: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, default=None)
     job_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, default=None)
     error_message: Mapped[Optional[str]] = mapped_column(Text, default=None)
@@ -38,6 +41,7 @@ class IngestionJob(Base):
 
     # 自动生成字段
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
         init=False,
@@ -61,10 +65,10 @@ class IngestionBatch(Base):
     batch_index: Mapped[int] = mapped_column()
     status: Mapped[str] = mapped_column(String(32), index=True)
     record_count: Mapped[int] = mapped_column()
-    requested_at: Mapped[datetime] = mapped_column()
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     # 可选字段
-    completed_at: Mapped[Optional[datetime]] = mapped_column(default=None)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
     batch_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, default=None)
     checksum: Mapped[Optional[str]] = mapped_column(String(64), default=None)
     error_message: Mapped[Optional[str]] = mapped_column(Text, default=None)
@@ -98,7 +102,8 @@ class RawProviderPayload(Base):
     # 自动生成字段
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
     collected_at: Mapped[datetime] = mapped_column(
-        default_factory=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True),
+        default_factory=lambda: now(),
         init=False,
     )
 

@@ -10,11 +10,15 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 import pandas as pd
 from core.infrastructure.providers.interfaces.base import DataProvider as IAkShareProvider
 from core.infrastructure.providers.interfaces.base import DataProviderError, DataRequest
+from core.utils.timeout import DataSourceState, get_timeout_manager
 from loguru import logger
 
 from .akshare import AkShareProxyProvider
 from .akshare_api_mapping import AkShareAPIMapping
 from .akshare_direct import AKShareDirectProvider
+
+# 数据源名称常量
+_SOURCE_NAME = "akshare"
 
 _STOCK_SYMBOL_FIELDS: tuple[str, ...] = (
     "symbol",
@@ -159,6 +163,7 @@ class AkShareAdapter(IAkShareProvider):
         **kwargs: Any,
     ) -> Optional[List[Dict[str, Any]]]:
         """对外暴露兼容 DataProvider 的股票列表接口."""
+        timeout_manager = get_timeout_manager()
 
         async def _call_provider(
             provider_obj: IAkShareProvider | None,
@@ -173,25 +178,31 @@ class AkShareAdapter(IAkShareProvider):
                 return None
             return list(result)
 
-        try:
-            result = await _call_provider(self.provider)
-            if result:
-                return result if not limit else result[:limit]
-        except Exception as exc:
-            logger.warning(f"AkShare primary get_stock_list failed: {exc}")
+        # 设置批量获取状态（股票列表通常有 500+ 条数据）
+        with timeout_manager.operation(
+            _SOURCE_NAME,
+            DataSourceState.BATCH_FETCHING,
+            "get_stock_list",
+        ):
+            try:
+                result = await _call_provider(self.provider)
+                if result:
+                    return result if not limit else result[:limit]
+            except Exception as exc:
+                logger.warning(f"AkShare primary get_stock_list failed: {exc}")
 
-        try:
-            result = await _call_provider(self.fallback_provider)
-            if result:
-                return result if not limit else result[:limit]
-        except Exception as exc:
-            logger.warning(f"AkShare fallback get_stock_list failed: {exc}")
+            try:
+                result = await _call_provider(self.fallback_provider)
+                if result:
+                    return result if not limit else result[:limit]
+            except Exception as exc:
+                logger.warning(f"AkShare fallback get_stock_list failed: {exc}")
 
-        api_result = await self.fetch_with_api("stock_info_a_code_name", {})
-        stocks = self._extract_data_list(api_result)
-        if not stocks:
-            return None
-        return stocks if not limit else stocks[:limit]
+            api_result = await self.fetch_with_api("stock_info_a_code_name", {})
+            stocks = self._extract_data_list(api_result)
+            if not stocks:
+                return None
+            return stocks if not limit else stocks[:limit]
 
     async def get_kline_data(
         self,
@@ -342,25 +353,33 @@ class AkShareAdapter(IAkShareProvider):
 
     async def fetch_stock_list(self) -> List[Dict[str, str]]:
         """获取股票列表"""
-        provider = cast(Any, self._require_provider())
-        try:
-            result = await provider.fetch_stock_list()
-            normalized = self._normalize_stock_list(result)
-            if normalized:
-                return normalized
-        except Exception as e:
-            logger.warning(f"主数据源获取股票列表失败: {e}")
+        timeout_manager = get_timeout_manager()
 
-        if self.fallback_provider:
+        # 设置批量获取状态
+        with timeout_manager.operation(
+            _SOURCE_NAME,
+            DataSourceState.BATCH_FETCHING,
+            "fetch_stock_list",
+        ):
+            provider = cast(Any, self._require_provider())
             try:
-                logger.info("切换到备用数据源获取股票列表")
-                fallback = cast(Any, self._require_fallback())
-                result = await fallback.fetch_stock_list()
+                result = await provider.fetch_stock_list()
                 normalized = self._normalize_stock_list(result)
                 if normalized:
                     return normalized
             except Exception as e:
-                logger.error(f"备用数据源也失败: {e}")
+                logger.warning(f"主数据源获取股票列表失败: {e}")
+
+            if self.fallback_provider:
+                try:
+                    logger.info("切换到备用数据源获取股票列表")
+                    fallback = cast(Any, self._require_fallback())
+                    result = await fallback.fetch_stock_list()
+                    normalized = self._normalize_stock_list(result)
+                    if normalized:
+                        return normalized
+                except Exception as e:
+                    logger.error(f"备用数据源也失败: {e}")
 
         # 返回默认列表
         return [

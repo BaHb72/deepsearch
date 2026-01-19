@@ -3,7 +3,7 @@
  * 用于设置日内对用户选中标的做T买卖点和仓位提醒
  */
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState } from 'react'
 import {
     Card,
     Button,
@@ -23,7 +23,6 @@ import {
     Col,
     Typography,
     Empty,
-    Spin,
     Statistic,
     Badge,
 } from 'antd'
@@ -42,7 +41,7 @@ import { StockSearchSelect } from '@/components/miniqmt'
 import ttradingAPI from './api'
 import type { TTradingStrategy, TradingSignal, CreateStrategyRequest, CreateSignalRequest } from './types'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { Option } = Select
 
 const TTradingPage: React.FC = () => {

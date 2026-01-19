@@ -13,7 +13,6 @@ import {
   MoonOutlined,
   SettingOutlined,
   SunOutlined,
-  SwapOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { ProLayout } from '@ant-design/pro-components'

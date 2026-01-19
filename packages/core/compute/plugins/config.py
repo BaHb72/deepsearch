@@ -23,6 +23,7 @@ class AmazingDataPluginConfig(BasePluginConfig):
     # Plugin 层配置（从外部传入）
     redis_url: str = Field(default="redis://localhost:6379")
     only_on_windows: bool = Field(default=True)
+    prewarm: bool = Field(default=False, description="启动时同步预热登录，消除首次调用延迟")
 
 
 class MiniQMTPluginConfig(BasePluginConfig):

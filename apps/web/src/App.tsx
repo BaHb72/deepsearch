@@ -22,7 +22,6 @@ const DataExplorer = lazy(() => import('./pages/DataSource/Explorer'))
 const StrategyGenerator = lazy(() => import('./pages/Strategy/Generator'))
 const StrategyTTrading = lazy(() => import('./pages/Strategy/TTrading'))
 const DataPlayground = lazy(() => import('./pages/Playground/DataPlayground'))
-const TTradingPage = lazy(() => import('./pages/Trading/TTradingPage'))
 
 const Loading: React.FC = () => (
   <div

@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Optional
 
-from sqlalchemy import ForeignKey, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,7 +19,7 @@ class MarketTick(Base):
     __tablename__ = "market_tick"
 
     # 必填字段
-    time: Mapped[datetime] = mapped_column(index=True)
+    time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     symbol: Mapped[str] = mapped_column(String(32), index=True)
     last_price: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     volume: Mapped[int] = mapped_column()
@@ -39,7 +39,7 @@ class Market1Min(Base):
     __tablename__ = "market_1min"
 
     # 必填字段
-    time: Mapped[datetime] = mapped_column(index=True)
+    time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     symbol: Mapped[str] = mapped_column(String(32), index=True)
     open: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     high: Mapped[Decimal] = mapped_column(Numeric(18, 4))
@@ -63,7 +63,7 @@ class MarketSnapshot(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON)
     data_source: Mapped[str] = mapped_column(String(32), index=True)
     access_type: Mapped[str] = mapped_column(String(32))
-    ingested_at: Mapped[datetime] = mapped_column(index=True)
+    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
     # 可选字段
     job_id: Mapped[Optional[str]] = mapped_column(
@@ -86,7 +86,9 @@ class MarketSnapshot(Base):
     list_date: Mapped[Optional[str]] = mapped_column(String(16), default=None)
     delist_date: Mapped[Optional[str]] = mapped_column(String(16), default=None)
     snapshot_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, default=None)
-    as_of: Mapped[Optional[datetime]] = mapped_column(index=True, default=None)
+    as_of: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), index=True, default=None
+    )
     record_hash: Mapped[Optional[str]] = mapped_column(String(64), default=None)
     tags: Mapped[Optional[list[Any]]] = mapped_column(JSON, default=None)
     notes: Mapped[Optional[str]] = mapped_column(Text, default=None)

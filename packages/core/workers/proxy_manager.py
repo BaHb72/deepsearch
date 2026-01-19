@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, TypedDict
 
 import aiohttp
+from core.utils.time.market_time import now
 from loguru import logger
 
 from .models import AkShareResponse, ProxyStatistics, ProxyStatus, ProxyTestResult, WorkersConfig
@@ -127,7 +128,7 @@ class WorkersProxyManager:
                 message="Workers URL not configured",
                 error="Please configure a valid Cloudflare Workers URL",
                 workers_version=None,
-                timestamp=datetime.now(),
+                timestamp=now(),
             )
             self.status = ProxyStatus.ERROR
             self.logger.error("Workers test failed: URL not configured")
@@ -174,7 +175,7 @@ class WorkersProxyManager:
                                     data.get("version") if isinstance(data, dict) else None
                                 ),
                                 error=None,
-                                timestamp=datetime.now(),
+                                timestamp=now(),
                             )
                             self.status = (
                                 ProxyStatus.ENABLED if self.config.enabled else ProxyStatus.DISABLED
@@ -210,7 +211,7 @@ class WorkersProxyManager:
                             message="Authentication required",
                             workers_version=None,
                             error="This endpoint requires an API key but none was provided",
-                            timestamp=datetime.now(),
+                            timestamp=now(),
                         )
                         self.status = ProxyStatus.ERROR
                         self.logger.error("Workers test failed: API key required but not provided")
@@ -227,7 +228,7 @@ class WorkersProxyManager:
                                 message="API key validation failed",
                                 workers_version=None,
                                 error="Invalid or unauthorized API key",
-                                timestamp=datetime.now(),
+                                timestamp=now(),
                             )
                             self.status = ProxyStatus.ERROR
                             self.logger.error("Workers test failed: Invalid API key")
@@ -252,7 +253,7 @@ class WorkersProxyManager:
                         message="Workers proxy is healthy" + auth_msg,
                         workers_version=data.get("version"),
                         error=None,
-                        timestamp=datetime.now(),
+                        timestamp=now(),
                     )
 
                     self.status = (
@@ -272,7 +273,7 @@ class WorkersProxyManager:
                         message="Authentication failed",
                         workers_version=None,
                         error=error_msg,
-                        timestamp=datetime.now(),
+                        timestamp=now(),
                     )
 
                     self.status = ProxyStatus.ERROR
@@ -286,7 +287,7 @@ class WorkersProxyManager:
                         message=f"HTTP {response.status}",
                         workers_version=None,
                         error=await response.text(),
-                        timestamp=datetime.now(),
+                        timestamp=now(),
                     )
 
                     self.status = ProxyStatus.ERROR
@@ -304,7 +305,7 @@ class WorkersProxyManager:
                 message="Connection timeout",
                 workers_version=None,
                 error="Request timed out",
-                timestamp=datetime.now(),
+                timestamp=now(),
             )
 
             self.status = ProxyStatus.ERROR
@@ -321,7 +322,7 @@ class WorkersProxyManager:
                 message="Connection failed",
                 workers_version=None,
                 error=str(e),
-                timestamp=datetime.now(),
+                timestamp=now(),
             )
 
             self.status = ProxyStatus.ERROR
@@ -346,7 +347,7 @@ class WorkersProxyManager:
 
         # 更新统计
         self.statistics.total_requests += 1
-        self.statistics.last_request_at = datetime.now()
+        self.statistics.last_request_at = now()
 
         # 检查缓存
         if use_cache and self.config.cache_enabled:
@@ -361,7 +362,7 @@ class WorkersProxyManager:
                     response_time=0,
                     cached=True,
                     error=None,
-                    timestamp=datetime.now(),
+                    timestamp=now(),
                 )
 
         # 决定使用 Workers 还是直连
@@ -462,7 +463,7 @@ class WorkersProxyManager:
                                 response_time=response_time,
                                 cached=False,
                                 error=None,
-                                timestamp=datetime.now(),
+                                timestamp=now(),
                             )
                         else:
                             error_text = await response.text()
@@ -477,7 +478,7 @@ class WorkersProxyManager:
                                 continue
 
                             self.statistics.last_error = error_text
-                            self.statistics.last_error_at = datetime.now()
+                            self.statistics.last_error_at = now()
 
                             return AkShareResponse(
                                 success=False,
@@ -486,7 +487,7 @@ class WorkersProxyManager:
                                 source="workers",
                                 response_time=response_time,
                                 cached=False,
-                                timestamp=datetime.now(),
+                                timestamp=now(),
                             )
 
                 except asyncio.TimeoutError:
@@ -507,7 +508,7 @@ class WorkersProxyManager:
             response_time = (time.time() - start_time) * 1000
             self.statistics.failed_requests += 1
             self.statistics.last_error = last_error or "All retries failed"
-            self.statistics.last_error_at = datetime.now()
+            self.statistics.last_error_at = now()
 
             return AkShareResponse(
                 success=False,
@@ -516,7 +517,7 @@ class WorkersProxyManager:
                 source="workers",
                 response_time=response_time,
                 cached=False,
-                timestamp=datetime.now(),
+                timestamp=now(),
             )
 
         except Exception as e:
@@ -524,7 +525,7 @@ class WorkersProxyManager:
 
             self.statistics.failed_requests += 1
             self.statistics.last_error = str(e)
-            self.statistics.last_error_at = datetime.now()
+            self.statistics.last_error_at = now()
 
             return AkShareResponse(
                 success=False,
@@ -533,7 +534,7 @@ class WorkersProxyManager:
                 source="workers",
                 response_time=response_time,
                 cached=False,
-                timestamp=datetime.now(),
+                timestamp=now(),
             )
 
     async def _request_direct(self, function: str, params: Dict[str, Any]) -> AkShareResponse:
@@ -582,7 +583,7 @@ class WorkersProxyManager:
                 response_time=response_time,
                 cached=False,
                 error=None,
-                timestamp=datetime.now(),
+                timestamp=now(),
             )
 
         except Exception as e:
@@ -590,7 +591,7 @@ class WorkersProxyManager:
 
             self.statistics.failed_requests += 1
             self.statistics.last_error = str(e)
-            self.statistics.last_error_at = datetime.now()
+            self.statistics.last_error_at = now()
 
             return AkShareResponse(
                 success=False,
@@ -599,7 +600,7 @@ class WorkersProxyManager:
                 source="direct",
                 response_time=response_time,
                 cached=False,
-                timestamp=datetime.now(),
+                timestamp=now(),
             )
 
     def _get_cache_key(self, function: str, params: Dict[str, Any]) -> str:
@@ -615,7 +616,7 @@ class WorkersProxyManager:
             # 兼容旧格式
             if isinstance(entry, tuple):
                 data, timestamp = entry
-                if datetime.now() - timestamp < timedelta(seconds=self.config.cache_ttl):
+                if now() - timestamp < timedelta(seconds=self.config.cache_ttl):
                     return data
                 else:
                     del self._cache[key]
@@ -623,11 +624,11 @@ class WorkersProxyManager:
 
             # 新格式（带元数据）
             if isinstance(entry, dict):
-                timestamp = entry.get("timestamp", datetime.now())
+                timestamp = entry.get("timestamp", now())
                 ttl = entry.get("ttl", self.config.cache_ttl)
 
                 # 检查是否过期
-                if datetime.now() - timestamp < timedelta(seconds=ttl):
+                if now() - timestamp < timedelta(seconds=ttl):
                     self.logger.debug(f"Cache hit (status={entry.get('status')}): {key}")
                     return entry.get("data")
                 else:
@@ -643,7 +644,7 @@ class WorkersProxyManager:
         self._cache[key] = {
             "data": data,
             "status": status,  # success, empty, error
-            "timestamp": datetime.now(),
+            "timestamp": now(),
             "ttl": cache_ttl,
         }
 

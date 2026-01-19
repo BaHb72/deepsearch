@@ -216,11 +216,7 @@ class DataProviderRegistry:
         if not entry_dict:
             return {}
 
-        config_block = entry_dict.get("config")
-        payload = self._as_dict(config_block)
-        if payload:
-            return payload
-
+        # 定义 meta 属性键（这些是顶层属性，需要单独提取）
         meta_keys = {
             "enabled",
             "priority",
@@ -231,8 +227,18 @@ class DataProviderRegistry:
             "has_saved_credential",
             "provider_name",
         }
-        fallback_payload = {key: value for key, value in entry_dict.items() if key not in meta_keys}
-        return fallback_payload if fallback_payload else {}
+
+        # 1. 提取顶层 meta 属性
+        meta_attrs = {key: entry_dict[key] for key in meta_keys if key in entry_dict}
+
+        # 2. 提取 config 子块
+        config_block = entry_dict.get("config", {})
+        config_payload = self._as_dict(config_block) if config_block else {}
+
+        # 3. 合并：config 子块 + meta 属性（meta 属性覆盖同名键）
+        result = {**config_payload, **meta_attrs}
+
+        return result
 
     def get_provider_instance(self, name: str, force_new: bool = False) -> Optional[Any]:
         """
@@ -514,17 +520,25 @@ class DataProviderRegistry:
                         "dask_scheduler_address", "tcp://localhost:8786"
                     )
 
+                    timeout_value = float(raw_config.get("timeout", 30.0))
+                    first_call_timeout_value = float(raw_config.get("first_call_timeout", 90.0))
+                    retry_count_value = int(raw_config.get("retry_count", 3))
+
                     logger.info(
-                        "[Registry] 创建 AmazingData DaskAdapter | mode=distributed | scheduler={}",
+                        "[Registry] 创建 AmazingData DaskAdapter | mode=distributed | scheduler={} | timeout={}s | first_call_timeout={}s | retry_count={}",
                         scheduler_address,
+                        timeout_value,
+                        first_call_timeout_value,
+                        retry_count_value,
                     )
 
                     try:
                         dask_client = DaskClient(scheduler_address, asynchronous=True)
                         instance = AmazingDataDaskAdapter(
                             dask_client=dask_client,
-                            timeout=float(raw_config.get("timeout", 30.0)),
-                            retry_count=int(raw_config.get("retry_count", 3)),
+                            timeout=timeout_value,
+                            first_call_timeout=first_call_timeout_value,
+                            retry_count=retry_count_value,
                         )
                         setattr(instance, "_implementation_mode", "distributed")
                     except Exception as e:

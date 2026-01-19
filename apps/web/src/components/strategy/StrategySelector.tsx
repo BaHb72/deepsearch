@@ -104,9 +104,6 @@ const StrategySelector: React.FC<StrategySelectorProps> = ({
         onRunBacktest(selectedStrategies);
     };
 
-    // 按类别分组
-    const categories = [...new Set(AVAILABLE_STRATEGIES.map(s => s.category))];
-
     return (
         <Card
             size="small"

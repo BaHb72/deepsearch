@@ -100,13 +100,23 @@ dask:
   # Scheduler 地址 (Docker 容器运行，通过端口映射访问)
   scheduler_address: "localhost:8786"
 
+  # 内存管理阈值配置
+  # 参考: https://distributed.dask.org/en/stable/worker-memory.html
+  memory_thresholds:
+    target: 0.60     # 超过 60% 开始 spill 到磁盘
+    spill: 0.70      # 超过 70% 强制激进 spill
+    pause: 0.80      # 超过 80% 暂停接收新任务
+    terminate: 0.95  # 超过 95% Nanny 重启 Worker
+
   windows_workers:
     enabled: true
     auto_start: true  # 随后端 API 自动启动
     num_workers: 2
     threads_per_worker: 2
-    memory_limit: "4GB"
+    memory_limit: "8GB"   # 保守配置: 静态 3.5GB + 动态 3GB + 20% 余量
     name_prefix: "windows-worker"
+    use_nanny: true       # 启用 Nanny 进程（使 terminate 阈值生效）
+    local_directory: "./data/dask-scratch"  # spill to disk 目录（建议 SSD）
     resources:
       WIN: 1.0  # Windows 资源标签（必须为浮点数，符合 Dask 要求）
 

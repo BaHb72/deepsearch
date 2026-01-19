@@ -63,7 +63,7 @@ const EChartsIntradayChart: React.FC<EChartsIntradayChartProps> = ({
                         backgroundColor: '#6a7985'
                     }
                 },
-                formatter: function (params: any[]) {
+                formatter (params: any[]) {
                     // Custom tooltip
                     if (!params || params.length === 0) return '';
                     const idx = params[0].dataIndex;
@@ -207,7 +207,7 @@ const EChartsIntradayChart: React.FC<EChartsIntradayChartProps> = ({
     if (!data || data.length === 0) return <div>No Data</div>;
 
     return (
-        <ReactECharts option={option} style={{ height: height, width: '100%' }} />
+        <ReactECharts option={option} style={{ height, width: '100%' }} />
     );
 };
 

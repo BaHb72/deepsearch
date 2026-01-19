@@ -21,7 +21,6 @@ from core.ports.market_data import (
 )
 from loguru import logger
 
-from apps.api.api.providers import DataProviderFactory, DataSourceType
 
 from .cache_reader import MarketDataCacheReader
 from .cache_writer import MarketDataCacheWriter
@@ -96,8 +95,9 @@ class PortBundleRegistry(MarketDataPortRegistry):
 class RealtimeDataOrchestrator:
     """Manage realtime adapters with fallback + health tracking."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, provider_container: Any | None = None) -> None:
         self._settings = settings
+        self._provider_container = provider_container
         self._handle: RealtimeRuntimeHandle | None = None
         self._lock = asyncio.Lock()
         self._health: Dict[str, Dict[str, Any]] = {}
@@ -249,14 +249,26 @@ class RealtimeDataOrchestrator:
         if realtime_cfg is None:
             raise RuntimeError("market_data.realtime config missing")
 
-        try:
-            provider = await DataProviderFactory.get_provider_async(DataSourceType.AMAZINGDATA)
-        except Exception as exc:
-            logger.warning("Failed to initialize AmazingData provider: {}", exc)
-            raise
+        provider = None
 
+        # 优先从 ProviderContainer 获取已注册的 Provider（避免重复创建导致 SDK 冲突）
+        if self._provider_container is not None:
+            try:
+                if self._provider_container.has("amazingdata"):
+                    provider = await self._provider_container.get("amazingdata")
+                    logger.info("使用 ProviderContainer 中已注册的 AmazingData Provider")
+            except Exception as exc:
+                logger.warning("从 ProviderContainer 获取 AmazingData Provider 失败: {}", exc)
+
+        # 如果 ProviderContainer 中没有 AmazingData，不要回退到主进程加载 SDK
+        # AmazingData SDK 不支持多进程同时登录，主进程加载会导致 Segfault
+        # 让 orchestrator 使用其他 fallback 适配器（如 AkShare）
         if provider is None:
-            raise RuntimeError("AmazingData provider unavailable")
+            raise RuntimeError(
+                "AmazingData provider 未在 ProviderContainer 中注册，"
+                "且主进程不应直接加载 SDK（会与 Dask Worker 冲突导致 Segfault）。"
+                "请确保 Dask Worker 已启动，或使用其他数据源。"
+            )
 
         service, cache_writer, pipeline, runner = create_realtime_streaming_pipeline(
             provider,

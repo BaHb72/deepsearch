@@ -7,7 +7,7 @@ import axios, {AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRe
 import {
     ApiCategory,
     ApiConfig,
-    ApiResponse,
+    HttpApiResponse,
     ErrorInterceptor,
     HttpMethod,
     RequestInterceptor,
@@ -23,8 +23,27 @@ import {RequestInterceptorManager} from './interceptors'
 
 // 请求去重映射
 interface PendingRequest<T = any> {
-    promise: Promise<ApiResponse<T>>
+    promise: Promise<HttpApiResponse<T>>
   timestamp: number
+}
+
+// 超时配置（从后端同步）
+interface TimeoutConfig {
+  clientTimeoutMs: number
+  timeoutsByOperation: Record<string, number>
+  initialized: boolean
+}
+
+// 默认超时配置（后端同步前使用）
+const DEFAULT_TIMEOUT_CONFIG: TimeoutConfig = {
+  clientTimeoutMs: 90000,  // 90秒，覆盖首次调用场景
+  timeoutsByOperation: {
+    default: 30000,
+    data_fetch: 90000,
+    health_check: 5000,
+    config_save: 10000,
+  },
+  initialized: false,
 }
 
 /**
@@ -42,6 +61,9 @@ export class ApiClient {
   private pendingRequests: Map<string, PendingRequest> = new Map()
   private requestCounter: number = 0
   private readonly dedupeWindow: number = 100 // 去重时间窗口(ms)
+
+  // 超时配置（从后端同步）
+  private timeoutConfig: TimeoutConfig = { ...DEFAULT_TIMEOUT_CONFIG }
 
   private constructor() {
     // 初始化 axios 实例
@@ -75,7 +97,8 @@ export class ApiClient {
    */
   private createAxiosInstance(): AxiosInstance {
     const instance = axios.create({
-      timeout: 30000,
+      // 使用配置的超时值（默认 90s，覆盖首次调用场景）
+      timeout: this.timeoutConfig.clientTimeoutMs,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
@@ -96,9 +119,55 @@ export class ApiClient {
   }
 
   /**
+   * 从后端同步超时配置
+   * 应在应用启动时调用，确保前后端超时一致
+   */
+  public async syncTimeoutConfig(): Promise<void> {
+    if (this.timeoutConfig.initialized) {
+      return  // 已初始化，跳过
+    }
+
+    try {
+      // 直接使用 axios 避免循环依赖
+      const response = await this.axiosInstance.get('/config/timeouts', {
+        timeout: 5000,  // 获取配置的超时时间较短
+      })
+
+      if (response.data) {
+        const config = response.data
+        this.timeoutConfig = {
+          clientTimeoutMs: config.client_timeout_ms ?? DEFAULT_TIMEOUT_CONFIG.clientTimeoutMs,
+          timeoutsByOperation: config.timeouts_by_operation ?? DEFAULT_TIMEOUT_CONFIG.timeoutsByOperation,
+          initialized: true,
+        }
+
+        // 更新 axios 实例的默认超时
+        this.axiosInstance.defaults.timeout = this.timeoutConfig.clientTimeoutMs
+
+        if (import.meta.env.DEV) {
+          console.debug('[ApiClient] 超时配置已同步:', this.timeoutConfig)
+        }
+      }
+    } catch (error) {
+      // 同步失败时使用默认配置，不阻塞应用启动
+      console.warn('[ApiClient] 同步超时配置失败，使用默认值:', error)
+      this.timeoutConfig.initialized = true  // 标记为已初始化，避免重复尝试
+    }
+  }
+
+  /**
+   * 获取指定操作类型的超时时间
+   */
+  public getTimeoutForOperation(operation: string): number {
+    return this.timeoutConfig.timeoutsByOperation[operation]
+      ?? this.timeoutConfig.timeoutsByOperation['default']
+      ?? this.timeoutConfig.clientTimeoutMs
+  }
+
+  /**
    * 发起请求（主要方法）
    */
-  public async request<T = any>(config: ApiConfig): Promise<ApiResponse<T>> {
+  public async request<T = any>(config: ApiConfig): Promise<HttpApiResponse<T>> {
     const startTime = Date.now()
       const requestId = config.requestId ?? this.generateRequestId()
       const dedupeEnabled = config.dedupe !== false
@@ -223,7 +292,7 @@ export class ApiClient {
   private async retryRequest<T>(
     config: ApiConfig,
     remainingRetries: number
-  ): Promise<ApiResponse<T>> {
+  ): Promise<HttpApiResponse<T>> {
     // 等待一段时间后重试（指数退避）
     const delay = Math.min(1000 * Math.pow(2, config.retries! - remainingRetries), 10000)
     await new Promise(resolve => setTimeout(resolve, delay))
@@ -326,7 +395,7 @@ export class ApiClient {
   /**
    * GET 请求
    */
-  public get<T = any>(url: string, params?: any, config?: Partial<ApiConfig>): Promise<ApiResponse<T>> {
+  public get<T = any>(url: string, params?: any, config?: Partial<ApiConfig>): Promise<HttpApiResponse<T>> {
     return this.request<T>({
       ...config,
       url,
@@ -338,7 +407,7 @@ export class ApiClient {
   /**
    * POST 请求
    */
-  public post<T = any>(url: string, data?: any, config?: Partial<ApiConfig>): Promise<ApiResponse<T>> {
+  public post<T = any>(url: string, data?: any, config?: Partial<ApiConfig>): Promise<HttpApiResponse<T>> {
     return this.request<T>({
       ...config,
       url,
@@ -350,7 +419,7 @@ export class ApiClient {
   /**
    * PUT 请求
    */
-  public put<T = any>(url: string, data?: any, config?: Partial<ApiConfig>): Promise<ApiResponse<T>> {
+  public put<T = any>(url: string, data?: any, config?: Partial<ApiConfig>): Promise<HttpApiResponse<T>> {
     return this.request<T>({
       ...config,
       url,
@@ -362,7 +431,7 @@ export class ApiClient {
   /**
    * DELETE 请求
    */
-  public delete<T = any>(url: string, config?: Partial<ApiConfig>): Promise<ApiResponse<T>> {
+  public delete<T = any>(url: string, config?: Partial<ApiConfig>): Promise<HttpApiResponse<T>> {
     return this.request<T>({
       ...config,
       url,
@@ -450,7 +519,7 @@ export class ApiClient {
     private async executeRequest<T>(
         axiosConfig: AxiosRequestConfig,
         apiConfig: ApiConfig
-    ): Promise<ApiResponse<T>> {
+    ): Promise<HttpApiResponse<T>> {
         const response: AxiosResponse<T> = await this.axiosInstance.request<T>(axiosConfig)
         const metadata = this.mergeMetadata(axiosConfig.metadata, {
             requestId: axiosConfig.metadata?.requestId ?? apiConfig.metadata?.requestId,
@@ -486,7 +555,7 @@ export class ApiClient {
 
     private addPendingRequest<T>(
         key: string,
-        promise: Promise<ApiResponse<T>>
+        promise: Promise<HttpApiResponse<T>>
     ): void {
         this.pendingRequests.set(key, {
             promise,

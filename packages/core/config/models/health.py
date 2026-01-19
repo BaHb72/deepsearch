@@ -33,6 +33,19 @@ class HealthCheckConfig(BaseModel):
     # 高级配置
     history_size: int = Field(default=100, ge=0, description="保留的历史记录数量")
 
+    # Redis 健康检查阈值
+    redis_latency_threshold_ms: float = Field(
+        default=50.0, gt=0, description="Redis 响应延迟阈值（毫秒），超过此值触发 DEGRADED"
+    )
+    redis_latency_samples: int = Field(
+        default=3, ge=1, le=10, description="Redis 延迟测量采样次数，取中位数"
+    )
+
+    # 数据库健康检查阈值
+    database_latency_threshold_ms: float = Field(
+        default=1000.0, gt=0, description="数据库查询延迟阈值（毫秒），超过此值触发 DEGRADED"
+    )
+
     # 告警配置
     alert_enabled: bool = Field(default=False, description="是否启用健康状态告警")
 

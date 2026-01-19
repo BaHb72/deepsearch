@@ -65,7 +65,12 @@ const OverviewCard = ({
     [config.retryAttempts, config.retryDelay]
   )
 
-  const defaultChannelLabel = CHANNEL_LABEL_MAP[config.defaultChannel] || config.defaultChannel
+  const defaultChannelLabel = useMemo(() => {
+    const channel = Array.isArray(config.defaultChannel)
+      ? config.defaultChannel[0]
+      : config.defaultChannel
+    return CHANNEL_LABEL_MAP[channel] || channel
+  }, [config.defaultChannel])
 
   return (
     <Card
@@ -128,7 +133,10 @@ const OverviewCard = ({
             description={
               <Space direction="vertical" size={2}>
                 <span>标题：{lastTest.title}</span>
-                <span>渠道：{CHANNEL_LABEL_MAP[lastTest.channel || config.defaultChannel] || lastTest.channel}</span>
+                <span>渠道：{(() => {
+                  const ch = lastTest.channel || (Array.isArray(config.defaultChannel) ? config.defaultChannel[0] : config.defaultChannel)
+                  return CHANNEL_LABEL_MAP[ch] || ch
+                })()}</span>
                 <span>分类：{lastTest.category || 'default'}</span>
                 {lastTest.statusCode && <span>状态码：{lastTest.statusCode}</span>}
                 {lastTest.errorMessage && <span>错误：{lastTest.errorMessage}</span>}

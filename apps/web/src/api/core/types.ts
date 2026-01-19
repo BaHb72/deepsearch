@@ -77,8 +77,10 @@ export interface ApiConfig {
   metadata?: RequestMetadataInput
 }
 
-// API 响应接口
-export interface ApiResponse<T = any> {
+// HTTP API 响应接口（包含完整 HTTP 信息）
+// 注意：这与后端业务响应 BackendResponse 不同
+// BackendResponse 位于 @/api/types/response.ts
+export interface HttpApiResponse<T = any> {
   // 响应数据
   data: T
   status: number
@@ -98,7 +100,7 @@ export interface ApiError extends Error {
   code: ApiErrorCode
   status?: number
   statusText?: string
-  response?: ApiResponse
+  response?: HttpApiResponse
   requestId?: string
   timestamp?: number
   retry?: boolean
@@ -234,6 +236,6 @@ export function isApiError(error: any): error is ApiError {
   return error instanceof Error && 'code' in error
 }
 
-export function isApiResponse<T = any>(response: any): response is ApiResponse<T> {
+export function isHttpApiResponse<T = any>(response: any): response is HttpApiResponse<T> {
   return response && 'data' in response && 'status' in response
 }

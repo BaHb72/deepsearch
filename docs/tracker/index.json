@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "updated_at": "2026-01-19T22:00:00+08:00",
+  "description": "统一关联索引 - 连接 issues 和 decisions 的生命周期",
+  "relations": [
+    {
+      "issue_path": "issues/resolved/2026-01-19_dask-worker-memory-exceeded.md",
+      "decision_path": "worklog/2026/01/2026-01-19_dask-worker_memory-optimization.md",
+      "relation_type": "resolved_by",
+      "created_at": "2026-01-19T22:00:00+08:00"
+    }
+  ]
+}

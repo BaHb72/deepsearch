@@ -75,44 +75,9 @@ const TRADING_START_HOUR = 9;
 const TRADING_START_MINUTE = 30;
 
 /**
- * 将时间字符串转换为分钟索引（从 09:30 开始计算）
- * 这样可以避免时区问题，让时间轴正确显示
- */
-function timeToMinuteIndex(timeStr: string, dayOffset: number = 0): number {
-    // 解析 HH:MM 或 HH:MM:SS 格式
-    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(timeStr)) {
-        const parts = timeStr.split(':');
-        const hours = parseInt(parts[0], 10);
-        const minutes = parseInt(parts[1], 10);
-
-        // 计算从 09:30 开始的分钟数
-        let minutesSinceStart = (hours - TRADING_START_HOUR) * 60 + (minutes - TRADING_START_MINUTE);
-
-        // 如果时间在开盘前，可能是上一天的数据或数据错误
-        if (minutesSinceStart < 0) {
-            minutesSinceStart = 0;
-        }
-
-        // A股上午交易 09:30-11:30 = 120分钟
-        // A股下午交易 13:00-15:00 = 120分钟
-        // 午休 11:30-13:00 = 90分钟（需要跳过）
-        if (hours >= 13) {
-            // 下午交易，需要减去午休时间（90分钟）
-            minutesSinceStart -= 90;
-        }
-
-        // 每天约 240 分钟交易时间
-        return dayOffset * 240 + minutesSinceStart;
-    }
-    return 0;
-}
-
-/**
  * 将分钟索引转换回时间字符串（用于显示）
  */
 function minuteIndexToTime(index: number): string {
-    // 计算是哪一天的第几分钟
-    const dayOffset = Math.floor(index / 240);
     let minuteInDay = index % 240;
 
     // 上午交易时间 09:30-11:30 (120分钟)
@@ -264,7 +229,7 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
         // 创建图表
         const chart = createChart(containerRef.current, {
             width: containerRef.current.clientWidth,
-            height: height,
+            height,
             layout: {
                 background: { type: ColorType.Solid, color: '#ffffff' },
                 textColor: '#333',
@@ -360,7 +325,7 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
             if (effectiveBasePrice > 0) {
                 const percentSeries = chart.addSeries(LineSeries, {
                     color: 'transparent',  // 隐藏线条，只显示 Y 轴
-                    lineWidth: 0,
+                    lineWidth: 1,  // 最小宽度，配合 transparent 颜色实现隐藏
                     priceScaleId: 'right',  // 使用右侧 Y 轴
                     crosshairMarkerVisible: false,  // 隐藏crosshair marker
                     priceFormat: {
@@ -523,7 +488,7 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
                     position: s.type === 'buy' ? 'belowBar' as const : 'aboveBar' as const,
                     color: s.type === 'buy' ? colors.buy : colors.sell,
                     shape: s.type === 'buy' ? shapes.buy : shapes.sell,
-                    text: text,
+                    text,
                     size: 1,
                 };
             });
@@ -544,9 +509,6 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
 
 
-        // Tooltip 逻辑
-        const toolTipWidth = 120;
-        const toolTipHeight = 160;
         const toolTipMargin = 15;
 
         // 创建 Tooltip 元素
@@ -600,9 +562,9 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
             } else {
                 // 如果找不到原始数据，尝试从 seriesData 获取
                 // 注意：seriesRef 可能是 Candle 或 Line，这里简化处理
-                // @ts-ignore
+                // @ts-expect-error seriesData.get 的类型定义不完整
                 const priceData = param.seriesData.get(seriesRef.current);
-                if (priceData) price = priceData.value || priceData.close || 0;
+                if (priceData) price = (priceData as { value?: number; close?: number }).value || (priceData as { value?: number; close?: number }).close || 0;
             }
 
             // 获取成交量
@@ -657,8 +619,6 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
                 </div>
             `;
 
-            // 动态定位
-            const coordinate = seriesRef.current!.priceToCoordinate(price);
             let left = param.point.x + toolTipMargin;
             let top = param.point.y + toolTipMargin;
 
@@ -690,7 +650,7 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
             // 当可见范围的左边界接近数据最早时间时，触发加载
             // 使用 5 分钟 (300秒) 的容差
-            if (visibleRange.from <= earliestDataTime + 300) {
+            if ((visibleRange.from as number) <= (earliestDataTime as number) + 300) {
                 console.log('[TradingViewChart] Triggering load more, earliestTimeStr:', earliestTimeStr, 'earliestDate:', earliestDate);
                 isLoadingMore = true;
                 // 传递原始时间字符串和日期

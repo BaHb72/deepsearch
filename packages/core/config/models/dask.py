@@ -11,6 +11,32 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+class MemoryThresholdsConfig(BaseModel):
+    """Dask Worker 内存管理阈值配置
+
+    Dask 使用分层阈值管理内存，各阈值触发不同行为：
+    - target: 超过此值开始 spill 最少使用的数据到磁盘
+    - spill: 超过此值强制激进 spill，直到降到 target 以下
+    - pause: 超过此值暂停接收新任务，等待 spill 完成
+    - terminate: 超过此值 Nanny 进程终止 Worker 并重新调度任务
+
+    参考: https://distributed.dask.org/en/stable/worker-memory.html
+    """
+
+    target: float = Field(
+        default=0.60, ge=0.0, le=1.0, description="开始 spill 到磁盘的阈值（默认 60%）"
+    )
+    spill: float = Field(
+        default=0.70, ge=0.0, le=1.0, description="强制激进 spill 的阈值（默认 70%）"
+    )
+    pause: float = Field(
+        default=0.80, ge=0.0, le=1.0, description="暂停接收新任务的阈值（默认 80%）"
+    )
+    terminate: float = Field(
+        default=0.95, ge=0.0, le=1.0, description="Nanny 终止 Worker 的阈值（默认 95%）"
+    )
+
+
 class WindowsWorkersConfig(BaseModel):
     """Windows Dask Workers 配置"""
 
@@ -25,6 +51,12 @@ class WindowsWorkersConfig(BaseModel):
         description="Worker 资源标签（必须为浮点数，符合 Dask 内部要求）",
     )
     port_range_start: int = Field(default=58200, description="Worker 端口范围起始值")
+    local_directory: Optional[str] = Field(
+        default=None, description="Worker 本地临时目录（用于 spill to disk），建议使用 SSD"
+    )
+    use_nanny: bool = Field(
+        default=True, description="是否使用 Nanny 进程监管 Worker（启用后 terminate 阈值才生效）"
+    )
 
 
 class TaskRoutingConfig(BaseModel):
@@ -54,4 +86,8 @@ class DaskConfig(BaseModel):
     task_routing: Optional[TaskRoutingConfig] = Field(
         default=None,
         description="任务路由配置",
+    )
+    memory_thresholds: MemoryThresholdsConfig = Field(
+        default_factory=MemoryThresholdsConfig,
+        description="Worker 内存管理阈值配置",
     )

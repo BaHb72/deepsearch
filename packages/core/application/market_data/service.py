@@ -49,6 +49,7 @@ class RealTimeMarketDataService:
     board_universe: BoardUniverse
     stock_list_fetcher: BoardStockListFetcher | None = None
     snapshot_cache: SnapshotCachePort | None = None  # Arrow 文件缓存
+    runtime_board_refresh_timeout: float = 15.0  # 运行时板块刷新超时（秒）
     _subscribed_codes: Set[str] = field(default_factory=set, init=False, repr=False)
     _status: Any = field(default=None, init=False, repr=False)
 
@@ -314,9 +315,15 @@ class RealTimeMarketDataService:
         ensure_start = perf_counter()
         try:
             # 添加超时保护，避免无限等待阻塞 API
-            await asyncio.wait_for(self.refresh_board_universe(), timeout=10.0)
+            await asyncio.wait_for(
+                self.refresh_board_universe(),
+                timeout=self.runtime_board_refresh_timeout,
+            )
         except asyncio.TimeoutError:
-            logger.warning("刷新板块数据超时（10秒），将使用已有缓存")
+            logger.warning(
+                "刷新板块数据超时 ({}s)，将使用已有缓存",
+                self.runtime_board_refresh_timeout,
+            )
         except Exception as exc:
             logger.warning("刷新板块数据失败: {}", exc)
         still_missing = [board for board in missing if not self.board_universe.resolve_codes(board)]

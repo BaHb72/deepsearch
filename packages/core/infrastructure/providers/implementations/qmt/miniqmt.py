@@ -25,6 +25,14 @@ from core.infrastructure.providers.interfaces.base import (
     DataSourceType,
 )
 from core.infrastructure.providers.interfaces.capabilities import DataCapability
+
+# New Protocol imports for Phase 2
+from core.infrastructure.providers.protocols.lifecycle import (
+    HealthCheckResult,
+    HealthStatus,
+)
+from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest
+from core.ports.data.responses import KlineResponse, RealtimeQuoteResponse
 from loguru import logger
 
 # 模块级别导入 xtquant，避免在每个函数中重复导入（会导致重复的连接消息）
@@ -242,6 +250,201 @@ class MiniQMTProvider(DataProvider):
         except Exception as e:
             logger.error(f"MiniQMT 初始化异常: {e}")
             return False
+
+    # ==================== ILifecycleProvider 协议实现 ====================
+
+    async def start(self) -> None:
+        """启动 Provider - 启动连接和后台任务（ILifecycleProvider 协议）
+
+        Raises:
+            ProviderStateError: 启动失败时抛出
+        """
+        try:
+            logger.info("MiniQMTProvider 启动...")
+
+            if self.connected:
+                logger.info("Provider 已连接，跳过启动")
+                return
+
+            # 调用内部启动逻辑
+            await self._start_source()
+            logger.info("MiniQMTProvider 启动成功")
+
+        except Exception as e:
+            logger.error(f"MiniQMTProvider 启动失败: {e}")
+            from core.infrastructure.providers.exceptions import ProviderStateError
+
+            raise ProviderStateError(provider="miniqmt", message=f"启动失败: {e}") from e
+
+    async def stop(self) -> None:
+        """停止 Provider - 停止连接和后台任务（ILifecycleProvider 协议）"""
+        try:
+            logger.info("MiniQMTProvider 停止...")
+            await self._stop_source()
+            logger.info("MiniQMTProvider 停止成功")
+        except Exception as e:
+            logger.error(f"MiniQMTProvider 停止失败: {e}")
+            # 不抛出异常，确保优雅关闭
+
+    async def health_check(self) -> HealthCheckResult:
+        """健康检查（ILifecycleProvider 协议）
+
+        检查：
+        - 连接状态
+        - 心跳状态
+        - 后台任务状态
+        - 队列积压情况
+
+        Returns:
+            HealthCheckResult: 健康检查结果
+        """
+        try:
+            if not self.connected:
+                return HealthCheckResult(
+                    status=HealthStatus.UNHEALTHY,
+                    message="未连接到 MiniQMT",
+                    details={"connected": False},
+                )
+
+            # 检查心跳
+            heartbeat_alive = self.heartbeat_task is not None and not self.heartbeat_task.done()
+            receive_alive = self.receive_task is not None and not self.receive_task.done()
+            queue_size = self.data_queue.qsize()
+
+            # 计算最后心跳时间间隔
+            import time
+
+            time_since_heartbeat = time.time() - self.last_heartbeat
+
+            details = {
+                "connected": self.connected,
+                "heartbeat_alive": heartbeat_alive,
+                "receive_alive": receive_alive,
+                "queue_size": queue_size,
+                "time_since_heartbeat": time_since_heartbeat,
+                "reconnect_attempts": self.reconnect_attempts,
+                "subscribed_symbols_count": len(self.subscribed_symbols),
+            }
+
+            # 健康状态判断
+            if not heartbeat_alive or not receive_alive:
+                status = HealthStatus.DEGRADED
+                message = "后台任务未运行"
+            elif time_since_heartbeat > self.heartbeat_interval * 3:
+                status = HealthStatus.DEGRADED
+                message = f"心跳超时 {time_since_heartbeat:.1f}s"
+            elif queue_size > 5000:
+                status = HealthStatus.DEGRADED
+                message = f"队列积压 {queue_size} 条消息"
+            elif self.reconnect_attempts > 0:
+                status = HealthStatus.DEGRADED
+                message = f"发生过重连（{self.reconnect_attempts} 次）"
+            else:
+                status = HealthStatus.HEALTHY
+                message = "运行正常"
+
+            return HealthCheckResult(status=status, message=message, details=details)
+
+        except Exception as e:
+            logger.error(f"健康检查失败: {e}")
+            return HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                message=f"健康检查异常: {e}",
+                details={},
+            )
+
+    # ==================== IKlineProvider 协议实现 ====================
+
+    async def query_kline(self, request: KlineRequest) -> KlineResponse:
+        """查询K线数据（IKlineProvider 协议）
+
+        适配现有的 get_kline_data 方法
+
+        Args:
+            request: K线查询请求
+
+        Returns:
+            KlineResponse: K线响应
+
+        Raises:
+            ProviderDataError: 查询失败时抛出
+        """
+        try:
+            result = await self.get_kline_data(
+                symbol=request.asset,
+                period=request.timeframe,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                limit=0,  # 不限制数量
+            )
+
+            if result is None:
+                from core.infrastructure.providers.exceptions import ProviderDataError
+
+                raise ProviderDataError(
+                    provider="miniqmt",
+                    message=f"查询K线失败: {request.asset}",
+                )
+
+            return KlineResponse(
+                success=True,
+                data=result,
+                metadata={
+                    "source": "miniqmt",
+                    "symbol": request.asset,
+                    "timeframe": request.timeframe,
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"查询K线失败: {e}")
+            from core.infrastructure.providers.exceptions import ProviderDataError
+
+            raise ProviderDataError(provider="miniqmt", message=f"查询K线失败: {e}") from e
+
+    # ==================== IRealtimeProvider 协议实现 ====================
+
+    async def query_realtime(self, request: RealtimeQuoteRequest) -> RealtimeQuoteResponse:
+        """查询实时行情（IRealtimeProvider 协议）
+
+        适配现有的 get_realtime_quotes 方法
+
+        Args:
+            request: 实时行情查询请求
+
+        Returns:
+            RealtimeQuoteResponse: 实时行情响应
+
+        Raises:
+            ProviderDataError: 查询失败时抛出
+        """
+        try:
+            result = await self.get_realtime_quotes(symbols=request.assets)
+
+            if result is None:
+                from core.infrastructure.providers.exceptions import ProviderDataError
+
+                raise ProviderDataError(
+                    provider="miniqmt",
+                    message=f"查询实时行情失败: {request.assets}",
+                )
+
+            return RealtimeQuoteResponse(
+                success=True,
+                data=result,
+                metadata={
+                    "source": "miniqmt",
+                    "symbols": request.assets,
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"查询实时行情失败: {e}")
+            from core.infrastructure.providers.exceptions import ProviderDataError
+
+            raise ProviderDataError(provider="miniqmt", message=f"查询实时行情失败: {e}") from e
+
+    # ==================== DataProvider 抽象方法实现 ====================
 
     async def get_stock_list(
         self, limit: Optional[int] = None, **kwargs: Any
@@ -1174,21 +1377,35 @@ class MiniQMTProvider(DataProvider):
         logger.info(f"MiniQMT 配置: {self.host}:{self.port}")
 
     async def _start_source(self) -> None:
-        """启动 MiniQMT 连接"""
-        # 连接到 MiniQMT
+        """启动 MiniQMT 连接
+
+        支持两种连接模式：
+        1. xtquant SDK 模式（优先）：直接使用 xtdata API，无需 socket 连接
+        2. socket 模式（回退）：通过 socket 连接到 MiniQMT 服务器
+        """
+        # 优先使用 xtquant SDK 模式
+        if XTDATA_AVAILABLE:
+            logger.info("使用 xtquant SDK 模式连接 MiniQMT")
+            self.connected = True
+            # SDK 模式不需要心跳和接收任务，xtdata 自动管理连接
+            logger.info("MiniQMT 数据源已启动 (xtquant SDK 模式)")
+            return
+
+        # 回退到 socket 连接模式
+        logger.info("xtquant SDK 不可用，回退到 socket 连接模式")
         if not await self._connect():
             raise DataProviderError(
                 f"无法连接到 MiniQMT 终端 ({self.host}:{self.port})，"
                 "请确保 QMT 量化终端已启动并监听正确端口"
             )
 
-        # 启动心跳任务
+        # 启动心跳任务（仅 socket 模式需要）
         self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
-        # 启动数据接收任务
+        # 启动数据接收任务（仅 socket 模式需要）
         self.receive_task = asyncio.create_task(self._receive_loop())
 
-        logger.info("MiniQMT 数据源已启动")
+        logger.info("MiniQMT 数据源已启动 (socket 模式)")
 
     async def _stop_source(self) -> None:
         """停止 MiniQMT 连接"""

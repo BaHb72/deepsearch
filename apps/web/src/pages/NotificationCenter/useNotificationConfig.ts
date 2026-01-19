@@ -47,9 +47,12 @@ const mapTokenValue = (value: string | null | undefined): string | undefined => 
   return value
 }
 
-const normalizeChannel = (channel: NotificationChannel): NotificationChannel => {
+const normalizeChannel = (channel: NotificationChannel | NotificationChannel[] | undefined): NotificationChannel => {
   if (!channel) {
     return 'wechat'
+  }
+  if (Array.isArray(channel)) {
+    return channel[0] || 'wechat'
   }
   return channel
 }

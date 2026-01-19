@@ -31,7 +31,6 @@ import {
     type PhaseBehavior,
     type PollingConfig as PollingConfigType,
     type PollingConfigUpdate,
-    type SessionGuard,
 } from '@/api/polling-config'
 
 const { Text, Title } = Typography
@@ -60,8 +59,8 @@ const PHASE_META: Record<string, { label: string; description: string; color: st
     },
 }
 
-// 轮询间隔预设值
-const INTERVAL_PRESETS = [
+// 轮询间隔预设值 (保留用于未来 UI 增强)
+const _INTERVAL_PRESETS = [
     { value: 1, label: '1秒' },
     { value: 2, label: '2秒' },
     { value: 5, label: '5秒' },
@@ -71,6 +70,7 @@ const INTERVAL_PRESETS = [
     { value: 60, label: '1分钟' },
     { value: 120, label: '2分钟' },
 ]
+void _INTERVAL_PRESETS  // 抑制未使用警告
 
 // 日历数据源选项
 const CALENDAR_SOURCE_OPTIONS = [
@@ -294,25 +294,28 @@ const PollingConfig: React.FC = () => {
 
         setSaving(true)
         try {
-            const payload: PollingConfigUpdate = {
-                defaults: {},
-                session_guard: config.session_guard ? {
-                    enabled: config.session_guard.enabled,
-                    calendar_source: config.session_guard.calendar_source,
-                    market: config.session_guard.market,
-                } : undefined,
-            }
+            // 构建 defaults 对象，使用正确的类型
+            const defaults: PollingConfigUpdate['defaults'] = {}
 
-            // 构建更新 payload
             for (const phase of Object.keys(PHASE_META)) {
                 const phaseConfig = config.defaults[phase as keyof typeof config.defaults]
                 if (phaseConfig) {
-                    payload.defaults![phase as keyof typeof payload.defaults] = {
+                    // 使用类型断言确保 phase 是有效的键
+                    (defaults as Record<string, PhaseBehavior>)[phase] = {
                         interval_seconds: phaseConfig.interval_seconds,
                         timeout_seconds: phaseConfig.timeout_seconds,
                         skip_polling: phaseConfig.skip_polling,
                     }
                 }
+            }
+
+            const payload: PollingConfigUpdate = {
+                defaults,
+                session_guard: config.session_guard ? {
+                    enabled: config.session_guard.enabled,
+                    calendar_source: config.session_guard.calendar_source,
+                    market: config.session_guard.market,
+                } : undefined,
             }
 
             const response = await updatePollingConfig(payload)

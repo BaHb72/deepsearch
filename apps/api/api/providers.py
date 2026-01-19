@@ -28,6 +28,7 @@ from typing import (
 
 from core.utils.data_sources import DataSourceType as RegistryDataSourceType
 from core.utils.data_sources import get_data_source_manager
+from core.utils.time.market_time import now
 from loguru import logger
 
 # NOTE: 以下服务类型别名用于动态加载的服务实现
@@ -427,8 +428,8 @@ class DataProviderFactory:
                     def __init__(self, actor, connected: bool = True):
                         self._actor = actor
                         self._is_connected = connected
-                        self._creation_time = datetime.now()
-                        self._last_health_check = datetime.now()
+                        self._creation_time = now()
+                        self._last_health_check = now()
                         self._consecutive_failures = 0
                         self._max_failures_before_disconnect = 3
 
@@ -453,7 +454,7 @@ class DataProviderFactory:
                             result = await asyncio.wait_for(self._actor.heartbeat(), timeout=5.0)
                             if result is True:
                                 self._consecutive_failures = 0
-                                self._last_health_check = datetime.now()
+                                self._last_health_check = now()
                                 return True
                             else:
                                 self._consecutive_failures += 1
@@ -628,8 +629,8 @@ class DataProviderFactory:
                     def __init__(self, actor, connected: bool = True):
                         self._actor = actor
                         self._is_connected = connected
-                        self._creation_time = datetime.now()
-                        self._last_health_check = datetime.now()
+                        self._creation_time = now()
+                        self._last_health_check = now()
                         self._consecutive_failures = 0
                         self._max_failures_before_disconnect = 3
 
@@ -653,7 +654,7 @@ class DataProviderFactory:
                             status = await asyncio.wait_for(self._actor.get_status(), timeout=5.0)
                             if status.get("initialized", False):
                                 self._consecutive_failures = 0
-                                self._last_health_check = datetime.now()
+                                self._last_health_check = now()
                                 return True
                             else:
                                 self._consecutive_failures += 1
@@ -771,7 +772,7 @@ class DataProviderFactory:
                             cls._provider_health[normalized_type] = {
                                 "status": "healthy",
                                 "provider": "amazingdata",
-                                "initialized_at": datetime.now().isoformat(),
+                                "initialized_at": now().isoformat(),
                                 "source": "dask_actor",
                             }
                             logger.info("Created amazingdata provider instance (async)")
@@ -787,7 +788,7 @@ class DataProviderFactory:
                         "status": "failed",
                         "provider": "error",
                         "error": str(e),
-                        "initialized_at": datetime.now().isoformat(),
+                        "initialized_at": now().isoformat(),
                     }
                     raise RuntimeError(f"AmazingData Actor 创建失败: {e}") from e
 
@@ -810,7 +811,7 @@ class DataProviderFactory:
                             cls._provider_health[normalized_type] = {
                                 "status": "healthy",
                                 "provider": "miniqmt",
-                                "initialized_at": datetime.now().isoformat(),
+                                "initialized_at": now().isoformat(),
                                 "source": "dask_actor",
                             }
                             logger.info("Created miniqmt provider instance (async)")
@@ -826,7 +827,7 @@ class DataProviderFactory:
                         "status": "failed",
                         "provider": "error",
                         "error": str(e),
-                        "initialized_at": datetime.now().isoformat(),
+                        "initialized_at": now().isoformat(),
                     }
                     raise RuntimeError(f"MiniQMT Actor 创建失败: {e}") from e
 
@@ -966,7 +967,7 @@ class DataProviderFactory:
             cls._provider_health[provider_name] = {"failures": []}
 
         failure_record: ProviderFailureRecord = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now().isoformat(),
             "type": failure_type,
             "message": error_msg,
         }
@@ -1003,7 +1004,7 @@ class DataProviderFactory:
         return {
             "providers": dict(cls._provider_health),
             "fallback_status": dict(cls._fallback_status),
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now().isoformat(),
         }
 
 
@@ -1046,7 +1047,6 @@ async def get_market_service():
         data_provider = None
 
         async def get_market_overview(self):
-            from datetime import datetime
 
             return {
                 "indices": [],

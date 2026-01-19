@@ -12,7 +12,7 @@ from core.infrastructure.providers.base.provider_base import BaseDataProvider
 from core.infrastructure.providers.factory import (
     CircuitBreaker,
     CircuitBreakerState,
-    DataProviderFactory,
+    ProviderSelector,
     SelectionStrategy,
 )
 from core.infrastructure.providers.registry import DataProviderRegistry, ProviderInfo, ProviderType
@@ -244,12 +244,12 @@ class TestCircuitBreaker:
         assert breaker.state == CircuitBreakerState.CLOSED
 
 
-class TestDataProviderFactory:
-    """测试数据提供者工厂"""
+class TestProviderSelector:
+    """测试数据提供者选择器"""
 
     def setup_method(self):
         """设置测试环境"""
-        self.factory = DataProviderFactory(
+        self.factory = ProviderSelector(
             strategy=SelectionStrategy.PRIORITY, enable_circuit_breaker=True
         )
 

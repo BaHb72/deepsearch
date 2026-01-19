@@ -4,6 +4,22 @@ WebUI 运行器
 提供独立运行 WebUI 的功能，支持前端和后端的启动管理。
 """
 
+# === Windows 控制台编码设置 ===
+# 必须在导入其他模块之前设置,确保后续日志输出正确
+import sys
+
+if sys.platform == "win32":
+    try:
+        from core.core.utils.file_encoding import PlatformEncodingHelper
+
+        # 设置控制台编码为 UTF-8,解决 Windows 控制台中文乱码问题
+        PlatformEncodingHelper.setup_console_encoding(encoding="utf-8")
+    except Exception as e:
+        # 如果设置失败,记录错误但不影响启动
+        # 此时无法使用 logger,因为还未初始化,使用 print
+        print(f"Warning: Failed to setup console encoding: {e}", file=sys.stderr)
+# === 编码设置结束 ===
+
 import asyncio
 import atexit
 import os

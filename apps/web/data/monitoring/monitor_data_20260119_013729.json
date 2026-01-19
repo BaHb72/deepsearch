@@ -1,0 +1,761 @@
+[
+  {
+    "timestamp": "2026-01-19T01:35:33.964997",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:35:39.753454",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:35:44.753670",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:35:49.753987",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:35:54.754463",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:35:59.754814",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:04.755403",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:09.755563",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:14.755848",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:19.756522",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:24.756923",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:29.757482",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 2.384185791015625e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 5.7220458984375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:34.757895",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 1.6689300537109375e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 4.0531158447265625e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:39.758288",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 1.6689300537109375e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 4.0531158447265625e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:44.758651",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 1.6689300537109375e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 4.0531158447265625e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:49.759435",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 1.6689300537109375e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 4.0531158447265625e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:54.759876",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 1.6689300537109375e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 4.0531158447265625e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:36:59.760339",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 1.6689300537109375e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 4.0531158447265625e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:37:04.760511",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 1.6689300537109375e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 4.0531158447265625e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:37:09.760887",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 1.6689300537109375e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 4.0531158447265625e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:37:14.761265",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 1.6689300537109375e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 4.0531158447265625e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:37:19.761691",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 1.6689300537109375e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 4.0531158447265625e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  },
+  {
+    "timestamp": "2026-01-19T01:37:24.762248",
+    "health": {
+      "status": "healthy",
+      "checks": {
+        "engine_running": {
+          "success": true,
+          "message": null,
+          "duration": 1.6689300537109375e-06,
+          "critical": true
+        },
+        "queue_size": {
+          "success": true,
+          "message": null,
+          "duration": 3.5762786865234375e-06,
+          "critical": false
+        },
+        "processing_latency": {
+          "success": true,
+          "message": null,
+          "duration": 4.0531158447265625e-06,
+          "critical": false
+        }
+      }
+    },
+    "metrics": {
+      "events": {},
+      "handlers": {},
+      "queue_size": 0,
+      "slow_events": 0
+    },
+    "alerts": []
+  }
+]

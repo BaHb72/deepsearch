@@ -28,7 +28,7 @@
 
 | 状态 | 数量 |
 |------|------|
-| 待处理 | 0 |
+| 待处理 | 13 |
 | 已解决 | 9 |
 
 ---
@@ -39,13 +39,20 @@
 
 （无）
 
-### High (0)
+### High (6)
 
-（无）
+- [Dask Worker 内存超限导致 OOM](backlog/2026-01-19_dask-worker-memory-exceeded.md) - Worker 内存超限，进程被 SIGKILL (137) 终止
+- [Dask Worker 模块导入失败](backlog/2026-01-19_dask-worker-module-import-failure.md) - Worker 进程无法导入 core.infrastructure.providers.implementations 模块
+- [数据源访问失败与系统健康降级](backlog/2026-01-18_datasource-access-failures.md) - DaskAdapter 超时、AkShare fallback 失败、Redis 响应慢
+- [AkShare Provider 生命周期问题](backlog/2026-01-16_akshare-provider-lifecycle.md) - Provider 初始化和清理流程
+- [AmazingData SDK 超时配置未被使用](backlog/2026-01-18_amazingdata-timeout-config-unused.md) - server.py 创建 DaskAdapter 时未传递 timeout 参数
+- [SDK 架构导致首次调用超时](backlog/2026-01-18_amazingdata-first-call-timeout.md) - 首次调用触发完整登录流程（30-60s）超过 45s 阈值
 
-### Medium (0)
+### Medium (3)
 
-（无）
+- [AmazingData SDK Prewarm 登录不稳定](backlog/2026-01-19_amazingdata-sdk-prewarm-login-instability.md) - Worker-0 首次登录超时，需重试才成功
+- [前后端超时配置不同步](backlog/2026-01-18_frontend-backend-timeout-mismatch.md) - 前端 30s、后端 45s，前端可能先超时
+- [SDK 无 HTTP 连接复用](backlog/2026-01-18_amazingdata-no-http-connection-reuse.md) - 每次调用新建连接，是 15-30s 延迟的主因
 
 ### Low (0)
 

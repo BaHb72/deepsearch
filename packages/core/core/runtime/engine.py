@@ -333,8 +333,8 @@ class MainEngine:
         if provider is None:
             return None
         try:
-            component = provider.get_service(cast(Type[Any], component_type))
-            return cast(Optional[Component], component)
+            result: Optional[Component] = provider.get_service(cast(Type[Any], component_type))
+            return result
         except Exception:
             return None
 

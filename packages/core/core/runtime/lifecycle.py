@@ -136,8 +136,8 @@ class LifecycleCoordinator:
             memory_manager = get_memory_manager()
             profiler.enable()
             profiler.set_threshold(100)
-            memory_manager.auto_cleanup = True
-            memory_manager.monitor_interval = 30
+            memory_manager._gc_enabled = True
+            memory_manager._gc_interval = 30
             query_optimizer.set_slow_threshold(1.0)
 
             database_component = components.get("database")

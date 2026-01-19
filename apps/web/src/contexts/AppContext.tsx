@@ -43,7 +43,7 @@ interface AppProviderProps {
   children: ReactNode
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 type AppContextType = any // 简化处理，避免复杂类型定义
 
 // Action Types

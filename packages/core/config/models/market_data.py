@@ -100,6 +100,32 @@ class MarketRealtimeConfig(BaseModel):
         ge=0,
         description="Step timeout during continuous trading",
     )
+    # 预热配置（假设 Actor 已完成登录，超时可缩短）
+    warmup_timeout_seconds: float = Field(
+        default=60.0,
+        ge=10.0,
+        description="Total timeout for board universe warmup (after login)",
+    )
+    warmup_fetch_timeout_seconds: float = Field(
+        default=30.0,
+        ge=5.0,
+        description="Timeout for each fetch operation (after login)",
+    )
+    warmup_retry_count: int = Field(
+        default=1,
+        ge=0,
+        le=5,
+        description="Number of retries for warmup fetch (after login, usually stable)",
+    )
+    warmup_fallback_to_cache: bool = Field(
+        default=True,
+        description="Whether to fallback to cached data when warmup times out",
+    )
+    runtime_board_refresh_timeout_seconds: float = Field(
+        default=15.0,
+        ge=1.0,
+        description="Timeout for on-demand board refresh during runtime requests",
+    )
     redis: MarketRedisConfig = Field(default_factory=MarketRedisConfig)
 
 

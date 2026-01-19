@@ -49,14 +49,14 @@ export const StatusSection: React.FC<StatusSectionProps> = ({
                 <Space direction="vertical" size="small">
                     <div>
                         <Text strong>xtdata 状态: </Text>
-                        <Tag color={Boolean(status.connected) ? 'green' : 'red'}>
-                            {Boolean(status.connected) ? '已连接' : '未连接'}
+                        <Tag color={status.connected ? 'green' : 'red'}>
+                            {status.connected ? '已连接' : '未连接'}
                         </Tag>
                     </div>
                     <div>
                         <Text strong>SDK 可用: </Text>
-                        <Tag color={Boolean(status.xtdata_available) ? 'green' : 'orange'}>
-                            {Boolean(status.xtdata_available) ? '可用' : '不可用'}
+                        <Tag color={status.xtdata_available ? 'green' : 'orange'}>
+                            {status.xtdata_available ? '可用' : '不可用'}
                         </Tag>
                     </div>
                     {status.message ? (

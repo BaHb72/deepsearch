@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import String, Text, func
+from core.utils.time.market_time import now
+from sqlalchemy import DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -26,7 +27,9 @@ class WatchlistItemDB(Base):
     name: Mapped[Optional[str]] = mapped_column(String(128), default=None)
     last_price: Mapped[Optional[float]] = mapped_column(default=None)
     last_signal: Mapped[Optional[str]] = mapped_column(String(32), default=None)
-    last_signal_time: Mapped[Optional[datetime]] = mapped_column(default=None)
+    last_signal_time: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
     success_rate: Mapped[Optional[float]] = mapped_column(default=None)
     alert_enabled: Mapped[bool] = mapped_column(default=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, default=None)
@@ -37,10 +40,12 @@ class WatchlistItemDB(Base):
     # 自动生成字段（init=False）
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
     added_at: Mapped[datetime] = mapped_column(
-        default_factory=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True),
+        default_factory=lambda: now(),
         init=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
         init=False,
@@ -79,7 +84,7 @@ class SignalHistoryDB(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     symbol: Mapped[str] = mapped_column(String(32), index=True)
     signal_type: Mapped[str] = mapped_column(String(16))  # "high" or "low"
-    signal_time: Mapped[datetime] = mapped_column(index=True)
+    signal_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     signal_price: Mapped[float] = mapped_column()
 
     # 可选字段（有默认值）
@@ -89,11 +94,12 @@ class SignalHistoryDB(Base):
     actual_high: Mapped[Optional[float]] = mapped_column(default=None)
     actual_low: Mapped[Optional[float]] = mapped_column(default=None)
     is_success: Mapped[Optional[bool]] = mapped_column(default=None)
-    verified_at: Mapped[Optional[datetime]] = mapped_column(default=None)
+    verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
 
     # 自动生成字段
     created_at: Mapped[datetime] = mapped_column(
-        default_factory=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True),
+        default_factory=lambda: now(),
         init=False,
     )
 
@@ -132,14 +138,14 @@ class TTradingRecordDB(Base):
     # 必填字段（由调用方提供）
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     symbol: Mapped[str] = mapped_column(String(32), index=True)
-    entry_time: Mapped[datetime] = mapped_column(index=True)
+    entry_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     entry_price: Mapped[float] = mapped_column()
     direction: Mapped[str] = mapped_column(String(16))  # "buy_first" / "sell_first"
     quantity: Mapped[int] = mapped_column()
 
     # 可选字段（有默认值）
     entry_signal: Mapped[Optional[str]] = mapped_column(String(32), default=None)
-    exit_time: Mapped[Optional[datetime]] = mapped_column(default=None)
+    exit_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
     exit_price: Mapped[Optional[float]] = mapped_column(default=None)
     exit_signal: Mapped[Optional[str]] = mapped_column(String(32), default=None)
     pnl: Mapped[Optional[float]] = mapped_column(default=None)
@@ -147,11 +153,12 @@ class TTradingRecordDB(Base):
     trading_cost: Mapped[Optional[float]] = mapped_column(default=None)
     is_success: Mapped[Optional[bool]] = mapped_column(default=None)
     status: Mapped[str] = mapped_column(String(16), default="open")
-    closed_at: Mapped[Optional[datetime]] = mapped_column(default=None)
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
 
     # 自动生成字段
     created_at: Mapped[datetime] = mapped_column(
-        default_factory=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True),
+        default_factory=lambda: now(),
         init=False,
     )
 
@@ -198,16 +205,18 @@ class PositionDB(Base):
     cost_price: Mapped[float] = mapped_column(default=0.0)
     available_qty: Mapped[int] = mapped_column(default=0)
     frozen_qty: Mapped[int] = mapped_column(default=0)
-    last_buy_date: Mapped[Optional[datetime]] = mapped_column(default=None)
+    last_buy_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
     position_type: Mapped[str] = mapped_column(String(16), default="trading")
 
     # 自动生成字段（init=False）
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
     created_at: Mapped[datetime] = mapped_column(
-        default_factory=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True),
+        default_factory=lambda: now(),
         init=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
         init=False,

@@ -1,0 +1,14 @@
+{
+  "active_connection_id": null,
+  "connections": {
+    "primary": {
+      "activation": {},
+      "connectivity": {
+        "state": "disconnected",
+        "retrying": false,
+        "last_success_at": "2026-01-18T17:35:23.035836+00:00",
+        "last_error": null
+      }
+    }
+  }
+}

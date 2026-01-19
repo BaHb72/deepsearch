@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
 import psutil
+from core.utils.time.market_time import now
 from loguru import logger
 
 
@@ -268,10 +269,10 @@ class SystemDataService:
     # ------------------------------------------------------------------
     def get_overview(self) -> Dict[str, Any]:
         """汇总系统运行状态。"""
-        now = datetime.now()
+        current_time = now()
         overview: Dict[str, Any] = {
-            "timestamp": now.timestamp(),
-            "updated_at": now.isoformat(),
+            "timestamp": current_time.timestamp(),
+            "updated_at": current_time.isoformat(),
             "engine": {
                 "running": False,
                 "uptime": 0.0,
@@ -336,13 +337,13 @@ class SystemDataService:
     def get_metrics(self) -> Dict[str, Any]:
         """返回详细的系统度量数据。"""
         payload = self._collect_detailed_metrics()
-        payload["timestamp"] = datetime.now().isoformat()
+        payload["timestamp"] = now().isoformat()
         return payload
 
     def get_statistics(self) -> Dict[str, Any]:
         """组合统计信息与监控摘要。"""
         stats = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now().isoformat(),
             "engine": {},
             "monitoring": {},
             "summary": {},
@@ -390,7 +391,7 @@ class SystemDataService:
             raise RuntimeError(f"获取组件信息失败: {exc}") from exc
 
         components_data: Dict[str, Dict[str, Any]] = {}
-        result = {"timestamp": datetime.now().isoformat(), "components": components_data}
+        result = {"timestamp": now().isoformat(), "components": components_data}
 
         for name, component in components.items():
             component_data = {
@@ -453,7 +454,7 @@ class SystemDataService:
             except Exception as exc:
                 logger.debug(f"获取组件 {component_name} info 失败: {exc}")
 
-        return {"timestamp": datetime.now().isoformat(), "component": payload}
+        return {"timestamp": now().isoformat(), "component": payload}
 
     async def check_component_health(self, component_name: str) -> Dict[str, Any]:
         """执行组件健康检查。"""
@@ -481,7 +482,7 @@ class SystemDataService:
                 is_healthy = False
 
         return {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now().isoformat(),
             "component": component_name,
             "healthy": is_healthy,
             "status": "healthy" if is_healthy else "unhealthy",

@@ -179,7 +179,7 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
                     formatter: s.type === 'buy'
                         ? `买${strategyLabel ? '·' + strategyLabel : ''}`
                         : `卖${strategyLabel ? '·' + strategyLabel : ''}`,
-                    color: color,
+                    color,
                     fontSize: 10,
                     fontWeight: 'bold',
                 },

@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional
 from loguru import logger
 
 if TYPE_CHECKING:
-    pass
+    from core.utils.system.port_reservation import PortReservation
 
 
 # ============================================================================
@@ -84,6 +84,16 @@ class PluginRegistration:
 
 
 @dataclass
+class MemoryThresholds:
+    """内存管理阈值"""
+
+    target: float = 0.60
+    spill: float = 0.70
+    pause: float = 0.80
+    terminate: float = 0.95
+
+
+@dataclass
 class DaskConfig:
     """Dask 配置数据类"""
 
@@ -95,6 +105,9 @@ class DaskConfig:
     memory_limit: str = "4GB"
     name_prefix: str = "windows-worker"
     resources: dict[str, int] = field(default_factory=lambda: {"WIN": 1})
+    local_directory: Optional[str] = None  # spill to disk 目录
+    use_nanny: bool = True  # 是否使用 Nanny 进程
+    memory_thresholds: MemoryThresholds = field(default_factory=MemoryThresholds)
 
 
 # ============================================================================
@@ -385,6 +398,23 @@ class DaskWorkerManager:
                 resources_dict = {"WIN": 1}
                 self._logger.info(f"使用默认 resources: {resources_dict}")
 
+            # 读取内存阈值配置
+            memory_thresholds = MemoryThresholds()
+            mem_thresholds_config = getattr(dask_config, "memory_thresholds", None)
+            if mem_thresholds_config is not None:
+                memory_thresholds = MemoryThresholds(
+                    target=getattr(mem_thresholds_config, "target", 0.60),
+                    spill=getattr(mem_thresholds_config, "spill", 0.70),
+                    pause=getattr(mem_thresholds_config, "pause", 0.80),
+                    terminate=getattr(mem_thresholds_config, "terminate", 0.95),
+                )
+                self._logger.info(
+                    f"内存阈值配置: target={memory_thresholds.target}, "
+                    f"spill={memory_thresholds.spill}, "
+                    f"pause={memory_thresholds.pause}, "
+                    f"terminate={memory_thresholds.terminate}"
+                )
+
             self._config = DaskConfig(
                 scheduler_address=scheduler_address,
                 enabled=True,
@@ -394,6 +424,9 @@ class DaskWorkerManager:
                 memory_limit=getattr(windows_workers, "memory_limit", "4GB"),
                 name_prefix=getattr(windows_workers, "name_prefix", "windows-worker"),
                 resources=resources_dict,
+                local_directory=getattr(windows_workers, "local_directory", None),
+                use_nanny=getattr(windows_workers, "use_nanny", True),
+                memory_thresholds=memory_thresholds,
             )
 
             self._logger.info(f"DaskConfig 创建完成，resources={self._config.resources}")
@@ -450,14 +483,47 @@ class DaskWorkerManager:
 
     @staticmethod
     def _get_host_address_for_docker() -> str:
-        """获取 Docker 容器可访问的主机地址"""
-        return "host.docker.internal"
+        """获取 Worker 对外通信地址
 
-    def _find_available_ports(
-        self, count: int, start_port: int = 58200, max_range: int = 100
-    ) -> list[int]:
+        根据运行环境返回正确的地址：
+        - Docker 容器内: host.docker.internal（用于访问宿主机）
+        - 宿主机/本地: localhost
+
+        注意：只有在 Docker 容器内运行时才使用 host.docker.internal，
+        因为在宿主机上直接运行时，Worker 应该使用 localhost 与本地 Scheduler 通信。
         """
-        查找 N 个可用端口
+        import os
+
+        # 检测是否在 Docker 容器内运行
+        # 方法 1: 检查 /.dockerenv 文件（Docker 容器内存在）
+        if os.path.exists("/.dockerenv"):
+            return "host.docker.internal"
+
+        # 方法 2: 检查 /proc/1/cgroup 是否包含 docker（Linux 容器内）
+        try:
+            with open("/proc/1/cgroup", "r") as f:
+                if "docker" in f.read():
+                    return "host.docker.internal"
+        except (FileNotFoundError, PermissionError):
+            pass
+
+        # 方法 3: 检查环境变量（某些容器化场景会设置）
+        if os.environ.get("DOCKER_CONTAINER") or os.environ.get("container"):
+            return "host.docker.internal"
+
+        # 非 Docker 容器环境，使用 localhost
+        # 注意：不再检查 DNS 解析，因为 Windows Docker Desktop
+        # 会在 hosts 文件中保留 host.docker.internal 映射
+        return "localhost"
+
+    def _reserve_ports(
+        self, count: int, start_port: int = 58200, max_range: int = 100
+    ) -> tuple[list[int], "PortReservation"]:
+        """
+        预留 N 个端口（原子性操作，解决 TOCTOU 竞态条件）
+
+        使用 PortReservation 通过 socket bind 原子性预留端口，
+        确保多个 Worker 不会抢占同一端口。
 
         Args:
             count: 需要的端口数量
@@ -465,34 +531,27 @@ class DaskWorkerManager:
             max_range: 搜索范围
 
         Returns:
-            可用端口列表
+            (预留的端口列表, PortReservation 实例)
+            调用者需要在 Worker 启动后调用 reservation.release_all() 释放预留
 
         Raises:
             RuntimeError: 无法找到足够的可用端口
         """
-        from core.utils.system.port_checker import PortChecker
+        from core.utils.system.port_reservation import PortReservation
 
-        available_ports: list[int] = []
-        occupied_ports: list[int] = []
-
-        for port in range(start_port, start_port + max_range):
-            if len(available_ports) >= count:
-                break
-
-            if PortChecker.is_port_available(port, host="0.0.0.0"):
-                available_ports.append(port)
-            else:
-                occupied_ports.append(port)
-                self._logger.debug(f"端口 {port} 已被占用，跳过")
-
-        if len(available_ports) < count:
-            raise RuntimeError(
-                f"无法在范围 {start_port}-{start_port + max_range} 内找到 {count} 个可用端口。"
-                f"已占用端口: {occupied_ports}"
+        reservation = PortReservation()
+        try:
+            ports = reservation.reserve_ports(
+                count=count,
+                start_port=start_port,
+                max_range=max_range,
+                host="0.0.0.0",
             )
-
-        self._logger.info(f"找到可用端口: {available_ports}")
-        return available_ports
+            self._logger.info(f"已预留端口: {ports}")
+            return ports, reservation
+        except RuntimeError:
+            reservation.release_all()
+            raise
 
     def _close_process_streams(self, process: subprocess.Popen) -> None:
         """
@@ -531,7 +590,23 @@ class DaskWorkerManager:
             worker_info = next((w for w in self._workers.values() if w.name == worker_name), None)
             if worker_info:
                 if worker_info.process.poll() is not None:
-                    self._logger.error(f"Worker {worker_name} 意外退出")
+                    exit_code = worker_info.process.returncode
+                    # 尝试读取 stderr（可能已被日志转发线程消费）
+                    stderr_output = ""
+                    try:
+                        if worker_info.process.stderr and not worker_info.process.stderr.closed:
+                            # 非阻塞读取剩余内容
+                            remaining = worker_info.process.stderr.read()
+                            if remaining:
+                                stderr_output = remaining.decode("utf-8", errors="replace")
+                    except Exception as e:
+                        stderr_output = f"[读取失败: {e}]"
+
+                    self._logger.error(
+                        f"Worker {worker_name} 意外退出 | "
+                        f"exit_code={exit_code} | "
+                        f"stderr={stderr_output[:500] if stderr_output else '[已被日志转发线程消费，请查看上方日志]'}"
+                    )
                     return False
 
             # 简单的时间等待（Dask Worker 通常在 5-10 秒内连接）
@@ -572,9 +647,19 @@ class DaskWorkerManager:
         return False
 
     async def _do_start_workers(self) -> bool:
-        """实际执行 Worker 启动（单次尝试）"""
+        """实际执行 Worker 启动（单次尝试）
+
+        使用端口预留机制解决 TOCTOU 竞态条件：
+        1. 原子性预留所有需要的端口
+        2. 启动所有 Worker 进程
+        3. 等待 Worker 绑定端口（0.5秒）
+        4. 释放端口预留
+        """
         if not self._config:
             return False
+
+        # 用于跟踪端口预留，确保在所有路径上释放
+        port_reservation = None
 
         async with self._process_lock:
             # 检查是否已有运行中的 Worker
@@ -588,32 +673,48 @@ class DaskWorkerManager:
 
             host_address = self._get_host_address_for_docker()
 
-            # 动态查找可用端口
+            # 原子性预留端口（解决 TOCTOU 竞态条件）
             try:
-                worker_ports = self._find_available_ports(
+                worker_ports, port_reservation = self._reserve_ports(
                     count=self._config.num_workers,
                     start_port=getattr(self._config, "port_range_start", 58200),
                     max_range=100,
                 )
             except RuntimeError as e:
-                self._logger.error(f"端口发现失败: {e}")
+                self._logger.error(f"端口预留失败: {e}")
                 return False
 
             for i, worker_port in enumerate(worker_ports):
                 worker_name = f"{self._config.name_prefix}-{i}"
 
+                # 使用 sys.executable 直接调用 Python 模块，而不是 uv run
+                # 原因: uv run dask worker 启动 Nanny 时，Nanny fork 的子进程
+                # 无法继承 uv 的虚拟环境，导致 Worker 启动失败
                 cmd = [
-                    "uv",
-                    "run",
-                    "dask",
-                    "worker",
+                    sys.executable,
+                    "-m",
+                    "distributed.cli.dask_worker",
                     f"tcp://{self._parsed_host}:{self._parsed_port}",
                     "--nthreads",
                     str(self._config.threads_per_worker),
                     "--memory-limit",
                     self._config.memory_limit,
-                    "--no-nanny",  # 直接启动 Worker，不使用 Nanny 进程
                 ]
+
+                # Nanny 进程配置（启用 Nanny 后 terminate 阈值才生效）
+                if not self._config.use_nanny:
+                    cmd.append("--no-nanny")
+                    self._logger.warning(
+                        f"Worker {worker_name}: Nanny 进程已禁用，内存 terminate 阈值将失效"
+                    )
+
+                # 本地临时目录（用于 spill to disk）
+                if self._config.local_directory:
+                    # 确保目录存在
+                    local_dir = os.path.abspath(self._config.local_directory)
+                    os.makedirs(local_dir, exist_ok=True)
+                    cmd.extend(["--local-directory", local_dir])
+                    self._logger.info(f"Worker {worker_name}: spill 目录 = {local_dir}")
 
                 # 添加资源标签
                 self._logger.info(
@@ -661,8 +762,22 @@ class DaskWorkerManager:
                 self._logger.info(f"命令列表: {cmd}")
                 self._logger.debug(f"Worker 启动命令: {cmd_str}")
 
-                # 构建环境变量（包含资源标签）
+                # 构建环境变量（包含资源标签和内存阈值）
                 env = os.environ.copy()
+
+                # 设置内存管理阈值（通过 Dask 环境变量）
+                thresholds = self._config.memory_thresholds
+                env["DASK_DISTRIBUTED__WORKER__MEMORY__TARGET"] = str(thresholds.target)
+                env["DASK_DISTRIBUTED__WORKER__MEMORY__SPILL"] = str(thresholds.spill)
+                env["DASK_DISTRIBUTED__WORKER__MEMORY__PAUSE"] = str(thresholds.pause)
+                env["DASK_DISTRIBUTED__WORKER__MEMORY__TERMINATE"] = str(thresholds.terminate)
+                self._logger.info(
+                    f"Worker {worker_name}: 内存阈值环境变量已设置 | "
+                    f"target={thresholds.target}, spill={thresholds.spill}, "
+                    f"pause={thresholds.pause}, terminate={thresholds.terminate}"
+                )
+
+                # 设置资源标签
                 if self._config.resources:
                     for key, value in self._config.resources.items():
                         env_key = f"DASK_DISTRIBUTED__WORKER__RESOURCES__{key.upper()}"
@@ -709,8 +824,20 @@ class DaskWorkerManager:
 
                 except Exception as e:
                     self._logger.error(f"启动 Worker {i} 失败: {e}")
+                    if port_reservation:
+                        port_reservation.release_all()
                     await self._cleanup_workers()
                     return False
+
+            # 所有 Worker 进程已启动，等待它们绑定端口后释放预留
+            # 延迟 0.5 秒让 Worker 有时间完成端口绑定
+            self._logger.info("等待 Workers 绑定端口...")
+            await asyncio.sleep(0.5)
+
+            # 释放端口预留（Worker 已绑定端口）
+            if port_reservation:
+                port_reservation.release_all()
+                self._logger.info("端口预留已释放")
 
             # 等待所有 Workers 就绪（健康检查）
             self._logger.info("等待 Workers 就绪...")
@@ -727,7 +854,22 @@ class DaskWorkerManager:
             failed = []
             for pid, info in self._workers.items():
                 if info.process.poll() is not None:
-                    self._logger.error(f"Worker {info.name} 启动后退出")
+                    exit_code = info.process.returncode
+                    # 尝试读取 stderr（可能已被日志转发线程消费）
+                    stderr_output = ""
+                    try:
+                        if info.process.stderr and not info.process.stderr.closed:
+                            remaining = info.process.stderr.read()
+                            if remaining:
+                                stderr_output = remaining.decode("utf-8", errors="replace")
+                    except Exception as e:
+                        stderr_output = f"[读取失败: {e}]"
+
+                    self._logger.error(
+                        f"Worker {info.name} 启动后退出 | "
+                        f"exit_code={exit_code} | "
+                        f"stderr={stderr_output[:500] if stderr_output else '[已被日志转发线程消费，请查看上方日志]'}"
+                    )
                     failed.append(pid)
 
             if failed:
@@ -750,6 +892,10 @@ class DaskWorkerManager:
                 return
 
             self._logger.info(f"正在停止 {len(running)} 个 Workers...")
+
+            # 先通过 Dask Client 发送 retire 命令，让 Scheduler 主动注销 Worker
+            # 这样即使进程被强制杀死，Scheduler 上也不会残留 Worker 注册信息
+            await self._retire_workers_from_scheduler(running)
 
             # 优雅关闭
             for info in running:
@@ -775,6 +921,52 @@ class DaskWorkerManager:
 
             self._workers.clear()
             self._logger.info("Workers 已全部停止")
+
+    async def _retire_workers_from_scheduler(self, workers: list) -> None:
+        """
+        通过 Dask Client 发送 retire 命令，让 Scheduler 主动注销 Worker
+
+        这样即使进程被强制杀死，Scheduler 上也不会残留 Worker 注册信息，
+        避免下次启动时出现 "name taken" 错误。
+
+        Args:
+            workers: 要注销的 Worker 信息列表
+        """
+        if not workers:
+            return
+
+        worker_names = [info.name for info in workers]
+        scheduler_address = f"tcp://{self._parsed_host}:{self._parsed_port}"
+
+        try:
+            from distributed import Client
+
+            # 使用短超时连接 Scheduler
+            async with Client(scheduler_address, asynchronous=True, timeout="5s") as client:
+                # 获取 Scheduler 上已注册的 Worker
+                scheduler_info = await client.scheduler_info()
+                registered_workers = scheduler_info.get("workers", {})
+
+                # 找出需要 retire 的 Worker 地址
+                workers_to_retire = []
+                for addr, info in registered_workers.items():
+                    worker_name = info.get("name", "")
+                    if worker_name in worker_names:
+                        workers_to_retire.append(addr)
+                        self._logger.debug(f"准备从 Scheduler 注销 Worker: {worker_name} ({addr})")
+
+                if workers_to_retire:
+                    # 发送 retire 命令
+                    await client.retire_workers(workers_to_retire, close_workers=False)
+                    self._logger.info(
+                        f"已从 Scheduler 注销 {len(workers_to_retire)} 个 Worker: {worker_names}"
+                    )
+                else:
+                    self._logger.debug("Scheduler 上没有找到需要注销的 Worker")
+
+        except Exception as e:
+            # retire 失败不应阻止进程终止，只记录警告
+            self._logger.warning(f"从 Scheduler 注销 Worker 失败（将继续终止进程）: {e}")
 
     async def _cleanup_workers(self) -> None:
         """清理所有 Worker 进程"""

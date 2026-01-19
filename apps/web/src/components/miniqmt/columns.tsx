@@ -4,7 +4,6 @@
  */
 import type { ColumnsType } from 'antd/es/table'
 import { Tooltip } from 'antd'
-import React from 'react'
 import { formatAmount, formatPercent } from '@/utils/formatters'
 
 /** 通用列样式：不换行，超长省略+悬浮提示 */

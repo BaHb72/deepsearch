@@ -68,7 +68,7 @@ const DateRangeSelectorTV: React.FC<DateRangeSelectorProps> = ({
                 textColor: '#333',
             },
             width: chartContainerRef.current.clientWidth,
-            height: height,
+            height,
             grid: {
                 vertLines: { visible: false },
                 horzLines: { visible: false },

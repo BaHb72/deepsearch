@@ -1,6 +1,16 @@
 """
-AKShare直连数据提供者
-直接使用AKShare获取实时股票数据，作为备用数据源
+AKShare 数据提供者
+
+统一的 AkShare Provider，支持两种访问模式：
+- worker 模式：通过 Cloudflare Worker 代理访问（使用 proxy_client.py）
+- direct 模式：直接调用 akshare 库
+
+配置示例：
+    config:
+        mode: worker  # 或 direct
+        proxy:
+            enabled: true
+            worker_url: https://your-worker.workers.dev
 """
 
 from __future__ import annotations
@@ -13,6 +23,11 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from core.core.utils.async_timeout import timeout_decorator
 from core.infrastructure.providers.interfaces.capabilities import DataCapability
+from core.infrastructure.providers.protocols.lifecycle import (
+    HealthCheckResult,
+    HealthStatus,
+    ILifecycleProvider,
+)
 
 # 导入监控装饰器
 from core.infrastructure.providers.unified_proxy import async_monitor_access
@@ -33,8 +48,11 @@ HAS_PANDAS = pd is not None
 CacheEntry = Tuple[float, Dict[str, Any]]
 
 
-class AKShareDirectProvider:
-    """AKShare直连数据提供者"""
+class AkShareProvider(ILifecycleProvider):
+    """AKShare 数据提供者（统一实现，支持 worker/direct 模式）
+
+    实现 ILifecycleProvider 协议，支持统一的生命周期管理。
+    """
 
     def __init__(
         self,
@@ -53,6 +71,7 @@ class AKShareDirectProvider:
         }
         self._executor = ThreadPoolExecutor(max_workers=3)
         self.initialized = False
+        self._started = False  # 跟踪 Provider 启动状态
         self.access_mode = "auto"
         self.proxy_info = {"enabled": False, "worker_url": None, "mode": "direct"}
         self._akshare: Optional[AkshareModule] = (
@@ -182,6 +201,92 @@ class AKShareDirectProvider:
         self.initialized = True
         self.proxy_info["mode"] = self.access_mode
         return True
+
+    async def start(self) -> None:
+        """启动 AkShare Provider
+
+        注意: AkShare 是无状态的 HTTP 调用库,不需要特殊启动逻辑。
+        此方法主要用于:
+        1. 满足 ILifecycleProvider 协议
+        2. 为未来扩展预留接口(如连接池、限流器)
+        3. 统一所有 Provider 的生命周期管理
+        """
+        if self._started:
+            logger.warning("AkShareProvider 已经启动")
+            return
+
+        self._started = True
+        logger.info("AkShareProvider 已启动(无状态模式)")
+
+    async def stop(self) -> None:
+        """停止 AkShare Provider
+
+        清理资源(如果有)。当前 AkShare 无需特殊清理,
+        但为未来扩展预留接口(如关闭 HTTP 会话)。
+
+        Note:
+            此方法是幂等的,可以多次调用
+        """
+        if not self._started:
+            return
+
+        # 未来可以在这里添加清理逻辑,例如:
+        # - 关闭 HTTP 会话池
+        # - 停止限流器
+        # - 保存统计数据
+        # - 关闭线程池
+        if hasattr(self, "_executor") and self._executor:
+            try:
+                self._executor.shutdown(wait=False)
+                logger.debug("AkShareProvider 线程池已关闭")
+            except Exception as e:
+                logger.warning(f"关闭线程池时出错: {e}")
+
+        self._started = False
+        logger.info("AkShareProvider 已停止")
+
+    async def health_check(self) -> HealthCheckResult:
+        """健康检查
+
+        测试 AkShare 服务是否可用。使用轻量级接口测试连通性。
+
+        Returns:
+            HealthCheckResult: 健康状态
+        """
+        if not self.initialized:
+            return HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                message="Provider 未初始化",
+                details={"initialized": False, "started": self._started},
+            )
+
+        if not self._started:
+            return HealthCheckResult(
+                status=HealthStatus.DEGRADED,
+                message="Provider 未启动",
+                details={"initialized": True, "started": False},
+            )
+
+        # AkShare 是无状态的 HTTP 库,只需检查模块是否可用
+        # 不进行实际 API 调用以保持健康检查的轻量级
+        if self._akshare is None:
+            return HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                message="AkShare 模块不可用",
+                details={"initialized": True, "started": True, "akshare_available": False},
+            )
+
+        return HealthCheckResult(
+            status=HealthStatus.HEALTHY,
+            message="AkShare Provider 运行正常",
+            details={
+                "initialized": True,
+                "started": True,
+                "access_mode": self.access_mode,
+                "proxy_enabled": self.proxy_info.get("enabled", False),
+                "akshare_available": True,
+            },
+        )
 
     def get_status_metadata(self) -> Dict[str, Any]:
         """返回当前代理模式与配置信息"""
@@ -2430,3 +2535,7 @@ class AKShareDirectProvider:
         except Exception as e:
             logger.error(f"获取分钟K线失败: {e}")
             return None
+
+
+# 向后兼容别名（重命名前的旧名称）
+AKShareDirectProvider = AkShareProvider

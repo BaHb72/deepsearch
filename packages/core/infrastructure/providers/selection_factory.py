@@ -15,6 +15,15 @@ from loguru import logger
 from .base.provider_base import BaseDataProvider
 from .registry import ProviderType, get_registry
 
+__all__ = [
+    "SelectionStrategy",
+    "CircuitBreakerState",
+    "CircuitBreaker",
+    "ProviderSelector",
+    "get_selector",
+    "get_factory",
+]
+
 
 class SelectionStrategy(Enum):
     """数据源选择策略"""
@@ -100,11 +109,13 @@ class CircuitBreaker:
         return True
 
 
-class DataProviderFactory:
+class ProviderSelector:
     """
-    数据提供者工厂
+    数据提供者智能选择器
 
-    负责创建、管理和智能选择数据提供者
+    负责基于策略选择最佳数据提供者，支持熔断器、性能统计等功能。
+    注意：此类负责"选择"而非"创建"，实际的 Actor/Provider 创建由
+    apps/api/api/providers.py 中的 DataProviderFactory 负责。
     """
 
     def __init__(
@@ -517,21 +528,37 @@ class DataProviderFactory:
         }
 
 
-# 全局工厂实例
-_factory = None
+# 全局选择器实例
+_selector: Optional[ProviderSelector] = None
 
 
-def get_factory(strategy: SelectionStrategy = SelectionStrategy.HYBRID) -> DataProviderFactory:
+def get_selector(strategy: SelectionStrategy = SelectionStrategy.HYBRID) -> ProviderSelector:
     """
-    获取全局数据提供者工厂实例
+    获取全局数据提供者选择器实例
 
     Args:
         strategy: 选择策略
 
     Returns:
-        工厂实例
+        选择器实例
     """
-    global _factory
-    if _factory is None:
-        _factory = DataProviderFactory(strategy)
-    return _factory
+    global _selector
+    if _selector is None:
+        _selector = ProviderSelector(strategy)
+    return _selector
+
+
+# 向后兼容别名
+def get_factory(strategy: SelectionStrategy = SelectionStrategy.HYBRID) -> ProviderSelector:
+    """
+    获取全局数据提供者选择器实例（向后兼容别名）
+
+    推荐使用 get_selector() 替代。
+
+    Args:
+        strategy: 选择策略
+
+    Returns:
+        选择器实例
+    """
+    return get_selector(strategy)

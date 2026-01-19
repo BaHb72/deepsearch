@@ -936,3 +936,86 @@ async def update_polling_config(payload: PollingConfigUpdate) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"更新轮询配置失败：{e}")
         raise HTTPException(status_code=500, detail=f"更新轮询配置失败：{e}") from e
+
+
+# ---------------------------------------------------------------------------
+# 超时配置 API
+# ---------------------------------------------------------------------------
+
+
+class TimeoutConfigResponse(BaseModel):
+    """超时配置响应模型。
+
+    用于前后端超时同步，确保前端超时 >= 后端超时。
+    """
+
+    # 前端 HTTP 客户端超时（毫秒）
+    client_timeout_ms: int = 90000  # 90秒，覆盖首次调用场景
+
+    # 按操作类型细分的超时配置
+    timeouts_by_operation: Dict[str, int] = {
+        "default": 30000,  # 默认操作 30s
+        "data_fetch": 90000,  # 数据获取（可能触发登录）90s
+        "health_check": 5000,  # 健康检查 5s
+        "config_save": 10000,  # 配置保存 10s
+    }
+
+    # 后端超时参考（仅供展示，前端不直接使用）
+    backend_timeouts: Dict[str, float] = {
+        "dask_adapter_normal": 45.0,
+        "dask_adapter_first_call": 90.0,
+        "sdk_internal": 30.0,
+    }
+
+
+@router.get("/timeouts")
+async def get_timeout_config() -> TimeoutConfigResponse:
+    """
+    获取超时配置。
+
+    前端应在启动时调用此接口，根据返回值配置 HTTP 客户端超时。
+    这确保前后端超时同步，避免前端先超时导致的用户体验问题。
+
+    Returns:
+        超时配置
+    """
+    try:
+        config = get_config()
+
+        # 从配置读取 AmazingData 超时设置
+        dask_normal_timeout = 45.0
+        dask_first_call_timeout = 90.0
+
+        if config:
+            data_sources = getattr(config, "data_sources", None)
+            if data_sources:
+                amazingdata_provider = data_sources.providers.get("amazingdata")
+                if amazingdata_provider:
+                    if amazingdata_provider.timeout:
+                        dask_normal_timeout = amazingdata_provider.timeout
+                    nested_config = amazingdata_provider.config or {}
+                    if "first_call_timeout" in nested_config:
+                        dask_first_call_timeout = float(nested_config["first_call_timeout"])
+
+        # 前端超时应该 >= 后端最大超时 + 网络缓冲
+        buffer_ms = 5000  # 5秒网络缓冲
+        client_timeout_ms = int(dask_first_call_timeout * 1000) + buffer_ms
+
+        return TimeoutConfigResponse(
+            client_timeout_ms=client_timeout_ms,
+            timeouts_by_operation={
+                "default": 30000,
+                "data_fetch": client_timeout_ms,
+                "health_check": 5000,
+                "config_save": 10000,
+            },
+            backend_timeouts={
+                "dask_adapter_normal": dask_normal_timeout,
+                "dask_adapter_first_call": dask_first_call_timeout,
+                "sdk_internal": 30.0,
+            },
+        )
+    except Exception as e:
+        logger.error(f"获取超时配置失败：{e}")
+        # 返回安全的默认值
+        return TimeoutConfigResponse()

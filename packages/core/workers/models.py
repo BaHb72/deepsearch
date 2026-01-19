@@ -6,6 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
+from core.utils.time.market_time import now
 from pydantic import BaseModel, Field
 
 
@@ -97,7 +98,7 @@ class ProxyStatistics(BaseModel):
         self.avg_response_time = 0.0
         self.bytes_sent = 0
         self.bytes_received = 0
-        self.started_at = datetime.now()
+        self.started_at = now()
         self.last_request_at = None
         self.last_error = None
         self.last_error_at = None
@@ -112,7 +113,7 @@ class ProxyTestResult(BaseModel):
     message: str = Field(..., description="测试消息")
     workers_version: Optional[str] = Field(None, description="Workers 版本")
     error: Optional[str] = Field(None, description="错误信息")
-    timestamp: datetime = Field(default_factory=datetime.now, description="测试时间")
+    timestamp: datetime = Field(default_factory=now, description="测试时间")
 
     class Config:
         json_schema_extra = {
@@ -151,4 +152,4 @@ class AkShareResponse(BaseModel):
     source: str = Field(..., description="数据来源：workers/direct/cache")
     response_time: float = Field(..., description="响应时间（毫秒）")
     cached: bool = Field(default=False, description="是否从缓存返回")
-    timestamp: datetime = Field(default_factory=datetime.now, description="响应时间戳")
+    timestamp: datetime = Field(default_factory=now, description="响应时间戳")

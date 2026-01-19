@@ -1,0 +1,157 @@
+{
+  "version": "1.0",
+  "updated_at": "2026-01-20T16:00:00+08:00",
+  "entries": [
+    {
+      "path": "2026/01/2026-01-20_frontend-data-source-adapters_capability-fix.md",
+      "date": "2026-01-20",
+      "module": "frontend-data-source-adapters",
+      "action": "capability-fix",
+      "type": "bugfix",
+      "summary": "修复前端数据源适配器：移除 MiniQMT 未实现的 stock_basic 声明，实现 AmazingData 真实健康检查，添加 AmazingData K线能力",
+      "keywords": ["frontend", "data-source", "adapter", "miniqmt", "amazingdata", "capabilities", "health-check", "isAvailable", "stock_kline", "contract-design"],
+      "files": ["adapters/miniqmt.ts", "adapters/amazingdata.ts"]
+    },
+    {
+      "path": "2026/01/2026-01-19_dask-worker_nanny-compatibility-fix.md",
+      "date": "2026-01-19",
+      "module": "dask-worker-manager",
+      "action": "nanny-compatibility-fix",
+      "type": "bugfix",
+      "summary": "使用 sys.executable 替代 uv run 启动 Worker，解决 Nanny 子进程无法继承虚拟环境的问题",
+      "keywords": ["dask", "worker", "nanny", "uv", "sys.executable", "subprocess", "virtual-environment", "fork", "inheritance"],
+      "files": ["dask_worker_manager.py"]
+    },
+    {
+      "path": "2026/01/2026-01-19_dask-worker_memory-optimization.md",
+      "date": "2026-01-19",
+      "module": "dask-worker, amazingdata-actor, dask-adapter",
+      "action": "memory-optimization",
+      "type": "optimization",
+      "summary": "内存超限综合优化：配置增加到6GB + Future清理 + Redis连接池实例化 + 增强监控日志",
+      "keywords": ["dask", "worker", "memory", "oom", "gc", "redis", "connection-pool", "future", "cleanup", "monitoring", "amazingdata"],
+      "files": ["infrastructure.dev.yaml", "settings.dev.yaml", "dask_adapter.py", "amazingdata_actor.py"],
+      "related_issue": "docs/issues/resolved/2026-01-19_dask-worker-memory-exceeded.md"
+    },
+    {
+      "path": "2026/01/2026-01-19_dask-worker-manager_exit-diagnostics-enhancement.md",
+      "date": "2026-01-19",
+      "module": "dask-worker-manager",
+      "action": "exit-diagnostics-enhancement",
+      "type": "optimization",
+      "summary": "Worker 退出时增加退出码和 stderr 输出诊断，快速定位意外退出原因",
+      "keywords": ["dask", "worker", "exit", "returncode", "stderr", "diagnostics", "logging", "process", "troubleshooting"],
+      "files": ["dask_worker_manager.py"]
+    },
+    {
+      "path": "2026/01/2026-01-18_dask-adapter_log-identifier-standardization.md",
+      "date": "2026-01-18",
+      "module": "dask-adapter",
+      "action": "log-identifier-standardization",
+      "type": "optimization",
+      "summary": "日志标识从 [DaskAdapter] 改为 [AmazingData/Dask]，采用 Provider/Component 命名模式提高可观测性",
+      "keywords": ["dask", "adapter", "logging", "identifier", "observability", "amazingdata", "naming-convention"],
+      "files": ["dask_adapter.py"]
+    },
+    {
+      "path": "2026/01/2026-01-18_health-checker_redis-latency-configurable.md",
+      "date": "2026-01-18",
+      "module": "health-checker",
+      "action": "redis-latency-configurable",
+      "type": "optimization",
+      "summary": "Redis 延迟阈值可配置化 + 多次采样取中位数，消除硬编码魔法数字，抗网络抖动干扰",
+      "keywords": ["health", "checker", "redis", "latency", "threshold", "configurable", "sampling", "median", "degraded"],
+      "files": ["checkers.py", "manager.py", "health.py"]
+    },
+    {
+      "path": "2026/01/2026-01-18_timezone-prewarm-refactor.md",
+      "date": "2026-01-18",
+      "module": "orm-models, amazingdata, dask-adapter",
+      "action": "timezone-prewarm-refactor",
+      "type": "architecture",
+      "summary": "统一使用北京时间 + 同步预热登录 + 分层超时，根治时区混用和首次调用延迟问题",
+      "keywords": ["timezone", "beijing", "asia-shanghai", "datetime", "orm", "prewarm", "login", "timeout", "dask", "amazingdata", "sqlalchemy"],
+      "files": ["market_time.py", "ingestion.py", "market.py", "watchlist.py", "module_source.py", "amazingdata_actor.py", "dask_adapter.py", "dask_plugin.py", "settings.dev.yaml"]
+    },
+    {
+      "path": "2026/01/2026-01-18_health-checker_redis-attribute-fix.md",
+      "date": "2026-01-18",
+      "module": "health-checker",
+      "action": "redis-attribute-fix",
+      "type": "bugfix",
+      "summary": "健康检查器访问组件属性时必须确认实际命名，长期应通过 Protocol 定义明确接口契约",
+      "keywords": ["health", "checker", "redis", "CacheComponent", "attribute", "private", "protocol", "interface", "contract"],
+      "files": ["checkers.py"]
+    },
+    {
+      "path": "2026/01/2026-01-18_health-manager_enhanced-logging.md",
+      "date": "2026-01-18",
+      "module": "health-manager",
+      "action": "enhanced-logging",
+      "type": "optimization",
+      "summary": "健康检查日志应该在报告问题时同时给出足够的诊断信息，避免运维人员需要额外步骤来确定问题根因",
+      "keywords": ["health", "manager", "logging", "unhealthy", "observability", "diagnostic", "warning", "component-status"],
+      "files": ["manager.py"]
+    },
+    {
+      "path": "2026/01/2026-01-17_amazingdata_redis-result-passing.md",
+      "date": "2026-01-17",
+      "module": "amazingdata",
+      "action": "redis-result-passing",
+      "type": "architecture",
+      "summary": "Dask tornado IOLoop 与 FastAPI asyncio 无法共处，使用 Redis 传递结果彻底绕过 Dask Future 返回机制",
+      "keywords": ["amazingdata", "dask", "redis", "tornado", "asyncio", "event-loop", "Future", "timeout", "call_sync", "sync-redis"],
+      "files": ["amazingdata_actor.py", "dask_adapter.py", "server.py"]
+    },
+    {
+      "path": "2026/01/2026-01-17_amazingdata_dask-adapter-bugfix.md",
+      "date": "2026-01-17",
+      "module": "amazingdata",
+      "action": "dask-adapter-bugfix",
+      "type": "bugfix",
+      "summary": "Dask远程调用三陷阱：get_worker()获取Worker、run_in_executor等待Future、适配器过滤参数",
+      "keywords": ["amazingdata", "dask", "adapter", "Future", "get_worker", "run_in_executor", "timeout", "remote-call", "parameter-filter"],
+      "files": ["dask_adapter.py"]
+    },
+    {
+      "path": "2026/01/2026-01-17_amazingdata_interface-completion.md",
+      "date": "2026-01-17",
+      "module": "amazingdata",
+      "action": "interface-completion",
+      "type": "design-change",
+      "summary": "接口分层是适配器模式的核心价值：SDK原生API面向数据源，领域层接口面向业务",
+      "keywords": ["amazingdata", "dask", "adapter", "interface", "protocol", "CalendarCapable", "StockListCapable", "DataProxy", "domain-layer"],
+      "files": ["dask_adapter.py"]
+    },
+    {
+      "path": "2026/01/2026-01-17_amazingdata_dask-proxy-registration.md",
+      "date": "2026-01-17",
+      "module": "amazingdata",
+      "action": "dask-proxy-registration",
+      "type": "architecture",
+      "summary": "使用 Dask 原生服务发现，不重复造轮子",
+      "keywords": ["dask", "proxy", "worker", "container", "provider", "actor", "scheduler", "service-discovery", "amazingdata"],
+      "files": ["container.py", "server.py", "dask_worker_manager.py", "dask_adapter.py"]
+    },
+    {
+      "path": "2026/01/2026-01-17_pyproject_package-discovery.md",
+      "date": "2026-01-17",
+      "module": "pyproject",
+      "action": "package-discovery",
+      "type": "fix",
+      "summary": "使用 setuptools.packages.find 自动发现包",
+      "keywords": ["pyproject", "setuptools", "packages", "dask", "worker", "import", "ModuleNotFoundError", "toml"],
+      "files": ["pyproject.toml"]
+    },
+    {
+      "path": "2026/01/2026-01-15_provider-architecture-refactor.md",
+      "date": "2026-01-15",
+      "module": "provider",
+      "action": "architecture-refactor",
+      "type": "architecture",
+      "summary": "容器+协议模式是管理有状态依赖的标准做法",
+      "keywords": ["provider", "container", "protocol", "lifecycle", "dependency-injection", "factory", "fastapi", "di"],
+      "files": ["protocols/base.py", "container.py", "provider_deps.py"]
+    }
+  ]
+}

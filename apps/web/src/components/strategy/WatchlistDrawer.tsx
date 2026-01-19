@@ -5,7 +5,7 @@
  */
 import React, { useState } from 'react';
 import { Drawer, Button, List, Space, Typography, Popconfirm, Tag, message } from 'antd';
-import { MenuOutlined, DeleteOutlined, ThunderboltOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, ThunderboltOutlined, PlusOutlined } from '@ant-design/icons';
 import UniversalStockSearch from '../common/UniversalStockSearch';
 
 const { Text } = Typography;

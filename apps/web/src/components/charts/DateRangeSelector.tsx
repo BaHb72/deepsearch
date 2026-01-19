@@ -162,7 +162,7 @@ const DateRangeSelector: React.FC<DateRangeSelectorProps> = ({
             animation: false,
             tooltip: {
                 trigger: 'axis',
-                formatter: function (params: any) {
+                formatter (params: any) {
                     if (!params || params.length === 0) return '';
                     const idx = params[0].dataIndex;
                     const bar = klineData[idx];

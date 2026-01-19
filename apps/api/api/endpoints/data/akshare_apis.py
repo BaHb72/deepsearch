@@ -9,10 +9,11 @@ from typing import Any, Dict, Optional
 from core.infrastructure.providers.implementations.akshare.akshare_api_mapping import (
     AkShareAPIMapping,
 )
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from apps.api.api.provider_deps import get_akshare_provider
 from apps.api.api.providers import DataProviderFactory, DataSourceType
 
 router = APIRouter(prefix="/api/akshare", tags=["akshare"])
@@ -787,15 +788,19 @@ async def get_realtime_quotes(
 
 
 @router.get("/stock/list", summary="获取股票列表")
-async def get_stock_list():
+async def get_stock_list(
+    provider=Depends(get_akshare_provider),  # 使用新的依赖注入
+):
     """
     获取A股股票列表
 
     Returns:
         股票列表，包含股票代码和名称
+
+    Note:
+        此端点已迁移到新 Provider 架构 (Phase 4)
     """
     try:
-        provider = await _get_akshare_provider()
         result = await provider.get_stock_list()
         return {
             "success": True,

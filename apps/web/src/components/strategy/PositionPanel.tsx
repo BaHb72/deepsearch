@@ -30,7 +30,6 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import {
-    getPositions,
     getPositionsWithPnl,
     getPositionsSummary,
     Position,

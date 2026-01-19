@@ -15,10 +15,8 @@ import {
     Button,
     Typography,
     Tooltip,
-    Divider,
     Tag,
     Modal,
-    Form,
     message,
     Row,
     Col,
@@ -27,14 +25,13 @@ import {
 } from 'antd';
 import {
     CalculatorOutlined,
-    EditOutlined,
     SendOutlined,
     SettingOutlined,
     ThunderboltOutlined,
     ExclamationCircleOutlined,
 } from '@ant-design/icons';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 // 仓位计算模式
 export type SizingMode = 'fixed' | 'atr' | 'kelly';
@@ -92,7 +89,7 @@ const PositionSizer: React.FC<PositionSizerProps> = ({
     symbol,
     currentQty,
     availableQty,
-    costPrice,
+    costPrice: _costPrice,  // 保留用于未来盈亏计算
     currentPrice,
     recommendation,
     onExecute,

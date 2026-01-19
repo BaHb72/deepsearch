@@ -57,7 +57,10 @@ const capabilityHandlers: Record<
         const symbols = params.codes?.join(',') || params.code || ''
         if (!symbols) return null
         const res = await akshareStockApi.getRealtimeQuote(symbols)
-        return { data: res.data || [] }
+        // 处理 ApiResponse 包装：res.data 可能是 ApiResponse<T> 或直接是 T
+        const rawData = res.data as unknown
+        const data = Array.isArray(rawData) ? rawData : ((rawData as Record<string, unknown>)?.data as unknown[] || [])
+        return { data }
     },
 
     stock_kline: async (params) => {
@@ -70,16 +73,20 @@ const capabilityHandlers: Record<
             end_date: params.endDate,
             adjust: (params.adjust as 'qfq' | 'hfq' | '') || 'qfq',
         })
-        return { data: res.data || [] }
+        const rawData = res.data as unknown
+        const data = Array.isArray(rawData) ? rawData : ((rawData as Record<string, unknown>)?.data as unknown[] || [])
+        return { data }
     },
 
     stock_list: async (params) => {
         const res = await akshareStockApi.getStockList({
             market: (params.market as 'all' | 'sh' | 'sz') || 'all',
-            page: params.page || 1,
+            page: (params.page as number) || 1,
             page_size: params.limit || 100,
         })
-        return { data: res.data?.stocks || [] }
+        const rawData = res.data as unknown
+        const stocks = Array.isArray(rawData) ? rawData : ((rawData as Record<string, unknown>)?.stocks as unknown[] || [])
+        return { data: stocks }
     },
 
     // 未实现的能力
@@ -164,7 +171,10 @@ export const akshareAdapter: DataSourceAdapter = {
     async isAvailable(): Promise<boolean> {
         try {
             const res = await akshareStatusApi.getStatus()
-            return res.data?.available ?? false
+            const rawData = res.data as unknown as Record<string, unknown>
+            // 处理 ApiResponse 包装的情况
+            const available = rawData?.available ?? (rawData?.data as Record<string, unknown>)?.available
+            return Boolean(available)
         } catch {
             return false
         }

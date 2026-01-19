@@ -113,7 +113,7 @@ class AmazingDataWorkerPlugin(BaseWorkerPlugin):
                         actor_config[key] = connection[key]
 
             # 其他非敏感配置可以直接合并
-            for key in ("cache", "subscription", "implementation_mode"):
+            for key in ("cache", "subscription", "implementation_mode", "prewarm"):
                 if key in config_data:
                     actor_config[key] = config_data[key]
 

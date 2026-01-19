@@ -14,10 +14,12 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from core.application.market_data.fallback_manager import ModuleFallbackManager
 from core.config import Settings, get_config
+from core.utils.timeout import DataSourceState, get_timeout_manager
 from loguru import logger
 
 if TYPE_CHECKING:
@@ -72,22 +74,202 @@ async def bind_market_data_handle(
     except Exception as exc:  # pragma: no cover - cache hydration best-effort
         logger.debug("加载缓存板块映射失败: {}", exc)
 
+    # 从配置读取预热参数（作为基础值，实际超时可能根据数据源状态动态调整）
+    warmup_timeout = getattr(realtime_cfg, "warmup_timeout_seconds", 90.0)
+    fetch_timeout = getattr(realtime_cfg, "warmup_fetch_timeout_seconds", 60.0)
+    retry_count = getattr(realtime_cfg, "warmup_retry_count", 2)
+    fallback_to_cache = getattr(realtime_cfg, "warmup_fallback_to_cache", True)
+
+    # 记录预热前的缓存状态，用于回退
+    cached_board_count = len(service.board_universe.boards())
+
     # 在后台任务中预热 board_universe，避免阻塞启动
     async def _warmup_board_universe():
-        try:
-            logger.info("开始预热板块数据...")
-            await asyncio.wait_for(service.refresh_board_universe(), timeout=30.0)
-            try:
-                await cache_writer.write_board_universe(service.board_universe.snapshot())
-                logger.info(
-                    "板块数据预热完成，已缓存 {} 个板块", len(service.board_universe.boards())
+        nonlocal cached_board_count
+        warmup_start = perf_counter()
+        last_error: Exception | None = None
+        timeout_manager = get_timeout_manager()
+
+        def _get_dynamic_timeout() -> float:
+            """根据数据源状态动态获取超时时间"""
+            # 检查 akshare 和 amazingdata 的状态
+            akshare_state = timeout_manager.get_state("akshare")
+            amazingdata_state = timeout_manager.get_state("amazingdata")
+
+            # 如果任一数据源正在执行批量操作或连接中，使用更长的超时
+            if akshare_state == DataSourceState.BATCH_FETCHING:
+                dynamic_timeout = timeout_manager.get_timeout("akshare", "batch")
+                logger.debug(
+                    "AkShare 正在批量获取，使用动态超时: {:.1f}s",
+                    dynamic_timeout,
                 )
-            except Exception as cache_exc:
-                logger.debug("写入板块缓存失败: {}", cache_exc)
+                return max(fetch_timeout, dynamic_timeout)
+
+            if amazingdata_state == DataSourceState.CONNECTING:
+                dynamic_timeout = timeout_manager.get_timeout("amazingdata", "connect")
+                logger.debug(
+                    "AmazingData 正在连接，使用动态超时: {:.1f}s",
+                    dynamic_timeout,
+                )
+                return max(fetch_timeout, dynamic_timeout)
+
+            # 使用配置的默认超时
+            return fetch_timeout
+
+        def _get_dynamic_warmup_timeout() -> float:
+            """根据数据源状态动态计算总预热超时
+
+            当数据源正在执行耗时操作（如 SDK 登录、批量获取）时，
+            自动延长总超时以避免过早中断。
+            """
+            # 检查数据源状态
+            amazingdata_state = timeout_manager.get_state("amazingdata")
+            akshare_state = timeout_manager.get_state("akshare")
+
+            # 如果正在连接，给 SDK 登录足够时间
+            if amazingdata_state == DataSourceState.CONNECTING:
+                dynamic_timeout = max(warmup_timeout, 120.0)
+                logger.debug(
+                    "AmazingData 正在连接，总预热超时延长至: {:.1f}s",
+                    dynamic_timeout,
+                )
+                return dynamic_timeout
+
+            # 如果正在批量获取，需要更长的超时
+            if akshare_state == DataSourceState.BATCH_FETCHING:
+                dynamic_timeout = max(warmup_timeout, 300.0)
+                logger.debug(
+                    "AkShare 正在批量获取，总预热超时延长至: {:.1f}s",
+                    dynamic_timeout,
+                )
+                return dynamic_timeout
+
+            # 使用配置的默认超时
+            return warmup_timeout
+
+        async def _fetch_with_retry() -> bool:
+            """执行带重试的数据获取，返回是否成功"""
+            nonlocal last_error
+            for attempt in range(retry_count + 1):
+                attempt_start = perf_counter()
+                # 每次重试时重新计算动态超时
+                current_timeout = _get_dynamic_timeout()
+                try:
+                    await asyncio.wait_for(
+                        service.refresh_board_universe(), timeout=current_timeout
+                    )
+                    elapsed = perf_counter() - attempt_start
+                    logger.info(
+                        "板块数据获取成功 (第{}次尝试, 耗时 {:.2f}s)",
+                        attempt + 1,
+                        elapsed,
+                    )
+                    return True
+                except asyncio.TimeoutError:
+                    elapsed = perf_counter() - attempt_start
+                    last_error = asyncio.TimeoutError(f"fetch timeout after {elapsed:.2f}s")
+                    if attempt < retry_count:
+                        logger.warning(
+                            "板块数据获取超时 (第{}次尝试, {:.2f}s), 准备重试...",
+                            attempt + 1,
+                            elapsed,
+                        )
+                    else:
+                        logger.warning(
+                            "板块数据获取超时 (第{}次尝试, {:.2f}s), 已达最大重试次数",
+                            attempt + 1,
+                            elapsed,
+                        )
+                except Exception as exc:
+                    elapsed = perf_counter() - attempt_start
+                    last_error = exc
+                    if attempt < retry_count:
+                        logger.warning(
+                            "板块数据获取失败 (第{}次尝试, {:.2f}s): {}, 准备重试...",
+                            attempt + 1,
+                            elapsed,
+                            exc,
+                        )
+                    else:
+                        logger.warning(
+                            "板块数据获取失败 (第{}次尝试, {:.2f}s): {}, 已达最大重试次数",
+                            attempt + 1,
+                            elapsed,
+                            exc,
+                        )
+            return False
+
+        try:
+            # 获取动态超时值（根据数据源状态调整）
+            initial_fetch_timeout = _get_dynamic_timeout()
+            dynamic_warmup_timeout = _get_dynamic_warmup_timeout()
+            logger.info(
+                "开始预热板块数据 (总超时: {:.1f}s (动态), 单次超时: {:.1f}s (动态), 重试次数: {})",
+                dynamic_warmup_timeout,
+                initial_fetch_timeout,
+                retry_count,
+            )
+
+            # 在动态总超时内执行带重试的获取
+            success = await asyncio.wait_for(_fetch_with_retry(), timeout=dynamic_warmup_timeout)
+
+            total_elapsed = perf_counter() - warmup_start
+            current_board_count = len(service.board_universe.boards())
+
+            if success:
+                # 成功获取，写入缓存
+                try:
+                    await cache_writer.write_board_universe(service.board_universe.snapshot())
+                    logger.info(
+                        "板块数据预热完成 (来源: 网络, 板块数: {}, 总耗时: {:.2f}s)",
+                        current_board_count,
+                        total_elapsed,
+                    )
+                except Exception as cache_exc:
+                    logger.debug("写入板块缓存失败: {}", cache_exc)
+                    logger.info(
+                        "板块数据预热完成 (来源: 网络, 板块数: {}, 总耗时: {:.2f}s, 缓存写入失败)",
+                        current_board_count,
+                        total_elapsed,
+                    )
+            else:
+                # 获取失败，检查是否可以回退到缓存
+                if fallback_to_cache and cached_board_count > 0:
+                    logger.warning(
+                        "板块数据预热失败，回退到已有缓存 (来源: 缓存, 板块数: {}, 总耗时: {:.2f}s)",
+                        cached_board_count,
+                        total_elapsed,
+                    )
+                else:
+                    logger.warning(
+                        "板块数据预热失败，无可用缓存 (总耗时: {:.2f}s), 将在首次请求时重试",
+                        total_elapsed,
+                    )
+
         except asyncio.TimeoutError:
-            logger.warning("板块数据预热超时（30秒），将在首次请求时重试")
+            total_elapsed = perf_counter() - warmup_start
+            current_board_count = len(service.board_universe.boards())
+            # 记录超时时的数据源状态，便于诊断
+            amazingdata_state = timeout_manager.get_state("amazingdata")
+            akshare_state = timeout_manager.get_state("akshare")
+            if fallback_to_cache and current_board_count > 0:
+                logger.warning(
+                    "板块数据预热总超时 ({:.1f}s), 回退到已有缓存 (板块数: {}, amazingdata={}, akshare={})",
+                    dynamic_warmup_timeout,
+                    current_board_count,
+                    amazingdata_state.value if amazingdata_state else "unknown",
+                    akshare_state.value if akshare_state else "unknown",
+                )
+            else:
+                logger.warning(
+                    "板块数据预热总超时 ({:.1f}s), 无可用缓存, 将在首次请求时重试 (amazingdata={}, akshare={})",
+                    dynamic_warmup_timeout,
+                    amazingdata_state.value if amazingdata_state else "unknown",
+                    akshare_state.value if akshare_state else "unknown",
+                )
         except Exception as exc:  # pragma: no cover - 初始化阶段容错
-            logger.warning("刷新板块列表失败: {}", exc)
+            total_elapsed = perf_counter() - warmup_start
+            logger.warning("刷新板块列表失败 (耗时: {:.2f}s): {}", total_elapsed, exc)
 
     # 启动后台预热任务
     asyncio.create_task(_warmup_board_universe())
@@ -130,7 +312,11 @@ async def ensure_market_data_runtime(
         if orchestrator is None or orchestrator.settings is not config_obj:
             from core.application.market_data.orchestrator import RealtimeDataOrchestrator
 
-            orchestrator = RealtimeDataOrchestrator(config_obj)
+            # 传入 provider_container 以便 orchestrator 复用已注册的 Provider
+            provider_container = getattr(app_state, "provider_container", None)
+            orchestrator = RealtimeDataOrchestrator(
+                config_obj, provider_container=provider_container
+            )
             app_state.market_data_orchestrator = orchestrator
 
         if getattr(app_state, "market_data_fallback_manager", None) is None:

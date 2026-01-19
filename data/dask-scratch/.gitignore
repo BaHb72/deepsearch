@@ -1,0 +1,4 @@
+# Dask Worker spill to disk files
+# These are temporary files created when Worker memory exceeds thresholds
+*
+!.gitignore

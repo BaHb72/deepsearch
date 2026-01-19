@@ -294,7 +294,7 @@ async def get_market_strength(
         if requested_source:
             try:
                 fallback_detail = await asyncio.wait_for(
-                    _ensure_fallback_data(app_state, "strength", requested_source), timeout=5.0
+                    _ensure_fallback_data(app_state, "strength", requested_source), timeout=10.0
                 )
                 strength_result = await _fetch(requested_source)
                 effective_source = requested_source
@@ -307,7 +307,7 @@ async def get_market_strength(
             if auto_source:
                 try:
                     fallback_detail = await asyncio.wait_for(
-                        _ensure_fallback_data(app_state, "strength", auto_source), timeout=5.0
+                        _ensure_fallback_data(app_state, "strength", auto_source), timeout=10.0
                     )
                     strength_result = await _fetch(auto_source)
                     effective_source = auto_source
@@ -315,7 +315,7 @@ async def get_market_strength(
                     logger.warning("strength fallback 超时（5秒），跳过 {} fallback", auto_source)
             elif provider_ready:
                 try:
-                    await asyncio.wait_for(refresh_market_data_once(app_state), timeout=5.0)
+                    await asyncio.wait_for(refresh_market_data_once(app_state), timeout=10.0)
                     strength_result = await _fetch(None)
                     effective_source = None
                 except asyncio.TimeoutError:
@@ -461,7 +461,7 @@ async def get_board_overview(
             try:
                 fallback_detail = await asyncio.wait_for(
                     _ensure_fallback_data(app_state, "board_overview", requested_source),
-                    timeout=5.0,
+                    timeout=10.0,
                 )
                 strength_result = await _fetch(requested_source)
             except asyncio.TimeoutError:
@@ -475,7 +475,8 @@ async def get_board_overview(
             if auto_source:
                 try:
                     fallback_detail = await asyncio.wait_for(
-                        _ensure_fallback_data(app_state, "board_overview", auto_source), timeout=5.0
+                        _ensure_fallback_data(app_state, "board_overview", auto_source),
+                        timeout=10.0,
                     )
                     strength_result = await _fetch(auto_source)
                     requested_source = auto_source
@@ -708,7 +709,7 @@ async def get_order_imbalance(
             try:
                 fallback_detail = await asyncio.wait_for(
                     _ensure_fallback_data(app_state, "order_imbalance", requested_source),
-                    timeout=5.0,
+                    timeout=10.0,
                 )
                 imbalance_result = await _fetch(requested_source)
             except asyncio.TimeoutError:
@@ -723,7 +724,7 @@ async def get_order_imbalance(
                 try:
                     fallback_detail = await asyncio.wait_for(
                         _ensure_fallback_data(app_state, "order_imbalance", auto_source),
-                        timeout=5.0,
+                        timeout=10.0,
                     )
                     imbalance_result = await _fetch(auto_source)
                     requested_source = auto_source
@@ -733,7 +734,7 @@ async def get_order_imbalance(
                     )
             elif provider_ready:
                 try:
-                    await asyncio.wait_for(refresh_market_data_once(app_state), timeout=5.0)
+                    await asyncio.wait_for(refresh_market_data_once(app_state), timeout=10.0)
                     imbalance_result = await _fetch(None)
                 except asyncio.TimeoutError:
                     logger.warning("order_imbalance refresh 超时（5秒），返回空结果")

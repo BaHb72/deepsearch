@@ -146,6 +146,10 @@ class AmazingDataConfig(BaseModel):
     worker_env: Dict[str, str] = Field(
         default_factory=dict, description="AmazingData Worker 环境变量覆盖"
     )
+    prewarm: bool = Field(
+        default=True,
+        description="启动时同步预热登录，消除首次调用延迟（distributed 模式）",
+    )
 
     connection: AmazingDataConnectionConfig = Field(
         default_factory=AmazingDataConnectionConfig, description="连接配置"

@@ -1,6 +1,25 @@
 """
-重构后的AkShare代理提供者
-通过模块化设计提高可维护性和可测试性
+[DEPRECATED] AkShare 代理提供者 - 已废弃
+
+警告：此模块已废弃，请使用 akshare_direct.py 中的 AkShareProvider。
+
+废弃原因：
+- request_handler.py 发送 /api/* 格式请求
+- 但 worker.js 只处理 /proxy?url=* 格式
+- 两者协议不兼容，导致 404 错误
+
+正确的实现：
+- AkShareProvider (akshare_direct.py) 使用 proxy_client.py
+- proxy_client.py 正确使用 /proxy?url= 格式
+
+迁移指南：
+    # 旧代码
+    from .akshare_refactored import AkShareProxyProvider
+    provider = AkShareProxyProvider(config)
+
+    # 新代码
+    from .akshare_direct import AkShareProvider
+    provider = AkShareProvider(config)
 """
 
 import asyncio
@@ -17,6 +36,14 @@ from core.infrastructure.providers.interfaces.base import (
     DataSourceType,
 )
 from core.infrastructure.providers.interfaces.capabilities import DataCapability
+
+# New Protocol imports for Phase 2
+from core.infrastructure.providers.protocols.lifecycle import (
+    HealthCheckResult,
+    HealthStatus,
+)
+from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest
+from core.ports.data.responses import KlineResponse, RealtimeQuoteResponse
 from core.utils.network.akshare_proxy import patch_akshare
 from loguru import logger
 
@@ -207,6 +234,215 @@ class AkShareProxyProvider:
         except Exception as e:
             logger.error(f"初始化失败: {e}")
             raise
+
+    # ==================== ILifecycleProvider 协议实现 ====================
+
+    async def start(self) -> None:
+        """启动 Provider - 启动健康监控等后台任务（ILifecycleProvider 协议）
+
+        Raises:
+            ProviderStateError: 启动失败时抛出
+        """
+        try:
+            logger.info("AkShareProxyProvider 启动...")
+
+            if self._initialized and self.status == "running":
+                logger.info("Provider 已启动，跳过")
+                return
+
+            # 调用内部初始化逻辑（包含启动）
+            await self.initialize()
+            logger.info("AkShareProxyProvider 启动成功")
+
+        except Exception as e:
+            logger.error(f"AkShareProxyProvider 启动失败: {e}")
+            from core.infrastructure.providers.exceptions import ProviderStateError
+
+            raise ProviderStateError(provider="akshare", message=f"启动失败: {e}") from e
+
+    async def stop(self) -> None:
+        """停止 Provider - 停止健康监控等后台任务（ILifecycleProvider 协议）"""
+        try:
+            logger.info("AkShareProxyProvider 停止...")
+            await self.cleanup()
+            logger.info("AkShareProxyProvider 停止成功")
+        except Exception as e:
+            logger.error(f"AkShareProxyProvider 停止失败: {e}")
+            # 不抛出异常，确保优雅关闭
+
+    async def health_check(self) -> HealthCheckResult:
+        """健康检查（ILifecycleProvider 协议）
+
+        检查：
+        - 初始化状态
+        - Worker 健康状态
+        - 监控任务状态
+
+        Returns:
+            HealthCheckResult: 健康检查结果
+        """
+        try:
+            if not self._initialized:
+                return HealthCheckResult(
+                    status=HealthStatus.UNHEALTHY,
+                    message="未初始化",
+                    details={"initialized": False},
+                )
+
+            # 获取 Worker 健康状态
+            health_flags = self.worker_manager.get_health_flags()
+            healthy_workers = sum(1 for healthy in health_flags.values() if healthy)
+            total_workers = len(self.worker_manager.worker_urls)
+
+            # 检查监控任务状态
+            monitor_alive = self._monitor_task is not None and not self._monitor_task.done()
+
+            details = {
+                "initialized": self._initialized,
+                "status": self.status,
+                "healthy_workers": healthy_workers,
+                "total_workers": total_workers,
+                "worker_health": health_flags,
+                "monitor_alive": monitor_alive,
+            }
+
+            # 健康状态判断
+            if healthy_workers == 0:
+                status = HealthStatus.UNHEALTHY
+                message = f"所有 Worker 不可用（共 {total_workers} 个）"
+            elif healthy_workers < total_workers:
+                status = HealthStatus.DEGRADED
+                message = f"部分 Worker 不可用（{healthy_workers}/{total_workers}）"
+            elif not monitor_alive:
+                status = HealthStatus.DEGRADED
+                message = "健康监控任务未运行"
+            else:
+                status = HealthStatus.HEALTHY
+                message = "运行正常"
+
+            return HealthCheckResult(status=status, message=message, details=details)
+
+        except Exception as e:
+            logger.error(f"健康检查失败: {e}")
+            return HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                message=f"健康检查异常: {e}",
+                details={},
+            )
+
+    # ==================== IKlineProvider 协议实现 ====================
+
+    async def query_kline(self, request: KlineRequest) -> KlineResponse:
+        """查询K线数据（IKlineProvider 协议）
+
+        适配现有的 get_history_data 方法
+
+        Args:
+            request: K线查询请求
+
+        Returns:
+            KlineResponse: K线响应
+
+        Raises:
+            ProviderDataError: 查询失败时抛出
+        """
+        try:
+            # 映射周期参数
+            period_map = {
+                "1d": "daily",
+                "1w": "weekly",
+                "1m": "monthly",
+                "1mo": "monthly",
+            }
+            period = period_map.get(request.timeframe, "daily")
+
+            result = await self.get_history_data(
+                symbol=self._normalize_symbol(request.asset),
+                start_date=request.start_date,
+                end_date=request.end_date,
+                period=period,
+                adjust=request.adjust or "",
+            )
+
+            if result is None or result.empty:
+                from core.infrastructure.providers.exceptions import ProviderDataError
+
+                raise ProviderDataError(
+                    provider="akshare",
+                    message=f"查询K线失败: {request.asset}",
+                )
+
+            # 将 DataFrame 转换为字典列表
+            data_list = result.reset_index().to_dict("records")
+
+            return KlineResponse(
+                success=True,
+                data=data_list,
+                metadata={
+                    "source": "akshare",
+                    "symbol": request.asset,
+                    "timeframe": request.timeframe,
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"查询K线失败: {e}")
+            from core.infrastructure.providers.exceptions import ProviderDataError
+
+            raise ProviderDataError(provider="akshare", message=f"查询K线失败: {e}") from e
+
+    # ==================== IRealtimeProvider 协议实现 ====================
+
+    async def query_realtime(self, request: RealtimeQuoteRequest) -> RealtimeQuoteResponse:
+        """查询实时行情（IRealtimeProvider 协议）
+
+        适配现有的 get_realtime_data 方法
+
+        Args:
+            request: 实时行情查询请求
+
+        Returns:
+            RealtimeQuoteResponse: 实时行情响应
+
+        Raises:
+            ProviderDataError: 查询失败时抛出
+        """
+        try:
+            result = await self.get_realtime_data(symbols=request.assets)
+
+            if not result:
+                from core.infrastructure.providers.exceptions import ProviderDataError
+
+                raise ProviderDataError(
+                    provider="akshare",
+                    message=f"查询实时行情失败: {request.assets}",
+                )
+
+            # 提取数据部分
+            data = result.get("data") if isinstance(result, dict) else result
+
+            # 将数据标准化为列表
+            if isinstance(data, dict):
+                data_list = list(data.values())
+            elif isinstance(data, list):
+                data_list = data
+            else:
+                data_list = []
+
+            return RealtimeQuoteResponse(
+                success=True,
+                data=data_list,
+                metadata={
+                    "source": "akshare",
+                    "symbols": request.assets,
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"查询实时行情失败: {e}")
+            from core.infrastructure.providers.exceptions import ProviderDataError
+
+            raise ProviderDataError(provider="akshare", message=f"查询实时行情失败: {e}") from e
 
     async def _run_health_monitor(self):
         """运行健康监控任务"""
@@ -796,7 +1032,7 @@ class AkShareProxyProvider:
 
             # 清理请求优化器
             if self.request_optimizer:
-                await self.request_optimizer.cleanup()
+                await self.request_optimizer.stop()
 
             self._initialized = False
             logger.info("AkShare代理提供者资源清理完成")

@@ -2,11 +2,25 @@
 市场时间工具模块
 
 提供A股市场交易时间判断和缓存策略
+统一使用北京时间 (Asia/Shanghai)
 """
 
 from datetime import datetime, time
 from enum import Enum
 from typing import Optional
+from zoneinfo import ZoneInfo
+
+# 系统统一时区：北京时间
+CHINA_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def now() -> datetime:
+    """获取当前北京时间（带时区信息）
+
+    Returns:
+        带时区的当前北京时间
+    """
+    return datetime.now(CHINA_TZ)
 
 
 class MarketSession(Enum):
@@ -43,7 +57,7 @@ class MarketTimeUtil:
             当前市场时段
         """
         if dt is None:
-            dt = datetime.now()
+            dt = now()
 
         # 检查是否为周末
         if dt.weekday() >= 5:  # 周六或周日
@@ -210,7 +224,7 @@ class MarketTimeUtil:
             是否应该预取
         """
         if dt is None:
-            dt = datetime.now()
+            dt = now()
 
         # 在以下时间段进行预取：
         # 1. 早上8:30-9:00（盘前准备）

@@ -28,6 +28,14 @@ import pandas as pd
 from core.infrastructure.cache import ArrowCacheManager
 from core.infrastructure.providers.interfaces.base import DataProvider, DataProviderError
 
+# Protocol interfaces
+from core.infrastructure.providers.protocols.lifecycle import (
+    HealthCheckResult,
+    HealthStatus,
+)
+from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest
+from core.ports.data.responses import KlineResponse, RealtimeQuoteResponse
+
 # AmazingData SDK
 from ._sdk_loader import HAS_AMAZINGDATA, ad
 from .config import (
@@ -757,6 +765,178 @@ class OptimizedAmazingDataProvider(DataProvider):
 
         return self._sdk
 
+    # ============ ILifecycleProvider 实现 ============
+
+    async def initialize(self) -> None:
+        """初始化 Provider
+
+        内部调用现有的初始化逻辑。
+        """
+        try:
+            logger.info("OptimizedAmazingDataProvider 初始化...")
+
+            # 如果已经连接，跳过
+            if self._connected:
+                logger.info("Provider 已初始化，跳过")
+                return
+
+            # 执行登录（内部会初始化 SDK）
+            # 注意：不启动心跳，由 start() 方法启动
+            result = await self._login()
+            if not result:
+                from core.infrastructure.providers.exceptions import ProviderInitializationError
+
+                raise ProviderInitializationError(provider="amazingdata", message="登录失败")
+
+            logger.info("OptimizedAmazingDataProvider 初始化成功")
+
+        except Exception as e:
+            logger.error(f"OptimizedAmazingDataProvider 初始化失败: {e}")
+            from core.infrastructure.providers.exceptions import ProviderInitializationError
+
+            raise ProviderInitializationError(provider="amazingdata", message=str(e)) from e
+
+    async def start(self) -> None:
+        """启动 Provider
+
+        启动心跳等后台任务。
+        """
+        try:
+            logger.info("OptimizedAmazingDataProvider 启动...")
+
+            # 如果心跳任务已启动，跳过
+            if self._heartbeat_task and not self._heartbeat_task.done():
+                logger.info("心跳任务已运行，跳过")
+                return
+
+            # 启动心跳
+            self._heartbeat_task = cast(
+                asyncio.Task[None], asyncio.create_task(self.heartbeat.heartbeat_loop())
+            )
+
+            logger.info("OptimizedAmazingDataProvider 启动成功")
+
+        except Exception as e:
+            logger.error(f"OptimizedAmazingDataProvider 启动失败: {e}")
+            from core.infrastructure.providers.exceptions import ProviderStateError
+
+            raise ProviderStateError(provider="amazingdata", message=f"启动失败: {e}") from e
+
+    async def stop(self) -> None:
+        """停止 Provider
+
+        停止心跳，登出，清理资源。
+        内部调用现有的 disconnect() 方法。
+        """
+        try:
+            logger.info("OptimizedAmazingDataProvider 停止...")
+
+            # 调用现有的 disconnect 方法
+            await self.disconnect()
+
+            logger.info("OptimizedAmazingDataProvider 停止成功")
+
+        except Exception as e:
+            logger.error(f"OptimizedAmazingDataProvider 停止失败: {e}")
+            # 不抛出异常，确保优雅关闭
+
+    async def health_check(self) -> HealthCheckResult:
+        """健康检查
+
+        检查连接状态、心跳状态、SDK 状态。
+        """
+        try:
+            # 检查连接状态
+            if not self._connected:
+                return HealthCheckResult(
+                    status=HealthStatus.UNHEALTHY,
+                    message="未连接到 AmazingData",
+                    details={"connected": False},
+                )
+
+            # 检查心跳任务
+            heartbeat_alive = self._heartbeat_task is not None and not self._heartbeat_task.done()
+
+            # 检查登录时间
+            login_duration = 0.0
+            if self._login_time:
+                login_duration = (datetime.now() - self._login_time).total_seconds()
+
+            # 组装详情
+            details = {
+                "connected": self._connected,
+                "heartbeat_alive": heartbeat_alive,
+                "login_duration_seconds": login_duration,
+                "consecutive_heartbeat_failures": self.heartbeat.consecutive_failures,
+            }
+
+            # 判断健康状态
+            if not heartbeat_alive:
+                status = HealthStatus.DEGRADED
+                message = "心跳任务未运行"
+            elif self.heartbeat.consecutive_failures > 5:
+                status = HealthStatus.DEGRADED
+                message = f"心跳连续失败 {self.heartbeat.consecutive_failures} 次"
+            else:
+                status = HealthStatus.HEALTHY
+                message = "运行正常"
+
+            return HealthCheckResult(status=status, message=message, details=details)
+
+        except Exception as e:
+            logger.error(f"健康检查失败: {e}")
+            return HealthCheckResult(
+                status=HealthStatus.UNHEALTHY, message=f"健康检查异常: {e}", details={}
+            )
+
+    # ============ IKlineProvider 实现 ============
+
+    async def query_kline(self, request: KlineRequest) -> KlineResponse:
+        """查询K线数据
+
+        适配现有的 get_kline_data 方法。
+        """
+        try:
+            # 调用现有方法
+            result = await self.get_kline_data(
+                symbol=request.asset,
+                period=request.timeframe,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                adjust=request.adjust,
+            )
+
+            # 转换为标准响应
+            return KlineResponse(
+                success=True,
+                data=result,
+                metadata={
+                    "source": "amazingdata",
+                    "symbol": request.asset,
+                    "timeframe": request.timeframe,
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"查询K线失败: {e}")
+            from core.infrastructure.providers.exceptions import ProviderDataError
+
+            raise ProviderDataError(provider="amazingdata", message=f"查询K线失败: {e}") from e
+
+    # ============ IRealtimeProvider 实现 ============
+
+    async def query_realtime(self, request: RealtimeQuoteRequest) -> RealtimeQuoteResponse:
+        """查询实时行情
+
+        注意：OptimizedAmazingDataProvider 当前可能没有实时行情方法，
+        这里提供一个占位实现或抛出 NotImplementedError。
+        """
+        # 如果有实时行情方法，调用它
+        # 如果没有，抛出未实现异常
+        raise NotImplementedError("AmazingData Provider 暂不支持实时行情查询")
+
+    # ============ 原有方法保留 ============
+
     async def connect(self) -> bool:
         """连接到数据源"""
         try:
@@ -791,8 +971,9 @@ class OptimizedAmazingDataProvider(DataProvider):
             # 登出
             await self._logout()
 
-            # 关闭线程池
-            self.thread_pool.shutdown()
+            # 关闭线程池（异步执行避免阻塞）
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self.thread_pool.shutdown)
 
             logger.info("AmazingData 优化版本已断开连接")
         except Exception as e:

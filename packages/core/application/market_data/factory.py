@@ -89,6 +89,7 @@ def create_realtime_market_data_service(
     order_window: Optional[WindowSpec] = None,
     auction_window: Optional[WindowSpec] = None,
     enable_snapshot_cache: bool = True,  # 新增: Arrow 快照缓存
+    runtime_board_refresh_timeout: float = 15.0,  # 运行时板块刷新超时
 ) -> RealTimeMarketDataService:
     """Assemble a RealTimeMarketDataService backed by provided adapter/registry."""
 
@@ -159,6 +160,7 @@ def create_realtime_market_data_service(
         board_universe=board_universe,
         stock_list_fetcher=board_fetcher,
         snapshot_cache=snapshot_cache,
+        runtime_board_refresh_timeout=runtime_board_refresh_timeout,
     )
 
 
@@ -218,6 +220,9 @@ def create_realtime_streaming_pipeline(
     if config and config.auction_window:
         auction_window_final = _window_spec_from_config(config.auction_window)
 
+    # 从配置读取运行时板块刷新超时
+    runtime_board_timeout = config.runtime_board_refresh_timeout_seconds if config else 15.0
+
     service = create_realtime_market_data_service(
         provider,
         registry=registry,
@@ -227,6 +232,7 @@ def create_realtime_streaming_pipeline(
         capital_windows=capital_windows_final,
         order_window=order_window_final,
         auction_window=auction_window_final,
+        runtime_board_refresh_timeout=runtime_board_timeout,
     )
 
     redis_conf = config.redis if config else None

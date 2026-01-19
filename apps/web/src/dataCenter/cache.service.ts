@@ -21,6 +21,7 @@ class CacheService {
     hits: 0,
     misses: 0
   }
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null
 
   /**
    * 设置缓存
@@ -180,16 +181,36 @@ class CacheService {
       ttl: entry.ttl
     }
   }
+
+  /**
+   * 启动自动清理定时器
+   */
+  startAutoCleanup(interval: number = 60000): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer)
+    }
+    this.cleanupTimer = setInterval(() => {
+      this.cleanup()
+    }, interval)
+  }
+
+  /**
+   * 停止自动清理定时器
+   */
+  stopAutoCleanup(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer)
+      this.cleanupTimer = null
+    }
+  }
 }
 
 // 导出单例
 export const cacheService = new CacheService()
 
-// 定期清理过期缓存（每分钟）
+// 定期清理过期缓存（每分钟）- 使用实例方法避免 HMR 时创建多个定时器
 if (typeof window !== 'undefined') {
-  setInterval(() => {
-    cacheService.cleanup()
-  }, 60000)
+  cacheService.startAutoCleanup(60000)
 }
 
 // 开发环境下暴露到 window

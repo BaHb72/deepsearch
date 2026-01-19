@@ -430,6 +430,7 @@ class AppState:
         self.market_data_initializing = False
         self.market_data_lock = asyncio.Lock()
         self.market_data_fallback_manager: ModuleFallbackManager | None = None
+        self.provider_container: Any = None  # ProviderContainer 实例（用于 orchestrator 复用）
 
     @diagnostic_logger.diagnostic_method
     def set_engine(self, engine: MainEngine) -> None:
@@ -669,6 +670,42 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"日志系统初始化检查失败: {e}")
 
+    # 初始化 ProviderContainer（新架构）
+    try:
+        from core.infrastructure.providers.container import ProviderContainer
+
+        logger.info("初始化 ProviderContainer...")
+        provider_container = ProviderContainer()
+        app.state.provider_container = provider_container
+
+        # 同步到 AppState 实例，便于 market_data_runtime/orchestrator 访问
+        if hasattr(app.state, "app_state") and app.state.app_state is not None:
+            app.state.app_state.provider_container = provider_container
+
+        # 预加载配置中的 Provider
+        # 注意：跳过 amazingdata，因为 AmazingData SDK 不支持多进程同时登录
+        # AmazingData 的 SDK 操作由 Dask Worker 中的 AmazingDataActor 处理
+        # 主进程通过 orchestrator 使用 Worker 代理的数据
+        SKIP_PRELOAD_PROVIDERS = {"amazingdata"}
+        settings = get_config()
+        if hasattr(settings, "data_sources") and settings.data_sources:
+            for name, ds_config in settings.data_sources.providers.items():
+                if name.lower() in SKIP_PRELOAD_PROVIDERS:
+                    logger.info(f"跳过预加载 Provider: {name} (由 Dask Worker 处理)")
+                    continue
+                if ds_config.enabled:
+                    try:
+                        config_dict = ds_config.model_dump()
+                        await provider_container.create_and_register(name, config_dict)
+                        logger.info(f"预加载 Provider 成功: {name}")
+                    except Exception as e:
+                        logger.warning(f"预加载 Provider 失败: {name} - {e}")
+
+        logger.info("ProviderContainer 初始化完成")
+    except Exception as e:
+        logger.warning(f"ProviderContainer 初始化失败（非致命）: {e}")
+        app.state.provider_container = None
+
     # 初始化数据库组件（确保在正确的事件循环中）
     try:
         from core.core.component_factory import DatabaseComponentFactory
@@ -693,6 +730,7 @@ async def lifespan(app: FastAPI):
         app.state.db_service = None
 
     # 启动 Windows Dask Workers（在市场数据服务之前）
+    worker_started = False
     try:
         from core.compute.dask_worker_manager import ensure_windows_workers
 
@@ -703,6 +741,97 @@ async def lifespan(app: FastAPI):
             logger.warning("Windows Dask Workers 自启动失败（将继续启动，但数据源功能可能受限）")
     except Exception as e:
         logger.warning(f"Windows Dask Workers 自启动异常: {e}")
+
+    # 如果 Worker 启动成功，注册 AmazingData 代理到 ProviderContainer
+    provider_container = getattr(app.state, "provider_container", None)
+    if worker_started and provider_container is not None:
+        try:
+            import redis.asyncio as aioredis
+            from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+                AmazingDataDaskAdapter,
+            )
+            from distributed import Client
+
+            # 获取 scheduler 地址（从配置读取）
+            scheduler_address = "tcp://localhost:8786"
+            app_settings = get_config()
+            dask_config = getattr(app_settings, "dask", None)
+            if dask_config and hasattr(dask_config, "scheduler_address"):
+                scheduler_address = dask_config.scheduler_address
+
+            # 创建 Dask Client（用于任务提交）
+            # 注意：不使用 future.result()，而是通过 Redis 获取结果
+            # 这是为了绕过 tornado IOLoop 与 FastAPI asyncio 的冲突
+            dask_client = Client(
+                scheduler_address,
+                timeout="30s",
+                set_as_default=False,
+                direct_to_workers=False,
+            )
+
+            # 创建 Redis 客户端（用于获取调用结果）
+            # 使用与 Worker 相同的 Redis 实例
+            redis_url = "redis://localhost:6379"
+            cache_config = getattr(app_settings, "cache", None)
+            if cache_config and hasattr(cache_config, "url"):
+                redis_url = cache_config.url
+            redis_client = aioredis.from_url(
+                redis_url,
+                encoding="utf-8",
+                decode_responses=True,
+            )
+
+            # 从配置读取 AmazingData 超时设置
+            # 配置路径: data_sources.providers.amazingdata.timeout / config.first_call_timeout
+            amazingdata_timeout = 45.0  # 默认后续调用超时
+            amazingdata_first_call_timeout = 90.0  # 默认首次调用超时（含登录）
+
+            data_sources = getattr(app_settings, "data_sources", None)
+            if data_sources:
+                amazingdata_provider = data_sources.providers.get("amazingdata")
+                if amazingdata_provider:
+                    # 读取主超时配置
+                    if amazingdata_provider.timeout:
+                        amazingdata_timeout = amazingdata_provider.timeout
+                    # 读取嵌套配置中的首次调用超时
+                    nested_config = amazingdata_provider.config or {}
+                    if "first_call_timeout" in nested_config:
+                        amazingdata_first_call_timeout = float(nested_config["first_call_timeout"])
+                    # 如果配置了 prewarm，首次调用超时可以适当降低（预热后不需要登录）
+                    if nested_config.get("prewarm"):
+                        logger.info("[AmazingData] 预热模式已启用，Worker 启动时将完成登录")
+
+            logger.info(
+                "[AmazingData/Dask] 超时配置 | normal={}s | first_call={}s",
+                amazingdata_timeout,
+                amazingdata_first_call_timeout,
+            )
+
+            # 创建代理 Adapter（带 Redis 客户端用于结果传递）
+            adapter = AmazingDataDaskAdapter(
+                dask_client,
+                redis_client=redis_client,
+                timeout=amazingdata_timeout,
+                first_call_timeout=amazingdata_first_call_timeout,
+            )
+
+            # 初始化并验证 Actor 可用
+            if await adapter.initialize():
+                # 注册到 ProviderContainer
+                provider_container.register_external("amazingdata", adapter)
+                # 保存 client 引用以便关闭时使用
+                app.state.amazingdata_dask_client = dask_client
+                app.state.amazingdata_redis_client = redis_client
+                logger.info(
+                    "AmazingData Dask 代理已注册到 ProviderContainer（使用 Redis 结果传递）"
+                )
+            else:
+                logger.warning("AmazingData Actor 不可用，跳过代理注册")
+                # 同步关闭 Client
+                dask_client.close()
+                await redis_client.aclose()
+        except Exception as e:
+            logger.warning(f"注册 AmazingData 代理失败: {e}")
 
     # 然后执行其他启动逻辑
     startup_handler = create_startup_handler(app_state)
@@ -753,6 +882,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"停止定时 GC 任务失败: {e}")
 
+    # 关闭 ProviderContainer（新架构）
+    provider_container_raw = getattr(app.state, "provider_container", None)
+    if provider_container_raw is not None:
+        try:
+            logger.info("关闭 ProviderContainer...")
+            await provider_container_raw.shutdown()
+            logger.info("ProviderContainer 已关闭")
+        except Exception as e:
+            logger.warning(f"关闭 ProviderContainer 失败: {e}")
+
     # 清理数据库连接池
     db_component_raw = getattr(app.state, "db_component", None)
     if db_component_raw is not None and hasattr(db_component_raw, "disconnect_async"):
@@ -775,6 +914,15 @@ async def lifespan(app: FastAPI):
                 logger.info("通知推送服务已关闭")
     except Exception as e:
         logger.warning(f"关闭通知推送服务失败: {e}")
+
+    # 关闭 AmazingData Dask Client（在 ProviderContainer 关闭后、Worker 停止前）
+    dask_client = getattr(app.state, "amazingdata_dask_client", None)
+    if dask_client is not None:
+        try:
+            await dask_client.close()
+            logger.info("AmazingData Dask Client 已关闭")
+        except Exception as e:
+            logger.warning(f"关闭 AmazingData Dask Client 失败: {e}")
 
     # 停止 Windows Dask Workers
     try:
@@ -1120,6 +1268,15 @@ def create_app() -> FastAPI:
     except ImportError as e:
         logger.warning(f"通用持仓管理API模块加载失败: {e}")
 
+    # Provider Management API (新架构)
+    try:
+        from apps.api.api.endpoints.providers import router as provider_management_router
+
+        app.include_router(provider_management_router, tags=["Provider Management"])
+        logger.info("Provider 管理API已注册（新架构）")
+    except ImportError as e:
+        logger.warning(f"Provider 管理API模块加载失败: {e}")
+
     # Data Source Monitor API
     try:
         from apps.api.api.monitor.data_source_api import router as monitor_data_source_router
@@ -1428,7 +1585,7 @@ if __name__ == "__main__":
     config = get_config()
     manager = get_server_manager()
     uvicorn.run(
-        "deepsearch.webui.server:app",
+        "apps.api.server:app",
         host=config.webui.backend_host,
         port=config.webui.backend_port,
         reload=config.webui.reload,

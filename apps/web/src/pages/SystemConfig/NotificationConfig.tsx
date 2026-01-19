@@ -35,7 +35,6 @@ import {
   resetNotificationQuotas,
   sendNotification,
   updateNotificationConfig,
-  WechatMessageTemplate,
 } from '@/api/notifications'
 
 const channelOptions: { label: string; value: NotificationChannel }[] = [
@@ -74,9 +73,10 @@ interface QuotaRow {
 interface TestFormValues {
   title: string
   content?: string
-  channel?: NotificationChannel
+  channel?: NotificationChannel[]  // 多选模式返回数组
   category?: string
   bypassQuota: boolean
+  barkTemplateName?: string
 }
 
 const getDefaultCategory = (): NotificationCategoryConfigItem => ({
@@ -86,6 +86,14 @@ const getDefaultCategory = (): NotificationCategoryConfigItem => ({
   windowSeconds: 300,
   channels: ['wechat']
 })
+
+const normalizeDefaultChannel = (
+  channel: NotificationChannel | NotificationChannel[] | undefined
+): NotificationChannel => {
+  if (!channel) return 'wechat'
+  if (Array.isArray(channel)) return channel[0] || 'wechat'
+  return channel
+}
 
 const NotificationConfig: React.FC = () => {
   const [form] = Form.useForm<NotificationFormValues>()
@@ -97,7 +105,7 @@ const NotificationConfig: React.FC = () => {
   const [testVisible, setTestVisible] = useState(false)
   const [quotas, setQuotas] = useState<QuotaRow[]>([])
   const [hasWechatToken, setHasWechatToken] = useState(false)
-  const [hasBarkToken, setHasBarkToken] = useState(false)
+  const [_hasBarkToken, setHasBarkToken] = useState(false)  // 暂未使用，保留与 hasWechatToken 一致
   const [barkServers, setBarkServers] = useState<BarkServer[]>([])
   const [selectedBarkServers, setSelectedBarkServers] = useState<string[]>([])  // 测试时选中的 Bark 服务器 (by name)
   const [lastTestResult, setLastTestResult] = useState<NotificationSendResult | null>(null)
@@ -170,7 +178,7 @@ const NotificationConfig: React.FC = () => {
 
       form.setFieldsValue({
         enabled: config.enabled,
-        defaultChannel: config.defaultChannel,
+        defaultChannel: normalizeDefaultChannel(config.defaultChannel),
         wechatToken: config.hasWechatToken ? (config.wechatToken || '***') : '',
         barkToken: config.hasBarkToken ? (config.barkToken || '***') : '',
         requestTimeout: config.requestTimeout,
@@ -248,7 +256,7 @@ const NotificationConfig: React.FC = () => {
         defaultChannel: values.defaultChannel,
         wechatToken: values.wechatToken ?? '',
         barkToken: values.wechatToken ?? '',  // 虾推啥只需一个 Token，复用微信 Token
-        barkServers: barkServers,  // 包含 Bark 服务器列表
+        barkServers,  // 包含 Bark 服务器列表
         requestTimeout: values.requestTimeout ?? 5,
         retryAttempts: values.retryAttempts ?? 3,
         retryDelay: values.retryDelay ?? 1,
@@ -265,7 +273,7 @@ const NotificationConfig: React.FC = () => {
           windowSeconds: item.windowSeconds,
           channels: item.channels && item.channels.length ? item.channels : ['wechat']
         })),
-        templates: templates,  // 保存消息模板
+        templates,  // 保存消息模板
       }
 
       const updated = await updateNotificationConfig(payload)
@@ -275,7 +283,7 @@ const NotificationConfig: React.FC = () => {
       setTemplates(updated.templates || { wechat: [], bark: [], defaultWechat: undefined, defaultBark: undefined })  // 同步更新模板
       form.setFieldsValue({
         enabled: updated.enabled,
-        defaultChannel: updated.defaultChannel,
+        defaultChannel: normalizeDefaultChannel(updated.defaultChannel),
         wechatToken: updated.hasWechatToken ? (updated.wechatToken || '***') : '',
         barkToken: updated.hasBarkToken ? (updated.barkToken || '***') : '',
         requestTimeout: updated.requestTimeout,
@@ -318,10 +326,14 @@ const NotificationConfig: React.FC = () => {
 
   const openTestModal = useCallback(() => {
     const values = form.getFieldsValue()
+    // defaultChannel 可能是单值或数组，统一转为数组
+    const defaultChannels = Array.isArray(values.defaultChannel)
+      ? values.defaultChannel
+      : values.defaultChannel ? [values.defaultChannel] : []
     testForm.setFieldsValue({
       title: 'DeepSearch 通知测试',
       content: '这是一条测试消息',
-      channel: values.defaultChannel,
+      channel: defaultChannels,
       category: values.categories?.[0]?.name || 'default',
       bypassQuota: true
     })

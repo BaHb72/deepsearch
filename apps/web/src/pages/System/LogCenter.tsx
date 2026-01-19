@@ -1044,7 +1044,7 @@ const LogCenter: React.FC = () => {
                     size="small"
                     dataSource={logFiles}
                     renderItem={item => (
-                      <List.Item actions={[<a onClick={() => {
+                      <List.Item actions={[<a key="download" onClick={() => {
                         const link = document.createElement('a')
                         link.href = `/api/system/logs/download/${encodeURIComponent(item.name)}`
                         link.download = item.name

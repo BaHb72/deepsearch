@@ -111,7 +111,7 @@ class PerformanceMonitor {
   }
 
   private handleWebVital(name: string, metric: Metric) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (this.data as any)[name] = metric.value
     this.log(`Web Vital - ${name}:`, metric.value)
     this.checkAndReport()

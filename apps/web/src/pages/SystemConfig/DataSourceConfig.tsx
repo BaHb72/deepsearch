@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect } from 'react'
 import type { ColumnsType } from 'antd/es/table'
 import type { SortOrder } from 'antd/es/table/interface'
 import {
@@ -158,6 +158,10 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }: DataSourceFo
   const [sourceType, setSourceType] = React.useState(initialValues?.type || 'akshare')
   const [testing, setTesting] = React.useState(false)
 
+  // 运行模式状态管理
+  const [amazingDataMode, setAmazingDataMode] = React.useState<'local' | 'distributed'>('distributed')
+  const [akshareMode, setAkshareMode] = React.useState<'direct' | 'worker'>('worker')
+
   const rawThrottleInfo = normalizeThrottleInfo(
     initialValues?.loginThrottle ?? initialValues?.login_throttle ?? null
   )
@@ -221,6 +225,35 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }: DataSourceFo
       if (initialConnection.username !== undefined && baseConfig.username === undefined) {
         baseConfig.username = initialConnection.username
       }
+
+      // AmazingData 运行模式默认值
+      baseConfig.implementation_mode = baseConfig.implementation_mode || 'optimized'
+      baseConfig.mode = baseConfig.mode || 'distributed'
+      if (baseConfig.mode === 'distributed' && !baseConfig.dask_scheduler_address) {
+        baseConfig.dask_scheduler_address = 'tcp://localhost:8786'
+      }
+    }
+
+    // AkShare 访问模式默认值
+    if (initialValues?.type === 'akshare') {
+      baseConfig.mode = baseConfig.mode || 'worker'
+      if (baseConfig.mode === 'worker') {
+        if (!baseConfig.proxy) {
+          baseConfig.proxy = {}
+        }
+        if (!baseConfig.proxy.worker_url) {
+          baseConfig.proxy.worker_url = 'https://akshare-proxy.934073514.workers.dev'
+        }
+        if (baseConfig.proxy.timeout === undefined) {
+          baseConfig.proxy.timeout = 15
+        }
+        if (baseConfig.proxy.retry_count === undefined) {
+          baseConfig.proxy.retry_count = 3
+        }
+        if (!baseConfig.proxy.cache) {
+          baseConfig.proxy.cache = { ttl: 300 }
+        }
+      }
     }
 
     return {
@@ -243,6 +276,18 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }: DataSourceFo
     form.resetFields()
     form.setFieldsValue(formInitialValues)
   }, [form, formInitialValues, initialValues?.type, hasSavedCredential])
+
+  // 同步运行模式状态
+  React.useEffect(() => {
+    if (initialValues?.type === 'amazingdata') {
+      const mode = (initialValues?.config as Record<string, unknown>)?.mode as 'local' | 'distributed' | undefined
+      setAmazingDataMode(mode || 'distributed')
+    }
+    if (initialValues?.type === 'akshare') {
+      const mode = (initialValues?.config as Record<string, unknown>)?.mode as 'direct' | 'worker' | undefined
+      setAkshareMode(mode || 'worker')
+    }
+  }, [initialValues])
 
   const buildDataSourcePayload = React.useCallback(
     (rawValues: Record<string, any>) => {
@@ -304,7 +349,19 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }: DataSourceFo
             cleanedConfig.connection = connectionPayload
           }
 
+          // 清理不相关的配置：local 模式不需要 dask_scheduler_address
+          if (cleanedConfig.mode === 'local') {
+            delete cleanedConfig.dask_scheduler_address
+          }
+
           payload.config = cleanedConfig
+        }
+
+        // AkShare 配置清理：direct 模式不需要 proxy 配置
+        if ((payload.type ?? sourceType) === 'akshare') {
+          if (payload.config.mode === 'direct') {
+            delete payload.config.proxy
+          }
         }
       }
 
@@ -549,8 +606,162 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }: DataSourceFo
           </>
         )}
 
+        {sourceType === 'akshare' && (
+          <>
+            {/* AkShare 访问模式选择器 */}
+            <Row gutter={16}>
+              <Col span={24}>
+                <Form.Item
+                  name={['config', 'mode']}
+                  label="访问模式"
+                  tooltip="direct: 直接调用 AkShare 库；worker: 通过 Cloudflare Worker 代理"
+                  initialValue="worker"
+                  rules={[{ required: true, message: '请选择访问模式' }]}
+                >
+                  <Select onChange={(value) => setAkshareMode(value)}>
+                    <Option value="direct">直接调用 (Direct)</Option>
+                    <Option value="worker">Worker 代理 (Worker)</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+
+            {/* Worker URL（仅在 worker 模式显示） */}
+            {akshareMode === 'worker' && (
+              <Row gutter={16}>
+                <Col span={24}>
+                  <Form.Item
+                    name={['config', 'proxy', 'worker_url']}
+                    label="Worker URL"
+                    tooltip="Cloudflare Worker 代理地址"
+                    rules={[
+                      { required: true, message: '请输入 Worker URL' },
+                      { type: 'url', message: '请输入有效的 URL' }
+                    ]}
+                  >
+                    <Input placeholder="https://akshare-proxy.934073514.workers.dev" />
+                  </Form.Item>
+                </Col>
+              </Row>
+            )}
+
+            {/* Worker 代理配置（可选） */}
+            {akshareMode === 'worker' && (
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item
+                    name={['config', 'proxy', 'timeout']}
+                    label="代理超时(秒)"
+                    initialValue={15}
+                  >
+                    <InputNumber min={5} max={60} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name={['config', 'proxy', 'retry_count']}
+                    label="代理重试次数"
+                    initialValue={3}
+                  >
+                    <InputNumber min={0} max={10} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name={['config', 'proxy', 'cache', 'ttl']}
+                    label="缓存TTL(秒)"
+                    initialValue={300}
+                  >
+                    <InputNumber min={60} max={3600} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+            )}
+          </>
+        )}
+
         {sourceType === 'amazingdata' && (
           <>
+            {/* 分布式模式警告提示 */}
+            {amazingDataMode === 'distributed' && (
+              <Alert
+                type="info"
+                showIcon
+                message="分布式模式注意事项"
+                description={
+                  <div>
+                    <p style={{ marginBottom: 8 }}>
+                      使用分布式模式需要先启动 Dask Scheduler 和 Worker：
+                    </p>
+                    <code style={{
+                      display: 'block',
+                      background: '#f5f5f5',
+                      padding: '8px 12px',
+                      borderRadius: 4,
+                      marginBottom: 8
+                    }}>
+                      dask-scheduler --port 8786
+                    </code>
+                    <p style={{ marginBottom: 0, color: '#666' }}>
+                      如果尚未配置 Dask 环境，建议先使用"本地模式"。
+                    </p>
+                  </div>
+                }
+                style={{ marginBottom: 16 }}
+              />
+            )}
+
+            {/* 运行模式配置 */}
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name={['config', 'implementation_mode']}
+                  label="实现模式"
+                  tooltip="optimized: 优化实现，推荐；process: 进程隔离（已废弃）"
+                  initialValue="optimized"
+                >
+                  <Select>
+                    <Option value="optimized">优化实现 (推荐)</Option>
+                    <Option value="process">进程隔离</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name={['config', 'mode']}
+                  label="运行模式"
+                  tooltip="local: 直接SDK调用；distributed: 通过Dask分布式调用"
+                  initialValue="distributed"
+                  rules={[{ required: true, message: '请选择运行模式' }]}
+                >
+                  <Select onChange={(value) => setAmazingDataMode(value)}>
+                    <Option value="local">本地模式 (Local)</Option>
+                    <Option value="distributed">分布式模式 (Distributed)</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+
+            {/* Dask Scheduler 地址（仅在 distributed 模式显示） */}
+            {amazingDataMode === 'distributed' && (
+              <Row gutter={16}>
+                <Col span={24}>
+                  <Form.Item
+                    name={['config', 'dask_scheduler_address']}
+                    label="Dask Scheduler 地址"
+                    tooltip="Dask Scheduler 的连接地址，格式：tcp://host:port"
+                    rules={[
+                      { required: true, message: '分布式模式需要配置 Dask Scheduler 地址' },
+                      { pattern: /^tcp:\/\/.+:\d+$/, message: '地址格式应为 tcp://host:port' }
+                    ]}
+                  >
+                    <Input placeholder="tcp://localhost:8786" />
+                  </Form.Item>
+                </Col>
+              </Row>
+            )}
+
+            {/* 服务器连接配置 */}
             <Row gutter={16}>
               <Col span={16}>
                 <Form.Item
@@ -654,7 +865,7 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }: DataSourceFo
               label="超时时间(ms)"
               rules={[{ required: true, message: '请设置超时时间' }]}
             >
-              <InputNumber min={1000} max={60000} style={{ width: '100%' }} />
+              <InputNumber min={1000} max={300000} style={{ width: '100%' }} />
             </Form.Item>
           </Col>
           <Col span={8}>

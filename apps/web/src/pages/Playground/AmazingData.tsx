@@ -8,12 +8,10 @@ import React, { useState, useEffect } from 'react'
 import {
     Layout,
     Typography,
-    Card,
     Button,
     Space,
     Table,
     Spin,
-    Tag,
     Row,
     Col,
     message,
@@ -27,10 +25,6 @@ import {
     BarChartOutlined,
     LineChartOutlined,
     StockOutlined,
-    FundOutlined,
-    TeamOutlined,
-    SwapOutlined,
-    PieChartOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { ProCard } from '@ant-design/pro-components'
@@ -65,7 +59,7 @@ const flattenDataFrameResult = (df: DataFrameResult | null | undefined): DataFra
                 if (nestedData && typeof nestedData === 'object' && 'data' in nestedData) {
                     const allRecords: Record<string, unknown>[] = []
                     df.data.forEach((item: Record<string, unknown>) => {
-                        Object.entries(item).forEach(([code, nested]) => {
+                        Object.entries(item).forEach(([_code, nested]) => {
                             if (nested && typeof nested === 'object' && 'data' in nested) {
                                 const nestedDf = nested as DataFrameResult
                                 if (Array.isArray(nestedDf.data)) {
@@ -253,14 +247,15 @@ const autoColumns = (df: DataFrameResult | null | undefined): ColumnsType<Record
     const isDateColumn = (col: string) =>
         /date|_date|DATE/i.test(col) || ['END_DATE', 'REPORT_DATE', 'ANN_DATE', 'TRADE_DATE'].includes(col)
 
-    const createColumn = (col: string) => ({
+    const createColumn = (col: string): { title: string; dataIndex: string; key: string; ellipsis: boolean; width: number; render: (val: unknown) => React.ReactNode } => ({
         title: COLUMN_NAME_MAP[col] || COLUMN_NAME_MAP[col.toUpperCase()] || col,
         dataIndex: col,
         key: col,
         ellipsis: true,
         width: 120, // 默认宽度
-        render: isDateColumn(col) ? (val: unknown) => formatDateValue(val) :
-            (val: unknown) => (typeof val === 'number' && Math.abs(val) > 1000000) ? val.toLocaleString() : val // 简单的大数格式化
+        render: isDateColumn(col)
+            ? (val: unknown) => formatDateValue(val) as React.ReactNode
+            : (val: unknown) => ((typeof val === 'number' && Math.abs(val) > 1000000) ? val.toLocaleString() : String(val ?? '')) as React.ReactNode
     })
 
     if (flatDf.columns && flatDf.columns.length > 0) {
@@ -313,7 +308,7 @@ const DataView: React.FC<{
             bordered
             headerBordered
             style={{ height: '100%' }}
-            bodyStyle={{ padding: viewMode === 'chart' ? 10 : 0, height: height, overflow: 'hidden' }}
+            bodyStyle={{ padding: viewMode === 'chart' ? 10 : 0, height, overflow: 'hidden' }}
         >
             <Spin spinning={loading}>
                 {!hasData && !loading ? (
@@ -344,9 +339,12 @@ const OverviewSection: React.FC<{ stockCode: string }> = ({ stockCode }) => {
         if (stockCode) {
             setLoading(true)
             basicApi.getStockBasic([stockCode]).then(res => {
-                const df = flattenDataFrameResult(res.data)
-                if (df && df.data && df.data.length > 0) {
-                    setInfo(df.data[0])
+                // 类型安全：res.data 已正确类型化为 DataFrameResult
+                if (res.success && res.data) {
+                    const df = flattenDataFrameResult(res.data)
+                    if (df && df.data && df.data.length > 0) {
+                        setInfo(df.data[0])
+                    }
                 }
             }).finally(() => setLoading(false))
         }
@@ -392,6 +390,7 @@ const FundamentalSection: React.FC<{ stockCode: string }> = ({ stockCode }) => {
                 shareholderApi.getHolderNum({ code: stockCode }),
             ])
 
+            // 类型安全：res.value 直接是 BackendResponse，不再是 AxiosResponse
             const getResult = (res: PromiseSettledResult<any>, apiName: string) => {
                 if (res.status === 'rejected') {
                     console.error(`${apiName} 请求失败:`, res.reason)
@@ -399,9 +398,9 @@ const FundamentalSection: React.FC<{ stockCode: string }> = ({ stockCode }) => {
                     return null
                 }
                 const response = res.value
-                if (!response.success) {
-                    console.error(`${apiName} 返回错误:`, response.error, response.traceback)
-                    message.error(`${apiName} 失败: ${response.error}`)
+                if (!response?.success) {
+                    console.error(`${apiName} 返回错误:`, response?.error, response?.traceback)
+                    message.error(`${apiName} 失败: ${response?.error}`)
                     return null
                 }
                 return response.data
@@ -415,8 +414,8 @@ const FundamentalSection: React.FC<{ stockCode: string }> = ({ stockCode }) => {
             setHolderData(getResult(results[3], '股东信息'))
             setHolderNumData(getResult(results[4], '股东数量'))
 
-            // Check if all failed
-            const allFailed = results.every(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success))
+            // 检查是否全部失败
+            const allFailed = results.every(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value?.success))
             if (allFailed) {
                 message.error('所有数据获取失败，请检查后端服务日志')
             }
@@ -430,7 +429,7 @@ const FundamentalSection: React.FC<{ stockCode: string }> = ({ stockCode }) => {
     useEffect(() => { fetchData() }, [stockCode])
 
     // 图表生成器
-    const getCommonOption = (title: string, xData: string[], series: any[]) => ({
+    const getCommonOption = (_title: string, xData: string[], series: any[]) => ({
         tooltip: { trigger: 'axis' },
         grid: { left: '3%', right: '4%', bottom: '10%', top: '15%', containLabel: true },
         xAxis: { type: 'category', data: xData },
@@ -504,7 +503,7 @@ const FundamentalSection: React.FC<{ stockCode: string }> = ({ stockCode }) => {
             </ProCard>
             <ProCard title="股东分析" direction="column" headerBordered>
                 <ProCard split="horizontal">
-                    <ProCard height={300} title="股东户数趋势">
+                    <ProCard title="股东户数趋势" style={{ height: 300 }}>
                         <DataView data={holderNumData} loading={loading} chartOption={getHolderNumOption()} height={250} />
                     </ProCard>
                     <ProCard title="十大股东">
@@ -527,15 +526,22 @@ const DerivativesSection: React.FC = () => {
     useEffect(() => {
         setLoading(true)
         Promise.all([
-            optionApi.getCodeList('EXTRA_ETF_OP').catch(() => ({ data: { data: [] } })),
-            etfApi.getPcf([etfCode]).catch(() => ({ data: { etf_pcf_info: null } }))
+            optionApi.getCodeList('EXTRA_ETF_OP').catch(() => ({ success: false, data: [] as string[] })),
+            etfApi.getPcf([etfCode]).catch(() => ({ success: false, data: { etf_pcf_info: null, etf_pcf_constituent: {} } }))
         ]).then(([optRes, etfRes]) => {
-            const codes = optRes.data?.data || []
+            // 类型安全：直接访问 BackendResponse 的字段
+            const codes = optRes.success && optRes.data ? (Array.isArray(optRes.data) ? optRes.data : []) : []
             setCodeList(codes)
             if (codes.length > 0) {
-                optionApi.getBasicInfo({ code_list: codes.slice(0, 10) }).then(res => setBasicInfo(res.data || null))
+                optionApi.getBasicInfo({ code_list: codes.slice(0, 10) }).then(res => {
+                    if (res.success && res.data) {
+                        setBasicInfo(res.data)
+                    }
+                })
             }
-            setPcfInfo(etfRes.data?.etf_pcf_info || null)
+            if (etfRes.success && etfRes.data) {
+                setPcfInfo(etfRes.data.etf_pcf_info || null)
+            }
         }).finally(() => setLoading(false))
     }, [])
 

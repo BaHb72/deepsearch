@@ -113,7 +113,6 @@ const LogConfig: React.FC = () => {
 
     const archiveEnabled = Form.useWatch(['archive', 'enabled'], form)
     const modulesEnabled = Form.useWatch(['modules', 'enabled'], form)
-    const currentLevel = Form.useWatch('level', form)
 
     const loadConfig = React.useCallback(async () => {
         setLoading(true)
@@ -166,8 +165,6 @@ const LogConfig: React.FC = () => {
             setSaving(false)
         }
     }
-
-    const levelColor = LOG_LEVELS.find(l => l.value === currentLevel)?.color ?? '#1890ff'
 
     return (
         <Spin spinning={loading}>

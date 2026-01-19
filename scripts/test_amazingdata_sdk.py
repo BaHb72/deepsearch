@@ -2,149 +2,176 @@
 # -*- coding: utf-8 -*-
 """
 AmazingData SDK 直接测试脚本
+
+用于诊断 get_code_list 接口是否正常工作，绕过 DaskAdapter/Actor 层。
+
+使用方法：
+    uv run python scripts/test_amazingdata_sdk.py
 """
 
 import sys
+import time
+from pathlib import Path
 
-sys.path.insert(0, "d:/Stock/code/deepsearch")
+import yaml
 
 
-def test_amazingdata_direct():
-    """直接测试 AmazingData SDK"""
+def load_amazingdata_config():
+    """从配置文件读取 AmazingData 凭证"""
+    project_root = Path(__file__).parent.parent
+    config_path = project_root / "packages" / "core" / "config" / "data_sources.yaml"
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+
+    amazingdata_config = config["providers"]["amazingdata"]["config"]["connection"]
+    return {
+        "username": amazingdata_config["username"],
+        "password": amazingdata_config["password"],
+        "host": amazingdata_config["host"],
+        "port": amazingdata_config["port"],
+    }
+
+
+def main():
     print("=" * 60)
     print("AmazingData SDK 直接测试")
     print("=" * 60)
 
-    # 尝试导入SDK
+    # 1. 加载 SDK
+    print("\n[1/4] 加载 SDK...")
+    start = time.perf_counter()
     try:
         import AmazingData as ad
 
-        print("[OK] SDK 导入成功")
+        print(f"  SDK 加载成功: {ad}")
+        print(f"  耗时: {time.perf_counter() - start:.2f}s")
     except ImportError as e:
-        print(f"[FAIL] SDK 导入失败: {e}")
-        return
+        print(f"  SDK 加载失败: {e}")
+        print("  请确保 AmazingData SDK 已安装")
+        return 1
 
-    # 登录
-    print("\n[1] 登录测试...")
+    # 2. 读取配置
+    print("\n[2/4] 读取配置...")
     try:
-        result = ad.login("212200038719", "212200038719@2025", "101.230.159.234", 8600)
-        print(f"  登录返回值: {result}")
-        if result == 0 or result is True:
-            print("  [OK] 登录成功")
-        else:
-            print(f"  [FAIL] 登录失败，错误码: {result}")
-            return
+        config = load_amazingdata_config()
+        username = config["username"]
+        password = config["password"]
+        host = config["host"]
+        port = config["port"]
+        print(f"  host: {host}:{port}")
+        print(f"  username: {username}")
     except Exception as e:
-        print(f"  [FAIL] 登录异常: {e}")
-        return
+        print(f"  配置读取失败: {e}")
+        import traceback
 
-    # 测试基础数据
-    print("\n[2] 基础数据测试...")
+        traceback.print_exc()
+        return 1
+
+    # 3. 登录
+    print("\n[3/4] 登录...")
+    start = time.perf_counter()
+    try:
+        result = ad.login(username=username, password=password, host=host, port=port)
+        elapsed = time.perf_counter() - start
+        print(f"  登录结果: {result}")
+        print(f"  耗时: {elapsed:.2f}s")
+        if result != 0 and result is not True:
+            print(f"  登录失败，错误码: {result}")
+            return 1
+    except Exception as e:
+        print(f"  登录异常: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return 1
+
+    # 4. 调用 get_code_list
+    print("\n[4/4] 调用 BaseData.get_code_list()...")
+    try:
+        base_data = ad.BaseData()
+
+        # 测试多种 security_type
+        security_types = ["EXTRA_STOCK_A", "STOCK_SH", "STOCK_SZ"]
+        for sec_type in security_types:
+            print(f"\n  测试 security_type={sec_type}")
+            start = time.perf_counter()
+            try:
+                result = base_data.get_code_list(security_type=sec_type)
+                elapsed = time.perf_counter() - start
+
+                if result is not None:
+                    if hasattr(result, "__len__"):
+                        print(f"    结果: {len(result)} 个代码")
+                        if len(result) > 0:
+                            # 显示前5个示例
+                            sample = list(result)[:5] if hasattr(result, "__iter__") else result[:5]
+                            print(f"    示例: {sample}")
+                    else:
+                        print(f"    结果类型: {type(result)}")
+                        print(f"    结果值: {result}")
+                else:
+                    print(f"    结果: None")
+                print(f"    耗时: {elapsed:.2f}s")
+            except Exception as e:
+                elapsed = time.perf_counter() - start
+                print(f"    调用失败: {e}")
+                print(f"    耗时: {elapsed:.2f}s")
+
+    except Exception as e:
+        print(f"  创建 BaseData 失败: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return 1
+
+    # 附加测试：其他常用接口
+    print("\n" + "-" * 60)
+    print("附加测试：其他常用接口")
+    print("-" * 60)
 
     # 交易日历
+    print("\n  [附加1] get_trading_calendar...")
+    start = time.perf_counter()
     try:
-        if hasattr(ad, "BaseData"):
-            calendar = ad.BaseData.get_trading_calendar("20241101", "20241130")
-            if calendar:
-                print(f"  [OK] 交易日历: {len(calendar)}天")
-            else:
-                print("  [FAIL] 交易日历: 无数据")
+        calendar = ad.BaseData.get_trading_calendar("20241101", "20241130")
+        elapsed = time.perf_counter() - start
+        if calendar:
+            print(f"    结果: {len(calendar)} 天")
+        else:
+            print(f"    结果: {calendar}")
+        print(f"    耗时: {elapsed:.2f}s")
     except Exception as e:
-        print(f"  [FAIL] 交易日历: {str(e)[:50]}")
+        print(f"    失败: {e}")
 
-    # 股票列表
+    # 股票列表（另一种方式）
+    print("\n  [附加2] get_stock_list...")
+    start = time.perf_counter()
     try:
-        if hasattr(ad, "BaseData"):
-            stock_list = ad.BaseData.get_stock_list()
-            if stock_list:
-                print(f"  [OK] 股票列表: {len(stock_list)}只")
-            else:
-                print("  [FAIL] 股票列表: 无数据")
+        stock_list = ad.BaseData.get_stock_list()
+        elapsed = time.perf_counter() - start
+        if stock_list:
+            print(f"    结果: {len(stock_list)} 只")
+        else:
+            print(f"    结果: {stock_list}")
+        print(f"    耗时: {elapsed:.2f}s")
     except Exception as e:
-        print(f"  [FAIL] 股票列表: {str(e)[:50]}")
-
-    # 测试行情数据
-    print("\n[3] 行情数据测试...")
-
-    # 获取交易日历（query_kline必需）
-    calendar = None
-    try:
-        if hasattr(ad, "BaseData"):
-            calendar = ad.BaseData().get_calendar()
-            print(f"  [INFO] 交易日历获取成功: {len(calendar)}天")
-    except Exception as e:
-        print(f"  [WARN] 交易日历获取失败: {str(e)[:40]}")
-
-    # K线数据 - 使用新API
-    try:
-        if hasattr(ad, "MarketData"):
-            market = ad.MarketData(calendar)  # 传入calendar
-            if hasattr(market, "query_kline"):
-                kline = market.query_kline(
-                    ["000001.SZ"],
-                    begin_date=20241101,
-                    end_date=20241130,
-                    period=10008,  # Period.day.value
-                )
-                if kline and "000001.SZ" in kline:
-                    print(f"  [OK] K线数据: {len(kline['000001.SZ'])}条")
-                else:
-                    print(f"  [INFO] K线数据: {type(kline)}")
-    except Exception as e:
-        print(f"  [FAIL] K线数据: {str(e)[:60]}")
-
-    # 快照数据 - 使用新API
-    try:
-        if hasattr(ad, "MarketData"):
-            market = ad.MarketData(calendar)  # 复用已获取的calendar
-            if hasattr(market, "query_snapshot"):
-                snapshot = market.query_snapshot(["000001.SZ"])
-                if snapshot and "000001.SZ" in snapshot:
-                    print("  [OK] 快照数据: 获取成功")
-                else:
-                    print(f"  [INFO] 快照数据: {type(snapshot)}")
-    except Exception as e:
-        print(f"  [FAIL] 快照数据: {str(e)[:60]}")
-
-    # 测试财务数据
-    print("\n[4] 财务数据测试...")
-
-    try:
-        if hasattr(ad, "InfoData"):
-            # 财务指标
-            if hasattr(ad.InfoData, "get_main_indicators"):
-                indicators = ad.InfoData.get_main_indicators("000001")
-                if indicators:
-                    print("  [OK] 主要指标: 获取成功")
-                else:
-                    print("  [INFO] 主要指标: 无数据")
-    except Exception as e:
-        print(f"  [FAIL] 主要指标: {str(e)[:60]}")
-
-    try:
-        if hasattr(ad, "InfoData"):
-            # 十大股东
-            if hasattr(ad.InfoData, "get_top10_shareholders"):
-                shareholders = ad.InfoData.get_top10_shareholders("000001")
-                if shareholders:
-                    print("  [OK] 十大股东: 获取成功")
-                else:
-                    print("  [INFO] 十大股东: 无数据")
-    except Exception as e:
-        print(f"  [FAIL] 十大股东: {str(e)[:60]}")
+        print(f"    失败: {e}")
 
     # 登出
-    print("\n[5] 登出...")
+    print("\n" + "-" * 60)
+    print("登出...")
     try:
         ad.logout()
-        print("  [OK] 登出成功")
+        print("  登出成功")
     except Exception as e:
-        print(f"  [INFO] 登出: {e}")
+        print(f"  登出异常（可忽略）: {e}")
 
     print("\n" + "=" * 60)
     print("测试完成")
     print("=" * 60)
+    return 0
 
 
 if __name__ == "__main__":
-    test_amazingdata_direct()
+    sys.exit(main())

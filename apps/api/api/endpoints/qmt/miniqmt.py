@@ -6,7 +6,7 @@ MiniQMT API 端点
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
+from typing import Any, Dict, List, Optional
 
 from core.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTProvider
 
@@ -97,6 +97,9 @@ async def subscribe_symbols(request: SubscribeRequest) -> Dict[str, Any]:
     """
     订阅股票行情
 
+    注意: MiniQMT 的 xtdata 接口不需要显式订阅，数据会自动推送。
+    此接口主要用于触发数据下载和验证股票代码是否有效。
+
     Args:
         request: 订阅请求
 
@@ -106,18 +109,34 @@ async def subscribe_symbols(request: SubscribeRequest) -> Dict[str, Any]:
     try:
         provider = await get_miniqmt_provider()
 
-        # 执行订阅
-        success = await provider.subscribe(request.symbols)
+        # xtdata 不需要显式订阅，但我们可以预下载数据并验证
+        valid_symbols = []
+        invalid_symbols = []
 
-        if success:
-            return {
-                "success": True,
-                "message": f"成功订阅 {len(request.symbols)} 只股票",
-                "symbols": request.symbols,
-                "timestamp": datetime.now().isoformat(),
-            }
-        else:
-            raise HTTPException(status_code=400, detail="订阅失败")
+        for symbol in request.symbols:
+            try:
+                # 通过 Actor 调用 xtdata.get_full_tick 验证股票有效性
+                result = await provider.call("get_full_tick", stock_list=[symbol])
+                if result and symbol in result:
+                    valid_symbols.append(symbol)
+                else:
+                    # 尝试下载历史数据
+                    await provider.call(
+                        "download_history_data", stock_code=symbol, period="1d", count=1
+                    )
+                    valid_symbols.append(symbol)
+            except Exception:
+                invalid_symbols.append(symbol)
+
+        return {
+            "success": len(valid_symbols) > 0,
+            "message": f"成功订阅 {len(valid_symbols)} 只股票"
+            + (f"，{len(invalid_symbols)} 只无效" if invalid_symbols else ""),
+            "symbols": valid_symbols,
+            "invalid_symbols": invalid_symbols if invalid_symbols else None,
+            "timestamp": datetime.now().isoformat(),
+            "note": "MiniQMT 使用 xtdata 接口，数据会自动推送，无需显式订阅",
+        }
 
     except HTTPException:
         raise
@@ -131,33 +150,23 @@ async def unsubscribe_symbols(request: UnsubscribeRequest) -> Dict[str, Any]:
     """
     取消订阅股票行情
 
+    注意: MiniQMT 的 xtdata 接口使用按需获取模式，不需要显式取消订阅。
+    此接口仅作为兼容性保留。
+
     Args:
         request: 取消订阅请求
 
     Returns:
         取消订阅结果
     """
-    try:
-        provider = await get_miniqmt_provider()
-
-        # 执行取消订阅
-        success = await provider.unsubscribe(request.symbols)
-
-        if success:
-            return {
-                "success": True,
-                "message": f"成功取消订阅 {len(request.symbols)} 只股票",
-                "symbols": request.symbols,
-                "timestamp": datetime.now().isoformat(),
-            }
-        else:
-            raise HTTPException(status_code=400, detail="取消订阅失败")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"取消订阅失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    # xtdata 不需要显式取消订阅，返回成功即可
+    return {
+        "success": True,
+        "message": f"已取消订阅 {len(request.symbols)} 只股票",
+        "symbols": request.symbols,
+        "timestamp": datetime.now().isoformat(),
+        "note": "MiniQMT 使用按需获取模式，无需显式取消订阅",
+    }
 
 
 @router.get("/realtime")
@@ -166,6 +175,8 @@ async def get_realtime_data(
 ) -> Dict[str, Any]:
     """
     获取实时行情数据
+
+    通过 Actor 调用 xtdata 获取实时 tick 数据。
 
     Args:
         symbols: 股票代码列表（逗号分隔）
@@ -182,40 +193,50 @@ async def get_realtime_data(
         if not symbol_list:
             raise HTTPException(status_code=400, detail="请提供股票代码")
 
-        # 创建数据请求
-        from core.infrastructure.providers.interfaces.base import DataRequest
+        # 通过 Actor 调用 xtdata.get_full_tick
+        result = await provider.call("get_full_tick", stock_list=symbol_list)
 
-        request = DataRequest(symbols=symbol_list, period="tick")
-
-        # 获取数据
-        response = await provider.get_data(request)
-
-        if response.success:
-            # 转换 DataFrame 为 JSON
-            payload = response.data
-            if payload is None:
-                data: List[Dict[str, Any]] = []
-            elif hasattr(payload, "to_dict"):
-                records_any = getattr(payload, "to_dict")("records")
-                data = cast(List[Dict[str, Any]], records_any)
-            elif isinstance(payload, Mapping):
-                data = [dict(payload)]
-            elif isinstance(payload, Sequence):
-                data = [
-                    dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload
-                ]
-            else:
-                data = []
-
+        if not result:
             return {
-                "success": True,
-                "data": data,
-                "count": len(data),
+                "success": False,
+                "message": "未获取到数据，请确认 MiniQMT 终端已启动",
+                "data": [],
                 "symbols": symbol_list,
                 "timestamp": datetime.now().isoformat(),
             }
-        else:
-            raise HTTPException(status_code=400, detail=response.error)
+
+        # 转换为列表格式
+        data = []
+        for symbol, tick in result.items():
+            if isinstance(tick, dict):
+                last_price = tick.get("lastPrice", 0)
+                pre_close = tick.get("preClose", 0)
+                change = last_price - pre_close if last_price and pre_close else 0
+                change_pct = (change / pre_close * 100) if pre_close else 0
+
+                data.append(
+                    {
+                        "symbol": symbol,
+                        "lastPrice": last_price,
+                        "change": round(change, 2),
+                        "changePct": round(change_pct, 2),
+                        "open": tick.get("open"),
+                        "high": tick.get("high"),
+                        "low": tick.get("low"),
+                        "preClose": pre_close,
+                        "volume": tick.get("volume"),
+                        "amount": tick.get("amount"),
+                        "time": tick.get("time"),
+                    }
+                )
+
+        return {
+            "success": True,
+            "data": data,
+            "count": len(data),
+            "symbols": symbol_list,
+            "timestamp": datetime.now().isoformat(),
+        }
 
     except HTTPException:
         raise
@@ -227,65 +248,142 @@ async def get_realtime_data(
 @router.get("/history")
 async def get_history_data(
     symbol: str = Query(..., description="股票代码"),
-    start_date: Optional[str] = Query(None, description="开始日期"),
-    end_date: Optional[str] = Query(None, description="结束日期"),
-    period: str = Query("1d", description="周期"),
-    adjust: str = Query("qfq", description="复权类型"),
+    start_date: Optional[str] = Query(None, description="开始日期 (YYYYMMDD)"),
+    end_date: Optional[str] = Query(None, description="结束日期 (YYYYMMDD)"),
+    period: str = Query("1d", description="周期: 1m, 5m, 15m, 30m, 60m, 1d"),
+    count: int = Query(100, description="获取条数（当不指定日期范围时使用）"),
 ) -> Dict[str, Any]:
     """
     获取历史K线数据
 
     Args:
         symbol: 股票代码
-        start_date: 开始日期
-        end_date: 结束日期
-        period: 数据周期
-        adjust: 复权类型
+        start_date: 开始日期 (YYYYMMDD 格式)
+        end_date: 结束日期 (YYYYMMDD 格式)
+        period: K线周期
+        count: 获取条数
 
     Returns:
         历史K线数据
     """
     try:
+        import math
+
         provider = await get_miniqmt_provider()
 
-        # 创建数据请求
-        from core.infrastructure.providers.interfaces.base import DataRequest
+        # 尝试下载数据
+        try:
+            await provider.call("download_history_data", stock_code=symbol, period=period, count=-1)
+        except Exception:
+            pass
 
-        request = DataRequest(
-            symbol=symbol, start_date=start_date, end_date=end_date, period=period, adjust=adjust
+        # 通过 Actor 调用 xtdata.get_market_data
+        result = await provider.call(
+            "get_market_data",
+            field_list=[],
+            stock_list=[symbol],
+            period=period,
+            count=count,
+            start_time=start_date or "",
+            end_time=end_date or "",
         )
 
-        # 获取数据
-        response = await provider.get_data(request)
-
-        if response.success:
-            payload = response.data
-            if payload is None:
-                data = []
-            elif hasattr(payload, "to_dict"):
-                records_any = getattr(payload, "to_dict")("records")
-                data = cast(List[Dict[str, Any]], records_any)
-            elif isinstance(payload, Mapping):
-                data = [dict(payload)]
-            elif isinstance(payload, Sequence):
-                data = [
-                    dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload
-                ]
-            else:
-                data = []
-
+        if not isinstance(result, dict) or not result:
             return {
-                "success": True,
-                "data": data,
-                "count": len(data),
-                "symbol": symbol,
-                "period": period,
-                "start_date": start_date,
-                "end_date": end_date,
+                "success": False,
+                "message": "未获取到历史数据",
+                "data": [],
                 "timestamp": datetime.now().isoformat(),
             }
-        else:
-            raise HTTPException(status_code=400, detail=response.error)
+
+        # Actor 已将 DataFrame 转换为 list[dict] 格式
+        # 格式: {field: [{"index": symbol, "time1": val1, "time2": val2, ...}]}
+        open_records = result.get("open", [])
+        high_records = result.get("high", [])
+        low_records = result.get("low", [])
+        close_records = result.get("close", [])
+        volume_records = result.get("volume", [])
+        amount_records = result.get("amount", [])
+
+        if not open_records:
+            return {
+                "success": False,
+                "message": "K线数据为空，可能需要先下载历史数据",
+                "data": [],
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        # 从记录中提取目标股票的数据
+        def find_symbol_record(records: list, target_symbol: str) -> dict:
+            for rec in records:
+                if rec.get("index") == target_symbol:
+                    return rec
+            return {}
+
+        open_rec = find_symbol_record(open_records, symbol)
+        high_rec = find_symbol_record(high_records, symbol)
+        low_rec = find_symbol_record(low_records, symbol)
+        close_rec = find_symbol_record(close_records, symbol)
+        volume_rec = find_symbol_record(volume_records, symbol)
+        amount_rec = find_symbol_record(amount_records, symbol)
+
+        if not open_rec:
+            return {
+                "success": False,
+                "message": f"未找到股票 {symbol} 的数据",
+                "data": [],
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        # 提取时间列（排除 index 列）
+        time_keys = [k for k in open_rec.keys() if k != "index"]
+        time_keys.sort()  # 按时间排序
+
+        data = []
+        for time_str in time_keys:
+            try:
+                if isinstance(time_str, str) and len(time_str) == 8:
+                    ts = int(datetime.strptime(time_str, "%Y%m%d").timestamp() * 1000)
+                elif isinstance(time_str, (int, float)):
+                    ts = int(time_str)
+                else:
+                    ts = int(datetime.strptime(str(time_str), "%Y%m%d").timestamp() * 1000)
+            except Exception:
+                ts = 0
+
+            def safe_float(val: Any) -> float:
+                if val is None or (isinstance(val, float) and math.isnan(val)):
+                    return 0.0
+                return float(val)
+
+            def safe_int(val: Any) -> int:
+                if val is None or (isinstance(val, float) and math.isnan(val)):
+                    return 0
+                return int(val)
+
+            data.append(
+                {
+                    "time": ts,
+                    "time_str": str(time_str),
+                    "open": safe_float(open_rec.get(time_str)),
+                    "high": safe_float(high_rec.get(time_str)),
+                    "low": safe_float(low_rec.get(time_str)),
+                    "close": safe_float(close_rec.get(time_str)),
+                    "volume": safe_int(volume_rec.get(time_str)),
+                    "amount": safe_float(amount_rec.get(time_str)),
+                }
+            )
+
+        return {
+            "success": True,
+            "data": data,
+            "count": len(data),
+            "symbol": symbol,
+            "period": period,
+            "start_date": start_date,
+            "end_date": end_date,
+            "timestamp": datetime.now().isoformat(),
+        }
 
     except HTTPException:
         raise
@@ -297,58 +395,142 @@ async def get_history_data(
 @router.get("/minute")
 async def get_minute_data(
     symbol: str = Query(..., description="股票代码"),
-    date: Optional[str] = Query(None, description="日期"),
-    period: str = Query("1m", description="分钟周期"),
+    date: Optional[str] = Query(None, description="日期 (YYYYMMDD)"),
+    period: str = Query("1m", description="分钟周期: 1m, 5m, 15m, 30m, 60m"),
+    count: int = Query(240, description="获取条数"),
 ) -> Dict[str, Any]:
     """
     获取分钟K线数据
 
     Args:
         symbol: 股票代码
-        date: 日期
+        date: 日期 (YYYYMMDD 格式)
         period: 分钟周期（1m, 5m, 15m, 30m, 60m）
+        count: 获取条数
 
     Returns:
         分钟K线数据
     """
     try:
+        import math
+
         provider = await get_miniqmt_provider()
 
-        # 创建数据请求
-        from core.infrastructure.providers.interfaces.base import DataRequest
+        # 尝试下载数据
+        try:
+            await provider.call("download_history_data", stock_code=symbol, period=period, count=-1)
+        except Exception:
+            pass
 
-        request = DataRequest(symbol=symbol, start_date=date, end_date=date, period=period)
+        # 通过 Actor 调用 xtdata.get_market_data
+        result = await provider.call(
+            "get_market_data",
+            field_list=[],
+            stock_list=[symbol],
+            period=period,
+            count=count,
+            start_time=date or "",
+            end_time=date or "",
+        )
 
-        # 获取数据
-        response = await provider.get_data(request)
-
-        if response.success:
-            payload = response.data
-            if payload is None:
-                data = []
-            elif hasattr(payload, "to_dict"):
-                records_any = getattr(payload, "to_dict")("records")
-                data = cast(List[Dict[str, Any]], records_any)
-            elif isinstance(payload, Mapping):
-                data = [dict(payload)]
-            elif isinstance(payload, Sequence):
-                data = [
-                    dict(item) if isinstance(item, Mapping) else {"value": item} for item in payload
-                ]
-            else:
-                data = []
-
+        if not isinstance(result, dict) or not result:
             return {
-                "success": True,
-                "data": data,
-                "count": len(data),
-                "symbol": symbol,
-                "period": period,
-                "date": date,
+                "success": False,
+                "message": "未获取到分钟数据",
+                "data": [],
                 "timestamp": datetime.now().isoformat(),
             }
-        else:
-            raise HTTPException(status_code=400, detail=response.error)
+
+        # Actor 已将 DataFrame 转换为 list[dict] 格式
+        open_records = result.get("open", [])
+        high_records = result.get("high", [])
+        low_records = result.get("low", [])
+        close_records = result.get("close", [])
+        volume_records = result.get("volume", [])
+        amount_records = result.get("amount", [])
+
+        if not open_records:
+            return {
+                "success": False,
+                "message": "分钟K线数据为空",
+                "data": [],
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        # 从记录中提取目标股票的数据
+        def find_symbol_record(records: list, target_symbol: str) -> dict:
+            for rec in records:
+                if rec.get("index") == target_symbol:
+                    return rec
+            return {}
+
+        open_rec = find_symbol_record(open_records, symbol)
+        high_rec = find_symbol_record(high_records, symbol)
+        low_rec = find_symbol_record(low_records, symbol)
+        close_rec = find_symbol_record(close_records, symbol)
+        volume_rec = find_symbol_record(volume_records, symbol)
+        amount_rec = find_symbol_record(amount_records, symbol)
+
+        if not open_rec:
+            return {
+                "success": False,
+                "message": f"未找到股票 {symbol} 的数据",
+                "data": [],
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        # 提取时间列（排除 index 列）
+        time_keys = [k for k in open_rec.keys() if k != "index"]
+        time_keys.sort()  # 按时间排序
+
+        data = []
+        for time_val in time_keys:
+            # 分钟数据的时间戳格式可能是 YYYYMMDDHHmmss 或时间戳
+            try:
+                time_str = str(time_val)
+                if len(time_str) == 14:  # YYYYMMDDHHmmss
+                    ts = int(datetime.strptime(time_str, "%Y%m%d%H%M%S").timestamp() * 1000)
+                elif len(time_str) == 12:  # YYYYMMDDHHmm
+                    ts = int(datetime.strptime(time_str, "%Y%m%d%H%M").timestamp() * 1000)
+                elif time_str.isdigit():
+                    ts = int(time_str)
+                else:
+                    ts = 0
+            except Exception:
+                ts = int(time_val) if isinstance(time_val, (int, float)) else 0
+
+            def safe_float(val: Any) -> float:
+                if val is None or (isinstance(val, float) and math.isnan(val)):
+                    return 0.0
+                return float(val)
+
+            def safe_int(val: Any) -> int:
+                if val is None or (isinstance(val, float) and math.isnan(val)):
+                    return 0
+                return int(val)
+
+            data.append(
+                {
+                    "time": ts,
+                    "time_str": str(time_val),
+                    "open": safe_float(open_rec.get(time_val)),
+                    "high": safe_float(high_rec.get(time_val)),
+                    "low": safe_float(low_rec.get(time_val)),
+                    "close": safe_float(close_rec.get(time_val)),
+                    "volume": safe_int(volume_rec.get(time_val)),
+                    "amount": safe_float(amount_rec.get(time_val)),
+                }
+            )
+
+        return {
+            "success": True,
+            "data": data,
+            "count": len(data),
+            "symbol": symbol,
+            "period": period,
+            "date": date,
+            "timestamp": datetime.now().isoformat(),
+        }
 
     except HTTPException:
         raise
@@ -362,40 +544,41 @@ async def reconnect() -> Dict[str, Any]:
     """
     重新连接 MiniQMT
 
-    会重置连接状态守卫，强制尝试重新连接。
+    通过 Actor 重新初始化连接。
 
     Returns:
         重连结果
     """
     try:
-        # 重置连接守卫状态
-        from core.infrastructure.providers.implementations.qmt.connection_guard import (
-            MiniQMTConnectionGuard,
-        )
-
-        MiniQMTConnectionGuard.reset()
-
+        # 获取 Actor
         provider = await get_miniqmt_provider()
 
-        # 先断开
-        await provider._disconnect()
+        # 先关闭现有连接
+        try:
+            await provider.shutdown()
+        except Exception as shutdown_err:
+            logger.warning(f"关闭 Actor 时出错（可忽略）: {shutdown_err}")
 
-        # 重新连接
-        success = await provider._connect()
+        # 重新初始化
+        init_success = await provider.initialize()
 
-        if success:
+        if init_success:
+            # 使用 heartbeat 验证连接
+            connected = await provider.heartbeat()
+            status = await provider.get_status()
+
             return {
-                "success": True,
-                "message": "成功重新连接到 MiniQMT",
-                "status": provider.get_connection_status(),
-                "guard_status": MiniQMTConnectionGuard.get_status(),
+                "success": connected,
+                "message": (
+                    "成功重新连接到 MiniQMT" if connected else "MiniQMT Actor 已重启但连接状态异常"
+                ),
+                "actor_status": status,
                 "timestamp": datetime.now().isoformat(),
             }
         else:
             return {
                 "success": False,
-                "message": "MiniQMT 客户端未运行，请先启动 MiniQMT",
-                "guard_status": MiniQMTConnectionGuard.get_status(),
+                "message": "MiniQMT Actor 初始化失败",
                 "timestamp": datetime.now().isoformat(),
             }
 
@@ -403,7 +586,11 @@ async def reconnect() -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"重新连接失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "success": False,
+            "message": f"重新连接失败: {str(e)}",
+            "timestamp": datetime.now().isoformat(),
+        }
 
 
 @router.get("/subscriptions")
@@ -495,7 +682,7 @@ async def get_xtdata_tick(
     symbols: str = Query(..., description="股票代码，逗号分隔，如: 000001.SZ,600000.SH")
 ) -> Dict[str, Any]:
     """
-    直接使用 xtdata 获取 Tick 数据（含五档盘口）
+    通过 Actor 获取 Tick 数据（含五档盘口）
 
     Args:
         symbols: 股票代码列表（逗号分隔）
@@ -504,13 +691,13 @@ async def get_xtdata_tick(
         Tick 数据，包含最新价、涨跌、五档盘口等
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
         symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
         if not symbol_list:
             raise HTTPException(status_code=400, detail="请提供股票代码")
 
-        result = xtdata.get_full_tick(symbol_list)
+        result = await provider.call("get_full_tick", stock_list=symbol_list)
 
         if not result:
             return {
@@ -547,8 +734,8 @@ async def get_xtdata_tick(
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取 xtdata tick 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -559,7 +746,7 @@ async def get_xtdata_quote(
     symbols: str = Query(..., description="股票代码，逗号分隔")
 ) -> Dict[str, Any]:
     """
-    获取简化的实时行情数据
+    通过 Actor 获取简化的实时行情数据
 
     Args:
         symbols: 股票代码列表
@@ -568,13 +755,13 @@ async def get_xtdata_quote(
         简化的行情数据
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
         symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
         if not symbol_list:
             raise HTTPException(status_code=400, detail="请提供股票代码")
 
-        result = xtdata.get_full_tick(symbol_list)
+        result = await provider.call("get_full_tick", stock_list=symbol_list)
 
         if not result:
             return {
@@ -596,7 +783,7 @@ async def get_xtdata_quote(
                 quotes.append(
                     {
                         "symbol": symbol,
-                        "name": symbol,  # 可以后续从其他数据源获取名称
+                        "name": symbol,
                         "lastPrice": last_price,
                         "change": round(change, 2),
                         "changePct": round(change_pct, 2),
@@ -615,8 +802,8 @@ async def get_xtdata_quote(
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取 xtdata quote 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -629,7 +816,7 @@ async def get_xtdata_kline(
     count: int = Query(100, description="获取条数"),
 ) -> Dict[str, Any]:
     """
-    获取K线历史数据
+    通过 Actor 获取 K 线历史数据
 
     Args:
         symbol: 股票代码
@@ -639,175 +826,110 @@ async def get_xtdata_kline(
     Returns:
         K线数据列表
     """
+    import math
+
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
         # 先尝试下载数据
         try:
-            xtdata.download_history_data(symbol, period, count=-1)
+            await provider.call("download_history_data", stock_code=symbol, period=period, count=-1)
         except Exception:
-            pass  # 忽略下载错误，尝试获取本地缓存
+            pass
 
-        result = xtdata.get_market_data(
-            field_list=[],  # 空列表表示获取所有字段
+        # 通过 Actor 获取 K 线数据
+        result = await provider.call(
+            "get_market_data",
+            field_list=[],
             stock_list=[symbol],
             period=period,
             count=count,
         )
 
-        # 添加调试日志
-        logger.debug(f"xtdata.get_market_data 返回类型: {type(result)}")
-        if isinstance(result, dict):
-            logger.debug(f"返回字段: {list(result.keys())}")
-            for key, val in result.items():
-                logger.debug(f"  {key}: type={type(val)}, shape={getattr(val, 'shape', 'N/A')}")
-
-        # 检查返回数据是否有效
         if not isinstance(result, dict) or not result:
             return {
                 "success": False,
                 "message": "未获取到K线数据",
                 "data": [],
-                "debug_info": f"result type: {type(result)}",
                 "timestamp": datetime.now().isoformat(),
             }
 
-        # xtdata 返回的是 DataFrame 格式: {field_name: pd.DataFrame}
-        # DataFrame 的结构是: index=时间戳, columns=股票代码
-        import numpy as np
-        import pandas as pd
+        # Actor 已将 DataFrame 转换为 list[dict] 格式
+        open_records = result.get("open", [])
+        high_records = result.get("high", [])
+        low_records = result.get("low", [])
+        close_records = result.get("close", [])
+        volume_records = result.get("volume", [])
+        amount_records = result.get("amount", [])
 
-        try:
-            # 获取各字段数据（time字段不需要，时间在columns中）
-            open_df = result.get("open")
-            high_df = result.get("high")
-            low_df = result.get("low")
-            close_df = result.get("close")
-            volume_df = result.get("volume")
-            amount_df = result.get("amount")
-
-            # 检查是否有数据
-            if open_df is None or (isinstance(open_df, pd.DataFrame) and open_df.empty):
-                return {
-                    "success": False,
-                    "message": "K线数据为空，可能需要先下载历史数据",
-                    "data": [],
-                    "timestamp": datetime.now().isoformat(),
-                }
-
-            # 转换数据格式
-            klines = []
-
-            # DataFrame 结构: index=股票代码, columns=时间戳(如 '20250116')
-            if isinstance(open_df, pd.DataFrame):
-                # 检查股票代码是否在 index 中
-                if symbol not in open_df.index:
-                    return {
-                        "success": False,
-                        "message": f"未找到股票 {symbol} 的数据",
-                        "data": [],
-                        "available_symbols": list(open_df.index),
-                        "timestamp": datetime.now().isoformat(),
-                    }
-
-                # 获取时间列（columns 是时间戳字符串如 '20250116'）
-                time_columns = open_df.columns.tolist()
-
-                # 按行提取该股票的数据
-                open_data = open_df.loc[symbol].tolist()
-                high_data = (
-                    high_df.loc[symbol].tolist()
-                    if isinstance(high_df, pd.DataFrame) and symbol in high_df.index
-                    else []
-                )
-                low_data = (
-                    low_df.loc[symbol].tolist()
-                    if isinstance(low_df, pd.DataFrame) and symbol in low_df.index
-                    else []
-                )
-                close_data = (
-                    close_df.loc[symbol].tolist()
-                    if isinstance(close_df, pd.DataFrame) and symbol in close_df.index
-                    else []
-                )
-                volume_data = (
-                    volume_df.loc[symbol].tolist()
-                    if isinstance(volume_df, pd.DataFrame) and symbol in volume_df.index
-                    else []
-                )
-                amount_data = (
-                    amount_df.loc[symbol].tolist()
-                    if isinstance(amount_df, pd.DataFrame) and symbol in amount_df.index
-                    else []
-                )
-
-                # 构建 K 线数据
-                for i, time_str in enumerate(time_columns):
-                    # 尝试将时间字符串转换为时间戳
-                    try:
-                        if isinstance(time_str, str) and len(time_str) == 8:
-                            # YYYYMMDD 格式
-                            ts = int(datetime.strptime(time_str, "%Y%m%d").timestamp() * 1000)
-                        elif isinstance(time_str, (int, float)):
-                            ts = int(time_str)
-                        else:
-                            ts = int(datetime.strptime(str(time_str), "%Y%m%d").timestamp() * 1000)
-                    except Exception:
-                        ts = 0
-
-                    klines.append(
-                        {
-                            "time": ts,
-                            "time_str": str(time_str),
-                            "open": (
-                                float(open_data[i])
-                                if i < len(open_data) and not np.isnan(open_data[i])
-                                else 0
-                            ),
-                            "high": (
-                                float(high_data[i])
-                                if i < len(high_data) and not np.isnan(high_data[i])
-                                else 0
-                            ),
-                            "low": (
-                                float(low_data[i])
-                                if i < len(low_data) and not np.isnan(low_data[i])
-                                else 0
-                            ),
-                            "close": (
-                                float(close_data[i])
-                                if i < len(close_data) and not np.isnan(close_data[i])
-                                else 0
-                            ),
-                            "volume": (
-                                int(volume_data[i])
-                                if i < len(volume_data) and not np.isnan(volume_data[i])
-                                else 0
-                            ),
-                            "amount": (
-                                float(amount_data[i])
-                                if i < len(amount_data) and not np.isnan(amount_data[i])
-                                else 0
-                            ),
-                        }
-                    )
-            else:
-                # 可能是旧版本格式或其他格式
-                return {
-                    "success": False,
-                    "message": f"未识别的数据格式: {type(open_df)}",
-                    "data": [],
-                    "timestamp": datetime.now().isoformat(),
-                }
-
-        except Exception as parse_error:
-            logger.error(f"解析 K 线数据失败: {parse_error}")
+        if not open_records:
             return {
                 "success": False,
-                "message": f"解析数据失败: {str(parse_error)}",
+                "message": "K线数据为空，可能需要先下载历史数据",
                 "data": [],
                 "timestamp": datetime.now().isoformat(),
             }
+
+        # 从记录中提取目标股票的数据
+        def find_symbol_record(records: list, target_symbol: str) -> dict:
+            for rec in records:
+                if rec.get("index") == target_symbol:
+                    return rec
+            return {}
+
+        open_rec = find_symbol_record(open_records, symbol)
+        high_rec = find_symbol_record(high_records, symbol)
+        low_rec = find_symbol_record(low_records, symbol)
+        close_rec = find_symbol_record(close_records, symbol)
+        volume_rec = find_symbol_record(volume_records, symbol)
+        amount_rec = find_symbol_record(amount_records, symbol)
+
+        if not open_rec:
+            return {
+                "success": False,
+                "message": f"未找到股票 {symbol} 的数据",
+                "data": [],
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        # 提取时间列
+        time_keys = [k for k in open_rec.keys() if k != "index"]
+        time_keys.sort()
+
+        klines = []
+        for time_str in time_keys:
+            try:
+                if isinstance(time_str, str) and len(time_str) == 8:
+                    ts = int(datetime.strptime(time_str, "%Y%m%d").timestamp() * 1000)
+                elif isinstance(time_str, (int, float)):
+                    ts = int(time_str)
+                else:
+                    ts = int(datetime.strptime(str(time_str), "%Y%m%d").timestamp() * 1000)
+            except Exception:
+                ts = 0
+
+            def safe_float(val: Any) -> float:
+                if val is None or (isinstance(val, float) and math.isnan(val)):
+                    return 0.0
+                return float(val)
+
+            def safe_int(val: Any) -> int:
+                if val is None or (isinstance(val, float) and math.isnan(val)):
+                    return 0
+                return int(val)
+
+            klines.append(
+                {
+                    "time": ts,
+                    "time_str": str(time_str),
+                    "open": safe_float(open_rec.get(time_str)),
+                    "high": safe_float(high_rec.get(time_str)),
+                    "low": safe_float(low_rec.get(time_str)),
+                    "close": safe_float(close_rec.get(time_str)),
+                    "volume": safe_int(volume_rec.get(time_str)),
+                    "amount": safe_float(amount_rec.get(time_str)),
+                }
+            )
 
         return {
             "success": True,
@@ -818,8 +940,8 @@ async def get_xtdata_kline(
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取 xtdata kline 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -828,38 +950,33 @@ async def get_xtdata_kline(
 @router.get("/xtdata/status")
 async def get_xtdata_status() -> Dict[str, Any]:
     """
-    获取 xtdata 连接状态
+    通过 Actor 获取 xtdata 连接状态
 
     Returns:
         xtdata 可用性状态
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
-        # 尝试获取一只股票来验证连接
-        test_result = xtdata.get_full_tick(["000001.SZ"])
-        connected = bool(test_result and "000001.SZ" in test_result)
+        # 使用 Actor 的 heartbeat 检测连接
+        connected = await provider.heartbeat()
+        status = await provider.get_status()
 
         return {
             "success": True,
-            "xtdata_available": True,
+            "xtdata_available": status.get("sdk_available", False),
             "connected": connected,
             "message": "xtdata 已连接" if connected else "xtdata 可用但未获取到数据",
+            "actor_status": status,
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        return {
-            "success": False,
-            "xtdata_available": False,
-            "connected": False,
-            "message": "xtquant SDK 未安装",
-            "timestamp": datetime.now().isoformat(),
-        }
+    except HTTPException:
+        raise
     except Exception as e:
         return {
             "success": False,
-            "xtdata_available": True,
+            "xtdata_available": False,
             "connected": False,
             "message": f"xtdata 连接错误: {str(e)}",
             "timestamp": datetime.now().isoformat(),
@@ -872,15 +989,15 @@ async def get_xtdata_status() -> Dict[str, Any]:
 @router.get("/xtdata/sectors")
 async def get_sectors() -> Dict[str, Any]:
     """
-    获取所有板块列表
+    通过 Actor 获取所有板块列表
 
     Returns:
         板块列表，包含板块名称和代码
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
-        result = xtdata.get_sector_list()
+        result = await provider.call("get_sector_list")
 
         if not result:
             return {
@@ -906,8 +1023,8 @@ async def get_sectors() -> Dict[str, Any]:
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取板块列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -918,7 +1035,7 @@ async def get_sector_stocks(
     sector: str = Query(..., description="板块名称，如: 沪深A股, 上证50, 中证500")
 ) -> Dict[str, Any]:
     """
-    获取板块成分股
+    通过 Actor 获取板块成分股
 
     Args:
         sector: 板块名称
@@ -927,9 +1044,9 @@ async def get_sector_stocks(
         板块内的股票代码列表
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
-        result = xtdata.get_stock_list_in_sector(sector)
+        result = await provider.call("get_stock_list_in_sector", sector_name=sector)
 
         if not result:
             return {
@@ -947,8 +1064,8 @@ async def get_sector_stocks(
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取板块成分股失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -959,7 +1076,7 @@ async def get_instrument_info(
     symbol: str = Query(..., description="股票代码，如: 000001.SZ")
 ) -> Dict[str, Any]:
     """
-    获取合约/股票详细信息
+    通过 Actor 获取合约/股票详细信息
 
     Args:
         symbol: 股票代码
@@ -968,9 +1085,9 @@ async def get_instrument_info(
         合约详细信息，包含名称、上市日期、板块等
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
-        result = xtdata.get_instrument_detail(symbol)
+        result = await provider.call("get_instrument_detail", stock_code=symbol)
 
         if not result:
             return {
@@ -987,8 +1104,8 @@ async def get_instrument_info(
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取合约信息失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -999,7 +1116,7 @@ async def get_instruments_batch(
     symbols: str = Query(..., description="股票代码列表，逗号分隔")
 ) -> Dict[str, Any]:
     """
-    批量获取合约详细信息
+    通过 Actor 批量获取合约详细信息
 
     Args:
         symbols: 股票代码列表（逗号分隔）
@@ -1008,13 +1125,13 @@ async def get_instruments_batch(
         多个合约的详细信息
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
         symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
         if not symbol_list:
             raise HTTPException(status_code=400, detail="请提供股票代码")
 
-        result = xtdata.get_instrument_detail_list(symbol_list)
+        result = await provider.call("get_instrument_detail_list", stock_list=symbol_list)
 
         if not result:
             return {
@@ -1031,8 +1148,8 @@ async def get_instruments_batch(
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"批量获取合约信息失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1048,7 +1165,7 @@ async def get_trading_dates(
     end_date: str = Query("", description="结束日期，格式: 20241231"),
 ) -> Dict[str, Any]:
     """
-    获取交易日期列表
+    通过 Actor 获取交易日期列表
 
     Args:
         market: 市场代码
@@ -1059,9 +1176,11 @@ async def get_trading_dates(
         交易日期列表
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
-        result = xtdata.get_trading_dates(market, start_time=start_date, end_time=end_date)
+        result = await provider.call(
+            "get_trading_dates", market=market, start_time=start_date, end_time=end_date
+        )
 
         if not result:
             return {
@@ -1091,8 +1210,8 @@ async def get_trading_dates(
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取交易日期失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1101,15 +1220,15 @@ async def get_trading_dates(
 @router.get("/xtdata/holidays")
 async def get_holidays() -> Dict[str, Any]:
     """
-    获取节假日列表
+    通过 Actor 获取节假日列表
 
     Returns:
         节假日日期列表
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
-        result = xtdata.get_holidays()
+        result = await provider.call("get_holidays")
 
         if not result:
             return {
@@ -1126,8 +1245,8 @@ async def get_holidays() -> Dict[str, Any]:
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取节假日失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1150,6 +1269,7 @@ async def get_financial_data(
         description="报告类型: report_time(按截止日期), announce_time(按披露日期)",
     ),
     auto_download: bool = Query(True, description="是否自动下载数据到本地缓存"),
+    timeout: int = Query(30, description="超时时间（秒）"),
 ) -> Dict[str, Any]:
     """
     获取财务数据（支持批量查询）
@@ -1173,12 +1293,15 @@ async def get_financial_data(
         end_date: 结束日期 YYYYMMDD
         report_type: 报告类型
         auto_download: 是否自动下载
+        timeout: 超时时间（秒）
 
     Returns:
         财务数据，格式: {symbol: {table: data}}
     """
+    import asyncio
+
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
         # 解析股票代码列表
         symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
@@ -1190,21 +1313,42 @@ async def get_financial_data(
         else:
             table_list = ["Balance", "Income", "CashFlow"]
 
-        # 自动下载财务数据
+        # 自动下载财务数据（带超时）
         if auto_download:
             try:
-                xtdata.download_financial_data(symbol_list, table_list)
+                await asyncio.wait_for(
+                    provider.call(
+                        "download_financial_data", stock_list=symbol_list, table_list=table_list
+                    ),
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"财务数据下载超时（{timeout}秒），将尝试读取缓存")
             except Exception as download_err:
                 logger.warning(f"财务数据下载失败（将尝试读取缓存）: {download_err}")
 
-        # 获取财务数据
-        result = xtdata.get_financial_data(
-            stock_list=symbol_list,
-            table_list=table_list,
-            start_time=start_date or "",
-            end_time=end_date or "",
-            report_type=report_type,
-        )
+        # 获取财务数据（带超时）
+        try:
+            result = await asyncio.wait_for(
+                provider.call(
+                    "get_financial_data",
+                    stock_list=symbol_list,
+                    table_list=table_list,
+                    start_time=start_date or "",
+                    end_time=end_date or "",
+                    report_type=report_type,
+                ),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            return {
+                "success": False,
+                "message": f"获取财务数据超时（{timeout}秒），请稍后重试或减少查询范围",
+                "symbols": symbol_list,
+                "tables": table_list,
+                "data": None,
+                "timestamp": datetime.now().isoformat(),
+            }
 
         if not result:
             return {
@@ -1217,39 +1361,19 @@ async def get_financial_data(
                 "note": "此功能需要 MiniQMT 投研版 VIP 权限",
             }
 
-        # 转换 DataFrame 为可序列化格式
-        formatted_result: Dict[str, Dict[str, Any]] = {}
-        for symbol, tables_data in result.items():
-            if tables_data:
-                formatted_result[symbol] = {}
-                for table_name, df in tables_data.items():
-                    if df is not None and hasattr(df, "empty") and not df.empty:
-                        formatted_result[symbol][table_name] = {
-                            "columns": list(df.columns),
-                            "data": df.values.tolist(),
-                            "index": [str(idx) for idx in df.index.tolist()],
-                            "count": len(df),
-                        }
-                    else:
-                        formatted_result[symbol][table_name] = {
-                            "columns": [],
-                            "data": [],
-                            "index": [],
-                            "count": 0,
-                        }
-
+        # Actor 已将 DataFrame 转换为可序列化格式
         return {
             "success": True,
             "symbols": symbol_list,
             "tables": table_list,
-            "symbol_count": len(formatted_result),
-            "data": formatted_result,
+            "symbol_count": len(result) if isinstance(result, dict) else 0,
+            "data": result,
             "timestamp": datetime.now().isoformat(),
             "note": "此功能需要 MiniQMT 投研版 VIP 权限",
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取财务数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1260,27 +1384,49 @@ async def get_financial_data(
 
 @router.get("/xtdata/etf-info")
 async def get_etf_info(
-    symbol: str = Query(..., description="ETF 代码，如: 510050.SH")
+    symbol: str = Query(..., description="ETF 代码，如: 510050.SH"),
+    timeout: int = Query(30, description="超时时间（秒）"),
 ) -> Dict[str, Any]:
     """
     获取 ETF 信息
 
     Args:
         symbol: ETF 代码
+        timeout: 超时时间（秒）
 
     Returns:
         ETF 详细信息
     """
-    try:
-        from xtquant import xtdata
+    import asyncio
 
-        # 先下载 ETF 信息
+    try:
+        provider = await get_miniqmt_provider()
+
+        # 先下载 ETF 信息（带超时）
         try:
-            xtdata.download_etf_info()
+            await asyncio.wait_for(
+                provider.call("download_etf_info"),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"ETF 信息下载超时（{timeout}秒），将尝试读取缓存")
         except Exception:
             pass
 
-        result = xtdata.get_etf_info(symbol)
+        # 获取 ETF 信息（带超时）
+        try:
+            result = await asyncio.wait_for(
+                provider.call("get_etf_info", fund_code=symbol),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            return {
+                "success": False,
+                "message": f"获取 ETF 信息超时（{timeout}秒），请稍后重试",
+                "symbol": symbol,
+                "data": None,
+                "timestamp": datetime.now().isoformat(),
+            }
 
         if not result:
             return {
@@ -1297,8 +1443,8 @@ async def get_etf_info(
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取 ETF 信息失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1306,27 +1452,49 @@ async def get_etf_info(
 
 @router.get("/xtdata/index-weight")
 async def get_index_weight(
-    index: str = Query(..., description="指数代码，如: 000300.SH (沪深300)")
+    index: str = Query(..., description="指数代码，如: 000300.SH (沪深300)"),
+    timeout: int = Query(30, description="超时时间（秒）"),
 ) -> Dict[str, Any]:
     """
     获取指数成分股权重
 
     Args:
         index: 指数代码
+        timeout: 超时时间（秒）
 
     Returns:
         指数成分股及其权重
     """
-    try:
-        from xtquant import xtdata
+    import asyncio
 
-        # 先下载指数权重数据
+    try:
+        provider = await get_miniqmt_provider()
+
+        # 先下载指数权重数据（带超时）
         try:
-            xtdata.download_index_weight()
+            await asyncio.wait_for(
+                provider.call("download_index_weight"),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"指数权重下载超时（{timeout}秒），将尝试读取缓存")
         except Exception:
             pass
 
-        result = xtdata.get_index_weight(index)
+        # 获取指数权重（带超时）
+        try:
+            result = await asyncio.wait_for(
+                provider.call("get_index_weight", index_code=index),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            return {
+                "success": False,
+                "message": f"获取指数权重超时（{timeout}秒），请稍后重试",
+                "index": index,
+                "data": None,
+                "timestamp": datetime.now().isoformat(),
+            }
 
         if not result:
             return {
@@ -1343,8 +1511,8 @@ async def get_index_weight(
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取指数权重失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1365,11 +1533,22 @@ async def get_divid_factors(symbol: str = Query(..., description="股票代码")
         复权因子数据
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
-        result = xtdata.get_divid_factors(symbol)
+        # 通过 Actor 调用 xtdata.get_divid_factors
+        result = await provider.call("get_divid_factors", stock_code=symbol)
 
-        if not result:
+        # 检查结果是否为空（处理 DataFrame/dict/None 等不同类型）
+        import pandas as pd
+
+        is_empty = (
+            result is None
+            or (isinstance(result, pd.DataFrame) and result.empty)
+            or (isinstance(result, dict) and len(result) == 0)
+            or (isinstance(result, list) and len(result) == 0)
+        )
+
+        if is_empty:
             return {
                 "success": False,
                 "message": f"未获取到 '{symbol}' 的复权因子",
@@ -1384,8 +1563,8 @@ async def get_divid_factors(symbol: str = Query(..., description="股票代码")
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取复权因子失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1397,15 +1576,15 @@ async def get_divid_factors(symbol: str = Query(..., description="股票代码")
 @router.get("/xtdata/markets")
 async def get_markets() -> Dict[str, Any]:
     """
-    获取所有市场列表
+    通过 Actor 获取所有市场列表
 
     Returns:
         市场代码列表
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
-        result = xtdata.get_markets()
+        result = await provider.call("get_markets")
 
         return {
             "success": True,
@@ -1413,8 +1592,8 @@ async def get_markets() -> Dict[str, Any]:
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取市场列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1423,15 +1602,15 @@ async def get_markets() -> Dict[str, Any]:
 @router.get("/xtdata/periods")
 async def get_period_list() -> Dict[str, Any]:
     """
-    获取支持的 K 线周期列表
+    通过 Actor 获取支持的 K 线周期列表
 
     Returns:
         周期列表
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
-        result = xtdata.get_period_list()
+        result = await provider.call("get_period_list")
 
         return {
             "success": True,
@@ -1439,8 +1618,8 @@ async def get_period_list() -> Dict[str, Any]:
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant SDK 未安装")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取周期列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1594,7 +1773,7 @@ async def get_sector_stocks_with_names(
     sector: str = Query(..., description="板块名称"),
 ) -> Dict[str, Any]:
     """
-    获取板块成分股（含股票名称）
+    通过 Actor 获取板块成分股（含股票名称）
 
     Args:
         sector: 板块名称
@@ -1603,10 +1782,10 @@ async def get_sector_stocks_with_names(
         成分股列表，包含 symbol 和 name
     """
     try:
-        from xtquant import xtdata
+        provider = await get_miniqmt_provider()
 
         # 获取板块内股票列表
-        stock_list = xtdata.get_stock_list_in_sector(sector)
+        stock_list = await provider.call("get_stock_list_in_sector", sector_name=sector)
 
         if not stock_list:
             return {
@@ -1621,7 +1800,7 @@ async def get_sector_stocks_with_names(
         result = []
         for symbol in stock_list:
             try:
-                detail = xtdata.get_instrument_detail(symbol)
+                detail = await provider.call("get_instrument_detail", stock_code=symbol)
                 name = detail.get("InstrumentName", symbol) if detail else symbol
 
                 # 处理编码问题
@@ -1653,8 +1832,8 @@ async def get_sector_stocks_with_names(
             "timestamp": datetime.now().isoformat(),
         }
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="xtquant 未安装或未连接")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取板块成分股失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

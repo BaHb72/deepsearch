@@ -1,6 +1,16 @@
 """
-请求处理器
-负责处理API请求、重试逻辑和响应处理
+[DEPRECATED] 请求处理器 - 已废弃
+
+警告：此模块已废弃，请使用 proxy_client.py。
+
+废弃原因：
+- 此模块发送 POST /api/{api_name} 格式请求
+- 但 worker.js 只处理 GET /proxy?url={encoded_url} 格式
+- 协议不兼容导致 404 错误
+
+正确的代理实现：
+- core/utils/network/proxy_client.py - 正确使用 /proxy?url= 格式
+- core/utils/network/akshare_proxy.py - patch_akshare() 猴子补丁
 """
 
 import asyncio
@@ -406,4 +416,4 @@ class RequestHandler:
         if self.session:
             await self.session.close()
             self.session = None
-        await self.request_optimizer.cleanup()
+        await self.request_optimizer.stop()
