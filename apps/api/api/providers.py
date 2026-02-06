@@ -357,7 +357,6 @@ class DataProviderFactory:
     @classmethod
     async def _create_amazingdata_actor(cls) -> Any:
         """创建新的 AmazingData Actor 并返回包装器"""
-        import asyncio
         import time
 
         from core.compute import get_dask_client
@@ -455,8 +454,6 @@ class DataProviderFactory:
                     async def check_health(self) -> bool:
                         """检查 Actor 是否仍然活跃"""
                         try:
-                            import asyncio
-
                             # 尝试调用一个简单方法验证 Actor 存活
                             result = await asyncio.wait_for(self._actor.heartbeat(), timeout=5.0)
                             if result is True:
@@ -509,6 +506,10 @@ class DataProviderFactory:
                             except asyncio.CancelledError:
                                 pass
                             self._heartbeat_task = None
+
+                    async def cleanup(self) -> None:
+                        """清理资源，由 _invoke_cleanup() 在实例销毁时自动调用"""
+                        await self.stop_heartbeat()
 
                     async def get_calendar(
                         self, data_type: str = "int", market: str = "SH"
@@ -611,7 +612,6 @@ class DataProviderFactory:
     @classmethod
     async def _create_miniqmt_actor(cls) -> Any:
         """创建新的 MiniQMT Actor 并返回包装器"""
-        import asyncio
         import time
 
         from core.compute import get_dask_client
@@ -687,8 +687,6 @@ class DataProviderFactory:
                     async def check_health(self) -> bool:
                         """检查 Actor 是否仍然活跃"""
                         try:
-                            import asyncio
-
                             status = await asyncio.wait_for(self._actor.get_status(), timeout=5.0)
                             if status.get("initialized", False):
                                 self._consecutive_failures = 0
