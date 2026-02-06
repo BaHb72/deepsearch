@@ -4,7 +4,9 @@
 > 发现位置: apps/web/src/api/core/client.ts:78, packages/core/infrastructure/providers/implementations/amazingdata/dask_adapter.py:91
 > 类型: config
 > 严重程度: medium
-> 状态: open
+> 状态: resolved
+> 解决日期: 2026-02-07
+> 解决方式: request.ts 默认超时从 30s 提升到 90s，setupRequest() 启动时从后端 /api/config/timeouts 同步配置
 
 ---
 

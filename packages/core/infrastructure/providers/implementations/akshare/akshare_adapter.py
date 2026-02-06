@@ -84,8 +84,6 @@ class AkShareAdapter(IAkShareProvider):
             )
         self.use_proxy = use_proxy
         self.provider: AKShareDirectProvider | None = None
-        # fallback_provider 保留为 None，内部 fallback 由 provider 自行处理
-        self.fallback_provider: AKShareDirectProvider | None = None
 
     async def initialize(self):
         """初始化提供者"""
@@ -103,13 +101,6 @@ class AkShareAdapter(IAkShareProvider):
         if self.provider is None:
             raise DataProviderError("AkShare provider not initialized. Call initialize() first.")
         return self.provider  # type: ignore[return-value]
-
-    def _require_fallback(self) -> IAkShareProvider:
-        if self.fallback_provider is None:
-            raise DataProviderError(
-                "AkShare fallback provider not available. Call initialize() first."
-            )
-        return self.fallback_provider  # type: ignore[return-value]
 
     @staticmethod
     def _extract_data_list(result: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -228,14 +219,7 @@ class AkShareAdapter(IAkShareProvider):
             if result:
                 return result
         except Exception as exc:
-            logger.warning(f"AkShare primary get_kline_data failed: {exc}")
-
-        try:
-            result = await _call_provider(self.fallback_provider)  # type: ignore[arg-type]
-            if result:
-                return result
-        except Exception as exc:
-            logger.warning(f"AkShare fallback get_kline_data failed: {exc}")
+            logger.warning(f"AkShare get_kline_data failed: {exc}")
 
         hist = await self.get_stock_hist(
             symbol=symbol,
@@ -259,48 +243,22 @@ class AkShareAdapter(IAkShareProvider):
             if isinstance(result, dict) and not result.get("error"):
                 return cast(Dict[str, Any], result)
         except Exception as e:
-            logger.warning(f"主数据源获取失败: {e}")
+            logger.warning(f"获取 {symbol} 实时行情失败: {e}")
 
-        if self.fallback_provider:
-            try:
-                logger.info(f"切换到备用数据源获取 {symbol} 实时行情")
-                fallback = cast(Any, self._require_fallback())
-                result = await fallback.get_realtime_quote(symbol)
-                if isinstance(result, dict) and not result.get("error"):
-                    result["fallback"] = True
-                    return cast(Dict[str, Any], result)
-            except Exception as e:
-                logger.error(f"备用数据源也失败: {e}")
-
-        return {"error": "所有数据源均失败"}
+        return {"error": "数据源获取失败"}
 
     async def get_realtime_quotes(self, symbols: List[str]) -> Optional[List[Dict[str, Any]]]:
         """批量获取实时行情"""
         provider = cast(Any, self._require_provider())
         try:
-            # 优先尝试批量接口
             if hasattr(provider, "get_realtime_quotes"):
                 result = await provider.get_realtime_quotes(symbols)
                 if result:
                     return list(result)
         except Exception as e:
-            logger.warning(f"主数据源批量获取实时行情失败: {e}")
+            logger.warning(f"批量获取实时行情失败: {e}")
 
-        if self.fallback_provider:
-            try:
-                fallback = cast(Any, self._require_fallback())
-                if hasattr(fallback, "get_realtime_quotes"):
-                    logger.info(f"切换到备用数据源批量获取 {len(symbols)} 只股票行情")
-                    result = await fallback.get_realtime_quotes(symbols)
-                    if result:
-                        # 标记为fallback
-                        for item in result:
-                            item["fallback"] = True
-                        return result
-            except Exception as e:
-                logger.error(f"备用数据源批量获取失败: {e}")
-
-        # 如果批量接口不可用，回退到逐个获取
+        # 批量接口不可用，回退到逐个获取
         results = []
         for symbol in symbols:
             quote = await self.get_realtime_quote(symbol)
@@ -324,20 +282,9 @@ class AkShareAdapter(IAkShareProvider):
             if isinstance(result, dict) and not result.get("error"):
                 return cast(Dict[str, Any], result)
         except Exception as e:
-            logger.warning(f"主数据源获取历史数据失败: {e}")
+            logger.warning(f"获取 {symbol} 历史数据失败: {e}")
 
-        if self.fallback_provider:
-            try:
-                logger.info(f"切换到备用数据源获取 {symbol} 历史数据")
-                fallback = cast(Any, self._require_fallback())
-                result = await fallback.get_stock_hist(symbol, period, start_date, end_date, adjust)
-                if isinstance(result, dict) and not result.get("error"):
-                    result["fallback"] = True
-                    return cast(Dict[str, Any], result)
-            except Exception as e:
-                logger.error(f"备用数据源也失败: {e}")
-
-        return {"data": [], "error": "所有数据源均失败"}
+        return {"data": [], "error": "数据源获取失败"}
 
     async def fetch_stock_list(self) -> List[Dict[str, str]]:
         """获取股票列表"""
@@ -356,21 +303,10 @@ class AkShareAdapter(IAkShareProvider):
                 if normalized:
                     return normalized
             except Exception as e:
-                logger.warning(f"主数据源获取股票列表失败: {e}")
+                logger.warning(f"获取股票列表失败: {e}")
 
-            if self.fallback_provider:
-                try:
-                    logger.info("切换到备用数据源获取股票列表")
-                    fallback = cast(Any, self._require_fallback())
-                    result = await fallback.fetch_stock_list()
-                    normalized = self._normalize_stock_list(result)
-                    if normalized:
-                        return normalized
-                except Exception as e:
-                    logger.error(f"备用数据源也失败: {e}")
-
-        # 所有数据源均失败，返回空列表（禁止返回 mock 数据）
-        logger.error("AkShare 所有数据源获取股票列表均失败，返回空列表")
+        # 数据源获取失败，返回空列表（禁止返回 mock 数据）
+        logger.error("AkShare 获取股票列表失败，返回空列表")
         return []
 
     async def get_trading_calendar(
@@ -523,7 +459,7 @@ class AkShareAdapter(IAkShareProvider):
         if api_info:
             safe_params = AkShareAPIMapping.transform_params(api_name, safe_params)
 
-        # 直接调用主 provider（fallback_provider 已废弃）
+        # 直接调用主 provider
         return await self._call_provider_api(
             self.provider, api_name, dict(safe_params), max_retries=max_retries
         )
@@ -535,7 +471,6 @@ class AkShareAdapter(IAkShareProvider):
         params: Dict[str, Any],
         *,
         max_retries: int = 3,
-        mark_fallback: bool = False,
     ) -> Dict[str, Any]:
         """Execute one AkShare API call against a provider"""
         if not provider:
@@ -556,10 +491,7 @@ class AkShareAdapter(IAkShareProvider):
             logger.error(f"AkShare provider call failed for {api_name}: {exc}")
             return {"success": False, "error": str(exc), "data": []}
 
-        normalized = self._normalize_api_result(raw_result)
-        if mark_fallback and normalized.get("success"):
-            normalized["fallback"] = True
-        return normalized
+        return self._normalize_api_result(raw_result)
 
     @staticmethod
     def _normalize_api_result(result: Any) -> Dict[str, Any]:

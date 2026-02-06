@@ -77,16 +77,6 @@ debugAxiosInstance(request)
 request.defaults.baseURL = '/api'
 debugLog('INIT', `设置默认baseURL: ${request.defaults.baseURL}`)
 
-// ============ 后端URL管理 ============
-
-async function ensureBackendUrl(): Promise<string> {
-    if (!request.defaults.baseURL) {
-        request.defaults.baseURL = '/api'
-        debugLog('BACKEND_URL', '确保使用相对路径: /api')
-    }
-    return ''
-}
-
 // ============ 导出初始化函数 ============
 
 export async function setupRequest(): Promise<null> {
@@ -122,8 +112,6 @@ let requestCounter = 0
 
 request.interceptors.request.use(
     async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
-        await ensureBackendUrl()
-
         const customConfig = config as CustomAxiosRequestConfig
         const requestId = ++requestCounter
         customConfig.requestId = requestId

@@ -4,7 +4,9 @@
 > 发现位置: packages/core/infrastructure/providers/implementations/akshare/akshare_adapter.py:91, packages/core/utils/network/akshare_proxy.py:36
 > 类型: docs
 > 严重程度: low
-> 状态: open
+> 状态: resolved
+> 解决日期: 2026-02-07
+> 解决方式: akshare_adapter.py initialize() 中根据 use_proxy 区分日志，proxy 模式标注已废弃
 
 ---
 
