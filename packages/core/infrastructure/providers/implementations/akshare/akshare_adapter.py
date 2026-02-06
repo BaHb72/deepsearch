@@ -91,7 +91,10 @@ class AkShareAdapter(IAkShareProvider):
         """初始化提供者"""
         # 统一使用 AKShareDirectProvider，它内部有 API fallback 机制
         self.provider = AKShareDirectProvider()
-        logger.info("使用 AkShare 直连模式（内置 API fallback）")
+        if self.use_proxy:
+            logger.info("使用 AkShare 代理模式（已废弃，建议切换为直连）")
+        else:
+            logger.info("使用 AkShare 直连模式（内置 API fallback）")
 
         if hasattr(self.provider, "initialize"):
             await self.provider.initialize()

@@ -172,3 +172,19 @@ class TimeoutManager:
 此问题与 Issue #1（stock_list 数据源优先级）相关。如果 stock_list 改为 AmazingData 优先，可以部分缓解超时问题，但不能根本解决。
 
 建议实施方案 B，从架构层面解决超时管理问题。
+
+---
+
+## 2026-02-07 更新
+
+### 已解决部分
+
+- **方案 B 核心框架已实现**：`TimeoutManager` + `DataSourceState` 枚举 + `TimeoutConfig` 数据类
+- **YAML 配置化完成**：`TimeoutsConfig` Pydantic 模型（`packages/core/config/models/timeouts.py`），dev/prod 环境独立配置
+- **桥接层完成**：`load_timeout_configs_from_settings()` 将 Pydantic Settings 导入 TimeoutManager
+- **主要调用点已集成**：`dask_init_state.py`、`market_data_runtime.py`、`dask_worker_manager.py`、`server.py`、`server_manager.py`
+
+### 残余项
+
+- 更多调用点集成状态感知 API（如 AkShare batch 操作、Redis 健康检查等边缘场景）
+- `TimeoutManager.get_timeout()` 的状态感知逻辑可进一步细化（当前主要区分 IDLE/CONNECTING/FETCHING/BATCH_FETCHING）

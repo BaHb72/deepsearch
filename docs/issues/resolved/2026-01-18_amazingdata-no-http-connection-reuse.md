@@ -1,10 +1,12 @@
-# SDK 无 HTTP 连接复用
+# [WON'T FIX] SDK 无 HTTP 连接复用
 
 > 发现日期: 2026-01-18
 > 发现位置: packages/core/infrastructure/providers/implementations/amazingdata/
 > 类型: performance
 > 严重程度: medium
-> 状态: open
+> 状态: won't fix
+> 关闭日期: 2026-02-07
+> 关闭理由: SDK 内部连接管理机制，非代码层面可修复。连接复用取决于 AmazingData SDK 实现。
 
 ---
 

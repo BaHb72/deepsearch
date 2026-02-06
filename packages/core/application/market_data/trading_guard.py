@@ -175,12 +175,21 @@ class TradingSessionGuard:
         today_int = self._as_date_int(now.date())
         trading_days = await self._collect_trading_days()
         if not trading_days:
-            trading_days = {today_int}
-            if not self._calendar_fallback_active:
-                logger.warning(
-                    "交易日历为空，临时视 {} 为交易日，允许实时行情继续运行",
-                    today_int,
-                )
+            # 交易日历为空时的 fallback：至少排除周末
+            if now.weekday() < 5:  # 周一=0 ... 周五=4
+                trading_days = {today_int}
+                if not self._calendar_fallback_active:
+                    logger.warning(
+                        "交易日历为空，临时视 {} 为交易日（工作日），允许实时行情继续运行",
+                        today_int,
+                    )
+            else:
+                # 周末：即使日历为空也不视为交易日
+                if not self._calendar_fallback_active:
+                    logger.info(
+                        "交易日历为空，但 {} 为周末，跳过行情轮询",
+                        today_int,
+                    )
             self._calendar_fallback_active = True
         elif self._calendar_fallback_active:
             logger.info("交易日历恢复，关闭临时交易日回退")

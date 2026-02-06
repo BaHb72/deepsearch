@@ -61,9 +61,9 @@ const describeBackendIssue = (): string => {
 
 // ============ 创建 axios 实例 ============
 
-debugLog('INIT', '创建axios实例', { timeout: 30000 })
+debugLog('INIT', '创建axios实例', { timeout: 90000 })
 const request: AxiosInstance = axios.create({
-    timeout: 30000,
+    timeout: 90000,
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
@@ -94,6 +94,18 @@ export async function setupRequest(): Promise<null> {
         debugLog('SETUP', '开始初始化 axios 实例')
         request.defaults.baseURL = '/api'
         debugLog('SETUP', '使用代理配置: /api -> http://localhost:8000')
+
+        // 从后端同步超时配置，确保前后端超时一致
+        try {
+            const response = await axios.get('/api/config/timeouts', { timeout: 5000 })
+            if (response.data?.client_timeout_ms) {
+                request.defaults.timeout = response.data.client_timeout_ms
+                debugLog('SETUP', `超时配置已从后端同步: ${response.data.client_timeout_ms}ms`)
+            }
+        } catch {
+            debugLog('SETUP', '后端超时配置同步失败，使用默认值 90000ms')
+        }
+
         return null
     } catch (error) {
         debugLog('SETUP_ERROR', '初始化失败', error)

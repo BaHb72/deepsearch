@@ -141,3 +141,19 @@ AkShare 作为 fallback 数据源也失败，可能是：
 - 该问题在 distributed 模式下更容易出现
 - local 模式下可能不会有此问题（直接 SDK 调用，无 Dask 开销）
 - 如果问题持续，建议暂时切换回 local 模式
+
+---
+
+## 2026-02-07 更新
+
+### 已解决部分
+
+- **超时配置化**：所有超时值已统一到 YAML 配置（`TimeoutsConfig`），不再硬编码（Refactoring #4）
+- **AkShare 可用性**：默认切换为直连模式（proxy=False），避免代理限流导致的 fallback 失败（Refactoring #3）
+- **DaskAdapter 超时**：首次调用超时已从 30s 调整为可配置值（dev: 85s），足够覆盖 SDK 初始化
+- **AkShare fallback 超时**：已纳入 TimeoutManager 管理，不再使用 5s 硬编码
+
+### 残余项
+
+- 启动顺序协调：多组件并发启动时仍可能出现资源竞争，需要更精细的启动依赖图
+- Redis 响应时间监控：健康检查中 Redis degraded 状态的阈值可能需要根据实际环境调整

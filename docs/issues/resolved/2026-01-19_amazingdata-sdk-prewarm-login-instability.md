@@ -1,10 +1,12 @@
-# AmazingData SDK Prewarm 登录不稳定
+# [WON'T FIX] AmazingData SDK Prewarm 登录不稳定
 
 > 发现日期: 2026-01-19
 > 发现位置: Dask Worker 启动日志
 > 类型: performance
 > 严重程度: medium
-> 状态: open
+> 状态: won't fix
+> 关闭日期: 2026-02-07
+> 关闭理由: 单 Worker 架构已消除多 Worker 竞争问题；SDK 服务端登录不稳定属外部因素，非代码层面可控。
 
 ---
 
