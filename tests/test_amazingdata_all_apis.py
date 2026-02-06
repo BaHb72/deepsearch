@@ -15,6 +15,8 @@ import pytest
 from core.infrastructure.providers.implementations.amazingdata import (
     AmazingDataExtended,
     AmazingDataRealtime,
+)
+from core.infrastructure.providers.implementations.amazingdata.snapshot_policy import (
     SnapshotAlignPolicy,
 )
 

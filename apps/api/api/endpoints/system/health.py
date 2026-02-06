@@ -46,6 +46,16 @@ def get_engine():
         def __init__(self):
             self.status = _DummyStatus()
             self.message = "ok"
+            from datetime import datetime
+
+            self.timestamp = datetime.now()
+
+        def to_dict(self):
+            return {
+                "status": self.status.value,
+                "message": self.message,
+                "timestamp": self.timestamp.isoformat(),
+            }
 
     class _DummyHealthManager:
         def get_overall_status(self):
@@ -53,6 +63,23 @@ def get_engine():
 
         def get_last_results(self):
             return {"system": _DummyResult(), "database": _DummyResult()}
+
+        def get_statistics(self):
+            return {
+                "total_checkers": 0,
+                "enabled_checkers": 0,
+                "overall_status": "healthy",
+                "checkers": {},
+            }
+
+        async def check_component(self, name: str):
+            return _DummyResult()
+
+        async def check_all(self):
+            return {"system": _DummyResult(), "database": _DummyResult()}
+
+        def get_history(self, limit: int = 50):
+            return []
 
     class _DummyEngine:
         async def get_health_status(self):
@@ -107,6 +134,23 @@ async def get_health() -> Dict[str, Any]:
         except Exception as e:
             logger.debug(f"Could not get MessageBus health status: {e}")
 
+        # 增强：添加Dask集群初始化状态
+        try:
+            from core.compute.dask_init_state import get_dask_init_manager_sync
+
+            dask_manager = get_dask_init_manager_sync()
+            if dask_manager:
+                status = dask_manager.get_status()
+                health_report["dask"] = {
+                    "phase": status.phase.value,
+                    "ready": dask_manager.is_ready,
+                    "usable": dask_manager.is_usable,
+                    "scheduler_ready": status.scheduler.ready,
+                    "amazingdata_ready": status.amazingdata.ready,
+                }
+        except Exception as e:
+            logger.debug(f"Could not get Dask init status: {e}")
+
         return health_report
     except Exception as e:
         logger.error(f"获取健康状态失败: {e}")
@@ -159,6 +203,49 @@ async def get_health_summary() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"获取健康状态摘要失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取健康状态摘要失败: {str(e)}")
+
+
+@router.get("/history")
+async def get_health_history(limit: int = 50) -> Dict[str, Any]:
+    """
+    获取健康检查历史记录
+
+    Args:
+        limit: 返回的记录数量限制
+
+    Returns:
+        健康检查历史
+    """
+    try:
+        engine = get_engine()
+        health_manager = engine.get_health_manager()
+
+        history = health_manager.get_history(limit=limit)
+
+        return {"count": len(history), "history": history}
+
+    except Exception as e:
+        logger.error(f"获取健康检查历史失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取健康检查历史失败: {str(e)}")
+
+
+@router.get("/statistics")
+async def get_health_statistics() -> Dict[str, Any]:
+    """
+    获取健康检查统计信息
+
+    Returns:
+        健康检查统计数据
+    """
+    try:
+        engine = get_engine()
+        health_manager = engine.get_health_manager()
+
+        return _as_dict(health_manager.get_statistics())
+
+    except Exception as e:
+        logger.error(f"获取健康检查统计失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取健康检查统计失败: {str(e)}")
 
 
 @router.get("/{component}")
@@ -223,46 +310,3 @@ async def trigger_health_check() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"触发健康检查失败: {e}")
         raise HTTPException(status_code=500, detail=f"触发健康检查失败: {str(e)}")
-
-
-@router.get("/history")
-async def get_health_history(limit: int = 50) -> Dict[str, Any]:
-    """
-    获取健康检查历史记录
-
-    Args:
-        limit: 返回的记录数量限制
-
-    Returns:
-        健康检查历史
-    """
-    try:
-        engine = get_engine()
-        health_manager = engine.get_health_manager()
-
-        history = health_manager.get_history(limit=limit)
-
-        return {"count": len(history), "history": history}
-
-    except Exception as e:
-        logger.error(f"获取健康检查历史失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取健康检查历史失败: {str(e)}")
-
-
-@router.get("/statistics")
-async def get_health_statistics() -> Dict[str, Any]:
-    """
-    获取健康检查统计信息
-
-    Returns:
-        健康检查统计数据
-    """
-    try:
-        engine = get_engine()
-        health_manager = engine.get_health_manager()
-
-        return _as_dict(health_manager.get_statistics())
-
-    except Exception as e:
-        logger.error(f"获取健康检查统计失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取健康检查统计失败: {str(e)}")

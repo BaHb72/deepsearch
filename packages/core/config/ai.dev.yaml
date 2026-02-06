@@ -1,0 +1,7 @@
+ai:
+  enabled: true
+  base_url: "http://localhost:11434"
+  model: "deepseek-v3"
+  timeout: 120.0
+  temperature: 0.7
+  max_tokens: 4096

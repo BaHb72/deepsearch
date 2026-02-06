@@ -60,15 +60,11 @@ class TestDataSourceStatus:
     @pytest.mark.asyncio
     async def test_refresh_data_sources(self):
         """Test refreshing all data sources."""
-        with patch(
-            "core.infrastructure.providers.managers.data_source_manager.DataSourceRegistry.get_config",
-            return_value=DataSourceConfig(enabled=True, priority=1),
-        ):
-            manager = DataSourceManager()
-            manager.initialize = AsyncMock()
+        manager = DataSourceManager()
+        manager.initialize = AsyncMock()
 
-            await manager.initialize()
-            manager.initialize.assert_called_once()
+        await manager.initialize()
+        manager.initialize.assert_called_once()
 
 
 class TestDataSourceValidation:

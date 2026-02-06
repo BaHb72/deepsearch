@@ -477,5 +477,11 @@ def run_standalone(
 
 
 if __name__ == "__main__":
-    # 测试独立运行
+    import warnings
+
+    warnings.warn(
+        "直接运行 runner.py 已废弃，请使用: uv run deepsearch run --mode webui",
+        DeprecationWarning,
+        stacklevel=1,
+    )
     run_standalone()

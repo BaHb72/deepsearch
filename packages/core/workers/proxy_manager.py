@@ -616,7 +616,13 @@ class WorkersProxyManager:
             # 兼容旧格式
             if isinstance(entry, tuple):
                 data, timestamp = entry
-                if now() - timestamp < timedelta(seconds=self.config.cache_ttl):
+                # 统一时区：旧格式可能存入 naive datetime
+                current = now()
+                if timestamp.tzinfo is None:
+                    from core.utils.time.market_time import CHINA_TZ
+
+                    timestamp = timestamp.replace(tzinfo=CHINA_TZ)
+                if current - timestamp < timedelta(seconds=self.config.cache_ttl):
                     return data
                 else:
                     del self._cache[key]
@@ -626,6 +632,12 @@ class WorkersProxyManager:
             if isinstance(entry, dict):
                 timestamp = entry.get("timestamp", now())
                 ttl = entry.get("ttl", self.config.cache_ttl)
+
+                # 统一时区：旧格式可能存入 naive datetime
+                if timestamp.tzinfo is None:
+                    from core.utils.time.market_time import CHINA_TZ
+
+                    timestamp = timestamp.replace(tzinfo=CHINA_TZ)
 
                 # 检查是否过期
                 if now() - timestamp < timedelta(seconds=ttl):

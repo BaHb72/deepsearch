@@ -15,13 +15,16 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import site
 import socket
 import subprocess
 import sys
+import sysconfig
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional
 
 from loguru import logger
@@ -131,11 +134,24 @@ class DaskWorkerManager:
     """
 
     # 状态转换表
+    # 允许从启动中任意阶段转换到停止状态，以支持 Ctrl+C 中断启动流程
     VALID_TRANSITIONS: ClassVar[Dict[DaskWorkerState, List[DaskWorkerState]]] = {
         DaskWorkerState.IDLE: [DaskWorkerState.CHECKING, DaskWorkerState.FAILED],
-        DaskWorkerState.CHECKING: [DaskWorkerState.STARTING, DaskWorkerState.FAILED],
-        DaskWorkerState.STARTING: [DaskWorkerState.REGISTERING, DaskWorkerState.FAILED],
-        DaskWorkerState.REGISTERING: [DaskWorkerState.RUNNING, DaskWorkerState.FAILED],
+        DaskWorkerState.CHECKING: [
+            DaskWorkerState.STARTING,
+            DaskWorkerState.STOPPING,  # 允许中断启动
+            DaskWorkerState.FAILED,
+        ],
+        DaskWorkerState.STARTING: [
+            DaskWorkerState.REGISTERING,
+            DaskWorkerState.STOPPING,  # 允许中断启动
+            DaskWorkerState.FAILED,
+        ],
+        DaskWorkerState.REGISTERING: [
+            DaskWorkerState.RUNNING,
+            DaskWorkerState.STOPPING,  # 允许中断启动
+            DaskWorkerState.FAILED,
+        ],
         DaskWorkerState.RUNNING: [DaskWorkerState.STOPPING, DaskWorkerState.FAILED],
         DaskWorkerState.STOPPING: [DaskWorkerState.STOPPED, DaskWorkerState.FAILED],
         DaskWorkerState.STOPPED: [DaskWorkerState.IDLE],
@@ -179,6 +195,12 @@ class DaskWorkerManager:
         # 解析后的地址缓存
         self._parsed_host: str = "localhost"
         self._parsed_port: int = 8786
+
+        # Plugin 就绪事件（用于等待 Plugin 在 Worker 上完成 setup）
+        self._amazingdata_plugin_ready = asyncio.Event()
+
+        # Redis URL（用于 Plugin 就绪检查）
+        self._redis_url: str = "redis://localhost:6379"
 
     # ========================================================================
     # 属性
@@ -263,6 +285,11 @@ class DaskWorkerManager:
             return True  # 配置禁用时返回 True
 
         try:
+            # 启动前清理残留 Worker（避免 "name taken" 错误）
+            cleaned_count = await self._cleanup_stale_workers()
+            if cleaned_count > 0:
+                self._logger.info(f"已清理 {cleaned_count} 个残留 Worker，继续启动")
+
             # 阶段 1: 检查 Scheduler
             if not await self._transition_to(DaskWorkerState.CHECKING):
                 return False
@@ -429,6 +456,16 @@ class DaskWorkerManager:
                 memory_thresholds=memory_thresholds,
             )
 
+            # 读取 Redis URL（用于 Plugin 就绪检查）
+            database_config = getattr(settings, "database", None)
+            if database_config:
+                cache_config = getattr(database_config, "cache", None)
+                if cache_config:
+                    host = getattr(cache_config, "host", "localhost")
+                    port = getattr(cache_config, "port", 6379)
+                    self._redis_url = f"redis://{host}:{port}"
+                    self._logger.info(f"Redis URL: {self._redis_url}")
+
             self._logger.info(f"DaskConfig 创建完成，resources={self._config.resources}")
 
             return True
@@ -515,6 +552,127 @@ class DaskWorkerManager:
         # 注意：不再检查 DNS 解析，因为 Windows Docker Desktop
         # 会在 hosts 文件中保留 host.docker.internal 映射
         return "localhost"
+
+    def _get_site_packages_paths(self) -> list[str]:
+        """获取 site-packages 路径（多重 fallback）
+
+        UV 虚拟环境下 site.getsitepackages() 可能返回不正确的路径，
+        需要使用多种方法尝试获取正确的 site-packages 路径。
+
+        Returns:
+            site-packages 路径列表
+        """
+        paths: list[str] = []
+        seen: set[str] = set()
+
+        def add_path(p: str) -> None:
+            """添加路径（去重）"""
+            if p and p not in seen and os.path.isdir(p):
+                seen.add(p)
+                paths.append(p)
+
+        # 方法 1: site.getsitepackages()（标准方法）
+        try:
+            site_packages = site.getsitepackages()
+            if site_packages:
+                for sp in site_packages:
+                    add_path(sp)
+                self._logger.debug(f"site.getsitepackages(): {site_packages}")
+        except Exception as e:
+            self._logger.debug(f"site.getsitepackages() 失败: {e}")
+
+        # 方法 2: sysconfig.get_path('purelib')（UV 虚拟环境更可靠）
+        try:
+            purelib = sysconfig.get_path("purelib")
+            if purelib:
+                add_path(purelib)
+                self._logger.debug(f"sysconfig purelib: {purelib}")
+        except Exception as e:
+            self._logger.debug(f"sysconfig.get_path('purelib') 失败: {e}")
+
+        # 方法 3: 从 sys.prefix 推断（Windows 虚拟环境）
+        try:
+            if sys.platform == "win32":
+                # Windows: venv/Lib/site-packages
+                win_site_packages = os.path.join(sys.prefix, "Lib", "site-packages")
+                add_path(win_site_packages)
+            else:
+                # Unix: venv/lib/pythonX.Y/site-packages
+                py_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+                unix_site_packages = os.path.join(sys.prefix, "lib", py_version, "site-packages")
+                add_path(unix_site_packages)
+        except Exception as e:
+            self._logger.debug(f"从 sys.prefix 推断 site-packages 失败: {e}")
+
+        # 方法 4: 从 sys.path 提取已知的 site-packages 路径
+        try:
+            for p in sys.path:
+                if "site-packages" in p and os.path.isdir(p):
+                    add_path(p)
+        except Exception as e:
+            self._logger.debug(f"从 sys.path 提取 site-packages 失败: {e}")
+
+        return paths
+
+    def _build_pythonpath(self, worker_name: str) -> str:
+        """构建 Worker 进程的 PYTHONPATH
+
+        确保包含：
+        1. 项目根目录（deepsearch/）
+        2. packages 目录（deepsearch/packages/）- 关键修复点
+        3. site-packages 路径（多重 fallback）
+        4. 已有的 PYTHONPATH
+
+        Args:
+            worker_name: Worker 名称（用于日志）
+
+        Returns:
+            完整的 PYTHONPATH 字符串
+        """
+        pythonpath_parts: list[str] = []
+        seen: set[str] = set()
+
+        def add_path(p: str) -> None:
+            """添加路径（去重）"""
+            if p and p not in seen:
+                seen.add(p)
+                pythonpath_parts.append(p)
+
+        # 1. 项目根目录（deepsearch/）
+        project_root = Path(
+            __file__
+        ).parent.parent.parent.parent  # compute -> core -> packages -> deepsearch
+        add_path(str(project_root))
+
+        # 2. packages 目录（关键修复：确保 import core.xxx 能正常工作）
+        packages_dir = project_root / "packages"
+        if packages_dir.is_dir():
+            add_path(str(packages_dir))
+            self._logger.debug(f"Worker {worker_name}: 添加 packages 目录到 PYTHONPATH")
+        else:
+            self._logger.warning(f"Worker {worker_name}: packages 目录不存在: {packages_dir}")
+
+        # 3. site-packages 路径（多重 fallback）
+        site_packages_paths = self._get_site_packages_paths()
+        for sp in site_packages_paths:
+            add_path(sp)
+
+        # 4. 保留已有的 PYTHONPATH
+        existing_pythonpath = os.environ.get("PYTHONPATH", "")
+        if existing_pythonpath:
+            for p in existing_pythonpath.split(os.pathsep):
+                add_path(p)
+
+        pythonpath = os.pathsep.join(pythonpath_parts)
+
+        self._logger.info(
+            f"Worker {worker_name}: PYTHONPATH 构建完成 | "
+            f"paths_count={len(pythonpath_parts)} | "
+            f"包含 packages={str(packages_dir) in pythonpath}"
+        )
+        self._logger.debug(f"Worker {worker_name}: PYTHONPATH={pythonpath}")
+
+        return pythonpath
 
     def _reserve_ports(
         self, count: int, start_port: int = 58200, max_range: int = 100
@@ -765,6 +923,10 @@ class DaskWorkerManager:
                 # 构建环境变量（包含资源标签和内存阈值）
                 env = os.environ.copy()
 
+                # 设置 PYTHONPATH（使用新的 _build_pythonpath 方法）
+                # 关键修复：确保包含 packages 目录，使 import core.xxx 正常工作
+                env["PYTHONPATH"] = self._build_pythonpath(worker_name)
+
                 # 设置内存管理阈值（通过 Dask 环境变量）
                 thresholds = self._config.memory_thresholds
                 env["DASK_DISTRIBUTED__WORKER__MEMORY__TARGET"] = str(thresholds.target)
@@ -843,7 +1005,17 @@ class DaskWorkerManager:
             self._logger.info("等待 Workers 就绪...")
             ready_count = 0
             for pid, info in self._workers.items():
-                is_ready = await self._wait_for_worker_ready(info.name, timeout=30.0)
+                # 从统一超时配置读取 worker_ready 超时
+                _wr_timeout = 30.0
+                try:
+                    from core.config import get_config as _get_cfg2
+
+                    _tc2 = getattr(_get_cfg2(), "timeouts", None)
+                    if _tc2:
+                        _wr_timeout = _tc2.dask.worker_ready
+                except Exception:
+                    pass
+                is_ready = await self._wait_for_worker_ready(info.name, timeout=_wr_timeout)
                 if is_ready:
                     ready_count += 1
                     self._logger.info(f"Worker {info.name} 已就绪 (PID={pid})")
@@ -907,20 +1079,76 @@ class DaskWorkerManager:
                 except Exception as e:
                     self._logger.debug(f"发送终止信号失败: {e}")
 
-            # 等待退出
+            # 等待退出（使用 run_in_executor 避免阻塞事件循环）
+            loop = asyncio.get_event_loop()
             for info in running:
                 try:
-                    info.process.wait(timeout=timeout)
-                except subprocess.TimeoutExpired:
+                    # 将同步的 process.wait() 放到线程池中执行，避免阻塞事件循环
+                    await asyncio.wait_for(
+                        loop.run_in_executor(None, lambda p=info.process: p.wait(timeout=timeout)),  # type: ignore[misc]
+                        timeout=timeout + 1.0,
+                    )
+                except (subprocess.TimeoutExpired, asyncio.TimeoutError):
                     self._logger.warning(f"Worker {info.name} 未响应，强制终止")
                     info.process.kill()
-                    info.process.wait(timeout=5)
+                    # kill 后也用异步等待，避免阻塞
+                    await loop.run_in_executor(None, lambda p=info.process: p.wait(timeout=5))  # type: ignore[misc]
                 finally:
                     # 关闭管道流，释放日志转发线程的阻塞
                     self._close_process_streams(info.process)
 
             self._workers.clear()
             self._logger.info("Workers 已全部停止")
+
+    async def _cleanup_stale_workers(self) -> int:
+        """清理 Scheduler 上的残留 Worker 注册
+
+        在启动新 Worker 前调用，避免 "name taken" 错误。
+        查找所有以当前 name_prefix 开头的已注册 Worker 并移除。
+
+        Returns:
+            清理的 Worker 数量
+        """
+        from distributed import Client
+
+        if not self._config:
+            return 0
+
+        scheduler_address = f"tcp://{self._parsed_host}:{self._parsed_port}"
+
+        try:
+            async with Client(
+                scheduler_address,
+                asynchronous=True,
+                timeout="5s",
+            ) as client:
+                # scheduler_info() 返回同步结果，不需要 await
+                scheduler_info = client.scheduler_info()
+                registered_workers = scheduler_info.get("workers", {})
+
+                # 查找所有以 name_prefix 开头的已注册 Worker
+                stale_workers = [
+                    addr
+                    for addr, info in registered_workers.items()
+                    if info.get("name", "").startswith(self._config.name_prefix)
+                ]
+
+                if stale_workers:
+                    stale_names = [registered_workers[addr].get("name") for addr in stale_workers]
+                    self._logger.warning(
+                        f"发现 {len(stale_workers)} 个残留 Worker 注册，正在清理 | "
+                        f"workers={stale_names}"
+                    )
+                    await client.retire_workers(stale_workers, close_workers=True)
+                    self._logger.info("残留 Worker 清理完成")
+                    return len(stale_workers)
+
+                return 0
+
+        except Exception as e:
+            # 清理失败不阻塞启动，只记录警告
+            self._logger.warning(f"清理残留 Worker 失败（继续启动）| error={e}")
+            return 0
 
     async def _retire_workers_from_scheduler(self, workers: list) -> None:
         """
@@ -944,7 +1172,8 @@ class DaskWorkerManager:
             # 使用短超时连接 Scheduler
             async with Client(scheduler_address, asynchronous=True, timeout="5s") as client:
                 # 获取 Scheduler 上已注册的 Worker
-                scheduler_info = await client.scheduler_info()
+                # scheduler_info() 返回同步结果，不需要 await
+                scheduler_info = client.scheduler_info()
                 registered_workers = scheduler_info.get("workers", {})
 
                 # 找出需要 retire 的 Worker 地址
@@ -990,7 +1219,11 @@ class DaskWorkerManager:
             plugin.registered_at = None
 
     async def _register_all_plugins(self) -> None:
-        """注册所有 Plugins"""
+        """注册所有 Plugins
+
+        注册 Plugin 后，会等待 AmazingData Plugin 在 Worker 上完成 setup。
+        这确保了在后续注册 Adapter 时，Actor 已经可用。
+        """
         scheduler_address = f"tcp://{self._parsed_host}:{self._parsed_port}"
 
         # 并行注册，各自处理错误
@@ -1011,6 +1244,42 @@ class DaskWorkerManager:
             self._logger.info(f"Plugins 已注册: {registered}")
         if failed:
             self._logger.warning(f"Plugins 注册失败: {failed}")
+
+        # 等待 AmazingData Plugin 在 Worker 上完成 setup
+        # 这是关键步骤：确保 Actor 真正可用后再设置就绪事件
+        if "amazingdata" in registered:
+            # 关键修复：等待 Plugin 被 Scheduler 发送到 Worker
+            # client.register_plugin() 返回后，Plugin 只是被发送给了 Scheduler
+            # 还需要额外时间让 Scheduler 将 Plugin 调度到 Worker 并开始执行 setup
+            self._logger.info("等待 Plugin 被调度到 Worker...")
+            await asyncio.sleep(3.0)
+
+            self._logger.info("等待 AmazingData Plugin 在 Worker 上完成 setup...")
+            # 从统一超时配置读取
+            _ad_timeout = 45.0
+            try:
+                from core.config import get_config as _get_cfg
+
+                _tc = getattr(_get_cfg(), "timeouts", None)
+                if _tc:
+                    _ad_timeout = _tc.amazingdata.normal_call
+            except Exception:
+                pass
+            plugin_ready = await self._wait_for_plugin_setup(
+                actor_name="amazingdata",
+                timeout=_ad_timeout,
+            )
+            if plugin_ready:
+                self._amazingdata_plugin_ready.set()
+                self._logger.info("AmazingData Plugin 已在 Worker 上就绪")
+            else:
+                # 关键修复：超时时也设置 Event，避免上层无限等待
+                # Event 语义应该是"等待结束"而非"成功完成"
+                self._amazingdata_plugin_ready.set()
+                self._logger.warning(
+                    "AmazingData Plugin setup 超时，但将继续执行 | "
+                    "后续 Adapter 初始化会再次检查 Actor 可用性"
+                )
 
     async def _register_plugin_safe(self, name: str, scheduler_address: str) -> None:
         """安全注册单个 Plugin"""
@@ -1098,7 +1367,9 @@ class DaskWorkerManager:
                     # 获取 MiniQMT 特定配置
                     cache_ttl = 300
                     failure_threshold = 5
-                    recovery_timeout = 60
+                    # 从统一超时配置读取熔断器恢复超时
+                    _tc_cb = getattr(settings, "timeouts", None)
+                    recovery_timeout = _tc_cb.dask.circuit_breaker_recovery if _tc_cb else 60
 
                     data_sources = getattr(settings, "data_sources", None)
                     if data_sources:
@@ -1114,19 +1385,16 @@ class DaskWorkerManager:
                                     failure_threshold = getattr(
                                         provider_config, "failure_threshold", 5
                                     )
-                                    recovery_timeout = getattr(
-                                        provider_config, "recovery_timeout", 60
-                                    )
 
                     # 使用 Pydantic 配置模型（修复参数签名不匹配）
-                    plugin_config = MiniQMTPluginConfig(
+                    plugin_config = MiniQMTPluginConfig(  # type: ignore[assignment]
                         redis_url=redis_url,
                         only_on_windows=True,
                         cache_ttl=cache_ttl,
                         failure_threshold=failure_threshold,
                         recovery_timeout=recovery_timeout,
                     )
-                    plugin = MiniQMTWorkerPlugin(plugin_config)
+                    plugin = MiniQMTWorkerPlugin(plugin_config)  # type: ignore[arg-type]
 
                 else:
                     self._logger.warning(f"未知的 Plugin: {name}")
@@ -1141,6 +1409,198 @@ class DaskWorkerManager:
             return False
         except Exception as e:
             self._logger.error(f"注册 {name} Plugin 失败: {e}")
+            return False
+
+    # ========================================================================
+    # Plugin 就绪等待
+    # ========================================================================
+
+    async def wait_amazingdata_plugin_ready(self, timeout: float = 60.0) -> bool:
+        """等待 AmazingData Plugin 在 Worker 上就绪
+
+        当 Plugin 在 Worker 上完成 setup（包括 Actor 注册到 Redis）后，
+        此方法返回 True。用于确保在注册 Adapter 前 Actor 已可用。
+
+        Args:
+            timeout: 最大等待时间（秒）
+
+        Returns:
+            True 如果 Plugin 已就绪，False 如果超时
+        """
+        try:
+            await asyncio.wait_for(
+                self._amazingdata_plugin_ready.wait(),
+                timeout=timeout,
+            )
+            self._logger.info("AmazingData Plugin 就绪事件已触发")
+            return True
+        except asyncio.TimeoutError:
+            self._logger.warning(f"等待 AmazingData Plugin 就绪超时 ({timeout}s)")
+            return False
+
+    async def _wait_for_plugin_setup(
+        self,
+        actor_name: str,
+        timeout: float = 45.0,
+        poll_interval: float = 1.0,
+    ) -> bool:
+        """等待 Plugin 在 Worker 上完成 setup
+
+        通过 Redis 轮询检查 Actor 是否已在 Worker 上注册。
+        Plugin 的 setup() 方法会在完成时设置 Redis 键。
+
+        Args:
+            actor_name: Actor 名称（如 "amazingdata"）
+            timeout: 最大等待时间（秒）
+            poll_interval: 轮询间隔（秒）
+
+        Returns:
+            True 如果 Actor 已就绪，False 如果超时或失败
+        """
+        import redis
+
+        redis_key = f"dask_actor_ready:{actor_name}"
+        max_polls = int(timeout / poll_interval)
+
+        self._logger.info(
+            f"等待 {actor_name} Plugin setup 完成 | "
+            f"redis_key={redis_key} | redis_url={self._redis_url} | timeout={timeout}s"
+        )
+
+        try:
+            # 创建 Redis 客户端（同步版本，用于简单轮询）
+            redis_client = redis.from_url(self._redis_url)  # type: ignore[attr-defined]
+
+            # 验证 Redis 连接
+            try:
+                redis_client.ping()
+                self._logger.info(f"Redis 连接验证成功 | url={self._redis_url}")
+            except Exception as e:
+                self._logger.error(f"Redis 连接失败! | url={self._redis_url} | error={e}")
+                # 连接失败时直接尝试 Actor 直接检查
+                actor_available = await self._check_actor_directly(actor_name)
+                if actor_available:
+                    self._logger.info(f"{actor_name} Actor 直接检查可用（绕过 Redis）")
+                    return True
+                return False
+
+            for i in range(max_polls):
+                try:
+                    # 检查 Redis 键是否存在
+                    ready_value = redis_client.get(redis_key)
+                    if ready_value:
+                        self._logger.info(
+                            f"{actor_name} Plugin setup 完成 | "
+                            f"检测到 Redis 键 | value={ready_value} | poll_count={i + 1}"
+                        )
+                        redis_client.close()
+                        return True
+                except Exception as e:
+                    self._logger.warning(f"Redis 轮询失败: {e}")
+
+                # 等待下一轮轮询
+                await asyncio.sleep(poll_interval)
+
+                # 每 5 秒输出一次进度日志（便于诊断）
+                if (i + 1) % 5 == 0:
+                    elapsed = (i + 1) * poll_interval
+                    self._logger.info(
+                        f"仍在等待 {actor_name} Plugin setup | elapsed={elapsed:.0f}s/{timeout:.0f}s"
+                    )
+
+            redis_client.close()
+
+            # Redis 轮询超时，尝试直接检查 Actor 可用性（fallback 机制）
+            self._logger.warning(
+                f"{actor_name} Plugin setup 超时（Redis 轮询）| " f"尝试直接检查 Actor 可用性..."
+            )
+
+            actor_available = await self._check_actor_directly(actor_name)
+            if actor_available:
+                self._logger.info(f"{actor_name} Actor 直接检查可用（绕过 Redis）")
+                return True
+
+            self._logger.warning(
+                f"{actor_name} Plugin setup 超时 | timeout={timeout}s | "
+                f"redis_key={redis_key} 未检测到，Actor 直接检查也失败"
+            )
+            return False
+
+        except Exception as e:
+            self._logger.error(f"等待 Plugin setup 失败: {e}")
+            return False
+
+    async def _check_actor_directly(self, actor_name: str) -> bool:
+        """直接检查 Actor 是否可用（不依赖 Redis）
+
+        当 Redis 轮询超时时，通过 Dask Client 直接在 Worker 上检查
+        Actor 是否已注册。这是一个 fallback 机制，用于应对 Redis 键
+        未正确设置但 Actor 实际已可用的情况。
+
+        Args:
+            actor_name: Actor 名称（如 "amazingdata"）
+
+        Returns:
+            True 如果 Actor 在 Worker 上可用，False 否则
+        """
+        from distributed import Client
+
+        scheduler_address = f"tcp://{self._parsed_host}:{self._parsed_port}"
+
+        try:
+            async with Client(scheduler_address, asynchronous=True, timeout="10s") as client:
+                # 获取 Worker 列表
+                scheduler_info = client.scheduler_info()
+                workers = scheduler_info.get("workers", {})
+
+                if not workers:
+                    self._logger.warning("直接检查 Actor: 没有可用的 Worker")
+                    return False
+
+                self._logger.info(
+                    f"直接检查 Actor: 找到 {len(workers)} 个 Worker | "
+                    f"workers={list(workers.keys())}"
+                )
+
+                # 定义在 Worker 上执行的检查函数
+                def check_actor_on_worker(target_actor_name: str) -> bool:
+                    """在 Worker 上检查 Actor 是否已注册"""
+                    try:
+                        from distributed import get_worker
+
+                        worker = get_worker()
+                        actors = getattr(worker, "actors", {})
+
+                        # Actor 键名格式: "{actor_name}-actor"
+                        actor_key = f"{target_actor_name}-actor"
+                        actor_exists = actor_key in actors
+
+                        # 记录所有已注册的 Actor（用于调试）
+                        if actors:
+                            print(f"[Worker] 已注册的 Actors: {list(actors.keys())}")
+                        else:
+                            print("[Worker] 没有已注册的 Actors")
+
+                        return actor_exists
+                    except Exception as e:
+                        print(f"[Worker] 检查 Actor 失败: {e}")
+                        return False
+
+                # 提交任务到 Worker（要求 WIN 资源）
+                future = client.submit(
+                    check_actor_on_worker,
+                    actor_name,
+                    resources={"WIN": 1.0},
+                )
+
+                # 等待结果（最多 10 秒）
+                result = await future.result(timeout=10)
+
+                self._logger.info(f"直接检查 Actor 结果: {actor_name} | available={result}")
+                return result
+
+        except Exception as e:
+            self._logger.warning(f"直接检查 Actor 失败: {e}")
             return False
 
     # ========================================================================

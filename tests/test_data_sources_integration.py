@@ -14,6 +14,8 @@ import pytest
 from core.infrastructure.providers.managers.data_source_manager import StockListFetchResult
 from loguru import logger
 
+pytestmark = pytest.mark.skipif(True, reason="集成测试：需要真实数据源连接")
+
 # 配置日志
 logger.add("test_data_sources.log", rotation="10 MB")
 

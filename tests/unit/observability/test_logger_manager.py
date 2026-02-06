@@ -7,10 +7,11 @@ from core.observability.logger import logger_manager
 
 
 def test_normalize_module_with_alias():
-    """带有前缀的模块名应匹配中文别名"""
+    """带有前缀的模块名应通过 token 翻译"""
 
     result = logger_manager._normalize_module_name("core.core.runtime.engine_adapter")
-    assert result == "运行时调度"
+    # 无精确别名匹配时，取最后一段 engine_adapter 做 token 拆分翻译
+    assert result == "引擎·适配器"
 
 
 def test_normalize_module_token_translation():
@@ -54,6 +55,6 @@ def test_format_console_uses_translated_module(tmp_path):
     formatted = logger_manager._format_console(record)
 
     assert "| 模块=AkShare·直连" in formatted
-    assert "d.i.p.akshare:42" in formatted
+    assert "c.i.p.akshare:42" in formatted
     assert "文件=" not in formatted
     assert "demo.py:42" not in formatted

@@ -729,109 +729,36 @@ async def lifespan(app: FastAPI):
         app.state.db_component = None
         app.state.db_service = None
 
-    # 启动 Windows Dask Workers（在市场数据服务之前）
-    worker_started = False
+    # 启动 Dask 集群（后台异步初始化，不阻塞 Uvicorn 端口监听）
+    # 这是关键优化：Dask Worker 初始化需要 15-25 秒，移到后台可让 Uvicorn 立即响应
     try:
-        from core.compute.dask_worker_manager import ensure_windows_workers
+        from core.compute.dask_init_state import get_dask_init_manager
 
-        worker_started = await ensure_windows_workers()
-        if worker_started:
-            logger.info("Windows Dask Workers 自启动成功")
-        else:
-            logger.warning("Windows Dask Workers 自启动失败（将继续启动，但数据源功能可能受限）")
+        dask_init_manager = await get_dask_init_manager()
+        # 启动后台初始化任务
+        app.state.dask_init_task = asyncio.create_task(
+            dask_init_manager.initialize_in_background(app),
+            name="dask_background_init",
+        )
+        app.state.dask_init_manager = dask_init_manager
+        logger.info("Dask 后台初始化任务已启动（Uvicorn 将立即开始监听端口）")
     except Exception as e:
-        logger.warning(f"Windows Dask Workers 自启动异常: {e}")
+        logger.warning(f"启动 Dask 后台初始化失败: {e}")
 
-    # 如果 Worker 启动成功，注册 AmazingData 代理到 ProviderContainer
-    provider_container = getattr(app.state, "provider_container", None)
-    if worker_started and provider_container is not None:
+    # 初始化 UnifiedDataFeed（核心数据访问层）
+    # 注意：此时 Dask Worker 可能还在后台初始化中，AmazingData adapter 可能尚不可用
+    # 但 CapabilityRouter 支持动态注册，后续 Dask Worker 就绪后会自动补充
+    try:
+        from core.application.services.unified_data import get_unified_feed, initialize_unified_feed
+
         try:
-            import redis.asyncio as aioredis
-            from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
-                AmazingDataDaskAdapter,
-            )
-            from distributed import Client
-
-            # 获取 scheduler 地址（从配置读取）
-            scheduler_address = "tcp://localhost:8786"
-            app_settings = get_config()
-            dask_config = getattr(app_settings, "dask", None)
-            if dask_config and hasattr(dask_config, "scheduler_address"):
-                scheduler_address = dask_config.scheduler_address
-
-            # 创建 Dask Client（用于任务提交）
-            # 注意：不使用 future.result()，而是通过 Redis 获取结果
-            # 这是为了绕过 tornado IOLoop 与 FastAPI asyncio 的冲突
-            dask_client = Client(
-                scheduler_address,
-                timeout="30s",
-                set_as_default=False,
-                direct_to_workers=False,
-            )
-
-            # 创建 Redis 客户端（用于获取调用结果）
-            # 使用与 Worker 相同的 Redis 实例
-            redis_url = "redis://localhost:6379"
-            cache_config = getattr(app_settings, "cache", None)
-            if cache_config and hasattr(cache_config, "url"):
-                redis_url = cache_config.url
-            redis_client = aioredis.from_url(
-                redis_url,
-                encoding="utf-8",
-                decode_responses=True,
-            )
-
-            # 从配置读取 AmazingData 超时设置
-            # 配置路径: data_sources.providers.amazingdata.timeout / config.first_call_timeout
-            amazingdata_timeout = 45.0  # 默认后续调用超时
-            amazingdata_first_call_timeout = 90.0  # 默认首次调用超时（含登录）
-
-            data_sources = getattr(app_settings, "data_sources", None)
-            if data_sources:
-                amazingdata_provider = data_sources.providers.get("amazingdata")
-                if amazingdata_provider:
-                    # 读取主超时配置
-                    if amazingdata_provider.timeout:
-                        amazingdata_timeout = amazingdata_provider.timeout
-                    # 读取嵌套配置中的首次调用超时
-                    nested_config = amazingdata_provider.config or {}
-                    if "first_call_timeout" in nested_config:
-                        amazingdata_first_call_timeout = float(nested_config["first_call_timeout"])
-                    # 如果配置了 prewarm，首次调用超时可以适当降低（预热后不需要登录）
-                    if nested_config.get("prewarm"):
-                        logger.info("[AmazingData] 预热模式已启用，Worker 启动时将完成登录")
-
-            logger.info(
-                "[AmazingData/Dask] 超时配置 | normal={}s | first_call={}s",
-                amazingdata_timeout,
-                amazingdata_first_call_timeout,
-            )
-
-            # 创建代理 Adapter（带 Redis 客户端用于结果传递）
-            adapter = AmazingDataDaskAdapter(
-                dask_client,
-                redis_client=redis_client,
-                timeout=amazingdata_timeout,
-                first_call_timeout=amazingdata_first_call_timeout,
-            )
-
-            # 初始化并验证 Actor 可用
-            if await adapter.initialize():
-                # 注册到 ProviderContainer
-                provider_container.register_external("amazingdata", adapter)
-                # 保存 client 引用以便关闭时使用
-                app.state.amazingdata_dask_client = dask_client
-                app.state.amazingdata_redis_client = redis_client
-                logger.info(
-                    "AmazingData Dask 代理已注册到 ProviderContainer（使用 Redis 结果传递）"
-                )
-            else:
-                logger.warning("AmazingData Actor 不可用，跳过代理注册")
-                # 同步关闭 Client
-                dask_client.close()
-                await redis_client.aclose()
-        except Exception as e:
-            logger.warning(f"注册 AmazingData 代理失败: {e}")
+            get_unified_feed()
+            logger.debug("UnifiedDataFeed 已存在，跳过重复初始化")
+        except RuntimeError:
+            initialize_unified_feed()
+            logger.info("UnifiedDataFeed 已在 lifespan 中初始化")
+    except Exception as e:
+        logger.warning(f"UnifiedDataFeed 初始化失败（非致命）: {e}")
 
     # 然后执行其他启动逻辑
     startup_handler = create_startup_handler(app_state)
@@ -859,6 +786,26 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"通知推送服务初始化失败（非致命）: {e}")
 
+    # 初始化 AI 分析服务（仅当配置启用时）
+    try:
+        settings = get_config()
+        if settings.ai and settings.ai.enabled:
+            from core.infrastructure.ai import AiAnalysisService, AiClient
+
+            ai_client = AiClient(settings.ai)
+            if await ai_client.health_check():
+                ai_service = AiAnalysisService(ai_client, settings.ai)
+                app.state.ai_client = ai_client
+                app.state.ai_service = ai_service
+                app.state.ai_config = settings.ai
+                logger.info(f"AI 分析服务已初始化 (模型: {settings.ai.model})")
+            else:
+                logger.warning("AI 服务不可用（Ollama 未运行或模型未加载），跳过初始化")
+                # 保留配置信息用于健康检查端点
+                app.state.ai_config = settings.ai
+    except Exception as e:
+        logger.warning(f"AI 分析服务初始化失败（非致命）: {e}")
+
     # 启动定时 GC 任务 (每 5 分钟执行一次)
     try:
         from apps.api.api.endpoints.system.memory import get_memory_manager
@@ -872,6 +819,20 @@ async def lifespan(app: FastAPI):
     yield  # 应用运行中
 
     # === SHUTDOWN ===
+    # 取消 Dask 后台初始化任务（如果还在运行）
+    dask_init_task = getattr(app.state, "dask_init_task", None)
+    if dask_init_task is not None and not dask_init_task.done():
+        dask_init_task.cancel()
+        try:
+            await dask_init_task
+        except asyncio.CancelledError:
+            logger.info("Dask 后台初始化任务已取消")
+
+    # 关闭 Dask 初始化状态管理器
+    dask_init_manager = getattr(app.state, "dask_init_manager", None)
+    if dask_init_manager is not None:
+        await dask_init_manager.shutdown()
+
     # 停止定时 GC 任务
     try:
         from apps.api.api.endpoints.system.memory import get_memory_manager
@@ -915,6 +876,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"关闭通知推送服务失败: {e}")
 
+    # 关闭 AI 客户端
+    ai_client = getattr(app.state, "ai_client", None)
+    if ai_client is not None:
+        try:
+            await ai_client.close()
+            logger.info("AI 客户端已关闭")
+        except Exception as e:
+            logger.warning(f"关闭 AI 客户端失败: {e}")
+
     # 关闭 AmazingData Dask Client（在 ProviderContainer 关闭后、Worker 停止前）
     dask_client = getattr(app.state, "amazingdata_dask_client", None)
     if dask_client is not None:
@@ -924,16 +894,28 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"关闭 AmazingData Dask Client 失败: {e}")
 
-    # 停止 Windows Dask Workers
-    try:
-        from core.compute.dask_worker_manager import stop_windows_workers
-
-        await stop_windows_workers()
-    except Exception as e:
-        logger.warning(f"停止 Windows Dask Workers 失败: {e}")
-
+    # 先停止业务逻辑（Runner），再停止基础设施（Dask）
+    # 这样即使 Dask 停止过程卡住，业务层已经正常关闭
     shutdown_handler = create_shutdown_handler(app_state)
     await shutdown_handler()
+
+    # 停止 Dask 集群（Workers -> Scheduler）
+    try:
+        from core.compute.dask_cluster_manager import shutdown_dask_cluster
+        from core.config import get_config as _get_shutdown_cfg
+
+        _dask_shutdown_timeout = 15.0
+        try:
+            _tc = getattr(_get_shutdown_cfg(), "timeouts", None)
+            if _tc:
+                _dask_shutdown_timeout = _tc.dask.shutdown
+        except Exception:
+            pass
+        await asyncio.wait_for(shutdown_dask_cluster(), timeout=_dask_shutdown_timeout)
+    except asyncio.TimeoutError:
+        logger.warning("停止 Dask 集群超时，继续退出")
+    except Exception as e:
+        logger.warning(f"停止 Dask 集群失败: {e}")
 
 
 def create_app() -> FastAPI:
@@ -1048,6 +1030,7 @@ def create_app() -> FastAPI:
     # from apps.api.api.endpoints.amazingdata import router as amazingdata_api
     from apps.api.api.endpoints.route_adapter import router as route_adapter_router
     from apps.api.api.endpoints.system.config import router as system_config_router
+    from apps.api.api.endpoints.system.dask_status import router as dask_status_router
     from apps.api.api.endpoints.system.health import router as system_health_router
     from apps.api.api.endpoints.system.logs import router as system_logs_router
     from apps.api.api.endpoints.system.memory import router as memory_router
@@ -1077,6 +1060,7 @@ def create_app() -> FastAPI:
     app.include_router(database_router, prefix="/api/database", tags=["Database"])
     app.include_router(monitoring_cache_router, prefix="/api/cache", tags=["Cache"])
     app.include_router(system_health_router, prefix="/api/health", tags=["Health"])
+    app.include_router(dask_status_router, prefix="/api/system/dask", tags=["Dask"])
     app.include_router(frontend_errors_router, prefix="/api/frontend", tags=["Frontend Errors"])
     app.include_router(workers_proxy_router, tags=["Workers Proxy"])  # 已包含 /api/workers 前缀
     app.include_router(
@@ -1347,6 +1331,15 @@ def create_app() -> FastAPI:
         logger.warning(f"AmazingData API模块加载失败 (ImportError): {e}")
     except Exception as e:
         logger.error(f"AmazingData API模块初始化失败: {e}")
+
+    # AI 分析 API
+    try:
+        from apps.api.api.endpoints.ai.router import router as ai_router
+
+        app.include_router(ai_router, tags=["AI Analysis"])
+        logger.info("AI 分析API已注册")
+    except ImportError as e:
+        logger.warning(f"AI 分析API模块加载失败: {e}")
 
     # 注册监控指标API
     try:

@@ -12,6 +12,7 @@ def test_retention_handler_archives_expired_logs(tmp_path):
     manager._archive_format = "zip"
     manager._archive_after_days = 1
     manager._archive_purge_days = None
+    manager._organize_by_month = False
 
     archive_dir = tmp_path / "archive"
     archive_dir.mkdir(parents=True, exist_ok=True)

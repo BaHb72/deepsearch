@@ -1,7 +1,68 @@
 {
   "version": "1.0",
-  "updated_at": "2026-01-20T16:00:00+08:00",
+  "updated_at": "2026-01-31T12:00:00+08:00",
   "entries": [
+    {
+      "path": "2026/01/2026-01-31_ai_analysis-service-phase1.md",
+      "date": "2026-01-31",
+      "module": "ai, config, api",
+      "action": "analysis-service-phase1",
+      "type": "feature",
+      "summary": "接入本地 DeepSeek 模型（Ollama），实现投资者互问解读和新闻分析的 RAG 模式，含流式 SSE 输出",
+      "keywords": ["ai", "deepseek", "ollama", "rag", "sse", "streaming", "investor-qa", "news", "analysis", "prompt", "httpx"],
+      "files": ["ai.py", "ai_client.py", "ai_analysis_service.py", "prompt_templates.py", "analyze.py", "server.py", "loader.py", "settings.py"]
+    },
+    {
+      "path": "2026/01/2026-01-28_dask-worker_pythonpath-fix-and-datasource-priority.md",
+      "date": "2026-01-28",
+      "module": "dask-worker-manager, market_data",
+      "action": "pythonpath-fix-and-datasource-priority",
+      "type": "bugfix",
+      "summary": "修复 PYTHONPATH 缺失 packages 目录导致 Plugin 注册失败，同时调整数据源优先级让 AmazingData 优先于 AkShare",
+      "keywords": ["dask", "worker", "pythonpath", "packages", "site-packages", "sysconfig", "uv", "amazingdata", "akshare", "priority", "routing", "fallback", "singleton", "event", "cluster-manager"],
+      "files": ["dask_worker_manager.py", "market_data.dev.yaml", "dask_cluster_manager.py"],
+      "related_decisions": ["2026-01-17_pyproject_package-discovery.md", "2026-01-19_dask-worker_nanny-compatibility-fix.md"]
+    },
+    {
+      "path": "2026/01/2026-01-25_akshare_fallback-refactor.md",
+      "date": "2026-01-25",
+      "module": "akshare",
+      "action": "fallback-refactor",
+      "type": "refactor",
+      "summary": "AkShare 架构简化：移除无效的 fallback_provider，日志级别从 debug 提升到 warning",
+      "keywords": ["akshare", "fallback", "adapter", "logging", "warning", "stock_list", "stock_zh_a_spot_em", "stock_info_a_code_name", "eastmoney", "ssl"],
+      "files": ["akshare_direct.py", "akshare_adapter.py"]
+    },
+    {
+      "path": "2026/01/2026-01-23_amazingdata_single-connection-constraint.md",
+      "date": "2026-01-23",
+      "module": "amazingdata, dask, config",
+      "action": "single-connection-constraint",
+      "type": "bugfix",
+      "summary": "AmazingData SDK 单连接约束导致多 Worker 竞争，修复配置覆盖问题并文档化约束",
+      "keywords": ["amazingdata", "dask", "worker", "num_workers", "single-connection", "config", "override", "timeout", "infrastructure", "sdk"],
+      "files": ["infrastructure.dev.yaml", "market_data_runtime.py", "CLAUDE.md"]
+    },
+    {
+      "path": "2026/01/2026-01-21_health-check_config-injection-fix.md",
+      "date": "2026-01-21",
+      "module": "health-check, lifecycle",
+      "action": "config-injection-fix",
+      "type": "bugfix",
+      "summary": "修复 LifecycleCoordinator 硬编码绕过配置系统的问题，使健康检查阈值可通过配置文件调整",
+      "keywords": ["health-check", "lifecycle", "config", "injection", "threshold", "redis", "database", "degraded", "pydantic"],
+      "files": ["lifecycle.py", "settings.dev.yaml", "health.py"]
+    },
+    {
+      "path": "2026/01/2026-01-20_amazingdata_health-check-redis-polling.md",
+      "date": "2026-01-20",
+      "module": "amazingdata",
+      "action": "health-check-redis-polling",
+      "type": "refactor",
+      "summary": "Actor 健康检查改用 Redis 轮询模式，彻底解决 asyncio.to_thread + Dask Future 的事件循环冲突",
+      "keywords": ["amazingdata", "dask", "health-check", "redis", "polling", "asyncio", "tornado", "event-loop", "timeout", "future"],
+      "files": ["dask_adapter.py"]
+    },
     {
       "path": "2026/01/2026-01-20_frontend-data-source-adapters_capability-fix.md",
       "date": "2026-01-20",

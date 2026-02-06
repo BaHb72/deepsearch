@@ -9,7 +9,7 @@ import inspect
 import time
 from contextlib import asynccontextmanager
 from functools import wraps
-from typing import Any, Callable, Dict, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from core.infrastructure.providers.managers.data_source_manager import (
     StockListFetchResult,
@@ -19,6 +19,14 @@ from core.observability.monitoring.data_source_monitor import get_monitor
 from core.ports.data_sources import DataAccessType, DataSourceType
 from loguru import logger
 
+# 数据源名称到枚举的映射
+_SOURCE_NAME_MAP: Dict[str, DataSourceType] = {
+    "miniqmt": DataSourceType.QMT,
+    "qmt": DataSourceType.QMT,
+    "amazingdata": DataSourceType.AMAZINGDATA,
+    "akshare": DataSourceType.AKSHARE,
+}
+
 
 class DataAccessProxy:
     """数据访问代理"""
@@ -26,17 +34,51 @@ class DataAccessProxy:
     def __init__(self):
         """初始化代理"""
         self.monitor = get_monitor()
-        self.providers = {}
+        self.providers: Dict[DataSourceType, Any] = {}
         self.initialized = False
 
         # 熔断器配置
         self.circuit_breaker_threshold = 5  # 连续失败次数阈值
         self.circuit_breaker_timeout = 60  # 熔断恢复时间（秒）
-        self.circuit_breaker_status = {}  # 数据源熔断状态
+        self.circuit_breaker_status: Dict[DataSourceType, Dict[str, Any]] = {}
 
         # 重试配置
         self.max_retries = 3
         self.retry_delay = 1.0  # 重试延迟（秒）
+
+        # 从配置加载 fallback_order
+        self._fallback_order: List[DataSourceType] = self._load_fallback_order()
+
+        # ProviderContainer 引用（用于动态获取 AmazingData）
+        self._provider_container: Optional[Any] = None
+
+    def _load_fallback_order(self) -> List[DataSourceType]:
+        """从配置文件加载 fallback_order
+
+        Returns:
+            数据源优先级列表
+        """
+        try:
+            from core.config import get_config
+
+            app_config = get_config()
+            order = app_config.data_sources.fallback_order  # type: ignore[union-attr]
+            result = []
+            for name in order:
+                if name in _SOURCE_NAME_MAP:
+                    source_type = _SOURCE_NAME_MAP[name]
+                    if source_type not in result:  # 避免重复
+                        result.append(source_type)
+            if result:
+                logger.info(f"从配置加载 fallback_order: {[s.value for s in result]}")
+                return result
+        except Exception as e:
+            logger.debug(f"从配置加载 fallback_order 失败，使用默认值: {e}")
+
+        # 默认优先级
+        default = [DataSourceType.QMT, DataSourceType.AMAZINGDATA, DataSourceType.AKSHARE]
+        logger.info(f"使用默认 fallback_order: {[s.value for s in default]}")
+        return default
 
     async def initialize(self):
         """初始化代理"""
@@ -87,6 +129,98 @@ class DataAccessProxy:
                     logger.info("QMT数据提供者初始化成功")
         except Exception as e:
             logger.debug(f"QMT数据提供者不可用: {e}")
+
+        # 初始化 AmazingData（通过 ProviderContainer，如果已注册）
+        await self._try_init_amazingdata()
+
+    async def _try_init_amazingdata(self) -> bool:
+        """尝试初始化 AmazingData 数据提供者
+
+        AmazingData 通过 Dask Worker 异步初始化，可能在代理初始化时还不可用。
+        此方法会尝试从 ProviderContainer 获取已注册的 AmazingData 代理。
+
+        Returns:
+            是否成功初始化
+        """
+        try:
+            from core.infrastructure.providers.container import ProviderContainer
+
+            # 尝试从应用上下文获取 ProviderContainer
+            try:
+                from core.core.runtime.context import get_context
+
+                context = get_context()
+                if context.has_service("provider_container"):
+                    self._provider_container = context.get_service("provider_container")
+            except Exception:
+                pass
+
+            # 如果有 ProviderContainer，尝试获取 AmazingData
+            if self._provider_container and isinstance(self._provider_container, ProviderContainer):
+                if self._provider_container.has("amazingdata"):
+                    amazingdata_provider = await self._provider_container.get("amazingdata")
+                    if amazingdata_provider:
+                        self.providers[DataSourceType.AMAZINGDATA] = amazingdata_provider
+                        logger.info("AmazingData 数据提供者初始化成功（通过 ProviderContainer）")
+                        return True
+
+            logger.debug("AmazingData 数据提供者暂不可用（将在请求时动态检查）")
+            return False
+
+        except Exception as e:
+            logger.debug(f"AmazingData 数据提供者初始化跳过: {e}")
+            return False
+
+    async def _get_amazingdata_provider(self) -> Optional[Any]:
+        """动态获取 AmazingData 数据提供者
+
+        在每次请求时检查 AmazingData 是否可用（可能在代理初始化后才注册）。
+
+        Returns:
+            AmazingData 数据提供者实例，或 None
+        """
+        # 如果已经在 providers 中，直接返回
+        if DataSourceType.AMAZINGDATA in self.providers:
+            return self.providers[DataSourceType.AMAZINGDATA]
+
+        # 尝试从 ProviderContainer 获取
+        try:
+            from core.infrastructure.providers.container import ProviderContainer
+
+            # 如果没有缓存 ProviderContainer，尝试获取
+            if self._provider_container is None:
+                try:
+                    from core.core.runtime.context import get_context
+
+                    context = get_context()
+                    if context.has_service("provider_container"):
+                        self._provider_container = context.get_service("provider_container")
+                except Exception:
+                    pass
+
+            if self._provider_container and isinstance(self._provider_container, ProviderContainer):
+                if self._provider_container.has("amazingdata"):
+                    amazingdata_provider = await self._provider_container.get("amazingdata")
+                    if amazingdata_provider:
+                        self.providers[DataSourceType.AMAZINGDATA] = amazingdata_provider
+                        logger.info("AmazingData 数据提供者已动态注册")
+                        return amazingdata_provider
+
+        except Exception as e:
+            logger.debug(f"动态获取 AmazingData 失败: {e}")
+
+        return None
+
+    def set_provider_container(self, container: Any) -> None:
+        """设置 ProviderContainer 引用
+
+        允许外部（如 FastAPI lifespan）注入 ProviderContainer。
+
+        Args:
+            container: ProviderContainer 实例
+        """
+        self._provider_container = container
+        logger.debug("ProviderContainer 已注入到 DataAccessProxy")
 
     @asynccontextmanager
     async def _monitor_access(
@@ -175,9 +309,11 @@ class DataAccessProxy:
         self,
         access_type: DataAccessType,
         prefer_source: Optional[DataSourceType] = None,
-    ) -> list[DataSourceType]:
+    ) -> List[DataSourceType]:
         """
         获取数据源优先级列表
+
+        基于配置文件中的 fallback_order，并根据访问类型做微调。
 
         Args:
             access_type: 访问类型
@@ -186,21 +322,22 @@ class DataAccessProxy:
         Returns:
             数据源优先级列表
         """
-        # 默认优先级：QMT > AKShare
-        default_priority = [DataSourceType.QMT, DataSourceType.AKSHARE]
+        # 使用配置文件中的 fallback_order 作为基础优先级
+        priority = self._fallback_order.copy()
 
-        # 根据访问类型调整优先级
+        # 根据访问类型可以做微调（但仍然尊重配置顺序）
+        # 注意：如果配置已经指定了顺序，这里只是确保相关数据源在列表中
         if access_type == DataAccessType.REALTIME_QUOTE:
-            # 实时行情优先QMT
-            priority = [DataSourceType.QMT, DataSourceType.AKSHARE]
+            # 实时行情：确保 QMT 和 AmazingData 在列表中靠前
+            # 配置的 fallback_order 已经考虑了这一点
+            pass
         elif access_type == DataAccessType.HISTORICAL_KLINE:
-            # 历史K线优先AKShare
-            priority = [DataSourceType.AKSHARE, DataSourceType.QMT]
+            # 历史 K 线：如果需要特殊处理可以在这里调整
+            # 但配置的 fallback_order 应该已经设置好了优先级
+            pass
         elif access_type == DataAccessType.STOCK_LIST:
-            # 股票列表优先AKShare
-            priority = [DataSourceType.AKSHARE, DataSourceType.QMT]
-        else:
-            priority = default_priority
+            # 股票列表：使用配置的优先级
+            pass
 
         # 如果指定了优先数据源，将其移到最前面
         if prefer_source and prefer_source in priority:
@@ -324,10 +461,10 @@ class DataAccessProxy:
 
         Args:
             symbol: 股票代码
-            period: 周期
+            period: 周期（daily, 1d, 5m 等）
             start_date: 开始日期
             end_date: 结束日期
-            adjust: 复权类型
+            adjust: 复权类型（none, qfq, hfq）
             prefer_source: 优先数据源
             module: 调用模块
 
@@ -339,10 +476,13 @@ class DataAccessProxy:
         last_error = None
         for source in sources:
             if self._is_circuit_open(source):
+                logger.debug(f"数据源 {source.value} 处于熔断状态，跳过")
                 continue
 
-            provider = self.providers.get(source)
+            # 动态获取 provider（支持 AmazingData 延迟注册）
+            provider = await self._get_provider_for_source(source)
             if not provider:
+                logger.debug(f"数据源 {source.value} 不可用，跳过")
                 continue
 
             try:
@@ -352,19 +492,19 @@ class DataAccessProxy:
                     symbol=symbol,
                     module=module,
                 ):
-                    if source == DataSourceType.AKSHARE:
-                        result = await provider.get_stock_hist(
-                            symbol=symbol,
-                            period=period,
-                            start_date=start_date,
-                            end_date=end_date,
-                            adjust=adjust,
-                        )
-                    else:
-                        continue
+                    result = await self._fetch_kline_from_source(
+                        source=source,
+                        provider=provider,
+                        symbol=symbol,
+                        period=period,
+                        start_date=start_date,
+                        end_date=end_date,
+                        adjust=adjust,
+                    )
 
                     if result is not None and not result.get("error"):
                         result["source"] = source.value
+                        logger.debug(f"从 {source.value} 成功获取 {symbol} K线数据")
                         return cast(Dict[str, Any], result)
 
             except Exception as e:
@@ -374,6 +514,216 @@ class DataAccessProxy:
 
         error_msg = f"所有数据源获取失败: {last_error}" if last_error else "没有可用的数据源"
         raise Exception(error_msg)
+
+    async def _get_provider_for_source(self, source: DataSourceType) -> Optional[Any]:
+        """获取指定数据源的 Provider
+
+        支持动态获取 AmazingData（可能在代理初始化后才注册）。
+
+        Args:
+            source: 数据源类型
+
+        Returns:
+            Provider 实例，或 None
+        """
+        # 先从已注册的 providers 中获取
+        provider = self.providers.get(source)
+        if provider:
+            return provider
+
+        # 如果是 AmazingData，尝试动态获取
+        if source == DataSourceType.AMAZINGDATA:
+            return await self._get_amazingdata_provider()
+
+        return None
+
+    async def _fetch_kline_from_source(
+        self,
+        source: DataSourceType,
+        provider: Any,
+        symbol: str,
+        period: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        adjust: str,
+    ) -> Optional[Dict[str, Any]]:
+        """从指定数据源获取 K 线数据
+
+        Args:
+            source: 数据源类型
+            provider: 数据提供者实例
+            symbol: 股票代码
+            period: 周期
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust: 复权类型
+
+        Returns:
+            K 线数据字典，或 None
+        """
+        if source == DataSourceType.AKSHARE:
+            return await provider.get_stock_hist(
+                symbol=symbol,
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+                adjust=adjust,
+            )
+
+        elif source == DataSourceType.AMAZINGDATA:
+            # 调用 AmazingData 的 K 线接口
+            kline_data = await self._fetch_kline_from_amazingdata(
+                provider=provider,
+                symbol=symbol,
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+                adjust=adjust,
+            )
+            if kline_data:
+                return {"data": kline_data, "source": "amazingdata"}
+            return None
+
+        elif source == DataSourceType.QMT:
+            # 调用 QMT 的 K 线接口
+            kline_data = await self._fetch_kline_from_qmt(
+                provider=provider,
+                symbol=symbol,
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+                adjust=adjust,
+            )
+            if kline_data:
+                return {"data": kline_data, "source": "qmt"}
+            return None
+
+        else:
+            logger.debug(f"数据源 {source.value} 不支持 K 线查询")
+            return None
+
+    async def _fetch_kline_from_amazingdata(
+        self,
+        provider: Any,
+        symbol: str,
+        period: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        adjust: str,
+    ) -> Optional[list]:
+        """从 AmazingData 获取 K 线数据
+
+        Args:
+            provider: AmazingData Provider 实例
+            symbol: 股票代码
+            period: 周期
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust: 复权类型
+
+        Returns:
+            K 线数据列表，或 None
+        """
+        try:
+            # 转换周期格式（统一到 AmazingData 格式）
+            period_map = {
+                "daily": "1d",
+                "day": "1d",
+                "1d": "1d",
+                "5m": "5m",
+                "15m": "15m",
+                "30m": "30m",
+                "60m": "60m",
+                "1h": "60m",
+            }
+            ad_period = period_map.get(period, period)
+
+            # 尝试调用 get_kline_data 方法
+            get_kline_data = getattr(provider, "get_kline_data", None)
+            if callable(get_kline_data):
+                result = await get_kline_data(
+                    symbol=symbol,
+                    period=ad_period,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+                return result
+
+            # 备用：尝试 get_kline 方法
+            get_kline = getattr(provider, "get_kline", None)
+            if callable(get_kline):
+                df = await get_kline(
+                    symbol=symbol,
+                    period=ad_period,
+                    start_date=start_date,
+                    end_date=end_date,
+                    adjust=adjust,
+                )
+                if df is not None and not df.empty:
+                    return df.reset_index().to_dict("records")
+
+        except Exception as e:
+            logger.debug(f"从 AmazingData 获取 K 线失败: {e}")
+
+        return None
+
+    async def _fetch_kline_from_qmt(
+        self,
+        provider: Any,
+        symbol: str,
+        period: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        adjust: str,
+    ) -> Optional[list]:
+        """从 QMT 获取 K 线数据
+
+        Args:
+            provider: QMT Provider 实例
+            symbol: 股票代码
+            period: 周期
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust: 复权类型
+
+        Returns:
+            K 线数据列表，或 None
+        """
+        try:
+            # 转换周期格式
+            period_map = {
+                "daily": "1d",
+                "day": "1d",
+                "1d": "1d",
+                "5m": "5m",
+                "15m": "15m",
+                "30m": "30m",
+                "60m": "1h",
+                "1h": "1h",
+            }
+            qmt_period = period_map.get(period, period)
+
+            # 尝试调用 get_kline 方法
+            get_kline = getattr(provider, "get_kline", None)
+            if callable(get_kline):
+                result = get_kline(
+                    symbol=symbol,
+                    period=qmt_period,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+                if inspect.isawaitable(result):
+                    result = await result
+                if result is not None:
+                    # 如果返回 DataFrame，转换为 records
+                    if hasattr(result, "to_dict"):
+                        return result.reset_index().to_dict("records")
+                    return result
+
+        except Exception as e:
+            logger.debug(f"从 QMT 获取 K 线失败: {e}")
+
+        return None
 
     async def get_stock_list(
         self,
@@ -387,10 +737,13 @@ class DataAccessProxy:
 
         for source in sources:
             if self._is_circuit_open(source):
+                logger.debug(f"数据源 {source.value} 处于熔断状态，跳过")
                 continue
 
-            provider = self.providers.get(source)
+            # 动态获取 provider（支持 AmazingData 延迟注册）
+            provider = await self._get_provider_for_source(source)
             if not provider:
+                logger.debug(f"数据源 {source.value} 不可用，跳过")
                 continue
 
             try:
@@ -440,29 +793,11 @@ class DataAccessProxy:
                 logger.warning(f"从 {source.value} 获取股票列表失败: {error}")
                 continue
 
-        fallback_legacy = [
-            {"code": "000001", "name": "平安银行", "label": "平安银行 (000001)", "value": "000001"},
-            {"code": "000002", "name": "万科A", "label": "万科A (000002)", "value": "000002"},
-            {"code": "000858", "name": "五粮液", "label": "五粮液 (000858)", "value": "000858"},
-            {"code": "002415", "name": "海康威视", "label": "海康威视 (002415)", "value": "002415"},
-            {"code": "300750", "name": "宁德时代", "label": "宁德时代 (300750)", "value": "300750"},
-            {"code": "600000", "name": "浦发银行", "label": "浦发银行 (600000)", "value": "600000"},
-            {"code": "600036", "name": "招商银行", "label": "招商银行 (600036)", "value": "600036"},
-            {"code": "600519", "name": "贵州茅台", "label": "贵州茅台 (600519)", "value": "600519"},
-            {"code": "601318", "name": "中国平安", "label": "中国平安 (601318)", "value": "601318"},
-            {"code": "601606", "name": "长城军工", "label": "长城军工 (601606)", "value": "601606"},
-        ]
-        fallback_result = build_stock_list_result(fallback_legacy, "fallback")
-        if fallback_result:
-            logger.warning("使用本地兜底股票列表，source=fallback")
-            return fallback_result
-
-        return StockListFetchResult(
-            source="fallback",
-            records=(),
-            legacy=tuple(fallback_legacy),
-            mismatch=len(fallback_legacy),
-        )
+        # 所有数据源都失败，抛出异常（而非返回不完整的硬编码数据）
+        # 这样调用者能明确知道获取失败，而不是误以为系统只有几只股票
+        error_msg = "所有数据源获取股票列表失败（已尝试: miniqmt, amazingdata, akshare）"
+        logger.error(error_msg)
+        raise Exception(error_msg)
 
 
 def monitor_access(

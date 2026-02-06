@@ -5,6 +5,10 @@
 
 market_data:
   realtime:
+    # 预热超时配置 - AkShare 通过 Cloudflare Worker 代理获取 5800+ 只股票需要约 5 分钟
+    warmup_timeout_seconds: 600.0  # 总超时 10 分钟
+    warmup_fetch_timeout_seconds: 400.0  # 单次超时 6.5 分钟
+    warmup_retry_count: 2  # 允许 2 次重试
     auction_interval_seconds: 5.0
     auction_timeout_seconds: 3.0
     boards:
@@ -108,12 +112,12 @@ capability_routing:
           priority: [miniqmt, amazingdata]
           fallback: true
         historical:
-          priority: [akshare, amazingdata]
+          priority: [amazingdata, akshare]  # AmazingData 优先，AkShare 作为 fallback
           fallback: true
       by_timeframe:
         "1m": [miniqmt, amazingdata]
         "5m": [miniqmt, amazingdata]
-        "1d": [akshare, amazingdata]
+        "1d": [amazingdata, akshare]  # AmazingData 优先，AkShare 作为 fallback
       priority: [miniqmt, amazingdata, akshare]
       fallback: true
 
@@ -126,5 +130,5 @@ capability_routing:
       fallback: false
 
     stock_list:
-      priority: [akshare]
+      priority: [miniqmt, amazingdata, akshare]  # 增加 miniqmt 和 amazingdata，AkShare 作为最后 fallback
       cache_ttl: 86400

@@ -37,6 +37,28 @@ class MemoryThresholdsConfig(BaseModel):
     )
 
 
+class SchedulerConfig(BaseModel):
+    """Dask Scheduler 配置
+
+    支持本地自动启动或连接外部 Scheduler（如 Docker 中运行的）。
+    当 prefer_external=True 时，优先检测并使用外部 Scheduler，
+    仅在外部不可用且 auto_start=True 时启动本地 Scheduler。
+    """
+
+    enabled: bool = Field(default=True, description="是否启用 Scheduler 管理")
+    auto_start: bool = Field(
+        default=True, description="外部 Scheduler 不可用时自动启动本地 Scheduler"
+    )
+    host: str = Field(default="localhost", description="Scheduler 监听地址")
+    port: int = Field(default=8786, description="Scheduler 监听端口")
+    dashboard_port: int = Field(default=8787, description="Dashboard 端口")
+    dashboard_enabled: bool = Field(default=True, description="是否启用 Dashboard")
+    startup_timeout: float = Field(default=30.0, description="启动超时时间（秒）")
+    prefer_external: bool = Field(
+        default=True, description="优先使用外部 Scheduler（如 Docker 中的）"
+    )
+
+
 class WindowsWorkersConfig(BaseModel):
     """Windows Dask Workers 配置"""
 
@@ -78,6 +100,10 @@ class DaskConfig(BaseModel):
     scheduler_address: str = Field(
         default="localhost:8786",
         description="Dask Scheduler 地址",
+    )
+    scheduler: Optional[SchedulerConfig] = Field(
+        default=None,
+        description="Scheduler 管理配置（自动启动等）",
     )
     windows_workers: Optional[WindowsWorkersConfig] = Field(
         default=None,

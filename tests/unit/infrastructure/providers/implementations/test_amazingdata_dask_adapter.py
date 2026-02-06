@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
 import pytest
@@ -69,7 +69,7 @@ class TestAmazingDataDaskAdapterInit:
         adapter = AmazingDataDaskAdapter(mock_dask_client)
 
         assert adapter.name == "amazingdata"
-        assert adapter._timeout == 30.0
+        assert adapter._timeout == 45.0
         assert adapter._retry_count == 3
         assert adapter._windows_worker is None
         assert adapter._actor_available is False
@@ -192,20 +192,33 @@ class TestAmazingDataDaskAdapterCallActor:
         adapter._actor_available = True
         adapter._windows_worker = "tcp://worker1:1234"
 
-        # 创建 mock Future
-        expected_result = [{"symbol": "000001.SZ", "close": 10.5}]
-        mock_future = MagicMock()
-        mock_async_future = asyncio.Future()
-        mock_async_future.set_result(expected_result)
+        # _call_actor 需要 Redis 客户端来轮询结果
+        mock_redis = MagicMock()
+        adapter._redis = mock_redis
 
-        with patch("asyncio.wrap_future", return_value=mock_async_future):
-            mock_dask_client.submit.return_value = mock_future
-            result = await adapter._call_actor(
-                "query_kline",
-                code_list=["000001.SZ"],
-                begin_date=20240101,
-                end_date=20240110,
-            )
+        # 模拟 Redis 轮询返回结果
+        import json
+
+        expected_result = [{"symbol": "000001.SZ", "close": 10.5}]
+        mock_redis.get = AsyncMock(
+            return_value=json.dumps(
+                {
+                    "status": "success",
+                    "result": expected_result,
+                }
+            ).encode()
+        )
+        mock_redis.delete = AsyncMock()
+
+        mock_future = MagicMock()
+        mock_dask_client.submit.return_value = mock_future
+
+        result = await adapter._call_actor(
+            "query_kline",
+            code_list=["000001.SZ"],
+            begin_date=20240101,
+            end_date=20240110,
+        )
 
         assert result == expected_result
         mock_dask_client.submit.assert_called_once()
@@ -222,18 +235,17 @@ class TestAmazingDataDaskAdapterCallActor:
         adapter._actor_available = True
         adapter._windows_worker = "tcp://worker1:1234"
 
-        # 模拟永远不完成的 Future
-        async def slow_future() -> Any:
-            await asyncio.sleep(10)
-            return {}
+        # _call_actor 需要 Redis 客户端
+        mock_redis = MagicMock()
+        adapter._redis = mock_redis
+        # Redis 轮询始终返回 None（模拟超时）
+        mock_redis.get = AsyncMock(return_value=None)
 
         mock_future = MagicMock()
+        mock_dask_client.submit.return_value = mock_future
 
-        with patch("asyncio.wrap_future", side_effect=lambda f: slow_future()):
-            mock_dask_client.submit.return_value = mock_future
-
-            with pytest.raises(DataProviderError, match="超时"):
-                await adapter._call_actor("query_kline")
+        with pytest.raises(DataProviderError, match="超时"):
+            await adapter._call_actor("query_kline")
 
         # 应该重试 2 次 + 初始调用 = 3 次
         assert mock_dask_client.submit.call_count == 3
@@ -310,10 +322,11 @@ class TestAmazingDataDaskAdapterDataProviderMethods:
         with patch.object(
             initialized_adapter, "_call_actor", return_value=expected_result
         ) as mock_call:
-            result = await initialized_adapter.get_calendar(begin_date=20240101, end_date=20240110)
+            result = await initialized_adapter.get_calendar(market="SH", data_type="int")
 
         assert result == expected_result
-        mock_call.assert_called_once_with("get_calendar", begin_date=20240101, end_date=20240110)
+        # get_calendar 使用默认参数时不传递 kwargs 到 _call_actor
+        mock_call.assert_called_once_with("get_calendar")
 
     @pytest.mark.asyncio
     async def test_get_balance_sheet(

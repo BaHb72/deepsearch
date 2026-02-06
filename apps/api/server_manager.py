@@ -20,8 +20,9 @@ from apps.api.api.models import WebServerConfig
 
 if TYPE_CHECKING:
     from asyncio import AbstractEventLoopPolicy as WindowsEventLoopPolicyBase
-elif hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
-    WindowsEventLoopPolicyBase = asyncio.WindowsProactorEventLoopPolicy
+elif hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
+    # 必须使用 SelectorEventLoop，Tornado/Dask 不兼容 ProactorEventLoop
+    WindowsEventLoopPolicyBase = asyncio.WindowsSelectorEventLoopPolicy
 else:  # pragma: no cover - 非 Windows 平台兜底
 
     class _WindowsEventLoopPolicyFallback(asyncio.DefaultEventLoopPolicy):
@@ -200,8 +201,17 @@ class ServerManager:
             except asyncio.TimeoutError:
                 self.logger.warning("服务器关闭超时")
 
-        # 取消所有任务
-        await self._cancel_all_tasks(timeout=2.0)
+        # 取消所有任务（从统一超时配置读取）
+        _cancel_timeout = 2.0
+        try:
+            from core.config import get_config as _get_cfg
+
+            _tc = getattr(_get_cfg(), "timeouts", None)
+            if _tc:
+                _cancel_timeout = _tc.shutdown.task_cancel
+        except Exception:
+            pass
+        await self._cancel_all_tasks(timeout=_cancel_timeout)
 
         self._servers.clear()
         self.logger.info("所有服务器已关闭")
@@ -232,8 +242,20 @@ class ServerManager:
 class GracefulShutdownServer(Server):
     """支持优雅关闭的服务器"""
 
-    # 关闭超时时间（秒）
+    # 关闭超时时间（秒）- 运行时从 Settings.timeouts.shutdown.server 读取
     SHUTDOWN_TIMEOUT = 3.0
+
+    @staticmethod
+    def _get_shutdown_timeout() -> float:
+        try:
+            from core.config import get_config as _get_cfg
+
+            _tc = getattr(_get_cfg(), "timeouts", None)
+            if _tc:
+                return _tc.shutdown.server
+        except Exception:
+            pass
+        return GracefulShutdownServer.SHUTDOWN_TIMEOUT
 
     def __init__(self, config: Config, manager: ServerManager):
         super().__init__(config)
@@ -258,10 +280,11 @@ class GracefulShutdownServer(Server):
         self.should_exit = True
 
         # 使用超时包装父类关闭
+        _timeout = self._get_shutdown_timeout()
         try:
-            await asyncio.wait_for(self._do_shutdown(sockets), timeout=self.SHUTDOWN_TIMEOUT)
+            await asyncio.wait_for(self._do_shutdown(sockets), timeout=_timeout)
         except asyncio.TimeoutError:
-            self.logger.warning(f"服务器关闭超时({self.SHUTDOWN_TIMEOUT}s)，强制终止")
+            self.logger.warning(f"服务器关闭超时({_timeout}s)，强制终止")
         except Exception as e:
             self.logger.debug(f"关闭时出错: {e}")
 

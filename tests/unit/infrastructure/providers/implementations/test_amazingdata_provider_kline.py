@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.skipif(True, reason="需要 AmazingData SDK 连接")
+
 
 @pytest.mark.asyncio
 async def test_get_kline_returns_valid_dataframe(real_amazingdata_provider):

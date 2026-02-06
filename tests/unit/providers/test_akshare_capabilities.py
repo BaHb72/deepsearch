@@ -11,6 +11,8 @@ import asyncio
 import pytest
 from core.infrastructure.providers.interfaces.capabilities import DataCapability
 
+pytestmark = pytest.mark.skipif(True, reason="需要 AkShare 网络 API 连接")
+
 # 全局速率限制：每次测试后等待
 RATE_LIMIT_SECONDS = 2.0
 

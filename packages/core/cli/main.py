@@ -46,7 +46,23 @@ def cli():
     default=True,
     help="启用 Rich 终端状态显示（减少日志刷屏）",
 )
-def run(env, mode, config, log_level, no_frontend, open_browser, status_display):
+@click.option(
+    "--frontend-port", type=int, default=None, help="前端端口（仅 webui 模式，默认从配置读取）"
+)
+@click.option(
+    "--backend-port", type=int, default=None, help="后端端口（仅 webui 模式，默认从配置读取）"
+)
+def run(
+    env,
+    mode,
+    config,
+    log_level,
+    no_frontend,
+    open_browser,
+    status_display,
+    frontend_port,
+    backend_port,
+):
     """运行 DeepSearch 系统
 
     ENV: 环境模式 (dev/prod)，默认为 prod
@@ -103,11 +119,18 @@ def run(env, mode, config, log_level, no_frontend, open_browser, status_display)
 
     # 使用上下文管理器管理引擎生命周期
     if mode == "webui":
-        # WebUI 模式特殊处理
+        # WebUI 模式：整合原 webui 命令的完整功能
         click.echo("启动 WebUI...")
         from apps.api.runner import run_standalone
 
-        run_standalone()
+        run_standalone(
+            start_frontend=not no_frontend,
+            frontend_port=frontend_port,
+            backend_port=backend_port,
+            auto_open_browser=open_browser,
+            start_engine=True,
+            infrastructure_only=True,
+        )
     else:
         # 配置参数
         context_config = {"no_frontend": no_frontend, "open_browser": open_browser}
@@ -159,32 +182,6 @@ def run(env, mode, config, log_level, no_frontend, open_browser, status_display)
             if status_ctx:
                 status_ctx.stop()
         click.echo("System closed")
-
-
-@cli.command()
-@click.option("--frontend/--no-frontend", default=True, help="是否启动前端")
-@click.option("--frontend-port", type=int, default=None, help="前端端口（默认从配置读取）")
-@click.option("--backend-port", type=int, default=None, help="后端端口（默认从配置读取）")
-@click.option("--open-browser/--no-open-browser", default=False, help="是否自动打开浏览器")
-def webui(frontend, frontend_port, backend_port, open_browser):
-    """运行 WebUI（独立模式）"""
-    from core.utils.system.port_checker import PortChecker
-
-    from apps.api.runner import run_standalone
-
-    # 检查端口冲突
-    if not PortChecker.validate_ports():
-        click.echo("请解决端口冲突后再启动服务。")
-        return
-
-    run_standalone(
-        start_frontend=frontend,
-        frontend_port=frontend_port,
-        backend_port=backend_port,
-        auto_open_browser=open_browser,
-        start_engine=True,
-        infrastructure_only=True,
-    )
 
 
 @cli.command()

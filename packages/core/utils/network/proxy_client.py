@@ -74,14 +74,28 @@ class ProxyClient:
         # 创建 session，使用原始的 Session 类避免递归
         self.session = _OriginalSession()
 
+        # 禁用系统代理（HTTP_PROXY/HTTPS_PROXY 环境变量）
+        # 原因：系统代理可能干扰与 Cloudflare Worker 的 SSL 通信
+        # 设置空字典会让 requests 忽略环境变量中的代理设置
+        self.session.proxies = {"http": None, "https": None}  # type: ignore[attr-defined]
+        self.session.trust_env = False  # type: ignore[attr-defined]  # 不信任环境变量中的代理配置
+
         # 设置默认超时时间（秒）
-        self.default_timeout = 10  # 默认10秒超时
+        # 增加超时时间以适应东方财富等 API 的响应延迟
+        self.default_timeout = 30
+
+        # 请求间隔配置（秒）- 防止触发 Cloudflare/东方财富速率限制
+        # 测试表明 1s 间隔可稳定成功，0.5s 作为速度与稳定性的折中
+        self.request_interval = 0.5
+        self._last_request_time = 0.0
 
         # 配置重试策略
+        # 添加 520-530 Cloudflare 错误码到重试列表
         retry_strategy = Retry(
-            total=3,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
+            total=5,  # 增加重试次数
+            backoff_factor=1.5,  # 增加退避因子，等待更长时间
+            status_forcelist=[429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527],
+            allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],  # 允许 POST 重试
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session.mount("http://", adapter)
@@ -147,7 +161,15 @@ class ProxyClient:
         Returns:
             Response 对象
         """
+        # 请求间隔控制 - 防止触发速率限制
+        if self.request_interval > 0:
+            elapsed_since_last = time.time() - self._last_request_time
+            if elapsed_since_last < self.request_interval:
+                sleep_time = self.request_interval - elapsed_since_last
+                time.sleep(sleep_time)
+
         start_time = time.time()
+        self._last_request_time = start_time
         self.stats["total_requests"] += 1
 
         # 设置默认超时（如果用户没有提供）
@@ -231,7 +253,7 @@ class ProxyClient:
         # 构建代理 URL
         # 使用完全编码 (safe="") 确保目标 URL 正确作为 Worker 的查询参数传递
         # Worker 的 decodeURIComponent 会正确解码所有编码字符
-        # 注意：由于不使用 urlencode 构建参数，逗号等字符保持原始格式
+        # 注意：必须完全编码，否则嵌套 URL 中的 ? 和 = 会被误解析为外层参数
         encoded_url = quote(url, safe="")
         proxy_url = f"{self.worker_url}/proxy?url={encoded_url}"
 

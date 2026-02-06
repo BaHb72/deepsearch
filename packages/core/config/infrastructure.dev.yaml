@@ -111,7 +111,7 @@ dask:
   windows_workers:
     enabled: true
     auto_start: true  # 随后端 API 自动启动
-    num_workers: 2
+    num_workers: 1  # AmazingData SDK 只支持单连接，多 Worker 会导致竞争
     threads_per_worker: 2
     memory_limit: "8GB"   # 保守配置: 静态 3.5GB + 动态 3GB + 20% 余量
     name_prefix: "windows-worker"
@@ -136,3 +136,49 @@ dask:
       - backtest_*
       - train_*
       - factor_*
+
+# =============================================================================
+# 统一超时配置
+# 集中管理散落在代码各处的超时值，按环境调整
+# =============================================================================
+timeouts:
+  dask:
+    worker_ready: 30.0          # 等待 Worker 就绪
+    amazingdata_init: 60.0      # 等待 AmazingData Dask 代理初始化
+    shutdown: 15.0              # 关闭 Dask 集群
+    circuit_breaker_recovery: 60.0  # 熔断器恢复
+
+  amazingdata:
+    normal_call: 45.0           # 普通 Actor 调用
+    first_call: 90.0            # 首次调用（含 SDK 登录）
+    sdk_login: 30.0             # SDK 登录
+    actor_create: 60.0          # Actor 创建
+    calendar_preload: 30.0      # 交易日历预加载
+
+  shutdown:
+    server: 3.0                 # 服务器关闭
+    runner_stop: 5.0            # Runner 停止
+    runner_stop_outer: 8.0      # Runner 停止外层保护
+    cache_writer: 5.0           # 缓存写入器关闭
+    provider_stop: 5.0          # 数据源停止
+    task_cancel: 2.0            # 任务取消
+
+  providers:
+    akshare:
+      idle: 5.0
+      connect: 30.0
+      fetch: 15.0
+      batch: 300.0
+      fallback: 10.0
+    amazingdata:
+      idle: 5.0
+      connect: 90.0
+      fetch: 45.0
+      batch: 120.0
+      fallback: 15.0
+    miniqmt:
+      idle: 5.0
+      connect: 60.0
+      fetch: 30.0
+      batch: 180.0
+      fallback: 10.0

@@ -42,7 +42,7 @@ dependencies = [
     "httpx>=0.28.1",
     "python-jose[cryptography]>=3.5.0",
     # ==== 数据获取依赖 ====
-    "amazingdata==1.0.23",
+    "amazingdata==1.0.26",
     "tgw==1.0.8.5",
     "akshare==1.17.65",
     "aiohttp>=3.13.0",
@@ -142,7 +142,7 @@ python-preference = "only-system"
 compile-bytecode = true
 
 [tool.uv.sources]
-amazingdata = { path = "packages/AmazingData-1.0.23-cp313-none-any.whl" }
+amazingdata = { path = "packages/AmazingData-1.0.26-cp313-none-any.whl" }
 tgw = { path = "packages/tgw-1.0.8.5-py3-none-any.whl" }
 
 [tool.uv.pip]

@@ -10,7 +10,6 @@ from typing import Any, Dict, Optional
 
 from core.application.services.unified_data import get_unified_feed
 from core.domain.market_data import StockListRecord
-from core.infrastructure.providers.managers.data_source_manager import StockListFetchResult
 from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest, StockListRequest
 from core.ports.data.semantic_types import AdjustType, AssetSpec, Timeframe, TimeRange
 from core.utils.data_sources import DataSourceType, get_data_source_manager
@@ -40,7 +39,8 @@ def _normalize_stock_records(
     records: list[dict[str, object]] = []
     legacy: list[dict[str, object]] = []
 
-    if isinstance(payload, StockListFetchResult):
+    # 使用 duck typing 替代 isinstance 检查，避免跨模块导入路径导致的类身份不匹配
+    if hasattr(payload, "records") and hasattr(payload, "as_legacy"):
         records = [dict(record.as_mapping()) for record in payload.records]
         legacy = payload.as_legacy()
         return records, legacy
@@ -159,6 +159,9 @@ async def get_stock_history(
 
     except HTTPException:
         raise
+    except RuntimeError as e:
+        logger.error(f"数据服务未就绪: {e}")
+        raise HTTPException(status_code=503, detail="数据服务尚未初始化，请稍后重试")
     except Exception as e:
         logger.error(f"获取历史数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -208,6 +211,9 @@ async def get_stock_quote(
 
     except HTTPException:
         raise
+    except RuntimeError as e:
+        logger.error(f"数据服务未就绪: {e}")
+        raise HTTPException(status_code=503, detail="数据服务尚未初始化，请稍后重试")
     except Exception as e:
         logger.error(f"获取实时行情失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -323,21 +329,43 @@ async def get_stock_list(source: Optional[str] = Query(None, description="指定
 
 @router.get("/stocks")
 async def get_stock_list_legacy(
-    source: Optional[str] = Query(None, description="指定数据源")
+    source: Optional[str] = Query(None, description="指定数据源"),
 ) -> list[dict[str, object]]:
     """旧版 /api/data/stocks 兼容输出，仅返回 legacy 列表。"""
 
+    # 优先使用 UnifiedDataFeed
+    try:
+        feed = get_unified_feed()
+        request = StockListRequest()
+        response = await feed.list_instruments(request)
+
+        legacy: list[dict[str, object]] = []
+        for stock in response.stocks:
+            legacy.append(
+                {
+                    "symbol": stock.asset.symbol,
+                    "code": stock.asset.symbol,
+                    "name": stock.name,
+                }
+            )
+        return legacy
+    except RuntimeError:
+        logger.warning("UnifiedDataFeed 未就绪，回退到旧实现获取股票列表")
+    except Exception as e:
+        logger.warning(f"UnifiedDataFeed 获取股票列表失败: {e}，回退到旧实现")
+
+    # 回退到旧实现
     service = data_module.get_data_service()
     stocks = await service.get_stock_list(limit=None)
-    if isinstance(stocks, StockListFetchResult) and stocks.mismatch:
+    if hasattr(stocks, "mismatch") and stocks.mismatch:
         logger.warning(
-            "��Ʊ�б�˫д���ڲ��� source=%s mismatch=%d",
-            stocks.source,
+            "股票列表双写内部差异 source=%s mismatch=%d",
+            getattr(stocks, "source", "unknown"),
             stocks.mismatch,
         )
-    records, legacy = _normalize_stock_records(stocks)
-    if legacy:
-        return legacy
+    records, legacy_list = _normalize_stock_records(stocks)
+    if legacy_list:
+        return legacy_list
     return records
 
 

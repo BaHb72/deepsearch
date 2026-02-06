@@ -20,6 +20,70 @@ DeepSearch是一个高性能量化交易系统
 
 ---
 
+## 数据源限制与注意事项
+
+### AmazingData SDK 单连接限制
+
+**核心约束**：AmazingData SDK 只支持单个连接，不能在多个进程/Worker 中同时使用。
+
+#### 技术背景
+
+AmazingData SDK 在初始化时会建立与服务器的长连接，该连接是有状态的且绑定到特定的账号。如果多个 Worker 同时尝试初始化 SDK：
+
+- 后初始化的连接会踢掉先前的连接
+- 导致 Actor 调用失败（连接已断开）
+- 出现 `AmazingData provider 未在 ProviderContainer 中注册` 错误
+
+#### 配置要求
+
+**Dask Worker 数量必须为 1**：
+
+```yaml
+# packages/core/config/infrastructure.dev.yaml
+dask:
+  windows_workers:
+    num_workers: 1  # 必须为 1，AmazingData SDK 只支持单连接
+```
+
+**注意配置覆盖问题**：
+
+本项目使用分层配置加载（`settings.yaml` + `infrastructure.yaml`），后者会覆盖前者的同名配置。修改 `num_workers` 时需检查两个文件：
+
+- `packages/core/config/settings.dev.yaml`
+- `packages/core/config/infrastructure.dev.yaml`
+
+#### 超时配置
+
+AmazingData 在 Dask Worker 上的初始化需要 25-35 秒（包括 SDK 登录、Actor 注册等），相关超时配置：
+
+| 配置项 | 位置 | 建议值 | 说明 |
+|--------|------|--------|------|
+| `wait_amazingdata_ready` 超时 | `apps/api/services/market_data_runtime.py:385` | 60s | 等待 Dask 代理就绪 |
+| `first_call_timeout` | `settings.*.yaml` | 120s | AmazingData 首次调用超时 |
+
+#### 常见错误及解决方案
+
+| 错误信息 | 根本原因 | 解决方案 |
+|----------|----------|----------|
+| `AmazingData 初始化超时，将使用其他数据源` | 超时时间不足 | 增加 `wait_amazingdata_ready` 超时至 60s |
+| `AmazingData provider 未在 ProviderContainer 中注册` | 多 Worker 竞争导致连接断开 | 确保 `num_workers: 1` |
+| `windows-worker-1` 出现在日志中 | 配置被覆盖 | 检查 `infrastructure.dev.yaml` 中的配置 |
+
+#### 验证方法
+
+启动服务后检查日志，正确的启动顺序应为：
+
+```
+1. [windows-worker-0] Worker 启动
+2. [windows-worker-0] AmazingData Actor 初始化完成
+3. AmazingData Dask 代理已就绪
+4. AmazingData Dask 代理已注册到 ProviderContainer
+```
+
+**不应出现**：`windows-worker-1` 或更多 Worker。
+
+---
+
 ## 🎯 问题解决方法论：第一性原理思维
 
 ### 核心原则

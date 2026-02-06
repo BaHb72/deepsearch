@@ -19,19 +19,11 @@ database:
     socket_connect_timeout: 5
     socket_keepalive: true
     socket_timeout: 5
-    startup_command:
-    - wsl.exe
-    - -d
-    - Ubuntu
-    - -u
-    - root
-    - service
-    - redis-server
-    - start
+    startup_command: []  # Redis 在 Docker 中运行，无需自动启动
     wsl:
-      auto_resolve_ip: true
+      auto_resolve_ip: false
       distro: Ubuntu
-      enabled: true
+      enabled: false  # Redis 已迁移到 Docker，禁用 WSL 模式
       service_name: redis-server
       user: root
   main:
@@ -76,8 +68,8 @@ dask:
 
   windows_workers:
     enabled: true
-    auto_start: false  # 生产环境手动启动
-    num_workers: 4
+    auto_start: true  # 随后端 API 自动启动
+    num_workers: 1  # AmazingData SDK 只支持单连接，多 Worker 会导致竞争
     threads_per_worker: 2
     memory_limit: "8GB"
     name_prefix: "windows-worker"
@@ -96,3 +88,48 @@ dask:
       - backtest_*
       - train_*
       - factor_*
+
+# =============================================================================
+# 统一超时配置（生产环境，较开发环境更保守）
+# =============================================================================
+timeouts:
+  dask:
+    worker_ready: 45.0
+    amazingdata_init: 90.0
+    shutdown: 20.0
+    circuit_breaker_recovery: 60.0
+
+  amazingdata:
+    normal_call: 60.0
+    first_call: 120.0
+    sdk_login: 45.0
+    actor_create: 90.0
+    calendar_preload: 45.0
+
+  shutdown:
+    server: 5.0
+    runner_stop: 8.0
+    runner_stop_outer: 12.0
+    cache_writer: 5.0
+    provider_stop: 8.0
+    task_cancel: 3.0
+
+  providers:
+    akshare:
+      idle: 5.0
+      connect: 30.0
+      fetch: 20.0
+      batch: 300.0
+      fallback: 10.0
+    amazingdata:
+      idle: 5.0
+      connect: 120.0
+      fetch: 60.0
+      batch: 180.0
+      fallback: 20.0
+    miniqmt:
+      idle: 5.0
+      connect: 60.0
+      fetch: 30.0
+      batch: 180.0
+      fallback: 10.0

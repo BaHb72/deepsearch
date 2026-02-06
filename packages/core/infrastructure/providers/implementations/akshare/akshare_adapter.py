@@ -13,7 +13,6 @@ from core.infrastructure.providers.interfaces.base import DataProviderError, Dat
 from core.utils.timeout import DataSourceState, get_timeout_manager
 from loguru import logger
 
-from .akshare import AkShareProxyProvider
 from .akshare_api_mapping import AkShareAPIMapping
 from .akshare_direct import AKShareDirectProvider
 
@@ -65,9 +64,11 @@ _STOCK_EXCHANGE_FIELDS: tuple[str, ...] = (
 
 class AkShareAdapter(IAkShareProvider):
     """
-    AkShare适配器 - 统一Direct和Proxy两种实现
+    AkShare 适配器
 
-    可以根据配置或运行时条件选择使用直连还是代理模式
+    注意：AkShareProxyProvider 已废弃（与 AKShareDirectProvider 是同一个类），
+    因此不再使用 primary/fallback 切换机制。内部 fallback 由 AKShareDirectProvider
+    自行处理（stock_zh_a_spot_em -> stock_info_a_code_name）。
     """
 
     def __init__(self, use_proxy: bool = False):
@@ -75,47 +76,37 @@ class AkShareAdapter(IAkShareProvider):
         初始化适配器
 
         Args:
-            use_proxy: 是否使用代理模式
+            use_proxy: 已废弃参数，保留仅为向后兼容
         """
+        if use_proxy:
+            logger.warning(
+                "use_proxy=True 已废弃: AkShareProxyProvider 现在与 AKShareDirectProvider 相同"
+            )
         self.use_proxy = use_proxy
-        self.provider = None
-        self.fallback_provider = None
+        self.provider: AKShareDirectProvider | None = None
+        # fallback_provider 保留为 None，内部 fallback 由 provider 自行处理
+        self.fallback_provider: AKShareDirectProvider | None = None
 
     async def initialize(self):
         """初始化提供者"""
-        if self.use_proxy:
-            # 主用代理，备用直连
-            self.provider = AkShareProxyProvider()
-            self.fallback_provider = AKShareDirectProvider()
-            logger.info("使用AkShare代理模式，备用直连模式")
-        else:
-            # 主用直连，备用代理
-            self.provider = AKShareDirectProvider()
-            self.fallback_provider = AkShareProxyProvider()
-            logger.info("使用AkShare直连模式，备用代理模式")
+        # 统一使用 AKShareDirectProvider，它内部有 API fallback 机制
+        self.provider = AKShareDirectProvider()
+        logger.info("使用 AkShare 直连模式（内置 API fallback）")
 
-        # 初始化主提供者
         if hasattr(self.provider, "initialize"):
             await self.provider.initialize()
-
-        # 初始化备用提供者
-        if hasattr(self.fallback_provider, "initialize"):
-            try:
-                await self.fallback_provider.initialize()
-            except Exception as e:
-                logger.warning(f"备用提供者初始化失败: {e}")
 
     def _require_provider(self) -> IAkShareProvider:
         if self.provider is None:
             raise DataProviderError("AkShare provider not initialized. Call initialize() first.")
-        return self.provider
+        return self.provider  # type: ignore[return-value]
 
     def _require_fallback(self) -> IAkShareProvider:
         if self.fallback_provider is None:
             raise DataProviderError(
                 "AkShare fallback provider not available. Call initialize() first."
             )
-        return self.fallback_provider
+        return self.fallback_provider  # type: ignore[return-value]
 
     @staticmethod
     def _extract_data_list(result: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -162,21 +153,14 @@ class AkShareAdapter(IAkShareProvider):
         limit: Optional[int] = None,
         **kwargs: Any,
     ) -> Optional[List[Dict[str, Any]]]:
-        """对外暴露兼容 DataProvider 的股票列表接口."""
-        timeout_manager = get_timeout_manager()
+        """
+        获取股票列表
 
-        async def _call_provider(
-            provider_obj: IAkShareProvider | None,
-        ) -> Optional[List[Dict[str, Any]]]:
-            if provider_obj is None:
-                return None
-            fetcher = getattr(provider_obj, "get_stock_list", None)
-            if not callable(fetcher):
-                return None
-            result = await fetcher(limit=limit, **kwargs)
-            if result is None:
-                return None
-            return list(result)
+        内部 fallback 机制由 AKShareDirectProvider 处理：
+        1. 先尝试 stock_zh_a_spot_em（东方财富实时行情）
+        2. 失败后尝试 stock_info_a_code_name（代码名称映射）
+        """
+        timeout_manager = get_timeout_manager()
 
         # 设置批量获取状态（股票列表通常有 500+ 条数据）
         with timeout_manager.operation(
@@ -185,24 +169,25 @@ class AkShareAdapter(IAkShareProvider):
             "get_stock_list",
         ):
             try:
-                result = await _call_provider(self.provider)
-                if result:
-                    return result if not limit else result[:limit]
-            except Exception as exc:
-                logger.warning(f"AkShare primary get_stock_list failed: {exc}")
+                if self.provider is None:
+                    logger.error("AkShare provider 未初始化")
+                    return None
 
-            try:
-                result = await _call_provider(self.fallback_provider)
-                if result:
-                    return result if not limit else result[:limit]
-            except Exception as exc:
-                logger.warning(f"AkShare fallback get_stock_list failed: {exc}")
+                fetcher = getattr(self.provider, "get_stock_list", None)
+                if not callable(fetcher):
+                    logger.error("AkShare provider 没有 get_stock_list 方法")
+                    return None
 
-            api_result = await self.fetch_with_api("stock_info_a_code_name", {})
-            stocks = self._extract_data_list(api_result)
-            if not stocks:
+                result = await fetcher(limit=limit, **kwargs)
+                if result:
+                    return list(result) if not limit else list(result)[:limit]
+
+                logger.warning("AkShare get_stock_list 返回空结果")
                 return None
-            return stocks if not limit else stocks[:limit]
+
+            except Exception as exc:
+                logger.error(f"AkShare get_stock_list 失败: {exc}")
+                return None
 
     async def get_kline_data(
         self,
@@ -236,14 +221,14 @@ class AkShareAdapter(IAkShareProvider):
             return list(result)
 
         try:
-            result = await _call_provider(self.provider)
+            result = await _call_provider(self.provider)  # type: ignore[arg-type]
             if result:
                 return result
         except Exception as exc:
             logger.warning(f"AkShare primary get_kline_data failed: {exc}")
 
         try:
-            result = await _call_provider(self.fallback_provider)
+            result = await _call_provider(self.fallback_provider)  # type: ignore[arg-type]
             if result:
                 return result
         except Exception as exc:
@@ -381,13 +366,62 @@ class AkShareAdapter(IAkShareProvider):
                 except Exception as e:
                     logger.error(f"备用数据源也失败: {e}")
 
-        # 返回默认列表
-        return [
-            {"symbol": "000001", "\u4ee3\u7801": "000001", "name": "\u5e73\u5b89\u94f6\u884c"},
-            {"symbol": "000002", "\u4ee3\u7801": "000002", "name": "\u4e07\u79d1A"},
-            {"symbol": "600000", "\u4ee3\u7801": "600000", "name": "\u6d66\u53d1\u94f6\u884c"},
-            {"symbol": "600036", "\u4ee3\u7801": "600036", "name": "\u62db\u5546\u94f6\u884c"},
-        ]
+        # 所有数据源均失败，返回空列表（禁止返回 mock 数据）
+        logger.error("AkShare 所有数据源获取股票列表均失败，返回空列表")
+        return []
+
+    async def get_trading_calendar(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> Optional[List[str]]:
+        """获取交易日历
+
+        Args:
+            start_date: 开始日期 (格式: YYYYMMDD)
+            end_date: 结束日期 (格式: YYYYMMDD)
+
+        Returns:
+            交易日期列表 (格式: YYYYMMDD)，失败返回 None
+        """
+        timeout_manager = get_timeout_manager()
+
+        with timeout_manager.operation(
+            _SOURCE_NAME,
+            DataSourceState.FETCHING,
+            "get_trading_calendar",
+        ):
+            provider = cast(Any, self._require_provider())
+            try:
+                result = await provider.get_trading_calendar(
+                    start_date=start_date, end_date=end_date
+                )
+                if result:
+                    return result
+            except Exception as e:
+                logger.error(f"AkShare 获取交易日历失败: {e}")
+
+        return None
+
+    async def get_calendar(self, market: str = "A") -> Optional[List[int]]:
+        """获取交易日历（标准协议方法）
+
+        与 get_trading_calendar 相同，但返回 YYYYMMDD 整数列表，
+        兼容 CapabilityRouter 的 TRADING_CALENDAR 能力接口。
+
+        Returns:
+            交易日期整数列表，失败返回 None
+        """
+        dates = await self.get_trading_calendar()
+        if dates is None:
+            return None
+        result = []
+        for d in dates:
+            try:
+                result.append(int(d))
+            except (ValueError, TypeError):
+                continue
+        return result if result else None
 
     async def get_realtime_data(self, symbols: List[str]) -> Dict[str, Any]:
         """兼容管理器调用：批量获取实时行情，返回 {symbol: payload} 结构"""
@@ -447,6 +481,29 @@ class AkShareAdapter(IAkShareProvider):
             logger.error(f"get_history_data 失败: {e}")
         return pd.DataFrame()
 
+    async def start(self) -> None:
+        """启动数据源"""
+        await self._start_source()
+
+    async def stop(self) -> None:
+        """停止数据源"""
+        await self._stop_source()
+
+    async def health_check(self):
+        """健康检查，委托给底层 provider"""
+        if self.provider and hasattr(self.provider, "health_check"):
+            return await self.provider.health_check()
+
+        from core.infrastructure.providers.protocols.lifecycle import (
+            HealthCheckResult,
+            HealthStatus,
+        )
+
+        return HealthCheckResult(
+            status=HealthStatus.UNHEALTHY,
+            message="AkShare provider 未初始化",
+        )
+
     def is_connected(self) -> bool:
         """检查连接状态"""
         if self.provider and hasattr(self.provider, "is_connected"):
@@ -456,32 +513,17 @@ class AkShareAdapter(IAkShareProvider):
     async def fetch_with_api(
         self, api_name: str, params: Dict[str, Any], max_retries: int = 3
     ) -> Dict[str, Any]:
-        """Unified AkShare API entry point"""
+        """统一的 AkShare API 调用入口"""
         safe_params = dict(params or {})
 
         api_info = AkShareAPIMapping.get_api_info(api_name)
         if api_info:
             safe_params = AkShareAPIMapping.transform_params(api_name, safe_params)
 
-        primary_result = await self._call_provider_api(
+        # 直接调用主 provider（fallback_provider 已废弃）
+        return await self._call_provider_api(
             self.provider, api_name, dict(safe_params), max_retries=max_retries
         )
-        if primary_result.get("success"):
-            return primary_result
-
-        if self.fallback_provider:
-            fallback_result = await self._call_provider_api(
-                self.fallback_provider,
-                api_name,
-                dict(safe_params),
-                max_retries=max_retries,
-                mark_fallback=True,
-            )
-            if fallback_result.get("success"):
-                return fallback_result
-            return fallback_result
-
-        return primary_result
 
     async def _call_provider_api(
         self,

@@ -117,6 +117,9 @@ class BaseWorkerPlugin(WorkerPlugin, ABC):
             self._initialized = True
             logger.info(f"[PLUGIN_SETUP] [步骤4/4] 注册完成 | 耗时={time.time() - step_start:.3f}s")
 
+            # 步骤 6: 设置 Redis 就绪标记（通知 Manager）
+            await self._set_ready_flag()
+
             total_elapsed = time.time() - setup_start
             logger.info(
                 f"[PLUGIN_SETUP] === Setup 成功完成 === | "
@@ -220,6 +223,50 @@ class BaseWorkerPlugin(WorkerPlugin, ABC):
             worker.actors = {}  # type: ignore
         worker.actors[self._get_actor_name()] = self._actor  # type: ignore
         logger.info(f"[{self.name}] Actor 注册成功 | name={self._get_actor_name()}")
+
+    async def _set_ready_flag(self) -> None:
+        """设置 Redis 就绪标记（带重试机制）
+
+        在 setup 成功完成后调用，通知 DaskWorkerManager 该 Actor 已就绪。
+        使用 Redis 键 `dask_actor_ready:{actor_name}` 作为就绪信号。
+
+        重试机制：最多 3 次重试，每次间隔 1 秒。
+        """
+        import asyncio
+
+        actor_name = self._get_actor_name()
+        redis_key = f"dask_actor_ready:{actor_name}"
+        redis_url = getattr(self.config, "redis_url", "redis://localhost:6379")
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                import redis
+
+                redis_client = redis.from_url(redis_url)  # type: ignore[attr-defined]
+
+                # 设置就绪标记，5 分钟过期（足够 Manager 检测到）
+                redis_client.setex(redis_key, 300, f"ready:{self._worker_address}")
+                redis_client.close()
+
+                logger.info(
+                    f"[PLUGIN_SETUP] Redis 就绪标记已设置 | "
+                    f"key={redis_key} | worker={self._worker_address}"
+                )
+                return  # 成功，退出
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"[PLUGIN_SETUP] Redis 设置失败，重试 {attempt + 1}/{max_retries} | "
+                        f"key={redis_key} | error={e}"
+                    )
+                    await asyncio.sleep(1.0)
+                else:
+                    # 最后一次重试也失败
+                    logger.error(
+                        f"[PLUGIN_SETUP] Redis 就绪标记设置失败（已重试 {max_retries} 次）| "
+                        f"key={redis_key} | redis_url={redis_url} | error={e}"
+                    )
 
     @abstractmethod
     async def _load_dependencies(self) -> None:

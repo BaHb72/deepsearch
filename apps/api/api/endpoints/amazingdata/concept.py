@@ -6,7 +6,7 @@ AmazingData 概念资金流向API
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 
 router = APIRouter(tags=["AmazingData-概念资金"])
@@ -46,68 +46,6 @@ async def get_concept_velocity(
     logger.info(f"[velocity] 请求开始 limit={limit}")
     import asyncio
 
-    # 模拟数据作为降级方案
-    def get_mock_data():
-        mock_concepts = [
-            {
-                "concept_code": "BK0001",
-                "name": "人工智能",
-                "velocity": 1500000000,
-                "lead_stock": "科大讯飞",
-                "lead_change": 0.05,
-            },
-            {
-                "concept_code": "BK0002",
-                "name": "新能源汽车",
-                "velocity": 1200000000,
-                "lead_stock": "比亚迪",
-                "lead_change": 0.03,
-            },
-            {
-                "concept_code": "BK0003",
-                "name": "半导体",
-                "velocity": 900000000,
-                "lead_stock": "中芯国际",
-                "lead_change": 0.04,
-            },
-            {
-                "concept_code": "BK0004",
-                "name": "医药生物",
-                "velocity": 800000000,
-                "lead_stock": "恒瑞医药",
-                "lead_change": 0.02,
-            },
-            {
-                "concept_code": "BK0005",
-                "name": "光伏",
-                "velocity": 700000000,
-                "lead_stock": "隆基绿能",
-                "lead_change": 0.01,
-            },
-            {
-                "concept_code": "BK0006",
-                "name": "锂电池",
-                "velocity": 650000000,
-                "lead_stock": "宁德时代",
-                "lead_change": 0.025,
-            },
-            {
-                "concept_code": "BK0007",
-                "name": "消费电子",
-                "velocity": 600000000,
-                "lead_stock": "立讯精密",
-                "lead_change": 0.015,
-            },
-            {
-                "concept_code": "BK0008",
-                "name": "白酒",
-                "velocity": 550000000,
-                "lead_stock": "贵州茅台",
-                "lead_change": 0.008,
-            },
-        ]
-        return mock_concepts[:limit]
-
     ConceptLinkageEngine, get_concept_engine, get_amazingdata_provider = _get_engine_lazy()
 
     # 尝试使用ConceptLinkageEngine (带超时)
@@ -121,13 +59,18 @@ async def get_concept_velocity(
                     await engine.initialize_graph()
                 return engine.get_sector_velocity_map()
 
-            data = await asyncio.wait_for(fetch_from_engine(), timeout=10.0)
+            data = await asyncio.wait_for(fetch_from_engine(), timeout=180.0)
             if data:
                 return format_response(success=True, data=data[:limit])
         except asyncio.TimeoutError:
-            logger.warning("ConceptLinkageEngine 获取数据超时(10s)，使用模拟数据")
+            logger.error("ConceptLinkageEngine 获取数据超时(180s)")
+            raise HTTPException(
+                status_code=503,
+                detail="数据服务暂时不可用，请稍后重试或先调用 /init 初始化",
+            )
         except Exception as e:
-            logger.warning(f"ConceptLinkageEngine获取数据失败: {e}，使用模拟数据")
+            logger.error(f"ConceptLinkageEngine 获取数据失败: {e}")
+            raise HTTPException(status_code=503, detail=f"数据获取失败: {e}")
 
     # 备用方案：使用AkShare获取板块资金流向数据 (带超时)
     try:
@@ -144,7 +87,7 @@ async def get_concept_velocity(
                 sector_type="概念资金流",
             )
 
-        data = await asyncio.wait_for(fetch_from_akshare(), timeout=10.0)
+        data = await asyncio.wait_for(fetch_from_akshare(), timeout=30.0)
 
         if data:
             result = [
@@ -159,13 +102,14 @@ async def get_concept_velocity(
             ]
             return format_response(success=True, data=result)
     except asyncio.TimeoutError:
-        logger.warning("AKShare 获取数据超时(10s)，使用模拟数据")
+        logger.error("AKShare 获取数据超时(30s)")
+        raise HTTPException(
+            status_code=503,
+            detail="AKShare 数据服务暂时不可用，请稍后重试",
+        )
     except Exception as e:
-        logger.warning(f"获取概念板块资金流速失败: {e}，使用模拟数据")
-
-    # 最终降级：返回模拟数据
-    logger.info("使用模拟数据返回 concept velocity")
-    return format_response(success=True, data=get_mock_data())
+        logger.error(f"获取概念板块资金流速失败: {e}")
+        raise HTTPException(status_code=503, detail=f"数据获取失败: {e}")
 
 
 @router.get("/linkage", summary="获取个股-概念联动图谱")
@@ -178,54 +122,61 @@ async def get_concept_linkage(
     """
     import asyncio
 
-    # 模拟数据作为降级方案
-    def get_mock_linkage():
-        return {
-            "center": stock_code,
-            "concepts": [
-                {"code": "BK0001", "name": "人工智能", "peers": ["000001", "000002", "000003"]},
-                {"code": "BK0002", "name": "大数据", "peers": ["000004", "000005"]},
-                {"code": "BK0003", "name": "云计算", "peers": ["000006", "000007", "000008"]},
-            ],
-        }
-
     ConceptLinkageEngine, get_concept_engine, get_amazingdata_provider = _get_engine_lazy()
 
-    if ConceptLinkageEngine is not None and get_concept_engine is not None:
-        try:
+    if ConceptLinkageEngine is None or get_concept_engine is None:
+        raise HTTPException(status_code=503, detail="ConceptLinkageEngine 不可用")
 
-            async def fetch_linkage():
-                provider = await get_amazingdata_provider()
-                engine = get_concept_engine(provider)
-                if not engine._initialized:
-                    await engine.initialize_graph()
-                return engine.get_linkage(stock_code)
+    try:
 
-            data = await asyncio.wait_for(fetch_linkage(), timeout=10.0)
-            if data and data.get("concepts"):
-                return format_response(success=True, data=data)
-        except asyncio.TimeoutError:
-            logger.warning("获取联动图谱超时(10s)，使用模拟数据")
-        except Exception as e:
-            logger.warning(f"获取联动图谱失败: {e}，使用模拟数据")
-
-    # 降级：返回模拟数据
-    logger.info(f"使用模拟数据返回 linkage for {stock_code}")
-    return format_response(success=True, data=get_mock_linkage())
-
-
-@router.post("/init", summary="初始化概念图谱(调试用)")
-async def init_concept_graph() -> Dict[str, Any]:
-    """初始化概念图谱"""
-    ConceptLinkageEngine, get_concept_engine, get_amazingdata_provider = _get_engine_lazy()
-
-    if ConceptLinkageEngine is not None and get_concept_engine is not None:
-        try:
+        async def fetch_linkage():
             provider = await get_amazingdata_provider()
             engine = get_concept_engine(provider)
-            await engine.initialize_graph()
-            return format_response(success=True, data="Initialized")
-        except Exception as e:
-            return format_response(success=False, error=str(e))
+            if not engine._initialized:
+                await engine.initialize_graph()
+            return engine.get_linkage(stock_code)
 
-    return format_response(success=False, error="ConceptLinkageEngine 不可用")
+        data = await asyncio.wait_for(fetch_linkage(), timeout=180.0)
+        if data and data.get("concepts"):
+            return format_response(success=True, data=data)
+
+        raise HTTPException(
+            status_code=404,
+            detail=f"未找到股票 {stock_code} 的概念联动数据",
+        )
+    except asyncio.TimeoutError:
+        logger.error(f"获取联动图谱超时(180s)，stock_code={stock_code}")
+        raise HTTPException(
+            status_code=503,
+            detail="数据服务暂时不可用，请稍后重试或先调用 /init 初始化",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取联动图谱失败: {e}")
+        raise HTTPException(status_code=503, detail=f"数据获取失败: {e}")
+
+
+@router.post("/init", summary="初始化概念图谱")
+async def init_concept_graph() -> Dict[str, Any]:
+    """
+    预初始化概念图谱，建议在系统启动后调用一次。
+    首次初始化可能需要 2-3 分钟（包含 SDK 登录）。
+    """
+    import asyncio
+
+    ConceptLinkageEngine, get_concept_engine, get_amazingdata_provider = _get_engine_lazy()
+
+    if ConceptLinkageEngine is None or get_concept_engine is None:
+        raise HTTPException(status_code=503, detail="ConceptLinkageEngine 不可用")
+
+    try:
+        provider = await get_amazingdata_provider()
+        engine = get_concept_engine(provider)
+        await asyncio.wait_for(engine.initialize_graph(), timeout=300.0)
+        return format_response(success=True, data="图谱初始化完成")
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="初始化超时(5分钟)，请检查网络连接")
+    except Exception as e:
+        logger.error(f"概念图谱初始化失败: {e}")
+        raise HTTPException(status_code=503, detail=f"初始化失败: {e}")

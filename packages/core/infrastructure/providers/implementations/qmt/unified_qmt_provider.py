@@ -644,14 +644,62 @@ class MiniQMTBackend(QMTBackend):
             return False
 
     async def get_special_data(self, data_type: str, **kwargs) -> Any:
-        """获取特殊数据"""
+        """获取特殊数据
+
+        支持的 data_type:
+        - stock_list: 获取股票列表（使用 get_stock_list_in_sector）
+        """
         xtdata = self.xtdata
 
         if not self.connected or xtdata is None:
             return None
 
-        # MiniQMT的特殊数据实现暂未开放
+        if data_type == "stock_list":
+            return await self._get_stock_list(**kwargs)
+
+        # 其他特殊数据类型暂未实现
+        logger.debug(f"MiniQMT 不支持的特殊数据类型: {data_type}")
         return None
+
+    async def _get_stock_list(self, **kwargs) -> Optional[List[Dict[str, Any]]]:
+        """获取股票列表（通过 xtdata.get_stock_list_in_sector）"""
+        xtdata = self.xtdata
+        if xtdata is None:
+            return None
+
+        try:
+            # 使用 xtdata.get_stock_list_in_sector 获取沪深 A 股列表
+            sector_name = kwargs.get("sector", "沪深A股")
+            stocks = xtdata.get_stock_list_in_sector(sector_name)
+
+            if not stocks:
+                logger.warning(f"从 MiniQMT 获取板块 '{sector_name}' 股票列表为空")
+                return None
+
+            # 转换为统一格式
+            result: List[Dict[str, Any]] = []
+            for stock_code in stocks:
+                # stock_code 格式如 "000001.SZ"
+                code = stock_code.split(".")[0] if "." in stock_code else stock_code
+                result.append(
+                    {
+                        "symbol": stock_code,
+                        "code": code,
+                        "name": "",  # MiniQMT 的 get_stock_list_in_sector 不返回名称
+                        "source": "miniqmt",
+                    }
+                )
+
+            limit = kwargs.get("limit")
+            if limit and limit > 0:
+                result = result[:limit]
+
+            logger.info(f"MiniQMT 获取到 {len(result)} 只股票")
+            return result
+
+        except Exception as e:
+            logger.error(f"MiniQMT 获取股票列表失败: {e}")
+            return None
 
 
 class StandardQMTBackend(QMTBackend):

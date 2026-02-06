@@ -1,29 +1,29 @@
-"""AmazingData Dask Client Adapter
+"""AmazingData Dask Adapter (Redis Task Queue)
 
-通过 Dask Client 远程调用 Windows Worker 上的 AmazingDataActor。
+通过 Redis 任务队列远程调用 Windows Worker 上的 AmazingDataActor。
 用于分布式部署场景，实现 DataProvider 接口。
 
 Architecture:
-    Client (FastAPI)                    Worker (Windows)
+    API (FastAPI)                       Worker (Dask)
            │                                   │
-           │  ─── client.submit() ──────────▶  │
+           │  ─── Redis RPUSH ─────────────▶  │  (BLPOP 监听)
            │                                   │
            │                      worker.actors["amazingdata"]
            │                              │
            │                      actor.call_sync(method, **kwargs)
            │                              │
-           │  ◀─────── result ───────────  │
+           │  ◀─── Redis GET ────────────  │  (结果写入 Redis)
+
+    完全通过 Redis 通信，无需 Dask Client，
+    彻底消除 Tornado/asyncio 事件循环冲突。
 
 Features:
-    - 自动选择 Windows Worker (WIN:1 资源标签)
-    - 连接池管理和复用
+    - Redis 任务队列替代 Dask Client（RPUSH/BLPOP）
     - 错误处理和自动重试
     - 超时保护
 
 Usage:
-    >>> from distributed import Client
-    >>> dask_client = Client("tcp://localhost:8786")
-    >>> adapter = AmazingDataDaskAdapter(dask_client)
+    >>> adapter = AmazingDataDaskAdapter(redis_client=redis, redis_url="redis://...")
     >>> await adapter.initialize()
     >>> result = await adapter.query_kline(code_list=["000001.SZ"], ...)
 """
@@ -40,42 +40,25 @@ from core.infrastructure.providers.interfaces.base import DataProviderError
 from loguru import logger
 
 if TYPE_CHECKING:
-    from distributed import Client, Future
     from redis.asyncio import Redis as AsyncRedis
 
 # Redis key 前缀，用于存储 Dask 调用结果
 _REDIS_RESULT_PREFIX = "dask_result:"
 
 
-def _check_worker_has_actor(dask_worker: Any) -> bool:
-    """检查 Worker 上是否有 amazingdata Actor（模块级函数，可被 pickle 序列化）"""
-    actors = getattr(dask_worker, "actors", {})
-    return "amazingdata" in actors
-
-
-def _ping_amazingdata_actor() -> str:
-    """在 Worker 上执行 ping 测试，检查 Actor 是否可用"""
-    from distributed import get_worker
-
-    worker = get_worker()
-    actors = getattr(worker, "actors", {})
-    if "amazingdata" in actors:
-        return "pong"
-    return "no_actor"
-
-
 class AmazingDataDaskAdapter:
-    """AmazingData Dask Client Adapter
+    """AmazingData Redis-based Adapter
 
-    实现 DataProvider 接口，通过 Dask 分布式调用远程 Actor。
+    实现 DataProvider 接口，通过 Redis 任务队列远程调用 Worker 上的 Actor。
 
-    使用 Redis 作为结果传递通道，彻底绕过 Dask Future 的返回机制，
-    解决 Dask tornado IOLoop 与 FastAPI asyncio 的事件循环冲突问题。
+    使用 Redis 作为双向通道：
+    - 任务提交: RPUSH 到 "amazingdata:task_queue"
+    - 结果获取: GET "dask_result:{task_id}"
+    完全不依赖 Dask Client，消除 Tornado/asyncio 冲突。
 
     Attributes:
         name: 数据源名称
-        _client: Dask distributed Client 实例
-        _redis: Redis 异步客户端（用于获取调用结果）
+        _redis: Redis 异步客户端
         _timeout: 远程调用超时时间（秒）
         _retry_count: 失败重试次数
         _windows_worker: 缓存的 Windows Worker 地址
@@ -86,43 +69,68 @@ class AmazingDataDaskAdapter:
 
     def __init__(
         self,
-        dask_client: "Client",
+        dask_client: Any = None,  # 保留参数兼容性，不再使用
         redis_client: "AsyncRedis | None" = None,
+        redis_url: str = "redis://localhost:6379",
         timeout: float = 45.0,
-        first_call_timeout: float = 90.0,
+        first_call_timeout: float = 120.0,
         retry_count: int = 3,
+        scheduler_address: str = "tcp://localhost:8786",
     ):
-        """初始化 Dask Adapter
+        """初始化 Adapter
 
         Args:
-            dask_client: Dask distributed Client 实例
-            redis_client: Redis 异步客户端（用于获取结果）
+            dask_client: 已废弃，保留兼容性
+            redis_client: Redis 异步客户端（用于提交任务和获取结果）
+            redis_url: Redis 连接 URL
             timeout: 后续调用超时时间（秒），纯 SDK 执行
             first_call_timeout: 首次调用超时时间（秒），包含登录流程
             retry_count: 失败重试次数
+            scheduler_address: 已废弃，保留兼容性
         """
-        self._client = dask_client
         self._redis = redis_client
+        self._redis_url = redis_url
         self._timeout = timeout
         self._first_call_timeout = first_call_timeout
         self._retry_count = retry_count
 
-        # 缓存 Windows Worker 地址
+        # 缓存 Windows Worker 地址（用于日志）
         self._windows_worker: str | None = None
         self._actor_available = False
         self._initialized = False
-        self._first_call_done = False  # 跟踪是否完成首次调用
-
-        # Future 生命周期管理（防止内存泄漏）
-        self._pending_futures: dict[str, "Future"] = {}
+        self._first_call_done = False
 
         logger.info(
-            "[AmazingDataDaskAdapter] 初始化 | scheduler={} | redis={}",
-            dask_client.scheduler.address if dask_client.scheduler else "unknown",
+            "[AmazingDataDaskAdapter] 初始化 | mode=redis-queue | redis={}",
             "connected" if redis_client else "none",
         )
 
     # ==================== 连接管理 ====================
+
+    async def _submit_via_redis(self, task_id: str, method: str, kwargs: dict) -> None:
+        """通过 Redis 任务队列提交任务到 Worker
+
+        替代 Dask Client.submit()，完全通过 Redis 通信。
+        Worker 端的 RedisTaskListener 会 BLPOP 取出任务并执行。
+
+        Args:
+            task_id: 任务 ID
+            method: Actor 方法名
+            kwargs: 方法参数
+        """
+        task_request = json.dumps(
+            {
+                "task_id": task_id,
+                "method": method,
+                "kwargs": kwargs,
+            }
+        )
+        await self._redis.rpush("amazingdata:task_queue", task_request)  # type: ignore[union-attr]
+        logger.debug(
+            "[AmazingData/Redis] 任务已提交 | task_id={} | method={}",
+            task_id,
+            method,
+        )
 
     async def initialize(self) -> bool:
         """初始化 Adapter，查找可用的 Windows Worker
@@ -161,51 +169,171 @@ class AmazingDataDaskAdapter:
             return False
 
     async def _find_windows_worker(self) -> str | None:
-        """查找有 WIN:1 资源的 Worker
+        """从 Redis 获取 Worker 地址
+
+        Worker 就绪时会设置 Redis key "dask_actor_ready:amazingdata"。
 
         Returns:
             Worker 地址，未找到返回 None
         """
+        if not self._redis:
+            return None
+
         try:
-            # 获取所有 Worker 信息
-            scheduler_info = self._client.scheduler_info()
-            workers = scheduler_info.get("workers", {})
+            ready_value = await self._redis.get("dask_actor_ready:amazingdata")
+            if not ready_value:
+                logger.warning("[AmazingData/Dask] Redis 中未找到 Worker 就绪标记")
+                return None
 
-            for worker_addr, worker_info in workers.items():
-                # 检查资源标签
-                resources = worker_info.get("resources", {})
-                if resources.get("WIN", 0) >= 1:
-                    logger.debug(
-                        "[AmazingData/Dask] 找到 Windows Worker | addr={} | resources={}",
-                        worker_addr,
-                        resources,
-                    )
-                    return worker_addr
+            # 解析 "ready:tcp://localhost:58200"
+            if ":" in ready_value and "tcp://" in ready_value:
+                idx = ready_value.find("tcp://")
+                worker_addr = ready_value[idx:]
+                logger.debug(
+                    "[AmazingData/Dask] 从 Redis 获取 Worker 地址 | addr={}",
+                    worker_addr,
+                )
+                return worker_addr
 
-            logger.warning("[AmazingData/Dask] 未找到 Windows Worker (WIN:1)")
+            logger.warning(
+                "[AmazingData/Dask] Worker 就绪标记格式异常 | value={}",
+                ready_value,
+            )
             return None
 
         except Exception as e:
             logger.error("[AmazingData/Dask] 查找 Worker 失败: {}", e)
             return None
 
-    async def _check_actor_available(self) -> bool:
-        """检查 Windows Worker 是否可用
+    async def _check_actor_available(
+        self,
+        max_retries: int = 3,
+        base_timeout: float = 15.0,
+    ) -> bool:
+        """检查 Actor 是否已注册（带重试的健康检查）
 
-        只验证 Windows Worker 存在且有 WIN 资源，Actor 的可用性在实际调用时验证。
-        这是因为 Actor 检查需要复杂的序列化，而 Dask 服务发现已经告诉我们 Worker 信息。
+        使用与 _call_actor 相同的 Redis 轮询模式，避免 asyncio.to_thread + Future.result()
+        导致的事件循环冲突问题。
+
+        核心原理：
+        1. 提交健康检查任务到 Worker（fire-and-forget）
+        2. Worker 检查 actors 字典是否有 "amazingdata" 键
+        3. Worker 将结果写入 Redis
+        4. Client 轮询 Redis 获取结果
+
+        重试机制（作为兜底保护）：
+        - 最多重试 3 次
+        - 使用指数退避：15s -> 30s -> 60s
+        - 每次重试前等待 2s, 4s, 8s
+
+        注意：这里只检查 Actor 字典是否有 key，不调用任何 Actor 方法，
+        因此不会触发登录流程。
+
+        Args:
+            max_retries: 最大重试次数
+            base_timeout: 基础超时时间（秒），会指数增长
 
         Returns:
-            Windows Worker 是否可用
+            Actor 是否可用
         """
-        # 已经在 _find_windows_worker 中验证了 Worker 存在
-        # Actor 的注册日志显示已成功，直接信任
-        if self._windows_worker:
+        if not self._windows_worker:
+            logger.warning("[AmazingData/Dask] 无 Windows Worker，跳过 Actor 检查")
+            return False
+
+        if not self._redis:
+            logger.warning("[AmazingData/Dask] Redis 未配置，跳过 Actor 健康检查")
+            return True  # 假定可用，让首次调用时发现问题
+
+        for attempt in range(max_retries):
+            # 指数退避：15s, 30s, 60s
+            current_timeout = base_timeout * (2**attempt)
+            task_id = f"health_check:{uuid.uuid4().hex[:8]}"
+
             logger.info(
-                "[AmazingData/Dask] Windows Worker 可用: {}，假定 Actor 已注册",
+                "[AmazingData/Dask] Actor 健康检查 | "
+                "尝试 {}/{} | timeout={}s | worker={} | task_id={}",
+                attempt + 1,
+                max_retries,
+                current_timeout,
                 self._windows_worker,
+                task_id,
             )
-            return True
+
+            try:
+                result = await self._do_health_check(task_id, current_timeout)
+                if result:
+                    return True
+
+                # 检查失败但未超时（Actor 确实不存在）
+                # 等待后重试
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** (attempt + 1)  # 2s, 4s, 8s
+                    logger.info(
+                        "[AmazingData/Dask] Actor 未就绪，{}s 后重试...",
+                        wait_time,
+                    )
+                    await asyncio.sleep(wait_time)
+
+            except Exception as e:
+                logger.warning(
+                    "[AmazingData/Dask] 健康检查异常 | 尝试 {}/{} | error={}",
+                    attempt + 1,
+                    max_retries,
+                    e,
+                )
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** (attempt + 1)
+                    await asyncio.sleep(wait_time)
+
+        logger.error(
+            "[AmazingData/Dask] Actor 健康检查失败 | 已重试 {} 次",
+            max_retries,
+        )
+        return False
+
+    async def _do_health_check(self, task_id: str, timeout: float) -> bool:
+        """执行单次健康检查
+
+        Args:
+            task_id: 任务 ID
+            timeout: 超时时间（秒）
+
+        Returns:
+            True 如果 Actor 可用，False 否则
+        """
+        # 通过 Redis 任务队列提交健康检查（使用特殊方法名 "_health_check"）
+        await self._submit_via_redis(task_id, "_health_check", {})
+
+        # 轮询 Redis
+        redis_key = f"dask_result:{task_id}"
+        poll_interval = 0.1  # 100ms
+        max_polls = int(timeout / poll_interval)
+
+        for i in range(max_polls):
+            result_data = await self._redis.get(redis_key)  # type: ignore[union-attr]
+            if result_data:
+                await self._redis.delete(redis_key)  # type: ignore[union-attr]
+                data = json.loads(result_data)
+                if data["status"] == "success":
+                    is_available = data["result"]
+                    if is_available:
+                        logger.info(
+                            "[AmazingData/Dask] Actor 健康检查通过 | worker={}",
+                            self._windows_worker,
+                        )
+                    else:
+                        logger.warning(
+                            "[AmazingData/Dask] Actor 未注册 | worker={}",
+                            self._windows_worker,
+                        )
+                    return is_available
+            await asyncio.sleep(poll_interval)
+
+        logger.warning(
+            "[AmazingData/Dask] Actor 健康检查超时 ({}s) | worker={}",
+            timeout,
+            self._windows_worker,
+        )
         return False
 
     def is_connected(self) -> bool:
@@ -215,6 +343,76 @@ class AmazingDataDaskAdapter:
             是否已连接并可用
         """
         return self._initialized and self._actor_available
+
+    # ==================== ILifecycleProvider 协议实现 ====================
+
+    async def start(self) -> None:
+        """启动 Adapter（已在 initialize 中完成，此处为协议兼容）"""
+        pass
+
+    async def stop(self) -> None:
+        """停止 Adapter，清理 Redis 连接"""
+        if self._redis:
+            try:
+                await self._redis.close()  # type: ignore[func-returns-value]
+            except Exception as e:
+                logger.warning("[AmazingData/Dask] 关闭 Redis 连接失败: {}", e)
+        self._initialized = False
+        self._actor_available = False
+
+    async def health_check(self):
+        """健康检查，返回 HealthCheckResult
+
+        通过 DaskInitManager 的状态和 Redis 连通性判断健康状况。
+        """
+        from core.infrastructure.providers.protocols.lifecycle import (
+            HealthCheckResult,
+            HealthStatus,
+        )
+
+        if not self._initialized:
+            return HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                message="Adapter 未初始化",
+            )
+
+        if not self._actor_available:
+            return HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                message="Actor 不可用",
+            )
+
+        # 检查 Redis 连通性
+        if self._redis:
+            try:
+                await self._redis.ping()
+            except Exception as e:
+                return HealthCheckResult(
+                    status=HealthStatus.DEGRADED,
+                    message=f"Redis 连接异常: {e}",
+                )
+
+        # 检查 DaskInitManager 的 AmazingData 就绪状态
+        try:
+            from core.compute.dask_init_state import get_dask_init_manager_sync
+
+            manager = get_dask_init_manager_sync()
+            if manager and manager.amazingdata_ready:
+                return HealthCheckResult(
+                    status=HealthStatus.HEALTHY,
+                    message="DaskAdapter 正常运行",
+                    details={
+                        "worker": self._windows_worker,
+                        "first_call_done": self._first_call_done,
+                    },
+                )
+        except Exception:
+            pass
+
+        return HealthCheckResult(
+            status=HealthStatus.DEGRADED,
+            message="Dask Worker 状态未知",
+        )
 
     # ==================== 核心远程调用 ====================
 
@@ -277,40 +475,8 @@ class AmazingDataDaskAdapter:
                 " (首次调用，含登录)" if not self._first_call_done else "",
             )
 
-            # 定义远程调用函数（命名体现业务含义，便于在 Dask Dashboard 中识别）
-            def _execute_amazingdata_method(
-                task_id_inner: str, method_inner: str, kwargs_inner: dict
-            ) -> None:
-                """在 Worker 上执行 AmazingData SDK 方法
-
-                注意：这里使用 fire-and-forget 模式，不返回结果。
-                结果通过 Redis 传递，由 call_sync 内部处理。
-                """
-                from distributed import get_worker
-
-                worker = get_worker()
-                actor = getattr(worker, "actors", {}).get("amazingdata")
-                if actor is None:
-                    raise RuntimeError("amazingdata Actor 未注册")
-
-                # 调用 Actor，传递 task_id 让它将结果存入 Redis
-                actor.call_sync(method_inner, task_id=task_id_inner, **kwargs_inner)
-
-            # 提交任务并追踪 Future（防止内存泄漏）
-            # key 参数指定任务名称，便于在 Dask Dashboard 中识别
-            # 格式: amazingdata:{method}:{short_id}
-            # 例如: amazingdata:query_kline:a1b2c3d4
-            future = self._client.submit(
-                _execute_amazingdata_method,
-                task_id,
-                method,
-                kwargs,
-                key=f"amazingdata:{task_id}",
-                workers=[worker_addr],
-                resources={"WIN": 1},
-                pure=False,
-            )
-            self._pending_futures[task_id] = future
+            # 通过 Redis 任务队列提交（替代 Dask Client.submit）
+            await self._submit_via_redis(task_id, method, kwargs)
 
             # 轮询 Redis 获取结果
             redis_key = f"{_REDIS_RESULT_PREFIX}{task_id}"
@@ -388,17 +554,15 @@ class AmazingDataDaskAdapter:
                 raise DataProviderError(f"Actor 调用超时: {method}")
 
             finally:
-                # 释放 Future 引用（防止内存泄漏）
-                self._release_future(task_id)
-                # 清理其他已完成的 Future（定期回收）
-                self._cleanup_completed_futures()
+                pass  # Redis 模式无需 Future 管理
 
         except DataProviderError:
             raise
         except Exception as e:
             logger.error(
-                "[AmazingData/Dask] 调用失败 | method={} | error={}",
+                "[AmazingData/Dask] 调用失败 | method={} | error_type={} | error={!r}",
                 method,
+                type(e).__name__,
                 str(e),
                 exc_info=True,
             )
@@ -408,77 +572,9 @@ class AmazingDataDaskAdapter:
                 return await self._call_actor(method, retry=retry + 1, **kwargs)
             raise DataProviderError(f"Actor 调用失败: {method} - {e}")
 
-    def _release_future(self, task_id: str) -> None:
-        """释放 Future 引用，防止内存泄漏
-
-        Dask Future 对象持有对结果的引用，如果不释放会导致内存持续增长。
-        此方法从追踪字典中移除 Future，并尝试调用 release() 方法。
-
-        Args:
-            task_id: 任务 ID
-        """
-        future = self._pending_futures.pop(task_id, None)
-        if future is not None:
-            try:
-                # 尝试释放 Future（如果 Dask 支持）
-                if hasattr(future, "release"):
-                    future.release()
-                elif hasattr(future, "cancel"):
-                    # 如果任务还在运行，取消它
-                    if not future.done():
-                        future.cancel()
-            except Exception as e:
-                logger.debug(
-                    "[AmazingData/Dask] 释放 Future 时发生异常 | task_id={} | error={}",
-                    task_id,
-                    e,
-                )
-
-    def _cleanup_completed_futures(self) -> int:
-        """清理已完成的 Future 对象，防止内存泄漏
-
-        遍历 _pending_futures 字典，找出所有已完成（done）的 Future 并释放。
-        此方法应在每次 _call_actor 调用后执行，确保及时回收内存。
-
-        Returns:
-            清理的 Future 数量
-        """
-        if not self._pending_futures:
-            return 0
-
-        # 找出所有已完成的 Future
-        completed_task_ids = [
-            task_id for task_id, future in self._pending_futures.items() if future.done()
-        ]
-
-        # 释放已完成的 Future
-        for task_id in completed_task_ids:
-            self._release_future(task_id)
-
-        if completed_task_ids:
-            logger.debug(
-                "[AmazingData/Dask] 已清理 {} 个已完成的 Future | 剩余={}",
-                len(completed_task_ids),
-                len(self._pending_futures),
-            )
-
-        return len(completed_task_ids)
-
     async def cleanup_pending_futures(self) -> int:
-        """清理所有挂起的 Future
-
-        用于关闭 Adapter 时清理资源。
-
-        Returns:
-            清理的 Future 数量
-        """
-        count = len(self._pending_futures)
-        task_ids = list(self._pending_futures.keys())
-        for task_id in task_ids:
-            self._release_future(task_id)
-        if count > 0:
-            logger.info("[AmazingData/Dask] 已清理 {} 个挂起的 Future", count)
-        return count
+        """兼容性方法，Redis 模式无需清理 Future"""
+        return 0
 
     # ==================== 基础数据接口 (BaseData) ====================
 
@@ -592,10 +688,14 @@ class AmazingDataDaskAdapter:
         """
         # SDK 的 get_calendar() 不接受 market 参数，A股市场统一使用同一日历
         # 这里不传递任何参数给 Actor，由 Actor 内部调用 SDK 的无参版本
+        logger.debug("DaskAdapter.get_calendar: 开始调用 Actor")
         result = await self._call_actor("get_calendar")
         if result is None:
+            logger.debug("DaskAdapter.get_calendar: Actor 返回 None")
             return []
-        return [int(d) for d in result]
+        converted = [int(d) for d in result]
+        logger.debug("DaskAdapter.get_calendar: 获取到 {} 条交易日", len(converted))
+        return converted
 
     async def get_stock_basic(self, code_list: list[str]) -> pd.DataFrame:
         """3.5.2.8 证券基础信息
@@ -1531,10 +1631,10 @@ class AmazingDataDaskAdapter:
         await self.cleanup_pending_futures()
 
         # 关闭进程池
-        if _DASK_PROCESS_POOL is not None:
+        if _DASK_PROCESS_POOL is not None:  # type: ignore[name-defined]
             try:
-                _DASK_PROCESS_POOL.shutdown(wait=False)
-                _DASK_PROCESS_POOL = None
+                _DASK_PROCESS_POOL.shutdown(wait=False)  # type: ignore[name-defined]
+                _DASK_PROCESS_POOL = None  # type: ignore[name-defined]
                 logger.info("[AmazingData/Dask] 进程池已关闭")
             except Exception as e:
                 logger.warning("[AmazingData/Dask] 关闭进程池时出错: {}", e)

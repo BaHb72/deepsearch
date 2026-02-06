@@ -77,7 +77,8 @@ class AmazingDataActor:
     # 类级别缓存：交易日历（一年只变一次，可跨实例共享）
     _calendar_cache: Any = None
     _calendar_cache_time: float = 0
-    _CALENDAR_CACHE_TTL: float = 86400  # 24 小时缓存有效期
+    _CALENDAR_CACHE_TTL: float = 86400  # 24 小时缓存有效期（有效数据）
+    _EMPTY_CACHE_TTL: float = 300  # 5 分钟缓存有效期（空数据，允许快速重试恢复）
 
     # 注意: Redis 同步连接池已改为实例级别（见 __init__）
     # 原因: 类级别缓存不随实例释放，可能导致内存泄漏
@@ -319,20 +320,34 @@ class AmazingDataActor:
         交易日历一年只变一次，可以安全缓存 24 小时。
         跨实例共享缓存，避免重复调用 SDK。
 
+        缓存策略：
+        - 有效数据：24 小时 TTL（_CALENDAR_CACHE_TTL）
+        - 空数据：5 分钟 TTL（_EMPTY_CACHE_TTL），允许快速重试恢复
+
         Returns:
             交易日历数据（list 格式）
         """
-        # 检查缓存是否有效
-        if (
-            AmazingDataActor._calendar_cache is not None
-            and time.time() - AmazingDataActor._calendar_cache_time < self._CALENDAR_CACHE_TTL
-        ):
-            logger.debug(
-                "[{}] 使用缓存的交易日历 | age={:.1f}s",
-                _ACTOR_ID,
-                time.time() - AmazingDataActor._calendar_cache_time,
-            )
-            return AmazingDataActor._calendar_cache
+        # 检查缓存是否有效（差异化 TTL：空数据用短 TTL，有效数据用长 TTL）
+        if AmazingDataActor._calendar_cache_time > 0:
+            cache_age = time.time() - AmazingDataActor._calendar_cache_time
+            cache_is_empty = not AmazingDataActor._calendar_cache
+            effective_ttl = self._EMPTY_CACHE_TTL if cache_is_empty else self._CALENDAR_CACHE_TTL
+
+            if cache_age < effective_ttl:
+                if cache_is_empty:
+                    logger.debug(
+                        "[{}] 缓存命中（空数据）| age={:.1f}s | ttl={:.0f}s",
+                        _ACTOR_ID,
+                        cache_age,
+                        effective_ttl,
+                    )
+                else:
+                    logger.debug(
+                        "[{}] 使用缓存的交易日历 | age={:.1f}s",
+                        _ACTOR_ID,
+                        cache_age,
+                    )
+                return AmazingDataActor._calendar_cache
 
         # 缓存无效，重新获取
         logger.info("[{}] 缓存未命中，从 SDK 获取交易日历...", _ACTOR_ID)
@@ -939,7 +954,7 @@ class AmazingDataActor:
             )
 
             try:
-                self._sync_redis_pool = redis.ConnectionPool.from_url(
+                self._sync_redis_pool = redis.ConnectionPool.from_url(  # type: ignore[attr-defined]
                     redis_url,
                     encoding="utf-8",
                     decode_responses=True,
@@ -953,7 +968,7 @@ class AmazingDataActor:
                 test_client.ping()
                 logger.info("[{}] Redis 连接测试成功", _ACTOR_ID)
 
-            except redis.ConnectionError as e:
+            except redis.ConnectionError as e:  # type: ignore[attr-defined]
                 logger.error(
                     "[{}] Redis 连接失败 | url={} | error={}",
                     _ACTOR_ID,
@@ -1208,6 +1223,21 @@ class AmazingDataActor:
                 timeout,
             )
             raise TimeoutError(f"SDK call '{method_name}' timed out after {timeout}s")
+        except SystemExit as e:
+            # AmazingData SDK 在登录失败时会调用 sys.exit()，这里捕获并转换为普通异常
+            # 常见原因："Connections of this user exceed the max limitation"
+            elapsed = time.time() - start_time
+            logger.error(
+                "[{}] SDK 调用触发 SystemExit（登录失败）| method={} | 耗时={:.2f}s | exit_code={}",
+                _ACTOR_ID,
+                method_name,
+                elapsed,
+                e.code,
+            )
+            raise RuntimeError(
+                f"SDK call '{method_name}' failed with SystemExit({e.code}). "
+                "This usually means login failed due to connection limit exceeded."
+            ) from e
         except Exception as e:
             elapsed = time.time() - start_time
             logger.error(

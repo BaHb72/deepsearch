@@ -10,6 +10,8 @@ from core.infrastructure.providers.implementations.amazingdata.query_manager imp
     AmazingDataQueryManager,
 )
 
+pytestmark = pytest.mark.skipif(True, reason="需要 AmazingData SDK 连接")
+
 
 @pytest.mark.asyncio
 async def test_fetch_realtime_quote_single_symbol(real_amazingdata_provider):

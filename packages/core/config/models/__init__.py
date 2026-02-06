@@ -4,6 +4,7 @@ DeepSearch 的配置模型定义。
 本包包含按功能组织的所有配置模型类。
 """
 
+from .ai import AiConfig
 from .amazingdata import AmazingDataConfig
 from .app import AppConfig, AppEnvironment
 from .bus import BusInstanceConfig, MessageBusConfig, RouteConfig
@@ -60,10 +61,19 @@ from .prefetch import DataSourcePrefetchConfig
 from .qmt import QmtConfig
 from .runtime import RuntimeConfig, RuntimeModeSetting
 from .security import SecurityConfig
+from .timeouts import (
+    AmazingDataTimeoutsConfig,
+    DaskTimeoutsConfig,
+    ProviderTimeoutProfile,
+    ShutdownTimeoutsConfig,
+    TimeoutsConfig,
+)
 from .webui import WebUIConfig
 from .zeromq import ZeroMQConfig
 
 __all__ = [
+    # AI
+    "AiConfig",
     # AmazingData
     "AmazingDataConfig",
     # Application settings
@@ -144,4 +154,10 @@ __all__ = [
     "ScenarioRouting",
     "StockListCapabilitySpec",
     "TickCapabilitySpec",
+    # Timeouts
+    "TimeoutsConfig",
+    "DaskTimeoutsConfig",
+    "AmazingDataTimeoutsConfig",
+    "ShutdownTimeoutsConfig",
+    "ProviderTimeoutProfile",
 ]

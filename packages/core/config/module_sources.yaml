@@ -42,8 +42,8 @@ modules:
     fallback: [ ]
 
   stock_list_sync:
-    primary: akshare
-    fallback: [ amazingdata ]
+    primary: amazingdata
+    fallback: [ akshare ]
 
 # =============================================================================
 # 按访问类型的默认配置（当模块未显式配置时使用）
@@ -58,8 +58,8 @@ access_types:
     fallback: [ amazingdata ]
 
   stock_list:
-    primary: akshare
-    fallback: [ amazingdata ]
+    primary: amazingdata
+    fallback: [ akshare ]
 
   orderbook:
     primary: amazingdata

@@ -2,7 +2,10 @@ import asyncio
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, cast
+
+if TYPE_CHECKING:
+    from core.core.health.interfaces import HealthCheckResult
 
 import pandas as pd
 from core.infrastructure.providers.interfaces.base import (
@@ -250,12 +253,12 @@ class AmazingDataProvider(DataProvider):
 
         if result == -999:
             error_msg = (
-                "AmazingData SDK attempted to exit the process (SystemExit).\n"
-                "Possible causes:\n"
-                "1. TGW initialization failure\n"
-                "2. Push server connection failure (check port 600)\n"
-                "3. Invalid credentials\n"
-                "Provider will switch to degraded mode."
+                "SDK尝试强制退出程序(SystemExit).\n"
+                "可能原因:\n"
+                "1. TGW 初始化失败\n"
+                "2. 推送服务器连接失败 (检查端口 600)\n"
+                "3. 凭据无效\n"
+                "Provider 将切换到降级模式."
             )
             logger.critical(f"[DEBUG] {error_msg}", action="login")
             await self._trigger_alert("SDK_EXIT", error_msg)
@@ -339,6 +342,69 @@ class AmazingDataProvider(DataProvider):
         current = self._get_stat_int(key) + delta
         self._stats[key] = current
         return current
+
+    async def health_check(self) -> "HealthCheckResult":
+        """健康检查
+
+        检查 AmazingData SDK 和连接状态。
+
+        Returns:
+            HealthCheckResult: 健康检查结果
+        """
+        from core.core.health.interfaces import HealthCheckResult, HealthStatus
+
+        try:
+            # 检查 SDK 可用性
+            if not self._sdk_available or self._sdk is None:
+                return HealthCheckResult(
+                    status=HealthStatus.UNHEALTHY,
+                    message="AmazingData SDK 不可用",
+                    details={"sdk_available": False},
+                )
+
+            # 检查连接状态
+            if not self._connected:
+                return HealthCheckResult(
+                    status=HealthStatus.UNHEALTHY,
+                    message="未连接到 AmazingData",
+                    details={"connected": False, "sdk_available": True},
+                )
+
+            # 组装详情
+            details: Dict[str, Any] = {
+                "connected": self._connected,
+                "sdk_available": self._sdk_available,
+                "degraded_mode": self._degraded_mode,
+                "queries": self._get_stat_int("queries"),
+                "query_errors": self._get_stat_int("query_errors"),
+            }
+
+            # 添加登录时间信息
+            if self._login_time:
+                login_duration = (datetime.now() - self._login_time).total_seconds()
+                details["login_duration_seconds"] = login_duration
+
+            # 判断健康状态
+            if self._degraded_mode:
+                return HealthCheckResult(
+                    status=HealthStatus.DEGRADED,
+                    message="AmazingData 处于降级模式",
+                    details=details,
+                )
+
+            return HealthCheckResult(
+                status=HealthStatus.HEALTHY,
+                message="AmazingData 运行正常",
+                details=details,
+            )
+
+        except Exception as e:
+            logger.error(f"健康检查失败: {e}")
+            return HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                message=f"健康检查异常: {e}",
+                details={},
+            )
 
     def _before_query(self) -> None:
         """查询前执行统一的状态检查"""

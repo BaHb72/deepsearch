@@ -192,7 +192,10 @@ class LifecycleCoordinator:
     async def _initialize_health_check_manager(self, components: Dict[str, Component]) -> None:
         """初始化健康检查管理器"""
         try:
-            self._health_check_manager = HealthCheckManager(check_interval=30.0, check_timeout=5.0)
+            # 从全局配置读取健康检查配置
+            config = get_config()
+            health_config = config.health_check if config else None
+            self._health_check_manager = HealthCheckManager(config=health_config)
             self._health_check_manager.auto_register_checkers(components)
             self._logger.info("[OK] Health check manager initialized")
         except Exception as e:

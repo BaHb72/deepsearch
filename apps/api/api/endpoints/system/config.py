@@ -982,20 +982,14 @@ async def get_timeout_config() -> TimeoutConfigResponse:
     try:
         config = get_config()
 
-        # 从配置读取 AmazingData 超时设置
-        dask_normal_timeout = 45.0
-        dask_first_call_timeout = 90.0
-
-        if config:
-            data_sources = getattr(config, "data_sources", None)
-            if data_sources:
-                amazingdata_provider = data_sources.providers.get("amazingdata")
-                if amazingdata_provider:
-                    if amazingdata_provider.timeout:
-                        dask_normal_timeout = amazingdata_provider.timeout
-                    nested_config = amazingdata_provider.config or {}
-                    if "first_call_timeout" in nested_config:
-                        dask_first_call_timeout = float(nested_config["first_call_timeout"])
+        # 从统一超时配置读取 AmazingData 超时设置
+        timeouts_cfg = getattr(config, "timeouts", None)
+        if timeouts_cfg:
+            dask_normal_timeout = timeouts_cfg.amazingdata.normal_call
+            dask_first_call_timeout = timeouts_cfg.amazingdata.first_call
+        else:
+            dask_normal_timeout = 45.0
+            dask_first_call_timeout = 90.0
 
         # 前端超时应该 >= 后端最大超时 + 网络缓冲
         buffer_ms = 5000  # 5秒网络缓冲

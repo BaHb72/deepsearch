@@ -282,6 +282,12 @@ class TradingSessionGuard:
             self._calendar_cache[market_key] = (normalized, now)
             return normalized
 
+        logger.debug(
+            "交易日历为空: market={} raw_result_type={} raw_len={}",
+            market_key,
+            type(result).__name__ if result is not None else "None",
+            len(result) if result else 0,
+        )
         if cache_entry and cache_entry[0]:
             return set(cache_entry[0])
         return set()

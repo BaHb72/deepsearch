@@ -3,8 +3,10 @@ AmazingData API 主路由器
 整合所有AmazingData子模块的路由
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from loguru import logger
+
+from apps.api.api.dependencies.dask import require_amazingdata_ready
 
 # 导入各个子模块的路由器
 from .basic_data import router as basic_data_router
@@ -18,7 +20,12 @@ from .realtime import router as realtime_router
 from .shareholder import router as shareholder_router
 
 # 创建主路由器
-router = APIRouter(prefix="/api/amazingdata", tags=["AmazingData"])
+# 添加 require_amazingdata_ready 依赖，确保 Dask 和 AmazingData Actor 就绪后才能访问
+router = APIRouter(
+    prefix="/api/amazingdata",
+    tags=["AmazingData"],
+    dependencies=[Depends(require_amazingdata_ready)],
+)
 
 # 包含各个子模块的路由
 router.include_router(basic_data_router, prefix="/basic")

@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from core.core.utils.async_timeout import timeout_decorator
+from core.infrastructure.providers.exceptions import ProviderDataError
 from core.infrastructure.providers.interfaces.capabilities import DataCapability
 from core.infrastructure.providers.protocols.lifecycle import (
     HealthCheckResult,
@@ -69,7 +70,7 @@ class AkShareProvider(ILifecycleProvider):
             "hist": 300,  # 历史数据缓存5分钟
             "info": 3600,  # 股票信息缓存1小时
         }
-        self._executor = ThreadPoolExecutor(max_workers=3)
+        self._executor = ThreadPoolExecutor(max_workers=10)
         self.initialized = False
         self._started = False  # 跟踪 Provider 启动状态
         self.access_mode = "auto"
@@ -142,7 +143,9 @@ class AkShareProvider(ILifecycleProvider):
         elif mode == "direct":
             should_use_proxy = False
         else:
-            should_use_proxy = bool(proxy_flag) if proxy_flag is not None else True
+            # auto 模式：仅当显式配置 proxy.enabled=true 时才使用代理
+            # 默认直连，避免 Cloudflare Worker 被速率限制（520 错误）
+            should_use_proxy = bool(proxy_flag) if proxy_flag is not None else False
 
         worker_url = proxy_config.get("worker_url") if isinstance(proxy_config, dict) else None
         timeout_override = None
@@ -1045,18 +1048,20 @@ class AkShareProvider(ILifecycleProvider):
         module="akshare_direct",
     )
     async def fetch_stock_list(self) -> List[Dict[str, str]]:
-        """获取股票列表"""
+        """获取股票列表
+
+        Raises:
+            ProviderDataError: 当获取失败时抛出，让上层调用者尝试其他数据源
+        """
         if self._akshare is None or not self.initialized:
-            return []
+            raise ProviderDataError(
+                provider="akshare",
+                message="AKShare 未安装或未初始化",
+            )
 
-        try:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(self._executor, self._fetch_stock_list_sync)
-            return result
-
-        except Exception as e:
-            logger.error(f"获取股票列表失败: {e}")
-            return []
+        loop = asyncio.get_event_loop()
+        # 不捕获异常，让 ProviderDataError 传播到上层
+        return await loop.run_in_executor(self._executor, self._fetch_stock_list_sync)
 
     async def get_stock_list(
         self, limit: Optional[int] = None, **kwargs
@@ -1124,7 +1129,7 @@ class AkShareProvider(ILifecycleProvider):
                     logger.info(f"通过东方财富接口获取到 {len(stocks)} 只股票")
                     return stocks
             except Exception as e1:
-                logger.debug(f"东方财富接口失败: {e1}")
+                logger.warning(f"东方财富接口失败: {e1}")
 
             # 方法2: 使用原来的stock_info_a_code_name
             try:
@@ -1139,24 +1144,23 @@ class AkShareProvider(ILifecycleProvider):
                     logger.info(f"通过stock_info_a_code_name获取到 {len(stocks)} 只股票")
                     return stocks
             except Exception as e2:
-                logger.debug(f"stock_info_a_code_name失败: {e2}")
+                logger.warning(f"stock_info_a_code_name失败: {e2}")
 
-            # 如果都失败了，返回一个基础的股票列表作为降级方案
-            logger.warning("所有股票列表API都失败，使用默认股票列表")
-            return [
-                {"代码": "000001", "名称": "平安银行"},
-                {"代码": "000002", "名称": "万科A"},
-                {"代码": "600000", "名称": "浦发银行"},
-                {"代码": "600036", "名称": "招商银行"},
-            ]
+            # 所有 API 都失败，抛出异常让上层调用者处理（尝试其他数据源）
+            raise ProviderDataError(
+                provider="akshare",
+                message="所有股票列表 API 都失败（stock_zh_a_spot_em, stock_info_a_code_name）",
+            )
 
+        except ProviderDataError:
+            # 重新抛出 ProviderDataError，让上层处理
+            raise
         except Exception as e:
-            logger.error(f"AKShare获取股票列表失败: {e}")
-            # 返回基础股票列表
-            return [
-                {"代码": "000001", "名称": "平安银行"},
-                {"代码": "000002", "名称": "万科A"},
-            ]
+            logger.error(f"AKShare 获取股票列表失败: {e}")
+            raise ProviderDataError(
+                provider="akshare",
+                message=f"获取股票列表失败: {e}",
+            ) from e
 
     async def call_api(
         self, api_name: str, params: Dict[str, Any], max_retries: int = 3

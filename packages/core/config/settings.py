@@ -16,6 +16,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .loader import load_yaml_config
 from .models import (
+    AiConfig,
     AmazingDataConfig,
     AppConfig,
     CapabilityRoutingConfig,
@@ -36,6 +37,7 @@ from .models import (
     QmtConfig,
     RuntimeConfig,
     SecurityConfig,
+    TimeoutsConfig,
     WebUIConfig,
     ZeroMQConfig,
 )
@@ -69,6 +71,8 @@ class Settings(BaseSettings):
     data_source_prefetch: Optional[DataSourcePrefetchConfig] = None  # 数据源预取调度
     capability_routing: Optional[CapabilityRoutingConfig] = None  # 能力路由配置
     dask: Optional[DaskConfig] = None  # Dask 分布式计算配置
+    ai: Optional[AiConfig] = None  # AI 分析服务配置
+    timeouts: TimeoutsConfig = Field(default_factory=TimeoutsConfig)  # 统一超时配置
 
     @property
     def zeromq(self) -> ZeroMQConfig:

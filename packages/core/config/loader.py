@@ -130,6 +130,7 @@ def load_yaml_config() -> Dict[str, Any]:
         # 加载拆分的配置文件
         config = _load_infrastructure_config(config, config_dir, env)
         config = _load_market_data_config(config, config_dir, env)
+        config = _load_ai_config(config, config_dir, env)
 
         # 加载独立的 data_sources.yaml（替换原有的 providers.yaml 逻辑）
         config = _load_data_sources_config(config, config_dir)
@@ -305,6 +306,40 @@ def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> None:
             _deep_merge(base[key], value)
         else:
             base[key] = value
+
+
+def _load_ai_config(config: Dict[str, Any], config_dir: Path, env: str) -> Dict[str, Any]:
+    """加载 AI 分析服务配置文件。
+
+    Args:
+        config: 已加载的主配置字典
+        config_dir: 配置文件目录
+        env: 环境名称
+
+    Returns:
+        合并后的配置字典
+    """
+    ai_path = config_dir / f"ai.{env}.yaml"
+    if not ai_path.exists():
+        return config
+
+    try:
+        with ai_path.open("r", encoding=YAML_ENCODING) as f:
+            ai_config = yaml.safe_load(f) or {}
+
+        if ai_config and "ai" in ai_config:
+            if "ai" not in config:
+                config["ai"] = {}
+            if isinstance(config["ai"], dict) and isinstance(ai_config["ai"], dict):
+                _deep_merge(config["ai"], ai_config["ai"])
+            else:
+                config["ai"] = ai_config["ai"]
+
+            print(f"[INFO] Loaded AI config: ai.{env}.yaml")
+    except Exception as e:
+        print(f"[WARNING] Failed to load ai.{env}.yaml: {e}", file=sys.stderr)
+
+    return config
 
 
 def _load_infrastructure_config(

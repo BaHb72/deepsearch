@@ -40,14 +40,26 @@ class MarketDataStreamingRunner:
         self._last_should_skip_step = False
         self._task = asyncio.create_task(self._run_loop(), name="market-data-streaming-loop")
 
-    async def stop(self) -> None:
-        """停止轮询循环并等待收尾。"""
+    async def stop(self, timeout: float = 5.0) -> None:
+        """停止轮询循环并等待收尾。
 
+        Args:
+            timeout: 等待任务结束的最大超时时间（秒）
+        """
         if not self._task:
             return
+
         self._stop_event.set()
+
+        # 主动取消任务
+        if not self._task.done():
+            self._task.cancel()
+
+        # 带超时等待
         try:
-            await self._task
+            await asyncio.wait_for(self._task, timeout=timeout)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            pass
         finally:
             self._task = None
 
@@ -124,6 +136,12 @@ class MarketDataStreamingRunner:
                         await asyncio.wait_for(
                             self._default_step(phase_state), timeout=effective_timeout
                         )
+                except asyncio.CancelledError:
+                    logger.info(
+                        "实时行情轮询收到取消信号 iteration={}",
+                        iteration_id,
+                    )
+                    raise
                 except asyncio.TimeoutError:
                     log_fn = logger.warning
                     if decision and decision.timeout_log_level.lower() == "info":
@@ -160,6 +178,8 @@ class MarketDataStreamingRunner:
                     iteration_elapsed,
                     self._stop_event.is_set(),
                 )
+        except asyncio.CancelledError:
+            logger.info("市场数据轮询任务已取消")
         finally:
             self._stop_event.clear()
 

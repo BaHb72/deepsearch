@@ -31,8 +31,8 @@ repos:
     rev: v1.13.0
     hooks:
       - id: mypy
-        args: [--config-file=pyproject.toml]
-        additional_dependencies: [types-PyYAML, types-redis, types-requests, types-pytz]
+        args: [--config-file=pyproject.toml, --follow-imports=silent]
+        additional_dependencies: [types-PyYAML, types-redis, types-requests, types-pytz, httpx]
         exclude: ^(tests|docs|tools|typings|scripts|apps/api)/
 
   # 通用文件格式检查

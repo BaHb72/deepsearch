@@ -15,7 +15,13 @@ from typing import Dict, Iterator, Optional
 
 from loguru import logger
 
-from .config import DEFAULT_TIMEOUT_CONFIGS, DataSourceState, SourceStateInfo, TimeoutConfig
+from .config import (
+    DEFAULT_TIMEOUT_CONFIGS,
+    DataSourceState,
+    SourceStateInfo,
+    TimeoutConfig,
+    load_timeout_configs_from_settings,
+)
 
 
 class TimeoutManager:
@@ -282,10 +288,11 @@ def get_timeout_manager() -> TimeoutManager:
         with _manager_lock:
             if _timeout_manager is None:
                 _timeout_manager = TimeoutManager()
-                # 自动注册已知数据源
-                for source in DEFAULT_TIMEOUT_CONFIGS:
-                    _timeout_manager.register_source(source)
-                logger.debug("TimeoutManager 初始化完成")
+                # 从配置系统加载超时值（覆盖代码级默认值）
+                loaded_configs = load_timeout_configs_from_settings()
+                for source, config in loaded_configs.items():
+                    _timeout_manager.register_source(source, config)
+                logger.debug("TimeoutManager 初始化完成（已加载配置）")
 
     return _timeout_manager
 

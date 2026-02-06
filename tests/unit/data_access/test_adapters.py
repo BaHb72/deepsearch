@@ -243,7 +243,7 @@ class TestAKShareAdapter:
                 "amount": [10200000, 12960000],
             }
         )
-        mock_provider.get_history_data.return_value = df
+        mock_provider.get_stock_hist = AsyncMock(return_value=df)
 
         request = KlineRequest(
             asset=AssetSpec.from_code("000001.SZ"),

@@ -21,7 +21,6 @@ from core.ports.market_data import (
 )
 from loguru import logger
 
-
 from .cache_reader import MarketDataCacheReader
 from .cache_writer import MarketDataCacheWriter
 from .factory import create_realtime_streaming_pipeline
@@ -337,9 +336,22 @@ class RealtimeDataOrchestrator:
 
         # 创建使用适配器日历的加载器
         async def _adapter_calendar_loader(market: str):
-            if hasattr(adapter, "get_calendar"):
+            has_cal = hasattr(adapter, "get_calendar")
+            logger.debug(
+                "日历加载器: adapter={} hasattr(get_calendar)={} market={}",
+                adapter.name,
+                has_cal,
+                market,
+            )
+            if has_cal:
                 try:
-                    return await adapter.get_calendar(market)
+                    result = await adapter.get_calendar(market)  # type: ignore[attr-defined]
+                    logger.debug(
+                        "日历加载器: adapter={} 返回 {} 条记录",
+                        adapter.name,
+                        len(result) if result else 0,
+                    )
+                    return result
                 except Exception as exc:
                     logger.warning("适配器日历获取失败 {}: {}", adapter.name, exc)
             return ()

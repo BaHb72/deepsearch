@@ -121,21 +121,33 @@ async def bind_market_data_handle(
 
             当数据源正在执行耗时操作（如 SDK 登录、批量获取）时，
             自动延长总超时以避免过早中断。
+
+            超时配置从 settings 统一读取，避免硬编码:
+            - AmazingData 首次调用: data_sources.providers.amazingdata.config.first_call_timeout
+            - AkShare 批量获取: 使用固定 300s（无状态服务）
             """
             # 检查数据源状态
             amazingdata_state = timeout_manager.get_state("amazingdata")
             akshare_state = timeout_manager.get_state("akshare")
 
             # 如果正在连接，给 SDK 登录足够时间
+            # 从统一超时配置读取（Settings.timeouts.amazingdata.first_call）
             if amazingdata_state == DataSourceState.CONNECTING:
-                dynamic_timeout = max(warmup_timeout, 120.0)
+                settings = get_config()
+                timeouts_cfg = getattr(settings, "timeouts", None)
+                amazingdata_first_call_timeout = (
+                    timeouts_cfg.amazingdata.first_call if timeouts_cfg else 90.0
+                )
+
+                dynamic_timeout = max(warmup_timeout, amazingdata_first_call_timeout)
                 logger.debug(
-                    "AmazingData 正在连接，总预热超时延长至: {:.1f}s",
+                    "AmazingData 正在连接，总预热超时延长至: {:.1f}s (配置: {:.1f}s)",
                     dynamic_timeout,
+                    amazingdata_first_call_timeout,
                 )
                 return dynamic_timeout
 
-            # 如果正在批量获取，需要更长的超时
+            # 如果正在批量获取，需要更长的超时（AkShare 无状态服务，使用固定值）
             if akshare_state == DataSourceState.BATCH_FETCHING:
                 dynamic_timeout = max(warmup_timeout, 300.0)
                 logger.debug(
@@ -274,6 +286,30 @@ async def bind_market_data_handle(
     # 启动后台预热任务
     asyncio.create_task(_warmup_board_universe())
 
+    # 在 Runner 启动前预加载交易日历，避免首次轮询时 calendar 为空
+    if getattr(realtime_cfg, "enabled", False):
+        session_guard = getattr(runner, "session_guard", None)
+        if session_guard:
+            try:
+                from zoneinfo import ZoneInfo
+
+                # 触发一次 evaluate 以缓存 calendar
+                timeouts_cfg = getattr(get_config(), "timeouts", None)
+                cal_timeout = timeouts_cfg.amazingdata.calendar_preload if timeouts_cfg else 30.0
+                await asyncio.wait_for(
+                    session_guard.evaluate(
+                        default_interval=1.0,
+                        default_timeout=5.0,
+                        now=datetime.now(ZoneInfo("Asia/Shanghai")),
+                    ),
+                    timeout=cal_timeout,
+                )
+                logger.debug("交易日历预加载完成")
+            except asyncio.TimeoutError:
+                logger.warning("交易日历预加载超时，Runner 将使用 fallback 模式")
+            except Exception as exc:
+                logger.warning("交易日历预加载失败: {}，Runner 将使用 fallback 模式", exc)
+
     if getattr(realtime_cfg, "enabled", False):
         try:
             await runner.start()
@@ -324,6 +360,23 @@ async def ensure_market_data_runtime(
                 app_state.market_data_fallback_manager = ModuleFallbackManager(config_obj)
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning("初始化 fallback 管理器失败: {}", exc)
+
+        # 如果 fallback 顺序包含 amazingdata，等待 Dask 就绪
+        ds_cfg = getattr(config_obj, "data_sources", None)
+        fallback_order = getattr(ds_cfg, "fallback_order", []) if ds_cfg else []
+        if "amazingdata" in fallback_order:
+            from core.compute.dask_init_state import get_dask_init_manager_sync
+
+            dask_manager = get_dask_init_manager_sync()
+            if dask_manager and not dask_manager.amazingdata_ready:
+                logger.info("等待 AmazingData Dask 代理初始化...")
+                timeouts_cfg = getattr(config_obj, "timeouts", None)
+                init_timeout = timeouts_cfg.dask.amazingdata_init if timeouts_cfg else 60.0
+                ready = await dask_manager.wait_amazingdata_ready(timeout=init_timeout)
+                if ready:
+                    logger.info("AmazingData Dask 代理已就绪")
+                else:
+                    logger.warning("AmazingData 初始化超时，将使用其他数据源")
 
         try:
             handle = await orchestrator.ensure_handle()
@@ -399,17 +452,33 @@ async def refresh_market_data_once(app_state: "AppState") -> None:
 async def shutdown_market_data_runtime(app_state: "AppState") -> None:
     """关闭市场数据实时运行态，释放资源。"""
 
+    # 从配置读取关闭超时
+    try:
+        from core.config import get_config
+
+        _shutdown = getattr(get_config(), "timeouts", None)
+        _shutdown = _shutdown.shutdown if _shutdown else None
+    except Exception:
+        _shutdown = None
+
     runner = getattr(app_state, "market_data_runner", None)
     if runner is not None:
         try:
-            await runner.stop()
+            runner_timeout = _shutdown.runner_stop if _shutdown else 5.0
+            runner_outer = _shutdown.runner_stop_outer if _shutdown else 8.0
+            await asyncio.wait_for(runner.stop(timeout=runner_timeout), timeout=runner_outer)
+        except asyncio.TimeoutError:
+            logger.warning("停止市场数据实时轮询超时")
         except Exception as exc:  # pragma: no cover - 防御性日志
             logger.debug("停止市场数据实时轮询失败: {}", exc)
 
     writer = getattr(app_state, "market_data_cache_writer", None)
     if writer is not None:
         try:
-            await writer.close()
+            writer_timeout = _shutdown.cache_writer if _shutdown else 5.0
+            await asyncio.wait_for(writer.close(), timeout=writer_timeout)
+        except asyncio.TimeoutError:
+            logger.warning("关闭市场数据缓存写入器超时")
         except Exception as exc:  # pragma: no cover - 防御性日志
             logger.debug("关闭市场数据缓存写入器失败: {}", exc)
 
@@ -419,7 +488,10 @@ async def shutdown_market_data_runtime(app_state: "AppState") -> None:
         try:
             stop_coro = getattr(provider, "stop_async", None)
             if callable(stop_coro):
-                await stop_coro()
+                provider_timeout = _shutdown.provider_stop if _shutdown else 5.0
+                await asyncio.wait_for(stop_coro(), timeout=provider_timeout)
+        except asyncio.TimeoutError:
+            logger.warning("停止数据源提供器超时")
         except Exception as exc:  # pragma: no cover - 防御性日志
             logger.debug("停止数据库提供器进程失败: {}", exc)
 

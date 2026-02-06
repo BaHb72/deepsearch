@@ -14,8 +14,6 @@ from core.infrastructure.providers.interfaces.base import TGWError
 from fastapi import HTTPException
 from loguru import logger
 
-from apps.api.api.providers import DataProviderFactory, DataSourceType
-
 DEFAULT_LOCAL_PATH = "D://AmazingData_local_data//"
 _DATE_COLUMN_CANDIDATES: tuple[str, ...] = (
     "report_date",
@@ -34,77 +32,34 @@ JSONDict: TypeAlias = dict[str, JSONValue]
 
 async def get_amazingdata_provider():
     """
-    获取AmazingData提供者实例
+    获取 AmazingData DaskAdapter 实例
+
+    通过 DaskInitManager 获取已注册的 DaskAdapter，该 adapter 通过 Redis 任务队列
+    与 Worker 上的 AmazingDataActor 通信，完全避免直连 SDK 的单连接限制和事件循环冲突。
+
+    注意：此函数依赖 require_amazingdata_ready 守卫（在 router 级别注入），
+    确保调用时 DaskAdapter 已就绪。
 
     Returns:
-        DataProvider实例 (ProcessIsolatedAmazingDataProvider 或 AmazingDataExtended)
+        AmazingDataDaskAdapter 实例
 
     Raises:
-        HTTPException: 获取提供者失败时
+        HTTPException: DaskAdapter 不可用时
     """
-    import asyncio
-    import time
+    from core.compute.dask_init_state import get_dask_init_manager_sync
 
-    start_time = time.time()
-    logger.debug("[DEBUG] get_amazingdata_provider 开始...")
+    manager = get_dask_init_manager_sync()
 
-    try:
-        logger.debug("[DEBUG] 调用 DataProviderFactory.get_provider_async(AMAZINGDATA)...")
-        step_start = time.time()
-        # 添加 90s 超时保护（Dask Actor 创建 60s + TGW 登录时间）
-        try:
-            provider = await asyncio.wait_for(
-                DataProviderFactory.get_provider_async(DataSourceType.AMAZINGDATA),
-                timeout=90.0,
-            )
-        except asyncio.TimeoutError:
-            logger.error("[DEBUG] get_provider_async 超时 (90s)")
-            raise HTTPException(
-                status_code=504,
-                detail="AmazingData provider 获取超时 (90s)，可能是 TGW 连接问题",
-            )
-        logger.debug(
-            f"[DEBUG] get_provider_async 完成, 耗时: {time.time() - step_start:.2f}秒, 类型: {type(provider).__name__}"
-        )
+    if manager is not None:
+        adapter = manager.amazingdata_adapter
+        if adapter is not None and getattr(adapter, "_initialized", False):
+            return adapter
 
-        # 检查provider状态
-        if provider is None:
-            logger.error("[DEBUG] provider 为 None!")
-            raise HTTPException(status_code=500, detail="AmazingData provider 获取失败: 返回 None")
-
-        # 检查连接状态
-        is_connected = getattr(provider, "_connected", False)
-        is_degraded = getattr(provider, "_degraded_mode", False)
-        sdk_available = getattr(provider, "_sdk_available", False)
-
-        logger.debug(
-            f"[DEBUG] Provider状态: _connected={is_connected}, "
-            f"_degraded_mode={is_degraded}, _sdk_available={sdk_available}"
-        )
-
-        if not is_connected:
-            error_msg = (
-                f"AmazingData 未连接! "
-                f"_connected={is_connected}, _degraded_mode={is_degraded}, _sdk_available={sdk_available}. "
-                "可能原因: 1) SDK未安装 2) 登录失败 3) TGW连接失败(端口600)"
-            )
-            logger.error(f"[DEBUG] {error_msg}")
-            raise HTTPException(status_code=503, detail=error_msg)
-
-        # 注意：不再创建AmazingDataExtended实例
-        # ProcessIsolatedAmazingDataProvider已经包含所有必要的方法
-        # 创建AmazingDataExtended会绕过进程隔离，导致SDK的sys.exit()崩溃主进程
-        logger.debug(f"[DEBUG] 使用Provider: {type(provider).__name__}")
-
-        logger.debug(
-            f"[DEBUG] get_amazingdata_provider 完成, 总耗时: {time.time() - start_time:.2f}秒"
-        )
-        return provider
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[DEBUG] 获取AmazingData提供者失败: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get AmazingData provider: {e}")
+    # 如果到这里说明 require_amazingdata_ready 守卫未生效或状态异常
+    raise HTTPException(
+        status_code=503,
+        detail="AmazingData 数据源不可用，Dask Worker 可能尚未就绪",
+    )
 
 
 def dataframe_to_dict(data: object) -> JSONValue:

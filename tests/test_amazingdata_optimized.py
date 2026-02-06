@@ -589,7 +589,7 @@ class TestPerformanceBenchmark:
 
     def test_cache_performance(self):
         """测试缓存性能"""
-        cache = OptimizedCacheManager()
+        cache = OptimizedCacheManager(max_size=2000)
 
         # 预热缓存
         for i in range(1000):

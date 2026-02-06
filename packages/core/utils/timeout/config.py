@@ -52,30 +52,70 @@ class TimeoutConfig:
     """备用数据源超时 - 切换到备用数据源时的超时"""
 
 
-# 预定义的数据源超时配置
+# 预定义的数据源超时配置（代码级默认值，可被 YAML 配置覆盖）
 DEFAULT_TIMEOUT_CONFIGS: Dict[str, TimeoutConfig] = {
     "akshare": TimeoutConfig(
         idle_timeout=5.0,
-        connect_timeout=30.0,  # AkShare 无需登录，连接较快
-        fetch_timeout=15.0,  # 单条请求
-        batch_timeout=300.0,  # 批量下载（如 557 条股票）
+        connect_timeout=30.0,
+        fetch_timeout=15.0,
+        batch_timeout=300.0,
         fallback_timeout=10.0,
     ),
     "amazingdata": TimeoutConfig(
         idle_timeout=5.0,
-        connect_timeout=90.0,  # SDK 首次登录需要较长时间
-        fetch_timeout=45.0,  # Actor 调用
-        batch_timeout=120.0,  # 批量查询
+        connect_timeout=90.0,
+        fetch_timeout=45.0,
+        batch_timeout=120.0,
         fallback_timeout=15.0,
     ),
     "miniqmt": TimeoutConfig(
         idle_timeout=5.0,
-        connect_timeout=60.0,  # QMT 连接
+        connect_timeout=60.0,
         fetch_timeout=30.0,
         batch_timeout=180.0,
         fallback_timeout=10.0,
     ),
 }
+
+
+def load_timeout_configs_from_settings() -> Dict[str, TimeoutConfig]:
+    """从 Settings.timeouts.providers 加载超时配置，覆盖代码级默认值。
+
+    如果配置系统尚未初始化或无 timeouts 配置，返回默认值。
+    """
+    configs = {
+        k: TimeoutConfig(
+            **{
+                "idle_timeout": v.idle_timeout,
+                "connect_timeout": v.connect_timeout,
+                "fetch_timeout": v.fetch_timeout,
+                "batch_timeout": v.batch_timeout,
+                "fallback_timeout": v.fallback_timeout,
+            }
+        )
+        for k, v in DEFAULT_TIMEOUT_CONFIGS.items()
+    }
+
+    try:
+        from core.config import get_config
+
+        settings = get_config()
+        timeouts_cfg = getattr(settings, "timeouts", None)
+        if timeouts_cfg is None:
+            return configs
+
+        for name, profile in timeouts_cfg.providers.items():
+            configs[name] = TimeoutConfig(
+                idle_timeout=profile.idle,
+                connect_timeout=profile.connect,
+                fetch_timeout=profile.fetch,
+                batch_timeout=profile.batch,
+                fallback_timeout=profile.fallback,
+            )
+    except Exception:
+        pass
+
+    return configs
 
 
 @dataclass

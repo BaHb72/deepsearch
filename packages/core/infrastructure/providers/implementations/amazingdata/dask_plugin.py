@@ -4,9 +4,14 @@ This plugin initializes and manages AmazingDataActor lifecycle on Dask Workers.
 使用 Dask 原生 setup/teardown 作为唯一的生命周期管理入口。
 
 架构设计:
-- Plugin.setup(): 创建并初始化 Actor，注册到 worker.actors
-- Plugin.teardown(): 清理 Actor 资源
+- Plugin.setup(): 创建并初始化 Actor，注册到 worker.actors，启动 Redis 任务监听器
+- Plugin.teardown(): 停止监听器，清理 Actor 资源
 - Actor 保持 SDK 登录状态
+- Redis 任务队列替代 Dask Client 提交，解决 Tornado/asyncio 事件循环冲突
+
+Task Queue 协议:
+    API 进程 RPUSH 任务到 Redis List "amazingdata:task_queue"
+    Worker 进程 BLPOP 取出任务并执行，结果写入 Redis "dask_result:{task_id}"
 
 Usage:
     from distributed import Client
@@ -23,6 +28,8 @@ Usage:
 
 from __future__ import annotations
 
+import json
+import threading
 from typing import TYPE_CHECKING, Any
 
 from core.compute.plugins.base_plugin import BaseWorkerPlugin
@@ -30,7 +37,154 @@ from core.compute.plugins.config import AmazingDataPluginConfig
 from loguru import logger
 
 if TYPE_CHECKING:
-    pass
+    from distributed import Worker
+
+# Redis 任务队列 key
+TASK_QUEUE_KEY = "amazingdata:task_queue"
+# Redis 结果 key 前缀（与 dask_adapter.py 中 _REDIS_RESULT_PREFIX 一致）
+RESULT_PREFIX = "dask_result:"
+
+
+class RedisTaskListener:
+    """Redis 任务队列监听器
+
+    在 Worker 进程中运行一个后台线程，通过 BLPOP 监听 Redis 任务队列。
+    收到任务后调用 Worker 上注册的 Actor 执行方法，结果写入 Redis。
+
+    这样 API 进程无需创建 Dask Client，完全通过 Redis 通信，
+    彻底消除 Tornado/asyncio 事件循环冲突。
+    """
+
+    def __init__(self, worker: Worker, redis_url: str) -> None:
+        self._worker = worker
+        self._redis_url = redis_url
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        """启动监听线程"""
+        self._thread = threading.Thread(
+            target=self._listen_loop,
+            name="amazingdata-redis-listener",
+            daemon=True,
+        )
+        self._thread.start()
+        logger.info("[RedisTaskListener] 监听线程已启动 | queue={}", TASK_QUEUE_KEY)
+
+    def stop(self) -> None:
+        """停止监听线程"""
+        self._stop_event.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=3.0)
+        logger.info("[RedisTaskListener] 监听线程已停止")
+
+    def _listen_loop(self) -> None:
+        """主监听循环，使用 BLPOP 阻塞等待任务"""
+        import redis
+
+        r = redis.from_url(self._redis_url)  # type: ignore[attr-defined]
+
+        while not self._stop_event.is_set():
+            try:
+                # BLPOP 阻塞 1 秒，超时后检查 stop_event
+                result = r.blpop(TASK_QUEUE_KEY, timeout=1)
+                if result is None:
+                    continue
+
+                _, task_json = result
+                if isinstance(task_json, bytes):
+                    task_json = task_json.decode("utf-8")
+
+                task = json.loads(task_json)
+                task_id = task["task_id"]
+                method = task["method"]
+                kwargs = task.get("kwargs", {})
+
+                self._execute_task(r, task_id, method, kwargs)
+
+            except Exception as e:
+                if self._stop_event.is_set():
+                    break
+                logger.error("[RedisTaskListener] 监听循环异常 | error={}", e, exc_info=True)
+                # 短暂等待后重试，避免密集错误循环
+                self._stop_event.wait(1.0)
+
+        try:
+            r.close()
+        except Exception:
+            pass
+
+    def _execute_task(
+        self,
+        r: Any,
+        task_id: str,
+        method: str,
+        kwargs: dict,
+    ) -> None:
+        """在 Worker 上执行一个任务
+
+        从 worker.actors 获取 Actor 并调用方法，结果通过 Redis 传回。
+        """
+        actors = getattr(self._worker, "actors", {})
+
+        logger.info(
+            "[RedisTaskListener] 执行任务 | task_id={} | method={} | actors={}",
+            task_id,
+            method,
+            list(actors.keys()),
+        )
+
+        actor = actors.get("amazingdata")
+
+        # 特殊方法：健康检查（只检查 Actor 是否存在，不触发登录）
+        if method == "_health_check":
+            result_data = json.dumps(
+                {
+                    "status": "success",
+                    "result": actor is not None,
+                }
+            )
+            redis_key = f"{RESULT_PREFIX}{task_id}"
+            r.setex(redis_key, 60, result_data)
+            return
+
+        if actor is None:
+            error_msg = f"amazingdata Actor 未注册 (已注册: {list(actors.keys())})"
+            logger.error("[RedisTaskListener] {}", error_msg)
+            self._store_error(r, task_id, error_msg)
+            return
+
+        try:
+            # 调用 Actor 方法，传递 task_id 让它将结果存入 Redis
+            actor.call_sync(method, task_id=task_id, **kwargs)
+        except Exception as e:
+            error_msg = f"Actor 调用失败: {type(e).__name__}: {e}"
+            logger.error(
+                "[RedisTaskListener] {} | task_id={} | method={}",
+                error_msg,
+                task_id,
+                method,
+            )
+            self._store_error(r, task_id, error_msg)
+
+    def _store_error(self, r: Any, task_id: str, error_msg: str) -> None:
+        """将错误写入 Redis"""
+        try:
+            redis_key = f"{RESULT_PREFIX}{task_id}"
+            error_data = json.dumps(
+                {
+                    "status": "error",
+                    "error": error_msg,
+                    "result": None,
+                }
+            )
+            r.setex(redis_key, 300, error_data)
+        except Exception as e:
+            logger.error(
+                "[RedisTaskListener] Redis 写入错误失败 | task_id={} | error={}",
+                task_id,
+                e,
+            )
 
 
 class AmazingDataWorkerPlugin(BaseWorkerPlugin):
@@ -41,6 +195,10 @@ class AmazingDataWorkerPlugin(BaseWorkerPlugin):
     - _create_actor: 创建 AmazingDataActor 实例
     - _get_actor_name: 返回 Actor 注册名称
 
+    额外功能:
+    - setup 完成后启动 RedisTaskListener，监听 Redis 任务队列
+    - teardown 时停止监听器
+
     Attributes:
         name: Plugin 名称
         config: AmazingDataPluginConfig 配置对象
@@ -49,12 +207,33 @@ class AmazingDataWorkerPlugin(BaseWorkerPlugin):
     name = "amazingdata-actor"
 
     def __init__(self, config: AmazingDataPluginConfig) -> None:
-        """初始化 Plugin
-
-        Args:
-            config: AmazingDataPluginConfig 配置对象
-        """
         super().__init__(config)
+        self._task_listener: RedisTaskListener | None = None
+
+    async def setup(self, worker: Worker) -> None:
+        """Plugin 启动流程
+
+        先执行父类标准 setup（创建 Actor、注册到 Worker），
+        然后启动 Redis 任务监听器。
+        """
+        await super().setup(worker)
+
+        # 只在 Actor 初始化成功后启动监听器
+        if self._initialized and self._actor is not None:
+            redis_url = getattr(self.config, "redis_url", "redis://localhost:6379")
+            self._task_listener = RedisTaskListener(worker, redis_url)
+            self._task_listener.start()
+
+    async def teardown(self, worker: Worker) -> None:
+        """Plugin 清理流程
+
+        先停止监听器，再执行父类清理。
+        """
+        if self._task_listener is not None:
+            self._task_listener.stop()
+            self._task_listener = None
+
+        await super().teardown(worker)
 
     async def _load_dependencies(self) -> None:
         """加载依赖
