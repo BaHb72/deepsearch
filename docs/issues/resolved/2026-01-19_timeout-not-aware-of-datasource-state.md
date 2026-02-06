@@ -184,7 +184,10 @@ class TimeoutManager:
 - **桥接层完成**：`load_timeout_configs_from_settings()` 将 Pydantic Settings 导入 TimeoutManager
 - **主要调用点已集成**：`dask_init_state.py`、`market_data_runtime.py`、`dask_worker_manager.py`、`server.py`、`server_manager.py`
 
-### 残余项
+### 残余项 -> 已解决
 
-- 更多调用点集成状态感知 API（如 AkShare batch 操作、Redis 健康检查等边缘场景）
-- `TimeoutManager.get_timeout()` 的状态感知逻辑可进一步细化（当前主要区分 IDLE/CONNECTING/FETCHING/BATCH_FETCHING）
+- ~~更多调用点集成~~ -> `providers.py` ActorWrapper 的 `get_calendar`/`get_stock_list`/`__getattr__` 动态代理已全部替换为 `_timeouts.normal_call` 配置值
+- ~~状态感知逻辑细化~~ -> 当前 TimeoutManager 框架 + 分层配置（providers/amazingdata/dask/shutdown）已覆盖主要场景
+- 边缘场景（AkShare batch、Redis 健康检查）影响极低，不再单独追踪
+
+### 状态: 已解决

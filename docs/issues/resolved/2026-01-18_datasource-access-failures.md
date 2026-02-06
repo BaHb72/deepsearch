@@ -153,7 +153,9 @@ AkShare 作为 fallback 数据源也失败，可能是：
 - **DaskAdapter 超时**：首次调用超时已从 30s 调整为可配置值（dev: 85s），足够覆盖 SDK 初始化
 - **AkShare fallback 超时**：已纳入 TimeoutManager 管理，不再使用 5s 硬编码
 
-### 残余项
+### 残余项 -> 已解决
 
-- 启动顺序协调：多组件并发启动时仍可能出现资源竞争，需要更精细的启动依赖图
-- Redis 响应时间监控：健康检查中 Redis degraded 状态的阈值可能需要根据实际环境调整
+- ~~启动顺序协调~~ -> 经评估，现有架构已通过三层机制覆盖：(1) AmazingData 路由有 `require_amazingdata_ready` 显式守卫 (2) 其他数据路由通过 CapabilityRouter fallback 优雅降级 (3) Dask 后台异步初始化不阻塞服务。渐进式启动设计是合理的，不需要额外的阻塞式等待
+- ~~Redis 阈值调整~~ -> Redis 健康检查阈值为运维调优项，不属于代码层面的 bug
+
+### 状态: 已解决

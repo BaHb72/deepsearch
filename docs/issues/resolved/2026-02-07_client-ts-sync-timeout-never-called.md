@@ -26,9 +26,15 @@
 - `ApiClient` 的超时始终使用默认值 90000ms，不会从后端动态获取
 - 如果后端超时配置变更，`ApiClient` 不会感知
 
-## 建议
+## 修复
 
-当前不紧急，因为 `ApiClient` 尚未被广泛使用。未来迁移到 `ApiClient` 时需要：
+已在 `apps/web/src/main-react.tsx` 的 `initApp()` 中添加调用：
 
-1. 在应用启动时调用 `apiClient.syncTimeoutConfig()`
-2. 或在 `ApiClient` 构造函数中自动触发同步
+```typescript
+await setupRequest()
+await apiClient.syncTimeoutConfig()  // 新增：同步 ApiClient 超时配置
+```
+
+现在两套 HTTP 客户端（旧 `request` 和新 `ApiClient`）都会在启动时从后端同步超时配置。
+
+### 状态: 已解决

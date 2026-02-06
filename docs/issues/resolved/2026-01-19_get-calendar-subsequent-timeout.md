@@ -56,7 +56,10 @@
 - **超时可配置**：所有超时值已从 YAML 配置读取，可根据环境调整（Refactoring #4）
 - **首次调用超时已修复**：`dask_first_call_timeout` 配置项确保首次调用有充足时间
 
-### 残余项
+### 残余项 -> 已解决
 
-- Actor 长期运行后可能挂起（SDK TCP 连接超时断开、线程池耗尽等），需要 Actor 健康检查/自动重连机制
-- 当前缺少 Actor 级别的心跳监控，无法区分"Actor 忙碌"和"Actor 卡死"
+- ~~Actor 长期运行后可能挂起~~ -> ActorWrapper 已添加后台心跳任务（60s 间隔），连续 3 次失败自动标记断连
+- ~~缺少 Actor 级别的心跳监控~~ -> `start_heartbeat()` / `_heartbeat_loop()` / `stop_heartbeat()` 方法已实现
+- ActorWrapper 内所有方法的超时值已从硬编码改为 `_timeouts.normal_call` 配置值（默认 45s）
+
+### 状态: 已解决

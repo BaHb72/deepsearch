@@ -393,13 +393,18 @@ class DataProviderFactory:
 
                 logger.debug("[ACTOR_CREATE] Dask Future 已提交 | future_key={}", actor_future.key)
 
+                # 从配置获取超时值
+                from core.config import get_config
+
+                _tc = get_config().timeouts.amazingdata
+
                 # Dask ActorFuture 实现了 __await__ 协议，可以直接 await
                 logger.debug("[ACTOR_CREATE] 等待 Future 完成...")
-                actor = await asyncio.wait_for(actor_future, timeout=60.0)
+                actor = await asyncio.wait_for(actor_future, timeout=_tc.actor_create)
 
                 # 初始化（延迟登录模式）
                 logger.info("[ACTOR_CREATE] 正在初始化 AmazingData...")
-                init_result = await asyncio.wait_for(actor.initialize(), timeout=30.0)
+                init_result = await asyncio.wait_for(actor.initialize(), timeout=_tc.sdk_login)
                 if not init_result:
                     raise RuntimeError("AmazingData 初始化失败")
 
@@ -409,7 +414,7 @@ class DataProviderFactory:
                     # get_calendar 是一个轻量级调用，会触发 _ensure_logged_in()
                     await asyncio.wait_for(
                         actor.call("get_calendar", market="SH"),
-                        timeout=30.0,
+                        timeout=_tc.calendar_preload,
                     )
                 except Exception as login_exc:
                     logger.warning("[ACTOR_CREATE] 延迟登录调用失败: {}", login_exc)
@@ -425,13 +430,15 @@ class DataProviderFactory:
                 class ActorWrapper:
                     """Dask Actor 本地包装器，提供 API 层所需的属性"""
 
-                    def __init__(self, actor, connected: bool = True):
+                    def __init__(self, actor, timeouts, connected: bool = True):
                         self._actor = actor
                         self._is_connected = connected
                         self._creation_time = now()
                         self._last_health_check = now()
                         self._consecutive_failures = 0
                         self._max_failures_before_disconnect = 3
+                        self._timeouts = timeouts
+                        self._heartbeat_task: asyncio.Task | None = None
 
                     @property
                     def _connected(self) -> bool:
@@ -474,6 +481,35 @@ class DataProviderFactory:
                             )
                         return False
 
+                    def start_heartbeat(self, interval: float = 60.0) -> None:
+                        """启动后台心跳任务，定期检测 Actor 存活"""
+                        if self._heartbeat_task is not None:
+                            return
+                        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop(interval))
+
+                    async def _heartbeat_loop(self, interval: float) -> None:
+                        """定期检查 Actor 存活状态"""
+                        await asyncio.sleep(interval)
+                        while self._is_connected:
+                            try:
+                                healthy = await self.check_health()
+                                if healthy:
+                                    logger.debug("Actor 心跳正常")
+                            except Exception as e:
+                                logger.warning("Actor 心跳检查异常: {}", e)
+                            await asyncio.sleep(interval)
+                        logger.warning("Actor 已断连，心跳任务退出")
+
+                    async def stop_heartbeat(self) -> None:
+                        """停止心跳任务"""
+                        if self._heartbeat_task and not self._heartbeat_task.done():
+                            self._heartbeat_task.cancel()
+                            try:
+                                await self._heartbeat_task
+                            except asyncio.CancelledError:
+                                pass
+                            self._heartbeat_task = None
+
                     async def get_calendar(
                         self, data_type: str = "int", market: str = "SH"
                     ) -> list[int]:
@@ -483,7 +519,7 @@ class DataProviderFactory:
                                 self._actor.call(
                                     "get_calendar", data_type=data_type, market=market
                                 ),
-                                timeout=10.0,
+                                timeout=self._timeouts.normal_call,
                             )
                             if not result:
                                 return []
@@ -499,7 +535,7 @@ class DataProviderFactory:
                         try:
                             result = await asyncio.wait_for(
                                 self._actor.call("get_stock_list", limit=limit, **kwargs),
-                                timeout=30.0,
+                                timeout=self._timeouts.normal_call,
                             )
                             return result
                         except Exception as e:
@@ -526,15 +562,17 @@ class DataProviderFactory:
                             # Actor 端会使用 inspect.signature() 自动转换位置参数
                             return await asyncio.wait_for(
                                 self._actor.call(name, *args, **kwargs),
-                                timeout=30.0,
+                                timeout=self._timeouts.normal_call,
                             )
 
                         return method_proxy
 
-                wrapper = ActorWrapper(actor, connected=True)
+                wrapper = ActorWrapper(actor, timeouts=_tc, connected=True)
+                wrapper.start_heartbeat(interval=60.0)
                 elapsed = time.time() - start_time
                 logger.info(
-                    "[ACTOR_CREATE] AmazingData Actor 创建、登录并验证成功 | 耗时={:.2f}s", elapsed
+                    "[ACTOR_CREATE] AmazingData Actor 创建、登录并验证成功 | 耗时={:.2f}s | 心跳已启动",
+                    elapsed,
                 )
                 return wrapper
 

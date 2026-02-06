@@ -13,6 +13,7 @@ import ErrorBoundary from './components/common/ErrorBoundary'
 import './utils/errorHandler'
 import './utils/debugApi'
 import { setupRequest } from './api/request'
+import { apiClient } from './api/core/client'
 import { resolveThemeMode, type ThemeMode } from './theme/config'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { RealtimeSourceProvider } from './contexts/RealtimeSourceContext'
@@ -105,6 +106,7 @@ async function initApp() {
 
     try {
         await setupRequest()
+        await apiClient.syncTimeoutConfig()
         debugLog('AXIOS', 'Axios 已初始化')
 
         const themeMode = resolveThemeMode()
