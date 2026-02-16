@@ -1,7 +1,37 @@
 {
   "version": "1.0",
-  "updated_at": "2026-01-31T12:00:00+08:00",
+  "updated_at": "2026-02-16T15:50:00+08:00",
   "entries": [
+    {
+      "path": "2026/02/2026-02-16_dask-version-alignment-closure.md",
+      "date": "2026-02-16",
+      "module": "diagnostics, docker, issues",
+      "action": "dask-version-alignment-closure",
+      "type": "bugfix",
+      "summary": "锁定 dask/distributed/numpy 精确版本并完成容器联调，关闭最后一个 backlog 问题",
+      "keywords": ["dask", "distributed", "numpy", "docker", "scheduler", "version-alignment", "backlog", "closure"],
+      "files": ["docker/pyproject.worker.toml", "tools/validate_dask_version_alignment.py", "docs/issues/resolved/2026-02-08_dask-version-mismatch.md"]
+    },
+    {
+      "path": "2026/02/2026-02-16_backlog-validation-dask-and-db-latency.md",
+      "date": "2026-02-16",
+      "module": "diagnostics, issues",
+      "action": "backlog-validation-dask-and-db-latency",
+      "type": "validation",
+      "summary": "通过最小脚本验证 backlog 两项问题：Dask 版本漂移保留待容器联调，数据库慢响应验证为健康并关闭",
+      "keywords": ["dask", "distributed", "numpy", "docker", "scheduler", "database", "latency", "health-check", "backlog", "validation"],
+      "files": ["validate_dask_version_alignment.py", "validate_database_health_latency.py", "docs/issues/README.md"]
+    },
+    {
+      "path": "2026/02/2026-02-16_amazingdata-distributed-init-and-shutdown-fix.md",
+      "date": "2026-02-16",
+      "module": "amazingdata, dask-adapter, registry, issues",
+      "action": "distributed-init-and-shutdown-fix",
+      "type": "bugfix",
+      "summary": "统一 AmazingData distributed 初始化为 Redis 队列模式，修复 shutdown NameError，并完成 issue 文档归档与统计纠偏",
+      "keywords": ["amazingdata", "dask", "redis-queue", "registry", "shutdown", "nameerror", "issue-tracking", "docs"],
+      "files": ["dask_adapter.py", "registry.py", "test_amazingdata_dask_adapter.py", "docs/issues/README.md"]
+    },
     {
       "path": "2026/01/2026-01-31_ai_analysis-service-phase1.md",
       "date": "2026-01-31",
