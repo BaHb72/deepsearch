@@ -64,12 +64,12 @@ class DatabaseHealthChecker(HealthChecker):
                     },
                 )
 
-            # 执行查询测试
-            start_time = time.perf_counter()
+            # 执行查询测试（仅计量查询时间，不含连接获取开销）
             try:
                 async with self._component._engine.begin() as conn:
+                    start_time = time.perf_counter()
                     await conn.execute(text("SELECT 1"))
-                query_time = (time.perf_counter() - start_time) * 1000
+                    query_time = (time.perf_counter() - start_time) * 1000
             except Exception as e:
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
@@ -83,7 +83,7 @@ class DatabaseHealthChecker(HealthChecker):
                 pool = self._component._engine.pool
                 pool_stats = {
                     "size": pool.size(),
-                    "checked_in": pool.checked_in_connections,
+                    "checked_in": pool.checkedin(),
                     "overflow": pool.overflow(),
                     "total": pool.size() + pool.overflow(),
                 }

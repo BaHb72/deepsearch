@@ -39,6 +39,8 @@ import pandas as pd
 from core.infrastructure.providers.interfaces.base import DataProviderError
 from loguru import logger
 
+from .amazingdata_types import period_to_sdk_int
+
 if TYPE_CHECKING:
     from redis.asyncio import Redis as AsyncRedis
 
@@ -184,6 +186,10 @@ class AmazingDataDaskAdapter:
             if not ready_value:
                 logger.warning("[AmazingData/Dask] Redis 中未找到 Worker 就绪标记")
                 return None
+
+            # 兼容 decode_responses=False 场景
+            if isinstance(ready_value, bytes):
+                ready_value = ready_value.decode("utf-8", errors="ignore")
 
             # 解析 "ready:tcp://localhost:58200"
             if ":" in ready_value and "tcp://" in ready_value:
@@ -697,18 +703,6 @@ class AmazingDataDaskAdapter:
         logger.debug("DaskAdapter.get_calendar: 获取到 {} 条交易日", len(converted))
         return converted
 
-    async def get_stock_basic(self, code_list: list[str]) -> pd.DataFrame:
-        """3.5.2.8 证券基础信息
-
-        Args:
-            code_list: 股票代码列表
-
-        Returns:
-            DataFrame: 证券基础信息
-        """
-        result = await self._call_actor("get_stock_basic", code_list=code_list)
-        return pd.DataFrame(result) if result else pd.DataFrame()
-
     async def get_backward_factor(
         self,
         code_list: list[str],
@@ -727,30 +721,6 @@ class AmazingDataDaskAdapter:
         """
         result = await self._call_actor(
             "get_backward_factor",
-            code_list=code_list,
-            begin_date=begin_date,
-            end_date=end_date,
-        )
-        return pd.DataFrame(result) if result else pd.DataFrame()
-
-    async def get_adj_factor(
-        self,
-        code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
-    ) -> pd.DataFrame:
-        """3.5.2.5 复权因子（单次）
-
-        Args:
-            code_list: 代码列表
-            begin_date: 开始日期
-            end_date: 结束日期
-
-        Returns:
-            DataFrame: 复权因子
-        """
-        result = await self._call_actor(
-            "get_adj_factor",
             code_list=code_list,
             begin_date=begin_date,
             end_date=end_date,
@@ -784,54 +754,46 @@ class AmazingDataDaskAdapter:
     async def get_history_stock_status(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """3.5.2.9 历史证券信息
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)，移除 date 参数
+
         Args:
             code_list: 代码列表
-            begin_date: 开始日期
-            end_date: 结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 历史证券状态
         """
-        result = await self._call_actor(
-            "get_history_stock_status",
-            code_list=code_list,
-            begin_date=begin_date,
-            end_date=end_date,
-        )
+        kwargs: dict[str, Any] = {"code_list": code_list}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
+        result = await self._call_actor("get_history_stock_status", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
-    async def get_bj_code_mapping(self) -> pd.DataFrame:
+    async def get_bj_code_mapping(
+        self,
+        local_path: str | None = None,
+        is_local: bool = True,
+    ) -> pd.DataFrame:
         """3.5.2.10 北交所代码映射
+
+        SDK v1.0.4: 签名改为 (local_path, is_local)，无 code_list
 
         Returns:
             DataFrame: 北交所代码映射
         """
-        result = await self._call_actor("get_bj_code_mapping")
-        return pd.DataFrame(result) if result else pd.DataFrame()
-
-    async def get_future_code_list(
-        self,
-        exchange: str | None = None,
-    ) -> list[str] | None:
-        """3.5.2.3 每日最新代码（期货）
-
-        Args:
-            exchange: 交易所
-
-        Returns:
-            期货代码列表
-        """
         kwargs: dict[str, Any] = {}
-        if exchange is not None:
-            kwargs["exchange"] = exchange
-
-        result = await self._call_actor("get_future_code_list", **kwargs)
-        return result
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
+        result = await self._call_actor("get_bj_code_mapping", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
 
     # ==================== 历史行情接口 (MarketData) ====================
 
@@ -888,8 +850,8 @@ class AmazingDataDaskAdapter:
             "begin_date": begin_date,
             "end_date": end_date,
         }
-        if period is not None:
-            kwargs["period"] = period
+        # SDK v1.0.4: period 必须传整数（Period 枚举值从字符串改为 int）
+        kwargs["period"] = period_to_sdk_int(period)
 
         result = await self._call_actor("query_kline", **kwargs)
         if result is None:
@@ -903,137 +865,125 @@ class AmazingDataDaskAdapter:
     async def get_balance_sheet(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
-        report_type: str | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """3.5.5.1 资产负债表
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 报告期开始日期
-            end_date: 报告期结束日期
-            report_type: 报表类型
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 资产负债表数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-        if report_type is not None:
-            kwargs["report_type"] = report_type
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_balance_sheet", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_cash_flow(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
-        report_type: str | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """3.5.5.2 现金流量表
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 报告期开始日期
-            end_date: 报告期结束日期
-            report_type: 报表类型
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 现金流量表数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-        if report_type is not None:
-            kwargs["report_type"] = report_type
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_cash_flow", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_income(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
-        report_type: str | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """3.5.5.3 利润表
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 报告期开始日期
-            end_date: 报告期结束日期
-            report_type: 报表类型
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 利润表数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-        if report_type is not None:
-            kwargs["report_type"] = report_type
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_income", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_profit_express(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """3.5.5.4 业绩快报
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 报告期开始日期
-            end_date: 报告期结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 业绩快报数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_profit_express", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_profit_notice(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """3.5.5.5 业绩预告
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 报告期开始日期
-            end_date: 报告期结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 业绩预告数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_profit_notice", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
@@ -1042,125 +992,125 @@ class AmazingDataDaskAdapter:
     async def get_share_holder(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """3.5.6.1 十大股东
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 报告期开始日期
-            end_date: 报告期结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 十大股东数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_share_holder", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_holder_num(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """股东人数
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 报告期开始日期
-            end_date: 报告期结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 股东人数数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_holder_num", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_equity_structure(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """股本结构
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 报告期开始日期
-            end_date: 报告期结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 股本结构数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_equity_structure", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_equity_pledge_freeze(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """股权质押冻结
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 开始日期
-            end_date: 结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 股权质押冻结数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_equity_pledge_freeze", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_equity_restricted(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """限售股解禁
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 开始日期
-            end_date: 结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 限售股解禁数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_equity_restricted", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
@@ -1169,150 +1119,144 @@ class AmazingDataDaskAdapter:
     async def get_dividend(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """3.5.7.5 分红配送
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 开始日期
-            end_date: 结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 分红配送数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_dividend", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_right_issue(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """配股
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+        SDK Bug 已通过 sdk_patches.py monkey-patch 修复 (reindex 替代直接列选择)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 开始日期
-            end_date: 结束日期
-
-        Returns:
-            DataFrame: 配股数据
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_right_issue", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_margin_summary(
         self,
-        code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """3.5.7.2 融资融券汇总
 
+        SDK v1.0.4: 签名改为 (local_path, is_local)，无 code_list
+
         Args:
-            code_list: 股票代码列表
-            begin_date: 开始日期
-            end_date: 结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 融资融券汇总数据
         """
-        kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        kwargs: dict[str, Any] = {}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_margin_summary", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_margin_detail(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """融资融券明细
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+        SDK Bug 已通过 sdk_patches.py monkey-patch 修复 (大小写 + 路径)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 开始日期
-            end_date: 结束日期
-
-        Returns:
-            DataFrame: 融资融券明细数据
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_margin_detail", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_long_hu_bang(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """3.5.7.4 龙虎榜
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 开始日期
-            end_date: 结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 龙虎榜数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_long_hu_bang", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_block_trading(
         self,
         code_list: list[str],
-        begin_date: int | None = None,
-        end_date: int | None = None,
+        local_path: str | None = None,
+        is_local: bool = True,
     ) -> pd.DataFrame:
         """3.5.7.1 大宗交易
 
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+
         Args:
             code_list: 股票代码列表
-            begin_date: 开始日期
-            end_date: 结束日期
+            local_path: 本地缓存路径
+            is_local: 是否优先读取本地缓存
 
         Returns:
             DataFrame: 大宗交易数据
         """
         kwargs: dict[str, Any] = {"code_list": code_list}
-        if begin_date is not None:
-            kwargs["begin_date"] = begin_date
-        if end_date is not None:
-            kwargs["end_date"] = end_date
-
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        kwargs["is_local"] = is_local
         result = await self._call_actor("get_block_trading", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
@@ -1405,25 +1349,6 @@ class AmazingDataDaskAdapter:
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     # ==================== 特色数据接口 ====================
-
-    async def get_option_code_list(
-        self,
-        underlying_code: str | None = None,
-    ) -> list[str] | None:
-        """期权代码列表
-
-        Args:
-            underlying_code: 标的代码
-
-        Returns:
-            期权代码列表
-        """
-        kwargs: dict[str, Any] = {}
-        if underlying_code is not None:
-            kwargs["underlying_code"] = underlying_code
-
-        result = await self._call_actor("get_option_code_list", **kwargs)
-        return result
 
     async def get_option_basic_info(
         self,
@@ -1622,22 +1547,11 @@ class AmazingDataDaskAdapter:
 
     async def shutdown(self) -> None:
         """关闭 Adapter"""
-        global _DASK_PROCESS_POOL
-
         self._actor_available = False
         self._initialized = False
 
         # 清理挂起的 Future（防止内存泄漏）
         await self.cleanup_pending_futures()
-
-        # 关闭进程池
-        if _DASK_PROCESS_POOL is not None:  # type: ignore[name-defined]
-            try:
-                _DASK_PROCESS_POOL.shutdown(wait=False)  # type: ignore[name-defined]
-                _DASK_PROCESS_POOL = None  # type: ignore[name-defined]
-                logger.info("[AmazingData/Dask] 进程池已关闭")
-            except Exception as e:
-                logger.warning("[AmazingData/Dask] 关闭进程池时出错: {}", e)
 
         logger.info("[AmazingData/Dask] 已关闭")
 

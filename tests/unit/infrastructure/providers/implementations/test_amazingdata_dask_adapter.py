@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,55 +18,35 @@ import pytest
 
 
 @pytest.fixture
-def mock_dask_client() -> MagicMock:
-    """模拟 Dask Client"""
+def mock_redis_client() -> MagicMock:
+    """模拟 Redis Async 客户端（Worker 就绪）"""
     client = MagicMock()
-    client.scheduler = MagicMock()
-    client.scheduler.address = "tcp://localhost:8786"
-
-    # 模拟 scheduler_info
-    client.scheduler_info.return_value = {
-        "workers": {
-            "tcp://worker1:1234": {
-                "resources": {"WIN": 1.0},
-                "memory_limit": 8_000_000_000,
-            }
-        }
-    }
-
+    client.get = AsyncMock(return_value="ready:tcp://worker1:1234")
+    client.rpush = AsyncMock(return_value=1)
+    client.delete = AsyncMock(return_value=1)
     return client
 
 
 @pytest.fixture
-def mock_dask_client_no_windows() -> MagicMock:
-    """模拟无 Windows Worker 的 Dask Client"""
+def mock_redis_client_no_windows() -> MagicMock:
+    """模拟 Redis 中没有 Worker 就绪标记"""
     client = MagicMock()
-    client.scheduler = MagicMock()
-    client.scheduler.address = "tcp://localhost:8786"
-
-    # 没有 Windows Worker
-    client.scheduler_info.return_value = {
-        "workers": {
-            "tcp://linux-worker:5678": {
-                "resources": {},
-                "memory_limit": 8_000_000_000,
-            }
-        }
-    }
-
+    client.get = AsyncMock(return_value=None)
+    client.rpush = AsyncMock(return_value=1)
+    client.delete = AsyncMock(return_value=1)
     return client
 
 
 class TestAmazingDataDaskAdapterInit:
     """初始化测试"""
 
-    def test_init_basic(self, mock_dask_client: MagicMock) -> None:
+    def test_init_basic(self, mock_redis_client: MagicMock) -> None:
         """测试基本初始化"""
         from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
             AmazingDataDaskAdapter,
         )
 
-        adapter = AmazingDataDaskAdapter(mock_dask_client)
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
 
         assert adapter.name == "amazingdata"
         assert adapter._timeout == 45.0
@@ -75,14 +55,14 @@ class TestAmazingDataDaskAdapterInit:
         assert adapter._actor_available is False
         assert adapter._initialized is False
 
-    def test_init_custom_params(self, mock_dask_client: MagicMock) -> None:
+    def test_init_custom_params(self, mock_redis_client: MagicMock) -> None:
         """测试自定义参数初始化"""
         from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
             AmazingDataDaskAdapter,
         )
 
         adapter = AmazingDataDaskAdapter(
-            mock_dask_client,
+            redis_client=mock_redis_client,
             timeout=60.0,
             retry_count=5,
         )
@@ -95,13 +75,13 @@ class TestAmazingDataDaskAdapterInitialize:
     """initialize() 方法测试"""
 
     @pytest.mark.asyncio
-    async def test_initialize_success(self, mock_dask_client: MagicMock) -> None:
+    async def test_initialize_success(self, mock_redis_client: MagicMock) -> None:
         """测试初始化成功"""
         from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
             AmazingDataDaskAdapter,
         )
 
-        adapter = AmazingDataDaskAdapter(mock_dask_client)
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
 
         # 模拟 _check_actor_available 返回 True
         with patch.object(adapter, "_check_actor_available", return_value=True):
@@ -115,14 +95,14 @@ class TestAmazingDataDaskAdapterInitialize:
 
     @pytest.mark.asyncio
     async def test_initialize_no_windows_worker(
-        self, mock_dask_client_no_windows: MagicMock
+        self, mock_redis_client_no_windows: MagicMock
     ) -> None:
         """测试无 Windows Worker"""
         from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
             AmazingDataDaskAdapter,
         )
 
-        adapter = AmazingDataDaskAdapter(mock_dask_client_no_windows)
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client_no_windows)
         result = await adapter.initialize()
 
         assert result is False
@@ -130,13 +110,13 @@ class TestAmazingDataDaskAdapterInitialize:
         assert adapter.is_connected() is False
 
     @pytest.mark.asyncio
-    async def test_initialize_actor_not_available(self, mock_dask_client: MagicMock) -> None:
+    async def test_initialize_actor_not_available(self, mock_redis_client: MagicMock) -> None:
         """测试 Actor 不可用"""
         from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
             AmazingDataDaskAdapter,
         )
 
-        adapter = AmazingDataDaskAdapter(mock_dask_client)
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
 
         # 模拟 _check_actor_available 返回 False
         with patch.object(adapter, "_check_actor_available", return_value=False):
@@ -147,13 +127,13 @@ class TestAmazingDataDaskAdapterInitialize:
         assert adapter._actor_available is False
 
     @pytest.mark.asyncio
-    async def test_initialize_idempotent(self, mock_dask_client: MagicMock) -> None:
+    async def test_initialize_idempotent(self, mock_redis_client: MagicMock) -> None:
         """测试重复初始化（幂等性）"""
         from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
             AmazingDataDaskAdapter,
         )
 
-        adapter = AmazingDataDaskAdapter(mock_dask_client)
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
 
         with patch.object(adapter, "_check_actor_available", return_value=True):
             # 第一次初始化
@@ -169,38 +149,32 @@ class TestAmazingDataDaskAdapterCallActor:
     """_call_actor() 方法测试"""
 
     @pytest.mark.asyncio
-    async def test_call_actor_not_initialized(self, mock_dask_client: MagicMock) -> None:
+    async def test_call_actor_not_initialized(self, mock_redis_client: MagicMock) -> None:
         """测试未初始化时调用"""
         from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
             AmazingDataDaskAdapter,
         )
         from core.infrastructure.providers.interfaces.base import DataProviderError
 
-        adapter = AmazingDataDaskAdapter(mock_dask_client)
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
 
         with pytest.raises(DataProviderError, match="Actor 不可用"):
             await adapter._call_actor("query_kline", code_list=["000001.SZ"])
 
     @pytest.mark.asyncio
-    async def test_call_actor_success(self, mock_dask_client: MagicMock) -> None:
+    async def test_call_actor_success(self, mock_redis_client: MagicMock) -> None:
         """测试远程调用成功"""
         from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
             AmazingDataDaskAdapter,
         )
 
-        adapter = AmazingDataDaskAdapter(mock_dask_client)
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
         adapter._actor_available = True
         adapter._windows_worker = "tcp://worker1:1234"
 
-        # _call_actor 需要 Redis 客户端来轮询结果
-        mock_redis = MagicMock()
-        adapter._redis = mock_redis
-
         # 模拟 Redis 轮询返回结果
-        import json
-
         expected_result = [{"symbol": "000001.SZ", "close": 10.5}]
-        mock_redis.get = AsyncMock(
+        mock_redis_client.get = AsyncMock(
             return_value=json.dumps(
                 {
                     "status": "success",
@@ -208,10 +182,6 @@ class TestAmazingDataDaskAdapterCallActor:
                 }
             ).encode()
         )
-        mock_redis.delete = AsyncMock()
-
-        mock_future = MagicMock()
-        mock_dask_client.submit.return_value = mock_future
 
         result = await adapter._call_actor(
             "query_kline",
@@ -221,61 +191,54 @@ class TestAmazingDataDaskAdapterCallActor:
         )
 
         assert result == expected_result
-        mock_dask_client.submit.assert_called_once()
+        mock_redis_client.rpush.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_call_actor_timeout_retry(self, mock_dask_client: MagicMock) -> None:
+    async def test_call_actor_timeout_retry(self, mock_redis_client: MagicMock) -> None:
         """测试超时重试"""
         from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
             AmazingDataDaskAdapter,
         )
         from core.infrastructure.providers.interfaces.base import DataProviderError
 
-        adapter = AmazingDataDaskAdapter(mock_dask_client, timeout=0.1, retry_count=2)
+        adapter = AmazingDataDaskAdapter(
+            redis_client=mock_redis_client, timeout=0.1, first_call_timeout=0.1, retry_count=2
+        )
         adapter._actor_available = True
         adapter._windows_worker = "tcp://worker1:1234"
 
-        # _call_actor 需要 Redis 客户端
-        mock_redis = MagicMock()
-        adapter._redis = mock_redis
         # Redis 轮询始终返回 None（模拟超时）
-        mock_redis.get = AsyncMock(return_value=None)
-
-        mock_future = MagicMock()
-        mock_dask_client.submit.return_value = mock_future
+        mock_redis_client.get = AsyncMock(return_value=None)
 
         with pytest.raises(DataProviderError, match="超时"):
             await adapter._call_actor("query_kline")
 
         # 应该重试 2 次 + 初始调用 = 3 次
-        assert mock_dask_client.submit.call_count == 3
+        assert mock_redis_client.rpush.await_count == 3
 
 
 class TestAmazingDataDaskAdapterDataProviderMethods:
     """DataProvider 接口方法测试"""
 
     @pytest.fixture
-    def initialized_adapter(self, mock_dask_client: MagicMock) -> Any:
+    def initialized_adapter(self, mock_redis_client: MagicMock) -> Any:
         """已初始化的 Adapter"""
         from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
             AmazingDataDaskAdapter,
         )
 
-        adapter = AmazingDataDaskAdapter(mock_dask_client)
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
         adapter._actor_available = True
         adapter._windows_worker = "tcp://worker1:1234"
         adapter._initialized = True
         return adapter
 
     @pytest.mark.asyncio
-    async def test_query_kline(self, initialized_adapter: Any, mock_dask_client: MagicMock) -> None:
+    async def test_query_kline(self, initialized_adapter: Any) -> None:
         """测试 query_kline 接口"""
         expected_result = {
             "000001.SZ": [{"date": 20240101, "close": 10.5}],
         }
-
-        mock_future = asyncio.Future()
-        mock_future.set_result(expected_result)
 
         with patch.object(
             initialized_adapter, "_call_actor", return_value=expected_result
@@ -294,13 +257,11 @@ class TestAmazingDataDaskAdapterDataProviderMethods:
             code_list=["000001.SZ"],
             begin_date=20240101,
             end_date=20240110,
-            period="day",
+            period=10008,
         )
 
     @pytest.mark.asyncio
-    async def test_get_code_list(
-        self, initialized_adapter: Any, mock_dask_client: MagicMock
-    ) -> None:
+    async def test_get_code_list(self, initialized_adapter: Any) -> None:
         """测试 get_code_list 接口"""
         expected_result = ["000001.SZ", "000002.SZ", "600000.SH"]
 
@@ -313,9 +274,7 @@ class TestAmazingDataDaskAdapterDataProviderMethods:
         mock_call.assert_called_once_with("get_code_list", security_type="EXTRA_STOCK_A")
 
     @pytest.mark.asyncio
-    async def test_get_calendar(
-        self, initialized_adapter: Any, mock_dask_client: MagicMock
-    ) -> None:
+    async def test_get_calendar(self, initialized_adapter: Any) -> None:
         """测试 get_calendar 接口"""
         expected_result = [20240102, 20240103, 20240104]
 
@@ -329,9 +288,7 @@ class TestAmazingDataDaskAdapterDataProviderMethods:
         mock_call.assert_called_once_with("get_calendar")
 
     @pytest.mark.asyncio
-    async def test_get_balance_sheet(
-        self, initialized_adapter: Any, mock_dask_client: MagicMock
-    ) -> None:
+    async def test_get_balance_sheet(self, initialized_adapter: Any) -> None:
         """测试 get_balance_sheet 接口"""
         expected_result = [
             {"symbol": "000001.SZ", "total_assets": 1000000},
@@ -342,26 +299,31 @@ class TestAmazingDataDaskAdapterDataProviderMethods:
         ) as mock_call:
             result = await initialized_adapter.get_balance_sheet(
                 code_list=["000001.SZ"],
-                begin_date=20240101,
-                end_date=20240331,
+                local_path="D:/tmp/amazingdata",
+                is_local=True,
             )
 
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 1
-        mock_call.assert_called_once()
+        mock_call.assert_called_once_with(
+            "get_balance_sheet",
+            code_list=["000001.SZ"],
+            local_path="D:/tmp/amazingdata",
+            is_local=True,
+        )
 
 
 class TestAmazingDataDaskAdapterShutdown:
     """shutdown() 方法测试"""
 
     @pytest.mark.asyncio
-    async def test_shutdown(self, mock_dask_client: MagicMock) -> None:
+    async def test_shutdown(self, mock_redis_client: MagicMock) -> None:
         """测试关闭"""
         from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
             AmazingDataDaskAdapter,
         )
 
-        adapter = AmazingDataDaskAdapter(mock_dask_client)
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
         adapter._actor_available = True
         adapter._initialized = True
 

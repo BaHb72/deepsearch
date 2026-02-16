@@ -98,15 +98,36 @@ async def query_kline(request: QueryKlineRequest) -> JSONDict:
     if not validate_date_range(request.begin_date, request.end_date):
         raise HTTPException(status_code=400, detail="Invalid date range")
 
+    # SDK v1.0.4: Period 为整数枚举，adapter 层的 period_to_sdk_int() 负责转换
     valid_periods = {
+        # API 别名
         "1min",
+        "3min",
         "5min",
+        "10min",
         "15min",
         "30min",
         "60min",
+        "120min",
         "daily",
         "weekly",
         "monthly",
+        "quarterly",
+        "yearly",
+        # SDK 原生名称
+        "min1",
+        "min3",
+        "min5",
+        "min10",
+        "min15",
+        "min30",
+        "min60",
+        "min120",
+        "day",
+        "week",
+        "month",
+        "season",
+        "year",
     }
     if request.period not in valid_periods:
         raise HTTPException(
@@ -159,13 +180,31 @@ async def batch_query_kline(requests: List[QueryKlineRequest]) -> JSONDict:
 
             valid_periods = {
                 "1min",
+                "3min",
                 "5min",
+                "10min",
                 "15min",
                 "30min",
                 "60min",
+                "120min",
                 "daily",
                 "weekly",
                 "monthly",
+                "quarterly",
+                "yearly",
+                "min1",
+                "min3",
+                "min5",
+                "min10",
+                "min15",
+                "min30",
+                "min60",
+                "min120",
+                "day",
+                "week",
+                "month",
+                "season",
+                "year",
             }
             if request.period not in valid_periods:
                 errors.append(

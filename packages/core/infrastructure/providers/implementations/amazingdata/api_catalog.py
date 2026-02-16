@@ -52,15 +52,11 @@ AMAZINGDATA_API_CATALOG = AmazingDataAPICatalog(
         "BaseData": (
             "get_code_info",
             "get_code_list",
-            "get_future_code_list",
-            "get_option_code_list",
             "get_backward_factor",
-            "get_adj_factor",
             "get_hist_code_list",
             "get_calendar",
         ),
         "InfoData": (
-            "get_stock_basic",
             "get_history_stock_status",
             "get_bj_code_mapping",
             "get_balance_sheet",

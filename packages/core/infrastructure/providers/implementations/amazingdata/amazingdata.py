@@ -983,20 +983,6 @@ class AmazingDataProvider(DataProvider):
     # ==================== Extended 接口快捷方法 ====================
     # 以下方法委托给 AmazingDataExtended 实现
 
-    async def get_option_code_list(
-        self, security_type: str = "EXTRA_ETF_OP"
-    ) -> Optional[List[str]]:
-        """获取期权代码列表"""
-        try:
-            from .amazingdata_extended import AmazingDataExtended
-
-            extended = AmazingDataExtended(self.config)
-            await extended.initialize()
-            return await extended.get_option_code_list(security_type)
-        except Exception as e:
-            logger.error(f"获取期权代码列表失败: {e}")
-            return None
-
     async def get_etf_pcf(self, code_list: List[str], **kwargs: Any) -> Optional[pd.DataFrame]:
         """获取ETF申赎清单 (PCF)"""
         try:

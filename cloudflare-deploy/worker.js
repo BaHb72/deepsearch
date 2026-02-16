@@ -287,17 +287,33 @@ async function handleProxy(request, env, ctx) {
             requestOptions.body = await request.arrayBuffer();
         }
 
-        // 执行请求（单次，不重试）
+        // 执行请求（服务端重试，处理源站瞬时故障）
+        const MAX_RETRIES = 3;
+        const RETRY_DELAYS = [0, 500, 1500];
         let response;
-        try {
-            response = await fetch(targetUrl, requestOptions);
-        } catch (error) {
-            console.error('Fetch error:', error);
-            return jsonResponse({
-                error: 'Failed to fetch',
-                message: error.message,
-                target: targetUrl
-            }, 502);
+        let lastError;
+
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            if (attempt > 0) {
+                await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+            }
+            try {
+                response = await fetch(targetUrl, requestOptions);
+                if (response.ok || response.status < 500) {
+                    break;
+                }
+                lastError = `HTTP ${response.status}`;
+            } catch (error) {
+                lastError = error.message;
+                if (attempt === MAX_RETRIES - 1) {
+                    console.error('Fetch error after retries:', lastError);
+                    return jsonResponse({
+                        error: 'Failed to fetch',
+                        message: lastError,
+                        target: targetUrl
+                    }, 502);
+                }
+            }
         }
 
         // 构建响应头
@@ -354,7 +370,6 @@ async function handleProxy(request, env, ctx) {
 }
 
 // ============ 请求处理 ============
-// Worker 只做单次请求，重试逻辑由 DeepSearch 控制
 
 // ============ 缓存时间策略 ============
 function getCacheTime(pathname, host) {

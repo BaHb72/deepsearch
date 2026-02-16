@@ -6,12 +6,11 @@ AmazingData 期权数据API模块
 - 3.5.10.1 期权基本资料 (get_option_basic_info)
 - 3.5.10.2 期权标准合约属性 (get_option_std_ctr_specs)
 - 3.5.10.3 期权月合约属性变动 (get_option_mon_ctr_specs)
-- 期权代码列表 (get_option_code_list)
 """
 
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from .base import (
@@ -57,34 +56,6 @@ class OptionMonCtrRequest(BaseModel):
 
 
 # ================== API接口 ==================
-
-
-@router.get("/code-list", summary="获取期权代码列表")
-async def get_option_code_list(
-    security_type: str = Query("EXTRA_ETF_OP", description="证券类型，默认ETF期权")
-) -> JSONDict:
-    """
-    获取期权代码列表
-
-    Args:
-        security_type: 证券类型，默认 EXTRA_ETF_OP
-
-    Returns:
-        期权代码列表
-    """
-    try:
-        provider = await get_amazingdata_provider()
-        result = await provider.get_option_code_list(security_type)
-        return format_response(
-            success=True,
-            data=result,
-            count=len(result) if result else 0,
-            security_type=security_type,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.post("/basic-info", summary="获取期权基本资料")

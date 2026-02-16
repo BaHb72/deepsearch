@@ -792,6 +792,79 @@ FIELD_MAPPING = {
 }
 
 
+# SDK v1.0.4 Period 枚举的整数值（通过反编译 constant.pyc 确认）
+PERIOD_TO_SDK_INT: dict[str, int] = {
+    # SDK 原生名称
+    "min1": 10000,
+    "min3": 10001,
+    "min5": 10002,
+    "min10": 10003,
+    "min15": 10004,
+    "min30": 10005,
+    "min60": 10006,
+    "min120": 10007,
+    "day": 10008,
+    "week": 10009,
+    "month": 10010,
+    "season": 10011,
+    "year": 10012,
+    # API 端点别名
+    "1min": 10000,
+    "3min": 10001,
+    "5min": 10002,
+    "10min": 10003,
+    "15min": 10004,
+    "30min": 10005,
+    "60min": 10006,
+    "120min": 10007,
+    "daily": 10008,
+    "weekly": 10009,
+    "monthly": 10010,
+    "quarterly": 10011,
+    "yearly": 10012,
+    # convert_period 中间格式
+    "1m": 10000,
+    "3m": 10001,
+    "5m": 10002,
+    "10m": 10003,
+    "15m": 10004,
+    "30m": 10005,
+    "60m": 10006,
+    "120m": 10007,
+    "1d": 10008,
+    "1w": 10009,
+    "1M": 10010,
+    "1Q": 10011,
+    "1Y": 10012,
+}
+
+
+def period_to_sdk_int(period: str | int | None) -> int:
+    """将任意格式的 period 转为 SDK v1.0.4 需要的整数值
+
+    SDK v1.0.4 的 Period 枚举值从字符串改为整数：
+    - Period.day.value = 10008 (之前是 "day")
+    - Period.min1.value = 10000 (之前是 "min1")
+
+    Args:
+        period: 周期值，支持字符串（多种格式）、整数或 None
+
+    Returns:
+        SDK 需要的整数 period 值
+
+    Raises:
+        ValueError: 未知的 period 值
+    """
+    if period is None:
+        return 10008  # 默认日K
+    if isinstance(period, int):
+        return period  # 已经是整数
+    result = PERIOD_TO_SDK_INT.get(period) or PERIOD_TO_SDK_INT.get(period.lower())
+    if result is None:
+        raise ValueError(f"未知的 period 值: {period!r}")
+    return result
+
+
 def convert_period(period: str) -> str:
     """
     转换周期格式

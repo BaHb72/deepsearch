@@ -39,11 +39,21 @@ COPY packages/core/config/__init__.py ./core/config/
 COPY packages/core/config/loader.py ./core/config/
 COPY packages/core/config/models/ ./core/config/models/
 
-# 创建空的 infrastructure 模块存根（避免导入错误）
-RUN mkdir -p core/infrastructure/providers && \
-    echo '"""Infrastructure stub for worker."""' > core/infrastructure/__init__.py && \
+# Infrastructure 模块存根 + Plugin 文件（Scheduler 反序列化需要完整模块路径）
+RUN mkdir -p core/infrastructure/providers/implementations/amazingdata && \
+    mkdir -p core/infrastructure/providers/implementations/qmt && \
+    echo '"""Infrastructure stub for scheduler."""' > core/infrastructure/__init__.py && \
     echo '"""Providers stub."""' > core/infrastructure/providers/__init__.py && \
-    echo 'class UnifiedDataFeed:\n    """Stub for UnifiedDataFeed."""\n    pass' > core/infrastructure/providers/binder.py
+    echo 'class UnifiedDataFeed:\n    """Stub."""\n    pass' > core/infrastructure/providers/binder.py && \
+    echo '"""Implementations stub."""' > core/infrastructure/providers/implementations/__init__.py && \
+    echo '"""AmazingData stub."""' > core/infrastructure/providers/implementations/amazingdata/__init__.py && \
+    echo '"""QMT stub."""' > core/infrastructure/providers/implementations/qmt/__init__.py
+
+# 仅复制 dask_plugin.py（顶层依赖仅需 core.compute.plugins，已在镜像中）
+COPY packages/core/infrastructure/providers/implementations/amazingdata/dask_plugin.py \
+     ./core/infrastructure/providers/implementations/amazingdata/
+COPY packages/core/infrastructure/providers/implementations/qmt/dask_plugin.py \
+     ./core/infrastructure/providers/implementations/qmt/
 
 # 安装依赖
 RUN pip install --no-cache-dir -e .

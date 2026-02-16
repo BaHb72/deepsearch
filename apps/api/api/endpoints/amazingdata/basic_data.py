@@ -23,12 +23,6 @@ from .base import (
 router = APIRouter(tags=["AmazingData-基础数据"])
 
 
-class StockBasicRequest(BaseModel):
-    """股票基础信息请求"""
-
-    code_list: List[str] = Field(..., description="股票代码列表，例如 SH.600000")
-
-
 class FactorRequest(BaseModel):
     """复权因子请求"""
 
@@ -109,21 +103,6 @@ async def get_calendar(
         )
 
 
-@router.post("/stock-basic", summary="获取股票基础信息")
-async def get_stock_basic(request: StockBasicRequest) -> JSONDict:
-    """批量查询股票基础资料"""
-    try:
-        provider = await get_amazingdata_provider()
-        result = await provider.get_stock_basic(request.code_list)
-        return format_response(
-            success=True,
-            data=dataframe_to_dict(result),
-            code_count=len(request.code_list),
-        )
-    except Exception as exc:  # pragma: no cover
-        return format_response(success=False, error=str(exc), code_list=request.code_list)
-
-
 @router.post("/backward-factor", summary="获取后复权因子")
 async def get_backward_factor(request: FactorRequest) -> JSONDict:
     """下载并按日期过滤后复权因子"""
@@ -135,40 +114,6 @@ async def get_backward_factor(request: FactorRequest) -> JSONDict:
     try:
         provider = await get_amazingdata_provider()
         raw = await provider.get_backward_factor(
-            request.code_list,
-            local_path,
-            request.is_local,
-        )
-        filtered_df = ensure_dataframe(raw)
-        if filtered_df is not None:
-            filtered_df = filter_dataframe_by_dates(
-                filtered_df,
-                request.begin_date,
-                request.end_date,
-            )
-        payload_source = filtered_df if filtered_df is not None else raw
-        return format_response(
-            success=True,
-            data=dataframe_to_dict(payload_source),
-            code_count=len(request.code_list),
-            date_range=f"{request.begin_date}-{request.end_date}",
-            local_path=local_path,
-        )
-    except Exception as exc:  # pragma: no cover
-        return format_response(success=False, error=str(exc), code_list=request.code_list)
-
-
-@router.post("/adj-factor", summary="获取前复权因子")
-async def get_adj_factor(request: FactorRequest) -> JSONDict:
-    """下载并按日期过滤前复权因子"""
-    if not validate_date_range(request.begin_date, request.end_date):
-        raise HTTPException(status_code=400, detail="Invalid date range")
-
-    local_path = request.local_path or DEFAULT_LOCAL_PATH
-
-    try:
-        provider = await get_amazingdata_provider()
-        raw = await provider.get_adj_factor(
             request.code_list,
             local_path,
             request.is_local,
@@ -261,23 +206,6 @@ async def get_code_list(
     try:
         provider = await get_amazingdata_provider()
         result = await provider.get_code_list(security_type)
-        return format_response(
-            success=True,
-            data=dataframe_to_dict(result),
-            security_type=security_type,
-        )
-    except Exception as exc:  # pragma: no cover
-        return format_response(success=False, error=str(exc), security_type=security_type)
-
-
-@router.get("/future-code-list", summary="获取当日期货代码")
-async def get_future_code_list(
-    security_type: str = Query("EXTRA__FUTURE", description="期货证券类型，默认全部")
-) -> JSONDict:
-    """获取当前期货代码列表"""
-    try:
-        provider = await get_amazingdata_provider()
-        result = await provider.get_future_code_list(security_type)
         return format_response(
             success=True,
             data=dataframe_to_dict(result),

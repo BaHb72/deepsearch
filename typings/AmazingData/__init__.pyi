@@ -66,23 +66,14 @@ class MarketData(Protocol):
         *,
         begin_date: int | None = ...,
         end_date: int | None = ...,
-        period: str | None = ...,
+        period: int | None = ...,
         adjust: str | None = ...,
     ) -> Any: ...
 
 class BaseData(Protocol):
     def get_code_info(self, security_type: str = ...) -> Any: ...
     def get_code_list(self, security_type: str = ...) -> Sequence[str]: ...
-    def get_future_code_list(self, security_type: str = ...) -> Sequence[str]: ...
-    def get_option_code_list(self, security_type: str = ...) -> Sequence[str]: ...
     def get_backward_factor(
-        self,
-        code_list: Sequence[str],
-        *,
-        local_path: str | None = ...,
-        is_local: bool = ...,
-    ) -> Any: ...
-    def get_adj_factor(
         self,
         code_list: Sequence[str],
         *,
@@ -104,107 +95,113 @@ class BaseData(Protocol):
     ) -> Sequence[int]: ...
 
 class InfoData(Protocol):
-    def get_stock_basic(self, code_list: Sequence[str]) -> Any: ...
     def get_history_stock_status(
         self,
         code_list: Sequence[str],
         *,
         local_path: str | None = ...,
         is_local: bool = ...,
-        begin_date: int | None = ...,
-        end_date: int | None = ...,
     ) -> Any: ...
-    def get_bj_code_mapping(self) -> Any: ...
+    def get_bj_code_mapping(
+        self,
+        *,
+        local_path: str | None = ...,
+        is_local: bool = ...,
+    ) -> Any: ...
     def get_equity_structure(
         self,
         code_list: Sequence[str],
         *,
-        begin_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
     def get_equity_restricted(
         self,
         code_list: Sequence[str],
         *,
-        begin_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
     def get_equity_pledge_freeze(
         self,
         code_list: Sequence[str],
         *,
-        begin_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
     def get_balance_sheet(
         self,
         code_list: Sequence[str],
         *,
-        start_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
     def get_income(
         self,
         code_list: Sequence[str],
         *,
-        start_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
     def get_cash_flow(
         self,
         code_list: Sequence[str],
         *,
-        start_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
     def get_profit_express(
         self,
         code_list: Sequence[str],
         *,
-        start_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
     def get_profit_notice(
         self,
         code_list: Sequence[str],
         *,
-        start_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
     def get_holder_num(
         self,
         code_list: Sequence[str],
         *,
-        start_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
     def get_share_holder(
         self,
         code_list: Sequence[str],
         *,
-        start_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
     def get_right_issue(
         self,
         code_list: Sequence[str],
         *,
-        start_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
     def get_dividend(
         self,
         code_list: Sequence[str],
         *,
-        start_date: int | None = ...,
-        end_date: int | None = ...,
+        local_path: str | None = ...,
+        is_local: bool = ...,
     ) -> Any: ...
-    def get_margin_summary(self, *, trade_date: int | None = ...) -> Any: ...
+    def get_margin_summary(
+        self,
+        *,
+        local_path: str | None = ...,
+        is_local: bool = ...,
+    ) -> Any: ...
     def get_margin_detail(
         self,
         code_list: Sequence[str],
         *,
-        trade_date: int | None = ...,
         local_path: str | None = ...,
         is_local: bool = ...,
     ) -> Any: ...
@@ -214,8 +211,6 @@ class InfoData(Protocol):
         *,
         local_path: str | None = ...,
         is_local: bool = ...,
-        begin_date: int | None = ...,
-        end_date: int | None = ...,
     ) -> Any: ...
     def get_long_hu_bang(
         self,
@@ -223,8 +218,6 @@ class InfoData(Protocol):
         *,
         local_path: str | None = ...,
         is_local: bool = ...,
-        begin_date: int | None = ...,
-        end_date: int | None = ...,
     ) -> Any: ...
 
 constant: _ConstantNamespace

@@ -509,15 +509,22 @@ class DataProviderRegistry:
 
                 # 检查是否使用 distributed 模式（通过 Dask 分布式调用）
                 run_mode = raw_config.get("mode", "local")
+                instance: Any
                 if run_mode == "distributed":
-                    # distributed 模式：使用 DaskAdapter 远程调用 Windows Worker
+                    # distributed 模式：使用 Redis 任务队列调用 Windows Worker
                     from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
                         AmazingDataDaskAdapter,
                     )
-                    from distributed import Client as DaskClient
 
                     scheduler_address = raw_config.get(
                         "dask_scheduler_address", "tcp://localhost:8786"
+                    )
+                    redis_url = str(
+                        raw_config.get("redis_url")
+                        or raw_config.get("cache_url")
+                        or os.getenv("REDIS__URL")
+                        or os.getenv("REDIS_URL")
+                        or "redis://localhost:6379"
                     )
 
                     timeout_value = float(raw_config.get("timeout", 30.0))
@@ -525,20 +532,29 @@ class DataProviderRegistry:
                     retry_count_value = int(raw_config.get("retry_count", 3))
 
                     logger.info(
-                        "[Registry] 创建 AmazingData DaskAdapter | mode=distributed | scheduler={} | timeout={}s | first_call_timeout={}s | retry_count={}",
+                        "[Registry] 创建 AmazingData DaskAdapter | mode=distributed(redis-queue) | scheduler={} | redis={} | timeout={}s | first_call_timeout={}s | retry_count={}",
                         scheduler_address,
+                        redis_url,
                         timeout_value,
                         first_call_timeout_value,
                         retry_count_value,
                     )
 
                     try:
-                        dask_client = DaskClient(scheduler_address, asynchronous=True)
+                        from redis import asyncio as aioredis
+
+                        redis_client = aioredis.from_url(
+                            redis_url,
+                            encoding="utf-8",
+                            decode_responses=True,
+                        )
                         instance = AmazingDataDaskAdapter(
-                            dask_client=dask_client,
+                            redis_client=redis_client,
+                            redis_url=redis_url,
                             timeout=timeout_value,
                             first_call_timeout=first_call_timeout_value,
                             retry_count=retry_count_value,
+                            scheduler_address=scheduler_address,
                         )
                         setattr(instance, "_implementation_mode", "distributed")
                     except Exception as e:

@@ -454,28 +454,7 @@ def fetch_stock_board_metadata_blocking(
     if not symbols:
         return []
 
-    normalized_symbols = sorted({symbol.upper() for symbol in symbols if symbol})
-    info_cls = getattr(sdk, "InfoData", None)
-    payloads: list[dict[str, Any]] = []
-
-    if info_cls is not None:
-        info_instance = info_cls()
-        method_obj = getattr(info_instance, "get_stock_basic", None)
-        info_method: Callable[..., Any] | None = method_obj if callable(method_obj) else None
-        if info_method:
-            try:
-                result = info_method(code_list=normalized_symbols)
-            except TypeError:
-                result = info_method(normalized_symbols)
-            except Exception as exc:  # noqa: BLE001
-                log_debug("InfoData.get_stock_basic ����ʧ��: {}", exc)
-                result = None
-            if result is not None:
-                payloads.extend(normalize_stock_records(result))
-
-    if payloads:
-        return payloads
-
+    # SDK v1.0.4: get_stock_basic 已移除，直接使用 BaseData.get_code_info
     base_cls = getattr(sdk, "BaseData", None)
     if base_cls is None:
         return []
@@ -486,7 +465,7 @@ def fetch_stock_board_metadata_blocking(
     try:
         result = code_info_method(security_type="EXTRA_STOCK_A")
     except Exception as exc:  # noqa: BLE001
-        log_debug("BaseData.get_code_info ����ʧ��: {}", exc)
+        log_debug("BaseData.get_code_info failed: {}", exc)
         return []
     return normalize_stock_records(result)
 

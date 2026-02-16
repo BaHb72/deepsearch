@@ -335,25 +335,6 @@ async def get_calendar(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/stock-basic", summary="获取股票基础信息")
-async def get_stock_basic(request: List[str] = Body(..., description="股票代码列表")):
-    """
-    3.5.2.8 证券基础信息
-    获取指定股票的基础信息
-    """
-    try:
-        provider = await get_amazingdata_provider()
-        result = await provider.get_stock_basic(request)
-        return {
-            "status": "success",
-            "data": dataframe_to_dict(result),
-            "count": len(result) if result is not None else 0,
-        }
-    except Exception as e:
-        logger.error(f"获取股票基础信息失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.post("/backward-factor", summary="获取后复权因子")
 async def get_backward_factor(request: StockListRequest):
     """
@@ -372,27 +353,6 @@ async def get_backward_factor(request: StockListRequest):
         }
     except Exception as e:
         logger.error(f"获取后复权因子失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/adj-factor", summary="获取单次复权因子")
-async def get_adj_factor(request: StockListRequest):
-    """
-    3.5.2.5 复权因子（单次复权因子）
-    获取复权因子数据并本地存储
-    """
-    try:
-        provider = await get_amazingdata_provider()
-        result = await provider.get_adj_factor(
-            request.code_list, _resolve_local_path(request.local_path), request.is_local
-        )
-        return {
-            "status": "success",
-            "data": dataframe_to_dict(result),
-            "message": "单次复权因子获取成功",
-        }
-    except Exception as e:
-        logger.error(f"获取单次复权因子失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -449,21 +409,6 @@ async def get_code_list(security_type: str = Query("EXTRA_STOCK_A", description=
         return {"status": "success", "data": result, "count": len(result) if result else 0}
     except Exception as e:
         logger.error(f"获取代码列表失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/future-code-list", summary="获取期货代码列表")
-async def get_future_code_list(security_type: str = Query("EXTRA__FUTURE", description="证券类型")):
-    """
-    3.5.2.3 每日最新代码（期货特殊接口）
-    获取最新的期货代码列表
-    """
-    try:
-        provider = await get_amazingdata_provider()
-        result = await provider.get_future_code_list(security_type)
-        return {"status": "success", "data": result, "count": len(result) if result else 0}
-    except Exception as e:
-        logger.error(f"获取期货代码列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

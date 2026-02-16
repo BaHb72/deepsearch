@@ -56,7 +56,7 @@ async def get_api_info():
             "basic_data": {
                 "path": "/api/amazingdata/basic",
                 "description": "基础数据接口",
-                "endpoints": 10,
+                "endpoints": 7,
             },
             "realtime": {
                 "path": "/api/amazingdata/realtime",
@@ -91,7 +91,7 @@ async def get_api_info():
             "option": {
                 "path": "/api/amazingdata/option",
                 "description": "期权数据接口",
-                "endpoints": 4,
+                "endpoints": 3,
             },
             "etf": {
                 "path": "/api/amazingdata/etf",
@@ -99,7 +99,7 @@ async def get_api_info():
                 "endpoints": 3,
             },
         },
-        "total_endpoints": 48,
+        "total_endpoints": 44,
         "features": [
             "模块化设计",
             "统一错误处理",

@@ -51,4 +51,13 @@ if stub_path:
 else:
     ad, HAS_AMAZINGDATA, IMPORT_ERROR = _load_sdk()
 
+# SDK v1.0.4 bug 修复（字节码反编译验证后的 monkey-patch）
+if HAS_AMAZINGDATA:
+    try:
+        from .sdk_patches import apply_sdk_patches
+
+        apply_sdk_patches()
+    except Exception as exc:
+        logger.warning(f"[SDK补丁] 应用失败（不影响其他功能）: {exc}")
+
 __all__ = ["ad", "HAS_AMAZINGDATA", "IMPORT_ERROR"]

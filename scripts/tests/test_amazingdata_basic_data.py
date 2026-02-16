@@ -119,31 +119,18 @@ async def run_basic_data_tests():
 
     results.append(await test_api("get_code_list (每日最新代码列表)", test_get_code_list))
 
-    # ==================== 3. get_future_code_list ====================
-    async def test_get_future_code_list():
-        data = await provider.get_future_code_list(security_type="EXTRA__FUTURE")
-        return {"success": data is not None, "data": data if isinstance(data, list) else [data]}
+    # get_future_code_list -- SDK v1.0.4 已移除，跳过
 
-    results.append(await test_api("get_future_code_list (期货代码列表)", test_get_future_code_list))
-
-    # ==================== 4. get_calendar ====================
+    # ==================== 3. get_calendar ====================
     async def test_get_calendar():
         data = await provider.get_calendar(market="SH")
         return {"success": data is not None, "data": data if isinstance(data, list) else [data]}
 
     results.append(await test_api("get_calendar (交易日历)", test_get_calendar))
 
-    # ==================== 5. get_stock_basic ====================
-    async def test_get_stock_basic():
-        data = await provider.get_stock_basic(test_codes)
-        return {
-            "success": data is not None,
-            "data": data.to_dict("records") if hasattr(data, "to_dict") else data,
-        }
+    # get_stock_basic -- SDK v1.0.4 已移除，跳过
 
-    results.append(await test_api("get_stock_basic (证券基础信息)", test_get_stock_basic))
-
-    # ==================== 6. get_backward_factor ====================
+    # ==================== 4. get_backward_factor ====================
     async def test_get_backward_factor():
         data = await provider.get_backward_factor(
             code_list=test_codes, begin_date=20241201, end_date=20241210
@@ -155,19 +142,9 @@ async def run_basic_data_tests():
 
     results.append(await test_api("get_backward_factor (后复权因子)", test_get_backward_factor))
 
-    # ==================== 7. get_adj_factor ====================
-    async def test_get_adj_factor():
-        data = await provider.get_adj_factor(
-            code_list=test_codes, begin_date=20241201, end_date=20241210
-        )
-        return {
-            "success": data is not None,
-            "data": data.to_dict("records") if hasattr(data, "to_dict") else data,
-        }
+    # get_adj_factor -- SDK v1.0.4 已移除，跳过
 
-    results.append(await test_api("get_adj_factor (前复权因子)", test_get_adj_factor))
-
-    # ==================== 8. get_history_stock_status ====================
+    # ==================== 5. get_history_stock_status ====================
     async def test_get_history_stock_status():
         data = await provider.get_history_stock_status(
             code_list=test_codes, begin_date=20241201, end_date=20241210

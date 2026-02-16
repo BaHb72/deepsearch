@@ -108,19 +108,18 @@ async def run_option_tests():
     # ETF代码 (用于期权标准合约查询)
     etf_codes = ["510300.SH", "510050.SH"]
 
-    # ==================== 1. get_option_code_list ====================
-    async def test_get_option_code_list():
-        data = await provider.get_option_code_list(security_type="EXTRA_ETF_OP")
-        return data
+    # get_option_code_list -- SDK v1.0.4 已移除，改用 get_code_list
+    # 获取期权代码用于后续测试
+    option_codes = None
+    try:
+        option_codes = await provider.get_code_list(security_type="EXTRA_ETF_OP")
+        print(f"  获取到 {len(option_codes) if option_codes else 0} 个期权代码")
+    except Exception as e:
+        print(f"  获取期权代码失败: {e}")
 
-    results.append(await test_api("get_option_code_list (期权代码列表)", test_get_option_code_list))
-
-    # ==================== 2. get_option_basic_info ====================
+    # ==================== 1. get_option_basic_info ====================
     async def test_get_option_basic_info():
-        # 先获取一些期权代码
-        option_codes = await provider.get_option_code_list(security_type="EXTRA_ETF_OP")
         if option_codes and len(option_codes) > 0:
-            # 只取前2个期权代码进行测试
             test_option_codes = option_codes[:2] if len(option_codes) >= 2 else option_codes
             data = await provider.get_option_basic_info(code_list=test_option_codes)
             return data
@@ -131,7 +130,7 @@ async def run_option_tests():
         await test_api("get_option_basic_info (期权基本资料)", test_get_option_basic_info)
     )
 
-    # ==================== 3. get_option_std_ctr_specs ====================
+    # ==================== 2. get_option_std_ctr_specs ====================
     async def test_get_option_std_ctr_specs():
         data = await provider.get_option_std_ctr_specs(code_list=etf_codes)
         return data
@@ -140,10 +139,8 @@ async def run_option_tests():
         await test_api("get_option_std_ctr_specs (期权标准合约属性)", test_get_option_std_ctr_specs)
     )
 
-    # ==================== 4. get_option_mon_ctr_spcon ====================
+    # ==================== 3. get_option_mon_ctr_spcon ====================
     async def test_get_option_mon_ctr_spcon():
-        # 先获取期权代码
-        option_codes = await provider.get_option_code_list(security_type="EXTRA_ETF_OP")
         if option_codes and len(option_codes) > 0:
             test_option_codes = option_codes[:2] if len(option_codes) >= 2 else option_codes
             data = await provider.get_option_mon_ctr_spcon(code_list=test_option_codes)

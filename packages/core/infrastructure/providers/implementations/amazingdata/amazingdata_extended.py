@@ -76,7 +76,7 @@ from core.infrastructure.providers.interfaces.base import DataProviderError, TGW
 
 # AmazingData SDK
 from .amazingdata import AmazingDataProvider
-from .amazingdata_types import StockListItem
+from .amazingdata_types import StockListItem, period_to_sdk_int
 from .common import SubscriptionCallback
 from .config import ProviderConfigLike
 from .helpers import _normalize_date_to_int
@@ -585,33 +585,6 @@ class AmazingDataExtended(AmazingDataProvider):
             logger.error(f"获取交易日历失败: {e}")
             return None
 
-    async def get_stock_basic(self, code_list: List[str]) -> pd.DataFrame:
-        """
-        3.5.2.8 证券基础信息
-        获取指定股票的基础信息，包括公司名称、上市日期、退市日期等
-
-        Args:
-            code_list: 股票代码列表
-
-        Returns:
-            DataFrame: 股票基础信息
-        """
-        await self._ensure_data_objects()
-
-        try:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._info_data.get_stock_basic, code_list)
-
-            logger.info(f"成功获取{len(result) if result is not None else 0}条股票基础信息")
-            return _safe_dataframe(result)
-
-        except Exception as e:
-            import traceback
-
-            logger.error(f"获取股票基础信息失败: {e}")
-            logger.error(f"详细错误: {traceback.format_exc()}")
-            raise  # 向上传播错误
-
     async def get_backward_factor(
         self,
         code_list: List[str],
@@ -651,46 +624,6 @@ class AmazingDataExtended(AmazingDataProvider):
             import traceback
 
             logger.error(f"获取后复权因子失败: {e}")
-            logger.error(f"详细错误: {traceback.format_exc()}")
-            raise  # 向上传播错误
-
-    async def get_adj_factor(
-        self,
-        code_list: List[str],
-        local_path: Optional[str] = None,
-        is_local: bool = True,
-    ) -> pd.DataFrame:
-        """
-        3.5.2.5 复权因子（单次复权因子）
-        获取复权因子数据并本地存储
-
-        Args:
-            code_list: 代码列表
-            local_path: 本地存储路径
-            is_local: 是否使用本地存储
-
-        Returns:
-            DataFrame: index为交易日期，columns为股票代码
-        """
-        await self._ensure_data_objects()
-
-        try:
-            local_path = self._prepare_local_path(local_path)
-
-            loop = asyncio.get_event_loop()
-            # 使用lambda包装以支持关键字参数，避免与worker端enforced_kwargs冲突
-            result = await loop.run_in_executor(
-                None,
-                lambda: self._base_data.get_adj_factor(code_list, local_path, is_local=is_local),
-            )
-
-            logger.info("成功获取单次复权因子数据")
-            return _safe_dataframe(result)
-
-        except Exception as e:
-            import traceback
-
-            logger.error(f"获取单次复权因子失败: {e}")
             logger.error(f"详细错误: {traceback.format_exc()}")
             raise  # 向上传播错误
 
@@ -817,34 +750,6 @@ class AmazingDataExtended(AmazingDataProvider):
 
             logger.error(f"获取代码列表失败: {e}")
             logger.error(f"[DEBUG] 异常详情: {traceback.format_exc()}")
-            return None
-
-    async def get_future_code_list(
-        self, security_type: str = "EXTRA__FUTURE"
-    ) -> Optional[List[str]]:
-        """
-        3.5.2.3 每日最新代码（期货特殊接口）
-        获取最新的期货代码列表
-
-        Args:
-            security_type: 代码类型，默认EXTRA__FUTURE
-
-        Returns:
-            期货代码列表
-        """
-        await self._ensure_data_objects()
-
-        try:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None, self._base_data.get_future_code_list, security_type
-            )
-
-            logger.info(f"成功获取期货代码列表，共{len(result) if result else 0}个代码")
-            return cast(Optional[List[str]], result)
-
-        except Exception as e:
-            logger.error(f"获取期货代码列表失败: {e}")
             return None
 
     async def get_bj_code_mapping(
@@ -1081,23 +986,8 @@ class AmazingDataExtended(AmazingDataProvider):
             return None
 
         try:
-            effective_period = period
-            if effective_period is None:
-                try:
-                    sdk = self._require_sdk()
-                except DataProviderError:
-                    sdk = None
-
-                if sdk is not None:
-                    constant = getattr(sdk, "constant", None)
-                    if constant is not None:
-                        try:
-                            effective_period = constant.Period.day.value
-                        except AttributeError:
-                            logger.warning("AmazingData SDK 未提供周期常量，退回默认日线")
-
-                if effective_period is None:
-                    effective_period = "day"
+            # SDK v1.0.4: period 必须传整数（Period 枚举值从字符串改为 int）
+            effective_period = period_to_sdk_int(period)
 
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
@@ -1123,19 +1013,16 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
         local_path: Optional[str] = None,
         is_local: bool = True,
-        begin_date: Optional[int] = None,
-        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         3.5.5.4 业绩快报
-        获取指定股票的业绩快报数据
+
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)，移除 date 参数
 
         Args:
             code_list: 股票代码列表
             local_path: 本地存储路径
             is_local: 是否使用本地存储
-            begin_date: 报告期开始日期筛选(格式: YYYYMMDD)，可选
-            end_date: 报告期结束日期筛选(格式: YYYYMMDD)，可选
 
         Returns:
             DataFrame: 业绩快报数据
@@ -1143,14 +1030,9 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            # 获取默认日期范围
-            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=90)
-
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_profit_express(
-                    code_list, begin_date, end_date
-                )
+                result = await self._dask_adapter.get_profit_express(code_list)
                 logger.info("成功通过 Dask Actor 获取业绩快报数据")
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
@@ -1159,8 +1041,6 @@ class AmazingDataExtended(AmazingDataProvider):
             kwargs = {
                 "local_path": local_path,
                 "is_local": is_local,
-                "begin_date": begin_date,
-                "end_date": end_date,
             }
 
             if self._use_process_isolation and self._process_backend is not None:
@@ -1183,20 +1063,18 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
         local_path: Optional[str] = None,
         is_local: bool = True,
-        begin_date: Optional[int] = None,
-        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         3.5.5.5 业绩预告
+
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)，移除 date 参数
         """
         await self._ensure_data_objects()
 
         try:
-            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=90)
-
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_profit_notice(code_list, begin_date, end_date)
+                result = await self._dask_adapter.get_profit_notice(code_list)
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing
@@ -1204,8 +1082,6 @@ class AmazingDataExtended(AmazingDataProvider):
             kwargs = {
                 "local_path": local_path,
                 "is_local": is_local,
-                "begin_date": begin_date,
-                "end_date": end_date,
             }
 
             if self._use_process_isolation and self._process_backend is not None:
@@ -1355,11 +1231,12 @@ class AmazingDataExtended(AmazingDataProvider):
 
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_share_holder(code_list, begin_date, end_date)
+                result = await self._dask_adapter.get_share_holder(code_list)
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing
-            kwargs = {"begin_date": begin_date, "end_date": end_date}
+            local_path = self._prepare_local_path(local_path)
+            kwargs = {"local_path": local_path, "is_local": is_local}
             if self._use_process_isolation and self._process_backend is not None:
                 result = await self._info_data.get_share_holder(code_list, **kwargs)
             else:
@@ -1389,11 +1266,12 @@ class AmazingDataExtended(AmazingDataProvider):
 
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_holder_num(code_list, begin_date, end_date)
+                result = await self._dask_adapter.get_holder_num(code_list)
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing
-            kwargs = {"begin_date": begin_date, "end_date": end_date}
+            local_path = self._prepare_local_path(local_path)
+            kwargs = {"local_path": local_path, "is_local": is_local}
             if self._use_process_isolation and self._process_backend is not None:
                 result = await self._info_data.get_holder_num(code_list, **kwargs)
             else:
@@ -1423,13 +1301,12 @@ class AmazingDataExtended(AmazingDataProvider):
 
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_equity_structure(
-                    code_list, begin_date, end_date
-                )
+                result = await self._dask_adapter.get_equity_structure(code_list)
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing
-            kwargs = {"begin_date": begin_date, "end_date": end_date}
+            local_path = self._prepare_local_path(local_path)
+            kwargs = {"local_path": local_path, "is_local": is_local}
             if self._use_process_isolation and self._process_backend is not None:
                 result = await self._info_data.get_equity_structure(code_list, **kwargs)
             else:
@@ -1459,13 +1336,12 @@ class AmazingDataExtended(AmazingDataProvider):
 
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_equity_pledge_freeze(
-                    code_list, begin_date, end_date
-                )
+                result = await self._dask_adapter.get_equity_pledge_freeze(code_list)
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing
-            kwargs = {"begin_date": begin_date, "end_date": end_date}
+            local_path = self._prepare_local_path(local_path)
+            kwargs = {"local_path": local_path, "is_local": is_local}
             if self._use_process_isolation and self._process_backend is not None:
                 result = await self._info_data.get_equity_pledge_freeze(code_list, **kwargs)
             else:
@@ -1495,13 +1371,12 @@ class AmazingDataExtended(AmazingDataProvider):
 
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_equity_restricted(
-                    code_list, begin_date, end_date
-                )
+                result = await self._dask_adapter.get_equity_restricted(code_list)
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing
-            kwargs = {"begin_date": begin_date, "end_date": end_date}
+            local_path = self._prepare_local_path(local_path)
+            kwargs = {"local_path": local_path, "is_local": is_local}
             if self._use_process_isolation and self._process_backend is not None:
                 result = await self._info_data.get_equity_restricted(code_list, **kwargs)
             else:
@@ -1533,11 +1408,12 @@ class AmazingDataExtended(AmazingDataProvider):
 
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_dividend(code_list, begin_date, end_date)
+                result = await self._dask_adapter.get_dividend(code_list)
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing
-            kwargs = {"begin_date": begin_date, "end_date": end_date}
+            local_path = self._prepare_local_path(local_path)
+            kwargs = {"local_path": local_path, "is_local": is_local}
             if self._use_process_isolation and self._process_backend is not None:
                 result = await self._info_data.get_dividend(code_list, **kwargs)
             else:
@@ -1556,22 +1432,23 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
         local_path: Optional[str] = None,
         is_local: bool = True,
-        begin_date: Optional[int] = None,
-        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
-        """3.5.7.2 配股数据"""
+        """3.5.7.2 配股数据
+
+        SDK v1.0.4: 签名改为 (code_list, local_path, is_local)
+        SDK Bug 已通过 sdk_patches.py monkey-patch 修复 (reindex 替代直接列选择)
+        """
         await self._ensure_data_objects()
 
         try:
-            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=365)
-
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_right_issue(code_list, begin_date, end_date)
+                result = await self._dask_adapter.get_right_issue(code_list)
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing
-            kwargs = {"begin_date": begin_date, "end_date": end_date}
+            local_path = self._prepare_local_path(local_path)
+            kwargs = {"local_path": local_path, "is_local": is_local}
             if self._use_process_isolation and self._process_backend is not None:
                 result = await self._info_data.get_right_issue(code_list, **kwargs)
             else:
@@ -1591,18 +1468,14 @@ class AmazingDataExtended(AmazingDataProvider):
         self,
         local_path: Optional[str] = None,
         is_local: bool = True,
-        begin_date: Optional[int] = None,
-        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """3.5.8.1 融资融券交易汇总"""
         await self._ensure_data_objects()
 
         try:
-            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=30)
-
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_margin_summary(begin_date, end_date)
+                result = await self._dask_adapter.get_margin_summary()
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing
@@ -1610,8 +1483,6 @@ class AmazingDataExtended(AmazingDataProvider):
             kwargs = {
                 "local_path": local_path,
                 "is_local": is_local,
-                "begin_date": begin_date,
-                "end_date": end_date,
             }
             if self._use_process_isolation and self._process_backend is not None:
                 result = await self._info_data.get_margin_summary(**kwargs)
@@ -1631,18 +1502,17 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
         local_path: Optional[str] = None,
         is_local: bool = True,
-        begin_date: Optional[int] = None,
-        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
-        """3.5.8.2 融资融券标的明细"""
+        """3.5.8.2 融资融券标的明细
+
+        SDK Bug 已通过 sdk_patches.py monkey-patch 修复 (大小写 + 路径)
+        """
         await self._ensure_data_objects()
 
         try:
-            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=30)
-
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_margin_detail(code_list, begin_date, end_date)
+                result = await self._dask_adapter.get_margin_detail(code_list)
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing
@@ -1650,8 +1520,6 @@ class AmazingDataExtended(AmazingDataProvider):
             kwargs = {
                 "local_path": local_path,
                 "is_local": is_local,
-                "begin_date": begin_date,
-                "end_date": end_date,
             }
             if self._use_process_isolation and self._process_backend is not None:
                 result = await self._info_data.get_margin_detail(code_list, **kwargs)
@@ -1673,18 +1541,14 @@ class AmazingDataExtended(AmazingDataProvider):
         code_list: List[str],
         local_path: Optional[str] = None,
         is_local: bool = True,
-        begin_date: Optional[int] = None,
-        end_date: Optional[int] = None,
     ) -> pd.DataFrame:
         """3.5.9.1 龙虎榜"""
         await self._ensure_data_objects()
 
         try:
-            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=30)
-
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_long_hu_bang(code_list, begin_date, end_date)
+                result = await self._dask_adapter.get_long_hu_bang(code_list)
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing
@@ -1692,8 +1556,6 @@ class AmazingDataExtended(AmazingDataProvider):
             kwargs = {
                 "local_path": local_path,
                 "is_local": is_local,
-                "begin_date": begin_date,
-                "end_date": end_date,
             }
             if self._use_process_isolation and self._process_backend is not None:
                 result = await self._info_data.get_long_hu_bang(code_list, **kwargs)
@@ -1711,6 +1573,7 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_block_trading(
         self,
         code_list: List[str],
+        *,
         local_path: Optional[str] = None,
         is_local: bool = True,
         begin_date: Optional[int] = None,
@@ -1720,11 +1583,17 @@ class AmazingDataExtended(AmazingDataProvider):
         await self._ensure_data_objects()
 
         try:
-            begin_date, end_date = _get_default_date_range(begin_date, end_date, default_days=30)
-
+            if begin_date is not None or end_date is not None:
+                logger.debug(
+                    "get_block_trading 忽略 begin_date/end_date，SDK v1.0.4 已改为 local_path/is_local 参数模型"
+                )
             # 优先使用 Dask Actor
             if self._dask_adapter is not None:
-                result = await self._dask_adapter.get_block_trading(code_list, begin_date, end_date)
+                result = await self._dask_adapter.get_block_trading(
+                    code_list,
+                    local_path=local_path,
+                    is_local=is_local,
+                )
                 return pd.DataFrame(result) if result else pd.DataFrame()
 
             # 回退到 multiprocessing (保留原有后处理逻辑)
@@ -1732,8 +1601,6 @@ class AmazingDataExtended(AmazingDataProvider):
             kwargs = {
                 "local_path": local_path,
                 "is_local": is_local,
-                "begin_date": begin_date,
-                "end_date": end_date,
             }
             if self._use_process_isolation and self._process_backend is not None:
                 result = await self._info_data.get_block_trading(code_list, **kwargs)
@@ -1879,33 +1746,6 @@ class AmazingDataExtended(AmazingDataProvider):
             raise
 
     # ================== 期权相关接口 ==================
-
-    async def get_option_code_list(
-        self, security_type: str = "EXTRA_ETF_OP"
-    ) -> Optional[List[str]]:
-        """
-        获取期权代码列表
-
-        Args:
-            security_type: 代码类型，默认EXTRA_ETF_OP（ETF期权）
-
-        Returns:
-            期权代码列表
-        """
-        await self._ensure_data_objects()
-
-        try:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None, self._base_data.get_option_code_list, security_type
-            )
-
-            logger.info(f"成功获取期权代码列表，共{len(result) if result else 0}个代码")
-            return cast(Optional[List[str]], result)
-
-        except Exception as e:
-            logger.error(f"获取期权代码列表失败: {e}")
-            return None
 
     async def get_option_basic_info(
         self,
