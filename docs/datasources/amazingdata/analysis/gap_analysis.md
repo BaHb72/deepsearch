@@ -2,9 +2,9 @@
 
 ## 分析概述
 
-**分析日期**: 2025-12-25
-**图片总数**: 106张
-**分析批次**: 11批
+**分析日期**: 2026年2月7日
+**文档版本**: AmazingData 开发手册 V1.0.24 (2025年12月16日 PDF版)
+**对比对象**: 原有 API 清单 (基于旧版文档/图片)
 
 ---
 
@@ -12,56 +12,58 @@
 
 ### 实现状态总结
 
-经过对AmazingData开发手册全部106张图片的系统性分析，并与现有`api_catalog.py`实现进行对比：
+经过对最新PDF文档的分析，发现原有API清单存在显著滞后。新文档包含大量新增模块和接口。
 
-| 模块 | 文档接口数 | 已实现数 | 差距 |
+| 模块 | 文档接口数 | 已实现数(旧) | 差距 (新增/待验证) |
 |------|-----------|----------|------|
-| BaseData | 8 | 8 | 0 |
-| InfoData | 19 | 19 | 0 |
+| System (基础) | 3 | 1 | 2 |
+| BaseData | 11 | 8 | 3 |
+| SubscribeData | 9 | 7 | 2 |
 | MarketData | 2 | 2 | 0 |
-| SubscribeDataCallbacks | 7 | 7 | 0 |
-| **合计** | **36** | **36** | **0** |
+| InfoData (原有) | 19 | 19 | 0 |
+| InfoData (期权) | 3 | 0 | **3** |
+| InfoData (ETF) | 3 | 0 | **3** |
+| InfoData (指数) | 2 | 0 | **2** |
+| InfoData (行业) | 4 | 0 | **4** |
+| InfoData (可转债)| 11 | 0 | **11** |
+| InfoData (国债) | 1 | 0 | **1** |
+| **合计** | **63** | **36** | **27** |
+
+**注意**: "已实现数"基于旧版分析，新接口默认标记为"待实现"。
 
 ---
 
 ## 差距详情
 
-**无未实现接口**
+### 1. 完全缺失的模块 (InfoData)
 
-所有AmazingData开发手册中记录的API接口均已在现有代码中实现。
+以下模块在原分析中未提及，需确认为新功能或此前遗漏：
 
----
+- **期权数据 (Option Data)**: `get_option_basic_info`, `get_option_std_ctr_specs`, `get_option_mon_ctr_specs`
+- **ETF数据 (ETF Data)**: `get_etf_pcf`, `get_fund_share`, `get_fund_iopv`
+- **交易所指数 (Index Data)**: `get_index_constituent`, `get_index_weight`
+- **行业指数 (Industry Data)**: `get_industry_base_info`, `get_industry_constituent`, `get_industry_weight`, `get_industry_daily`
+- **可转债数据 (Convertible Bond)**: 包含发行、份额、转股、赎回、回售等11个接口
+- **国债数据 (Treasury)**: `get_treasury_yield`
 
-## 枚举值覆盖
+### 2. 现有模块的新增接口
 
-- **security_type**: 28种完全覆盖
-- **market**: 10种完全覆盖
-- **periods**: 13种完全覆盖
+- **System**: `logout`, `update_password`
+- **SubscribeData**: `onSnapshotglra` (港股通), `onSnapshothkt` (需确认是否别名)
 
 ---
 
 ## 建议
 
-1. **无需新增接口实现**
-2. **可选优化**:
-   - 增加接口调用示例文档
-   - 完善错误处理和异常说明
-   - 添加接口性能基准测试
+1. **代码核查**: 立即检查 `src` 目录下的代码，确认上述 "新增" 接口是否实际上已在代码中存在但未文档化。
+2. **补充实现**: 如果代码中确实缺失，应按照 V1.0.24 手册补充实现这 27 个新接口。
+3. **更新文档**: 更新项目内的 API 文档和类型定义，以包含新的数据结构（如可转债条款、ETF申赎信息等）。
 
 ---
 
 ## 分析文档索引
 
-| 批次 | 图片范围 | 主要内容 |
-|------|----------|----------|
-| batch_01.md | 01-10 | SDK安装、登录、BaseData |
-| batch_02.md | 11-20 | BaseData因子接口 |
-| batch_03.md | 21-30 | BaseData、MarketData |
-| batch_04.md | 31-40 | InfoData财务报表 |
-| batch_05.md | 41-50 | InfoData股东股权 |
-| batch_06.md | 51-60 | InfoData市场交易 |
-| batch_07.md | 61-70 | SubscribeData回调 |
-| batch_08.md | 71-80 | K线订阅、快照字段 |
-| batch_09.md | 81-90 | 各类型快照详解 |
-| batch_10.md | 91-100 | 港股通、K线结构 |
-| batch_11.md | 101-106 | FAQ、附录 |
+| 文件 | 说明 |
+|------|------|
+| pdf_manual_extraction.md | 基于PDF的完整接口提取列表 (2026-02-07) |
+| api_inventory.md | 更新后的完整清单 |

@@ -29,6 +29,7 @@ env/
 ENV/
 
 # ==================== Tooling & Caches ====================
+.cache/
 .benchmarks/
 .pytest_cache/
 .mypy_cache/
@@ -226,3 +227,6 @@ D?Stockcodedeepsearch.pre-commit-config.yaml
 /decompiled_*.py
 /*.ps1
 !/scripts/*.ps1
+
+# ==================== Local Reference Files ====================
+docs/datasources/amazingdata/analysis/*.pdf
