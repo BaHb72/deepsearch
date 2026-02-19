@@ -9,7 +9,8 @@ Date: 2025-09-18
 """
 
 import json
-from typing import Any, Dict, List, Literal, Mapping, Optional, TypedDict, cast
+from enum import Enum
+from typing import Any, Dict, List, Literal, Optional, TypedDict, cast
 
 import pandas as pd
 from core.infrastructure.providers.implementations.amazingdata.amazingdata_extended import (
@@ -21,11 +22,11 @@ from core.infrastructure.providers.implementations.amazingdata.amazingdata_realt
 from core.infrastructure.providers.implementations.amazingdata.snapshot_policy import (
     SnapshotAlignPolicy,
 )
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from apps.api.api.providers import DataProviderFactory, DataSourceType
+from apps.api.api.provider_deps import resolve_provider
 
 from .base import DEFAULT_LOCAL_PATH
 
@@ -51,6 +52,30 @@ class AmazingDataResponse(TypedDict, total=False):
 
 JsonRecord = Dict[str, Any]
 DataFrameRecords = List[JsonRecord]
+_manual_login_provider: AmazingDataExtended | None = None
+
+
+class DataSourceType(str, Enum):
+    """模块内兼容枚举，保留旧测试和调用方 monkeypatch 能力。"""
+
+    AMAZINGDATA = "amazingdata"
+
+
+class DataProviderFactory:
+    """模块内兼容工厂，内部统一走 provider_deps.resolve_provider。"""
+
+    _instances: Dict[str, Any] = {}
+
+    @classmethod
+    async def get_provider_async(cls, provider_type: Any, strict: bool = True) -> Any:
+        provider_name = str(getattr(provider_type, "value", provider_type))
+        provider = await resolve_provider(provider_name, strict=False)
+        if provider is not None:
+            cls._instances[provider_name] = provider
+            return provider
+        if strict:
+            raise HTTPException(status_code=503, detail=f"{provider_name} Provider 不可用")
+        return None
 
 
 def _build_success_response(
@@ -133,79 +158,53 @@ class SubscriptionRequest(BaseModel):
 
 
 class BlockTradingRequest(BaseModel):
-    """���ڽ���������"""
+    """大宗交易请求参数"""
 
-    code_list: List[str] = Field(..., description="��Ʊ�����б�")
-    local_path: Optional[str] = Field("D://AmazingData_local_data//", description="���ػ���·��")
-    is_local: bool = Field(True, description="�Ƿ����ñ��ػ���")
-    begin_date: Optional[int] = Field(None, description="��ʼ���ڣ�YYYYMMDD��")
-    end_date: Optional[int] = Field(None, description="�������ڣ�YYYYMMDD��")
+    code_list: List[str] = Field(..., description="股票代码列表")
+    local_path: Optional[str] = Field("D://AmazingData_local_data//", description="本地缓存路径")
+    is_local: bool = Field(True, description="是否启用本地缓存")
+    begin_date: Optional[int] = Field(None, description="开始日期（YYYYMMDD）")
+    end_date: Optional[int] = Field(None, description="结束日期（YYYYMMDD）")
 
 
 # ================== 辅助函数 ==================
 
 
-async def get_amazingdata_provider() -> AmazingDataExtended:
-    """获取AmazingData提供者实例"""
+async def get_amazingdata_provider(request: Request | None = None) -> Any:
+    """获取 AmazingData 提供者实例（优先复用已初始化实例）。"""
+    global _manual_login_provider
+
     try:
-        provider = await DataProviderFactory.get_provider_async(DataSourceType.AMAZINGDATA)
-        if not isinstance(provider, AmazingDataExtended):
-            # 如果不是扩展版本，尝试创建扩展版本
-            from core.config import get_config
-
-            config = get_config()
-
-            payload: Mapping[str, Any] | None = None
-            direct_config = getattr(config, "amazingdata", None)
-            if direct_config is not None:
-                if hasattr(direct_config, "to_provider_payload"):
-                    payload = cast(Mapping[str, Any], direct_config.to_provider_payload())
-                elif hasattr(direct_config, "model_dump"):
-                    payload = cast(Mapping[str, Any], direct_config.model_dump())
-                elif isinstance(direct_config, Mapping):
-                    payload = dict(direct_config)
-
-            if payload is None:
-                data_sources_section = getattr(config, "data_sources", None)
-                amazingdata_section: Any | None = None
-                if data_sources_section is not None:
-                    providers_section = getattr(data_sources_section, "providers", None)
-                    if (
-                        providers_section is None
-                        and data_sources_section is not None
-                        and hasattr(data_sources_section, "model_dump")
-                    ):
-                        providers_section = data_sources_section.model_dump().get("providers")
-                    if providers_section is not None and hasattr(providers_section, "get"):
-                        amazingdata_section = providers_section.get("amazingdata")
-                if amazingdata_section is None:
-                    if data_sources_section is not None and hasattr(
-                        data_sources_section, "model_dump"
-                    ):
-                        try:
-                            providers_map = data_sources_section.model_dump().get("providers", {})
-                        except Exception:
-                            providers_map = {}
-                        if isinstance(providers_map, dict):
-                            amazingdata_section = providers_map.get("amazingdata")
-
-                if amazingdata_section is not None:
-                    if hasattr(amazingdata_section, "to_provider_payload"):
-                        payload = cast(Mapping[str, Any], amazingdata_section.to_provider_payload())
-                    elif hasattr(amazingdata_section, "model_dump"):
-                        payload = cast(Mapping[str, Any], amazingdata_section.model_dump())
-                    elif isinstance(amazingdata_section, Mapping):
-                        payload = dict(amazingdata_section)
-
-            if payload is None:
-                raise HTTPException(
-                    status_code=500,
-                    detail="未找到有效的 AmazingData 配置",
+        if _manual_login_provider is not None:
+            try:
+                health_result = await _manual_login_provider.health_check()
+                status = getattr(health_result, "status", None)
+                status_name = (
+                    str(getattr(status, "name", status)).upper() if status is not None else ""
                 )
+                if status_name != "UNHEALTHY":
+                    return _manual_login_provider
+                logger.warning("本地登录会话已失效，切换到工厂 Provider 路径")
+            except Exception as e:
+                logger.warning(f"本地登录会话健康检查失败，切换到工厂 Provider 路径: {e}")
+            _manual_login_provider = None
 
-            provider = AmazingDataExtended(payload)
-            await provider.initialize()
-        return cast(AmazingDataExtended, provider)
+        provider = await DataProviderFactory.get_provider_async(
+            DataSourceType.AMAZINGDATA,
+            strict=False,
+        )
+
+        if provider is None:
+            raise HTTPException(status_code=503, detail="AmazingData Provider 未初始化")
+
+        # 兼容返回类型：
+        # - AmazingDataExtended（本地直连）
+        # - Dask ActorWrapper（通过 __getattr__ 代理调用）
+        # - 其他 Provider 代理对象
+        # 避免在 API 请求阶段重复构造直连实例，防止重复登录和连接竞争。
+        return provider
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取AmazingData提供者失败: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get AmazingData provider: {e}")
@@ -233,6 +232,8 @@ async def login(request: LoginRequest) -> AmazingDataResponse:
     3.5.1.1 登录
     登录到AmazingData系统
     """
+    global _manual_login_provider
+
     try:
         # 创建配置
         config = {
@@ -242,13 +243,22 @@ async def login(request: LoginRequest) -> AmazingDataResponse:
             "port": request.port,
         }
 
+        # 清理历史本地会话，避免并发持有多个直连实例
+        if _manual_login_provider is not None:
+            try:
+                await _manual_login_provider.stop_async()
+            except Exception as stop_exc:
+                logger.warning(f"清理旧本地登录会话失败: {stop_exc}")
+            finally:
+                _manual_login_provider = None
+
         # 创建提供者并登录
         provider = AmazingDataExtended(config)
         success = await provider.initialize()
 
         if success:
-            # 保存到Factory
-            DataProviderFactory._instances[DataSourceType.AMAZINGDATA] = provider
+            # 仅保存为路由内本地会话，避免污染全局 Provider 缓存键。
+            _manual_login_provider = provider
             return _build_success_response(message="登录成功")
         else:
             raise HTTPException(status_code=401, detail="登录失败")
@@ -264,8 +274,14 @@ async def logout() -> AmazingDataResponse:
     3.5.1.2 登出
     登出AmazingData系统
     """
+    global _manual_login_provider
+
     try:
-        provider = await get_amazingdata_provider()
+        provider = _manual_login_provider
+        _manual_login_provider = None
+        if provider is None:
+            provider = await get_amazingdata_provider()
+
         await provider.unsubscribe_all()
         await provider.stop_async()
         return _build_success_response(message="登出成功")

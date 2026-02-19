@@ -14,7 +14,34 @@ import pandas as pd
 from core.config import get_config
 
 
-def test_amazingdata_config():
+def _as_dict(value):
+    """将配置对象转换为 dict。"""
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            dumped = model_dump()
+            if isinstance(dumped, dict):
+                return dict(dumped)
+        except Exception:
+            return {}
+    raw = getattr(value, "__dict__", None)
+    if isinstance(raw, dict):
+        return dict(raw)
+    return {}
+
+
+def _read_field(value, key, default=None):
+    """兼容 dict / pydantic 对象读取字段。"""
+    if isinstance(value, dict):
+        return value.get(key, default)
+    return getattr(value, key, default)
+
+
+def load_amazingdata_config():
     """测试AmazingData配置和连接"""
     print("=" * 60)
     print("AmazingData API 测试（从配置文件读取凭证）")
@@ -27,14 +54,14 @@ def test_amazingdata_config():
 
     # 优先检查新格式配置 (data_sources.providers.amazingdata)
     if hasattr(config, "data_sources") and config.data_sources:
-        providers = config.data_sources.get("providers", {})
+        providers = _as_dict(_read_field(config.data_sources, "providers", {}))
         if "amazingdata" in providers:
             print("[INFO] 使用新格式配置 (data_sources.providers.amazingdata)")
             ad_provider = providers["amazingdata"]
 
-            enabled = ad_provider.get("enabled", False)
-            ad_config_dict = ad_provider.get("config", {})
-            conn_config = ad_config_dict.get("connection", {})
+            enabled = bool(_read_field(ad_provider, "enabled", False))
+            ad_config_dict = _as_dict(_read_field(ad_provider, "config", {}))
+            conn_config = _as_dict(ad_config_dict.get("connection", {}))
 
             host = conn_config.get("host", "localhost")
             port = conn_config.get("port", 8888)
@@ -115,7 +142,19 @@ def test_amazingdata_config():
     return False
 
 
-async def test_amazingdata_connection(credentials):
+def test_amazingdata_config():
+    """pytest 入口：仅校验配置可解析。"""
+    import pytest
+
+    config = load_amazingdata_config()
+    if not config:
+        pytest.skip("AmazingData 配置不可用，跳过真实链路配置测试")
+    assert isinstance(config, dict)
+    assert bool(config.get("username"))
+    assert bool(config.get("password"))
+
+
+async def run_amazingdata_connection_test(credentials):
     """测试AmazingData连接"""
     print("\n" + "=" * 60)
     print("开始测试AmazingData连接")
@@ -217,7 +256,7 @@ async def test_amazingdata_connection(credentials):
 def main():
     """主函数"""
     # 测试配置
-    credentials = test_amazingdata_config()
+    credentials = load_amazingdata_config()
 
     if not credentials:
         print("\n[FAIL] 配置检查未通过，无法继续测试")
@@ -241,7 +280,7 @@ def main():
 
     # 运行异步测试
     try:
-        success = asyncio.run(test_amazingdata_connection(credentials))
+        success = asyncio.run(run_amazingdata_connection_test(credentials))
 
         # 打印总结
         print("\n" + "=" * 60)

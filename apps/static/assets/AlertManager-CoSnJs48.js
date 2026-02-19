@@ -1,0 +1,1 @@
+import{j as t,cB as e,B as r,cs as s}from"./index-D0QrCZAq.js";import{P as a}from"./index-Bu2BjVWy.js";const n=()=>t.jsx(a,{header:{title:"告警管理",ghost:!0},children:t.jsx(e,{icon:t.jsx(s,{}),title:"功能开发中",subTitle:"告警管理功能即将上线，敬请期待。",extra:t.jsx(r,{type:"primary",children:"返回首页"})})});export{n as default};

@@ -234,15 +234,35 @@ async def get_stock_detail(symbol: str, period: int = Query(30, ge=7, le=90)):
 
         # 获取市场参与意愿（日度）
         try:
-            df_desire = await run_in_executor(ak.stock_comment_detail_scrd_desire_daily_em, symbol)
-            df_desire = df_desire.rename(
-                columns={
-                    "交易日": "date",
-                    "当日意愿上升": "daily_rise",
-                    "5日平均参与意愿变化": "avg_5d_change",
-                }
-            )
-            df_desire = df_desire.tail(period)
+            if hasattr(ak, "stock_comment_detail_scrd_desire_daily_em"):
+                df_desire = await run_in_executor(
+                    ak.stock_comment_detail_scrd_desire_daily_em, symbol
+                )
+                df_desire = df_desire.rename(
+                    columns={
+                        "交易日": "date",
+                        "当日意愿上升": "daily_rise",
+                        "5日平均参与意愿变化": "avg_5d_change",
+                    }
+                )
+            else:
+                df_desire = await run_in_executor(ak.stock_comment_detail_scrd_desire_em, symbol)
+                df_desire = df_desire.rename(
+                    columns={
+                        "交易日期": "date",
+                        "参与意愿变化": "daily_rise",
+                        "5日平均变化": "avg_5d_change",
+                    }
+                )
+
+            if "date" not in df_desire.columns:
+                df_desire["date"] = None
+            if "daily_rise" not in df_desire.columns:
+                df_desire["daily_rise"] = None
+            if "avg_5d_change" not in df_desire.columns:
+                df_desire["avg_5d_change"] = None
+
+            df_desire = df_desire[["date", "daily_rise", "avg_5d_change"]].tail(period)
             result["desire"] = df_desire.to_dict("records")
         except Exception as e:
             logger.warning(f"获取市场参与意愿失败: {e}")

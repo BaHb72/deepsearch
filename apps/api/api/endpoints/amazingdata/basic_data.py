@@ -42,6 +42,14 @@ class HistCodeListRequest(BaseModel):
     local_path: Optional[str] = Field(None, description="本地缓存路径，默认使用系统路径")
 
 
+class StockBasicRequest(BaseModel):
+    """证券基础信息请求"""
+
+    code_list: List[str] = Field(..., description="证券代码列表")
+    local_path: Optional[str] = Field(None, description="本地缓存路径，默认使用系统路径")
+    is_local: bool = Field(True, description="是否优先读取本地缓存，默认 True")
+
+
 @router.get("/code-info", summary="获取每日证券信息")
 async def get_code_info(
     security_type: str = Query("EXTRA_STOCK_A", description="证券类型，默认沪深 A 股")
@@ -114,6 +122,40 @@ async def get_backward_factor(request: FactorRequest) -> JSONDict:
     try:
         provider = await get_amazingdata_provider()
         raw = await provider.get_backward_factor(
+            request.code_list,
+            local_path,
+            request.is_local,
+        )
+        filtered_df = ensure_dataframe(raw)
+        if filtered_df is not None:
+            filtered_df = filter_dataframe_by_dates(
+                filtered_df,
+                request.begin_date,
+                request.end_date,
+            )
+        payload_source = filtered_df if filtered_df is not None else raw
+        return format_response(
+            success=True,
+            data=dataframe_to_dict(payload_source),
+            code_count=len(request.code_list),
+            date_range=f"{request.begin_date}-{request.end_date}",
+            local_path=local_path,
+        )
+    except Exception as exc:  # pragma: no cover
+        return format_response(success=False, error=str(exc), code_list=request.code_list)
+
+
+@router.post("/adj-factor", summary="获取单次复权因子")
+async def get_adj_factor(request: FactorRequest) -> JSONDict:
+    """下载并按日期过滤单次复权因子"""
+    if not validate_date_range(request.begin_date, request.end_date):
+        raise HTTPException(status_code=400, detail="Invalid date range")
+
+    local_path = request.local_path or DEFAULT_LOCAL_PATH
+
+    try:
+        provider = await get_amazingdata_provider()
+        raw = await provider.get_adj_factor(
             request.code_list,
             local_path,
             request.is_local,
@@ -213,6 +255,61 @@ async def get_code_list(
         )
     except Exception as exc:  # pragma: no cover
         return format_response(success=False, error=str(exc), security_type=security_type)
+
+
+@router.get("/future-code-list", summary="获取当日期货代码列表")
+async def get_future_code_list(
+    security_type: str = Query("EXTRA_FUTURE", description="证券类型（期货）")
+) -> JSONDict:
+    """获取指定期货市场的当日代码列表"""
+    try:
+        provider = await get_amazingdata_provider()
+        result = await provider.get_future_code_list(security_type)
+        return format_response(
+            success=True,
+            data=dataframe_to_dict(result),
+            security_type=security_type,
+        )
+    except Exception as exc:  # pragma: no cover
+        return format_response(success=False, error=str(exc), security_type=security_type)
+
+
+@router.get("/option-code-list", summary="获取当日期权代码列表")
+async def get_option_code_list(
+    security_type: str = Query("EXTRA_ETF_OP", description="证券类型（期权）")
+) -> JSONDict:
+    """获取指定期权市场的当日代码列表"""
+    try:
+        provider = await get_amazingdata_provider()
+        result = await provider.get_option_code_list(security_type)
+        return format_response(
+            success=True,
+            data=dataframe_to_dict(result),
+            security_type=security_type,
+        )
+    except Exception as exc:  # pragma: no cover
+        return format_response(success=False, error=str(exc), security_type=security_type)
+
+
+@router.post("/stock-basic", summary="获取证券基础信息")
+async def get_stock_basic(request: StockBasicRequest) -> JSONDict:
+    """获取证券基础信息"""
+    local_path = request.local_path or DEFAULT_LOCAL_PATH
+    try:
+        provider = await get_amazingdata_provider()
+        result = await provider.get_stock_basic(
+            code_list=request.code_list,
+            local_path=local_path,
+            is_local=request.is_local,
+        )
+        return format_response(
+            success=True,
+            data=dataframe_to_dict(result),
+            code_count=len(request.code_list),
+            local_path=local_path,
+        )
+    except Exception as exc:  # pragma: no cover
+        return format_response(success=False, error=str(exc), code_list=request.code_list)
 
 
 @router.get("/bj-code-mapping", summary="获取北交所代码映射")

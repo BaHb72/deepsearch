@@ -13,6 +13,7 @@ Windows Dask Worker 管理器
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import os
 import signal
 import site
@@ -108,6 +109,7 @@ class DaskConfig:
     memory_limit: str = "4GB"
     name_prefix: str = "windows-worker"
     resources: dict[str, int] = field(default_factory=lambda: {"WIN": 1})
+    contact_host: Optional[str] = None
     local_directory: Optional[str] = None  # spill to disk 目录
     use_nanny: bool = True  # 是否使用 Nanny 进程
     memory_thresholds: MemoryThresholds = field(default_factory=MemoryThresholds)
@@ -451,6 +453,7 @@ class DaskWorkerManager:
                 memory_limit=getattr(windows_workers, "memory_limit", "4GB"),
                 name_prefix=getattr(windows_workers, "name_prefix", "windows-worker"),
                 resources=resources_dict,
+                contact_host=getattr(windows_workers, "contact_host", None),
                 local_directory=getattr(windows_workers, "local_directory", None),
                 use_nanny=getattr(windows_workers, "use_nanny", True),
                 memory_thresholds=memory_thresholds,
@@ -519,38 +522,79 @@ class DaskWorkerManager:
         return address, 8786
 
     @staticmethod
-    def _get_host_address_for_docker() -> str:
-        """获取 Worker 对外通信地址
-
-        根据运行环境返回正确的地址：
-        - Docker 容器内: host.docker.internal（用于访问宿主机）
-        - 宿主机/本地: localhost
-
-        注意：只有在 Docker 容器内运行时才使用 host.docker.internal，
-        因为在宿主机上直接运行时，Worker 应该使用 localhost 与本地 Scheduler 通信。
-        """
-        import os
-
-        # 检测是否在 Docker 容器内运行
-        # 方法 1: 检查 /.dockerenv 文件（Docker 容器内存在）
-        if os.path.exists("/.dockerenv"):
-            return "host.docker.internal"
-
-        # 方法 2: 检查 /proc/1/cgroup 是否包含 docker（Linux 容器内）
+    def _is_loopback_host(host: str) -> bool:
+        """判断主机地址是否为 loopback。"""
+        value = str(host or "").strip().strip("[]").lower()
+        if not value:
+            return False
+        if value in {"localhost", "127.0.0.1", "::1"}:
+            return True
         try:
-            with open("/proc/1/cgroup", "r") as f:
-                if "docker" in f.read():
-                    return "host.docker.internal"
-        except (FileNotFoundError, PermissionError):
-            pass
+            return ipaddress.ip_address(value).is_loopback
+        except ValueError:
+            return False
 
-        # 方法 3: 检查环境变量（某些容器化场景会设置）
-        if os.environ.get("DOCKER_CONTAINER") or os.environ.get("container"):
+    @staticmethod
+    def _extract_host_from_address(address: str) -> str:
+        """从 tcp://host:port 形式中提取 host。"""
+        value = str(address or "").strip()
+        if value.startswith("tcp://"):
+            value = value[6:]
+        if ":" in value:
+            host, _ = value.rsplit(":", 1)
+            return host
+        return value
+
+    async def _detect_scheduler_runtime_host(self) -> str | None:
+        """从 Scheduler 运行时信息中解析真实 host。"""
+        scheduler_address = f"tcp://{self._parsed_host}:{self._parsed_port}"
+        try:
+            from distributed import Client
+
+            async with Client(
+                scheduler_address,
+                asynchronous=True,
+                timeout="5s",
+                set_as_default=False,
+            ) as client:
+                scheduler_info = client.scheduler_info() or {}
+                runtime_address = str(scheduler_info.get("address") or scheduler_address)
+                return self._extract_host_from_address(runtime_address)
+        except Exception as exc:
+            self._logger.debug(f"获取 Scheduler 运行时地址失败，使用配置地址回退: {exc}")
+            return None
+
+    async def _resolve_worker_contact_host(self) -> str:
+        """解析 Worker contact host（优先显式配置，其次自动判定）。"""
+        if self._config and self._config.contact_host:
+            explicit = str(self._config.contact_host).strip()
+            if explicit:
+                self._logger.info(f"使用显式配置的 Worker contact host: {explicit}")
+                return explicit
+
+        env_override = os.getenv("DEEPSEARCH_DASK_WORKER_CONTACT_HOST", "").strip()
+        if env_override:
+            self._logger.info(f"使用环境变量覆盖的 Worker contact host: {env_override}")
+            return env_override
+
+        runtime_host = await self._detect_scheduler_runtime_host()
+        configured_host = self._parsed_host
+
+        if runtime_host and self._is_loopback_host(runtime_host):
+            return "localhost"
+
+        if self._is_loopback_host(configured_host) and runtime_host and not self._is_loopback_host(
+            runtime_host
+        ):
+            # 配置是 localhost，但实际 Scheduler 在容器/远端网络中，需避免回连到 127.0.0.1
+            self._logger.info(
+                f"检测到外部 Scheduler 运行地址 {runtime_host}，Worker contact host 切换为 host.docker.internal"
+            )
             return "host.docker.internal"
 
-        # 非 Docker 容器环境，使用 localhost
-        # 注意：不再检查 DNS 解析，因为 Windows Docker Desktop
-        # 会在 hosts 文件中保留 host.docker.internal 映射
+        if runtime_host and not self._is_loopback_host(runtime_host):
+            return runtime_host
+
         return "localhost"
 
     def _get_site_packages_paths(self) -> list[str]:
@@ -829,7 +873,7 @@ class DaskWorkerManager:
             # 清空旧记录
             self._workers.clear()
 
-            host_address = self._get_host_address_for_docker()
+            host_address = await self._resolve_worker_contact_host()
 
             # 原子性预留端口（解决 TOCTOU 竞态条件）
             try:

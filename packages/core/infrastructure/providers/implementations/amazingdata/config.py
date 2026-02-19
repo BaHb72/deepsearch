@@ -159,11 +159,18 @@ def ensure_amazingdata_provider_config(config_like: ProviderConfigLike) -> Amazi
 
     data = dict(raw_data)
 
-    # 首先检查顶层的 connection
+    # 首先检查顶层的 connection。
+    # 当 connection 与顶层字段同时存在时，优先采用 connection 中的值，
+    # 以兼容历史配置里残留的演示字段（如顶层 username/host）污染真实连接参数。
     connection_section = data.get("connection")
     if isinstance(connection_section, Mapping):
-        merged = dict(connection_section)
-        merged.update({k: v for k, v in data.items() if k != "connection"})
+        merged = {k: v for k, v in data.items() if k != "connection"}
+        for key, value in dict(connection_section).items():
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            merged[key] = value
         data = merged
     # 如果顶层没有 connection，检查 config.connection（嵌套结构）
     elif isinstance(config_section, Mapping):

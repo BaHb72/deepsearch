@@ -73,6 +73,10 @@ class WindowsWorkersConfig(BaseModel):
         description="Worker 资源标签（必须为浮点数，符合 Dask 内部要求）",
     )
     port_range_start: int = Field(default=58200, description="Worker 端口范围起始值")
+    contact_host: Optional[str] = Field(
+        default=None,
+        description="Worker 对外公布地址（覆盖自动判定；例如 host.docker.internal 或宿主机 IP）",
+    )
     local_directory: Optional[str] = Field(
         default=None, description="Worker 本地临时目录（用于 spill to disk），建议使用 SSD"
     )

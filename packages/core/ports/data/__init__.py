@@ -27,6 +27,7 @@ from .responses import (
     TickData,
     TickResponse,
 )
+from .routing_result import FallbackReasonCode, RouteAttempt, RoutedResponseMeta
 from .semantic_types import (
     AdjustType,
     AssetSpec,
@@ -65,4 +66,8 @@ __all__ = [
     "StockInfo",
     "StockListResponse",
     "DataResponse",
+    # 路由结果
+    "FallbackReasonCode",
+    "RouteAttempt",
+    "RoutedResponseMeta",
 ]

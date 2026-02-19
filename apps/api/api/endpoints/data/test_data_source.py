@@ -9,9 +9,11 @@ from typing import Optional
 
 from core.observability.monitoring.data_source_monitor import DataSourceMonitor
 from core.ports.data_sources import DataAccessType, DataSourceType
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel
+
+from apps.api.api.provider_deps import resolve_provider_from_request
 
 router = APIRouter(prefix="/api/data-source", tags=["data-source-test"])
 
@@ -36,7 +38,7 @@ class TestResponse(BaseModel):
 
 
 @router.post("/test", response_model=TestResponse)
-async def test_data_source(request: TestRequest):
+async def test_data_source(request: TestRequest, http_request: Request):
     """
     测试数据源连接和性能
 
@@ -63,14 +65,15 @@ async def test_data_source(request: TestRequest):
             else DataAccessType.HISTORICAL_KLINE
         )
 
-        # 根据数据源类型获取对应的provider
-        from apps.api.api.providers import DataProviderFactory
-
         try:
             # 执行测试请求
             if source_type == DataSourceType.AKSHARE or source_type == DataSourceType.AKSHARE_PROXY:
                 try:
-                    provider = await DataProviderFactory.get_provider_async("akshare")
+                    provider = await resolve_provider_from_request(
+                        http_request, "akshare", strict=False
+                    )
+                    if provider is None:
+                        raise RuntimeError("AkShare provider 不可用")
                     if request.test_type == "realtime":
                         # 使用 get_realtime_data 方法，传入符号列表
                         result = await provider.get_realtime_data([request.symbol])
@@ -93,7 +96,11 @@ async def test_data_source(request: TestRequest):
                     logger.error(f"Provider error for {source_type}: {provider_error}")
                     result = {"error": f"Provider error: {provider_error}", "success": False}
             elif source_type == DataSourceType.AMAZINGDATA:
-                provider = await DataProviderFactory.get_provider_async("amazingdata")
+                provider = await resolve_provider_from_request(
+                    http_request, "amazingdata", strict=False
+                )
+                if provider is None:
+                    raise RuntimeError("AmazingData provider 不可用")
                 # AmazingData测试逻辑
                 if request.test_type == "realtime":
                     try:
@@ -118,7 +125,15 @@ async def test_data_source(request: TestRequest):
                             "success": False,
                         }
             elif source_type == DataSourceType.QMT:
-                provider = await DataProviderFactory.get_provider_async("qmt")
+                provider = await resolve_provider_from_request(
+                    http_request, "miniqmt", strict=False
+                )
+                if provider is None:
+                    provider = await resolve_provider_from_request(
+                        http_request, "qmt", strict=False
+                    )
+                if provider is None:
+                    raise RuntimeError("MiniQMT provider 不可用")
                 # QMT测试逻辑
                 if request.test_type == "realtime":
                     try:
@@ -146,7 +161,15 @@ async def test_data_source(request: TestRequest):
             else:
                 # 统一数据源 - 使用默认测试逻辑
                 try:
-                    provider = await DataProviderFactory.get_provider_async("unified")
+                    provider = await resolve_provider_from_request(
+                        http_request, "unified", strict=False
+                    )
+                    if provider is None:
+                        provider = await resolve_provider_from_request(
+                            http_request, "akshare", strict=False
+                        )
+                    if provider is None:
+                        raise RuntimeError("统一数据源不可用（unified/akshare 均不可用）")
                     # 尝试获取实时数据作为测试
                     if request.test_type == "realtime":
                         result = await provider.get_realtime_quote(request.symbol)

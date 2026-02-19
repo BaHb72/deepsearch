@@ -5,15 +5,19 @@ MiniQMT API 端点
 """
 
 import asyncio
-from datetime import datetime
+import inspect
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from core.infrastructure.providers.implementations.qmt.miniqmt import MiniQMTProvider
+from core.infrastructure.providers.interfaces.capabilities import DataCapability
 
 # 兼容新旧管理器
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
 from pydantic import BaseModel
+from apps.api.api.endpoints.data.unified_query import query_capability_bridge
+from apps.api.api.provider_deps import resolve_provider
 
 try:
     from core.utils.data_sources import DataSourceManager
@@ -56,18 +60,508 @@ class RealtimeRequest(BaseModel):
     symbols: List[str]
 
 
-async def get_miniqmt_provider() -> Any:
+async def get_miniqmt_provider(request: Request | None = None) -> Any:
     """获取 MiniQMT Actor 实例（通过 Dask Actor）"""
-    from apps.api.api.providers import DataProviderFactory, DataSourceType
-
     try:
-        provider = await DataProviderFactory.get_provider_async(DataSourceType.MINIQMT)
+        provider = await resolve_provider("miniqmt", request=request, strict=False)
         if provider is None:
             raise HTTPException(status_code=503, detail="MiniQMT Actor 不可用")
         return provider
     except Exception as e:
         logger.error(f"获取 MiniQMT Actor 失败: {e}")
         raise HTTPException(status_code=503, detail=f"MiniQMT 服务不可用: {e}")
+
+
+_AMAZINGDATA_CAPABILITY_REQUIREMENTS: dict[str, set[DataCapability]] = {
+    "realtime_quote": {
+        DataCapability.REALTIME_QUOTE,
+        DataCapability.REALTIME_QUOTES,
+        DataCapability.TICK_DATA,
+    },
+    "stock_kline": {
+        DataCapability.KLINE_DATA,
+        DataCapability.MINUTE_DATA,
+    },
+}
+
+
+def _parse_symbol_list(symbols: str) -> list[str]:
+    return [item.strip() for item in symbols.split(",") if item.strip()]
+
+
+def _legacy_payload_with_trace(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """统一补齐兼容层的 trace 字段。"""
+    data = payload.get("data")
+    return {
+        "success": True,
+        "data": data if isinstance(data, list) else [],
+        "count": int(payload.get("count") or (len(data) if isinstance(data, list) else 0)),
+        "source": payload.get("source", "unknown"),
+        "fallback": bool(payload.get("fallback_reason")),
+        "fallback_reason": payload.get("fallback_reason"),
+        "attempts": payload.get("attempts", []),
+        "timestamp": payload.get("routed_at") or datetime.now().isoformat(),
+    }
+
+
+def _to_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        if isinstance(value, str):
+            value = value.replace(",", "").strip()
+            if not value:
+                return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _to_int(value: Any, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        if isinstance(value, str):
+            value = value.replace(",", "").strip()
+            if not value:
+                return default
+        return int(float(value))
+    except Exception:
+        return default
+
+
+def _first_value(payload: Dict[str, Any], candidates: list[str]) -> Any:
+    for key in candidates:
+        if key in payload and payload[key] is not None:
+            return payload[key]
+    return None
+
+
+def _to_record_rows(payload: Any, *, default_symbol: str | None = None) -> list[dict[str, Any]]:
+    """将各种返回结构归一化为 list[dict]。"""
+    if payload is None:
+        return []
+
+    if hasattr(payload, "to_dict"):
+        try:
+            records = payload.to_dict("records")
+            if isinstance(records, list):
+                normalized = [dict(item) for item in records if isinstance(item, dict)]
+                if default_symbol:
+                    for item in normalized:
+                        item.setdefault("symbol", default_symbol)
+                return normalized
+        except Exception:
+            pass
+
+    if isinstance(payload, list):
+        rows: list[dict[str, Any]] = []
+        for item in payload:
+            rows.extend(_to_record_rows(item, default_symbol=default_symbol))
+        return rows
+
+    if isinstance(payload, dict):
+        if "data" in payload:
+            return _to_record_rows(payload.get("data"), default_symbol=default_symbol)
+
+        if "result" in payload:
+            return _to_record_rows(payload.get("result"), default_symbol=default_symbol)
+
+        # 典型行结构：直接返回为单条记录
+        if any(
+            key in payload
+            for key in (
+                "symbol",
+                "code",
+                "stock_code",
+                "open",
+                "high",
+                "low",
+                "close",
+                "price",
+                "lastPrice",
+                "time",
+                "date",
+                "timestamp",
+            )
+        ):
+            row = dict(payload)
+            if default_symbol:
+                row.setdefault("symbol", default_symbol)
+            return [row]
+
+        rows: list[dict[str, Any]] = []
+        for key, value in payload.items():
+            symbol_key = str(key) if key is not None else default_symbol
+            rows.extend(_to_record_rows(value, default_symbol=symbol_key))
+        return rows
+
+    return []
+
+
+def _symbol_variants(symbol: str) -> set[str]:
+    variants = {symbol}
+    if "." in symbol:
+        left, right = symbol.split(".", 1)
+        variants.add(f"{right}.{left}")
+    return variants
+
+
+def _extract_symbol_rows(payload: Any, symbol: str) -> list[dict[str, Any]]:
+    if isinstance(payload, dict):
+        for variant in _symbol_variants(symbol):
+            if variant in payload:
+                return _to_record_rows(payload.get(variant), default_symbol=symbol)
+    rows = _to_record_rows(payload)
+    if not rows:
+        return []
+
+    filtered: list[dict[str, Any]] = []
+    for row in rows:
+        row_symbol = _first_value(row, ["symbol", "code", "stock_code", "ticker"])
+        if isinstance(row_symbol, str) and row_symbol in _symbol_variants(symbol):
+            filtered.append(row)
+    if filtered:
+        return filtered
+    return rows if len(_symbol_variants(symbol)) == 1 else []
+
+
+def _normalize_ts_and_label(raw_time: Any) -> tuple[int, str]:
+    if raw_time is None:
+        return 0, ""
+
+    if isinstance(raw_time, (int, float)):
+        num = int(raw_time)
+        if 19000101 <= num <= 20991231:
+            dt = datetime.strptime(str(num), "%Y%m%d")
+            return int(dt.timestamp() * 1000), str(num)
+        if num > 10_000_000_000:
+            dt = datetime.fromtimestamp(num / 1000)
+            return num, dt.strftime("%Y%m%d%H%M%S")
+        if num > 1_000_000_000:
+            dt = datetime.fromtimestamp(num)
+            return int(num * 1000), dt.strftime("%Y%m%d%H%M%S")
+        return num, str(num)
+
+    text = str(raw_time).strip()
+    if not text:
+        return 0, ""
+    if text.isdigit() and len(text) == 8:
+        dt = datetime.strptime(text, "%Y%m%d")
+        return int(dt.timestamp() * 1000), text
+
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y%m%d%H%M%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            dt = datetime.strptime(text, fmt)
+            return int(dt.timestamp() * 1000), dt.strftime("%Y%m%d%H%M%S")
+        except Exception:
+            continue
+
+    iso_text = text.replace("T", " ").split(".")[0]
+    try:
+        dt = datetime.fromisoformat(iso_text)
+        return int(dt.timestamp() * 1000), dt.strftime("%Y%m%d%H%M%S")
+    except Exception:
+        return 0, text
+
+
+def _build_quote_row(symbol: str, row: Dict[str, Any]) -> Dict[str, Any]:
+    last_price = _to_float(
+        _first_value(row, ["lastPrice", "last_price", "price", "close", "latest", "最新价"]),
+        0.0,
+    )
+    pre_close = _to_float(
+        _first_value(row, ["preClose", "pre_close", "prev_close", "昨收", "close_prev"]),
+        last_price,
+    )
+    change = round(last_price - pre_close, 2) if pre_close else 0.0
+    change_pct = round(change / pre_close * 100, 2) if pre_close else 0.0
+    row_symbol = _first_value(row, ["symbol", "code", "stock_code", "ticker"])
+    resolved_symbol = row_symbol if isinstance(row_symbol, str) else symbol
+
+    return {
+        "symbol": resolved_symbol,
+        "name": resolved_symbol,
+        "lastPrice": last_price,
+        "change": change,
+        "changePct": change_pct,
+        "open": _to_float(_first_value(row, ["open", "open_price", "开盘"]), 0.0),
+        "high": _to_float(_first_value(row, ["high", "high_price", "最高"]), 0.0),
+        "low": _to_float(_first_value(row, ["low", "low_price", "最低"]), 0.0),
+        "volume": _to_int(_first_value(row, ["volume", "vol", "成交量"]), 0),
+        "amount": _to_float(_first_value(row, ["amount", "turnover", "成交额"]), 0.0),
+    }
+
+
+def _build_kline_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    raw_time = _first_value(
+        row,
+        ["time", "datetime", "date", "trade_time", "timestamp", "ts", "tradeDate", "TRADE_DATE"],
+    )
+    ts, time_str = _normalize_ts_and_label(raw_time)
+    return {
+        "time": ts,
+        "time_str": time_str or str(raw_time or ""),
+        "open": _to_float(_first_value(row, ["open", "开盘"]), 0.0),
+        "high": _to_float(_first_value(row, ["high", "最高"]), 0.0),
+        "low": _to_float(_first_value(row, ["low", "最低"]), 0.0),
+        "close": _to_float(_first_value(row, ["close", "收盘", "last"]), 0.0),
+        "volume": _to_int(_first_value(row, ["volume", "vol", "成交量"]), 0),
+        "amount": _to_float(_first_value(row, ["amount", "成交额"]), 0.0),
+    }
+
+
+def _estimate_kline_date_range(period: str, count: int) -> tuple[int, int]:
+    today = datetime.now().date()
+    normalized = period.strip().lower()
+    raw_period = period.strip()
+
+    minute_periods = {"1m", "5m", "15m", "30m", "60m", "1min", "5min", "15min", "30min", "60min"}
+    if normalized in minute_periods:
+        days = max(5, min(120, count // 40 + 3))
+    elif normalized in {"1w", "w", "week", "weekly"}:
+        days = max(180, min(4000, count * 14))
+    elif raw_period == "1M" or normalized in {"month", "monthly"}:
+        days = max(365, min(7000, count * 45))
+    else:
+        days = max(60, min(1200, count * 3))
+
+    begin = today - timedelta(days=days)
+    return int(begin.strftime("%Y%m%d")), int(today.strftime("%Y%m%d"))
+
+
+async def _provider_capabilities(provider: Any) -> set[DataCapability] | None:
+    getter = getattr(provider, "get_capabilities", None)
+    if not callable(getter):
+        return None
+
+    try:
+        capabilities = getter()
+        if asyncio.iscoroutine(capabilities):
+            capabilities = await capabilities
+    except Exception:
+        return None
+
+    if not isinstance(capabilities, (set, list, tuple)):
+        return None
+
+    normalized: set[DataCapability] = set()
+    for item in capabilities:
+        if isinstance(item, DataCapability):
+            normalized.add(item)
+            continue
+        if isinstance(item, str):
+            try:
+                normalized.add(DataCapability(item))
+            except Exception:
+                continue
+    return normalized
+
+
+async def _supports_amazingdata_capability(provider: Any, capability_key: str) -> bool:
+    required = _AMAZINGDATA_CAPABILITY_REQUIREMENTS.get(capability_key)
+    if not required:
+        return True
+
+    capabilities = await _provider_capabilities(provider)
+    # 无法探测能力时，允许继续按方法探测，避免误判导致功能不可用
+    if capabilities is None:
+        return True
+    return bool(required & capabilities)
+
+
+async def _get_amazingdata_provider_optional(request: Request | None = None) -> Any:
+    try:
+        return await resolve_provider("amazingdata", request=request, strict=False)
+    except Exception as exc:
+        logger.warning(f"AmazingData Provider 获取失败: {exc}")
+        return None
+
+
+async def _get_amazingdata_provider_optional_compat(request: Request | None = None) -> Any:
+    getter = _get_amazingdata_provider_optional
+    try:
+        signature = inspect.signature(getter)
+        arity = sum(
+            1
+            for param in signature.parameters.values()
+            if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        )
+    except (TypeError, ValueError):
+        arity = 0
+
+    if arity == 0:
+        return await getter()
+    return await getter(request)
+
+
+async def _fetch_quote_from_amazingdata(
+    symbol_list: list[str], request: Request | None = None
+) -> tuple[list[dict[str, Any]], str]:
+    provider = await _get_amazingdata_provider_optional_compat(request=request)
+    if provider is None:
+        return [], "amazingdata_unavailable"
+
+    if not await _supports_amazingdata_capability(provider, "realtime_quote"):
+        return [], "capability_realtime_quote_not_supported"
+
+    current_date = int(datetime.now().strftime("%Y%m%d"))
+    call_specs = [
+        ("get_realtime_quote", (), {"code_list": symbol_list}),
+        ("get_realtime_quote", (symbol_list,), {}),
+        ("get_realtime_quotes", (symbol_list,), {}),
+        ("query_snapshot", (), {"code_list": symbol_list, "date": current_date}),
+        ("query_snapshot", (), {"code_list": symbol_list, "begin_date": current_date, "end_date": current_date}),
+    ]
+
+    payload: Any = None
+    last_error = ""
+    for method_name, args, kwargs in call_specs:
+        method = getattr(provider, method_name, None)
+        if not callable(method):
+            continue
+        try:
+            payload = await method(*args, **kwargs)
+            if payload:
+                break
+        except Exception as exc:
+            last_error = f"{method_name}:{exc}"
+            continue
+
+    if not payload:
+        return [], last_error or "no_quote_payload"
+
+    rows = _to_record_rows(payload)
+    quotes: list[dict[str, Any]] = []
+    seen_symbols: set[str] = set()
+
+    for symbol in symbol_list:
+        symbol_rows = _extract_symbol_rows(payload, symbol)
+        if not symbol_rows:
+            symbol_rows = rows
+        if not symbol_rows:
+            continue
+        quote = _build_quote_row(symbol, symbol_rows[0])
+        resolved_symbol = str(quote.get("symbol", symbol))
+        if resolved_symbol in seen_symbols:
+            continue
+        seen_symbols.add(resolved_symbol)
+        quotes.append(quote)
+
+    if not quotes:
+        for row in rows:
+            inferred_symbol = _first_value(row, ["symbol", "code", "stock_code"])
+            symbol = str(inferred_symbol) if inferred_symbol is not None else symbol_list[0]
+            quote = _build_quote_row(symbol, row)
+            resolved_symbol = str(quote.get("symbol", symbol))
+            if resolved_symbol in seen_symbols:
+                continue
+            seen_symbols.add(resolved_symbol)
+            quotes.append(quote)
+
+    return quotes, "ok" if quotes else "no_quote_rows"
+
+
+async def _fetch_kline_from_amazingdata(
+    symbol: str, period: str, count: int, request: Request | None = None
+) -> tuple[list[dict[str, Any]], str]:
+    provider = await _get_amazingdata_provider_optional_compat(request=request)
+    if provider is None:
+        return [], "amazingdata_unavailable"
+
+    if not await _supports_amazingdata_capability(provider, "stock_kline"):
+        return [], "capability_stock_kline_not_supported"
+
+    begin_date, end_date = _estimate_kline_date_range(period, count)
+    start_str = str(begin_date)
+    end_str = str(end_date)
+
+    sdk_period: Any = period
+    try:
+        from core.infrastructure.providers.implementations.amazingdata.amazingdata_types import (
+            period_to_sdk_int,
+        )
+
+        sdk_period = period_to_sdk_int(period)
+    except Exception:
+        sdk_period = period
+
+    call_specs = [
+        (
+            "query_kline",
+            (),
+            {
+                "code_list": [symbol],
+                "begin_date": begin_date,
+                "end_date": end_date,
+                "period": sdk_period,
+            },
+        ),
+        (
+            "query_kline",
+            (),
+            {"code_list": [symbol], "begin_date": begin_date, "end_date": end_date, "period": period},
+        ),
+        (
+            "get_kline_data",
+            (),
+            {
+                "symbol": symbol,
+                "period": period,
+                "start_date": start_str,
+                "end_date": end_str,
+                "limit": count,
+            },
+        ),
+        (
+            "get_stock_hist",
+            (),
+            {
+                "symbol": symbol,
+                "period": period,
+                "start_date": start_str,
+                "end_date": end_str,
+                "limit": count,
+            },
+        ),
+    ]
+
+    payload: Any = None
+    last_error = ""
+    for method_name, args, kwargs in call_specs:
+        method = getattr(provider, method_name, None)
+        if not callable(method):
+            continue
+        try:
+            payload = await method(*args, **kwargs)
+            if payload:
+                break
+        except Exception as exc:
+            last_error = f"{method_name}:{exc}"
+            continue
+
+    if not payload:
+        return [], last_error or "no_kline_payload"
+
+    rows = _extract_symbol_rows(payload, symbol)
+    if not rows:
+        rows = _to_record_rows(payload, default_symbol=symbol)
+
+    if not rows:
+        return [], "no_kline_rows"
+
+    kline_rows = [_build_kline_row(row) for row in rows]
+    kline_rows = [
+        row
+        for row in kline_rows
+        if row["time"] > 0
+        or row["time_str"]
+        or any(row[key] > 0 for key in ("open", "high", "low", "close", "volume", "amount"))
+    ]
+    kline_rows.sort(key=lambda item: (item["time"], item["time_str"]))
+    if count > 0:
+        kline_rows = kline_rows[-count:]
+    return kline_rows, "ok" if kline_rows else "no_kline_rows"
 
 
 @router.get("/status")
@@ -754,59 +1248,43 @@ async def get_xtdata_quote(
     Returns:
         简化的行情数据
     """
+    symbol_list = _parse_symbol_list(symbols)
+    if not symbol_list:
+        raise HTTPException(status_code=400, detail="请提供股票代码")
+
     try:
-        provider = await get_miniqmt_provider()
-
-        symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
-        if not symbol_list:
-            raise HTTPException(status_code=400, detail="请提供股票代码")
-
-        result = await provider.call("get_full_tick", stock_list=symbol_list)
-
-        if not result:
+        payload = await query_capability_bridge(
+            capability="realtime_quote",
+            params={"codes": symbol_list},
+        )
+        return _legacy_payload_with_trace(payload)
+    except HTTPException as exc:
+        logger.warning(f"统一查询桥接失败，退回旧 AmazingData 回退逻辑: {exc}")
+        amazingdata_quotes, fallback_reason = await _fetch_quote_from_amazingdata(symbol_list)
+        if amazingdata_quotes:
             return {
-                "success": False,
-                "message": "MiniQMT 未连接或无数据",
-                "data": [],
+                "success": True,
+                "data": amazingdata_quotes,
+                "count": len(amazingdata_quotes),
+                "source": "amazingdata",
+                "fallback": True,
+                "fallback_reason": "provider_unavailable",
                 "timestamp": datetime.now().isoformat(),
             }
-
-        # 转换为列表格式，便于前端表格展示
-        quotes = []
-        for symbol, tick in result.items():
-            if isinstance(tick, dict):
-                last_price = tick.get("lastPrice", 0)
-                pre_close = tick.get("preClose", 0)
-                change = last_price - pre_close if last_price and pre_close else 0
-                change_pct = (change / pre_close * 100) if pre_close else 0
-
-                quotes.append(
-                    {
-                        "symbol": symbol,
-                        "name": symbol,
-                        "lastPrice": last_price,
-                        "change": round(change, 2),
-                        "changePct": round(change_pct, 2),
-                        "open": tick.get("open"),
-                        "high": tick.get("high"),
-                        "low": tick.get("low"),
-                        "volume": tick.get("volume"),
-                        "amount": tick.get("amount"),
-                    }
-                )
-
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
         return {
-            "success": True,
-            "data": quotes,
-            "count": len(quotes),
+            "success": False,
+            "message": detail.get("message", "获取实时行情失败"),
+            "data": [],
+            "count": 0,
+            "source": "none",
+            "fallback": False,
+            "reason": {
+                "bridge": detail,
+                "amazingdata": fallback_reason,
+            },
             "timestamp": datetime.now().isoformat(),
         }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取 xtdata quote 失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/xtdata/kline")
@@ -826,125 +1304,49 @@ async def get_xtdata_kline(
     Returns:
         K线数据列表
     """
-    import math
-
     try:
-        provider = await get_miniqmt_provider()
-
-        # 先尝试下载数据
-        try:
-            await provider.call("download_history_data", stock_code=symbol, period=period, count=-1)
-        except Exception:
-            pass
-
-        # 通过 Actor 获取 K 线数据
-        result = await provider.call(
-            "get_market_data",
-            field_list=[],
-            stock_list=[symbol],
-            period=period,
-            count=count,
+        payload = await query_capability_bridge(
+            capability="stock_kline",
+            params={
+                "code": symbol,
+                "period": period,
+                "limit": count,
+            },
         )
-
-        if not isinstance(result, dict) or not result:
+        legacy_payload = _legacy_payload_with_trace(payload)
+        legacy_payload.update({"symbol": symbol, "period": period})
+        return legacy_payload
+    except HTTPException as exc:
+        logger.warning(f"统一查询桥接失败，退回旧 AmazingData 回退逻辑: {exc}")
+        fallback_klines, fallback_reason = await _fetch_kline_from_amazingdata(symbol, period, count)
+        if fallback_klines:
             return {
-                "success": False,
-                "message": "未获取到K线数据",
-                "data": [],
+                "success": True,
+                "symbol": symbol,
+                "period": period,
+                "data": fallback_klines,
+                "count": len(fallback_klines),
+                "source": "amazingdata",
+                "fallback": True,
+                "fallback_reason": "provider_unavailable",
                 "timestamp": datetime.now().isoformat(),
             }
-
-        # Actor 已将 DataFrame 转换为 list[dict] 格式
-        open_records = result.get("open", [])
-        high_records = result.get("high", [])
-        low_records = result.get("low", [])
-        close_records = result.get("close", [])
-        volume_records = result.get("volume", [])
-        amount_records = result.get("amount", [])
-
-        if not open_records:
-            return {
-                "success": False,
-                "message": "K线数据为空，可能需要先下载历史数据",
-                "data": [],
-                "timestamp": datetime.now().isoformat(),
-            }
-
-        # 从记录中提取目标股票的数据
-        def find_symbol_record(records: list, target_symbol: str) -> dict:
-            for rec in records:
-                if rec.get("index") == target_symbol:
-                    return rec
-            return {}
-
-        open_rec = find_symbol_record(open_records, symbol)
-        high_rec = find_symbol_record(high_records, symbol)
-        low_rec = find_symbol_record(low_records, symbol)
-        close_rec = find_symbol_record(close_records, symbol)
-        volume_rec = find_symbol_record(volume_records, symbol)
-        amount_rec = find_symbol_record(amount_records, symbol)
-
-        if not open_rec:
-            return {
-                "success": False,
-                "message": f"未找到股票 {symbol} 的数据",
-                "data": [],
-                "timestamp": datetime.now().isoformat(),
-            }
-
-        # 提取时间列
-        time_keys = [k for k in open_rec.keys() if k != "index"]
-        time_keys.sort()
-
-        klines = []
-        for time_str in time_keys:
-            try:
-                if isinstance(time_str, str) and len(time_str) == 8:
-                    ts = int(datetime.strptime(time_str, "%Y%m%d").timestamp() * 1000)
-                elif isinstance(time_str, (int, float)):
-                    ts = int(time_str)
-                else:
-                    ts = int(datetime.strptime(str(time_str), "%Y%m%d").timestamp() * 1000)
-            except Exception:
-                ts = 0
-
-            def safe_float(val: Any) -> float:
-                if val is None or (isinstance(val, float) and math.isnan(val)):
-                    return 0.0
-                return float(val)
-
-            def safe_int(val: Any) -> int:
-                if val is None or (isinstance(val, float) and math.isnan(val)):
-                    return 0
-                return int(val)
-
-            klines.append(
-                {
-                    "time": ts,
-                    "time_str": str(time_str),
-                    "open": safe_float(open_rec.get(time_str)),
-                    "high": safe_float(high_rec.get(time_str)),
-                    "low": safe_float(low_rec.get(time_str)),
-                    "close": safe_float(close_rec.get(time_str)),
-                    "volume": safe_int(volume_rec.get(time_str)),
-                    "amount": safe_float(amount_rec.get(time_str)),
-                }
-            )
-
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
         return {
-            "success": True,
+            "success": False,
             "symbol": symbol,
             "period": period,
-            "data": klines,
-            "count": len(klines),
+            "message": detail.get("message", "获取K线数据失败"),
+            "data": [],
+            "count": 0,
+            "source": "none",
+            "fallback": False,
+            "reason": {
+                "bridge": detail,
+                "amazingdata": fallback_reason,
+            },
             "timestamp": datetime.now().isoformat(),
         }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取 xtdata kline 失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/xtdata/status")
@@ -995,39 +1397,23 @@ async def get_sectors() -> Dict[str, Any]:
         板块列表，包含板块名称和代码
     """
     try:
-        provider = await get_miniqmt_provider()
-
-        result = await provider.call("get_sector_list")
-
-        if not result:
-            return {
-                "success": False,
-                "message": "未获取到板块数据",
-                "data": [],
-                "timestamp": datetime.now().isoformat(),
-            }
-
-        # 格式化数据
-        sectors = []
-        if isinstance(result, list):
-            for sector in result:
-                if isinstance(sector, str):
-                    sectors.append({"name": sector, "code": sector})
-                elif isinstance(sector, dict):
-                    sectors.append(sector)
-
+        payload = await query_capability_bridge(
+            capability="sector_list",
+            params={},
+        )
+        return _legacy_payload_with_trace(payload)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
         return {
-            "success": True,
-            "data": sectors,
-            "count": len(sectors),
+            "success": False,
+            "message": detail.get("message", "未获取到板块数据"),
+            "data": [],
+            "count": 0,
+            "source": "none",
+            "fallback": False,
+            "reason": detail,
             "timestamp": datetime.now().isoformat(),
         }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取板块列表失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/xtdata/sector/stocks")
@@ -1044,31 +1430,35 @@ async def get_sector_stocks(
         板块内的股票代码列表
     """
     try:
-        provider = await get_miniqmt_provider()
-
-        result = await provider.call("get_stock_list_in_sector", sector_name=sector)
-
-        if not result:
-            return {
-                "success": False,
-                "message": f"未获取到板块 '{sector}' 的成分股",
-                "data": [],
-                "timestamp": datetime.now().isoformat(),
-            }
-
+        payload = await query_capability_bridge(
+            capability="sector_stocks",
+            params={"sector_name": sector, "sector_type": "industry"},
+        )
+        data = payload.get("data", [])
+        symbols: list[Any] = []
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    symbols.append(item.get("symbol") or item.get("code") or item.get("name"))
+                else:
+                    symbols.append(item)
+        cleaned = [str(item) for item in symbols if item]
+        base = _legacy_payload_with_trace(payload)
+        base.update({"sector": sector, "data": cleaned, "count": len(cleaned)})
+        return base
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
         return {
-            "success": True,
+            "success": False,
+            "message": detail.get("message", f"未获取到板块 '{sector}' 的成分股"),
             "sector": sector,
-            "data": result if isinstance(result, list) else list(result),
-            "count": len(result),
+            "data": [],
+            "count": 0,
+            "source": "none",
+            "fallback": False,
+            "reason": detail,
             "timestamp": datetime.now().isoformat(),
         }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取板块成分股失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/xtdata/instrument")
@@ -1648,55 +2038,27 @@ async def get_sector_capital_flow(
         板块资金流向排名数据
     """
     try:
-        import akshare as ak
-        import pandas as pd
-
-        # 调用 akshare 接口获取板块资金流向排名
-        df = ak.stock_sector_fund_flow_rank(indicator=indicator, sector_type=sector_type)
-
-        if df is None or df.empty:
-            return {
-                "success": False,
-                "message": "未获取到板块资金流向数据",
-                "data": [],
-                "timestamp": datetime.now().isoformat(),
-            }
-
-        # 转换 DataFrame 为列表
-        # 处理 NaN 和 Infinity 值
-        df = df.replace([float("inf"), float("-inf")], None)
-        df = df.where(pd.notnull(df), None)
-
-        # 转换为 JSON 可序列化格式
-        records = df.to_dict("records")
-
-        # 清理 None 值和格式化数字
-        cleaned_records = []
-        for record in records:
-            cleaned: Dict[str, Any] = {}
-            for k, v in record.items():
-                if v is None or (isinstance(v, float) and pd.isna(v)):
-                    cleaned[k] = None
-                elif isinstance(v, float):
-                    cleaned[k] = round(v, 4)
-                else:
-                    cleaned[k] = v
-            cleaned_records.append(cleaned)
-
+        payload = await query_capability_bridge(
+            capability="sector_capital_flow",
+            params={"indicator": indicator, "sector_type": sector_type},
+        )
+        base = _legacy_payload_with_trace(payload)
+        base.update({"indicator": indicator, "sector_type": sector_type})
+        return base
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
         return {
-            "success": True,
+            "success": False,
+            "message": detail.get("message", "未获取到板块资金流向数据"),
             "indicator": indicator,
             "sector_type": sector_type,
-            "data": cleaned_records,
-            "count": len(cleaned_records),
+            "data": [],
+            "count": 0,
+            "source": "none",
+            "fallback": False,
+            "reason": detail,
             "timestamp": datetime.now().isoformat(),
         }
-
-    except ImportError:
-        raise HTTPException(status_code=503, detail="akshare 未安装，请运行: pip install akshare")
-    except Exception as e:
-        logger.error(f"获取板块资金流向失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/xtdata/stock-list")

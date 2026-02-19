@@ -3,15 +3,16 @@
  * 封装市场数据 API 调用，提供业务逻辑和缓存策略
  */
 
-import { marketDataLiveApi } from '@/api/marketDataLive'
-import type {
-    StrengthResponse,
-    BoardOverviewResponse,
-    OrderImbalanceResponse,
-    AuctionQualityResponse,
-    ConceptFlowResponse,
-    RealtimeSourceStatus,
-    DataSourceSwitchResponse,
+import {
+    marketDataLiveApi,
+    type StrengthResponse,
+    type BoardOverviewResponse,
+    type OrderImbalanceResponse,
+    type AuctionQualityResponse,
+    type ConceptFlowResponse,
+    type ConceptFlowPeriod,
+    type RealtimeSourceStatus,
+    type DataSourceSwitchResponse,
 } from '@/api/marketDataLive'
 
 // ============ 查询参数类型 ============
@@ -38,6 +39,12 @@ export interface OrderImbalanceParams {
 
 export interface AuctionQualityParams {
     boards?: string
+    source?: string | null
+}
+
+export interface ConceptFlowParams {
+    period?: ConceptFlowPeriod
+    limit?: number
     source?: string | null
 }
 
@@ -102,7 +109,7 @@ export const marketDataService = {
     /**
      * 获取概念资金流排行 (替代订单失衡)
      */
-    async getConceptFlow(params?: { limit?: number; source?: string | null }): Promise<ConceptFlowResponse> {
+    async getConceptFlow(params?: ConceptFlowParams): Promise<ConceptFlowResponse> {
         return marketDataLiveApi.getConceptFlow(params)
     },
 

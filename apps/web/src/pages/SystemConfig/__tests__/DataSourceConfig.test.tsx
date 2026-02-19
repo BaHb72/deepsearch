@@ -27,13 +27,18 @@ jest.mock('antd', () => {
 
 const mockUseAsyncData = jest.fn()
 const mockUseModal = jest.fn()
+const mockUseDataSourceStatus = jest.fn()
 
 jest.mock('@/hooks', () => ({
   useModal: (...args: any[]) => mockUseModal(...args),
   useAsyncData: (...args: any[]) => mockUseAsyncData(...args),
 }))
 
-jest.mock('@/api/systemConfig', () => ({
+jest.mock('@/stores', () => ({
+  useDataSourceStatus: (...args: any[]) => mockUseDataSourceStatus(...args),
+}))
+
+jest.mock('@/api/config/dataSourceConfig', () => ({
   fetchDataSources: jest.fn(),
   fetchDataSourceHealth: jest.fn(),
   createDataSource: jest.fn(),
@@ -41,23 +46,17 @@ jest.mock('@/api/systemConfig', () => ({
   deleteDataSource: jest.fn(),
   testDataSource: jest.fn(),
   toggleDataSource: jest.fn(),
-  updateDataSourceConfig: jest.fn(),
 }))
 
-const createAsyncResult = <T,>(data: T) => ({
-  data,
-  loading: false,
-  refresh: jest.fn(),
-  error: null,
-  execute: jest.fn(),
-  initialized: true,
-  reset: jest.fn(),
-  setData: jest.fn(),
-})
+jest.mock('@/api/config/systemImport', () => ({
+  fetchGlobalDataSourceConfig: jest.fn(async () => ({})),
+  updateDataSourceConfig: jest.fn(),
+}))
 
 describe('DataSourceConfig 状态与凭证交互', () => {
   let dataSourcesState: any[]
   let healthState: Record<string, any>
+  let summaryState: Record<string, any>
 
   beforeEach(() => {
     Object.values(mockMessageApi).forEach(fn => fn.mockClear())
@@ -74,11 +73,29 @@ describe('DataSourceConfig 状态与凭证交互', () => {
 
     dataSourcesState = []
     healthState = {}
+    summaryState = {}
 
-    mockUseAsyncData.mockImplementation((_, options) => {
-      const isDataFetch = options && Object.prototype.hasOwnProperty.call(options, 'onError')
-      const payload = isDataFetch ? dataSourcesState : healthState
-      return createAsyncResult(payload)
+    mockUseDataSourceStatus.mockImplementation(() => {
+      const counts = dataSourcesState.reduce((acc: Record<string, number>, item: Record<string, unknown>) => {
+        const status = String(item.status || 'offline')
+        acc[status] = (acc[status] || 0) + 1
+        return acc
+      }, {})
+
+      return {
+        dataSources: dataSourcesState,
+        summary: {
+          total: dataSourcesState.length,
+          availableCount: healthState?.availableCount ?? 0,
+          counts,
+          ...summaryState,
+        },
+        health: healthState,
+        loading: false,
+        error: null,
+        fetchStatus: jest.fn(async () => undefined),
+        refreshStatus: jest.fn(async () => undefined),
+      }
     })
   })
 
@@ -208,6 +225,22 @@ describe('DataSourceConfig 状态与凭证交互', () => {
       availableCount: 1,
     }
 
+    mockUseModal
+      .mockReturnValueOnce({
+        visible: false,
+        data: null,
+        open: jest.fn(),
+        close: jest.fn(),
+        setLoading: jest.fn(),
+      })
+      .mockReturnValueOnce({
+        visible: true,
+        data: dataSourcesState[0],
+        open: jest.fn(),
+        close: jest.fn(),
+        setLoading: jest.fn(),
+      })
+
     renderComponent()
 
     expect(screen.getByText('已保存')).toBeInTheDocument()
@@ -228,7 +261,7 @@ describe('DataSourceConfig 状态与凭证交互', () => {
         id: 'alert-source',
         name: '主数据源',
         type: 'amazingdata',
-        status: 'active',
+        status: 'degraded',
         enabled: true,
         priority: 1,
         config: { host: 'host', port: 8600 },

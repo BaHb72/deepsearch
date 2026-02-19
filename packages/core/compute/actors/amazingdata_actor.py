@@ -285,10 +285,24 @@ class AmazingDataActor:
             logger.warning("[{}] 检查分布式会话失败: {}", _ACTOR_ID, e)
             return False
 
+    @staticmethod
+    def _resolve_sdk_module() -> Any:
+        """统一解析 AmazingData SDK 模块并校验可用性。"""
+        from core.infrastructure.providers.implementations.amazingdata._sdk_loader import (
+            HAS_AMAZINGDATA,
+            IMPORT_ERROR,
+            ad,
+        )
+
+        if not HAS_AMAZINGDATA or ad is None:
+            detail = str(IMPORT_ERROR) if IMPORT_ERROR else "unknown import error"
+            raise RuntimeError(f"AmazingData SDK 不可用: {detail}")
+        return ad
+
     async def _init_sdk_objects_without_login(self) -> bool:
         """初始化 SDK 数据对象（不调用 login，复用会话）"""
         try:
-            import AmazingData as sdk
+            sdk = self._resolve_sdk_module()
 
             self._sdk = sdk
             self._base_data = sdk.BaseData()  # type: ignore[misc]
@@ -399,7 +413,7 @@ class AmazingDataActor:
             # 步骤 1: 导入 SDK
             step_start = time_module.time()
             logger.info("[{}] [步骤1/5] 导入 AmazingData SDK...", _ACTOR_ID)
-            import AmazingData as sdk
+            sdk = self._resolve_sdk_module()
 
             logger.info(
                 "[{}] [步骤1/5] SDK 导入成功 | 耗时={:.3f}s",

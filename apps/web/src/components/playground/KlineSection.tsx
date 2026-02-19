@@ -15,6 +15,7 @@ import { ExtendedFieldsPanel } from '@/components/common/ExtendedFieldsPanel'
 export interface KlineSectionProps {
     stockCode: string
     preferredSource?: DataSourceType
+    onSuggestSourceSwitch?: (source: DataSourceType) => void
     defaultPeriod?: string
     /** 是否显示扩展字段面板 */
     showExtended?: boolean
@@ -32,6 +33,7 @@ const PERIOD_OPTIONS = [
 export const KlineSection: React.FC<KlineSectionProps> = ({
     stockCode,
     preferredSource,
+    onSuggestSourceSwitch,
     defaultPeriod = '1d',
     showExtended = true,
 }) => {
@@ -44,6 +46,13 @@ export const KlineSection: React.FC<KlineSectionProps> = ({
         preferredSource,
         autoFetch: true,
         deps: [stockCode, period],
+        monitor: {
+            pageKey: 'dev/playground',
+            pageName: '数据源沙盒',
+            moduleKey: 'quote',
+            moduleName: '行情数据',
+            onSwitchSource: onSuggestSourceSwitch,
+        },
     })
 
     // 合并所有扩展字段（K线数据有多条）

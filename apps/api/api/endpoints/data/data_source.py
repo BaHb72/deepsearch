@@ -4,15 +4,46 @@
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from loguru import logger
 from pydantic import BaseModel
 
-from apps.api.api.providers import get_akshare_provider
+from apps.api.api.provider_deps import get_akshare_provider
 
 router = APIRouter(prefix="/api/data-source", tags=["数据源"])
+
+
+def _worker_urls(provider: Any) -> list[str]:
+    raw = getattr(provider, "worker_urls", [])
+    if isinstance(raw, list):
+        return [str(item) for item in raw if item]
+    return []
+
+
+def _worker_stats(provider: Any) -> Dict[str, Dict[str, Any]]:
+    raw = getattr(provider, "worker_stats", {})
+    return raw if isinstance(raw, dict) else {}
+
+
+def _worker_health(provider: Any) -> Dict[str, bool]:
+    raw = getattr(provider, "worker_health", {})
+    return raw if isinstance(raw, dict) else {}
+
+
+def _provider_name(provider: Any) -> str:
+    name = getattr(provider, "name", None)
+    if isinstance(name, str) and name.strip():
+        return name
+    return provider.__class__.__name__
+
+
+def _provider_display_name(provider: Any) -> str:
+    display_name = getattr(provider, "display_name", None)
+    if isinstance(display_name, str) and display_name.strip():
+        return display_name
+    return _provider_name(provider)
 
 
 class WorkerTestRequest(BaseModel):
@@ -36,9 +67,11 @@ async def get_worker_status(provider=Depends(get_akshare_provider)):
     """获取所有 Worker 节点状态"""
 
     workers = []
-    for url in provider.worker_urls:
-        stats = provider.worker_stats.get(url, {})
-        health = provider.worker_health.get(url, False)
+    worker_stats = _worker_stats(provider)
+    worker_health = _worker_health(provider)
+    for url in _worker_urls(provider):
+        stats = worker_stats.get(url, {})
+        health = worker_health.get(url, False)
 
         success_rate = 0
         if stats.get("total_requests", 0) > 0:
@@ -64,7 +97,10 @@ async def get_worker_status(provider=Depends(get_akshare_provider)):
 @router.get("/stats")
 async def get_statistics(provider=Depends(get_akshare_provider)):
     """获取数据源统计信息"""
-    stats = provider.get_statistics()
+    get_statistics_fn = getattr(provider, "get_statistics", None)
+    stats = get_statistics_fn() if callable(get_statistics_fn) else {}
+    if not isinstance(stats, dict):
+        stats = {}
 
     # 计算额外的统计信息
     total_requests = stats.get("total_requests", 0)
@@ -98,10 +134,14 @@ async def get_statistics(provider=Depends(get_akshare_provider)):
 async def test_worker(request: WorkerTestRequest, provider=Depends(get_akshare_provider)):
     """测试特定 Worker 节点"""
 
-    if request.url not in provider.worker_urls:
+    worker_urls = _worker_urls(provider)
+    if request.url not in worker_urls:
         raise HTTPException(status_code=404, detail="Worker 不存在")
 
     try:
+        if not hasattr(provider, "_check_worker_health"):
+            raise HTTPException(status_code=400, detail="当前 Provider 不支持 Worker 健康检查")
+
         # 执行健康检查
         health = await provider._check_worker_health(request.url)
 
@@ -200,16 +240,23 @@ async def websocket_logs(websocket: WebSocket):
 async def get_config(provider=Depends(get_akshare_provider)):
     """获取数据源配置"""
 
+    worker_urls = _worker_urls(provider)
+    cache_ttl = getattr(provider, "_cache_ttl", {})
+    if not isinstance(cache_ttl, dict):
+        cache_ttl = {}
+
+    supports_worker_health = hasattr(provider, "_check_worker_health")
+
     return {
-        "provider_name": provider.name,
-        "display_name": provider.display_name,
-        "worker_urls": provider.worker_urls,
-        "cache_ttl": provider._cache_ttl,
+        "provider_name": _provider_name(provider),
+        "display_name": _provider_display_name(provider),
+        "worker_urls": worker_urls,
+        "cache_ttl": cache_ttl,
         "features": {
-            "proxy_enabled": True,
+            "proxy_enabled": bool(worker_urls),
             "cache_enabled": True,
-            "health_monitoring": True,
-            "auto_failover": True,
+            "health_monitoring": supports_worker_health,
+            "auto_failover": supports_worker_health,
         },
     }
 
@@ -218,13 +265,22 @@ async def get_config(provider=Depends(get_akshare_provider)):
 async def refresh_workers(provider=Depends(get_akshare_provider)):
     """刷新 Worker 状态"""
 
+    worker_urls = _worker_urls(provider)
+    worker_health = _worker_health(provider)
+    if not hasattr(provider, "_check_worker_health"):
+        return {
+            "message": "当前 Provider 不支持 Worker 刷新，已跳过",
+            "healthy_count": 0,
+            "total_count": 0,
+        }
+
     # 重新检查所有 Worker 健康状态
-    for url in provider.worker_urls:
+    for url in worker_urls:
         health = await provider._check_worker_health(url)
-        provider.worker_health[url] = health
+        worker_health[url] = health
 
     return {
         "message": "Worker 状态已刷新",
-        "healthy_count": sum(1 for h in provider.worker_health.values() if h),
-        "total_count": len(provider.worker_urls),
+        "healthy_count": sum(1 for h in worker_health.values() if h),
+        "total_count": len(worker_urls),
     }

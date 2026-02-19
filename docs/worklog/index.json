@@ -1,7 +1,97 @@
 {
   "version": "1.0",
-  "updated_at": "2026-02-16T15:50:00+08:00",
+  "updated_at": "2026-02-17T20:30:00+08:00",
   "entries": [
+    {
+      "path": "2026/02/2026-02-17_dask-runtime-version-alignment-numpy-pandas.md",
+      "date": "2026-02-17",
+      "module": "dask, docker, diagnostics",
+      "action": "dask-runtime-version-alignment-numpy-pandas",
+      "type": "bugfix",
+      "summary": "对齐 Dask 运行时 numpy/pandas 漂移并扩展 strict 校验覆盖 pandas，消除 client/scheduler/worker 版本告警",
+      "keywords": ["dask", "distributed", "numpy", "pandas", "docker", "scheduler", "worker", "version-alignment", "strict-check"],
+      "files": ["docker/pyproject.worker.toml", "tools/validate_dask_version_alignment.py", "2026-02-17_dask-runtime-version-alignment-numpy-pandas.md"]
+    },
+    {
+      "path": "2026/02/2026-02-17_ttrading-stop-bleeding-failover-and-runtime-guard.md",
+      "date": "2026-02-17",
+      "module": "strategy-center, ttrading, provider-factory",
+      "action": "ttrading-stop-bleeding-failover-and-runtime-guard",
+      "type": "bugfix",
+      "summary": "为 ttrading 增加 MiniQMT->AmazingData->AkShare 回退链路与 strict 软失败守护，避免单源失败升级为全链路 500",
+      "keywords": ["ttrading", "miniqmt", "amazingdata", "akshare", "failover", "strict", "503", "runtime-guard", "stability"],
+      "files": ["ttrading.py", "providers.py", "test_strategy_center_ttrading_api.py", "test_strategy_center_ttrading_failover.py", "test_strategy_center_ttrading_kline_collector_reuse.py", "test_ttrading_providers.py"]
+    },
+    {
+      "path": "2026/02/2026-02-17_amazingdata-all-apis-test-fixture-process-isolation-fix.md",
+      "date": "2026-02-17",
+      "module": "amazingdata-tests, provider-test-fixture",
+      "action": "amazingdata-all-apis-test-fixture-process-isolation-fix",
+      "type": "bugfix",
+      "summary": "修复全接口历史测试夹具与当前进程隔离守卫不兼容问题，消除 28 个假失败",
+      "keywords": ["amazingdata", "pytest", "fixture", "process-isolation", "mock", "tgwerror", "regression"],
+      "files": ["tests/test_amazingdata_all_apis.py", "docs/issues/resolved/2026-02-17_amazingdata-all-apis-test-fixture-process-isolation-mismatch.md"]
+    },
+    {
+      "path": "2026/02/2026-02-17_amazingdata-interface-alignment-via-doc-and-pyc.md",
+      "date": "2026-02-17",
+      "module": "amazingdata-extended, dask-adapter, api-endpoints",
+      "action": "amazingdata-interface-alignment-via-doc-and-pyc",
+      "type": "bugfix",
+      "summary": "基于最新文档与 SDK 1.0.28 pyc 反编译对齐接口，补齐缺失方法并修正期权月合约命名",
+      "keywords": ["amazingdata", "sdk", "pyc", "reverse-engineering", "interface-alignment", "option", "kzz", "basic-data", "dask-adapter"],
+      "files": ["amazingdata_extended.py", "dask_adapter.py", "basic_data.py", "option.py", "router.py", "test_amazingdata_interface_alignment.py", "2026-02-17_amazingdata-interface-alignment-with-sdk-1.0.28.md"]
+    },
+    {
+      "path": "2026/02/2026-02-17_amazingdata-sdk-import-compat-fix.md",
+      "date": "2026-02-17",
+      "module": "amazingdata-loader, amazingdata-extended, provider-init",
+      "action": "amazingdata-sdk-import-compat-fix",
+      "type": "bugfix",
+      "summary": "修复 tgw Login/login 兼容断裂与模块级 __getattr__ 导入期误触发，恢复 AmazingData 模块稳定导入",
+      "keywords": ["amazingdata", "tgw", "login", "Login", "__getattr__", "import", "compatibility", "provider"],
+      "files": ["__init__.py", "amazingdata_extended.py", "_sdk_loader.py", "test_amazingdata_provider_resolution.py", "test_fastapi_integration.py"]
+    },
+    {
+      "path": "2026/02/2026-02-17_provider-contract-and-image-config-hardening.md",
+      "date": "2026-02-17",
+      "module": "amazingdata-api, provider-fastapi-integration, docker-dask",
+      "action": "provider-contract-and-image-config-hardening",
+      "type": "bugfix",
+      "summary": "修复 AmazingData 登录实例缓存键污染、FastAPI 预加载配置扁平化、Dask 镜像配置泄露边界问题",
+      "keywords": ["amazingdata", "provider", "check_health", "health_check", "fastapi", "preload", "akshare", "config", "docker", "dask", "security", "track"],
+      "files": ["amazingdata_api.py", "fastapi.py", "Dockerfile.dask", "test_amazingdata_provider_resolution.py", "test_fastapi_integration.py", "test_dockerfile_dask_security.py", "docs/issues/resolved/2026-02-17_provider-contract-config-preload-and-docker-secrets-boundary.md"]
+    },
+    {
+      "path": "2026/02/2026-02-17_amazingdata-probe-stability-root-cause-and-plan.md",
+      "date": "2026-02-17",
+      "module": "amazingdata, dask, diagnostics",
+      "action": "probe-stability-root-cause-and-plan",
+      "type": "research",
+      "summary": "定位 probe 抖动主因并完成 Phase 1，已产出 5 轮 strict 基线（ok_rate=1.0, p95=23.324s）",
+      "keywords": ["amazingdata", "probe", "check-amazingdata", "dask", "scheduler", "worker", "gather", "network", "route", "diagnostics", "plan"],
+      "files": ["start_windows_dask.ps1", "Dockerfile.dask", "main.py", "providers.py", "test_check_amazingdata_command.py", "measure_amazingdata_probe_stability.py", "2026-02-17_amazingdata-probe-stability-research-and-remediation-plan.md"]
+    },
+    {
+      "path": "2026/02/2026-02-16_amazingdata-progress-and-next-plan.md",
+      "date": "2026-02-16",
+      "module": "amazingdata, diagnostics, provider",
+      "action": "progress-and-next-plan",
+      "type": "plan",
+      "summary": "记录 AmazingData 当前可用性边界，确认主链路可用并明确独立 CLI 真实探测稳定性治理计划",
+      "keywords": ["amazingdata", "progress", "plan", "check-amazingdata", "probe-calendar", "actor", "timeout", "provider-convergence", "diagnostics"],
+      "files": ["main.py", "data_sources.yaml", "test_check_amazingdata_command.py", "2026-02-16_amazingdata-provider-resolution-and-real-path-validation.md", "2026-02-16_amazingdata-real-path-verification-gap.md"]
+    },
+    {
+      "path": "2026/02/2026-02-16_amazingdata-provider-resolution-and-real-path-validation.md",
+      "date": "2026-02-16",
+      "module": "amazingdata-api, provider, integration-test",
+      "action": "provider-resolution-and-real-path-validation",
+      "type": "bugfix",
+      "summary": "收敛 AmazingData provider 解析路径，修复配置优先级与 Worker 启动脚本问题，并完成本机与 Docker Scheduler 双路径真实验证",
+      "keywords": ["amazingdata", "provider", "actor-wrapper", "single-connection", "api", "validation", "check-amazingdata", "dask-worker", "config-precedence", "powershell51", "track"],
+      "files": ["amazingdata_api.py", "main.py", "config.py", "start_windows_dask.ps1", "Dockerfile.dask", "test_amazingdata_provider_resolution.py", "test_check_amazingdata_command.py", "test_amazingdata_config_resolution.py", "test_amazingdata_working.py", "docs/issues/README.md"]
+    },
     {
       "path": "2026/02/2026-02-16_dask-version-alignment-closure.md",
       "date": "2026-02-16",

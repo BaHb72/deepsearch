@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 from core.compute.plugins.base_plugin import BaseWorkerPlugin
@@ -60,6 +61,10 @@ class RedisTaskListener:
         self._redis_url = redis_url
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._runtime_marker_value = f"ready:{worker.address}"
+        self._last_marker_refresh = 0.0
+        self._marker_refresh_interval = 3.0
+        self._marker_ttl_seconds = 12
 
     def start(self) -> None:
         """启动监听线程"""
@@ -83,9 +88,12 @@ class RedisTaskListener:
         import redis
 
         r = redis.from_url(self._redis_url)  # type: ignore[attr-defined]
+        self._refresh_runtime_markers(r, force=True)
 
         while not self._stop_event.is_set():
             try:
+                self._refresh_runtime_markers(r)
+
                 # BLPOP 阻塞 1 秒，超时后检查 stop_event
                 result = r.blpop(TASK_QUEUE_KEY, timeout=1)
                 if result is None:
@@ -110,9 +118,44 @@ class RedisTaskListener:
                 self._stop_event.wait(1.0)
 
         try:
+            self._clear_runtime_markers(r)
             r.close()
         except Exception:
             pass
+
+    def _refresh_runtime_markers(self, redis_client: Any, force: bool = False) -> None:
+        """刷新 Actor 运行时标记（ready + heartbeat）。
+
+        目的：当 Worker 因 SDK hard-exit 崩溃后，标记会在短 TTL 后自然消失，
+        API 侧可快速感知并进入降级状态。
+        """
+        now = time.monotonic()
+        if not force and (now - self._last_marker_refresh) < self._marker_refresh_interval:
+            return
+
+        redis_client.setex(
+            "dask_actor_ready:amazingdata",
+            self._marker_ttl_seconds,
+            self._runtime_marker_value,
+        )
+        redis_client.setex(
+            "dask_actor_heartbeat:amazingdata",
+            self._marker_ttl_seconds,
+            self._runtime_marker_value,
+        )
+        self._last_marker_refresh = now
+
+    def _clear_runtime_markers(self, redis_client: Any) -> None:
+        """清理本 Worker 对应的运行时标记（避免误删其他 Worker 的新标记）。"""
+        for key in ("dask_actor_ready:amazingdata", "dask_actor_heartbeat:amazingdata"):
+            try:
+                current = redis_client.get(key)
+                if isinstance(current, bytes):
+                    current = current.decode("utf-8", errors="ignore")
+                if current == self._runtime_marker_value:
+                    redis_client.delete(key)
+            except Exception:
+                logger.debug("[RedisTaskListener] 清理运行时标记失败 | key={}", key, exc_info=True)
 
     def _execute_task(
         self,

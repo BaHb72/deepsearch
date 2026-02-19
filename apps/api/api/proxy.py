@@ -8,11 +8,11 @@ from typing import Any, NotRequired, TypedDict, cast
 
 import yaml
 from core.config import get_config, get_config_dir
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from apps.api.api.providers import get_akshare_provider
+from apps.api.api.provider_deps import get_akshare_provider
 
 
 def _format_last_check(value: Any) -> str | None:
@@ -105,11 +105,9 @@ class WorkersConfigRequest(BaseModel):
 
 
 @router.get("/status")
-async def get_status() -> WorkersStatusResponse:
+async def get_status(provider=Depends(get_akshare_provider)) -> WorkersStatusResponse:
     """获取 Workers 代理状态和配置"""
     try:
-        provider = await get_akshare_provider()
-
         config: WorkersConfig = {
             "enabled": True,
             "workers": [],

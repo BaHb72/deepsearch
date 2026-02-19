@@ -124,17 +124,28 @@ export interface RealtimeSourceStatus {
     status?: string
 }
 
+export type ConceptFlowPeriod = 'realtime' | 'today' | 'week'
+
 // 概念资金流类型
 export interface ConceptFlowItem {
-    board: string
+    concept_name?: string
     concept_code?: string
-    velocity: number
+    main_net_inflow?: number
+    main_net_inflow_pct?: number
+    change_pct?: number
+    leading_stock?: string
+    flow_speed?: number
+    ts?: string
+    // 兼容旧字段，避免影响存量页面
+    board?: string
+    velocity?: number
     lead_stock?: string
     lead_change?: number
     data_source?: string
 }
 
 export interface ConceptFlowResponse extends BaseLiveResponse {
+    period?: ConceptFlowPeriod
     items: ConceptFlowItem[]
     count: number
 }
@@ -152,7 +163,7 @@ export const marketDataLiveApi = {
     getAuctionQuality: (params?: { boards?: string; source?: string | null }) =>
         request.get<AuctionQualityResponse>('/market/live/auction-quality', { params }) as unknown as Promise<AuctionQualityResponse>,
     // 概念资金流 (替代订单失衡)
-    getConceptFlow: (params?: { limit?: number; source?: string | null }) =>
+    getConceptFlow: (params?: { period?: ConceptFlowPeriod; limit?: number; source?: string | null }) =>
         request.get<ConceptFlowResponse>('/market/live/concept-flow', { params }) as unknown as Promise<ConceptFlowResponse>,
     getDataSourceStatus: () =>
         request.get<RealtimeSourceStatus>('/market/live/data-source/status') as unknown as Promise<RealtimeSourceStatus>,

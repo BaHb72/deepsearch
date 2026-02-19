@@ -1,110 +1,106 @@
-"""
-注意：此脚本包含真实 AmazingData SDK 登录和交互，需人工输入。
-标记为手动测试，默认跳过。
-"""
+"""AmazingData 数据量手动测试（通过子进程隔离原生 SDK 崩溃风险）。"""
 
+import importlib.util
+import json
 import os
+import subprocess
 import sys
-import time
+import textwrap
 
 import pytest
 
-try:
-    import AmazingData as ad
-except ImportError as exc:
-    pytest.skip(f"AmazingData 未安装: {exc}", allow_module_level=True)
-
 
 pytestmark = pytest.mark.manual(reason="需要手动环境和凭证")
+
+if importlib.util.find_spec("AmazingData") is None:
+    pytest.skip("AmazingData 未安装", allow_module_level=True)
+
 if not os.getenv("RUN_MANUAL_TESTS"):
     pytest.skip(
-        "手动测试，默认跳过；设置环境变量 RUN_MANUAL_TESTS=1 后再运行。",
+        "手动测试默认跳过；设置 RUN_MANUAL_TESTS=1 后运行。",
         allow_module_level=True,
     )
 
 
-# 配置
-USERNAME = "212200038719"
-PASSWORD = "212200038719@2025"
-HOST = "101.230.159.234"
-PORT = 8600
+def test_amazingdata_data_size_manual_subprocess() -> None:
+    """在子进程执行真实 SDK 调用，避免原生层崩溃拖垮 pytest 主进程。"""
+    username = os.getenv("AMAZINGDATA_USERNAME", "")
+    password = os.getenv("AMAZINGDATA_PASSWORD", "")
+    host = os.getenv("AMAZINGDATA_HOST", "101.230.159.234")
+    port = os.getenv("AMAZINGDATA_PORT", "8600")
 
-print("=" * 60)
-print("AmazingData 数据量测试")
-print("=" * 60)
+    if not username or not password:
+        pytest.skip("缺少 AMAZINGDATA_USERNAME/AMAZINGDATA_PASSWORD，跳过手动真实测试")
 
-# 登录
-print("\n[1] 登录...")
-login_result = ad.login(USERNAME, PASSWORD, HOST, PORT)
-if login_result != 0 and login_result is not True:
-    print(f"登录失败: {login_result}")
-    sys.exit(1)
-print("登录成功")
+    probe_code = textwrap.dedent(
+        """
+        import json
+        import time
 
-# 创建BaseData
-print("\n[2] 创建BaseData对象...")
-base_data = ad.BaseData()
-print("BaseData创建成功")
-
-# 测试get_code_info
-print("\n[3] 调用get_code_info('EXTRA_STOCK_A')...")
-start_time = time.time()
-
-try:
-    code_info = base_data.get_code_info("EXTRA_STOCK_A")
-    elapsed = time.time() - start_time
-
-    print(f"✓ 调用成功，耗时: {elapsed:.2f}秒")
-    print(f"  返回类型: {type(code_info)}")
-
-    if code_info is not None:
-        # 检查数据大小
+        import AmazingData as ad
         import pandas as pd
 
+        username = {username!r}
+        password = {password!r}
+        host = {host!r}
+        port = int({port!r})
+
+        start_login = time.time()
+        login_result = ad.login(username, password, host, port)
+        if login_result not in (0, True):
+            raise RuntimeError(f"login failed: {login_result}")
+
+        base_data = ad.BaseData()
+
+        start_info = time.time()
+        code_info = base_data.get_code_info("EXTRA_STOCK_A")
+        info_elapsed = time.time() - start_info
+
+        info_rows = None
+        info_cols = None
+        info_mem_mb = None
+        sample_json_kb = None
         if isinstance(code_info, pd.DataFrame):
-            print(f"  DataFrame形状: {code_info.shape}")
-            print(f"  列数: {len(code_info.columns)}")
-            print(f"  行数: {len(code_info)}")
+            info_rows = len(code_info)
+            info_cols = len(code_info.columns)
+            info_mem_mb = float(code_info.memory_usage(deep=True).sum()) / 1024 / 1024
+            sample_json_kb = len(code_info.head(10).to_json()) / 1024
 
-            # 估算内存占用
-            memory_usage = code_info.memory_usage(deep=True).sum()
-            print(f"  内存占用: {memory_usage / 1024 / 1024:.2f} MB")
+        start_cal = time.time()
+        calendar = base_data.get_trading_calendar("20240101", "20240131")
+        cal_elapsed = time.time() - start_cal
 
-            # 显示前几列
-            print(f"  列名: {list(code_info.columns)[:10]}...")
+        ad.logout(username)
 
-            # 测试转JSON的大小
-            try:
-                # 只测试前10行
-                sample_json = code_info.head(10).to_json()
-                print(f"  前10行JSON大小: {len(sample_json) / 1024:.2f} KB")
+        payload = {
+            "login_elapsed_sec": round(time.time() - start_login, 3),
+            "code_info_elapsed_sec": round(info_elapsed, 3),
+            "calendar_elapsed_sec": round(cal_elapsed, 3),
+            "code_info_rows": info_rows,
+            "code_info_cols": info_cols,
+            "code_info_mem_mb": None if info_mem_mb is None else round(info_mem_mb, 3),
+            "sample_json_kb": None if sample_json_kb is None else round(sample_json_kb, 3),
+            "calendar_len": None if calendar is None else len(calendar),
+        }
+        print(json.dumps(payload, ensure_ascii=False))
+        """
+    ).format(username=username, password=password, host=host, port=port)
 
-                # 估算全部数据JSON大小
-                estimated_full_size = len(sample_json) * len(code_info) / 10 / 1024 / 1024
-                print(f"  估算完整JSON大小: {estimated_full_size:.2f} MB")
-            except Exception as e:
-                print(f"  JSON转换测试失败: {e}")
+    completed = subprocess.run(
+        [sys.executable, "-c", probe_code],
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
 
-except Exception as e:
-    elapsed = time.time() - start_time
-    print(f"✗ 调用失败，耗时: {elapsed:.2f}秒")
-    print(f"  错误: {e}")
+    assert completed.returncode == 0, (
+        "AmazingData 手动数据量测试失败\n"
+        f"returncode={completed.returncode}\n"
+        f"stdout:\n{completed.stdout}\n"
+        f"stderr:\n{completed.stderr}"
+    )
 
-# 对比：测试获取少量数据
-print("\n[4] 对比测试：获取交易日历（数据量小）...")
-start_time = time.time()
-try:
-    calendar = base_data.get_trading_calendar("20240101", "20240131")
-    elapsed = time.time() - start_time
-    print(f"✓ 获取交易日历成功，耗时: {elapsed:.2f}秒")
-    if calendar is not None:
-        print(f"  数据条数: {len(calendar)}")
-except Exception as e:
-    print(f"✗ 获取失败: {e}")
-
-# 登出
-print("\n[5] 登出...")
-ad.logout(USERNAME)
-print("完成")
-
-input("\n按Enter退出...")
+    stdout = completed.stdout.strip()
+    assert stdout, "子进程未输出任何结果"
+    metrics = json.loads(stdout.splitlines()[-1])
+    assert "code_info_elapsed_sec" in metrics

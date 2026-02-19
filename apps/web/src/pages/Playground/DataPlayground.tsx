@@ -29,9 +29,24 @@ import {
     TradingAnomalySection,
 } from '@/components/playground'
 
+type ModuleKey = 'quote' | 'flow' | 'fundamental' | 'anomaly'
+
 const DataPlayground: React.FC = () => {
     const [stockCode, setStockCode] = useState('000001.SZ')
-    const [preferredSource, setPreferredSource] = useState<DataSourceType | undefined>()
+    const [globalPreferredSource, setGlobalPreferredSource] = useState<DataSourceType | undefined>()
+    const [modulePreferredSource, setModulePreferredSource] = useState<
+        Partial<Record<ModuleKey, DataSourceType | undefined>>
+    >({})
+
+    const resolvePreferredSource = (module: ModuleKey): DataSourceType | undefined =>
+        modulePreferredSource[module] ?? globalPreferredSource
+
+    const setModuleSource = (module: ModuleKey, source: DataSourceType) => {
+        setModulePreferredSource((prev) => ({
+            ...prev,
+            [module]: source,
+        }))
+    }
 
     const tabItems = [
         {
@@ -46,12 +61,20 @@ const DataPlayground: React.FC = () => {
                 <Space direction="vertical" style={{ width: '100%' }} size="middle">
                     <Row gutter={16}>
                         <Col span={24}>
-                            <QuoteSection stockCode={stockCode} preferredSource={preferredSource} />
+                            <QuoteSection
+                                stockCode={stockCode}
+                                preferredSource={resolvePreferredSource('quote')}
+                                onSuggestSourceSwitch={(source) => setModuleSource('quote', source)}
+                            />
                         </Col>
                     </Row>
                     <Row gutter={16}>
                         <Col span={24}>
-                            <KlineSection stockCode={stockCode} preferredSource={preferredSource} />
+                            <KlineSection
+                                stockCode={stockCode}
+                                preferredSource={resolvePreferredSource('quote')}
+                                onSuggestSourceSwitch={(source) => setModuleSource('quote', source)}
+                            />
                         </Col>
                     </Row>
                 </Space>
@@ -66,7 +89,10 @@ const DataPlayground: React.FC = () => {
                 </Space>
             ),
             children: (
-                <CapitalFlowSection preferredSource={preferredSource} />
+                <CapitalFlowSection
+                    preferredSource={resolvePreferredSource('flow')}
+                    onSuggestSourceSwitch={(source) => setModuleSource('flow', source)}
+                />
             ),
         },
         {
@@ -78,7 +104,11 @@ const DataPlayground: React.FC = () => {
                 </Space>
             ),
             children: (
-                <FundamentalSection stockCode={stockCode} preferredSource={preferredSource} />
+                <FundamentalSection
+                    stockCode={stockCode}
+                    preferredSource={resolvePreferredSource('fundamental')}
+                    onSuggestSourceSwitch={(source) => setModuleSource('fundamental', source)}
+                />
             ),
         },
         {
@@ -90,7 +120,11 @@ const DataPlayground: React.FC = () => {
                 </Space>
             ),
             children: (
-                <TradingAnomalySection stockCode={stockCode} preferredSource={preferredSource} />
+                <TradingAnomalySection
+                    stockCode={stockCode}
+                    preferredSource={resolvePreferredSource('anomaly')}
+                    onSuggestSourceSwitch={(source) => setModuleSource('anomaly', source)}
+                />
             ),
         },
     ]
@@ -117,8 +151,8 @@ const DataPlayground: React.FC = () => {
                         <Space>
                             <ApiOutlined style={{ color: '#1890ff' }} />
                             <DataSourceSelect
-                                value={preferredSource}
-                                onChange={setPreferredSource}
+                                value={globalPreferredSource}
+                                onChange={setGlobalPreferredSource}
                                 allowAuto
                                 width={140}
                                 size="middle"

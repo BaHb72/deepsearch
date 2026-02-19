@@ -36,6 +36,8 @@ const ALLOWED_HOSTS = [
     'push2ex.eastmoney.com',  // 新增：涨停跌停池数据
     'datacenter.eastmoney.com',
     'datacenter-web.eastmoney.com',
+    'quote.eastmoney.com',  // 新增：行情页面/部分接口跳转域名
+    'data.eastmoney.com',  // 新增：千股千评等页面域名
     'np-anotice-stock.eastmoney.com',  // 新增：公告数据
     'np-listnotice.eastmoney.com',  // 新增：公告列表
     // 东方财富数字子域名（用于不同的数据分片）
@@ -50,6 +52,7 @@ const ALLOWED_HOSTS = [
     'www.sse.com.cn',
     'query.sse.com.cn',
     'www.szse.cn',
+    'docs.static.szse.cn',  // 新增：深交所静态文档直链
 
     // 雪球
     'xueqiu.com',

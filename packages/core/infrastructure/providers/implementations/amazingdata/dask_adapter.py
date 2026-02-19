@@ -46,6 +46,8 @@ if TYPE_CHECKING:
 
 # Redis key 前缀，用于存储 Dask 调用结果
 _REDIS_RESULT_PREFIX = "dask_result:"
+_ACTOR_READY_KEY = "dask_actor_ready:amazingdata"
+_ACTOR_HEARTBEAT_KEY = "dask_actor_heartbeat:amazingdata"
 
 
 class AmazingDataDaskAdapter:
@@ -101,11 +103,102 @@ class AmazingDataDaskAdapter:
         self._actor_available = False
         self._initialized = False
         self._first_call_done = False
+        self._last_runtime_issue: str | None = None
 
         logger.info(
             "[AmazingDataDaskAdapter] 初始化 | mode=redis-queue | redis={}",
             "connected" if redis_client else "none",
         )
+
+    @staticmethod
+    def _decode_redis_value(raw_value: Any) -> str | None:
+        """将 Redis 返回值标准化为字符串。"""
+        if raw_value is None:
+            return None
+        if isinstance(raw_value, bytes):
+            return raw_value.decode("utf-8", errors="ignore")
+        if isinstance(raw_value, str):
+            return raw_value
+        return str(raw_value)
+
+    @staticmethod
+    def _extract_worker_address(marker_value: str | None) -> str | None:
+        """从 ready/heartbeat 标记中提取 worker 地址。"""
+        if not marker_value:
+            return None
+        idx = marker_value.find("tcp://")
+        if idx >= 0:
+            return marker_value[idx:]
+        return None
+
+    @staticmethod
+    def _looks_like_worker_crash(error_text: str) -> bool:
+        """根据错误文本判断是否疑似 Worker/SDK 崩溃。"""
+        text = (error_text or "").lower()
+        crash_signals = (
+            "unable to contact actor",
+            "unable to contact actor's worker",
+            "worker closed",
+            "worker died",
+            "process exited",
+            "access violation",
+            "segmentation fault",
+            "systemexit",
+            "connection reset",
+        )
+        return any(sig in text for sig in crash_signals)
+
+    async def _probe_actor_runtime(self) -> tuple[bool, str | None]:
+        """探测 Actor 运行时是否仍存活（优先 heartbeat，兼容 ready 标记）。"""
+        if not self._redis:
+            return True, None
+
+        try:
+            heartbeat_value = self._decode_redis_value(await self._redis.get(_ACTOR_HEARTBEAT_KEY))
+            ready_value = self._decode_redis_value(await self._redis.get(_ACTOR_READY_KEY))
+
+            marker_value = heartbeat_value or ready_value
+            if not marker_value:
+                return False, "Redis 未检测到 AmazingData Actor 心跳/就绪标记"
+
+            marker_worker = self._extract_worker_address(marker_value)
+            if marker_worker and marker_worker != self._windows_worker:
+                old_worker = self._windows_worker
+                self._windows_worker = marker_worker
+                logger.warning(
+                    "[AmazingData/Dask] 检测到 Actor Worker 地址变化 | old={} | new={}",
+                    old_worker,
+                    marker_worker,
+                )
+
+            return True, None
+        except Exception as exc:
+            return False, f"运行时探测异常: {exc}"
+
+    def _mark_actor_unavailable(self, reason: str, error_type: str = "PROCESS_CRASH") -> None:
+        """统一处理 Actor 不可用状态，向系统健康面上报。"""
+        self._actor_available = False
+        self._initialized = False
+        self._first_call_done = False
+        self._last_runtime_issue = reason
+
+        logger.error("[AmazingData/Dask] 标记 Actor 不可用 | reason={}", reason)
+
+        try:
+            from core.infrastructure.monitoring.provider_health import get_monitor
+
+            get_monitor().record_error("amazingdata", error_type, reason)
+        except Exception:
+            logger.debug("[AmazingData/Dask] 写入 ProviderHealth 失败", exc_info=True)
+
+        try:
+            from core.compute.dask_init_state import get_dask_init_manager_sync
+
+            manager = get_dask_init_manager_sync()
+            if manager is not None:
+                manager.mark_amazingdata_runtime_unavailable(reason)
+        except Exception:
+            logger.debug("[AmazingData/Dask] 写入 DaskInitState 失败", exc_info=True)
 
     # ==================== 连接管理 ====================
 
@@ -160,6 +253,7 @@ class AmazingDataDaskAdapter:
                 return False
 
             self._initialized = True
+            self._last_runtime_issue = None
             logger.info(
                 "[AmazingData/Dask] 初始化成功 | worker={} | actor=available",
                 self._windows_worker,
@@ -182,19 +276,17 @@ class AmazingDataDaskAdapter:
             return None
 
         try:
-            ready_value = await self._redis.get("dask_actor_ready:amazingdata")
-            if not ready_value:
-                logger.warning("[AmazingData/Dask] Redis 中未找到 Worker 就绪标记")
+            marker_value = self._decode_redis_value(await self._redis.get(_ACTOR_READY_KEY))
+            if not marker_value:
+                # 向后兼容：若未设置 ready，尝试读取 heartbeat
+                marker_value = self._decode_redis_value(await self._redis.get(_ACTOR_HEARTBEAT_KEY))
+
+            if not marker_value:
+                logger.warning("[AmazingData/Dask] Redis 中未找到 Worker 就绪/心跳标记")
                 return None
 
-            # 兼容 decode_responses=False 场景
-            if isinstance(ready_value, bytes):
-                ready_value = ready_value.decode("utf-8", errors="ignore")
-
-            # 解析 "ready:tcp://localhost:58200"
-            if ":" in ready_value and "tcp://" in ready_value:
-                idx = ready_value.find("tcp://")
-                worker_addr = ready_value[idx:]
+            worker_addr = self._extract_worker_address(marker_value)
+            if worker_addr:
                 logger.debug(
                     "[AmazingData/Dask] 从 Redis 获取 Worker 地址 | addr={}",
                     worker_addr,
@@ -202,8 +294,8 @@ class AmazingDataDaskAdapter:
                 return worker_addr
 
             logger.warning(
-                "[AmazingData/Dask] Worker 就绪标记格式异常 | value={}",
-                ready_value,
+                "[AmazingData/Dask] Worker 标记格式异常 | value={}",
+                marker_value,
             )
             return None
 
@@ -398,6 +490,16 @@ class AmazingDataDaskAdapter:
                     message=f"Redis 连接异常: {e}",
                 )
 
+        runtime_alive, runtime_reason = await self._probe_actor_runtime()
+        if not runtime_alive:
+            reason = f"AmazingData Worker 运行时异常: {runtime_reason or '未知'}"
+            self._mark_actor_unavailable(reason, error_type="PROCESS_CRASH")
+            return HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                message=reason,
+                details={"worker": self._windows_worker},
+            )
+
         # 检查 DaskInitManager 的 AmazingData 就绪状态
         try:
             from core.compute.dask_init_state import get_dask_init_manager_sync
@@ -457,7 +559,12 @@ class AmazingDataDaskAdapter:
             DataProviderError: 调用失败或超时
         """
         if not self._actor_available:
-            raise DataProviderError("Actor 不可用，请先调用 initialize()")
+            reason = (
+                f"Actor 不可用（最近异常: {self._last_runtime_issue}）"
+                if self._last_runtime_issue
+                else "Actor 不可用，请先调用 initialize()"
+            )
+            raise DataProviderError(reason)
 
         if not self._redis:
             raise DataProviderError("Redis 客户端未配置，无法获取调用结果")
@@ -522,6 +629,11 @@ class AmazingDataDaskAdapter:
                                 method,
                                 error_msg,
                             )
+                            if self._looks_like_worker_crash(error_msg):
+                                self._mark_actor_unavailable(
+                                    f"Worker 返回崩溃信号: {error_msg}",
+                                    error_type="PROCESS_CRASH",
+                                )
                             raise DataProviderError(f"Actor 调用失败: {error_msg}")
 
                     await asyncio.sleep(poll_interval)
@@ -552,6 +664,14 @@ class AmazingDataDaskAdapter:
                         redis_key,
                         e,
                     )
+
+                runtime_alive, runtime_reason = await self._probe_actor_runtime()
+                if not runtime_alive:
+                    crash_reason = (
+                        f"Actor 调用超时且检测到 Worker 运行时异常: {runtime_reason or '未知'}"
+                    )
+                    self._mark_actor_unavailable(crash_reason, error_type="PROCESS_CRASH")
+                    raise DataProviderError(crash_reason)
 
                 if retry < self._retry_count:
                     logger.info("[AmazingData/Dask] 重试 {}/{}", retry + 1, self._retry_count)
@@ -608,10 +728,31 @@ class AmazingDataDaskAdapter:
         result = await self._call_actor("get_code_list", security_type=security_type)
         return result
 
+    async def get_future_code_list(
+        self, security_type: str = "EXTRA_FUTURE"
+    ) -> list[str] | None:
+        """3.5.2.3 每日最新代码表（期货交易所）"""
+        return await self._call_actor("get_future_code_list", security_type=security_type)
+
+    async def get_option_code_list(
+        self, security_type: str = "EXTRA_ETF_OP"
+    ) -> list[str] | None:
+        """3.5.2.4 每日最新代码表（期权）"""
+        return await self._call_actor("get_option_code_list", security_type=security_type)
+
+    async def get_future_code_info(
+        self, security_type: str = "EXTRA_FUTURE"
+    ) -> pd.DataFrame:
+        """期货代码信息（SDK 扩展接口）"""
+        result = await self._call_actor("get_future_code_info", security_type=security_type)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
     async def get_stock_list(
         self,
         market: str | None = None,
         board: str | None = None,
+        limit: int | None = None,
+        **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """获取股票列表（领域层接口）
 
@@ -625,6 +766,27 @@ class AmazingDataDaskAdapter:
         Returns:
             股票信息列表
         """
+        # 兼容历史调用：get_stock_list(limit=10) / get_stock_list(10)
+        if isinstance(market, int) and board is None and limit is None:
+            limit = market
+            market = None
+        if isinstance(board, int) and limit is None:
+            limit = board
+            board = None
+
+        if market is None:
+            market_value = kwargs.get("market")
+            if isinstance(market_value, str):
+                market = market_value
+        if board is None:
+            board_value = kwargs.get("board")
+            if isinstance(board_value, str):
+                board = board_value
+        if limit is None:
+            limit_value = kwargs.get("limit")
+            if isinstance(limit_value, int):
+                limit = limit_value
+
         # 默认获取沪深北A股
         security_type = "EXTRA_STOCK_A"
 
@@ -650,6 +812,9 @@ class AmazingDataDaskAdapter:
                     continue
 
             stocks.append({"symbol": code, "name": ""})
+
+        if limit is not None and limit >= 0:
+            stocks = stocks[:limit]
 
         return stocks
 
@@ -727,6 +892,19 @@ class AmazingDataDaskAdapter:
         )
         return pd.DataFrame(result) if result else pd.DataFrame()
 
+    async def get_adj_factor(
+        self,
+        code_list: list[str],
+        local_path: str | None = None,
+        is_local: bool = True,
+    ) -> pd.DataFrame:
+        """3.5.2.6 复权因子（单次复权因子）"""
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_adj_factor", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
     async def get_hist_code_list(
         self,
         begin_date: int | None = None,
@@ -793,6 +971,19 @@ class AmazingDataDaskAdapter:
             kwargs["local_path"] = local_path
         kwargs["is_local"] = is_local
         result = await self._call_actor("get_bj_code_mapping", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_stock_basic(
+        self,
+        code_list: list[str],
+        local_path: str | None = None,
+        is_local: bool = True,
+    ) -> pd.DataFrame:
+        """3.5.2.8 证券基础信息"""
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_stock_basic", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     # ==================== 历史行情接口 (MarketData) ====================
@@ -1384,7 +1575,7 @@ class AmazingDataDaskAdapter:
         result = await self._call_actor("get_option_std_ctr_specs", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
-    async def get_option_mon_ctr_spcon(
+    async def get_option_mon_ctr_specs(
         self,
         underlying_code: str | None = None,
         month: str | None = None,
@@ -1404,7 +1595,114 @@ class AmazingDataDaskAdapter:
         if month is not None:
             kwargs["month"] = month
 
-        result = await self._call_actor("get_option_mon_ctr_spcon", **kwargs)
+        result = await self._call_actor("get_option_mon_ctr_specs", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_option_mon_ctr_spcon(
+        self,
+        underlying_code: str | None = None,
+        month: str | None = None,
+    ) -> pd.DataFrame:
+        """兼容旧方法名，内部转发到 get_option_mon_ctr_specs。"""
+        return await self.get_option_mon_ctr_specs(underlying_code, month)
+
+    async def get_kzz_issuance(
+        self, code_list: list[str], local_path: str | None = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_kzz_issuance", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_kzz_share(
+        self, code_list: list[str], local_path: str | None = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_kzz_share", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_kzz_conv(
+        self, code_list: list[str], local_path: str | None = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_kzz_conv", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_kzz_conv_change(
+        self, code_list: list[str], local_path: str | None = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_kzz_conv_change", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_kzz_corr(
+        self, code_list: list[str], local_path: str | None = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_kzz_corr", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_kzz_call(
+        self, code_list: list[str], local_path: str | None = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_kzz_call", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_kzz_put(
+        self, code_list: list[str], local_path: str | None = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_kzz_put", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_kzz_put_call_item(
+        self, code_list: list[str], local_path: str | None = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_kzz_put_call_item", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_kzz_put_explanation(
+        self, code_list: list[str], local_path: str | None = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_kzz_put_explanation", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_kzz_call_explanation(
+        self, code_list: list[str], local_path: str | None = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_kzz_call_explanation", **kwargs)
+        return pd.DataFrame(result) if result else pd.DataFrame()
+
+    async def get_kzz_suspend(
+        self, code_list: list[str], local_path: str | None = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        kwargs: dict[str, Any] = {"code_list": code_list, "is_local": is_local}
+        if local_path is not None:
+            kwargs["local_path"] = local_path
+        result = await self._call_actor("get_kzz_suspend", **kwargs)
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     async def get_etf_pcf(

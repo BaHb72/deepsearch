@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { DataSourceAdapter } from '../types'
+import type { DataCapability, DataSourceType } from '../types'
 import type {
     RichDataResponse,
     CoreData,
@@ -12,6 +13,60 @@ import type {
 } from '../types/rich-data'
 import { getAdaptersForCapability } from '../adapters'
 import { transformToRichData } from '../field-mapper'
+import {
+    canFallbackToLegacy,
+    extractRequestErrorMessage,
+    queryUnifiedData,
+    supportsUnifiedQuery,
+} from '../unified-query'
+import {
+    beginSlowWatch,
+    emitProviderReasonEvent,
+    finishSlowWatch,
+} from '../slow-load/slow-load-manager'
+
+interface LegacyFetchResult {
+    rows: Record<string, unknown>[]
+    source: DataSourceType
+    latency: number
+}
+
+async function fetchWithLegacyAdapter(
+    capability: DataCapability,
+    params: Record<string, unknown>,
+    preferredSource?: DataSourceType
+): Promise<LegacyFetchResult> {
+    const adapters = getAdaptersForCapability(capability)
+    if (adapters.length === 0) {
+        throw new Error(`No adapter supports capability: ${capability}`)
+    }
+
+    let selectedAdapter = adapters[0]
+    if (preferredSource) {
+        const preferred = adapters.find((adapter: DataSourceAdapter) => adapter.name === preferredSource)
+        if (preferred) {
+            selectedAdapter = preferred
+        }
+    }
+
+    const startTime = performance.now()
+    const result = await selectedAdapter.fetch({
+        capability,
+        params,
+        preferredSource,
+    })
+    const latency = Math.round(performance.now() - startTime)
+
+    if (!result.success) {
+        throw new Error(result.error || 'Request failed')
+    }
+
+    return {
+        rows: result.data as Record<string, unknown>[],
+        source: selectedAdapter.name,
+        latency,
+    }
+}
 
 /**
  * 富数据源 Hook
@@ -41,9 +96,11 @@ export function useRichDataSource<TCore extends CoreData = CoreData>(
         capability,
         params,
         preferredSource,
+        strictSource = false,
         autoFetch = true,
         deps = [],
         preserveRaw = false,
+        monitor,
     } = options
 
     const [response, setResponse] = useState<RichDataResponse<TCore> | null>(null)
@@ -51,52 +108,86 @@ export function useRichDataSource<TCore extends CoreData = CoreData>(
     const [error, setError] = useState<string | null>(null)
 
     const fetchIdRef = useRef(0)
+    const monitorRef = useRef(monitor)
+
+    useEffect(() => {
+        monitorRef.current = monitor
+    }, [monitor])
 
     const fetchData = useCallback(async () => {
         fetchIdRef.current += 1
         const currentFetchId = fetchIdRef.current
+        const watchId = beginSlowWatch({
+            capability,
+            preferredSource,
+            monitor: monitorRef.current,
+        })
 
         setLoading(true)
         setError(null)
 
         try {
-            // 获取支持该能力的适配器
-            const adapters = getAdaptersForCapability(capability)
-            if (adapters.length === 0) {
-                throw new Error(`No adapter supports capability: ${capability}`)
-            }
+            let rawRows: Record<string, unknown>[] = []
+            let source: DataSourceType = preferredSource || 'amazingdata'
+            let latency = 0
+            let fallbackReason: string | null = null
+            let attempts: Array<{
+                provider: string
+                success: boolean
+                reason_code?: string | null
+                reason_detail?: string | null
+                latency_ms?: number | null
+            }> | undefined = undefined
 
-            // 选择适配器：优先使用指定的，否则使用第一个
-            let selectedAdapter = adapters[0]
-            if (preferredSource) {
-                const preferred = adapters.find((a: DataSourceAdapter) => a.name === preferredSource)
-                if (preferred) {
-                    selectedAdapter = preferred
+            if (supportsUnifiedQuery(capability)) {
+                try {
+                    const unified = await queryUnifiedData(
+                        capability,
+                        params,
+                        preferredSource,
+                        strictSource
+                    )
+                    rawRows = unified.rows
+                    source = unified.source
+                    latency = unified.latency ?? 0
+                    fallbackReason = unified.fallbackReason
+                    attempts = unified.attempts
+                } catch (error) {
+                    if (!canFallbackToLegacy(error)) {
+                        throw new Error(extractRequestErrorMessage(error))
+                    }
+                    const legacy = await fetchWithLegacyAdapter(capability, params, preferredSource)
+                    rawRows = legacy.rows
+                    source = legacy.source
+                    latency = legacy.latency
                 }
+            } else {
+                const legacy = await fetchWithLegacyAdapter(capability, params, preferredSource)
+                rawRows = legacy.rows
+                source = legacy.source
+                latency = legacy.latency
             }
-
-            // 执行请求
-            const startTime = performance.now()
-            const result = await selectedAdapter.fetch({
-                capability,
-                params,
-            })
-            const latency = Math.round(performance.now() - startTime)
 
             // 检查是否是最新请求
             if (currentFetchId !== fetchIdRef.current) return
 
-            if (!result.success) {
-                throw new Error(result.error || 'Request failed')
-            }
-
             // 转换为 RichDataResponse
             const richResponse = transformToRichData<TCore>(
-                result.data as Record<string, unknown>[],
-                selectedAdapter.name,
+                rawRows,
+                source,
                 capability,
                 latency,
                 { preserveRaw }
+            )
+            if (richResponse._meta) {
+                richResponse._meta.fallbackReason = fallbackReason
+                richResponse._meta.attempts = attempts
+            }
+
+            await emitProviderReasonEvent(
+                watchId,
+                richResponse._meta?.attempts,
+                richResponse._meta?.source
             )
 
             setResponse(richResponse)
@@ -108,11 +199,12 @@ export function useRichDataSource<TCore extends CoreData = CoreData>(
             setError(errorMessage)
             setResponse(null)
         } finally {
+            finishSlowWatch(watchId)
             if (currentFetchId === fetchIdRef.current) {
                 setLoading(false)
             }
         }
-    }, [capability, JSON.stringify(params), preferredSource, preserveRaw])
+    }, [capability, JSON.stringify(params), preferredSource, strictSource, preserveRaw])
 
     // 自动获取数据
     useEffect(() => {

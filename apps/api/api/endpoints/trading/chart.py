@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from core.indicators.technical import INDICATOR_REGISTRY, TechnicalIndicators
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -22,7 +22,7 @@ from apps.api.api.exception_handlers import (
     InvalidParameterError,
     handle_api_exceptions,
 )
-from apps.api.api.providers import DataProviderFactory
+from apps.api.api.provider_deps import resolve_provider
 
 # from core.application.services.market.chart_service import ChartService
 # from core.application.services.market.signal_detector import SignalDetector
@@ -181,23 +181,23 @@ def _get_init_lock() -> asyncio.Lock:
     return _init_lock
 
 
-async def get_chart_service() -> ChartService:
+async def get_chart_service(request: Request | None = None) -> ChartService:
     """获取图表服务实例"""
     global chart_service
     if chart_service is None:
         async with _get_init_lock():
             # Double-check pattern
             if chart_service is None:
-                # 使用单例数据提供者
-                try:
-                    # 优先使用统一数据管理器
-                    data_provider = DataProviderFactory.get_provider("unified")
-                    logger.info("使用单例统一数据源管理器")
-                except Exception as e:
-                    logger.warning(f"获取统一管理器失败: {e}, 使用akshare提供者")
-                    # 降级使用akshare单例
-                    data_provider = DataProviderFactory.get_provider("akshare")
-                    logger.info("使用单例akshare提供者")
+                data_provider = await resolve_provider("unified", request=request, strict=False)
+                if data_provider is not None:
+                    logger.info("使用统一 ProviderContainer 数据源")
+                else:
+                    logger.warning("获取 unified Provider 失败，尝试回退到 akshare")
+                    data_provider = await resolve_provider("akshare", request=request, strict=False)
+                    if data_provider is not None:
+                        logger.info("使用 akshare Provider 作为回退数据源")
+                    else:
+                        logger.warning("未获取到可用 Provider，将以空数据源初始化图表服务")
 
                 indicator_calculator = TechnicalIndicators()
 

@@ -10,6 +10,13 @@ import type {
     UseDataSourceResult
 } from '../types'
 import { executeRequest } from '../adapters'
+import {
+    buildColumnsFromRows,
+    canFallbackToLegacy,
+    extractRequestErrorMessage,
+    queryUnifiedData,
+    supportsUnifiedQuery,
+} from '../unified-query'
 
 export interface UseDataSourceOptions extends DataSourceRequest {
     /** 是否自动获取数据 */
@@ -43,16 +50,46 @@ export function useDataSource<T = Record<string, unknown>>(
         setError(undefined)
 
         try {
-            const response = await executeRequest<T>(request)
+            if (supportsUnifiedQuery(request.capability)) {
+                try {
+                    const unified = await queryUnifiedData(
+                        request.capability,
+                        request.params,
+                        request.preferredSource,
+                        request.strictSource ?? false
+                    )
 
-            if (response.success) {
-                setData(response.data)
-                setColumns(response.columns)
-                setSource(response.source)
+                    const normalizedRows = unified.rows.map((item, index) => ({
+                        _key: index,
+                        ...item,
+                    })) as T[]
+
+                    setData(normalizedRows)
+                    setColumns(buildColumnsFromRows(unified.rows))
+                    setSource(unified.source)
+                } catch (error) {
+                    if (!canFallbackToLegacy(error)) {
+                        throw new Error(extractRequestErrorMessage(error))
+                    }
+
+                    const response = await executeRequest<T>(request)
+                    if (!response.success) {
+                        throw new Error(response.error || 'Failed to fetch data')
+                    }
+                    setData(response.data)
+                    setColumns(response.columns)
+                    setSource(response.source)
+                }
             } else {
-                setError(response.error || 'Failed to fetch data')
-                setData([])
-                setColumns([])
+                const response = await executeRequest<T>(request)
+
+                if (response.success) {
+                    setData(response.data)
+                    setColumns(response.columns)
+                    setSource(response.source)
+                } else {
+                    throw new Error(response.error || 'Failed to fetch data')
+                }
             }
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Unknown error')
@@ -69,7 +106,7 @@ export function useDataSource<T = Record<string, unknown>>(
             refresh()
         }
 
-    }, [autoFetch, ...deps])
+    }, [autoFetch, refresh, ...deps])
 
     return {
         data,

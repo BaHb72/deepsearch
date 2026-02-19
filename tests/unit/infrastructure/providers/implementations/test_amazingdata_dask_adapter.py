@@ -207,14 +207,52 @@ class TestAmazingDataDaskAdapterCallActor:
         adapter._actor_available = True
         adapter._windows_worker = "tcp://worker1:1234"
 
-        # Redis 轮询始终返回 None（模拟超时）
-        mock_redis_client.get = AsyncMock(return_value=None)
+        async def _mock_get(key: str) -> Any:
+            if key.startswith("dask_result:"):
+                return None
+            if key in ("dask_actor_heartbeat:amazingdata", "dask_actor_ready:amazingdata"):
+                return "ready:tcp://worker1:1234"
+            return None
+
+        # 结果键始终无结果（模拟业务超时），但运行时标记存在（不应误判为崩溃）
+        mock_redis_client.get = AsyncMock(side_effect=_mock_get)
 
         with pytest.raises(DataProviderError, match="超时"):
             await adapter._call_actor("query_kline")
 
         # 应该重试 2 次 + 初始调用 = 3 次
         assert mock_redis_client.rpush.await_count == 3
+
+    @pytest.mark.asyncio
+    async def test_call_actor_marks_unavailable_when_runtime_marker_missing(
+        self, mock_redis_client: MagicMock
+    ) -> None:
+        """测试超时且运行时标记缺失时，标记为疑似 Worker 崩溃。"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+        from core.infrastructure.providers.interfaces.base import DataProviderError
+
+        adapter = AmazingDataDaskAdapter(
+            redis_client=mock_redis_client,
+            timeout=0.1,
+            first_call_timeout=0.1,
+            retry_count=0,
+        )
+        adapter._actor_available = True
+        adapter._initialized = True
+        adapter._windows_worker = "tcp://worker1:1234"
+
+        # 所有 key 都不存在：结果无返回 + 心跳/就绪标记缺失
+        mock_redis_client.get = AsyncMock(return_value=None)
+
+        with pytest.raises(DataProviderError, match="运行时异常"):
+            await adapter._call_actor("query_kline")
+
+        assert adapter._actor_available is False
+        assert adapter._initialized is False
+        assert adapter._last_runtime_issue is not None
+        assert "心跳/就绪标记" in adapter._last_runtime_issue
 
 
 class TestAmazingDataDaskAdapterDataProviderMethods:
@@ -288,6 +326,34 @@ class TestAmazingDataDaskAdapterDataProviderMethods:
         mock_call.assert_called_once_with("get_calendar")
 
     @pytest.mark.asyncio
+    async def test_get_stock_list_accepts_limit_keyword(self, initialized_adapter: Any) -> None:
+        """测试 get_stock_list 支持 limit 关键字参数。"""
+        expected_codes = ["600000.SH", "000001.SZ", "000002.SZ"]
+
+        with patch.object(
+            initialized_adapter, "_call_actor", return_value=expected_codes
+        ) as mock_call:
+            result = await initialized_adapter.get_stock_list(market="SZ", limit=1)
+
+        assert result == [{"symbol": "000001.SZ", "name": ""}]
+        mock_call.assert_called_once_with("get_code_list", security_type="EXTRA_STOCK_A")
+
+    @pytest.mark.asyncio
+    async def test_get_stock_list_accepts_positional_limit(self, initialized_adapter: Any) -> None:
+        """测试 get_stock_list 兼容旧式位置参数 limit。"""
+        expected_codes = ["600000.SH", "000001.SZ", "000002.SZ"]
+
+        with patch.object(
+            initialized_adapter, "_call_actor", return_value=expected_codes
+        ) as mock_call:
+            result = await initialized_adapter.get_stock_list(2)
+
+        assert len(result) == 2
+        assert result[0]["symbol"] == "600000.SH"
+        assert result[1]["symbol"] == "000001.SZ"
+        mock_call.assert_called_once_with("get_code_list", security_type="EXTRA_STOCK_A")
+
+    @pytest.mark.asyncio
     async def test_get_balance_sheet(self, initialized_adapter: Any) -> None:
         """测试 get_balance_sheet 接口"""
         expected_result = [
@@ -311,6 +377,39 @@ class TestAmazingDataDaskAdapterDataProviderMethods:
             local_path="D:/tmp/amazingdata",
             is_local=True,
         )
+
+
+class TestAmazingDataDaskAdapterHealthCheck:
+    """health_check() 方法测试"""
+
+    @pytest.mark.asyncio
+    async def test_health_check_runtime_marker_missing_marks_unhealthy(
+        self, mock_redis_client: MagicMock
+    ) -> None:
+        """测试运行时标记丢失时 health_check 返回 UNHEALTHY 并降级。"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+        from core.infrastructure.providers.protocols.lifecycle import HealthStatus
+
+        async def _mock_get(key: str) -> Any:
+            if key in ("dask_actor_heartbeat:amazingdata", "dask_actor_ready:amazingdata"):
+                return None
+            return "ready:tcp://worker1:1234"
+
+        mock_redis_client.get = AsyncMock(side_effect=_mock_get)
+        mock_redis_client.ping = AsyncMock(return_value=True)
+
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
+        adapter._actor_available = True
+        adapter._initialized = True
+        adapter._windows_worker = "tcp://worker1:1234"
+
+        result = await adapter.health_check()
+
+        assert result.status == HealthStatus.UNHEALTHY
+        assert "运行时异常" in result.message
+        assert adapter._actor_available is False
 
 
 class TestAmazingDataDaskAdapterShutdown:

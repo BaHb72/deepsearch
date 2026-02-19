@@ -76,7 +76,7 @@ describe('useResponsive Hook', () => {
       mockUseBreakpoint.mockReturnValue({
         xs: false,
         sm: false,
-        md: false,
+        md: true,
         lg: true,
         xl: false,
         xxl: false
@@ -127,14 +127,12 @@ describe('useResponsive Hook', () => {
       expect(result.current.height).toBe(768)
 
       // Simulate window resize
-      act(() => {
+      await act(async () => {
         window.innerWidth = 1920
         window.innerHeight = 1080
         window.dispatchEvent(new Event('resize'))
+        await new Promise(resolve => setTimeout(resolve, 200))
       })
-
-      // Wait for debounce
-      await new Promise(resolve => setTimeout(resolve, 200))
 
       // Check updated dimensions
       expect(result.current.width).toBe(1920)

@@ -184,6 +184,63 @@ async def get_provider_by_name(
         raise HTTPException(status_code=404, detail=f"Provider '{name}' 不可用: {str(e)}") from e
 
 
+async def resolve_provider_from_request(
+    request: Request,
+    provider_name: str,
+    *,
+    strict: bool = True,
+):
+    """
+    在路由函数内部（无 Depends 场景）按请求上下文解析 Provider。
+
+    用于渐进替换旧 DataProviderFactory 调用，统一走 app.state.provider_container。
+    """
+    return await resolve_provider(provider_name, request=request, strict=strict)
+
+
+async def resolve_provider(
+    provider_name: str,
+    request: Request | None = None,
+    *,
+    strict: bool = True,
+):
+    """
+    统一 Provider 解析入口。
+
+    优先使用请求上下文中的 ProviderContainer；无 request 时尝试全局 app.state。
+    """
+    try:
+        container: ProviderContainer | None = None
+
+        if request is not None:
+            container = await get_provider_container(request)
+        else:
+            try:
+                from apps.api import server as api_server
+
+                app = getattr(api_server, "app", None)
+                if app is not None:
+                    container = getattr(app.state, "provider_container", None)
+            except Exception as import_error:
+                logger.debug(f"加载全局 app 失败: {import_error}")
+
+            if container is None:
+                raise RuntimeError("全局 ProviderContainer 不可用")
+            if not isinstance(container, ProviderContainer):
+                raise TypeError(f"全局 ProviderContainer 类型错误: {type(container)}")
+
+        provider = await container.get(provider_name)
+        return provider
+    except Exception as e:
+        logger.warning(f"统一 Provider 解析失败: {provider_name} - {e}")
+        if strict:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Provider '{provider_name}' 不可用: {e}",
+            ) from e
+        return None
+
+
 # 健康检查辅助函数（不是依赖注入，而是工具函数）
 async def check_provider_health(
     provider_name: str, container: ProviderContainer

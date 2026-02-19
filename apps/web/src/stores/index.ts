@@ -6,6 +6,7 @@ import { useDatabaseConnections, useDatabaseStore, useDataSourceStatus, useSelec
 import { useSystemStore } from './system.store'
 import { useMarketStore } from './market.store'
 import { useConfigStore } from './config.store'
+import { useSlowLoadSwitchStore } from './slowLoadSwitch.store'
 import { cacheService } from '@/dataCenter/cache.service'
 import { requestManager } from '@/dataCenter/utils'
 
@@ -20,6 +21,7 @@ export {
 export { useSystemStore } from './system.store'
 export { useMarketStore } from './market.store'
 export { useConfigStore } from './config.store'
+export { useSlowLoadSwitchStore, buildSlowEventDedupKey } from './slowLoadSwitch.store'
 
 // 导出类型定义
 export type {
@@ -88,6 +90,7 @@ if (import.meta.env.DEV) {
     system: useSystemStore,
     market: useMarketStore,
     config: useConfigStore,
+    slowLoadSwitch: useSlowLoadSwitchStore,
     utils: {
       clearAllCache,
       resetAllStores,

@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from enum import StrEnum
 from typing import TYPE_CHECKING, Dict
 
@@ -22,6 +24,11 @@ from core.ports.data.responses import (
     RealtimeQuoteResponse,
     StockListResponse,
     TickResponse,
+)
+from core.ports.data.routing_result import (
+    FallbackReasonCode,
+    RouteAttempt,
+    RoutedResponseMeta,
 )
 from loguru import logger
 
@@ -53,9 +60,11 @@ class AllProvidersFailedError(Exception):
         self,
         request: DataRequest,
         errors: Dict[str, Exception],
+        attempts: tuple[RouteAttempt, ...] = (),
     ):
         self.request = request
         self.errors = errors
+        self.attempts = attempts
         providers = ", ".join(errors.keys())
         super().__init__(f"All providers failed: {providers}")
 
@@ -107,6 +116,30 @@ class UnifiedDataFeed:
         adapter = self._router.resolve(request)
         return await self._dispatch(adapter, request)
 
+    async def query_with_trace(
+        self,
+        request: DataRequest,
+    ) -> tuple[DataResponse, RoutedResponseMeta]:
+        """
+        查询数据并返回路由元信息（无降级）。
+        """
+        response = await self.query(request)
+        source_name = getattr(getattr(response, "source", None), "value", None) or "unknown"
+        meta = RoutedResponseMeta(
+            source=source_name,
+            fallback_reason=None,
+            attempts=(
+                RouteAttempt(
+                    provider=source_name,
+                    success=True,
+                    reason_code=None,
+                    reason_detail=None,
+                    latency_ms=getattr(response, "latency_ms", None),
+                ),
+            ),
+        )
+        return response, meta
+
     async def query_with_fallback(
         self,
         request: DataRequest,
@@ -125,8 +158,19 @@ class UnifiedDataFeed:
         Raises:
             AllProvidersFailedError: 所有 Provider 都失败
         """
+        response, _ = await self.query_with_fallback_trace(request=request, strategy=strategy)
+        return response
+
+    async def query_with_fallback_trace(
+        self,
+        request: DataRequest,
+        strategy: FallbackStrategy = FallbackStrategy.SEQUENTIAL,
+    ) -> tuple[DataResponse, RoutedResponseMeta]:
+        """
+        带降级的查询，并返回路由轨迹。
+        """
         if strategy == FallbackStrategy.NONE:
-            return await self.query(request)
+            return await self.query_with_trace(request)
 
         adapters = self._router.resolve_all(request)
         if not adapters:
@@ -136,16 +180,47 @@ class UnifiedDataFeed:
             )
 
         errors: Dict[str, Exception] = {}
+        attempts: list[RouteAttempt] = []
 
         for adapter in adapters:
+            started = time.perf_counter()
             try:
-                return await self._dispatch(adapter, request)
-            except Exception as e:
-                logger.warning(f"Provider {adapter.name} 失败: {e}, 尝试下一个")
-                errors[adapter.name] = e
+                response = await self._dispatch(adapter, request)
+                latency_ms = int((time.perf_counter() - started) * 1000)
+                attempts.append(
+                    RouteAttempt(
+                        provider=adapter.name,
+                        success=True,
+                        reason_code=None,
+                        reason_detail=None,
+                        latency_ms=latency_ms,
+                    )
+                )
+                fallback_reason = None
+                if len(attempts) > 1:
+                    fallback_reason = attempts[-2].reason_code or FallbackReasonCode.PROVIDER_ERROR
+                return response, RoutedResponseMeta(
+                    source=adapter.name,
+                    fallback_reason=fallback_reason,
+                    attempts=tuple(attempts),
+                )
+            except Exception as exc:
+                latency_ms = int((time.perf_counter() - started) * 1000)
+                reason_code = self._classify_exception(exc)
+                attempts.append(
+                    RouteAttempt(
+                        provider=adapter.name,
+                        success=False,
+                        reason_code=reason_code,
+                        reason_detail=str(exc),
+                        latency_ms=latency_ms,
+                    )
+                )
+                logger.warning(f"Provider {adapter.name} 失败: {exc}, 尝试下一个")
+                errors[adapter.name] = exc
                 continue
 
-        raise AllProvidersFailedError(request, errors)
+        raise AllProvidersFailedError(request, errors, attempts=tuple(attempts))
 
     async def _dispatch(
         self,
@@ -182,6 +257,18 @@ class UnifiedDataFeed:
 
         else:
             raise ValueError(f"Unknown request type: {type(request)}")
+
+    @staticmethod
+    def _classify_exception(exc: Exception) -> FallbackReasonCode:
+        """异常映射到统一降级原因。"""
+        if isinstance(exc, CapabilityNotSupportedError):
+            return FallbackReasonCode.CAPABILITY_NOT_SUPPORTED
+        if isinstance(exc, asyncio.TimeoutError):
+            return FallbackReasonCode.PROVIDER_TIMEOUT
+        message = str(exc).lower()
+        if any(keyword in message for keyword in ("not initialized", "unavailable", "connection")):
+            return FallbackReasonCode.PROVIDER_UNAVAILABLE
+        return FallbackReasonCode.PROVIDER_ERROR
 
     # ========================================================================
     # 便捷方法

@@ -5,13 +5,14 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { message } from 'antd'
-import { marketDataService } from '@/services/market/marketData.service'
-import type {
-    StrengthParams,
-    BoardOverviewParams,
-    OrderImbalanceParams,
-    AuctionQualityParams,
-    FetchAllMarketDataParams,
+import {
+    marketDataService,
+    type StrengthParams,
+    type BoardOverviewParams,
+    type OrderImbalanceParams,
+    type AuctionQualityParams,
+    type ConceptFlowParams,
+    type FetchAllMarketDataParams,
 } from '@/services/market/marketData.service'
 import { marketQueryKeys } from './keys'
 import { formatDataSourceLabel } from '@/utils/dataSource'
@@ -116,12 +117,6 @@ export function useAuctionQuality(
 }
 
 // ============ 概念资金流 Hook (替代订单失衡) ============
-
-export interface ConceptFlowParams {
-    limit?: number
-    source?: string | null
-}
-
 export function useConceptFlow(
     params?: ConceptFlowParams,
     options?: QueryHookOptions

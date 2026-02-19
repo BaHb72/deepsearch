@@ -10,9 +10,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, cast, run
 
 from core.config import get_config
 from core.core.runtime.context import get_context
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from loguru import logger
+
+from apps.api.api.provider_deps import resolve_provider_from_request
 
 if TYPE_CHECKING:
     from core.core.managers.component_manager import ComponentManager
@@ -746,22 +748,15 @@ async def get_statistics():
 # ================== MiniQMT 板块数据 API ==================
 
 
-async def _get_miniqmt_provider():
+async def _get_miniqmt_provider(request: Request):
     """获取MiniQMT provider实例"""
-    from apps.api.api.providers import DataProviderFactory, DataSourceType
-
-    try:
-        provider = await DataProviderFactory.get_provider_async(DataSourceType.MINIQMT)
-        if provider is None:
-            return None
-        return provider
-    except Exception as e:
-        logger.error(f"获取MiniQMT provider失败: {e}")
-        return None
+    provider = await resolve_provider_from_request(request, "miniqmt", strict=False)
+    return provider
 
 
 @router.get("/calendar", summary="获取交易日历")
 async def get_trading_calendar(
+    request: Request,
     market: str = Query("SH", description="市场类型，SH/SZ"),
     start_date: str = Query(..., description="开始日期，格式YYYYMMDD"),
     end_date: str = Query(..., description="结束日期，格式YYYYMMDD"),
@@ -779,7 +774,7 @@ async def get_trading_calendar(
     Returns:
         交易日期列表
     """
-    provider = await _get_miniqmt_provider()
+    provider = await _get_miniqmt_provider(request)
 
     if not provider:
         return JSONResponse(
@@ -806,7 +801,7 @@ async def get_trading_calendar(
 
 
 @router.get("/sectors", summary="获取所有板块列表")
-async def get_sector_list():
+async def get_sector_list(request: Request):
     """
     获取所有板块列表
 
@@ -815,7 +810,7 @@ async def get_sector_list():
     Returns:
         板块名称列表
     """
-    provider = await _get_miniqmt_provider()
+    provider = await _get_miniqmt_provider(request)
 
     if not provider:
         return JSONResponse(
@@ -839,7 +834,7 @@ async def get_sector_list():
 
 
 @router.get("/sectors/{sector}/stocks", summary="获取板块成分股")
-async def get_sector_stocks(sector: str):
+async def get_sector_stocks(sector: str, request: Request):
     """
     获取板块成分股
 
@@ -851,7 +846,7 @@ async def get_sector_stocks(sector: str):
     Returns:
         成分股代码列表
     """
-    provider = await _get_miniqmt_provider()
+    provider = await _get_miniqmt_provider(request)
 
     if not provider:
         return JSONResponse(
@@ -876,7 +871,7 @@ async def get_sector_stocks(sector: str):
 
 
 @router.get("/instrument/{symbol}", summary="获取合约详情")
-async def get_instrument_detail(symbol: str):
+async def get_instrument_detail(symbol: str, request: Request):
     """
     获取股票/合约详细信息
 
@@ -896,7 +891,7 @@ async def get_instrument_detail(symbol: str):
         - ExpireDate: 到期日（如适用）
         - 其他相关字段
     """
-    provider = await _get_miniqmt_provider()
+    provider = await _get_miniqmt_provider(request)
 
     if not provider:
         return JSONResponse(
@@ -922,7 +917,7 @@ async def get_instrument_detail(symbol: str):
 
 
 @router.get("/index/{index_code}/weight", summary="获取指数成分股权重")
-async def get_index_weight(index_code: str):
+async def get_index_weight(index_code: str, request: Request):
     """
     获取指数成分股权重
 
@@ -939,7 +934,7 @@ async def get_index_weight(index_code: str):
         - 上证50: 000016.SH
         - 中证500: 000905.SH
     """
-    provider = await _get_miniqmt_provider()
+    provider = await _get_miniqmt_provider(request)
 
     if not provider:
         return JSONResponse(
@@ -965,6 +960,7 @@ async def get_index_weight(index_code: str):
 
 @router.get("/kline", summary="获取K线数据")
 async def get_kline(
+    request: Request,
     symbols: str = Query(..., description="股票代码列表，逗号分隔，如 '000001.SZ,600000.SH'"),
     period: str = Query("1d", description="周期: 1m/5m/15m/30m/60m/1d/1w/1M"),
     start_date: Optional[str] = Query(None, description="开始日期 YYYYMMDD"),
@@ -986,7 +982,7 @@ async def get_kline(
     Returns:
         K线数据字典，格式: {代码: [K线记录列表]}
     """
-    provider = await _get_miniqmt_provider()
+    provider = await _get_miniqmt_provider(request)
 
     if not provider:
         return JSONResponse(
@@ -1030,6 +1026,7 @@ async def get_kline(
 
 @router.get("/realtime", summary="获取实时行情")
 async def get_realtime_quote(
+    request: Request,
     symbols: str = Query(..., description="股票代码列表，逗号分隔，如 '000001.SZ,600000.SH'"),
 ):
     """
@@ -1043,7 +1040,7 @@ async def get_realtime_quote(
     Returns:
         实时行情数据字典，格式: {代码: 行情数据}
     """
-    provider = await _get_miniqmt_provider()
+    provider = await _get_miniqmt_provider(request)
 
     if not provider:
         return JSONResponse(
@@ -1078,6 +1075,7 @@ async def get_realtime_quote(
 
 @router.get("/north-flow", summary="获取北向资金流向")
 async def get_north_flow(
+    request: Request,
     symbols: Optional[str] = Query(None, description="股票代码列表，逗号分隔（可选）"),
     start_date: Optional[str] = Query(None, description="开始日期 YYYYMMDD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYYMMDD"),
@@ -1099,7 +1097,7 @@ async def get_north_flow(
     Returns:
         北向资金数据列表
     """
-    provider = await _get_miniqmt_provider()
+    provider = await _get_miniqmt_provider(request)
 
     if not provider:
         return JSONResponse(
@@ -1138,6 +1136,7 @@ async def get_north_flow(
 
 @router.get("/dragon-tiger", summary="获取龙虎榜数据")
 async def get_dragon_tiger(
+    request: Request,
     date: Optional[str] = Query(None, description="日期 YYYYMMDD，默认最新"),
     symbols: Optional[str] = Query(None, description="股票代码列表，逗号分隔（用于过滤）"),
 ):
@@ -1153,7 +1152,7 @@ async def get_dragon_tiger(
     Returns:
         龙虎榜数据列表
     """
-    provider = await _get_miniqmt_provider()
+    provider = await _get_miniqmt_provider(request)
 
     if not provider:
         return JSONResponse(
@@ -1190,6 +1189,7 @@ async def get_dragon_tiger(
 
 @router.get("/limit-performance", summary="获取涨跌表现数据")
 async def get_limit_up_performance(
+    request: Request,
     symbols: str = Query(..., description="股票代码列表，逗号分隔"),
     start_date: Optional[str] = Query(None, description="开始日期 YYYYMMDD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYYMMDD"),
@@ -1218,7 +1218,7 @@ async def get_limit_up_performance(
     Returns:
         涨跌表现数据列表
     """
-    provider = await _get_miniqmt_provider()
+    provider = await _get_miniqmt_provider(request)
 
     if not provider:
         return JSONResponse(

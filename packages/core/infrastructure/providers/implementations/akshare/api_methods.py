@@ -285,7 +285,7 @@ class AkShareAPIMethods:
     async def fetch_index_data(self) -> Any:
         """获取指数数据"""
         try:
-            result = await self.request_handler.call_api("stock_zh_index_spot", {})
+            result = await self.request_handler.call_api("stock_zh_index_spot_em", {})
             return result
         except Exception as e:
             logger.error(f"获取指数数据失败: {e}")

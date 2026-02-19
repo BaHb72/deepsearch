@@ -27,6 +27,9 @@ COPY docker/pyproject.worker.toml ./pyproject.toml
 COPY packages/core/__init__.py ./core/
 COPY packages/core/observability/ ./core/observability/
 COPY packages/core/constants/ ./core/constants/
+COPY packages/core/utils/ ./core/utils/
+COPY packages/core/messaging/ ./core/messaging/
+COPY packages/core/ports/ ./core/ports/
 
 # 应用层（聚合框架）
 COPY packages/core/application/ ./core/application/
@@ -34,10 +37,14 @@ COPY packages/core/application/ ./core/application/
 # 计算层（Dask 客户端）
 COPY packages/core/compute/ ./core/compute/
 
-# 配置层（部分）
-COPY packages/core/config/__init__.py ./core/config/
-COPY packages/core/config/loader.py ./core/config/
+# 配置层（仅运行时代码与脱敏模板，避免将 settings*.yaml 等敏感配置写入镜像层）
+RUN mkdir -p core/config
+COPY packages/core/config/*.py ./core/config/
 COPY packages/core/config/models/ ./core/config/models/
+COPY packages/core/config/services/ ./core/config/services/
+COPY packages/core/config/settings.prod.yaml.example ./core/config/settings.prod.yaml.example
+COPY packages/core/config/data_sources.yaml.example ./core/config/data_sources.yaml.example
+RUN cp core/config/settings.prod.yaml.example core/config/settings.prod.yaml
 
 # Infrastructure 模块存根 + Plugin 文件（Scheduler 反序列化需要完整模块路径）
 RUN mkdir -p core/infrastructure/providers/implementations/amazingdata && \

@@ -15,6 +15,7 @@ import { ExtendedFieldsPanel } from '@/components/common/ExtendedFieldsPanel'
 
 export interface CapitalFlowSectionProps {
     preferredSource?: DataSourceType
+    onSuggestSourceSwitch?: (source: DataSourceType) => void
     /** 是否显示扩展字段面板 */
     showExtended?: boolean
 }
@@ -100,6 +101,7 @@ const capitalFlowColumns: ColumnsType<CapitalFlowData & { _key: number }> = [
 
 export const CapitalFlowSection: React.FC<CapitalFlowSectionProps> = ({
     preferredSource,
+    onSuggestSourceSwitch,
     showExtended = true,
 }) => {
     // 注意：capital_flow 能力需要后端支持
@@ -109,6 +111,13 @@ export const CapitalFlowSection: React.FC<CapitalFlowSectionProps> = ({
         params: { limit: 50 },
         preferredSource,
         autoFetch: true,
+        monitor: {
+            pageKey: 'dev/playground',
+            pageName: '数据源沙盒',
+            moduleKey: 'flow',
+            moduleName: '资金流向',
+            onSwitchSource: onSuggestSourceSwitch,
+        },
     })
 
     return (

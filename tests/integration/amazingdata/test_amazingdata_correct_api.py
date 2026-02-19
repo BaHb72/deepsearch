@@ -12,25 +12,54 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core.config import get_config
 
 
+def _as_dict(value):
+    """将配置对象安全转换为字典。"""
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            dumped = model_dump()
+            if isinstance(dumped, dict):
+                return dict(dumped)
+        except Exception:
+            return {}
+    raw = getattr(value, "__dict__", None)
+    if isinstance(raw, dict):
+        return dict(raw)
+    return {}
+
+
+def _read_field(value, key, default=None):
+    """兼容 dict / pydantic 对象读取字段。"""
+    if isinstance(value, dict):
+        return value.get(key, default)
+    return getattr(value, key, default)
+
+
 def get_amazingdata_config():
     """获取AmazingData配置"""
     config = get_config()
 
     # 优先使用新格式配置
-    if hasattr(config, "data_sources") and config.data_sources:
-        providers = config.data_sources.get("providers", {})
-        if "amazingdata" in providers:
-            ad_provider = providers["amazingdata"]
-            if ad_provider.get("enabled"):
-                ad_config = ad_provider.get("config", {})
-                conn = ad_config.get("connection", {})
-                return {
-                    "username": conn.get("username", ""),
-                    "password": conn.get("password", ""),
-                    "host": conn.get("host", "localhost"),
-                    "port": conn.get("port", 8888),
-                    "enabled": True,
-                }
+    data_sources = getattr(config, "data_sources", None)
+    if data_sources:
+        providers = _read_field(data_sources, "providers", {})
+        providers_dict = _as_dict(providers)
+        ad_provider = providers_dict.get("amazingdata")
+
+        if ad_provider is not None and bool(_read_field(ad_provider, "enabled", False)):
+            ad_config = _as_dict(_read_field(ad_provider, "config", {}))
+            conn = _as_dict(ad_config.get("connection", {}))
+            return {
+                "username": conn.get("username", ""),
+                "password": conn.get("password", ""),
+                "host": conn.get("host", "localhost"),
+                "port": conn.get("port", 8888),
+                "enabled": True,
+            }
 
     # 回退到旧格式
     if hasattr(config, "amazingdata"):
@@ -47,8 +76,8 @@ def get_amazingdata_config():
     return None
 
 
-def test_amazingdata():
-    """测试AmazingData API"""
+def run_amazingdata_smoke_test() -> bool:
+    """执行 AmazingData API 烟雾测试。"""
     print("=" * 60)
     print("AmazingData SDK 测试")
     print("=" * 60)
@@ -177,9 +206,25 @@ def test_amazingdata():
     return True
 
 
+def test_amazingdata():
+    """pytest 入口：执行 smoke test 并断言通过。"""
+    import pytest
+
+    try:
+        import AmazingData  # noqa: F401
+    except ImportError:
+        pytest.skip("AmazingData SDK 未安装，跳过真实链路测试")
+
+    config = get_amazingdata_config()
+    if not config or not config.get("enabled", False):
+        pytest.skip("AmazingData 未启用或未配置，跳过真实链路测试")
+
+    assert run_amazingdata_smoke_test() is True
+
+
 def main():
     """主函数"""
-    success = test_amazingdata()
+    success = run_amazingdata_smoke_test()
 
     print("\n" + "=" * 60)
     print("测试总结")

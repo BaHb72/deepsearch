@@ -107,9 +107,9 @@ deepsearch/
 | **状态管理** | Zustand | 5.0.8 | 轻量级替代 Redux |
 | **图表库** | ECharts + Lightweight Charts | 5.6 + 5.1 | 实时 K 线图表 |
 | **类型检查** | mypy + Pyright | 1.0+ | 100% 合规（32 错误已修复） |
-| **数据源** | TGW (MiniQMT) | 1.0.8.5 | 迅投行情 SDK（优先） |
-|  | AmazingData | 1.0.23 | 专业数据服务（次选） |
-|  | AkShare | 1.17.65 | 备用数据源（代理模式） |
+| **数据源** | AmazingData | 1.0.28 | 默认数据源（主链路） |
+|  | TGW (MiniQMT) | 1.0.8.5 | 本地 SDK 回退路径 |
+|  | AkShare | 1.18.25 | 备用数据源（代理模式） |
 
 ## 核心能力
 
@@ -168,12 +168,14 @@ L3: PostgreSQL（持久化） ← 分钟级，持久化
 ### 数据源优先级
 
 ```
-MiniQMT（优先）      ← 快速、稳定、本地 SDK
+AmazingData（默认）   ← 主数据源（当前配置默认）
    ↓ 失败/熔断
-AmazingData（次选）  ← 功能全面、专业服务
+MiniQMT（首个回退）   ← 本地 SDK（低延迟）
    ↓ 失败/熔断
-AkShare（备用）      ← Cloudflare Worker 代理（避免封禁）
+AkShare（第二回退）   ← Cloudflare Worker 代理（避免封禁）
 ```
+
+> 运行时口径（2026-02-17）：`data_sources.default=amazingdata`，`fallback_order=miniqmt -> amazingdata -> akshare`（由 `packages/core/config/data_sources.yaml` 合并后生效）。
 
 **统一接口**：
 
@@ -287,11 +289,11 @@ packages/core/config/
 
 ```yaml
 data_sources:
-  default: miniqmt
+  default: amazingdata
   fallback_order:
-    - miniqmt      # 优先（快速、稳定、本地 SDK）
-    - amazingdata  # 次选（功能全面、专业服务）
-    - akshare      # 备用（代理模式，避免封禁）
+    - miniqmt      # 首个回退（快速、稳定、本地 SDK）
+    - amazingdata  # 次级回退（功能全面、专业服务）
+    - akshare      # 最终回退（代理模式，避免封禁）
 
   providers:
     miniqmt:
@@ -381,7 +383,7 @@ chore: 升级 SQLAlchemy 至 2.0.44
 1. **单机部署**：禁止分布式架构（Dask 仅用于环境隔离，非分布式计算）
 2. **依赖注入**：新组件必须通过 DI 容器注册（`packages/core/core/utils/container.py`）
 3. **分层架构**：严格遵守六边形架构，禁止跨层调用
-4. **数据源优先级**：MiniQMT > AmazingData > AkShare
+4. **数据源策略**：默认 `AmazingData`，回退顺序以 `data_sources.fallback_order` 为准（当前：`miniqmt -> amazingdata -> akshare`）
 5. **第一性原理**：优先重构而非补丁（见 CLAUDE.md 方法论）
 
 ### 代码规范
@@ -397,7 +399,7 @@ chore: 升级 SQLAlchemy 至 2.0.44
 
 | 变化项 | 旧版 | Monorepo v2（当前） |
 |--------|------|---------------------|
-| **数据源优先级** | AmazingData 优先 | MiniQMT 优先 |
+| **默认数据源** | AmazingData 优先 | AmazingData 默认（回退顺序见 `data_sources.yaml`） |
 | **Python 版本** | 3.12 | 3.13 |
 | **SQLAlchemy** | 1.4 | 2.0 (MappedAsDataclass) |
 | **React 版本** | 18.x | 19.2.3 |
@@ -419,10 +421,12 @@ chore: 升级 SQLAlchemy 至 2.0.44
 
 | 文档 | 说明 |
 |------|------|
+| `docs/overview/system_architecture_latest_2026-02-17.md` | 面向非技术读者的最新架构现状与风险说明（建议先读） |
 | `docs/architecture/` | 架构设计文档 |
 | `docs/development/` | 开发指南与规范 |
 | `docs/datasources/` | 数据源接入文档（AmazingData、MiniQMT、AkShare） |
 | `docs/operations/` | 运维手册 |
+| `docs/operations/runbooks/akshare_worker_proxy_acceptance_checklist.md` | AkShare Cloudflare Worker 代理迁移验收清单 |
 | `CLAUDE.md` | 项目规范与第一性原理方法论 |
 
 ## 许可证

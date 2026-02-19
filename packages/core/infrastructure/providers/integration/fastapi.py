@@ -5,11 +5,54 @@ FastAPI 集成
 """
 
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
 from loguru import logger
 
 from ..container import ProviderContainer
+
+
+def _to_dict(value: object) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            dumped = model_dump()
+            if isinstance(dumped, dict):
+                return dict(dumped)
+        except Exception:
+            return {}
+    if hasattr(value, "__dict__"):
+        raw = getattr(value, "__dict__", {})
+        if isinstance(raw, dict):
+            return dict(raw)
+    return {}
+
+
+def _iter_enabled_provider_configs(settings: object) -> list[tuple[str, dict[str, Any]]]:
+    data_sources_obj = getattr(settings, "data_sources", None)
+    if data_sources_obj is None:
+        return []
+
+    data_sources = _to_dict(data_sources_obj)
+    providers = _to_dict(data_sources.get("providers"))
+    enabled: list[tuple[str, dict[str, Any]]] = []
+
+    for name, raw_provider in providers.items():
+        provider = _to_dict(raw_provider)
+        if not provider or not bool(provider.get("enabled", False)):
+            continue
+
+        provider_payload = dict(provider)
+        provider_payload["config"] = _to_dict(provider.get("config"))
+
+        enabled.append((str(name), provider_payload))
+
+    return enabled
 
 
 @asynccontextmanager
@@ -37,14 +80,12 @@ async def provider_lifespan(app: FastAPI):
         from core.config import get_config
 
         config = get_config()
-        if hasattr(config, "data_sources"):
-            for name, ds_config in config.data_sources.items():
-                if ds_config.get("enabled", False):
-                    try:
-                        await container.create_and_register(name, ds_config)
-                        logger.info(f"预加载 Provider 成功: {name}")
-                    except Exception as e:
-                        logger.warning(f"预加载 Provider 失败: {name} - {e}")
+        for name, provider_config in _iter_enabled_provider_configs(config):
+            try:
+                await container.create_and_register(name, provider_config)
+                logger.info(f"预加载 Provider 成功: {name}")
+            except Exception as e:
+                logger.warning(f"预加载 Provider 失败: {name} - {e}")
     except Exception as e:
         logger.warning(f"无法加载配置: {e}")
 

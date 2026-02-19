@@ -96,15 +96,13 @@ class CapabilityRouter:
         Raises:
             NoProviderAvailableError: 无可用 Provider
         """
+        candidates = self.resolve_candidates(request)
+        if candidates:
+            selected = candidates[0]
+            logger.debug(f"路由到: {selected.name} for {self._infer_capability(request)}")
+            return selected
+
         capability = self._infer_capability(request)
-        priority_list = self._get_priority_list(request, capability)
-
-        for provider_name in priority_list:
-            adapter = self._adapters.get(provider_name)
-            if adapter and self._can_handle(adapter, request, capability):
-                logger.debug(f"路由到: {provider_name} for {capability}")
-                return adapter
-
         raise NoProviderAvailableError(capability, request)
 
     def resolve_all(self, request: DataRequest) -> List[BaseProviderAdapter]:
@@ -117,16 +115,24 @@ class CapabilityRouter:
         Returns:
             适配器列表（按优先级排序）
         """
+        return self.resolve_candidates(request)
+
+    def resolve_candidates(self, request: DataRequest) -> List[BaseProviderAdapter]:
+        """
+        获取所有可处理该请求的适配器候选（按优先级）。
+        """
         capability = self._infer_capability(request)
         priority_list = self._get_priority_list(request, capability)
-        result = []
+        candidates: List[BaseProviderAdapter] = []
 
         for provider_name in priority_list:
             adapter = self._adapters.get(provider_name)
-            if adapter and self._can_handle(adapter, request, capability):
-                result.append(adapter)
+            if adapter is None:
+                continue
+            if self._can_handle(adapter, request, capability):
+                candidates.append(adapter)
 
-        return result
+        return candidates
 
     def _infer_capability(self, request: DataRequest) -> DataCapability:
         """从请求类型推断能力类型"""
@@ -211,6 +217,31 @@ class CapabilityRouter:
                 return False
 
         return True
+
+    def explain_rejection(
+        self,
+        adapter: BaseProviderAdapter,
+        request: DataRequest,
+    ) -> str | None:
+        """
+        解释适配器为何无法处理请求；可处理时返回 None。
+        """
+        capability = self._infer_capability(request)
+        if not adapter.supports(capability):
+            return f"capability:{capability.value}:unsupported"
+
+        if isinstance(request, KlineRequest):
+            spec = adapter.capabilities.kline
+            if spec is None:
+                return "kline:missing_spec"
+            if request.timeframe < spec.min_timeframe:
+                return f"timeframe_too_small:{request.timeframe.value}"
+            if request.timeframe > spec.max_timeframe:
+                return f"timeframe_too_large:{request.timeframe.value}"
+            if request.adjust not in spec.adjust_types:
+                return f"adjust_unsupported:{request.adjust.value}"
+
+        return None
 
 
 __all__ = [

@@ -14,6 +14,33 @@ from core.config import get_config
 from helpers import fetch_code_list
 
 
+def _as_dict(value):
+    """将配置对象转换为 dict。"""
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            dumped = model_dump()
+            if isinstance(dumped, dict):
+                return dict(dumped)
+        except Exception:
+            return {}
+    raw = getattr(value, "__dict__", None)
+    if isinstance(raw, dict):
+        return dict(raw)
+    return {}
+
+
+def _read_field(value, key, default=None):
+    """兼容 dict / pydantic 对象读取字段。"""
+    if isinstance(value, dict):
+        return value.get(key, default)
+    return getattr(value, key, default)
+
+
 def test_simple():
     print("\n" + "=" * 60)
     print("AmazingData 简单连接测试")
@@ -25,12 +52,12 @@ def test_simple():
 
     # 获取AmazingData配置
     if hasattr(config, "data_sources") and config.data_sources:
-        providers = config.data_sources.get("providers", {})
+        providers = _as_dict(_read_field(config.data_sources, "providers", {}))
         if "amazingdata" in providers:
             print("\n使用新格式配置 (data_sources.providers.amazingdata)")
             ad_provider = providers["amazingdata"]
-            ad_config = ad_provider.get("config", {})
-            conn_config = ad_config.get("connection", {})
+            ad_config = _as_dict(_read_field(ad_provider, "config", {}))
+            conn_config = _as_dict(ad_config.get("connection", {}))
 
             username = conn_config.get("username", "")
             password = conn_config.get("password", "")

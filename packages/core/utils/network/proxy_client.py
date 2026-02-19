@@ -4,6 +4,10 @@ HTTP 代理客户端
 """
 
 import json
+import os
+import re
+import socket
+import subprocess
 import time
 from typing import Optional, TypedDict
 from urllib.parse import quote
@@ -47,21 +51,29 @@ class ProxyClient:
         Args:
             worker_url: Worker URL，如果不提供则从配置读取
         """
+        # 获取配置对象（用于读取 worker URL 与网络选项）
+        config = get_config()
+        workers_cfg = (
+            getattr(config, "cloudflare_workers", None) if config and hasattr(config, "cloudflare_workers") else None
+        )
+
         # 获取 Worker URL
         self.worker_url: Optional[str]
         if worker_url:
             self.worker_url = worker_url
         else:
             # 从配置读取
-            config = get_config()
-            if config and hasattr(config, "cloudflare_workers") and config.cloudflare_workers:
-                # 现在 cloudflare_workers 是 CloudflareWorkersConfig 对象
-                if config.cloudflare_workers.is_configured():
-                    self.worker_url = config.cloudflare_workers.get_full_url()
+            if workers_cfg:
+                if workers_cfg.is_configured():
+                    self.worker_url = workers_cfg.get_full_url()
                 else:
                     self.worker_url = None
             else:
                 self.worker_url = None
+
+        # 网络选项（默认：使用系统代理 + 超时时执行 IPv4 回退）
+        self.use_system_proxy = bool(getattr(workers_cfg, "use_system_proxy", True))
+        self.prefer_ipv4_fallback = bool(getattr(workers_cfg, "prefer_ipv4_fallback", True))
 
         # 如果没有 Worker，使用直连
         self.use_proxy = bool(self.worker_url)
@@ -74,11 +86,7 @@ class ProxyClient:
         # 创建 session，使用原始的 Session 类避免递归
         self.session = _OriginalSession()
 
-        # 禁用系统代理（HTTP_PROXY/HTTPS_PROXY 环境变量）
-        # 原因：系统代理可能干扰与 Cloudflare Worker 的 SSL 通信
-        # 设置空字典会让 requests 忽略环境变量中的代理设置
-        self.session.proxies = {"http": None, "https": None}  # type: ignore[attr-defined]
-        self.session.trust_env = False  # type: ignore[attr-defined]  # 不信任环境变量中的代理配置
+        self._apply_proxy_policy()
 
         # 设置默认超时时间（秒）
         # 增加超时时间以适应东方财富等 API 的响应延迟
@@ -109,6 +117,188 @@ class ProxyClient:
             "failed_requests": 0,
             "total_time": 0.0,
         }
+
+    @staticmethod
+    def _normalize_proxy_url(proxy: str) -> str:
+        """规范化代理 URL，补全缺失协议。"""
+        proxy = proxy.strip()
+        if not proxy:
+            return proxy
+        if "://" not in proxy:
+            return f"http://{proxy}"
+        return proxy
+
+    def _load_system_proxies(self) -> dict[str, str]:
+        """
+        读取系统代理配置。
+        优先级：
+        1. 显式环境变量（requests/trust_env 已处理）
+        2. Windows Internet Settings（当环境变量缺失时）
+        3. WinHTTP 代理（当 Internet Settings 不可用时）
+        """
+        # 若用户已通过环境变量提供代理，不做覆盖
+        for key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+            if os.getenv(key):
+                return {}
+
+        if os.name != "nt":
+            return {}
+
+        proxies = self._load_windows_internet_settings_proxies()
+        if proxies:
+            return proxies
+
+        return self._load_winhttp_proxies()
+
+    def _apply_proxy_policy(self) -> None:
+        """应用代理策略到 requests Session。"""
+        # 系统代理策略：
+        # - use_system_proxy=True: 使用环境变量代理，且在 Windows 下尝试读取系统代理
+        # - use_system_proxy=False: 强制忽略环境代理，保持完全直连
+        if self.use_system_proxy:
+            self.session.trust_env = True  # type: ignore[attr-defined]
+            system_proxies = self._load_system_proxies()
+            if system_proxies:
+                self.session.proxies.update(system_proxies)  # type: ignore[attr-defined]
+                logger.info(f"ProxyClient 已加载系统代理: {system_proxies}")
+            else:
+                logger.info("ProxyClient 启用系统代理环境变量(trust_env=True)")
+            return
+
+        # 设置空字典会让 requests 忽略环境变量中的代理设置
+        self.session.proxies = {"http": None, "https": None}  # type: ignore[attr-defined]
+        self.session.trust_env = False  # type: ignore[attr-defined]
+        logger.info("ProxyClient 已禁用系统代理环境变量(trust_env=False)")
+
+    def _load_windows_internet_settings_proxies(self) -> dict[str, str]:
+        """读取 Windows Internet Settings 代理。"""
+        try:
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+            ) as key:
+                proxy_enabled = int(winreg.QueryValueEx(key, "ProxyEnable")[0])
+                if proxy_enabled != 1:
+                    return {}
+                proxy_server = str(winreg.QueryValueEx(key, "ProxyServer")[0]).strip()
+                if not proxy_server:
+                    return {}
+                try:
+                    proxy_override = str(winreg.QueryValueEx(key, "ProxyOverride")[0]).strip()
+                except Exception:
+                    proxy_override = ""
+        except Exception as error:
+            logger.debug(f"读取 Windows 系统代理失败: {error}")
+            return {}
+
+        proxies = self._parse_proxy_server(proxy_server)
+        no_proxy = self._parse_no_proxy(proxy_override)
+        if no_proxy:
+            proxies["no_proxy"] = no_proxy
+
+        return proxies
+
+    def _load_winhttp_proxies(self) -> dict[str, str]:
+        """读取 WinHTTP 代理配置（作为系统代理兜底）。"""
+        try:
+            result = subprocess.run(
+                ["netsh", "winhttp", "show", "proxy"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+        except Exception as error:
+            logger.debug(f"读取 WinHTTP 代理失败: {error}")
+            return {}
+
+        if result.returncode != 0:
+            logger.debug(f"读取 WinHTTP 代理失败，退出码: {result.returncode}")
+            return {}
+
+        output = result.stdout
+        if "Direct access (no proxy server)" in output:
+            return {}
+
+        proxy_server = ""
+        bypass = ""
+        for line in output.splitlines():
+            clean_line = line.strip()
+            if "Proxy Server(s)" in clean_line and ":" in clean_line:
+                proxy_server = clean_line.split(":", 1)[1].strip()
+            elif "Bypass List" in clean_line and ":" in clean_line:
+                bypass = clean_line.split(":", 1)[1].strip()
+
+        if not proxy_server:
+            return {}
+
+        proxies = self._parse_proxy_server(proxy_server)
+        no_proxy = self._parse_no_proxy(bypass)
+        if no_proxy:
+            proxies["no_proxy"] = no_proxy
+        return proxies
+
+    def _parse_proxy_server(self, proxy_server: str) -> dict[str, str]:
+        """
+        解析 Windows 代理字符串。
+        支持：
+        - 127.0.0.1:10808
+        - http=127.0.0.1:10808;https=127.0.0.1:10808
+        """
+        proxies: dict[str, str] = {}
+        entries = [entry.strip() for entry in proxy_server.split(";") if entry.strip()]
+        for entry in entries:
+            if "=" in entry:
+                scheme, value = entry.split("=", 1)
+                scheme = scheme.strip().lower()
+                value = self._normalize_proxy_url(value)
+                if scheme in {"http", "https"} and value:
+                    proxies[scheme] = value
+            else:
+                value = self._normalize_proxy_url(entry)
+                if value:
+                    proxies.setdefault("http", value)
+                    proxies.setdefault("https", value)
+        return proxies
+
+    @staticmethod
+    def _parse_no_proxy(no_proxy_raw: str) -> str:
+        """解析 bypass 列表为 requests 可识别的 no_proxy 字符串。"""
+        if not no_proxy_raw:
+            return ""
+        if no_proxy_raw.lower() in {"(none)", "none"}:
+            return ""
+        tokens = [tok.strip() for tok in re.split(r"[;,\s]+", no_proxy_raw) if tok.strip()]
+        normalized = [tok for tok in tokens if tok.lower() != "<local>"]
+        return ",".join(normalized)
+
+    def _session_request(self, method: str, request_url: str, **kwargs) -> requests.Response:
+        """
+        统一封装 session 请求，并在 Worker 连接超时时执行 IPv4 一次性回退。
+        """
+        try:
+            return self.session.request(method, request_url, **kwargs)
+        except requests.exceptions.ConnectTimeout as exc:
+            if not self.prefer_ipv4_fallback:
+                raise
+            if not self.worker_url or ".workers.dev" not in self.worker_url:
+                raise
+
+            logger.warning(f"Worker 连接超时，尝试 IPv4 回退重试: {exc}")
+            try:
+                from urllib3.util import connection as urllib3_connection
+
+                original_allowed_gai_family = urllib3_connection.allowed_gai_family
+                urllib3_connection.allowed_gai_family = lambda: socket.AF_INET
+                try:
+                    return self.session.request(method, request_url, **kwargs)
+                finally:
+                    urllib3_connection.allowed_gai_family = original_allowed_gai_family
+            except Exception as fallback_error:
+                logger.warning(f"IPv4 回退重试失败: {fallback_error}")
+                raise
 
     def update_worker_url(self, worker_url: Optional[str]) -> None:
         """动态更新 Worker URL，并切换代理模式"""
@@ -259,7 +449,7 @@ class ProxyClient:
 
         if method == "GET":
             # 发送 GET 请求到 Worker（不使用 params，URL 已完全编码）
-            response = self.session.get(proxy_url, **kwargs)
+            response = self._session_request("GET", proxy_url, **kwargs)
 
         elif method == "POST":
             # POST 请求，需要转发请求体
@@ -274,11 +464,11 @@ class ProxyClient:
             kwargs["headers"] = headers
 
             # 发送 POST 请求到 Worker
-            response = self.session.post(proxy_url, **kwargs)
+            response = self._session_request("POST", proxy_url, **kwargs)
 
         else:
             # 其他方法
-            response = self.session.request(method, proxy_url, **kwargs)
+            response = self._session_request(method, proxy_url, **kwargs)
 
         return response
 
@@ -332,15 +522,15 @@ def get_proxy_client(worker_url: Optional[str] = None, force_refresh: bool = Fal
     """
     global _proxy_client
 
-    if _proxy_client is None:
-        _proxy_client = ProxyClient(worker_url=worker_url)
+    if _proxy_client is None or force_refresh:
+        target_url = worker_url
+        if target_url is None and _proxy_client is not None:
+            target_url = _proxy_client.worker_url
+        _proxy_client = ProxyClient(worker_url=target_url)
         return _proxy_client
 
-    if worker_url is not None:
-        if force_refresh or _proxy_client.worker_url != worker_url:
-            _proxy_client.update_worker_url(worker_url)
-    elif force_refresh:
-        _proxy_client.update_worker_url(None)
+    if worker_url is not None and _proxy_client.worker_url != worker_url:
+        _proxy_client.update_worker_url(worker_url)
 
     return _proxy_client
 

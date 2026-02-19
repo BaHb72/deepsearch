@@ -10,6 +10,9 @@ from typing import Any, Dict, Optional, TypedDict
 
 from loguru import logger
 
+# 避免 pytest 将该辅助模块误识别为测试模块。
+__test__ = False
+
 # SDK导入候选列表（已安装: amazingdata, tgw）
 _SDK_CANDIDATES = ("amazingdata", "tgw", "AmazingData", "amazingdata_sdk")
 
@@ -344,3 +347,7 @@ def validate_amazingdata_config(config: Dict[str, Any]) -> tuple[bool, str]:
             return False, "自定义网络需要提供端口号"
 
     return True, ""
+
+
+# 避免被 pytest 当作测试函数收集（该函数是业务辅助入口，不是测试用例）。
+test_amazingdata_connection.__test__ = False

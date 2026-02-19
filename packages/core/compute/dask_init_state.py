@@ -199,6 +199,25 @@ class DaskInitStateManager:
             elapsed_seconds=elapsed,
         )
 
+    def mark_amazingdata_runtime_unavailable(self, error: str) -> None:
+        """标记 AmazingData 运行时不可用（初始化完成后的故障通道）。
+
+        用于处理 SDK hard-exit / Worker 进程崩溃等运行时问题。
+        调用后会将整体阶段降为 PARTIAL，并保留错误详情供 API/巡检查询。
+        """
+        self._amazingdata_status.ready = False
+        self._amazingdata_status.error = error
+        self._amazingdata_status.ready_at = None
+
+        if self._scheduler_status.ready:
+            self._phase = DaskInitPhase.PARTIAL
+            self._message = "Dask 集群部分就绪（AmazingData 运行时异常）"
+        else:
+            self._phase = DaskInitPhase.FAILED
+            self._message = "Dask 集群不可用（AmazingData 运行时异常）"
+
+        self._logger.error("AmazingData 运行时降级: {}", error)
+
     def _calculate_progress(self) -> int:
         """计算初始化进度百分比"""
         if self._phase == DaskInitPhase.PENDING:

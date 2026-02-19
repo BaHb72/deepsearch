@@ -223,7 +223,12 @@ class DataProviderFactory:
     @classmethod
     def _invoke_cleanup(cls, instance: Any, provider_name: str) -> None:
         for method_name in ("close", "cleanup"):
-            callback = getattr(instance, method_name, None)
+            try:
+                inspect.getattr_static(instance, method_name)
+            except AttributeError:
+                callback = None
+            else:
+                callback = getattr(instance, method_name, None)
             if callback is None:
                 continue
 
@@ -355,11 +360,11 @@ class DataProviderFactory:
             return False, f"Dask 环境检查失败: {e}"
 
     @classmethod
-    async def _create_amazingdata_actor(cls) -> Any:
+    async def _create_amazingdata_actor(cls, create_timeout: float | None = None) -> Any:
         """创建新的 AmazingData Actor 并返回包装器"""
         import time
 
-        from core.compute import get_dask_client
+        from core.compute import close_dask_client, get_dask_client
         from core.compute.actors import AmazingDataActor
         from core.core.runtime.di_container import _get_amazingdata_config
 
@@ -372,11 +377,24 @@ class DataProviderFactory:
         config = _get_amazingdata_config()
 
         # 重试配置
-        max_retries = 3
+        max_retries = 3 if create_timeout is None else 1
         base_delay = 2.0
+        last_error_text = ""
+        deadline: float | None = None
+        if create_timeout is not None and create_timeout > 0:
+            deadline = time.monotonic() + float(create_timeout)
+
+        def _remaining_timeout(default_timeout: float) -> float:
+            if deadline is None:
+                return float(default_timeout)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise asyncio.TimeoutError("AmazingData Actor 创建超时（调用方限定）")
+            return min(float(default_timeout), remaining)
 
         for attempt in range(max_retries):
             start_time = time.time()
+            actor_future = None
             try:
                 client = await get_dask_client()
 
@@ -399,11 +417,15 @@ class DataProviderFactory:
 
                 # Dask ActorFuture 实现了 __await__ 协议，可以直接 await
                 logger.debug("[ACTOR_CREATE] 等待 Future 完成...")
-                actor = await asyncio.wait_for(actor_future, timeout=_tc.actor_create)
+                actor = await asyncio.wait_for(
+                    actor_future, timeout=_remaining_timeout(_tc.actor_create)
+                )
 
                 # 初始化（延迟登录模式）
                 logger.info("[ACTOR_CREATE] 正在初始化 AmazingData...")
-                init_result = await asyncio.wait_for(actor.initialize(), timeout=_tc.sdk_login)
+                init_result = await asyncio.wait_for(
+                    actor.initialize(), timeout=_remaining_timeout(_tc.sdk_login)
+                )
                 if not init_result:
                     raise RuntimeError("AmazingData 初始化失败")
 
@@ -413,7 +435,7 @@ class DataProviderFactory:
                     # get_calendar 是一个轻量级调用，会触发 _ensure_logged_in()
                     await asyncio.wait_for(
                         actor.call("get_calendar", market="SH"),
-                        timeout=_tc.calendar_preload,
+                        timeout=_remaining_timeout(_tc.calendar_preload),
                     )
                 except Exception as login_exc:
                     logger.warning("[ACTOR_CREATE] 延迟登录调用失败: {}", login_exc)
@@ -421,7 +443,7 @@ class DataProviderFactory:
 
                 # 验证登录状态
                 logger.info("[ACTOR_CREATE] 验证 Actor 连接...")
-                status = await asyncio.wait_for(actor.get_status(), timeout=10.0)
+                status = await asyncio.wait_for(actor.get_status(), timeout=_remaining_timeout(10.0))
                 if not status.get("logged_in"):
                     raise RuntimeError("Actor 连接状态验证失败")
 
@@ -579,6 +601,14 @@ class DataProviderFactory:
 
             except asyncio.TimeoutError as e:
                 elapsed = time.time() - start_time
+                last_error_text = str(e).strip() or e.__class__.__name__
+                if actor_future is not None:
+                    try:
+                        cancel_result = actor_future.cancel()
+                        if inspect.isawaitable(cancel_result):
+                            await cancel_result
+                    except Exception:
+                        pass
                 logger.warning(
                     "[ACTOR_CREATE] Actor 创建超时 (尝试 {}/{}) | 耗时={:.2f}s | 错误={}",
                     attempt + 1,
@@ -588,13 +618,26 @@ class DataProviderFactory:
                 )
                 if attempt < max_retries - 1:
                     delay = base_delay * (2**attempt)
+                    try:
+                        await close_dask_client()
+                    except Exception as close_exc:
+                        logger.debug("[ACTOR_CREATE] 重试前关闭 Dask Client 失败: {}", close_exc)
                     logger.info(f"等待 {delay}s 后重试...")
                     await asyncio.sleep(delay)
                 else:
-                    raise RuntimeError("AmazingData Actor 创建超时，已达最大重试次数") from e
+                    detail = f"（最近错误: {last_error_text}）" if last_error_text else ""
+                    raise RuntimeError(f"AmazingData Actor 创建超时，已达最大重试次数{detail}") from e
 
             except Exception as e:
                 elapsed = time.time() - start_time
+                last_error_text = str(e).strip() or e.__class__.__name__
+                if actor_future is not None:
+                    try:
+                        cancel_result = actor_future.cancel()
+                        if inspect.isawaitable(cancel_result):
+                            await cancel_result
+                    except Exception:
+                        pass
                 logger.error(
                     "[ACTOR_CREATE] Actor 创建失败 (尝试 {}/{}) | 耗时={:.2f}s | 错误={}",
                     attempt + 1,
@@ -604,6 +647,10 @@ class DataProviderFactory:
                 )
                 if attempt < max_retries - 1:
                     delay = base_delay * (2**attempt)
+                    try:
+                        await close_dask_client()
+                    except Exception as close_exc:
+                        logger.debug("[ACTOR_CREATE] 重试前关闭 Dask Client 失败: {}", close_exc)
                     logger.info(f"等待 {delay}s 后重试...")
                     await asyncio.sleep(delay)
                 else:
@@ -753,7 +800,12 @@ class DataProviderFactory:
                     raise
 
     @classmethod
-    async def get_provider_async(cls, provider_type: ProviderKey = "akshare") -> Any:
+    async def get_provider_async(
+        cls,
+        provider_type: ProviderKey = "akshare",
+        create_timeout: float | None = None,
+        strict: bool = True,
+    ) -> Any:
         """Get or create singleton provider instance (asynchronous version)."""
         normalized_type = cls._normalize_provider_type(provider_type)
 
@@ -798,7 +850,9 @@ class DataProviderFactory:
             if need_create:
                 logger.info("Creating amazingdata Actor instance (async, outside lock)")
                 try:
-                    new_instance = await cls._create_amazingdata_actor()
+                    new_instance = await cls._create_amazingdata_actor(
+                        create_timeout=create_timeout
+                    )
                     # 创建成功后再加锁保存
                     with cls._lock:
                         # 再次检查是否已被其他请求创建
@@ -826,7 +880,10 @@ class DataProviderFactory:
                         "error": str(e),
                         "initialized_at": now().isoformat(),
                     }
-                    raise RuntimeError(f"AmazingData Actor 创建失败: {e}") from e
+                    if strict:
+                        raise RuntimeError(f"AmazingData Actor 创建失败: {e}") from e
+                    logger.warning("AmazingData 创建失败，strict=False，返回 None")
+                    return None
 
         # miniqmt 特殊处理：在锁外创建 Actor 避免死锁
         if normalized_type == "miniqmt" and instance is None:
@@ -865,7 +922,10 @@ class DataProviderFactory:
                         "error": str(e),
                         "initialized_at": now().isoformat(),
                     }
-                    raise RuntimeError(f"MiniQMT Actor 创建失败: {e}") from e
+                    if strict:
+                        raise RuntimeError(f"MiniQMT Actor 创建失败: {e}") from e
+                    logger.warning("MiniQMT 创建失败，strict=False，返回 None")
+                    return None
 
         if instance is None:
             with cls._lock:

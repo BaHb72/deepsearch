@@ -186,6 +186,11 @@ async def _get_or_create_collector():
             raise
 
 
+async def get_shared_miniqmt_collector():
+    """获取全局共享的 MiniQMTCollector 实例。"""
+    return await _get_or_create_collector()
+
+
 class MiniQMTPollingStreamPort(RealtimeStreamPort):
     """Implement MarketStreamPort by polling MiniQMTCollector."""
 
@@ -453,4 +458,9 @@ class MiniQMTPollingAdapter(RealtimeAdapter):
             return []
 
 
-__all__ = ["MiniQMTPollingAdapter", "MiniQMTPollingStreamPort", "MiniQMTBoardUniversePort"]
+__all__ = [
+    "MiniQMTPollingAdapter",
+    "MiniQMTPollingStreamPort",
+    "MiniQMTBoardUniversePort",
+    "get_shared_miniqmt_collector",
+]

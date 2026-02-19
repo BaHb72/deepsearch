@@ -4,6 +4,7 @@ import { App as AntApp, Spin } from 'antd'
 
 import MainLayout from './layouts/MainLayout'
 import messageManager from './utils/messageManager'
+import SlowLoadSwitchModalHost from './components/common/SlowLoadSwitchModalHost'
 
 const Dashboard = lazy(() => import('./pages/dashboard'))
 const EventSystem = lazy(() => import('./pages/EventSystem'))
@@ -43,8 +44,9 @@ const App: React.FC = () => {
     messageManager.setMessageApi(message)
   }, [message])
 
-  return (
+    return (
     <Suspense fallback={<Loading />}>
+      <SlowLoadSwitchModalHost />
       <Routes>
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Dashboard />} />

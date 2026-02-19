@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "updated_at": "2026-02-16T15:50:00+08:00",
+  "updated_at": "2026-02-17T22:05:00+08:00",
   "description": "统一关联索引 - 连接 issues 和 decisions 的生命周期",
   "relations": [
     {
@@ -44,6 +44,72 @@
       "decision_path": "worklog/2026/02/2026-02-16_dask-version-alignment-closure.md",
       "relation_type": "resolved_by",
       "created_at": "2026-02-16T15:50:00+08:00"
+    },
+    {
+      "issue_path": "issues/resolved/2026-02-16_amazingdata-api-provider-reinit-on-request.md",
+      "decision_path": "worklog/2026/02/2026-02-16_amazingdata-provider-resolution-and-real-path-validation.md",
+      "relation_type": "resolved_by",
+      "created_at": "2026-02-16T21:20:00+08:00"
+    },
+    {
+      "issue_path": "issues/resolved/2026-02-16_hardcoded-amazingdata-test-credentials.md",
+      "decision_path": "worklog/2026/02/2026-02-16_amazingdata-provider-resolution-and-real-path-validation.md",
+      "relation_type": "resolved_by",
+      "created_at": "2026-02-16T21:20:00+08:00"
+    },
+    {
+      "issue_path": "issues/resolved/2026-02-16_check-amazingdata-missing-distributed-worker-check.md",
+      "decision_path": "worklog/2026/02/2026-02-16_amazingdata-provider-resolution-and-real-path-validation.md",
+      "relation_type": "resolved_by",
+      "created_at": "2026-02-16T21:20:00+08:00"
+    },
+    {
+      "issue_path": "issues/resolved/2026-02-16_amazingdata-config-connection-precedence.md",
+      "decision_path": "worklog/2026/02/2026-02-16_amazingdata-provider-resolution-and-real-path-validation.md",
+      "relation_type": "resolved_by",
+      "created_at": "2026-02-16T21:45:00+08:00"
+    },
+    {
+      "issue_path": "issues/resolved/2026-02-16_start-windows-dask-powershell51-parse-failure.md",
+      "decision_path": "worklog/2026/02/2026-02-16_amazingdata-provider-resolution-and-real-path-validation.md",
+      "relation_type": "resolved_by",
+      "created_at": "2026-02-16T21:45:00+08:00"
+    },
+    {
+      "issue_path": "issues/resolved/2026-02-16_docker-dask-scheduler-missing-core-modules.md",
+      "decision_path": "worklog/2026/02/2026-02-16_amazingdata-provider-resolution-and-real-path-validation.md",
+      "relation_type": "resolved_by",
+      "created_at": "2026-02-16T21:55:00+08:00"
+    },
+    {
+      "issue_path": "issues/backlog/2026-02-16_amazingdata-real-path-verification-gap.md",
+      "decision_path": "worklog/2026/02/2026-02-16_amazingdata-progress-and-next-plan.md",
+      "relation_type": "tracked_in",
+      "created_at": "2026-02-16T23:05:00+08:00"
+    },
+    {
+      "issue_path": "issues/resolved/2026-02-17_provider-contract-config-preload-and-docker-secrets-boundary.md",
+      "decision_path": "worklog/2026/02/2026-02-17_provider-contract-and-image-config-hardening.md",
+      "relation_type": "resolved_by",
+      "created_at": "2026-02-17T20:10:00+08:00"
+    },
+    {
+      "issue_path": "issues/resolved/2026-02-17_amazingdata-sdk-import-compat-and-module-getattr.md",
+      "decision_path": "worklog/2026/02/2026-02-17_amazingdata-sdk-import-compat-fix.md",
+      "relation_type": "resolved_by",
+      "created_at": "2026-02-17T20:40:00+08:00"
+    },
+    {
+      "issue_path": "issues/resolved/2026-02-17_amazingdata-interface-alignment-with-sdk-1.0.28.md",
+      "decision_path": "worklog/2026/02/2026-02-17_amazingdata-interface-alignment-via-doc-and-pyc.md",
+      "relation_type": "resolved_by",
+      "created_at": "2026-02-17T21:10:00+08:00"
+    },
+    {
+      "issue_path": "issues/resolved/2026-02-17_amazingdata-all-apis-test-fixture-process-isolation-mismatch.md",
+      "decision_path": "worklog/2026/02/2026-02-17_amazingdata-all-apis-test-fixture-process-isolation-fix.md",
+      "relation_type": "resolved_by",
+      "created_at": "2026-02-17T22:05:00+08:00"
     }
   ]
 }

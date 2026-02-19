@@ -37,6 +37,7 @@ export interface DataSourceRequest {
     capability: DataCapability
     params: DataSourceParams
     preferredSource?: DataSourceType
+    strictSource?: boolean
     fallbackSources?: DataSourceType[]
 }
 

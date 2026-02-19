@@ -9,12 +9,11 @@ from typing import Any, Dict, Optional
 from core.infrastructure.providers.implementations.akshare.akshare_api_mapping import (
     AkShareAPIMapping,
 )
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from apps.api.api.provider_deps import get_akshare_provider
-from apps.api.api.providers import DataProviderFactory, DataSourceType
+from apps.api.api.provider_deps import get_akshare_provider, resolve_provider_from_request
 
 router = APIRouter(prefix="/api/akshare", tags=["akshare"])
 
@@ -45,7 +44,10 @@ class CallApiRequest(BaseModel):
 
 
 @router.post("/call", summary="通用AkShare API调用")
-async def call_akshare_api(request: CallApiRequest):
+async def call_akshare_api(
+    request: CallApiRequest,
+    provider=Depends(get_akshare_provider),
+):
     """
     通用AkShare API调用接口
 
@@ -69,9 +71,6 @@ async def call_akshare_api(request: CallApiRequest):
         if not api_info:
             # 尝试直接调用，可能是未注册但有效的API
             logger.warning(f"API '{request.api_name}' 未在映射表中注册，尝试直接调用")
-
-        # 获取AkShare provider
-        provider = await DataProviderFactory.get_provider_async(DataSourceType.AKSHARE)
 
         if provider is None:
             raise HTTPException(status_code=503, detail="AkShare provider 不可用")
@@ -311,16 +310,16 @@ async def get_api_detail(api_name: str):
 # ================== 板块数据 API ==================
 
 
-async def _get_akshare_provider():
+async def _get_akshare_provider(request: Request):
     """获取AkShare provider实例"""
-    provider = await DataProviderFactory.get_provider_async(DataSourceType.AKSHARE)
+    provider = await resolve_provider_from_request(request, "akshare", strict=False)
     if provider is None:
         raise HTTPException(status_code=503, detail="AkShare provider 不可用")
     return provider
 
 
 @router.get("/boards/industry", summary="获取行业板块列表")
-async def get_industry_boards():
+async def get_industry_boards(request: Request):
     """
     获取行业板块列表
 
@@ -328,7 +327,7 @@ async def get_industry_boards():
         行业板块列表，包含板块名称、涨跌幅、成交量等信息
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_industry_boards()
         return {
             "success": True,
@@ -343,7 +342,7 @@ async def get_industry_boards():
 
 
 @router.get("/boards/concept", summary="获取概念板块列表")
-async def get_concept_boards():
+async def get_concept_boards(request: Request):
     """
     获取概念板块列表
 
@@ -351,7 +350,7 @@ async def get_concept_boards():
         概念板块列表，包含板块名称、涨跌幅、成交量等信息
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_concept_boards()
         return {
             "success": True,
@@ -367,6 +366,7 @@ async def get_concept_boards():
 
 @router.get("/boards/{board_name}/stocks", summary="获取板块成分股")
 async def get_board_constituents(
+    request: Request,
     board_name: str,
     board_type: str = Query("industry", description="板块类型: industry(行业)/concept(概念)"),
 ):
@@ -381,7 +381,7 @@ async def get_board_constituents(
         板块成分股列表
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_board_constituents(board_name, board_type)
         return {
             "success": True,
@@ -402,6 +402,7 @@ async def get_board_constituents(
 
 @router.get("/hsgt/flow", summary="获取北向资金流向")
 async def get_north_flow(
+    request: Request,
     indicator: str = Query("北向资金", description="指标类型: 沪股通/深股通/北向资金"),
 ):
     """
@@ -414,7 +415,7 @@ async def get_north_flow(
         资金流向历史数据
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_north_flow(indicator)
         return {
             "success": True,
@@ -431,6 +432,7 @@ async def get_north_flow(
 
 @router.get("/hsgt/hold", summary="获取北向资金持股排行")
 async def get_north_hold_stock(
+    request: Request,
     market: str = Query("北向", description="市场: 北向/沪股通/深股通"),
     indicator: str = Query(
         "今日排行", description="排行类型: 今日排行/5日排行/10日排行/月排行/季排行/年排行"
@@ -447,7 +449,7 @@ async def get_north_hold_stock(
         持股排行数据
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_north_hold_stock(market, indicator)
         return {
             "success": True,
@@ -468,6 +470,7 @@ async def get_north_hold_stock(
 
 @router.get("/anomaly/limit-up", summary="获取涨停池数据")
 async def get_limit_up_pool(
+    request: Request,
     date: Optional[str] = Query(None, description="日期，格式YYYYMMDD，默认最新"),
 ):
     """
@@ -480,7 +483,7 @@ async def get_limit_up_pool(
         涨停股票列表
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_limit_up_pool(date)
         return {
             "success": True,
@@ -497,6 +500,7 @@ async def get_limit_up_pool(
 
 @router.get("/anomaly/limit-down", summary="获取跌停池数据")
 async def get_limit_down_pool(
+    request: Request,
     date: Optional[str] = Query(None, description="日期，格式YYYYMMDD，默认最新"),
 ):
     """
@@ -509,7 +513,7 @@ async def get_limit_down_pool(
         跌停股票列表
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_limit_down_pool(date)
         return {
             "success": True,
@@ -526,6 +530,7 @@ async def get_limit_down_pool(
 
 @router.get("/anomaly/dragon-tiger", summary="获取龙虎榜数据")
 async def get_dragon_tiger(
+    request: Request,
     date: Optional[str] = Query(None, description="日期，格式YYYYMMDD，默认最新"),
 ):
     """
@@ -538,7 +543,7 @@ async def get_dragon_tiger(
         龙虎榜数据
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_dragon_tiger(date)
         return {
             "success": True,
@@ -558,6 +563,7 @@ async def get_dragon_tiger(
 
 @router.get("/margin/{market}", summary="获取融资融券数据")
 async def get_margin_trading(
+    request: Request,
     market: str,
 ):
     """
@@ -570,7 +576,7 @@ async def get_margin_trading(
         融资融券数据
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_margin_trading(market)
         return {
             "success": True,
@@ -589,7 +595,7 @@ async def get_margin_trading(
 
 
 @router.get("/stock/{symbol}/info", summary="获取个股详细信息")
-async def get_stock_info(symbol: str):
+async def get_stock_info(symbol: str, request: Request):
     """
     获取个股详细信息
 
@@ -600,7 +606,7 @@ async def get_stock_info(symbol: str):
         个股详细信息
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_stock_info(symbol)
         return {
             "success": True,
@@ -616,6 +622,7 @@ async def get_stock_info(symbol: str):
 
 @router.get("/stock/{symbol}/kline", summary="获取日线K线数据")
 async def get_stock_kline(
+    request: Request,
     symbol: str,
     period: str = Query("daily", description="周期: daily/weekly/monthly"),
     start_date: Optional[str] = Query(None, description="开始日期 YYYYMMDD"),
@@ -636,7 +643,7 @@ async def get_stock_kline(
         K线数据列表
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_kline(symbol, period, start_date, end_date, adjust)
         return {
             "success": True,
@@ -655,6 +662,7 @@ async def get_stock_kline(
 
 @router.get("/stock/{symbol}/minute", summary="获取分钟K线数据")
 async def get_minute_kline(
+    request: Request,
     symbol: str,
     period: str = Query("1", description="周期: 1/5/15/30/60 分钟"),
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD HH:MM:SS"),
@@ -675,7 +683,7 @@ async def get_minute_kline(
         分钟K线数据
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_minute_kline(symbol, period, start_date, end_date, adjust)
         return {
             "success": True,
@@ -753,6 +761,7 @@ async def get_api_statistics():
 
 @router.get("/realtime/quotes", summary="获取实时行情")
 async def get_realtime_quotes(
+    request: Request,
     symbols: str = Query(..., description="股票代码列表，逗号分隔，如: 000001,600000,300750"),
 ):
     """
@@ -765,7 +774,7 @@ async def get_realtime_quotes(
         实时行情数据字典，key为股票代码
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
         if not symbol_list:
             raise HTTPException(status_code=400, detail="请提供至少一个股票代码")
@@ -819,6 +828,7 @@ async def get_stock_list(
 
 @router.get("/calendar", summary="获取交易日历")
 async def get_calendar(
+    request: Request,
     market: str = Query("SH", description="市场代码: SH(上海)/SZ(深圳)"),
 ):
     """
@@ -831,7 +841,7 @@ async def get_calendar(
         交易日列表 (YYYYMMDD 格式)
     """
     try:
-        provider = await _get_akshare_provider()
+        provider = await _get_akshare_provider(request)
         result = await provider.get_calendar(market)
         return {
             "success": True,

@@ -86,6 +86,10 @@ def _resolve_data_source_name(app_state: Any) -> str:
 
 
 def _normalize_source_param(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
     if not value:
         return None
     normalized = value.strip().lower()
@@ -242,6 +246,212 @@ def _safe_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _safe_percentage(value: Any) -> float | None:
+    raw = _safe_float(value)
+    if raw is None:
+        return None
+    # 兼容 0.03(3%) 与 3.0(3%) 两种口径
+    if -1.0 <= raw <= 1.0:
+        return raw * 100
+    return raw
+
+
+def _extract_records(payload: Any) -> list[dict[str, Any]]:
+    if payload is None:
+        return []
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        return []
+    to_dict = getattr(payload, "to_dict", None)
+    if callable(to_dict):
+        try:
+            data = to_dict("records")
+            if isinstance(data, list):
+                return [item for item in data if isinstance(item, dict)]
+        except Exception:
+            return []
+    return []
+
+
+def _normalize_concept_period(period: str | None) -> str:
+    if period is None:
+        return "realtime"
+    normalized = str(period).strip().lower()
+    aliases = {
+        "rt": "realtime",
+        "real": "realtime",
+        "today": "today",
+        "day": "today",
+        "week": "week",
+        "weekly": "week",
+    }
+    resolved = aliases.get(normalized, normalized)
+    if resolved not in {"realtime", "today", "week"}:
+        raise HTTPException(status_code=400, detail="period 仅支持 realtime/today/week")
+    return resolved
+
+
+def _normalize_realtime_flow_items(items: list[dict[str, Any]], data_source: str) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for idx, item in enumerate(items):
+        concept_name = str(item.get("name") or item.get("concept_name") or item.get("board") or "")
+        concept_code = str(item.get("concept_code") or item.get("code") or f"RT-{idx}")
+        if not concept_name and not concept_code:
+            continue
+
+        flow_speed = _safe_float(item.get("velocity")) or 0.0
+        main_net_inflow = _safe_float(item.get("main_net_inflow"))
+        if main_net_inflow is None:
+            main_net_inflow = flow_speed
+        main_net_inflow_pct = _safe_float(item.get("main_net_inflow_pct"))
+        change_pct = _safe_percentage(item.get("change_pct"))
+        if change_pct is None:
+            change_pct = _safe_percentage(item.get("lead_change"))
+        lead_stock = str(item.get("lead_stock") or item.get("leading_stock") or "")
+        lead_change_pct = _safe_percentage(item.get("lead_change"))
+        if lead_change_pct is None:
+            lead_change_pct = change_pct
+
+        normalized.append(
+            {
+                # 统一字段
+                "concept_name": concept_name,
+                "concept_code": concept_code,
+                "main_net_inflow": main_net_inflow,
+                "main_net_inflow_pct": main_net_inflow_pct,
+                "change_pct": change_pct,
+                "leading_stock": lead_stock,
+                "flow_speed": flow_speed,
+                "ts": _iso_now(),
+                "data_source": data_source,
+                # 兼容旧字段
+                "board": concept_name,
+                "velocity": flow_speed,
+                "lead_stock": lead_stock,
+                "lead_change": (lead_change_pct / 100) if lead_change_pct is not None else None,
+            }
+        )
+    normalized.sort(key=lambda row: row.get("main_net_inflow") or 0.0, reverse=True)
+    return normalized
+
+
+def _normalize_akshare_flow_items(
+    items: list[dict[str, Any]],
+    *,
+    indicator_label: str,
+    data_source: str,
+) -> list[dict[str, Any]]:
+    leading_key = f"{indicator_label}主力净流入最大股"
+    change_key = f"{indicator_label}涨跌幅"
+    inflow_key = f"{indicator_label}主力净流入-净额"
+    inflow_pct_key = f"{indicator_label}主力净流入-净占比"
+    normalized: list[dict[str, Any]] = []
+
+    for idx, item in enumerate(items):
+        concept_name = str(item.get("name") or item.get("名称") or item.get("board") or "")
+        concept_code = str(item.get("code") or item.get("板块代码") or item.get("concept_code") or f"AK-{idx}")
+        if not concept_name and not concept_code:
+            continue
+
+        main_net_inflow = _safe_float(item.get("main_net_inflow"))
+        if main_net_inflow is None:
+            main_net_inflow = _safe_float(item.get("主力净流入-净额")) or 0.0
+        if main_net_inflow is None or main_net_inflow == 0.0:
+            main_net_inflow = _safe_float(item.get(inflow_key)) or 0.0
+        main_net_inflow_pct = _safe_float(item.get("main_net_inflow_pct"))
+        if main_net_inflow_pct is None:
+            main_net_inflow_pct = _safe_float(item.get("主力净流入-净占比"))
+        if main_net_inflow_pct is None:
+            main_net_inflow_pct = _safe_float(item.get(inflow_pct_key))
+        change_pct = _safe_float(item.get("change_pct"))
+        if change_pct is None:
+            change_pct = _safe_float(item.get(change_key))
+        if change_pct is None:
+            change_pct = _safe_float(item.get("今日涨跌幅"))
+        leading_stock = str(
+            item.get("leading_stock")
+            or item.get(leading_key)
+            or item.get("今日主力净流入最大股")
+            or item.get("lead_stock")
+            or ""
+        )
+        flow_speed = _safe_float(item.get("flow_speed"))
+        if flow_speed is None:
+            flow_speed = _safe_float(item.get("velocity"))
+        if flow_speed is None:
+            flow_speed = main_net_inflow
+
+        normalized.append(
+            {
+                # 统一字段
+                "concept_name": concept_name,
+                "concept_code": concept_code,
+                "main_net_inflow": main_net_inflow,
+                "main_net_inflow_pct": main_net_inflow_pct,
+                "change_pct": change_pct,
+                "leading_stock": leading_stock,
+                "flow_speed": flow_speed,
+                "ts": _iso_now(),
+                "data_source": data_source,
+                # 兼容旧字段
+                "board": concept_name,
+                "velocity": flow_speed,
+                "lead_stock": leading_stock,
+                "lead_change": (change_pct / 100) if change_pct is not None else None,
+            }
+        )
+
+    normalized.sort(key=lambda row: row.get("main_net_inflow") or 0.0, reverse=True)
+    return normalized
+
+
+async def _fetch_concept_flow_from_akshare(limit: int, indicator_label: str) -> list[dict[str, Any]]:
+    from core.infrastructure.providers.integration.compat import get_provider_compat
+
+    provider = await get_provider_compat("akshare")
+    if provider is None:
+        raise RuntimeError("akshare provider unavailable")
+
+    raw: Any = None
+    if callable(getattr(provider, "get_sector_capital_flow_rank", None)):
+        try:
+            raw = await provider.get_sector_capital_flow_rank(
+                indicator=indicator_label,
+                sector_type="概念资金流",
+            )
+        except Exception as error:
+            logger.warning(f"akshare get_sector_capital_flow_rank 失败，尝试 call_api: {error}")
+
+    primary_records = _extract_records(raw)
+    primary_items = _normalize_akshare_flow_items(
+        primary_records,
+        indicator_label=indicator_label,
+        data_source="akshare",
+    )
+    has_primary_inflow = any(abs((item.get("main_net_inflow") or 0.0)) > 0.0 for item in primary_items)
+    if primary_items and has_primary_inflow:
+        return primary_items[:limit]
+
+    # 兼容 provider 未初始化、接口返回空值，或主链路返回全 0 净流入的场景
+    raw = await provider.call_api(
+        api_name="stock_sector_fund_flow_rank",
+        params={"indicator": indicator_label, "sector_type": "概念资金流"},
+    )
+    records = _extract_records(raw)
+    normalized = _normalize_akshare_flow_items(
+        records,
+        indicator_label=indicator_label,
+        data_source="akshare",
+    )
+    if normalized:
+        return normalized[:limit]
+    return primary_items[:limit]
 
 
 @router.get("/strength")
@@ -855,53 +1065,163 @@ async def get_auction_quality(
 @router.get("/concept-flow")
 async def get_concept_flow(
     request: Request,
+    period: str | None = Query(
+        "realtime",
+        description="资金流周期: realtime(实时) / today(今日) / week(周，按5日口径)",
+    ),
     limit: int = Query(50, ge=1, le=200, description="返回数量"),
     source: str | None = Query(None, description="指定数据源，默认 amazingdata"),
 ) -> JSONResponse:
     """获取概念板块资金流向排行（替代订单失衡）。"""
+    period_value = _normalize_concept_period(period)
+    requested_source = _normalize_source_param(source) or (
+        "amazingdata" if period_value == "realtime" else "akshare"
+    )
+    detail: dict[str, Any] = {}
+    data_source = requested_source
 
-    requested_source = _normalize_source_param(source) or "amazingdata"
+    if period_value == "realtime":
+        try:
+            from apps.api.api.endpoints.amazingdata.concept import get_concept_velocity
 
-    # 调用 AmazingData 的 /concept/velocity 接口
-    try:
-        from apps.api.api.endpoints.amazingdata.concept import get_concept_velocity
-
-        result = await get_concept_velocity(limit=limit)
-
-        if result.get("success") and result.get("data"):
-            items = []
-            for item in result["data"]:
-                items.append(
-                    {
-                        "board": item.get("name", ""),
-                        "concept_code": item.get("concept_code", ""),
-                        "velocity": item.get("velocity", 0),
-                        "lead_stock": item.get("lead_stock", ""),
-                        "lead_change": item.get("lead_change", 0),
-                        "data_source": "amazingdata",
-                    }
-                )
+            result = await get_concept_velocity(limit=limit)
+            if result.get("success"):
+                records = _extract_records(result)
+                items = _normalize_realtime_flow_items(records, data_source="amazingdata")
+                has_realtime_inflow = any(abs((item.get("main_net_inflow") or 0.0)) > 0.0 for item in items)
+                if items and has_realtime_inflow:
+                    return JSONResponse(
+                        {
+                            "period": period_value,
+                            "items": items,
+                            "count": len(items),
+                            "retrieved_at": _iso_now(),
+                            "data_source": "amazingdata",
+                            "stale": False,
+                        }
+                    )
+                if items and not has_realtime_inflow:
+                    raise RuntimeError("realtime concept flow has no usable net inflow")
+            raise RuntimeError(result.get("error") or "realtime concept flow returned empty")
+        except Exception as primary_error:
+            logger.warning(f"实时概念资金流获取失败，回退今日口径: {primary_error}")
+            detail["fallback"] = {
+                "from": "amazingdata.realtime",
+                "to": "akshare.today",
+                "reason": str(primary_error),
+            }
+            try:
+                fallback_items = await _fetch_concept_flow_from_akshare(limit=limit, indicator_label="今日")
+                if fallback_items:
+                    return JSONResponse(
+                        {
+                            "period": period_value,
+                            "items": fallback_items,
+                            "count": len(fallback_items),
+                            "retrieved_at": _iso_now(),
+                            "data_source": "akshare",
+                            "stale": False,
+                            "detail": detail,
+                        }
+                    )
+            except Exception as fallback_error:
+                logger.warning(f"概念资金流 fallback 失败: {fallback_error}")
+                detail["fallback_error"] = str(fallback_error)
 
             return JSONResponse(
                 {
-                    "items": items,
-                    "count": len(items),
+                    "period": period_value,
+                    "items": [],
+                    "count": 0,
                     "retrieved_at": _iso_now(),
-                    "data_source": requested_source,
-                    "stale": False,
+                    "data_source": data_source,
+                    "stale": True,
+                    "detail": {
+                        "code": "DATA_SOURCE_OFFLINE",
+                        "message": "实时概念资金流获取失败",
+                        **detail,
+                    },
                 }
             )
-    except Exception as e:
-        logger.warning(f"获取概念资金流失败: {e}")
 
-    # 返回空数据
-    return JSONResponse(
-        {
-            "items": [],
-            "count": 0,
-            "retrieved_at": _iso_now(),
-            "data_source": requested_source,
-            "stale": True,
-            "detail": {"code": "DATA_SOURCE_OFFLINE", "message": "获取数据失败"},
-        }
-    )
+    indicator_label = "今日" if period_value == "today" else "5日"
+    try:
+        items = await _fetch_concept_flow_from_akshare(limit=limit, indicator_label=indicator_label)
+        if not items and period_value == "week":
+            fallback_items = await _fetch_concept_flow_from_akshare(limit=limit, indicator_label="今日")
+            if fallback_items:
+                return JSONResponse(
+                    {
+                        "period": period_value,
+                        "items": fallback_items,
+                        "count": len(fallback_items),
+                        "retrieved_at": _iso_now(),
+                        "data_source": "akshare",
+                        "stale": False,
+                        "detail": {
+                            "fallback": {
+                                "from": "akshare.5日",
+                                "to": "akshare.今日",
+                                "reason": "5日口径暂不可用，已回退今日口径",
+                            }
+                        },
+                    }
+                )
+        if not items:
+            return JSONResponse(
+                {
+                    "period": period_value,
+                    "items": [],
+                    "count": 0,
+                    "retrieved_at": _iso_now(),
+                    "data_source": "akshare",
+                    "stale": True,
+                    "detail": {"code": "DATA_SOURCE_EMPTY", "message": "暂无概念资金流数据"},
+                }
+            )
+        return JSONResponse(
+            {
+                "period": period_value,
+                "items": items,
+                "count": len(items),
+                "retrieved_at": _iso_now(),
+                "data_source": "akshare",
+                "stale": False,
+            }
+        )
+    except Exception as e:
+        logger.warning(f"获取概念资金流失败(period={period_value}): {e}")
+        if period_value == "week":
+            try:
+                fallback_items = await _fetch_concept_flow_from_akshare(limit=limit, indicator_label="今日")
+                if fallback_items:
+                    return JSONResponse(
+                        {
+                            "period": period_value,
+                            "items": fallback_items,
+                            "count": len(fallback_items),
+                            "retrieved_at": _iso_now(),
+                            "data_source": "akshare",
+                            "stale": False,
+                            "detail": {
+                                "fallback": {
+                                    "from": "akshare.5日",
+                                    "to": "akshare.今日",
+                                    "reason": str(e),
+                                }
+                            },
+                        }
+                    )
+            except Exception:
+                pass
+        return JSONResponse(
+            {
+                "period": period_value,
+                "items": [],
+                "count": 0,
+                "retrieved_at": _iso_now(),
+                "data_source": data_source,
+                "stale": True,
+                "detail": {"code": "DATA_SOURCE_OFFLINE", "message": "获取数据失败", "reason": str(e)},
+            }
+        )

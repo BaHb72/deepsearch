@@ -3,9 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 
-from core.infrastructure.providers.implementations.amazingdata.amazingdata_extended import (
-    AmazingDataExtended,
-)
+from core.ports.concept_engine import ConceptDataProviderPort
 from loguru import logger
 
 # 使用 Dict[str, Any] 替代不存在的 Snapshot 类型
@@ -34,7 +32,7 @@ class ConceptLinkageEngine:
     Maintains the static graph of Stock->Concepts and processes real-time snapshots.
     """
 
-    def __init__(self, provider: AmazingDataExtended):
+    def __init__(self, provider: ConceptDataProviderPort):
         self.provider = provider
         self._concept_map: Dict[str, List[str]] = {}  # ConceptID -> [StockID]
         self._stock_to_concepts: Dict[str, List[str]] = defaultdict(list)  # StockID -> [ConceptID]
@@ -245,7 +243,7 @@ _engine_instance: Optional[ConceptLinkageEngine] = None
 
 
 def get_concept_engine(
-    provider: Optional[AmazingDataExtended] = None,
+    provider: Optional[ConceptDataProviderPort] = None,
 ) -> Optional[ConceptLinkageEngine]:
     global _engine_instance
     if _engine_instance is None and provider:

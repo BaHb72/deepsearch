@@ -19,8 +19,10 @@ Architecture:
 # =============================================================================
 # 核心 Provider 类
 # =============================================================================
+from core.domain.market_data import StockListRecord
+
 from .amazingdata import AmazingDataProvider
-from .amazingdata_extended import AmazingDataExtended, StockListRecord
+from .amazingdata_extended import AmazingDataExtended
 from .amazingdata_optimized import OptimizedAmazingDataProvider
 
 # =============================================================================

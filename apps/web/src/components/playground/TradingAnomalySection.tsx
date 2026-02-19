@@ -16,6 +16,7 @@ import { ExtendedFieldsPanel } from '@/components/common/ExtendedFieldsPanel'
 export interface TradingAnomalySectionProps {
     stockCode?: string
     preferredSource?: DataSourceType
+    onSuggestSourceSwitch?: (source: DataSourceType) => void
     /** 是否显示扩展字段面板 */
     showExtended?: boolean
 }
@@ -120,6 +121,7 @@ const blockTradingColumns: ColumnsType<CoreBlockTradingData & { _key: number }> 
 export const TradingAnomalySection: React.FC<TradingAnomalySectionProps> = ({
     stockCode,
     preferredSource,
+    onSuggestSourceSwitch,
     showExtended = true,
 }) => {
     const [activeTab, setActiveTab] = useState('dragon')
@@ -140,6 +142,13 @@ export const TradingAnomalySection: React.FC<TradingAnomalySectionProps> = ({
         preferredSource,
         autoFetch: true,
         deps: [stockCode, dateParams.startDate, dateParams.endDate],
+        monitor: {
+            pageKey: 'dev/playground',
+            pageName: '数据源沙盒',
+            moduleKey: 'anomaly',
+            moduleName: '市场异动',
+            onSwitchSource: onSuggestSourceSwitch,
+        },
     })
 
     // 大宗交易数据
@@ -149,6 +158,13 @@ export const TradingAnomalySection: React.FC<TradingAnomalySectionProps> = ({
         preferredSource,
         autoFetch: activeTab === 'block',
         deps: [stockCode, activeTab, dateParams.startDate, dateParams.endDate],
+        monitor: {
+            pageKey: 'dev/playground',
+            pageName: '数据源沙盒',
+            moduleKey: 'anomaly',
+            moduleName: '市场异动',
+            onSwitchSource: onSuggestSourceSwitch,
+        },
     })
 
     const loading = dragonResult.loading || blockResult.loading

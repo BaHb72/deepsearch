@@ -671,17 +671,6 @@
       }
     },
     {
-      "name": "stock_comment_detail_scrd_desire_daily_em",
-      "category": "stock",
-      "description": "",
-      "params": [
-        "symbol"
-      ],
-      "param_defaults": {
-        "symbol": "600000"
-      }
-    },
-    {
       "name": "stock_comment_detail_scrd_desire_em",
       "category": "stock",
       "description": "",

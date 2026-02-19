@@ -1709,17 +1709,54 @@ class AkShareProvider(ILifecycleProvider):
             for _, row in df.iterrows():
                 result.append(
                     {
-                        "rank": int(row.get("序号", 0)),
+                        "rank": int(self._safe_float(row.get("序号", 0), 0.0)),
                         "name": str(row.get("名称", "")),
-                        "change_pct": float(
-                            row.get(f"{prefix}涨跌幅", row.get("今日涨跌幅", 0)) or 0
+                        "change_pct": self._safe_float(
+                            row.get(f"{prefix}涨跌幅", row.get("今日涨跌幅", 0)),
+                            0.0,
                         ),
-                        "main_net_inflow": float(row.get("主力净流入-净额", 0) or 0),
-                        "main_net_inflow_pct": float(row.get("主力净流入-净占比", 0) or 0),
-                        "super_large_net_inflow": float(row.get("超大单净流入-净额", 0) or 0),
-                        "super_large_net_inflow_pct": float(row.get("超大单净流入-净占比", 0) or 0),
-                        "large_net_inflow": float(row.get("大单净流入-净额", 0) or 0),
-                        "large_net_inflow_pct": float(row.get("大单净流入-净占比", 0) or 0),
+                        "main_net_inflow": self._safe_float(
+                            row.get(
+                                f"{prefix}主力净流入-净额",
+                                row.get("主力净流入-净额", 0),
+                            ),
+                            0.0,
+                        ),
+                        "main_net_inflow_pct": self._safe_float(
+                            row.get(
+                                f"{prefix}主力净流入-净占比",
+                                row.get("主力净流入-净占比", 0),
+                            ),
+                            0.0,
+                        ),
+                        "super_large_net_inflow": self._safe_float(
+                            row.get(
+                                f"{prefix}超大单净流入-净额",
+                                row.get("超大单净流入-净额", 0),
+                            ),
+                            0.0,
+                        ),
+                        "super_large_net_inflow_pct": self._safe_float(
+                            row.get(
+                                f"{prefix}超大单净流入-净占比",
+                                row.get("超大单净流入-净占比", 0),
+                            ),
+                            0.0,
+                        ),
+                        "large_net_inflow": self._safe_float(
+                            row.get(
+                                f"{prefix}大单净流入-净额",
+                                row.get("大单净流入-净额", 0),
+                            ),
+                            0.0,
+                        ),
+                        "large_net_inflow_pct": self._safe_float(
+                            row.get(
+                                f"{prefix}大单净流入-净占比",
+                                row.get("大单净流入-净占比", 0),
+                            ),
+                            0.0,
+                        ),
                         "leading_stock": str(
                             row.get(
                                 f"{prefix}主力净流入最大股", row.get("今日主力净流入最大股", "")
@@ -1734,7 +1771,159 @@ class AkShareProvider(ILifecycleProvider):
 
         except Exception as e:
             logger.error(f"获取板块资金流向排名失败: {e}")
+            # AkShare 在 5日/10日口径偶发返回字符串值，内部排序会触发类型比较异常。
+            # 这里回退到直接请求东财接口，并在本地做数值清洗与排序。
+            return self._fetch_sector_capital_flow_rank_raw_sync(indicator, sector_type)
+
+    def _fetch_sector_capital_flow_rank_raw_sync(
+        self,
+        indicator: str,
+        sector_type: str,
+    ) -> List[Dict[str, Any]]:
+        """绕过 akshare 排序逻辑，直接请求东财接口并做稳健解析。"""
+        try:
+            import math
+            import requests
+        except Exception as import_error:
+            logger.error(f"加载 fallback 依赖失败: {import_error}")
             return []
+
+        sector_type_map = {"行业资金流": "2", "概念资金流": "3", "地域资金流": "1"}
+        indicator_fields: Dict[str, Dict[str, str]] = {
+            "今日": {
+                "fid0": "f62",
+                "stat": "1",
+                "fields": "f12,f14,f2,f3,f62,f184,f66,f69,f72,f75,f78,f81,f84,f87,f204,f205,f124",
+                "change": "f3",
+                "main_net": "f62",
+                "main_pct": "f184",
+                "super_net": "f66",
+                "super_pct": "f69",
+                "large_net": "f72",
+                "large_pct": "f75",
+                "leading_stock": "f204",
+            },
+            "5日": {
+                "fid0": "f164",
+                "stat": "5",
+                "fields": "f12,f14,f2,f109,f164,f165,f166,f167,f168,f169,f170,f171,f172,f173,f257,f258,f124",
+                "change": "f109",
+                "main_net": "f164",
+                "main_pct": "f165",
+                "super_net": "f166",
+                "super_pct": "f167",
+                "large_net": "f168",
+                "large_pct": "f169",
+                "leading_stock": "f257",
+            },
+            "10日": {
+                "fid0": "f174",
+                "stat": "10",
+                "fields": "f12,f14,f2,f160,f174,f175,f176,f177,f178,f179,f180,f181,f182,f183,f260,f261,f124",
+                "change": "f160",
+                "main_net": "f174",
+                "main_pct": "f175",
+                "super_net": "f176",
+                "super_pct": "f177",
+                "large_net": "f178",
+                "large_pct": "f179",
+                "leading_stock": "f260",
+            },
+        }
+
+        mapping = indicator_fields.get(indicator)
+        sector_tag = sector_type_map.get(sector_type)
+        if mapping is None or sector_tag is None:
+            logger.error(f"不支持的板块资金流参数: indicator={indicator}, sector_type={sector_type}")
+            return []
+
+        url = "https://push2.eastmoney.com/api/qt/clist/get"
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+            )
+        }
+        params: Dict[str, Any] = {
+            "pn": 1,
+            "pz": 100,
+            "po": 1,
+            "np": 1,
+            "ut": "b2884a393a59ad64002292a3e90d46a5",
+            "fltt": 2,
+            "invt": 2,
+            "fid0": mapping["fid0"],
+            "fs": f"m:90 t:{sector_tag}",
+            "stat": mapping["stat"],
+            "fields": mapping["fields"],
+            "_": int(time.time() * 1000),
+        }
+
+        try:
+            first_resp = requests.get(url, params=params, headers=headers, timeout=15)
+            first_resp.raise_for_status()
+            first_json = first_resp.json()
+        except Exception as request_error:
+            logger.error(f"fallback 请求板块资金流首页失败: {request_error}")
+            return []
+
+        data_node = first_json.get("data") if isinstance(first_json, dict) else None
+        if not isinstance(data_node, dict):
+            return []
+
+        total = int(data_node.get("total") or 0)
+        total_pages = max(1, math.ceil(total / 100)) if total > 0 else 1
+        rows: List[Dict[str, Any]] = []
+
+        for page in range(1, total_pages + 1):
+            params["pn"] = page
+            try:
+                resp = requests.get(url, params=params, headers=headers, timeout=15)
+                resp.raise_for_status()
+                payload = resp.json()
+                data = payload.get("data") if isinstance(payload, dict) else None
+                diff = data.get("diff") if isinstance(data, dict) else None
+                if not isinstance(diff, list):
+                    continue
+            except Exception as page_error:
+                logger.warning(f"fallback 获取板块资金流分页失败(page={page}): {page_error}")
+                continue
+
+            for item in diff:
+                if not isinstance(item, dict):
+                    continue
+                rows.append(
+                    {
+                        "name": str(item.get("f14", "")),
+                        "change_pct": self._safe_float(item.get(mapping["change"]), 0.0),
+                        "main_net_inflow": self._safe_float(item.get(mapping["main_net"]), 0.0),
+                        "main_net_inflow_pct": self._safe_float(item.get(mapping["main_pct"]), 0.0),
+                        "super_large_net_inflow": self._safe_float(
+                            item.get(mapping["super_net"]),
+                            0.0,
+                        ),
+                        "super_large_net_inflow_pct": self._safe_float(
+                            item.get(mapping["super_pct"]),
+                            0.0,
+                        ),
+                        "large_net_inflow": self._safe_float(item.get(mapping["large_net"]), 0.0),
+                        "large_net_inflow_pct": self._safe_float(
+                            item.get(mapping["large_pct"]),
+                            0.0,
+                        ),
+                        "leading_stock": str(item.get(mapping["leading_stock"], "")),
+                        "source": "akshare_direct_raw",
+                    }
+                )
+
+        rows.sort(key=lambda x: self._safe_float(x.get("main_net_inflow"), 0.0), reverse=True)
+        for idx, row in enumerate(rows, start=1):
+            row["rank"] = idx
+
+        logger.info(
+            f"fallback 直连东财获取到 {len(rows)} 条板块资金流向数据(indicator={indicator}, sector_type={sector_type})"
+        )
+        return rows
 
     # ==================== 融资融券接口 ====================
 

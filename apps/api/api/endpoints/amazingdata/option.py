@@ -167,8 +167,7 @@ async def get_option_mon_ctr_specs(request: OptionMonCtrRequest) -> JSONDict:
     """
     try:
         provider = await get_amazingdata_provider()
-        # 注意：SDK中方法名是 get_option_mon_ctr_spcon
-        result = await provider.get_option_mon_ctr_spcon(
+        result = await provider.get_option_mon_ctr_specs(
             code_list=request.code_list,
             local_path=request.local_path or DEFAULT_LOCAL_PATH,
             is_local=request.is_local,

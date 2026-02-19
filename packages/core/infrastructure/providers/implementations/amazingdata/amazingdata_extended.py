@@ -752,6 +752,86 @@ class AmazingDataExtended(AmazingDataProvider):
             logger.error(f"[DEBUG] 异常详情: {traceback.format_exc()}")
             return None
 
+    async def get_future_code_list(
+        self, security_type: str = "EXTRA_FUTURE"
+    ) -> Optional[List[str]]:
+        """
+        3.5.2.3 每日最新代码表（期货交易所）
+        获取最新期货代码列表。
+
+        Args:
+            security_type: 期货代码类型，默认 EXTRA_FUTURE
+
+        Returns:
+            期货代码列表
+        """
+        await self._ensure_data_objects()
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, lambda: self._base_data.get_future_code_list(security_type=security_type)
+            )
+            return cast(Optional[List[str]], result)
+        except Exception as e:
+            logger.error(f"获取期货代码列表失败: {e}")
+            return None
+
+    async def get_option_code_list(
+        self, security_type: str = "EXTRA_ETF_OP"
+    ) -> Optional[List[str]]:
+        """
+        3.5.2.4 每日最新代码表（期权）
+        获取最新期权代码列表。
+
+        Args:
+            security_type: 期权代码类型，默认 EXTRA_ETF_OP
+
+        Returns:
+            期权代码列表
+        """
+        await self._ensure_data_objects()
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, lambda: self._base_data.get_option_code_list(security_type=security_type)
+            )
+            return cast(Optional[List[str]], result)
+        except Exception as e:
+            logger.error(f"获取期权代码列表失败: {e}")
+            return None
+
+    async def get_future_code_info(
+        self, security_type: str = "EXTRA_FUTURE"
+    ) -> pd.DataFrame:
+        """
+        获取期货代码信息（SDK 扩展接口）。
+
+        Args:
+            security_type: 期货代码类型
+
+        Returns:
+            期货代码信息 DataFrame
+        """
+        await self._ensure_data_objects()
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._base_data.get_future_code_info(security_type=security_type),
+            )
+            return _safe_dataframe(result)
+        except TypeError:
+            # 某些 SDK 版本不接受 security_type 参数
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, self._base_data.get_future_code_info)
+            return _safe_dataframe(result)
+        except Exception as e:
+            logger.error(f"获取期货代码信息失败: {e}")
+            return pd.DataFrame()
+
     async def get_bj_code_mapping(
         self, local_path: Optional[str] = None, is_local: bool = True
     ) -> pd.DataFrame:
@@ -782,6 +862,82 @@ class AmazingDataExtended(AmazingDataProvider):
             logger.error(f"获取北交所代码映射失败: {e}")
             logger.error(f"详细错误: {traceback.format_exc()}")
             raise  # 向上传播错误
+
+    async def get_adj_factor(
+        self,
+        code_list: List[str],
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+    ) -> pd.DataFrame:
+        """
+        3.5.2.6 复权因子（单次复权因子）
+        获取单次复权因子。
+
+        Args:
+            code_list: 代码列表
+            local_path: 本地存储路径
+            is_local: 是否使用本地缓存
+
+        Returns:
+            复权因子 DataFrame
+        """
+        await self._ensure_data_objects()
+
+        try:
+            local_path = self._prepare_local_path(local_path)
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._base_data.get_adj_factor(code_list, local_path, is_local=is_local),
+            )
+            return _safe_dataframe(result)
+        except Exception as e:
+            logger.error(f"获取单次复权因子失败: {e}")
+            raise
+
+    async def get_stock_basic(
+        self,
+        code_list: List[str],
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+    ) -> pd.DataFrame:
+        """
+        3.5.2.8 证券基础信息
+        获取证券基础信息；兼容不同 SDK 版本签名。
+
+        Args:
+            code_list: 证券代码列表
+            local_path: 本地存储路径
+            is_local: 是否使用本地缓存
+
+        Returns:
+            证券基础信息 DataFrame
+        """
+        await self._ensure_data_objects()
+        local_path = self._prepare_local_path(local_path)
+
+        method = getattr(self._info_data, "get_stock_basic", None)
+        if not callable(method):
+            logger.warning("当前 SDK 未暴露 get_stock_basic，回退到 get_code_info")
+            return await self.get_code_info()
+
+        loop = asyncio.get_event_loop()
+        try:
+            result = await loop.run_in_executor(
+                None,
+                lambda: method(code_list, local_path, is_local=is_local),
+            )
+            return _safe_dataframe(result)
+        except TypeError:
+            try:
+                result = await loop.run_in_executor(None, lambda: method(code_list))
+                return _safe_dataframe(result)
+            except Exception as e:
+                logger.error(f"获取证券基础信息失败: {e}")
+                raise
+        except Exception as e:
+            logger.error(f"获取证券基础信息失败: {e}")
+            raise
 
     # ================== 历史行情接口 ==================
 
@@ -1861,7 +2017,7 @@ class AmazingDataExtended(AmazingDataProvider):
             logger.error(f"详细错误: {traceback.format_exc()}")
             raise  # 向上传播错误
 
-    async def get_option_mon_ctr_spcon(
+    async def get_option_mon_ctr_specs(
         self,
         code_list: List[str],
         local_path: Optional[str] = None,
@@ -1896,10 +2052,17 @@ class AmazingDataExtended(AmazingDataProvider):
 
         try:
             _ = self._prepare_local_path(local_path)
+            method = getattr(self._info_data, "get_option_mon_ctr_specs", None)
+            if not callable(method):
+                # 兼容旧 SDK 命名
+                method = getattr(self._info_data, "get_option_mon_ctr_spcon", None)
+            if not callable(method):
+                raise AttributeError(
+                    "SDK 缺少 get_option_mon_ctr_specs/get_option_mon_ctr_spcon"
+                )
+
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None, self._info_data.get_option_mon_ctr_spcon, code_list
-            )
+            result = await loop.run_in_executor(None, lambda: method(code_list))
 
             logger.info("成功获取期权月合约属性变动数据")
             return _safe_dataframe(result)
@@ -1910,6 +2073,103 @@ class AmazingDataExtended(AmazingDataProvider):
             logger.error(f"获取期权月合约属性变动失败: {e}")
             logger.error(f"详细错误: {traceback.format_exc()}")
             raise  # 向上传播错误
+
+    async def get_option_mon_ctr_spcon(
+        self,
+        code_list: List[str],
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+    ) -> pd.DataFrame:
+        """兼容旧方法名，内部转发到 get_option_mon_ctr_specs。"""
+        return await self.get_option_mon_ctr_specs(code_list, local_path, is_local)
+
+    # ================== 可转债相关接口 ==================
+
+    async def _get_kzz_dataframe(
+        self,
+        method_name: str,
+        code_list: List[str],
+        local_path: Optional[str] = None,
+        is_local: bool = True,
+    ) -> pd.DataFrame:
+        await self._ensure_data_objects()
+        local_path = self._prepare_local_path(local_path)
+
+        method = getattr(self._info_data, method_name, None)
+        if not callable(method):
+            raise AttributeError(f"SDK 缺少方法: {method_name}")
+
+        loop = asyncio.get_event_loop()
+        try:
+            result = await loop.run_in_executor(
+                None, lambda: method(code_list, local_path, is_local=is_local)
+            )
+        except TypeError:
+            result = await loop.run_in_executor(None, lambda: method(code_list))
+        return _safe_dataframe(result)
+
+    async def get_kzz_issuance(
+        self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        return await self._get_kzz_dataframe("get_kzz_issuance", code_list, local_path, is_local)
+
+    async def get_kzz_share(
+        self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        return await self._get_kzz_dataframe("get_kzz_share", code_list, local_path, is_local)
+
+    async def get_kzz_conv(
+        self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        return await self._get_kzz_dataframe("get_kzz_conv", code_list, local_path, is_local)
+
+    async def get_kzz_conv_change(
+        self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        return await self._get_kzz_dataframe(
+            "get_kzz_conv_change", code_list, local_path, is_local
+        )
+
+    async def get_kzz_corr(
+        self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        return await self._get_kzz_dataframe("get_kzz_corr", code_list, local_path, is_local)
+
+    async def get_kzz_call(
+        self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        return await self._get_kzz_dataframe("get_kzz_call", code_list, local_path, is_local)
+
+    async def get_kzz_put(
+        self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        return await self._get_kzz_dataframe("get_kzz_put", code_list, local_path, is_local)
+
+    async def get_kzz_put_call_item(
+        self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        return await self._get_kzz_dataframe(
+            "get_kzz_put_call_item", code_list, local_path, is_local
+        )
+
+    async def get_kzz_put_explanation(
+        self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        return await self._get_kzz_dataframe(
+            "get_kzz_put_explanation", code_list, local_path, is_local
+        )
+
+    async def get_kzz_call_explanation(
+        self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        return await self._get_kzz_dataframe(
+            "get_kzz_call_explanation", code_list, local_path, is_local
+        )
+
+    async def get_kzz_suspend(
+        self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
+    ) -> pd.DataFrame:
+        return await self._get_kzz_dataframe("get_kzz_suspend", code_list, local_path, is_local)
 
     # ================== ETF 相关接口 ==================
 
@@ -2463,7 +2723,7 @@ ad: Optional[ModuleType] = _loader_ad
 # 注意: AmazingData 和 tgw 的 login 函数签名不同！优先使用 AmazingData
 _SDK_CANDIDATES = ("AmazingData", "amazingdata", "tgw", "amazingdata_sdk")
 
-__sdk_mod = None  # cache loaded SDK module
+__sdk_mod: Optional[ModuleType] = None  # cache loaded SDK module
 
 
 def _load_sdk():
@@ -2473,27 +2733,34 @@ def _load_sdk():
 
     # 优先尝试直接导入 AmazingData（有正确的 login 签名）
     # 不优先使用 sys.modules 缓存，因为可能缓存了错误的 tgw 模块
-    last_exc = None
+    import_errors: list[str] = []
     for name in _SDK_CANDIDATES:
         try:
             import importlib
 
             mod = importlib.import_module(name)
-            # 验证模块有 login 函数
-            if hasattr(mod, "login") and callable(getattr(mod, "login", None)):
+            # 兼容 SDK 差异：AmazingData 使用 login，小写；tgw 暴露 Login，大写
+            has_login = callable(getattr(mod, "login", None))
+            has_login_legacy = callable(getattr(mod, "Login", None))
+            if has_login or has_login_legacy:
                 __sdk_mod = mod
                 return __sdk_mod
+            import_errors.append(
+                f"{name}: missing callable login/Login, available={dir(mod)[:8]}"
+            )
         except Exception as e:  # pragma: no cover - import errors are environment-specific
-            last_exc = e
+            import_errors.append(f"{name}: {e!r}")
             continue
 
     raise RuntimeError(
-        f"Cannot import AmazingData SDK; tried {_SDK_CANDIDATES}. Last error: {last_exc!r}"
+        "Cannot load AmazingData SDK: no candidate exposes a compatible login entrypoint. "
+        f"Tried {_SDK_CANDIDATES}. Details: {'; '.join(import_errors)}"
     )
 
 
 # Alias map to tolerate different naming styles across SDKs
 _ALIAS = {
+    "login": "Login",
     "onSnapshotindex": "on_snapshot_index",
     "onSnapshotfuture": "on_snapshot_future",
     "onSnapshotetf": "on_snapshot_etf",
@@ -2508,7 +2775,15 @@ def __getattr__(name: str) -> Any:
     Delegate unknown attributes to the real SDK module.
     This allows tests or legacy code to resolve symbols on this shim module.
     """
-    sdk = _load_sdk()
+    # importlib 可能会探测 __path__/__spec__ 等 dunder 属性，不应触发 SDK 加载
+    if name.startswith("__"):
+        raise AttributeError(name)
+
+    try:
+        sdk = _load_sdk()
+    except Exception as exc:
+        raise AttributeError(f"SDK is unavailable while resolving attribute '{name}': {exc}") from exc
+
     if hasattr(sdk, name):
         return getattr(sdk, name)
     alt = _ALIAS.get(name)

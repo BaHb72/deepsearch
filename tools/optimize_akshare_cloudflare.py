@@ -297,7 +297,7 @@ async def test_akshare_apis():
         (ak.stock_info_a_code_name, "股票列表"),
         (lambda: ak.stock_zh_a_hist("000001", "daily", "qfq"), "日K线数据"),
         (lambda: ak.stock_individual_info_em("000001"), "个股信息"),
-        (lambda: ak.stock_zh_index_spot, "指数行情"),
+        (lambda: ak.stock_zh_index_spot_em("上证系列指数"), "指数行情"),
     ]
 
     success_count = 0

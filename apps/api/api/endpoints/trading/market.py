@@ -3,7 +3,7 @@
 提供市场概览、板块行情、异动监控等接口
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
@@ -120,6 +120,49 @@ class ZTPoolItem(BaseModel):
     industry: str  # 所属行业
 
 
+def _normalize_concept_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """统一概念板块返回字段，兼容不同来源的中英文键名。"""
+    normalized: list[dict[str, Any]] = []
+    for item in items:
+        name = (
+            item.get("name")
+            or item.get("板块名称")
+            or item.get("概念名称")
+            or item.get("concept_name")
+            or ""
+        )
+        code = item.get("code") or item.get("板块代码") or item.get("concept_code") or ""
+        if not name and not code:
+            continue
+        enriched = dict(item)
+        enriched.setdefault("name", str(name))
+        enriched.setdefault("code", str(code))
+        normalized.append(enriched)
+    return normalized
+
+
+def _extract_records_from_api_result(payload: Any) -> list[dict[str, Any]]:
+    """从 provider 返回值中提取记录列表。"""
+    if payload is None:
+        return []
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        return []
+    to_dict = getattr(payload, "to_dict", None)
+    if callable(to_dict):
+        try:
+            data = to_dict("records")
+            if isinstance(data, list):
+                return [item for item in data if isinstance(item, dict)]
+        except Exception:
+            return []
+    return []
+
+
 @router.get("/overview", response_model=MarketOverviewResponse)
 async def get_market_overview(service=Depends(get_market_service)):
     """
@@ -195,24 +238,33 @@ async def get_ths_concept_list(service=Depends(get_market_service)):
     获取同花顺概念板块列表
     """
     try:
-        # 使用直连方式获取同花顺数据
+        # 优先使用 THS 直连
         from core.infrastructure.providers.implementations.akshare.ths_direct import (
             get_ths_provider,
         )
 
         provider = get_ths_provider()
         result = await provider.get_concept_list()
-        if result["success"]:
-            return {"data": result["data"], "_data_source": result["source"]}
-        else:
-            logger.error(f"获取失败: {result.get('error')}")
-            # 尝试使用代理方式作为后备
-            from core.infrastructure.providers.implementations.akshare.akshare import (
-                AkShareProxyProvider,
-            )
+        if result.get("success"):
+            raw_items = result.get("data")
+            if isinstance(raw_items, list):
+                normalized = _normalize_concept_items(
+                    [item for item in raw_items if isinstance(item, dict)]
+                )
+                if normalized:
+                    return {"data": normalized, "_data_source": result.get("source", "ths_direct")}
 
-            proxy_provider = AkShareProxyProvider()
-            return await proxy_provider.call_api("stock_board_concept_name_ths", {})
+        # THS 直连失败时，回退到 stock_board_concept_name_em（避免返回 proxy mock/错误结构）
+        logger.warning("THS 概念板块获取失败，回退到 stock_board_concept_name_em")
+        from core.infrastructure.providers.integration.compat import get_provider_compat
+
+        akshare_provider = await get_provider_compat("akshare")
+        fallback_result = await akshare_provider.call_api(
+            api_name="stock_board_concept_name_em",
+            params={},
+        )
+        fallback_items = _normalize_concept_items(_extract_records_from_api_result(fallback_result))
+        return {"data": fallback_items, "_data_source": "akshare.stock_board_concept_name_em"}
     except Exception as e:
         logger.error(f"获取同花顺概念板块列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

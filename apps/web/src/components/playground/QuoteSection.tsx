@@ -14,6 +14,7 @@ import { ExtendedFieldsPanel } from '@/components/common/ExtendedFieldsPanel'
 export interface QuoteSectionProps {
     stockCode: string
     preferredSource?: DataSourceType
+    onSuggestSourceSwitch?: (source: DataSourceType) => void
     /** 是否显示扩展字段面板 */
     showExtended?: boolean
 }
@@ -21,6 +22,7 @@ export interface QuoteSectionProps {
 export const QuoteSection: React.FC<QuoteSectionProps> = ({
     stockCode,
     preferredSource,
+    onSuggestSourceSwitch,
     showExtended = true,
 }) => {
     const { data, extended, meta, loading, error, refresh } = useRichDataSource<CoreQuoteData>({
@@ -29,6 +31,13 @@ export const QuoteSection: React.FC<QuoteSectionProps> = ({
         preferredSource,
         autoFetch: true,
         deps: [stockCode],
+        monitor: {
+            pageKey: 'dev/playground',
+            pageName: '数据源沙盒',
+            moduleKey: 'quote',
+            moduleName: '行情数据',
+            onSwitchSource: onSuggestSourceSwitch,
+        },
     })
 
     const quote = data[0]

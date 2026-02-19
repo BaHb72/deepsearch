@@ -822,12 +822,11 @@ class MiniQMTProvider(DataProvider):
 
             # 尝试从 AkShare 获取龙虎榜数据
             try:
-                # 延迟导入避免循环依赖
-                from apps.api.api.providers import DataProviderFactory, DataSourceType
-
-                akshare_provider = await DataProviderFactory.get_provider_async(
-                    DataSourceType.AKSHARE
+                from core.infrastructure.providers.integration.compat import (
+                    get_provider_compat,
                 )
+
+                akshare_provider = await get_provider_compat("akshare")
 
                 # 调用 AkShare 的龙虎榜接口
                 # stock_lhb_detail_em - 东方财富龙虎榜详情

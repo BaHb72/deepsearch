@@ -2,7 +2,7 @@
 Cloudflare Workers 配置模型
 """
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 
 class CloudflareWorkersConfig(BaseModel):
@@ -12,7 +12,11 @@ class CloudflareWorkersConfig(BaseModel):
     url: str = Field(default="", description="Worker URL，例如: your-worker.workers.dev")
 
     # 认证配置
-    api_key: str = Field(default="", description="API 密钥，用于 Worker 认证")
+    api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("api_key", "auth_key"),
+        description="API 密钥，用于 Worker 认证（兼容 auth_key）",
+    )
 
     # 故障转移配置
     fallback_to_direct: bool = Field(default=True, description="Worker 不可用时是否回退到直连模式")
@@ -21,6 +25,14 @@ class CloudflareWorkersConfig(BaseModel):
     timeout: int = Field(default=30, description="请求超时时间（秒）")
 
     retry_count: int = Field(default=3, description="请求重试次数")
+
+    use_system_proxy: bool = Field(
+        default=True, description="是否使用系统代理（环境变量 + Windows 系统代理）"
+    )
+
+    prefer_ipv4_fallback: bool = Field(
+        default=True, description="代理请求连接超时时是否自动回退为 IPv4 重试"
+    )
 
     # 缓存配置
     cache_enabled: bool = Field(default=True, description="是否启用本地缓存")
@@ -36,6 +48,8 @@ class CloudflareWorkersConfig(BaseModel):
                     "fallback_to_direct": True,
                     "timeout": 30,
                     "retry_count": 3,
+                    "use_system_proxy": True,
+                    "prefer_ipv4_fallback": True,
                     "cache_enabled": True,
                     "cache_ttl": 300,
                 }
@@ -73,3 +87,8 @@ class CloudflareWorkersConfig(BaseModel):
         if self.is_configured():
             return f"CloudflareWorkers(url={self.url}, fallback={self.fallback_to_direct})"
         return "CloudflareWorkers(not configured)"
+
+    @property
+    def auth_key(self) -> str:
+        """兼容旧字段名 auth_key。"""
+        return self.api_key

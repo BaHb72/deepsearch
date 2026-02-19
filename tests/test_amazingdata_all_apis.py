@@ -52,7 +52,11 @@ def mock_ad():
 
 @pytest.fixture
 async def provider(mock_ad):
-    """创建测试用的provider"""
+    """创建测试用的provider。
+
+    AmazingDataExtended 当前强制通过进程隔离路径初始化对象，本测试使用
+    mock 对象验证接口调用，不依赖真实进程隔离后端，因此将初始化守卫替换为 no-op。
+    """
     config = {"username": "test", "password": "test", "host": "localhost", "port": 8600}
 
     with patch(
@@ -69,7 +73,7 @@ async def provider(mock_ad):
             provider._info_data = Mock()
             provider._market_data = Mock()
             provider._initialized_objects = True
-            provider.get_calendar = AsyncMock(return_value=[20250101, 20250102])
+            provider._ensure_data_objects = AsyncMock(return_value=None)
             return provider
 
 
@@ -404,7 +408,7 @@ class TestMarketAnomaly:
     @pytest.mark.asyncio
     async def test_get_block_trading(self, provider):
         """����3.5.9.2 ���ڽ���"""
-        provider._info_data.block_trading.return_value = pd.DataFrame(
+        provider._info_data.get_block_trading.return_value = pd.DataFrame(
             {
                 "MARKET_CODE": ["000001.SZ"],
                 "TRADE_DATE": ["20240101"],

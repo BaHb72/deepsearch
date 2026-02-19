@@ -26,9 +26,6 @@ KlineCallbackFunc = Callable[[KlineRecord, str], Coroutine[Any, Any, None]]
 CallbackFunc = Callable[[Any, Any], Coroutine[Any, Any, None]]
 SubscriptionHandler = Callable[[Any, Any], None]
 
-if _sdk_module is None:
-    raise RuntimeError("AmazingData SDK 未加载，无法使用实时订阅功能")
-
 ad = cast(Any, _sdk_module)
 
 
@@ -140,6 +137,9 @@ class AmazingDataRealtime:
         Args:
             parent: AmazingDataExtended 实例
         """
+        if _sdk_module is None:
+            raise RuntimeError("AmazingData SDK 未加载，无法使用实时订阅功能")
+
         self.parent = parent
         self._subscription_data: Optional[Any] = None
         self._subscription_callbacks: Dict[str, SubscriptionHandler] = {}

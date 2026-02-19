@@ -17,7 +17,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-TARGET_PACKAGES = ("dask", "distributed", "numpy")
+TARGET_PACKAGES = ("dask", "distributed", "numpy", "pandas")
 DEFAULT_SCHEDULER_CONTAINER = "deepsearch-dask-scheduler"
 DEFAULT_WORKER_PYPROJECT = Path("docker/pyproject.worker.toml")
 DEFAULT_LOCKFILE = Path("uv.lock")

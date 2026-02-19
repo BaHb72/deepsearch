@@ -39,7 +39,11 @@ class DataSourceProviderConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     enabled: bool = Field(default=True, description="是否启用该数据源")
-    priority: int = Field(default=100, ge=0, description="优先级，值越小越优先")
+    priority: int = Field(
+        default=100,
+        ge=0,
+        description="优先级（统一 data_sources 语义：值越小越优先）",
+    )
     timeout: Optional[float] = Field(default=None, gt=0, description="覆盖默认的超时时间（秒）")
     retry_count: Optional[int] = Field(default=None, ge=0, description="覆盖默认的重试次数")
     fallback_enabled: bool = Field(default=False, description="是否为该源启用兜底")
@@ -102,7 +106,7 @@ class RealtimeAdapterSpec(BaseModel):
     priority: int = Field(
         default=100,
         ge=0,
-        description="越小优先级越高",
+        description="越小优先级越高（仅用于 realtime adapters 选择）",
     )
     options: Dict[str, Any] = Field(
         default_factory=dict,
@@ -172,7 +176,7 @@ class DataSourcesConfig(BaseModel):
         default_factory=dict, description="已声明的数据源提供者集合"
     )
     realtime: Optional[RealtimeDataSourceConfig] = Field(
-        default=None, description="ʵʱ����Դ orchestrator ���á�"
+        default=None, description="实时数据源 orchestrator 配置。"
     )
 
     @field_validator("fallback_order", mode="after")

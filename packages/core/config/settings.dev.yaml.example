@@ -37,6 +37,18 @@ cache:
         ttl: 600
 
 # =============================================================================
+# Cloudflare Workers 代理配置（可选）
+# =============================================================================
+cloudflare_workers:
+  url: https://YOUR-CLOUDFLARE-WORKER.workers.dev
+  api_key: ""  # 公开访问时留空（兼容 auth_key 旧字段）
+  timeout: 30
+  retry_count: 3
+  use_system_proxy: true
+  prefer_ipv4_fallback: true
+  fallback_to_direct: true
+
+# =============================================================================
 # 数据源配置
 # =============================================================================
 data_sources:

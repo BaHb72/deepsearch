@@ -20,6 +20,16 @@ export interface RichDataMeta {
     latency: number
     /** 是否缓存数据 */
     cached: boolean
+    /** 降级原因（若发生数据源切换） */
+    fallbackReason?: string | null
+    /** 路由尝试轨迹 */
+    attempts?: Array<{
+        provider: string
+        success: boolean
+        reason_code?: string | null
+        reason_detail?: string | null
+        latency_ms?: number | null
+    }>
 }
 
 // ============================================================
@@ -170,10 +180,23 @@ export interface UseRichDataSourceOptions {
     capability: DataCapability
     params: Record<string, unknown>
     preferredSource?: DataSourceType
+    strictSource?: boolean
     autoFetch?: boolean
     deps?: unknown[]
     /** 是否保留原始数据 */
     preserveRaw?: boolean
+    /** 慢加载监控上下文（用于全局慢加载提示） */
+    monitor?: SlowLoadMonitorContext
+}
+
+/** 慢加载监控上下文 */
+export interface SlowLoadMonitorContext {
+    pageKey: string
+    pageName: string
+    moduleKey: string
+    moduleName: string
+    slowThresholdMs?: number
+    onSwitchSource?: (target: DataSourceType) => void | Promise<void>
 }
 
 /** useRichDataSource Hook 返回值 */

@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, "D:\\Stock\\code\\deepsearch")
 
 from apps.api.api.endpoints.datasources.amazingdata_test_helper import (
-    test_amazingdata_connection,
+    test_amazingdata_connection as run_amazingdata_connection_test,
     validate_amazingdata_config,
 )
 
@@ -35,7 +35,7 @@ def test_direct_connection():
         return
 
     # 执行测试
-    result = test_amazingdata_connection(
+    result = run_amazingdata_connection_test(
         username=test_config["username"], password=test_config["password"], test_type="realtime"
     )
 

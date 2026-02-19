@@ -5,6 +5,9 @@ DeepSearch 命令行接口
 """
 
 import asyncio
+import contextlib
+import io
+import inspect
 import json
 import os
 import socket
@@ -244,12 +247,74 @@ def check_realtime(env: str | None, config: str | None) -> None:
 @click.option(
     "--timeout", type=float, default=3.0, show_default=True, help="TCP 连通性检测超时时间（秒）"
 )
-def check_amazingdata(env: str, config: str | None, timeout: float) -> None:
+@click.option(
+    "--probe-calendar/--no-probe-calendar",
+    default=False,
+    show_default=True,
+    help="执行一次真实 get_calendar 调用（非 mock）",
+)
+@click.option(
+    "--probe-timeout",
+    type=float,
+    default=15.0,
+    show_default=True,
+    help="真实 get_calendar 调用超时时间（秒）",
+)
+@click.option(
+    "--probe-market",
+    type=str,
+    default="SH",
+    show_default=True,
+    help="真实 get_calendar 调用市场参数",
+)
+@click.option(
+    "--probe-data-type",
+    type=click.Choice(["int", "str"]),
+    default="int",
+    show_default=True,
+    help="真实 get_calendar 返回类型参数",
+)
+@click.option(
+    "--suppress-third-party-output/--no-suppress-third-party-output",
+    default=True,
+    show_default=True,
+    help="抑制第三方库直接写入终端的输出，保持诊断 JSON 可读性",
+)
+@click.option(
+    "--safe-ascii-json/--raw-unicode-json",
+    default=True,
+    show_default=True,
+    help="安全模式下将 JSON 转义为 ASCII，避免终端编码不一致导致乱码",
+)
+def check_amazingdata(
+    env: str,
+    config: str | None,
+    timeout: float,
+    probe_calendar: bool,
+    probe_timeout: float,
+    probe_market: str,
+    probe_data_type: str,
+    suppress_third_party_output: bool,
+    safe_ascii_json: bool,
+) -> None:
     """对 AmazingData 依赖进行基础自检"""
 
     import os
 
+    def _ensure_utf8_streams() -> None:
+        os.environ["PYTHONUTF8"] = "1"
+        os.environ["PYTHONIOENCODING"] = "utf-8"
+        for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if callable(reconfigure):
+                try:
+                    reconfigure(encoding="utf-8", errors="replace")
+                except Exception:
+                    pass
+
     os.environ["APP__ENV"] = env
+    os.environ["DEEPSEARCH_ENV"] = env
+    _ensure_utf8_streams()
 
     results: dict[str, object] = {
         "environment": env,
@@ -257,12 +322,35 @@ def check_amazingdata(env: str, config: str | None, timeout: float) -> None:
         "checks": [],
     }
 
+    def _emit_results() -> None:
+        click.echo(
+            json.dumps(
+                results,
+                ensure_ascii=bool(safe_ascii_json),
+                indent=2,
+            )
+        )
+
     def add_check(name: str, status: str, detail: str, suggestion: str | None = None) -> None:
         entry: dict[str, object] = {"name": name, "status": status, "detail": detail}
         if suggestion:
             entry["suggestion"] = suggestion
         checks: list[dict[str, object]] = results.setdefault("checks", [])  # type: ignore[assignment]
         checks.append(entry)
+
+    def aggregate_status() -> str:
+        checks = results.get("checks", [])
+        if not isinstance(checks, list):
+            return "failed"
+
+        statuses = {str(item.get("status", "")).lower() for item in checks if isinstance(item, dict)}
+        if "failed" in statuses:
+            return "failed"
+        if "warning" in statuses:
+            return "warning"
+        if "ok" in statuses:
+            return "ok"
+        return "failed"
 
     def _read_tail_lines(file_path: Path, max_bytes: int = 4096, max_lines: int = 10) -> list[str]:
         try:
@@ -282,15 +370,250 @@ def check_amazingdata(env: str, config: str | None, timeout: float) -> None:
         except Exception as exc:  # pragma: no cover - 文件读取异常
             return [f"(读取日志失败: {exc})"]
 
+    def _to_dict(value: object) -> dict[str, object]:
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            return dict(value)
+        if hasattr(value, "model_dump"):
+            try:
+                dumped = value.model_dump()
+                if isinstance(dumped, dict):
+                    return dict(dumped)
+            except Exception:
+                return {}
+        if hasattr(value, "__dict__"):
+            return dict(getattr(value, "__dict__", {}))
+        return {}
+
+    def _get_static_callable(target: object, method_name: str):
+        try:
+            inspect.getattr_static(target, method_name)
+        except AttributeError:
+            return None
+
+        callback = getattr(target, method_name, None)
+        if not callable(callback):
+            return None
+        return callback
+
+    async def _cleanup_provider(provider_obj: object) -> None:
+        cleanup_timeout = 10.0
+        for method_name in ("stop_async", "shutdown", "stop", "cleanup", "close"):
+            callback = _get_static_callable(provider_obj, method_name)
+            if not callable(callback):
+                continue
+            try:
+                result = callback()
+                if inspect.isawaitable(result):
+                    await asyncio.wait_for(result, timeout=cleanup_timeout)
+            except Exception:
+                pass
+            break
+
+    def _resolve_amazingdata_config(settings_obj: object) -> tuple[object | None, str | None]:
+        # 兼容旧配置：settings.amazingdata
+        direct_config = getattr(settings_obj, "amazingdata", None)
+        if direct_config:
+            return direct_config, "settings.amazingdata"
+
+        # 兼容新配置：settings.data_sources.providers.amazingdata
+        data_sources_obj = getattr(settings_obj, "data_sources", None)
+        data_sources_dict = _to_dict(data_sources_obj)
+        providers = _to_dict(data_sources_dict.get("providers"))
+        provider_entry_obj = providers.get("amazingdata")
+        provider_entry = _to_dict(provider_entry_obj)
+        if not provider_entry:
+            return None, None
+
+        from core.config.models.amazingdata import (
+            AmazingDataConfig as SettingsAmazingDataConfig,
+        )
+
+        provider_config = _to_dict(provider_entry.get("config"))
+        for key in (
+            "enabled",
+            "priority",
+            "mode",
+            "dask_scheduler_address",
+            "implementation_mode",
+            "prewarm",
+            "worker_env",
+        ):
+            if key in provider_entry and key not in provider_config:
+                provider_config[key] = provider_entry[key]
+
+        if "enabled" not in provider_config:
+            provider_config["enabled"] = bool(provider_entry.get("enabled", False))
+
+        # 兼容偶发的扁平配置，尽量构造 connection 字段
+        if "connection" not in provider_config:
+            connection_payload: dict[str, object] = {}
+            for key in (
+                "username",
+                "password",
+                "host",
+                "port",
+                "timeout",
+                "max_retries",
+                "heartbeat_interval",
+                "auto_reconnect",
+                "python_interpreter_path",
+                "tgw_log_path",
+            ):
+                if key in provider_entry:
+                    connection_payload[key] = provider_entry[key]
+            if connection_payload:
+                provider_config["connection"] = connection_payload
+
+        return (
+            SettingsAmazingDataConfig.model_validate(provider_config),
+            "settings.data_sources.providers.amazingdata",
+        )
+
+    def _check_worker_backconnect_from_scheduler(
+        dask_client: object,
+        worker_addresses: list[str],
+        timeout_seconds: float,
+    ) -> dict[str, dict[str, object]]:
+        if not worker_addresses:
+            return {}
+
+        def _probe(
+            dask_scheduler=None,  # noqa: ARG001 - distributed 注入
+            worker_addresses: list[str] | None = None,
+            timeout_seconds: float = 2.0,
+        ):
+            import socket as _socket
+
+            results: dict[str, dict[str, object]] = {}
+            for raw_addr in worker_addresses or []:
+                addr_text = str(raw_addr)
+                result: dict[str, object] = {"reachable": False, "error": "", "host": "", "port": 0}
+                try:
+                    endpoint = addr_text.strip()
+                    if "://" in endpoint:
+                        endpoint = endpoint.split("://", 1)[1]
+
+                    if endpoint.startswith("[") and "]:" in endpoint:
+                        host, port_text = endpoint[1:].rsplit("]:", 1)
+                    else:
+                        host, port_text = endpoint.rsplit(":", 1)
+                    port = int(port_text)
+
+                    result["host"] = host
+                    result["port"] = port
+                    with _socket.create_connection(
+                        (host, port),
+                        timeout=max(0.5, float(timeout_seconds)),
+                    ):
+                        result["reachable"] = True
+                except Exception as exc:  # pragma: no cover - scheduler 环境执行
+                    result["error"] = f"{exc.__class__.__name__}: {exc}"
+
+                results[addr_text] = result
+            return results
+
+        run_on_scheduler = getattr(dask_client, "run_on_scheduler", None)
+        if not callable(run_on_scheduler):
+            raise RuntimeError("当前 Dask Client 不支持 run_on_scheduler，无法执行回连检查")
+
+        raw_result = run_on_scheduler(
+            _probe,
+            worker_addresses=worker_addresses,
+            timeout_seconds=max(1.0, float(timeout_seconds)),
+        )
+        if not isinstance(raw_result, dict):
+            raise RuntimeError(f"回连检查返回类型异常: {type(raw_result).__name__}")
+        return raw_result
+
+    def _windows_worker_autostart_enabled(settings_obj: object) -> bool:
+        dask_config = getattr(settings_obj, "dask", None)
+        windows_workers = getattr(dask_config, "windows_workers", None) if dask_config else None
+        if windows_workers is None:
+            return False
+        return bool(
+            getattr(windows_workers, "enabled", False)
+            and getattr(windows_workers, "auto_start", False)
+        )
+
+    def _try_autostart_windows_workers(start_timeout: float = 45.0) -> tuple[bool, str]:
+        async def _run_start() -> bool:
+            from core.compute.dask_worker_manager import ensure_windows_workers
+
+            return await asyncio.wait_for(ensure_windows_workers(), timeout=start_timeout)
+
+        try:
+            started = asyncio.run(_run_start())
+            if started:
+                return True, ""
+            return False, "ensure_windows_workers() 返回 False"
+        except Exception as exc:  # pragma: no cover - 依赖环境差异
+            return False, str(exc)
+
+    def _collect_dask_version_mismatches(dask_client: object) -> list[str]:
+        get_versions = getattr(dask_client, "get_versions", None)
+        if not callable(get_versions):
+            return []
+
+        try:
+            versions = get_versions(check=False)
+        except TypeError:
+            versions = get_versions()
+        except Exception:
+            return []
+
+        if not isinstance(versions, dict):
+            return []
+
+        scheduler_section = versions.get("scheduler", {})
+        client_section = versions.get("client", {})
+        scheduler_packages = (
+            scheduler_section.get("packages", {}) if isinstance(scheduler_section, dict) else {}
+        )
+        client_packages = client_section.get("packages", {}) if isinstance(client_section, dict) else {}
+        if not isinstance(scheduler_packages, dict) or not isinstance(client_packages, dict):
+            return []
+
+        mismatches: list[str] = []
+        for package_name in ("dask", "distributed"):
+            scheduler_ver = scheduler_packages.get(package_name)
+            client_ver = client_packages.get(package_name)
+            if scheduler_ver and client_ver and str(scheduler_ver) != str(client_ver):
+                mismatches.append(
+                    f"{package_name}: client={client_ver}, scheduler={scheduler_ver}"
+                )
+        return mismatches
+
+    def _extract_endpoint_host(endpoint: str) -> str:
+        endpoint_text = str(endpoint).strip()
+        if "://" in endpoint_text:
+            endpoint_text = endpoint_text.split("://", 1)[1]
+        if endpoint_text.startswith("[") and "]:" in endpoint_text:
+            host, _ = endpoint_text[1:].rsplit("]:", 1)
+            return host.strip().lower()
+        if ":" in endpoint_text:
+            host, _ = endpoint_text.rsplit(":", 1)
+            return host.strip().lower()
+        return endpoint_text.strip().lower()
+
+    def _is_loopback_host(host: str) -> bool:
+        normalized = str(host).strip().lower()
+        return normalized in {"localhost", "127.0.0.1", "::1"}
+
     try:
         if config:
             from core.config import config_manager
 
+            # ConfigManager.env setter 会触发 reload()；在未设置 config_path 时会产生无效告警。
+            # 这里仅同步运行环境，不触发 reload，随后直接 load(config)。
+            if getattr(config_manager, "env", None) != env:
+                setattr(config_manager, "_env", env)
             config_manager.load(config)
             add_check("加载自定义配置", "ok", f"已加载 {config}")
     except Exception as exc:  # pragma: no cover - 配置解析异常
         add_check("加载自定义配置", "failed", f"读取配置失败：{exc}")
-        click.echo(json.dumps(results, ensure_ascii=False, indent=2))
+        _emit_results()
         raise SystemExit(1)
 
     try:
@@ -305,19 +628,33 @@ def check_amazingdata(env: str, config: str | None, timeout: float) -> None:
             f"无法实例化 Settings：{exc}",
             "请确认 settings.<env>.yaml 是否存在且字段填写完整",
         )
-        click.echo(json.dumps(results, ensure_ascii=False, indent=2))
+        _emit_results()
         raise SystemExit(1)
 
-    amazingdata_config = getattr(settings, "amazingdata", None)
+    try:
+        amazingdata_config, config_source = _resolve_amazingdata_config(settings)
+    except Exception as exc:
+        add_check(
+            "AmazingData 配置",
+            "failed",
+            f"AmazingData 配置解析失败：{exc}",
+            "请检查 settings.<env>.yaml 中 amazingdata 或 data_sources.providers.amazingdata 配置",
+        )
+        _emit_results()
+        raise SystemExit(1)
+
     if not amazingdata_config:
         add_check(
             "AmazingData 配置",
             "failed",
             "未找到 amazingdata 配置段",
-            "请参考 settings.template.yaml 添加 amazingdata 配置后重试",
+            "请参考 settings.template.yaml，补充 amazingdata 或 data_sources.providers.amazingdata 配置后重试",
         )
-        click.echo(json.dumps(results, ensure_ascii=False, indent=2))
+        _emit_results()
         raise SystemExit(1)
+
+    if config_source:
+        add_check("AmazingData 配置来源", "ok", f"检测到 {config_source}")
 
     if not getattr(amazingdata_config, "enabled", False):
         add_check(
@@ -326,8 +663,8 @@ def check_amazingdata(env: str, config: str | None, timeout: float) -> None:
             "amazingdata.enabled 当前为 false，跳过连通性检测",
             "如需启用 AmazingData，请在配置中将 enabled 设置为 true",
         )
-        results["status"] = "ok"
-        click.echo(json.dumps(results, ensure_ascii=False, indent=2))
+        results["status"] = aggregate_status()
+        _emit_results()
         raise SystemExit(0)
 
     try:
@@ -340,7 +677,7 @@ def check_amazingdata(env: str, config: str | None, timeout: float) -> None:
             f"配置不符合要求：{exc}",
             "请更新 settings.<env>.yaml 中的 amazingdata.connection 字段",
         )
-        click.echo(json.dumps(results, ensure_ascii=False, indent=2))
+        _emit_results()
         raise SystemExit(1)
 
     log_path_value = getattr(amazingdata_config.connection, "tgw_log_path", "") or getattr(
@@ -406,12 +743,402 @@ def check_amazingdata(env: str, config: str | None, timeout: float) -> None:
             f"无法连接 {host}:{port}：{exc}",
             "请确认网络连通性、防火墙及服务端监听状态",
         )
-        click.echo(json.dumps(results, ensure_ascii=False, indent=2))
+        _emit_results()
         raise SystemExit(1)
 
-    results["status"] = "ok"
-    click.echo(json.dumps(results, ensure_ascii=False, indent=2))
-    raise SystemExit(0)
+    mode = str(getattr(amazingdata_config, "mode", "local") or "local").lower()
+    scheduler_address = getattr(amazingdata_config, "dask_scheduler_address", None)
+    probe_skip_reason: str | None = None
+    probe_skip_suggestion: str | None = None
+    worker_bootstrap_command = (
+        "`uv run --python ./.venv/Scripts/python.exe python -c \"import asyncio; "
+        "from core.compute.dask_worker_manager import ensure_windows_workers; "
+        "print(asyncio.run(ensure_windows_workers()))\"`"
+    )
+
+    if mode == "distributed":
+        if not scheduler_address:
+            probe_skip_reason = "distributed 模式缺少 dask_scheduler_address"
+            probe_skip_suggestion = (
+                "请在 AmazingData 配置中补充 dask_scheduler_address；"
+                "修复后重试 `deepsearch check-amazingdata dev --probe-calendar`"
+            )
+            add_check(
+                "Dask Worker 可用性",
+                "failed",
+                "distributed 模式缺少 dask_scheduler_address",
+                "请在 AmazingData 配置中补充 dask_scheduler_address",
+            )
+        else:
+            try:
+                from distributed import Client
+
+                with Client(
+                    str(scheduler_address),
+                    timeout=f"{max(timeout, 3.0)}s",
+                    set_as_default=False,
+                ) as client:
+                    scheduler_info = client.scheduler_info() or {}
+                    workers = scheduler_info.get("workers", {}) or {}
+                    version_mismatches = _collect_dask_version_mismatches(client)
+                    if version_mismatches:
+                        add_check(
+                            "Dask 版本一致性",
+                            "warning",
+                            "检测到 client/scheduler 版本不一致: "
+                            + "; ".join(version_mismatches),
+                            "建议对齐 dask/distributed 版本后重启 Scheduler 和 Worker",
+                        )
+                    else:
+                        add_check("Dask 版本一致性", "ok", "client/scheduler 版本一致")
+
+                    if not workers:
+                        auto_start_attempted = False
+                        if _windows_worker_autostart_enabled(settings):
+                            auto_start_attempted = True
+                            started, reason = _try_autostart_windows_workers()
+                            if started:
+                                time.sleep(1.0)
+                                scheduler_info = client.scheduler_info() or {}
+                                workers = scheduler_info.get("workers", {}) or {}
+                                add_check(
+                                    "Dask Worker 自动拉起",
+                                    "ok",
+                                    f"已触发自动拉起，当前 Worker 数: {len(workers)}",
+                                )
+                            else:
+                                add_check(
+                                    "Dask Worker 自动拉起",
+                                    "warning",
+                                    f"自动拉起失败: {reason}",
+                                    "请检查本机 Python 环境、端口占用与 Worker 启动日志",
+                                )
+
+                        if auto_start_attempted and workers:
+                            pass
+                        else:
+                            suggestion = "请先启动至少一个 Dask Worker"
+                            if _windows_worker_autostart_enabled(settings):
+                                suggestion += f"（也可执行 {worker_bootstrap_command}）"
+                            probe_skip_reason = "Scheduler 在线但无可用 Worker"
+                            probe_skip_suggestion = (
+                                f"{suggestion}；修复后重试 `deepsearch check-amazingdata dev --probe-calendar`"
+                            )
+                            add_check(
+                                "Dask Worker 可用性",
+                                "failed",
+                                f"Scheduler {scheduler_address} 在线但无可用 Worker",
+                                suggestion,
+                            )
+                    if workers:
+                        win_workers = [
+                            addr
+                            for addr, info in workers.items()
+                            if isinstance(info, dict)
+                            and isinstance(info.get("resources"), dict)
+                            and info["resources"].get("WIN", 0) > 0
+                        ]
+
+                        if not win_workers:
+                            probe_skip_reason = (
+                                f"Scheduler {scheduler_address} 已连接，但无 WIN 资源 Worker"
+                            )
+                            probe_skip_suggestion = (
+                                "请先启动至少一个 resources.WIN > 0 的 Worker，"
+                                f"例如执行 {worker_bootstrap_command}；"
+                                "修复后重试 `deepsearch check-amazingdata dev --probe-calendar`"
+                            )
+                            add_check(
+                                "Dask Worker 可用性",
+                                "failed",
+                                f"Scheduler {scheduler_address} 已连接，但无 WIN 资源 Worker（共 {len(workers)} 个）",
+                                "Windows 任务需要至少一个 resources.WIN > 0 的 Worker",
+                            )
+                        else:
+                            add_check(
+                                "Dask Worker 可用性",
+                                "ok",
+                                f"可用 Worker: {len(workers)} 个，WIN 资源 Worker: {len(win_workers)} 个",
+                            )
+
+                            scheduler_runtime_address = str(
+                                scheduler_info.get("address") or scheduler_address
+                            )
+                            scheduler_runtime_host = _extract_endpoint_host(
+                                scheduler_runtime_address
+                            )
+                            loopback_win_workers = [
+                                str(addr)
+                                for addr in win_workers
+                                if _is_loopback_host(_extract_endpoint_host(str(addr)))
+                            ]
+
+                            if loopback_win_workers and not _is_loopback_host(
+                                scheduler_runtime_host
+                            ):
+                                add_check(
+                                    "Scheduler 到 Worker 回连",
+                                    "failed",
+                                    (
+                                        f"检测到 Scheduler({scheduler_runtime_address}) 与 WIN Worker "
+                                        f"联系地址不兼容（loopback）: {loopback_win_workers[:3]}"
+                                    ),
+                                    "请将 Worker contact-address 配置为可被 Scheduler 回连的宿主机地址（如 host.docker.internal 或宿主机网卡 IP）",
+                                )
+                            else:
+                                try:
+                                    backconnect = _check_worker_backconnect_from_scheduler(
+                                        client,
+                                        worker_addresses=[str(addr) for addr in win_workers],
+                                        timeout_seconds=max(1.0, float(timeout)),
+                                    )
+                                    reachable_workers = [
+                                        addr
+                                        for addr, info in backconnect.items()
+                                        if isinstance(info, dict) and bool(info.get("reachable"))
+                                    ]
+                                    unreachable_workers = [
+                                        addr
+                                        for addr, info in backconnect.items()
+                                        if not (isinstance(info, dict) and bool(info.get("reachable")))
+                                    ]
+
+                                    if not reachable_workers:
+                                        details: list[str] = []
+                                        for addr in unreachable_workers[:3]:
+                                            info = backconnect.get(addr, {})
+                                            error = (
+                                                str(info.get("error", "未知错误"))
+                                                if isinstance(info, dict)
+                                                else "未知错误"
+                                            )
+                                            details.append(f"{addr} -> {error}")
+                                        detail_text = (
+                                            "；".join(details)
+                                            if details
+                                            else "所有 WIN Worker 均不可回连"
+                                        )
+                                        add_check(
+                                            "Scheduler 到 Worker 回连",
+                                            "failed",
+                                            f"未发现可回连 WIN Worker（共 {len(win_workers)} 个）：{detail_text}",
+                                            "请检查 Worker --host 地址与 Docker 网络可达性，避免落到 Default Switch 网段",
+                                        )
+                                    elif unreachable_workers:
+                                        add_check(
+                                            "Scheduler 到 Worker 回连",
+                                            "warning",
+                                            (
+                                                f"可回连 WIN Worker: {len(reachable_workers)}/{len(win_workers)}；"
+                                                f"不可回连: {unreachable_workers[:3]}"
+                                            ),
+                                            "建议固定 Worker --host 到容器可回连地址，降低 gather 超时风险",
+                                        )
+                                    else:
+                                        add_check(
+                                            "Scheduler 到 Worker 回连",
+                                            "ok",
+                                            f"WIN Worker 全部可回连（{len(win_workers)} 个）",
+                                        )
+                                except Exception as exc:
+                                    add_check(
+                                        "Scheduler 到 Worker 回连",
+                                        "warning",
+                                        f"回连预检查执行失败：{exc}",
+                                        "若后续出现 Actor 超时，请重点检查 Worker 地址与容器网络",
+                                    )
+            except Exception as exc:  # pragma: no cover - 依赖环境差异
+                probe_skip_reason = f"无法连接 Dask Scheduler {scheduler_address}: {exc}"
+                probe_skip_suggestion = (
+                    "请确认 Scheduler/Worker 正常运行且地址可达；"
+                    "修复后重试 `deepsearch check-amazingdata dev --probe-calendar`"
+                )
+                add_check(
+                    "Dask Worker 可用性",
+                    "failed",
+                    f"无法连接 Dask Scheduler {scheduler_address}: {exc}",
+                    "请确认 Scheduler/Worker 正常运行且地址可达",
+                )
+
+    if probe_calendar:
+        if mode == "distributed" and probe_skip_reason:
+            add_check(
+                "真实 API Smoke",
+                "warning",
+                f"未执行 get_calendar 探测：{probe_skip_reason}",
+                probe_skip_suggestion,
+            )
+        else:
+            try:
+                from core.infrastructure.providers.integration.compat import (
+                    get_provider_compat,
+                )
+
+                async def _run_calendar_probe(provider_obj: object) -> object:
+                    calendar_method = getattr(provider_obj, "get_calendar", None)
+                    if not callable(calendar_method):
+                        raise RuntimeError("Provider 不支持 get_calendar 接口")
+
+                    def _resolve_effective_timeout() -> float:
+                        # 严格遵循用户传入的 probe_timeout，避免巡检命令长时间阻塞。
+                        return max(1.0, float(probe_timeout))
+
+                    async def _invoke_static_lifecycle(method_name: str) -> object | None:
+                        callback = _get_static_callable(provider_obj, method_name)
+                        if callback is None:
+                            return None
+
+                        result = callback()
+                        if inspect.isawaitable(result):
+                            return await asyncio.wait_for(
+                                result,
+                                timeout=max(5.0, float(probe_timeout)),
+                            )
+                        return result
+
+                    init_result = await _invoke_static_lifecycle("initialize")
+                    if init_result is False:
+                        raise RuntimeError("Provider initialize() 返回 False")
+
+                    actor_obj = getattr(provider_obj, "_actor", None)
+                    actor_call = getattr(actor_obj, "call", None)
+                    if callable(actor_call):
+                        actor_result = await asyncio.wait_for(
+                            actor_call("get_calendar", data_type=probe_data_type, market=probe_market),
+                            timeout=_resolve_effective_timeout(),
+                        )
+                        if actor_result is None:
+                            return []
+                        if isinstance(actor_result, list):
+                            normalized: list[int] = []
+                            for item in actor_result:
+                                try:
+                                    normalized.append(int(item))
+                                except (TypeError, ValueError):
+                                    continue
+                            return normalized
+                        return actor_result
+
+                    invocation_errors: list[str] = []
+                    candidate_result: object | None = None
+                    invoked = False
+                    for invoke in (
+                        lambda: calendar_method(data_type=probe_data_type, market=probe_market),
+                        lambda: calendar_method(market=probe_market),
+                        lambda: calendar_method(probe_data_type, probe_market),
+                        lambda: calendar_method(),
+                    ):
+                        try:
+                            candidate_result = invoke()
+                            invoked = True
+                            break
+                        except TypeError as exc:
+                            invocation_errors.append(str(exc))
+
+                    if not invoked:
+                        raise RuntimeError(
+                            "get_calendar 参数适配失败: "
+                            + " | ".join(invocation_errors[-2:] or ["未知参数错误"])
+                        )
+
+                    if inspect.isawaitable(candidate_result):
+                        return await asyncio.wait_for(
+                            candidate_result,
+                            timeout=_resolve_effective_timeout(),
+                        )
+                    return candidate_result
+
+                async def _run_probe_flow() -> object:
+                    provider_obj: object | None = None
+                    try:
+                        provider_obj = await asyncio.wait_for(
+                            get_provider_compat("amazingdata"),
+                            timeout=max(1.0, float(probe_timeout)),
+                        )
+                        if provider_obj is None:
+                            raise RuntimeError("无法创建 amazingdata Provider 实例")
+
+                        return await _run_calendar_probe(provider_obj)
+                    finally:
+                        if provider_obj is not None:
+                            await _cleanup_provider(provider_obj)
+                        try:
+                            from core.compute import close_dask_client
+
+                            await asyncio.wait_for(close_dask_client(), timeout=5.0)
+                        except Exception:
+                            pass
+
+                if suppress_third_party_output:
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                        io.StringIO()
+                    ):
+                        calendar_result = asyncio.run(_run_probe_flow())
+                else:
+                    calendar_result = asyncio.run(_run_probe_flow())
+
+                if isinstance(calendar_result, list):
+                    if calendar_result:
+                        preview = calendar_result[:3]
+                        add_check(
+                            "真实 API Smoke",
+                            "ok",
+                            f"get_calendar 成功，返回 {len(calendar_result)} 条，样例: {preview}",
+                        )
+                    else:
+                        add_check(
+                            "真实 API Smoke",
+                            "warning",
+                            "get_calendar 调用成功但返回空列表",
+                            "请检查交易日历数据是否完整同步",
+                        )
+                else:
+                    add_check(
+                        "真实 API Smoke",
+                        "warning",
+                        f"get_calendar 返回非列表类型: {type(calendar_result).__name__}",
+                        "请确认 Provider 接口返回结构是否符合预期",
+                    )
+            except Exception as exc:
+                error_text = str(exc).strip() or exc.__class__.__name__
+                error_text_lower = error_text.lower()
+                if isinstance(exc, asyncio.TimeoutError):
+                    add_check(
+                        "真实 API Smoke",
+                        "warning",
+                        "get_calendar 调用超时（可能为瞬时抖动）",
+                        "建议重试；若持续超时，请检查 Worker 负载、Dask 链路与 Actor 状态",
+                    )
+                elif "unable to contact actor's worker" in error_text_lower:
+                    add_check(
+                        "真实 API Smoke",
+                        "failed",
+                        f"get_calendar 调用失败: {error_text}",
+                        "Actor 所在 Worker 不可达，请优先检查 Worker --host 地址与 Scheduler 到 Worker 回连链路",
+                    )
+                elif (
+                    "deserialization of the task graph" in error_text_lower
+                    or "different environments" in error_text_lower
+                    or "no module named" in error_text_lower
+                ):
+                    add_check(
+                        "真实 API Smoke",
+                        "failed",
+                        f"get_calendar 调用失败: {error_text}",
+                        "检测到 Dask 环境不一致，请重建 deepsearch-dask 镜像并重启 scheduler/worker",
+                    )
+                else:
+                    add_check(
+                        "真实 API Smoke",
+                        "failed",
+                        f"get_calendar 调用失败: {error_text}",
+                        "请检查 Dask Worker、Redis 连接和 AmazingData 会话状态",
+                    )
+
+    _ensure_utf8_streams()
+    results["status"] = aggregate_status()
+    _emit_results()
+    raise SystemExit(1 if results["status"] == "failed" else 0)
 
 
 @cli.command()

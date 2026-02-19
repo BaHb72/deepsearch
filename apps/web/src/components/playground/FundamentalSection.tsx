@@ -15,6 +15,7 @@ import { ExtendedFieldsPanel } from '@/components/common/ExtendedFieldsPanel'
 export interface FundamentalSectionProps {
     stockCode: string
     preferredSource?: DataSourceType
+    onSuggestSourceSwitch?: (source: DataSourceType) => void
     /** 是否显示扩展字段面板 */
     showExtended?: boolean
 }
@@ -31,6 +32,7 @@ const formatLargeNumber = (val: number | undefined): string => {
 export const FundamentalSection: React.FC<FundamentalSectionProps> = ({
     stockCode,
     preferredSource,
+    onSuggestSourceSwitch,
     showExtended = true,
 }) => {
     const [activeTab, setActiveTab] = useState('income')
@@ -42,6 +44,13 @@ export const FundamentalSection: React.FC<FundamentalSectionProps> = ({
         preferredSource,
         autoFetch: true,
         deps: [stockCode],
+        monitor: {
+            pageKey: 'dev/playground',
+            pageName: '数据源沙盒',
+            moduleKey: 'fundamental',
+            moduleName: '基本面',
+            onSwitchSource: onSuggestSourceSwitch,
+        },
     })
 
     // 资产负债表数据
@@ -51,6 +60,13 @@ export const FundamentalSection: React.FC<FundamentalSectionProps> = ({
         preferredSource,
         autoFetch: activeTab === 'balance',
         deps: [stockCode, activeTab],
+        monitor: {
+            pageKey: 'dev/playground',
+            pageName: '数据源沙盒',
+            moduleKey: 'fundamental',
+            moduleName: '基本面',
+            onSwitchSource: onSuggestSourceSwitch,
+        },
     })
 
     // 股东数据
@@ -60,6 +76,13 @@ export const FundamentalSection: React.FC<FundamentalSectionProps> = ({
         preferredSource,
         autoFetch: activeTab === 'holder',
         deps: [stockCode, activeTab],
+        monitor: {
+            pageKey: 'dev/playground',
+            pageName: '数据源沙盒',
+            moduleKey: 'fundamental',
+            moduleName: '基本面',
+            onSwitchSource: onSuggestSourceSwitch,
+        },
     })
 
     const loading = incomeResult.loading || balanceResult.loading || holderResult.loading

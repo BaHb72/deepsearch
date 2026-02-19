@@ -56,7 +56,7 @@ async def get_api_info():
             "basic_data": {
                 "path": "/api/amazingdata/basic",
                 "description": "基础数据接口",
-                "endpoints": 7,
+                "endpoints": 11,
             },
             "realtime": {
                 "path": "/api/amazingdata/realtime",
@@ -99,7 +99,7 @@ async def get_api_info():
                 "endpoints": 3,
             },
         },
-        "total_endpoints": 44,
+        "total_endpoints": 48,
         "features": [
             "模块化设计",
             "统一错误处理",

@@ -430,7 +430,7 @@ class DataSourceManager:
 
     @staticmethod
     def _ensure_dict(value):
-        """��ȷ������Ϊ dict ������֧�� Pydantic/����ʵ��"""
+        """确保输入转换为 dict，兼容 Pydantic/普通对象。"""
         if value is None:
             return {}
         if isinstance(value, dict):
@@ -474,7 +474,7 @@ class DataSourceManager:
 
     @staticmethod
     def _deep_merge_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-        """����ϲ� dict �����ȼ������� override"""
+        """深度合并 dict，override 优先级更高。"""
         result = dict(base or {})
         for key, value in (override or {}).items():
             if isinstance(value, dict) and isinstance(result.get(key), dict):
@@ -807,7 +807,7 @@ class DataSourceManager:
         providers_dict["akshare"] = akshare_normalized
 
     def _update_fallback_order_config(self) -> None:
-        """���� runtime config �е� fallback_order �� default ����"""
+        """同步 runtime config 中的 fallback_order 与 default 设置。"""
         fallback_values = [item.value for item in self._fallback_order]
         default_value = self._default_source.value if self._default_source else None
 
@@ -829,19 +829,19 @@ class DataSourceManager:
         if hasattr(data_sources_section, "fallback_order"):
             try:
                 data_sources_section.fallback_order = list(fallback_values)
-            except Exception:  # pragma: no cover - ���ͱ����쳣
-                logger.debug("�� runtime config д�� fallback_order ʱ�����쳣", exc_info=True)
+            except Exception:  # pragma: no cover - 类型兼容异常
+                logger.debug("向 runtime config 写入 fallback_order 时发生异常", exc_info=True)
 
         if hasattr(data_sources_section, "default"):
             try:
                 data_sources_section.default = default_value
-            except Exception:  # pragma: no cover - ���ͱ����쳣
-                logger.debug("�� runtime config д�� default ʱ�����쳣", exc_info=True)
+            except Exception:  # pragma: no cover - 类型兼容异常
+                logger.debug("向 runtime config 写入 default 时发生异常", exc_info=True)
 
     def _update_provider_snapshot(
         self, source_type: DataSourceType, config: DataSourceConfig
     ) -> None:
-        """ͬ���� runtime config �е�����Դ������� fallback ���ã�����������ͨ�� UI ����ʾ"""
+        """同步 runtime config 中的数据源启用状态与 fallback 信息，供 UI 展示。"""
         data_sources_section = getattr(self.config, "data_sources", None)
         fallback_sources_raw = list(config.fallback_sources or [])
         fallback_sources_str = [
@@ -892,14 +892,14 @@ class DataSourceManager:
                     existing_entry = getattr(providers_attr, source_type.value)
                 except Exception:
                     logger.debug(
-                        "providers �ṹ�����ɱ� dict ���޷��Զ�ͬ���ڴ�� config ������� fallback ���ð�",
+                        "providers 结构不可变且非 dict，无法自动同步内存配置的 fallback 设置",
                         exc_info=True,
                     )
                     return
             _apply(existing_entry)
 
     def _handle_akshare_disabled(self, config: DataSourceConfig) -> None:
-        """���������� AkShare ����ʱ��Ҫ�����߼�"""
+        """处理 AkShare 被禁用时的 fallback 同步逻辑。"""
         config.fallback_sources = []
         config.fallback_enabled = False
 
@@ -940,7 +940,7 @@ class DataSourceManager:
             self._update_fallback_order_config()
 
     def _handle_akshare_enabled(self, config: DataSourceConfig) -> None:
-        """�������� AkShare ����ʱ���� fallback ��ͬ���߼�"""
+        """处理 AkShare 启用时的 fallback 同步逻辑。"""
         if DataSourceType.AKSHARE not in self._fallback_order:
             self._fallback_order.append(DataSourceType.AKSHARE)
 
@@ -989,7 +989,9 @@ class DataSourceManager:
                 return float(stripped)
             except ValueError:
                 pass
-        logger.warning(f"���Դ {provider} �ֶ� {field} ֵ {value!r} ����ת��Ϊ float����ʹ��Ĭ��ֵ {default}")
+        logger.warning(
+            f"数据源 {provider} 字段 {field} 值 {value!r} 无法转换为 float，使用默认值 {default}"
+        )
         return default
 
     def _coerce_int(
@@ -1014,7 +1016,9 @@ class DataSourceManager:
                 return int(stripped)
             except ValueError:
                 pass
-        logger.warning(f"���Դ {provider} �ֶ� {field} ֵ {value!r} ����ת��Ϊ int����ʹ��Ĭ��ֵ {default}")
+        logger.warning(
+            f"数据源 {provider} 字段 {field} 值 {value!r} 无法转换为 int，使用默认值 {default}"
+        )
         return default
 
     def is_provider_enabled(self, source: Union[str, DataSourceType]) -> bool:

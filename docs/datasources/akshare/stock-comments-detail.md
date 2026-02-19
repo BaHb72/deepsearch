@@ -297,11 +297,11 @@ print(stock_comment_detail_scrd_desire_em_df)
 
 ##### 日度市场参与意愿
 
-接口: stock_comment_detail_scrd_desire_daily_em
+接口: stock_comment_detail_scrd_desire_em
 
 目标地址: <https://data.eastmoney.com/stockcomment/stock/600000.html>
 
-描述: 东方财富网-数据中心-特色数据-千股千评-市场热度-日度市场参与意愿
+描述: 东方财富网-数据中心-特色数据-千股千评-市场热度-市场参与意愿（日度）
 
 限量: 单次获取指定 symbol 的数据
 
@@ -313,28 +313,31 @@ print(stock_comment_detail_scrd_desire_em_df)
 
 输出参数
 
-| 名称         | 类型      | 描述 |
-|------------|---------|----|
-| 交易日        | object  | -  |
-| 当日意愿上升     | float64 | -  |
-| 5日平均参与意愿变化 | float64 | -  |
+| 名称        | 类型      | 描述 |
+|-----------|---------|----|
+| 交易日期      | object  | -  |
+| 股票代码      | object  | -  |
+| 参与意愿      | float64 | -  |
+| 5日平均参与意愿  | float64 | -  |
+| 参与意愿变化    | float64 | -  |
+| 5日平均变化    | float64 | -  |
 
 接口示例
 
 ```python
 import akshare as ak
 
-stock_comment_detail_scrd_desire_daily_em_df = ak.stock_comment_detail_scrd_desire_daily_em(symbol="600000")
-print(stock_comment_detail_scrd_desire_daily_em_df)
+stock_comment_detail_scrd_desire_em_df = ak.stock_comment_detail_scrd_desire_em(symbol="600000")
+print(stock_comment_detail_scrd_desire_em_df)
 ```
 
 数据示例
 
 ```
-     交易日  当日意愿上升  5日平均参与意愿变化
-0  2024-09-18    4.76        1.00
-1  2024-09-19    7.57        2.19
-2  2024-09-20  -10.55        1.00
-3  2024-09-23    8.85        1.00
-4  2024-09-24    7.42        3.61
+       交易日期    股票代码  参与意愿  5日平均参与意愿  参与意愿变化  5日平均变化
+0  2024-09-18  600000  23.8       19.1    4.76    1.00
+1  2024-09-19  600000  31.4       21.4    7.57    2.19
+2  2024-09-20  600000  20.8       22.4  -10.55    1.00
+3  2024-09-23  600000  29.7       23.4    8.85    1.00
+4  2024-09-24  600000  37.1       27.0    7.42    3.61
 ```

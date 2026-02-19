@@ -57,15 +57,13 @@ class MiniQMTIntradayDataProvider(IntradayDataProvider):
         """
         获取分时K线数据 - 使用MiniQMT真实数据
         """
-        from concurrent.futures import ThreadPoolExecutor
-
-        from core.infrastructure.providers.datafeed.miniqmt.miniqmt_collector import (
-            MiniQMTCollector,
+        from core.adapters.market_data.miniqmt_polling_adapter import (
+            get_shared_miniqmt_collector,
         )
 
         try:
-            # 获取MiniQMTCollector实例
-            collector = MiniQMTCollector()
+            # 复用全局 collector，避免每次请求创建定时器线程
+            collector = await get_shared_miniqmt_collector()
 
             if not collector.connected:
                 logger.warning("MiniQMT not connected, returning empty data")
@@ -76,18 +74,13 @@ class MiniQMTIntradayDataProvider(IntradayDataProvider):
 
             logger.info(f"Fetching real intraday data for {symbol}, date={today_str}, period=1m")
 
-            # 在线程池中执行同步操作
-            loop = asyncio.get_event_loop()
-            with ThreadPoolExecutor() as executor:
-                result = await loop.run_in_executor(
-                    executor,
-                    lambda: collector.download_history_data(
-                        stock_code=symbol,
-                        period="1m",  # 1分钟K线
-                        start_time=today_str,
-                        end_time=today_str,
-                    ),
-                )
+            result = await asyncio.to_thread(
+                collector.download_history_data,
+                stock_code=symbol,
+                period="1m",  # 1分钟K线
+                start_time=today_str,
+                end_time=today_str,
+            )
 
             logger.info(
                 f"Download result for {symbol}: success={result.get('success')}, count={result.get('count', 0)}"

@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from helpers import fetch_code_list
 
 
-def test_amazingdata():
+def run_amazingdata_working_test() -> bool:
     print("\n" + "=" * 60)
     print("AmazingData 功能测试（使用正确的API调用）")
     print("=" * 60)
@@ -27,13 +27,17 @@ def test_amazingdata():
         print(f"[FAIL] SDK导入失败: {e}")
         return False
 
-    # 使用正确的凭证和服务器
+    # 真实凭证通过环境变量注入，避免在仓库中硬编码敏感信息
     credentials = {
-        "username": "212200038719",
-        "password": "212200038719@2025",
-        "host": "101.230.159.234",  # 使用电信线路2
-        "port": 8600,
+        "username": os.getenv("AMAZINGDATA_USERNAME", "").strip(),
+        "password": os.getenv("AMAZINGDATA_PASSWORD", "").strip(),
+        "host": os.getenv("AMAZINGDATA_HOST", "101.230.159.234").strip(),
+        "port": int(os.getenv("AMAZINGDATA_PORT", "8600")),
     }
+
+    if not credentials["username"] or not credentials["password"]:
+        print("[SKIP] 未提供 AMAZINGDATA_USERNAME / AMAZINGDATA_PASSWORD，跳过真实登录测试")
+        return False
 
     print("\n连接信息：")
     print(f"  服务器: {credentials['host']}:{credentials['port']}")
@@ -133,12 +137,29 @@ def test_amazingdata():
         print(f"[WARNING] 登出异常: {e}")
 
     print("\n" + "=" * 60)
-    print("✅ 测试完成！AmazingData数据源工作正常")
+    print("[OK] 测试完成，AmazingData 数据源工作正常")
     print("=" * 60)
 
     return True
 
 
+def test_amazingdata():
+    """pytest 入口：在真实凭据可用时执行功能测试。"""
+    import pytest
+
+    try:
+        import AmazingData  # noqa: F401
+    except ImportError:
+        pytest.skip("AmazingData SDK 未安装，跳过真实功能测试")
+
+    if not os.getenv("AMAZINGDATA_USERNAME", "").strip() or not os.getenv(
+        "AMAZINGDATA_PASSWORD", ""
+    ).strip():
+        pytest.skip("未提供 AMAZINGDATA_USERNAME / AMAZINGDATA_PASSWORD，跳过真实登录测试")
+
+    assert run_amazingdata_working_test() is True
+
+
 if __name__ == "__main__":
-    success = test_amazingdata()
+    success = run_amazingdata_working_test()
     sys.exit(0 if success else 1)

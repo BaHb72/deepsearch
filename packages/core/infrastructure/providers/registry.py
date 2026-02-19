@@ -667,6 +667,11 @@ class DataProviderRegistry:
         """
         按优先级排序获取所有提供者信息
 
+        注意:
+            该注册表属于 legacy 选择链路，历史语义为“值越大越优先”。
+            统一配置层 `data_sources.providers.*.priority` 采用“值越小越优先”语义。
+            两者不可直接混用，应在适配边界显式转换。
+
         Returns:
             按优先级排序的提供者信息列表
         """

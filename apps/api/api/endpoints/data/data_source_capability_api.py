@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Final, Mapping, cast
 
+from core.application.services.unified_data import get_unified_feed
 from core.infrastructure.providers.interfaces.capabilities import DataCapability
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -41,8 +42,8 @@ from apps.api.api.models import (
 
 router = APIRouter(prefix="/api/datasource", tags=["datasource_capability"])
 
-# 数据源能力映射
-DATA_SOURCE_CAPABILITIES: Final[dict[DataSourceSlug, frozenset[DataCapability]]] = {
+# 默认能力映射（兜底，运行时矩阵不可用时使用）
+DEFAULT_DATA_SOURCE_CAPABILITIES: Final[dict[DataSourceSlug, frozenset[DataCapability]]] = {
     "amazingdata": frozenset(
         {
             DataCapability.STOCK_LIST,
@@ -195,11 +196,59 @@ def _normalize_source_slug(source: str) -> str:
     return normalized
 
 
+def _build_runtime_capability_map() -> dict[DataSourceSlug, frozenset[DataCapability]]:
+    """
+    从 UnifiedDataFeed 运行时适配器构建能力矩阵。
+
+    回退策略：
+    - 若 UnifiedDataFeed 未初始化或取值失败，返回空映射，调用方再使用默认矩阵兜底。
+    """
+    try:
+        feed = get_unified_feed()
+    except Exception:
+        return {}
+
+    capability_map: dict[DataSourceSlug, frozenset[DataCapability]] = {}
+    mapping = {
+        "kline": DataCapability.KLINE_DATA,
+        "realtime_quote": DataCapability.REALTIME_QUOTE,
+        "tick": DataCapability.TICK_DATA,
+        "stock_list": DataCapability.STOCK_LIST,
+        "orderbook": DataCapability.ORDER_BOOK,
+    }
+
+    for adapter_name, adapter in feed.router.adapters.items():
+        normalized = _normalize_source_slug(adapter_name)
+        if normalized not in DATA_SOURCE_METADATA:
+            # 能力对比接口仅展示登记过的来源，避免前端出现未知来源样式
+            continue
+        capabilities: set[DataCapability] = set()
+        for field_name, cap in mapping.items():
+            try:
+                if adapter.capabilities.supports(field_name):
+                    capabilities.add(cap)
+            except Exception:
+                continue
+        capability_map[cast(DataSourceSlug, normalized)] = frozenset(capabilities)
+
+    return capability_map
+
+
+def _get_capability_map() -> dict[DataSourceSlug, frozenset[DataCapability]]:
+    """获取当前能力矩阵（优先运行时，失败回退静态默认）。"""
+    merged = dict(DEFAULT_DATA_SOURCE_CAPABILITIES)
+    runtime_map = _build_runtime_capability_map()
+    if runtime_map:
+        merged.update(runtime_map)
+    return merged
+
+
 def _iter_capable_sources(capability: DataCapability) -> list[DataSourceSlug]:
     """根据能力返回所有支持的数据源 ID。"""
+    capability_map = _get_capability_map()
     return [
         source_id
-        for source_id, capability_set in DATA_SOURCE_CAPABILITIES.items()
+        for source_id, capability_set in capability_map.items()
         if capability in capability_set
     ]
 
@@ -207,9 +256,10 @@ def _iter_capable_sources(capability: DataCapability) -> list[DataSourceSlug]:
 def _is_capability_supported(source: str, capability: DataCapability) -> bool:
     """判断指定来源是否支持某项能力。"""
     normalized = _normalize_source_slug(source)
-    if normalized not in DATA_SOURCE_CAPABILITIES:
+    capability_map = _get_capability_map()
+    if normalized not in capability_map:
         return False
-    capability_set = DATA_SOURCE_CAPABILITIES[cast(DataSourceSlug, normalized)]
+    capability_set = capability_map[cast(DataSourceSlug, normalized)]
     return capability in capability_set
 
 
@@ -310,9 +360,10 @@ async def get_capability_matrix():
     try:
         matrix: CapabilityMatrix = {"sources": {}, "categories": {}}
         sources = matrix["sources"]
+        capability_map = _get_capability_map()
 
         for source_id, metadata in DATA_SOURCE_METADATA.items():
-            capabilities = DATA_SOURCE_CAPABILITIES.get(source_id, EMPTY_CAPABILITIES)
+            capabilities = capability_map.get(source_id, EMPTY_CAPABILITIES)
 
             supported_count = len(capabilities)
             total_count = len(DataCapability)
@@ -374,13 +425,14 @@ async def get_source_capabilities(source: str):
     """
     try:
         normalized_source = _normalize_source_slug(source)
+        capability_map = _get_capability_map()
 
-        if normalized_source not in DATA_SOURCE_CAPABILITIES:
+        if normalized_source not in capability_map:
             raise HTTPException(status_code=404, detail=f"数据源 {source} 不存在")
 
         source_slug = cast(DataSourceSlug, normalized_source)
 
-        capabilities = DATA_SOURCE_CAPABILITIES[source_slug]
+        capabilities = capability_map[source_slug]
         metadata = DATA_SOURCE_METADATA.get(source_slug, DEFAULT_METADATA)
 
         # 按类别组织能力
@@ -452,11 +504,12 @@ async def compare_capabilities(
     try:
         raw_sources = [s.strip() for s in sources.split(",") if s.strip()]
         source_slugs: list[DataSourceSlug] = []
+        capability_map = _get_capability_map()
 
         # 验证数据源
         for raw_source in raw_sources:
             normalized = _normalize_source_slug(raw_source)
-            if normalized not in DATA_SOURCE_CAPABILITIES:
+            if normalized not in capability_map:
                 raise HTTPException(status_code=400, detail=f"数据源 {normalized} 不存在")
             source_slugs.append(cast(DataSourceSlug, normalized))
 
@@ -472,7 +525,7 @@ async def compare_capabilities(
             }
 
             for source in source_slugs:
-                capabilities = DATA_SOURCE_CAPABILITIES[source]
+                capabilities = capability_map[source]
                 cap_comparison["sources"][source] = cap in capabilities
 
             # 判断差异类型
@@ -638,8 +691,9 @@ async def check_feature_availability(source: str, feature: str):
     try:
         # 验证数据源
         normalized_source = _normalize_source_slug(source)
+        capability_map = _get_capability_map()
 
-        if normalized_source not in DATA_SOURCE_CAPABILITIES:
+        if normalized_source not in capability_map:
             raise HTTPException(status_code=404, detail=f"数据源 {source} 不存在")
 
         source_slug = cast(DataSourceSlug, normalized_source)

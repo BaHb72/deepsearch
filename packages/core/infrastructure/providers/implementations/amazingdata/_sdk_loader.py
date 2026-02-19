@@ -12,6 +12,7 @@ from loguru import logger
 ad: Optional[ModuleType]
 HAS_AMAZINGDATA: bool
 IMPORT_ERROR: Optional[Exception]
+_REQUIRED_SDK_ATTRS = ("BaseData", "MarketData", "InfoData")
 
 
 def _load_stub(stub_path: str) -> tuple[Optional[ModuleType], bool, Optional[Exception]]:
@@ -34,10 +35,30 @@ def _load_sdk() -> tuple[Optional[ModuleType], bool, Optional[Exception]]:
     for name in sdk_candidates:
         try:
             _ad = __import__(name)
+
+            has_login = callable(getattr(_ad, "login", None))
+            has_login_legacy = callable(getattr(_ad, "Login", None))
+            if not has_login and has_login_legacy:
+                # 兼容旧接口：将 Login 对齐为 login
+                setattr(_ad, "login", getattr(_ad, "Login"))
+                has_login = True
+
+            if not has_login:
+                last_exc = RuntimeError(f"{name} missing callable login/Login")
+                logger.debug(f"[SDK加载] 候选 {name} 不兼容: {last_exc}")
+                continue
+
+            missing_attrs = [attr for attr in _REQUIRED_SDK_ATTRS if not callable(getattr(_ad, attr, None))]
+            if missing_attrs:
+                last_exc = RuntimeError(f"{name} missing required SDK APIs: {', '.join(missing_attrs)}")
+                logger.debug(f"[SDK加载] 候选 {name} 不兼容: {last_exc}")
+                continue
+
             logger.info(f"[SDK加载] AmazingData SDK加载成功 (包名: {name}): {_ad}")
             return _ad, True, None
         except Exception as exc:
             last_exc = exc
+            logger.debug(f"[SDK加载] 导入候选 {name} 失败: {exc}")
             continue
     logger.warning(f"AmazingData SDK import failed, tried {sdk_candidates}. Last error: {last_exc}")
     return None, False, last_exc
