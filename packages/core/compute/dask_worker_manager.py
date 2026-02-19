@@ -583,8 +583,10 @@ class DaskWorkerManager:
         if runtime_host and self._is_loopback_host(runtime_host):
             return "localhost"
 
-        if self._is_loopback_host(configured_host) and runtime_host and not self._is_loopback_host(
-            runtime_host
+        if (
+            self._is_loopback_host(configured_host)
+            and runtime_host
+            and not self._is_loopback_host(runtime_host)
         ):
             # 配置是 localhost，但实际 Scheduler 在容器/远端网络中，需避免回连到 127.0.0.1
             self._logger.info(

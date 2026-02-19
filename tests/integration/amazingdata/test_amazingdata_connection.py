@@ -10,8 +10,8 @@ sys.path.insert(0, "D:\\Stock\\code\\deepsearch")
 
 from apps.api.api.endpoints.datasources.amazingdata_test_helper import (
     test_amazingdata_connection as run_amazingdata_connection_test,
-    validate_amazingdata_config,
 )
+from apps.api.api.endpoints.datasources.amazingdata_test_helper import validate_amazingdata_config
 
 
 def test_direct_connection():

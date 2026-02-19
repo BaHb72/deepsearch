@@ -46,4 +46,3 @@ P0
   - 新增测试 `tests/unit/infrastructure/providers/test_amazingdata_config_resolution.py`
     - `test_ensure_config_prefers_connection_over_legacy_top_level_fields`
     - `test_ensure_config_uses_top_level_when_connection_missing`
-

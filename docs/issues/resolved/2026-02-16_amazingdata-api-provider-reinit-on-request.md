@@ -11,8 +11,8 @@
 
 这会导致：
 
-1. 绕过 `DataProviderFactory` / Dask Actor 的既有运行链路  
-2. 请求期出现重复初始化和重复登录风险  
+1. 绕过 `DataProviderFactory` / Dask Actor 的既有运行链路
+2. 请求期出现重复初始化和重复登录风险
 3. 在 AmazingData 单连接约束下放大连接竞争问题
 
 ## 关键证据
@@ -50,4 +50,3 @@ P0
     - 验证已有 provider 被直接复用
     - 验证空 provider 返回 503
   - 回归：`uv run pytest tests/unit/api/test_amazingdata_provider_resolution.py tests/unit/cli/test_check_amazingdata_command.py -q` 通过
-

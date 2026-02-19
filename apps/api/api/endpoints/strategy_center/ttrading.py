@@ -9,11 +9,12 @@ API endpoints for the T-Trading engine:
 - Data source status
 """
 
-from datetime import datetime
 import inspect
+from datetime import datetime
 from typing import Any, Dict, Optional, cast
 from uuid import uuid4
 
+import pandas as pd
 from core.strategies.interfaces.models import (
     IntradayAnalysis,
     TTradingConfig,
@@ -28,7 +29,6 @@ from core.strategies.ttrading import (
 )
 from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
-import pandas as pd
 from pydantic import BaseModel, Field
 
 from apps.api.api.provider_deps import resolve_provider_from_request
@@ -89,7 +89,8 @@ def _get_positional_arity(func: Any) -> int:
     return sum(
         1
         for param in signature.parameters.values()
-        if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        if param.kind
+        in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
     )
 
 
@@ -220,7 +221,9 @@ async def _probe_miniqmt_actor_connection_compat(request: Optional[Request]) -> 
     return bool(await probe(request))
 
 
-async def _get_provider_with_soft_fail_compat(request: Optional[Request], provider_name: str) -> Any:
+async def _get_provider_with_soft_fail_compat(
+    request: Optional[Request], provider_name: str
+) -> Any:
     getter = _get_provider_with_soft_fail
     arity = _get_positional_arity(getter)
     if arity <= 1:
@@ -238,7 +241,9 @@ async def _get_intraday_bars_compat(
     return await getter(symbol, minutes=minutes)
 
 
-async def _get_current_quote_compat(data_provider: Any, request: Optional[Request], symbol: str) -> Any:
+async def _get_current_quote_compat(
+    data_provider: Any, request: Optional[Request], symbol: str
+) -> Any:
     getter = data_provider.get_current_quote
     arity = _get_positional_arity(getter)
     if arity >= 2:
@@ -270,7 +275,9 @@ async def _fetch_kline_rows_from_provider(
             end_date=end_date,
             limit=limit,
         ),
-        lambda: fetcher(symbol, period=period, start_date=start_date, end_date=end_date, limit=limit),
+        lambda: fetcher(
+            symbol, period=period, start_date=start_date, end_date=end_date, limit=limit
+        ),
         lambda: fetcher(symbol=symbol, period=period, start_date=start_date, end_date=end_date),
     ):
         try:

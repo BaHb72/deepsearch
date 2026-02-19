@@ -200,4 +200,3 @@ def test_get_capabilities_contains_extended_items(test_client):
 
     assert required.issubset(set(capabilities.keys()))
     assert capabilities["realtime_quote"] == ["miniqmt", "amazingdata"]
-

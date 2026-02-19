@@ -3,20 +3,28 @@
 > 说明：本文件由 `AmazingData开发手册.pdf` 中“接口相关章节”转存而来，仅做 Markdown 排版优化，未对原文含义做扩写。
 
 ## 3.4 Python 开发步骤
+
 登录AmazingData 之后，实现数据获取。
+
 ### 3.4.1 登录AmazingData
+
 （1）所有数据接口调用前，必须登录
 （2）import AmazingData 库，填写账号、密码、ip/port 等信息，调用登录api。
+
 ```python
 import AmazingData as ad
 ad.login(username='username', password='password',host='***.***.***.***',port=****)
 ```
+
 ### 3.4.2 调用数据接口
+
 #### 3.4.2.1 查询接口调用
+
 （1）登录api；
 （2）实例化对应的数据查询类；
 
 （3）调用查询数据接口，获取数据；
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -27,7 +35,9 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list(security_type='EXTRA_ETF')
 
 ```
+
 #### 3.4.2.2 订阅接口调用
+
 （1）登录api；
 （2）实例化对应的数据查询类；
 （3）实例化数据订阅类；
@@ -51,46 +61,62 @@ print(period, data)
 sub_data.run()
 
 ```
+
 ## 3.5 API 接口详细
+
 ### 3.5.1 基础接口
+
 #### 3.5.1.1 登录
+
 调用任何数据接口之前，必须先调用登录接口。
 
 SDK 的账号、密码、ip 和端口号需联系您的开户营业部申请开通权限之后获取。
 函数接口：login
 功能描述：api 登陆
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | username | str | 是 | 账号 |
 | password | str | 是 | 密码 |
 | ip | str | 是 | 服务器ip |
 | host | int | 是 | 服务器端口号 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
 ad.login(username='username', password='password',host='***.***.***.***',port=****)
 ```
+
 #### 3.5.1.2 登出
+
 函数接口：logout
 功能描述：api 退出登录链接 ，必须在登录状态下，才可使用；正常使用情况
 下，无需使用此接口
+
 | 名称 | 类型 | 说明 |
 | --- | --- | --- |
 | username | str | 用户名 |
+
 #### 3.5.1.3 更新密码
+
 函数接口：update_password
 功能描述：更新密码接口，必须先登录才能修改密码
+
 | 名称 | 类型 | 说明 |
 | --- | --- | --- |
 | username | str | 用户名 |
 | old_password | str | 旧密码 |
 | new_password | str | 新密码 |
+
 ### 3.5.2 基础数据
+
 #### 3.5.2.1 每日最新证券信息
+
 函数接口：get_code_info
 功能描述：获取每日最新证券信息，交易日早上9 点前更新当日最新
 输入：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | security_type | str | 否 | 代码类型security_type（见附录），<br><br>默认为EXTRA_STOCK_A（上交<br>所A 股、深交所A 股和北交所的股<br>票列表） |
@@ -98,6 +124,7 @@ ad.login(username='username', password='password',host='***.***.***.***',port=**
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | code_info | dataframe | index 为股票代码<br>column 为<br>symbol (证券简称)<br>security_status（产品状态标志）<br>pre_close (昨收价)<br>high_limited  (涨停价)<br>low_limited ( 跌停价)<br>price_tick (最小价格变动单位) |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -105,11 +132,14 @@ ad.login(username='username', password='password',host='***.***.***.***',port=**
 base_data_object = ad.BaseData()
 code_info = base_data_object.get_code_info(security_type='EXTRA_ETF')
 ```
+
 #### 3.5.2.2 每日最新代码表（沪深北）
+
 交易日早上9 点前更新
 函数接口：get_code_list
 功能描述：获取代码表（每日最新），此接口无法获取历史代码表
 输入：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | security_type | str | 否 | 代码类型security_type（见附录），<br>默认为EXTRA_STOCK_A（上交<br>所A 股、深交所A 股和北交所的股<br>票列表） |
@@ -117,6 +147,7 @@ code_info = base_data_object.get_code_info(security_type='EXTRA_ETF')
 | 返回值 | 数据类型 | 解释 |
 | --- | --- | --- |
 | code_list | list | 证券代码 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -125,11 +156,14 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list(security_type='EXTRA_STOCK_A')
 
 ```
+
 #### 3.5.2.3 每日最新代码表（期货交易所）
+
 交易日早上9 点前更新
 函数接口：get_future_code_list
 功能描述：获取代码表（每日最新），此接口无法获取历史代码表
 输入：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | security_type | str | 是 | 代码类型security_type(期货交易<br>所)（见附录），默认为EXTRA_F<br>UTURE（期货, 包含中金所/上期所<br>/大商所/郑商所/上海国际能源交易<br>中心所） |
@@ -137,6 +171,7 @@ code_list = base_data_object.get_code_list(security_type='EXTRA_STOCK_A')
 | 返回值 | 数据类型 | 解释 |
 | --- | --- | --- |
 | code_list | list | 证券代码 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -144,11 +179,14 @@ ad.login(username='username', password='password',host='***.***.***.***',port=**
 base_data_object = ad.BaseData()
 code_list = base_data_object.get_future_code_list(security_type='EXTRA_FUTURE')
 ```
+
 #### 3.5.2.4 每日最新代码表（期权）
+
 交易日早上9 点前更新
 函数接口：get_option_code_list
 功能描述：获取代码表（每日最新），此接口无法获取历史代码表
 输入：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | security_type | str | 是 | 代码类型security_type 期权)（见附<br>录），默认为EXTRA_ETF_OP（E<br>TF 期权, 包含上交所和深交所） |
@@ -156,6 +194,7 @@ code_list = base_data_object.get_future_code_list(security_type='EXTRA_FUTURE')
 | 返回值 | 数据类型 | 解释 |
 | --- | --- | --- |
 | code_list | list | 证券代码 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -164,11 +203,14 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_option_code_list(security_type='EXTRA_ETF_OP')
 
 ```
+
 #### 3.5.2.5 复权因子（后复权因子）
+
 函数接口：BaseData.get_backward_factor
 功能描述：获取复权因子数据并本地存储，复权因子为根据交易所行情数据计算得出的后复
 权因子；
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | lis[str] | 是 | 代码列表，支持股票、ETF |
@@ -184,9 +226,11 @@ True:
 本地local_path 无数据的情况下，从互联网取数据，并更新本地local_path 的数据
 False:从互联网取数据，并更新本地local_path 的数据
 输出：
+
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | backward_factor | dataframe | index 为交易日期<br>column 为股票代码 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -196,11 +240,14 @@ code_list = base_data_object.get_code_list(security_type='EXTRA_STOCK_A')
 backward_factor = base_data_object.get_backward_factor(code_list, local_path='D://AmazingData_local_data//',
 is_local=False)
 ```
+
 #### 3.5.2.6 复权因子（单次复权因子）
+
 函数接口：BaseData.get_adj_factor
 功能描述：获取复权因子数据并本地存储，复权因子为根据交易所行情数据计算得出的单次
 复权因子；
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | lis[str] | 是 | 代码列表，支持股票、ETF |
@@ -216,9 +263,11 @@ True:
 本地local_path 无数据的情况下，从互联网取数据，并更新本地local_path 的数据
 False:从互联网取数据，并更新本地local_path 的数据
 输出：
+
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | adj_factor | dataframe | index 为交易日期<br>column 为股票代码 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -226,17 +275,22 @@ ad.login(username='username', password='password',host='***.***.***.***',port=**
 base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list(security_type='EXTRA_STOCK_A')
 ```
+
 adj_factor
 =
+
 ```python
 base_data_object.get_adj_factor(code_list,
 local_path='D://AmazingData_local_data//',
 is_local=False)
 ```
+
 #### 3.5.2.7 历史代码表
+
 函数接口：BaseData 的get_hist_code_list
 功能描述：获取历史代码表，先检查本地数据，再从服务端补充，最后返回数据输入参数：
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | security_type | str | 是 | 默认为<br>"EXTRA_STOCK_A_SH_SZ"  沪深A 股，支持<br>附录security_type(沪深北)和security_type(期货<br>交易所)， |
@@ -247,6 +301,7 @@ is_local=False)
 | 返回值 | 数据类型 | 解释 |
 | --- | --- | --- |
 | code_list | List[str] | 证券代码 |
+
 ```python
 # 第一步 登录api
 
@@ -254,18 +309,23 @@ import AmazingData as ad
 ad.login(username='username', password='password',host='***.***.***.***',port=****)
 base_data_object = ad.BaseData()
 ```
+
 code_list
 =
+
 ```python
 base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A_SH_SZ',start_date=20240101,
 end_date=20240701, local_path=local_path)
 
 ```
+
 #### 3.5.2.8 交易日历
+
 函数接口：get_calendar
 功能描述：获取交易所的交易日历
 
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | data_type | str | 否 | 选择返回数据的类型，默认为str ，可选datetime<br>或 str |
@@ -274,6 +334,7 @@ end_date=20240701, local_path=local_path)
 | 返回值 | 数据类型 | 解释 |
 | --- | --- | --- |
 | calendar | List[int] | 日期 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -281,11 +342,14 @@ ad.login(username='username', password='password',host='***.***.***.***',port=**
 base_data_object = ad.BaseData()
 calendar = base_data_object.get_calendar()
 ```
+
 #### 3.5.2.9 证券基础信息
+
 函数接口：get_stock_basic
 功能描述：获取指定股票列表的上市公司的证券基础数据，包含沪深北三个交易所，所有股
 票（包含已退市标的）的中英文名称、上市日期、退市日期、上市板块等信息
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深北三个交易所的代码列表，可见<br>示例 |
@@ -303,6 +367,7 @@ calendar = base_data_object.get_calendar()
 | LISTPLATE_NAME | string | 上市板块名称 |
 | COMP_SNAME_ENG | string | 英文名称缩写 |
 | IS_LISTED | int | 上市状态<br>1：上市交易<br>3：终止上市 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -312,11 +377,14 @@ code_list = base_data_object.get_code_list(security_type='EXTRA_STOCK_A_SH_SZ')
 info_data_object = ad.InfoData()
 stock_basic = info_data_object.get_stock_basic (code_list)
 ```
+
 #### 3.5.2.10 历史证券信息
+
 函数接口：get_history_stock_status
 功能描述：获取指定股票列表的上市公司的历史证券数据，以日度为频率，包含历史的涨跌
 停、st、除权除息等信息
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -339,6 +407,7 @@ stock_basic = info_data_object.get_stock_basic (code_list)
 | IS_SUSP_SEC | string | 是否停牌<br>1 表示是，0 表示否 |
 | IS_WD_SEC | string | 是否除息<br>1 表示是，0 表示否 |
 | IS_XR_SEC | string | 是否除权<br>1 表示是，0 表示否 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -352,10 +421,13 @@ end_date=today)
 history_stock_status = info_data_object.get_history_stock_status(all_code_list)
 
 ```
+
 #### 3.5.2.11 北交所新旧代码对照表
+
 函数接口：get_bj_code_mapping
 功能描述：获取北交所的存量上市公司股票新旧代码对照表
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | local_path | str | 是 | 本地存储数据的路径，需绝对路径，格式<br>类似“<br>'D://AmazingData_local_data//'<br>” |
@@ -364,6 +436,7 @@ history_stock_status = info_data_object.get_history_stock_status(all_code_list)
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | bj_code_map | ping | dataframe<br>column 为bj_code_mapping 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -371,19 +444,25 @@ ad.login(username='username', password='password',host='***.***.***.***',port=**
 info_data_object = ad.InfoData()
 bj_code_mapping = info_data_object.get_bj_code_mapping()
 ```
+
 bj_code_mapping 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | OLD_CODE | string | 旧代码 |
 | NEW_CODE | string | 新代码 |
 | SECURITY_NAME | string | 证券简称 |
 | LISTING_DATE | int | 上市日期 |
+
 ### 3.5.3 实时行情数据
+
 实时行情订阅接口使用步骤
 （1） 实例化AmazingData 的SubscribeData
 （2） 回调函数的装饰器传入code_list(代码表)和period(数据周期)两个参数
 （3） 回调函数中获取数据
+
 #### 3.5.3.1 指数实时快照
+
 函数接口：onSnapshotindex
 功能描述：交易所指数快照数据的实时订阅回调函数
 输入参数：入参需传入装饰器中SubscribeData.register
@@ -397,6 +476,7 @@ bj_code_mapping 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | data | Object | 指数为SnapshotIndex（见附录） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -412,7 +492,9 @@ def onSnapshotindex(data: Union[ad.constant.Snapshot, ad.constant.SnapshotIndex]
 sub_data.run()
 
 ```
+
 #### 3.5.3.2 股票实时快照
+
 函数接口：onSnapshot
 功能描述：level-1 快照数据的实时订阅回调函数
 输入参数：入参需传入装饰器中SubscribeData.register
@@ -426,6 +508,7 @@ sub_data.run()
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | data | Object | 股票为Snapshot（见附录） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -439,7 +522,9 @@ def onSnapshot(data: Union[ad.constant.Snapshot, ad.constant.SnapshotIndex], per
 print(period, data)
 sub_data.run()
 ```
+
 #### 3.5.3.3 逆回购实时快照
+
 函数接口：onSnapshotglra
 功能描述：level-1 快照数据的实时订阅回调函数
 
@@ -454,6 +539,7 @@ sub_data.run()
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | data | Object | 为Snapshot（见附录） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -467,7 +553,9 @@ def onSnapshotglra(data: Union[ad.constant.Snapshot, ad.constant.SnapshotIndex],
 print(period, data)
 sub_data.run()
 ```
+
 #### 3.5.3.4 期货实时快照
+
 函数接口：onSnapshotfuture
 功能描述：level-1 快照数据的实时订阅回调函数
 输入参数：入参需传入装饰器中SubscribeData.register
@@ -481,6 +569,7 @@ sub_data.run()
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | data | Object | 期货为SnapshotFuture（见附录） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -495,7 +584,9 @@ def onSnapshotfuture (data: Union[ad.constant.SnapshotFuture], period):
 print(period, data)
 sub_data.run()
 ```
+
 #### 3.5.3.5 ETF 实时快照
+
 函数接口：onSnapshotetf
 功能描述：level-1 快照数据的实时订阅回调函数
 输入参数：入参需传入装饰器中SubscribeData.register
@@ -509,6 +600,7 @@ sub_data.run()
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | data | Object | ETF 为Snapshot（见附录） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -524,7 +616,9 @@ sub_data.run()
 
 
 ```
+
 #### 3.5.3.6 可转债实时快照
+
 函数接口：onSnapshotkzz
 功能描述：level-1 快照数据的实时订阅回调函数
 
@@ -539,6 +633,7 @@ sub_data.run()
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | data | Object | 可转债为Snapshot（见附录） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -552,7 +647,9 @@ def onSnapshotkzz(data: Union[ad.constant.Snapshot, ad.constant.SnapshotIndex], 
 print(period, data)
 sub_data.run()
 ```
+
 #### 3.5.3.7 港股通实时快照
+
 函数接口：onSnapshothkt
 功能描述：港股通快照数据的实时订阅回调函数
 输入参数：入参需传入装饰器中SubscribeData.register
@@ -566,6 +663,7 @@ sub_data.run()
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | data | Object | 港股通为SnapshotHKT（见附录） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -580,7 +678,9 @@ def onSnapshothkt(data: Union[ad.constant.Snapshot, ad.constant.SnapshotIndex], 
 print(period, data)
 sub_data.run()
 ```
+
 #### 3.5.3.8 ETF 期权实时快照
+
 函数接口：onSnapshotoption
 功能描述：港股通快照数据的实时订阅回调函数
 输入参数：入参需传入装饰器中SubscribeData.register
@@ -594,6 +694,7 @@ sub_data.run()
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | data | Object | ETF 期权为SnapshotOption（见附录） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -607,10 +708,13 @@ def onSnapshotoption(data: Union[ad.constant.SnapshotOption], period):
     print('onSnapshotoption: ', data)
 sub_data.run()
 ```
+
 #### 3.5.3.9 实时K 线
+
 函数接口：OnKLine
 功能描述：K 线数据的实时订阅回调函数
 输入参数：入参需传入装饰器中SubscribeData.register
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list:[str] | 是 | 可传入列表，支持北交所、上交所、深交<br><br>所的可转债、股票、指数、ETF 等品种<br>支持期货（中金所/上期所/大商所/郑商所/<br>上海国际能源交易中心所） |
@@ -620,6 +724,7 @@ sub_data.run()
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | data | Object | Kline（见附录） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -634,13 +739,18 @@ def OnKLine(data: Union[ad.constant.Kline], period):
  print('OnKLine: ', data)
 sub_data.run()
 ```
+
 ### 3.5.4 历史行情数据
+
 （1） 实例化AmazingData 的MarketData，入参需交易日历
 （2） 调用MarketData 的方法获取数据
+
 #### 3.5.4.1 历史快照
+
 函数接口：query_snapshot
 功能描述：快照数据的历史数据查询接口
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list:[str] | 是 | 可传入列表，支持北交所、上交所、深交<br>所的可转债、股票、指数、ETF、港股通<br>等、ETF 期权等品种 |
@@ -652,6 +762,7 @@ sub_data.run()
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | snapshot_dict | dict | 指字典的key：代码<br>字典的value：dataframe，<br>column 为快照数据（指数为SnapshotIndex（见附录），<br>股票、ETF 和可转债为Snapshot（见附录），<br>港股通为SnapshotHKT（见附录）），<br>ETF 期权为SnapshotOption（见附录）），<br><br>index 为日期（datetime） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -662,10 +773,13 @@ calendar = base_data_object.get_calendar()
 market_data_object=ad.MarketData(calendar)
 snapshot_dict = market_data_object.query_snapshot(code_list, begin_date=20240530, end_date=20240530)
 ```
+
 #### 3.5.4.2 历史K 线
+
 函数接口：query_kline
 功能描述：K 线数据的实时订阅回调函数 ，支持全部周期的K 线数据查询
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list:[str] | 是 | 可传入列表，支持北交所、上交所、深交<br>所的可转债、股票、指数、ETF 等品种，<br>上交所、深交所的ETF 期权；<br>支持期货（中金所/上期所/大商所/郑商所/<br>上海国际能源交易中心所） |
@@ -678,6 +792,7 @@ snapshot_dict = market_data_object.query_snapshot(code_list, begin_date=20240530
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | kline_dict | dict | 字典的key：代码<br>字典的value：dataframe，<br>column 为K 线数据Kline（见附录），<br>index 为日期（datetime） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -688,11 +803,15 @@ calendar = base_data_object.get_calendar()
 market_data_object=ad.MarketData(calendar)
 kline_dict = market_data_object.query_kline (code_list, begin_date=20240530, end_date=20240530)
 ```
+
 ### 3.5.5 财务数据
+
 #### 3.5.5.1 资产负债表
+
 函数接口：get_balance_sheet
 功能描述：获取指定股票列表的上市公司的资产负债表数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -704,6 +823,7 @@ kline_dict = market_data_object.query_kline (code_list, begin_date=20240530, end
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | balance_sheet | dict | key：code<br>value:dataframe<br>column 为balance_sheet 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -716,7 +836,9 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 balance_sheet = info_data_object.get_balance_sheet(all_code_list)
 ```
+
 balance_sheet 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | 备注 | MARKET_CODE | str<br>证券代码 |
@@ -898,10 +1020,13 @@ balance_sheet 的字段说明：
 | UNDISTRIBUTED_PRO | float | 未分配利润 |
 | UNEARNED_PREM_RE | SV | float<br>未到期责任准备金 |
 | USE_RIGHT_ASSETS | float | 使用权资产 |
+
 #### 3.5.5.2 现金流量表
+
 函数接口：get_cash_flow
 功能描述：获取指定股票列表的上市公司的现金流量表数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -913,6 +1038,7 @@ balance_sheet 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | cash_flow | dict | key：code<br>value:dataframe<br>column 为cash_flow 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -925,7 +1051,9 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 cash_flow = info_data_object.get_cash_flow (all_code_list)
 ```
+
 cash_flow 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | 备注 | MARKET_CODE | str<br>证券代码<br><br>SECURITY_NAM |
@@ -1048,10 +1176,13 @@ cash_flow 的字段说明：
 | T | double | 经营活动现金流出小计<br><br>UNCONFIRMED_I |
 | NV_LOSS | double | 未确认投资损失<br><br>USE_RIGHT_ASS |
 | ET_DEP | double | 使用权资产折旧 |
+
 #### 3.5.5.3 利润表
+
 函数接口：get_income
 功能描述：获取指定股票列表的上市公司的利润表数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -1063,6 +1194,7 @@ cash_flow 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | income | dict | key：code<br>value:dataframe<br>column 为income 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -1076,7 +1208,9 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 income = info_data_object.get_income (all_code_list)
 ```
+
 income 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | 备注 | MARKET_CODE | str<br>证券代码 |
@@ -1193,10 +1327,13 @@ income 的字段说明：
 | PUB_WEL_FUND | float | 提取法定公益金 |
 | WITHDRAW_LEG_ | SURPLUS | float<br>提取法定盈余公积<br><br>WITHDRAW_RESV |
 | _FUND | float | 提取储备基金 |
+
 #### 3.5.5.4 业绩快报
+
 函数接口：get_profit_express
 功能描述：获取指定股票列表的上市公司的业绩快报数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -1208,6 +1345,7 @@ income 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | profit_express | dataframe | column 为profit_express 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -1221,6 +1359,7 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 profit_express = info_data_object.get_profit_express (all_code_list)
 ```
+
 profit_express 的字段说明：
 参数
  数据类型
@@ -1431,11 +1570,12 @@ float64
 期初净资产
 元
 
-
 #### 3.5.5.5 业绩预告
+
 函数接口：get_profit_notice
 功能描述：获取指定股票列表的上市公司的业绩预告数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -1447,6 +1587,7 @@ float64
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | profit_notice | dataframe | column 为profit_notice 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -1460,6 +1601,7 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
 profit_notice = info_data_object.get_profit_notice (all_code_list)
 
 ```
+
 profit_notice 的字段说明：
 参数
  数据类型
@@ -1553,12 +1695,14 @@ str
 报告期名称
 参看报告期名称
 
-
 ### 3.5.6 股东股本数据
+
 #### 3.5.6.1 十大股东数据
+
 函数接口：get_share_holder
 功能描述：获取指定股票列表的上市公司的十大股东数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -1570,6 +1714,7 @@ str
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | share_holder | dataframe | column 为share_holder 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -1582,6 +1727,7 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 share_holder = info_data_object.get_share_holder (all_code_list)
 ```
+
 share_holder 的字段说明：
 参数
  数据类
@@ -1640,9 +1786,11 @@ float
 流通股数量
 
 #### 3.5.6.2 股东户数
+
 函数接口：get_holder_num
 功能描述：获取指定股票列表的上市公司的股东户数数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -1654,6 +1802,7 @@ float
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | holder_num | dataframe | column 为holder_num 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -1667,6 +1816,7 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 holder_num = info_data_object.get_holder_num (all_code_list)
 ```
+
 holder_num 的字段说明：
 参数
  数据类
@@ -1687,10 +1837,13 @@ A 股、B 股、H 股、境外股的总户数
 HOLDER_NUM
 float
 A 股股东户数
+
 #### 3.5.6.3 股本结构
+
 函数接口：get_equity_structure
 功能描述：获取指定股票列表的上市公司的股本结构数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -1702,6 +1855,7 @@ A 股股东户数
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | equity_structu | re | dataframe<br>column 为equity_structuree 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -1715,7 +1869,9 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 equity_structure = info_data_object.get_equity_structure (all_code_list)
 ```
+
 equity_structure 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | 备注 | MARKET_CODE | string<br>证券代码 |
@@ -1812,7 +1968,6 @@ float
 RESTRICTED_B_SHAR
 float
 限售B 股(万股)
-
 
 E
 OTHER_RTD_SHARE
@@ -1944,7 +2099,6 @@ PRE_NON_TRADABLE
 float
 股改前非流通股
 
-
 _SHARE
 RESTRICTED_A_SHAR
 E
@@ -1980,12 +2134,12 @@ ARE
 float
 限售股合计
 
-
-
 #### 3.5.6.4 股权冻结/质押
+
 函数接口：get_equity_pledge_freeze
 功能描述：获取指定股票列表的上市公司的股权冻结/质押数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -1997,6 +2151,7 @@ float
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | equity_pledge | _freeze | dict<br>key：code<br>value:dataframe<br>column 为equity_pledge_freeze 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -2010,7 +2165,9 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 equity_pledge_freeze = info_data_object.get_equity_pledge_freeze (all_code_list)
 ```
+
 equity_pledge_freeze 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | 备注 | MARKET_CODE | string<br>证券代码 |
@@ -2031,10 +2188,13 @@ equity_pledge_freeze 的字段说明：
 | DISFROZEN_TIME | string | 解压或解冻日期 |
 | SHR_CATEGORY_ | int | 股份性质类别代<br>1:法人股2:个人股3:国有<br><br>CODE<br>码<br>股4:国有股,法人股5:流通<br>股6:流通股,限售流通股7:<br>外资股8:限售流通股9:优<br>先<br>股 |
 | FREEZE_TYPE | int | 冻结/质押类型<br>1:质押2:司法3:质押式回<br>购 |
+
 #### 3.5.6.5 限售股解禁
+
 函数接口：get_equity_restricted
 功能描述：获取指定股票列表的上市公司的限售股解禁数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -2046,6 +2206,7 @@ equity_pledge_freeze 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | equity_restrict | ed | dict<br>key：code<br>value:dataframe<br>column 为equity_restricted 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -2058,6 +2219,7 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 equity_restricted = info_data_object.get_equity_restricted (all_code_list)
 ```
+
 equity_restricted 的字段说明：
 
 | 字段名称 | 类型 | 字段说明 |
@@ -2070,11 +2232,15 @@ equity_restricted 的字段说明：
 | SHARE_LST_IS_ANN | int | 上市数量是否公布值<br>0：否，为预测<br>值 1: 是, 为实<br>际公布值 |
 | CLOSE_PRICE | float | 前日收盘价（元） |
 | SHARE_LST_MARKET_VA | LUE | float<br>解禁市值（元）<br>SHARE_LST*<br>CLOSE_PRICE |
+
 ### 3.5.7 股东权益数据
+
 #### 3.5.7.1 分红数据
+
 函数接口：get_dividend
 功能描述：获取指定股票列表的上市公司的分红数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -2086,6 +2252,7 @@ equity_restricted 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | dividend | dataframe | column 为dividend 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 
@@ -2099,7 +2266,9 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 dividend = info_data_object.get_dividend(all_code_list)
 ```
+
 dividend 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | 备注 | MARKET_CODE | string<br>证券代码 |
@@ -2126,10 +2295,13 @@ dividend 的字段说明：
 | REMARK | string | 备注 |
 | DIV_PREANN_DATE | string | 预案预披露公告日<br>股东提议的公告日期 |
 | DIV_TARGET | string | 分红对象 |
+
 #### 3.5.7.2 配股数据
+
 函数接口：get_right_issue
 功能描述：获取指定股票列表的上市公司的配股数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -2141,6 +2313,7 @@ dividend 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | right_issue | dataframe | column 为right_issue 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -2153,7 +2326,9 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 right_issue = info_data_object.get_right_issue(all_code_list)
 ```
+
 right_issue 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | 备注 | MARKET_CODE | string<br>证券代码 |
@@ -2186,11 +2361,15 @@ right_issue 的字段说明：
 | RATIO_MOLECULAR | double | 配股比例分子 |
 | SUBS_METHOD | string | 认购方式 |
 | EXPECTED_FUND_RA | ISING | double<br>预计募集资金(元) |
+
 ### 3.5.8 融资融券数据
+
 #### 3.5.8.1 融资融券成交汇总
+
 函数接口：get_margin_summary
 功能描述：获取指定日期的上市公司的融资融券成交汇总数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | local_path | str | 是 | 本地存储数据的路径，需绝对路径，格式<br>类似“<br>'D://AmazingData_local_data//'<br>” |
@@ -2202,6 +2381,7 @@ right_issue 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | margin_summ | ary | dataframe<br>column 为margin_summary 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -2209,7 +2389,9 @@ ad.login(username='username', password='password',host='***.***.***.***',port=**
 info_data_object = ad.InfoData()
 margin_summary = info_data_object.get_margin_summary()
 ```
+
 margin_summary 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | TRADE_DATE | string | 交易日期 |
@@ -2219,10 +2401,13 @@ margin_summary 的字段说明：
 | SUM_SEC_LENDING_BALANCE | float | 融券余额(元) |
 | SUM_SALES_OF_BORROWED_SEC | int | 融券卖出量(股,份,手) |
 | SUM_MARGIN_TRADE_BALANCE | float | 融资融券余额(元) |
+
 #### 3.5.8.2 融资融券交易明细
+
 函数接口：get_margin_detail
 功能描述：获取指定股票列表的上市公司的融资融券交易明细数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -2234,6 +2419,7 @@ margin_summary 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | margin_detail | dict | key：code<br><br>value:dataframe<br>column 为margin_detail 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -2246,7 +2432,9 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 margin_detail = info_data_object.get_margin_detail(all_code_list)
 ```
+
 margin_detail 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | MARKET_CODE | string | 证券代码 |
@@ -2260,11 +2448,15 @@ margin_detail 的字段说明：
 | C | int | 融券偿还量(股,份,手) |
 | SEC_LENDING_BALANCE_VOL | int | 融券余量(股,份,手) |
 | MARGIN_TRADE_BALANCE | float | 融资融券余额(元) |
+
 ### 3.5.9 交易异动数据
+
 #### 3.5.9.1 龙虎榜
+
 函数接口：get_long_hu_bang
 功能描述：获取指定股票列表的上市公司的龙虎榜数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -2276,6 +2468,7 @@ margin_detail 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | long_hu_bang | dataframe | column 为long_hu_bang 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -2288,6 +2481,7 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 long_hu_bang = info_data_object.get_long_hu_bang(all_code_list)
 ```
+
 long_hu_bang 的字段说明：
 参数
  数据类型
@@ -2309,7 +2503,6 @@ REASON_TYPE
 string
 上榜原因类
 型
-
 
 REASON_TYPE_NAME
 string
@@ -2348,9 +2541,11 @@ float
 （万股）
 
 #### 3.5.9.2 大宗交易
+
 函数接口：get_block_trading
 功能描述：获取指定股票列表的大宗交易数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深A 的的代码列表，可见示例 |
@@ -2362,6 +2557,7 @@ float
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | block_trading | dataframe | column 为block_trading 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -2375,6 +2571,7 @@ all_code_list = base_data_object.get_hist_code_list(security_type='EXTRA_STOCK_A
                                              end_date=today)
 block_trading = info_data_object. block_trading (all_code_list)
 ```
+
 block_trading 的字段说明：
 参数
  数据类型
@@ -2406,12 +2603,16 @@ string
 B_SELLER_NAME
 string
 卖方营业部名称
+
 ### 3.5.10 期权数据
+
 #### 3.5.10.1 期权基本资料
+
 函数接口：get_option_basic_info
 
 功能描述：获取指定期权的基本资料（沪深交易所的ETF 期权）
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深ETF 期权的的代码列表，可见示<br>例 |
@@ -2421,6 +2622,7 @@ string
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | option_basic_ | info | dataframe<br>column 为option_basic_info 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -2431,13 +2633,16 @@ calendar = base_data_object.get_calendar()
 today = calendar[-1]
 code_list = base_data_object.get_option_code_list(security_type='EXTRA_ETF_OP')
 ```
+
 hist_code_list
 =
+
 ```python
 base_data_object.get_hist_code_list(security_type='EXTRA_ETF_OP'', start_date=20130101,
                          end_date=today)
 option_basic_info =info_data_object.get_option_basic_info(code_list, is_local=False)
 ```
+
 option_basic_info 的字段说明：
 参数
  数据类型
@@ -2508,24 +2713,34 @@ MARKET_CODE
 string
 合约代码
 
-
-
 #### 3.5.10.2 期权标准合约属性
+
 函数接口：get_option_std_ctr_specs
 功能描述：获取指定期权标准合约属性（沪深交易所的ETF 期权）
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深ETF 的的代码列表，目前包含 |
+
 ## 159919. SZ
+
 ## 159915. SZ
+
 ## 159922. SZ
+
 ## 159901. SZ
+
 ## 510300. SH
+
 ## 588000. SH
+
 ## 588080. SH
+
 ## 510050. SH
+
 ## 510500. SH
+
 local_path
 str
 是
@@ -2539,9 +2754,11 @@ bool
 默认为True，本地数据缓存方案
 
 输出参数：
+
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | option_std_ctr | _specs | dataframe<br>column 为option_std_ctr_specs 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -2549,6 +2766,7 @@ ad.login(username='username', password='password',host='***.***.***.***',port=**
 info_data_object = ad.InfoData()
 option_std_ctr_specs =info_data_object.get_option_std_ctr_specs(['510050.SH'], is_local=False)
 ```
+
 option_std_ctr_specs 的字段说明：
 参数
  数据类型
@@ -2573,7 +2791,6 @@ string
 LAST_TRADING_DATE
 string
 最后交易日
-
 
 POSITION_LIMIT
 string
@@ -2673,12 +2890,13 @@ CONTRACT_MULTIPLIER
 int
 合约乘数
 
-
 #### 3.5.10.3 期权月合约属性变动
+
 函数接口：get_option_mon_ctr_specs
 
 功能描述：获取指定期权月合约属性变动（沪深交易所的ETF 期权）
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深ETF 期权的的代码列表，可见示<br>例 |
@@ -2688,6 +2906,7 @@ int
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | block_trading | dataframe | column 为block_trading 的字段<br>index 为序号（无意义） |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -2698,13 +2917,16 @@ calendar = base_data_object.get_calendar()
 today = calendar[-1]
 code_list = base_data_object.get_option_code_list(security_type='EXTRA_ETF_OP')
 ```
+
 hist_code_list
 =
+
 ```python
 base_data_object.get_hist_code_list(security_type='EXTRA_ETF_OP'', start_date=20130101,
                          end_date=today)
 option_mon_ctr_specs =info_data_object.get_option_mon_ctr_specs(code_list, is_local=False)
 ```
+
 option_mon_ctr_specs 的字段说明：
 参数
  数据类型
@@ -2743,11 +2965,15 @@ float
 CHANGE_REASON
 string
 调整原因
+
 ### 3.5.11 ETF 数据
+
 #### 3.5.11.1 ETF 每日最新申赎数据
+
 函数接口： get_etf_pcf
 功能描述：获取指定ETF 的申赎和成分股数据（沪深交易所的ETF）
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深ETF 的的代码列表，可见示例 |
@@ -2756,6 +2982,7 @@ string
 | --- | --- | --- |
 | etf_pcf_info | dataframe | column 为etf_pcf_info 的字段<br>index 为ETF 代码<br>etf_pcf_consti |
 | tuent | dict | 字典的key：ETF 代码<br>字典的value：dataframe，<br>column 为etf_pcf_constituent 的字段，<br>index 为序号 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -2763,6 +2990,7 @@ ad.login(username='username', password='password',host='***.***.***.***',port=**
 base_data_object = ad.BaseData()
 code_list = base_data_object.get_hist_code_list(security_type='EXTRA_ETF')
 ```
+
 etf_pcf_info, etf_pcf_constituent = base_data_object.get_etf_pcf(code_list)
 etf_pcf_info 的字段说明：
 参数
@@ -2782,23 +3010,29 @@ string
 publish
 string
 是否发布IOPV
+
 ```python
 Y=是,N=否
 ```
+
 creation
 string
 是否允许申购
+
 ```python
 Y=是,N=否(仅深圳
 ```
+
 有效)
 redemption
 string
 是否允许赎回
+
 ```python
 Y=是,N=否(仅深圳
 
 ```
+
 有效)
 creation_redemption_switch
 string
@@ -2931,8 +3165,8 @@ int
 substitute_flag
 string
 现金替代标志
-//**深圳现金替代
-标志*        //0=
+//*_深圳现金替代
+标志_        //0=
 禁止现金替代(必
 须有证券),1=可以
 进行现金替代(先
@@ -2940,10 +3174,11 @@ string
 差额部分用现金替
 代),2=必须用现金
 替代
-//**上海现金替代
-标志*
+//*_上海现金替代
+标志_
 
 //ETF 公告文件
+
 ## 1.0 版格式
 
 //0 –沪市不可被替
@@ -2964,6 +3199,7 @@ string
 品)
 
 //ETF 公告文件
+
 ## 2.1 版格式
 
 //0 –沪市不可被替
@@ -3016,11 +3252,12 @@ string
 仅对跨市场债券
 (银行间)ETF 启用
 
-
 #### 3.5.11.2 ETF 基金份额
+
 函数接口：get_fund_share
 功能描述：获取指定ETF 列表的基金份额数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深ETF 的的代码列表，可见示例 |
@@ -3032,6 +3269,7 @@ string
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | fund_share | dict | key：code<br>value:dataframe<br>column 为fund_share 的字段<br>index 为日期 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3042,7 +3280,9 @@ etf_code_list = base_data_object.get_code_list(security_type='EXTRA_ETF')
 # ETF 份额
 fund_share = info_data_object.get_fund_share(etf_code_list, is_local=False)
 ```
+
 fund_share 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | 备注 | FUND_SHARE | float<br>基金份额(万份) |
@@ -3053,10 +3293,13 @@ fund_share 的字段说明：
 | TOTAL_SHARE | float | 基金总份额(万份) |
 | CHANGE_DATE | string | 变动日期 |
 | FLOAT_SHARE | float | 流通份额(万份) |
+
 #### 3.5.11.3 ETF 每日收盘iopv
+
 函数接口：get_fund_iopv
 功能描述：获取指定ETF 列表的基金份额数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深ETF 的的代码列表，可见示例 |
@@ -3068,6 +3311,7 @@ fund_share 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | fund_iopv | dict | key：code<br>value:dataframe<br>column 为fund_iopv 的字段<br>index 为序号，无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3078,17 +3322,23 @@ etf_code_list = base_data_object.get_code_list(security_type='EXTRA_ETF')
 # ETF 份额
 fund_iopv = info_data_object.get_fund_iopv(etf_code_list, is_local=False)
 ```
+
 fund_iopv 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | MARKET_CODE | string | 市场代码 |
 | PRICE_DATE | string | 日期 |
 | IOPV_NAV | float | IOPV 收盘净值 |
+
 ### 3.5.12 交易所指数数据
+
 #### 3.5.12.1 交易所指数成分股
+
 函数接口：get_index_constituent
 功能描述：获取指定交易所指数列表的成分股数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持沪深指数的的代码列表，可见示例，<br>仅支持常用指数，约600 多只，无返回数<br>据则不支持。 |
@@ -3098,6 +3348,7 @@ fund_iopv 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | index_constit | uent | dict<br>key：code<br>value:dataframe<br>column 为index_constituent 的字段<br>index 为日期 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3108,7 +3359,9 @@ code_list = base_data_object.get_code_list(security_type='EXTRA_INDEX_A')
 index_constituent = info_data_object.get_index_constituent(code_list, is_local=False)
 
 ```
+
 index_constituent 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | 备注 | INDEX_CODE | string<br>指数代码 |
@@ -3116,10 +3369,13 @@ index_constituent 的字段说明：
 | INDATE | string | 纳入日期 |
 | OUTDATE | string | 剔除日期<br>未剔除时为na<br>n |
 | INDEX_NAME | string | 指数名称 |
+
 #### 3.5.12.2 交易所指数成分股日权重
+
 函数接口：get_index_weight
 功能描述：获取指定交易所指数列表的成分股日权重数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持指数列表；<br>指数代码：支持以下5 个指数<br>上证50： 000016.SH<br>沪深300： 000300.SH<br>中证500：  000905.SH<br>中证800：  000906.SH<br>中证1000： 000852.SH |
@@ -3131,6 +3387,7 @@ index_constituent 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | index_weight | dict | key：code<br>value:dataframe<br>column 为index_weight 的字段<br>index 为日期 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3138,17 +3395,23 @@ import AmazingData as ad
 ad.login(username='username', password='password',host='***.***.***.***',port=****)
 info_data_object = ad.InfoData()
 ```
+
 index_weight
 =
+
 ```python
 info_data_object.get_index_weight(['000016.SH',
 ```
+
 '000300.SH',
 '000905.SH','000906.SH','000852.SH'],
+
 ```python
 is_local=False)
 ```
+
 index_weight 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | INDEX_CODE | string | 指数代码 |
@@ -3160,11 +3423,15 @@ index_weight 的字段说明：
 | WEIGHT_FACTOR | float |  |
 | 权重因子 | WEIGHT | float |
 | 权重（%） | CLOSE | float<br>收盘价 |
+
 ### 3.5.13 行业指数数据
+
 #### 3.5.13.1 行业指数基本信息
+
 函数接口：get_industry_base_info
 功能描述：获取行业指数的基本信息数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | local_path | str | 是 | 本地存储数据的路径，需绝对路径，格式<br>类似“<br>'D://AmazingData_local_data//'<br>” |
@@ -3173,6 +3440,7 @@ index_weight 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | industry_base | _info | dict<br>key：code<br>value:dataframe<br>column 为industry_base_info 的字段<br>index 为日期 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3180,7 +3448,9 @@ ad.login(username='username', password='password',host='***.***.***.***',port=**
 info_data_object = ad.InfoData()
 industry_base_info = info_data_object.get_industry_base_info()
 ```
+
 industry_base_info 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | 备注 | INDEX_CODE | string<br>指数代码 |
@@ -3191,10 +3461,13 @@ industry_base_info 的字段说明：
 | LEVEL3_NAME | string | 三级行业 |
 | IS_PUB | int | 是否发布<br>1：已发布；<br>2：未发布 |
 | CHANGE_REASON | string | 变动原因 |
+
 #### 3.5.13.2 行业指数成分股
+
 函数接口：get_industry_constituent
 功能描述：获取指定行业指数列表的成分股数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持行业指数的的代码列表，可见示例，<br>仅从get_industry_base_info 取到的指数代<br>码。 |
@@ -3204,6 +3477,7 @@ industry_base_info 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | industry_cons | tituent | dict<br>key：code<br>value:dataframe<br>column 为industry_constituent 的字段<br>index 为日期 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3215,7 +3489,9 @@ industry_base_list = list(industry_base_info['INDEX_CODE'])
 # 行业指数成分股
 industry_constituent = info_data_object.get_industry_constituent(industry_base_list, is_local=False)
 ```
+
 industry_constituent 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | 备注 | INDEX_CODE | string<br>指数代码 |
@@ -3223,10 +3499,13 @@ industry_constituent 的字段说明：
 | INDATE | string | 纳入日期 |
 | OUTDATE | string | 剔除日期<br>未剔除时为na<br>n |
 | INDEX_NAME | string | 指数名称 |
+
 #### 3.5.13.3 行业指数成分股日权重
+
 函数接口：get_industry_weight
 功能描述：获取指定行业指数列表的成分股日权重数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持行业指数的的代码列表，可见示例，<br>仅从get_industry_base_info 取到的指数代<br>码。 |
@@ -3238,6 +3517,7 @@ industry_constituent 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | industry_weig | ht | dict<br>key：code<br>value:dataframe<br>column 为industry_weight 的字段<br>index 为日期 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3248,17 +3528,22 @@ industry_base_list = list(industry_base_info['INDEX_CODE'])
 # 行业指数日权重
 industry_weight = info_data_object.get_industry_weight(industry_base_list)
 ```
+
 industry_weight 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | WEIGHT | float | 权重 |
 | CON_CODE | string | 成份股代码 |
 | TRADE_DATE | string | 交易日期 |
 | INDEX_CODE | string | 指数代码 |
+
 #### 3.5.13.4 行业指数日行情
+
 函数接口：get_industry_daily
 功能描述：获取指定行业指数列表的日行情数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持行业指数的的代码列表，可见示例，<br>仅从get_industry_base_info 取到的指数代<br>码。 |
@@ -3270,6 +3555,7 @@ industry_weight 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | industry_daily | dict | key：code<br>value:dataframe<br>column 为industry_daily 的字段<br>index 为日期 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3280,7 +3566,9 @@ industry_base_list = list(industry_base_info['INDEX_CODE'])
 # 行业指数日行情
 industry_daily = info_data_object.get_industry_daily(industry_base_list, is_local=False)
 ```
+
 industry_daily 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | OPEN | float |  |
@@ -3296,11 +3584,15 @@ industry_daily 的字段说明：
 | INDEX_CODE | string | 指数代码 |
 | PRE_CLOSE | float | 昨收盘价 |
 | TRADE_DATE | string | 交易日期 |
+
 ### 3.5.14 可转债数据
+
 #### 3.5.14.1 可转债发行
+
 函数接口：get_kzz_issuance
 功能描述：获取指定可转债列表的可转债发行数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持可转债的的代码列表 |
@@ -3310,6 +3602,7 @@ industry_daily 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | kzz_issuance | dict | dataframe<br>column 为kzz_issuance 的字段<br>index 无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3320,7 +3613,9 @@ code_list = base_data_object.get_code_list('EXTRA_KZZ')
 kzz_issuance = info_data_object.get_kzz_issuance(code_list, is_local=False)
 
 ```
+
 kzz_issuance 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | MARKET_CODE | string | 市场代码 |
@@ -3396,10 +3691,13 @@ kzz_issuance 的字段说明：
 | COUPON_TXT | string | 利率说明 |
 | RATIO_ANNCE_DATE | string | 网上中签率公告日 |
 | RATIO_DATE | string | 网上中签结果公告日 |
+
 #### 3.5.14.2 可转债份额
+
  函数接口：get_kzz_share
 功能描述：获取指定可转债列表的可转债份额数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持可转债的的代码列表 |
@@ -3409,6 +3707,7 @@ kzz_issuance 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | kzz_share | dict | dataframe<br>column 为kzz_share 的字段<br>index 无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3418,7 +3717,9 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list('EXTRA_KZZ')
 kzz_share = info_data_object.get_kzz_share(code_list, is_local=False)
 ```
+
 kzz_share 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | CHANGE_DATE | string | 变动日期 |
@@ -3435,10 +3736,13 @@ kzz_share 的字段说明：
 | 到期 | QLXQ |  |
 | 权利行权 | TQDF | 本金提前兑 |
 | 付 | GH | 购回<br>HSZG  回售转股<br>HGZG  回购转股 |
+
 #### 3.5.14.3 可转债转股数据
+
  函数接口：get_kzz_conv
 功能描述：获取指定可转债列表的可转债转股数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持可转债的的代码列表 |
@@ -3448,6 +3752,7 @@ kzz_share 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | kzz_conv | dict | dataframe<br>column 为kzz_conv 的字段<br>index 无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3457,7 +3762,9 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list('EXTRA_KZZ')
 kzz_conv = info_data_object.get_kzz_conv(code_list, is_local=False)
 ```
+
 kzz_conv 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | MARKET_CODE | string | 市场代码 |
@@ -3474,10 +3781,13 @@ kzz_conv 的字段说明：
 | REL_CONV_MONTH | float | 相对转换期(月) |
 | IS_FORCED | float | 是否强制转股 |
 | FORCED_CONV_REASON | string | 强制转换原因 |
+
 #### 3.5.14.4 可转债转股变动数据
+
  函数接口：get_kzz_conv_change
 功能描述：获取指定可转债列表的可转债转股变动数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持可转债的的代码列表 |
@@ -3488,6 +3798,7 @@ kzz_conv 的字段说明：
 | --- | --- | --- |
 | kzz_conv_cha | nge |  |
 | dict | dataframe | column 为kzz_conv_change 的字段<br>index 无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3497,7 +3808,9 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list('EXTRA_KZZ')
 kzz_conv_change = info_data_object.get_kzz_conv_change(code_list, is_local=False)
 ```
+
 kzz_conv_change 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | MARKET_CODE | string | 市场代码 |
@@ -3505,10 +3818,13 @@ kzz_conv_change 的字段说明：
 | ANN_DATE | string | 公告日期 |
 | CONV_PRICE | float | 转股价格 |
 | CHANGE_REASON | string | 变动原因，<br>变<br>动<br>原<br>因<br>变动原因名称<br>发行<br>换股吸收合并<br><br>派息<br>配股<br>上市<br>送股<br>送转股<br>送转股,派息<br>修正<br>增发<br>转增,派息<br>送股,派息<br>公司选择不行<br>使赎回权<br>回购注销<br>回购注销,派息<br>增发,回购注销<br>增发,回购注销,<br>派息<br>增发,派息<br>换股<br>派息,转增<br>派息,转增,增发<br>派息,送转股<br>调整<br>转增<br>除息 |
+
 #### 3.5.14.5 可转债修正数据
+
  函数接口：get_kzz_corr
 功能描述：获取指定可转债列表的可转债修正数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持可转债的的代码列表 |
@@ -3518,6 +3834,7 @@ kzz_conv_change 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | kzz_corr | dict | dataframe<br>column 为kzz_corr 的字段<br>index 无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3527,7 +3844,9 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list('EXTRA_KZZ')
 kzz_corr = info_data_object.get_kzz_corr(code_list, is_local=False)
 ```
+
 kzz_corr 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | MARKET_CODE | string | 市场代码 |
@@ -3544,10 +3863,13 @@ kzz_corr 的字段说明：
 | TIMEPOINT_CORR_TEXT_ | CLAUSE | string<br>时点修正文字条款 |
 | SPEC_CORR_RANGE | float | 特别修正幅度<br>IS_SPEC_DOWN_CORR_C |
 | LAUSE_FLAG | int | 是否有特别向下修正条<br>款 |
+
 #### 3.5.14.6 可转债赎回数据
+
  函数接口：get_kzz_call
 功能描述：获取指定可转债列表的可转债赎回数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持可转债的的代码列表 |
@@ -3557,6 +3879,7 @@ kzz_corr 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | kzz_call | dict | dataframe<br>column 为kzz_call 的字段<br>index 无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3566,7 +3889,9 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list('EXTRA_KZZ')
 kzz_call = info_data_object.get_kzz_call(code_list, is_local=False)
 ```
+
 kzz_call 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | MARKET_CODE | string | 市场代码 |
@@ -3574,10 +3899,13 @@ kzz_call 的字段说明：
 | BEGIN_DATE | string | 起始日期 |
 | END_DATE | string | 截止日期 |
 | TRI_RATIO | float | 触发比例（%） |
+
 #### 3.5.14.7 可转债回售数据
+
 函数接口：get_kzz_put
 功能描述：获取指定可转债列表的可转债回售数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持可转债的的代码列表 |
@@ -3587,6 +3915,7 @@ kzz_call 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | kzz_put | dict | dataframe<br>column 为kzz_put 的字段<br>index 无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3596,7 +3925,9 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list('EXTRA_KZZ')
 kzz_put = info_data_object.get_kzz_put(code_list, is_local=False)
 ```
+
 kzz_put 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | MARKET_CODE | string | 市场代码 |
@@ -3604,11 +3935,14 @@ kzz_put 的字段说明：
 | BEGIN_DATE | string | 起始日期 |
 | END_DATE | string | 截止日期 |
 | TRI_RATIO | float | 触发比例（%） |
+
 #### 3.5.14.8 可转债回售赎回条款
+
  函数接口：get_kzz_put_call_item
 功能描述：获取指定可转债列表的可转债回售赎回条款数据
 
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持可转债的的代码列表 |
@@ -3619,6 +3953,7 @@ kzz_put 的字段说明：
 | --- | --- | --- |
 | kzz_put_call_ | item |  |
 | dict | dataframe | column 为kzz_put_call_item 的字段<br>index 无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3628,7 +3963,9 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list('EXTRA_KZZ')
 kzz_put_call_item = info_data_object.get_kzz_put_call_item(code_list, is_local=False)
 ```
+
 kzz_put_call_item 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | MARKET_CODE | string | 市场代码 |
@@ -3668,10 +4005,13 @@ kzz_put_call_item 的字段说明：
 | TIME_CALL_TEXT | string | 时点赎回文字条款 |
 | EXPIRED_REDEMPTION_P | RICE | float<br>到期赎回价 |
 | PUT_TRI_CON_DESC | string | 回售触发条件说明 |
+
 #### 3.5.14.9 可转债回售条款执行说明
+
  函数接口：get_kzz_put_explanation
 功能描述：获取指定可转债列表的可转债回售条款执行说明数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持可转债的的代码列表 |
@@ -3682,6 +4022,7 @@ kzz_put_call_item 的字段说明：
 | --- | --- | --- |
 | kzz_put_expla | nation |  |
 | dict | dataframe | column 为kzz_put_explanation 的字段<br>index 无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3691,7 +4032,9 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list('EXTRA_KZZ')
 kzz_put_explanation = info_data_object.get_kzz_put_explanation(code_list, is_local=False)
 ```
+
 kzz_put_explanation 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | MARKET_CODE | string | 市场代码 |
@@ -3709,10 +4052,13 @@ kzz_put_explanation 的字段说明：
 | RESALE_AMOUNT | float | 转售总面额（亿元） |
 | RESALE_IMP_AMOUNT | float | 实施转售总面额（亿元） |
 | RESALE_END_DATE | string | 转售截止日 |
+
 #### 3.5.14.10 可转债赎回条款执行说明
+
  函数接口：get_kzz_call_explanation
 功能描述：获取指定可转债列表的可转债赎回条款执行说明数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持可转债的的代码列表 |
@@ -3723,6 +4069,7 @@ kzz_put_explanation 的字段说明：
 | --- | --- | --- |
 | kzz_call_expl | anation |  |
 | dict | dataframe | column 为kzz_call_explanation 的字段<br>index 无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3732,6 +4079,7 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list('EXTRA_KZZ')
 kzz_call_explanation = info_data_object.get_kzz_call_explanation(code_list, is_local=False)
 ```
+
 kzz_call_explanation 的字段说明：
 
 | 字段名称 | 类型 | 字段说明 |
@@ -3747,10 +4095,13 @@ kzz_call_explanation 的字段说明：
 | CALL_FUND_ARRIVAL_DATE | string | 赎回资金到账日 |
 | CALL_RECORD_DAY | string | 赎回登记日 |
 | CALL_REASON | string | 赎回原因 |
+
 #### 3.5.14.11 可转债停复牌信息
+
  函数接口：get_kzz_suspend
 功能描述：获取指定可转债列表的可转债停复牌信息数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | code_list | list[str] | 是 | 支持可转债的的代码列表 |
@@ -3760,6 +4111,7 @@ kzz_call_explanation 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | kzz_suspend | dict | dataframe<br>column 为kzz_suspend 的字段<br>index 无意义 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3770,7 +4122,9 @@ base_data_object = ad.BaseData()
 code_list = base_data_object.get_code_list('EXTRA_KZZ')
 kzz_suspend = info_data_object.get_kzz_suspend(code_list, is_local=False)
 ```
+
 kzz_suspend 的字段说明：
+
 | 字段名称 | 类型 | 字段说明 |
 | --- | --- | --- |
 | MARKET_CODE | string | 市场代码 |
@@ -3780,11 +4134,15 @@ kzz_suspend 的字段说明：
 | CHANGE_REASON | string | 停牌原因 |
 | CHANGE_REASON_CODE | int | 停牌原因代码 |
 | RESUMP_TIME | string | 停复牌时间 |
+
 ### 3.5.15 国债收益率数据
+
 #### 3.5.15.1 国债收益率
+
 函数接口：get_treasury_yield
 功能描述：获取指定期限的国债收益率数据
 输入参数：
+
 | 参数 | 数据类型 | 必选 | 解释 |
 | --- | --- | --- | --- |
 | term_list | list[str] | 是 | 支持不同期限的国债收益率<br>'m3'：3 个月,<br>'m6'：6 个月,<br>'y1'：1 年,<br>'y2'：2 年,<br>'y3'：3 年,<br>'y5'：5 年,<br>'y7'：7 年,<br>'y10'：20 年,<br><br>'y30'：30 年 |
@@ -3796,6 +4154,7 @@ kzz_suspend 的字段说明：
 | 参数 | 数据类型 | 解释 |
 | --- | --- | --- |
 | treasury_yield | dict | 字典的key：期限<br>字典的value：dataframe，<br>column 为YIELD，国债收益率数据，<br>index 为日期 |
+
 ```python
 # 第一步 登录api
 import AmazingData as ad
@@ -3804,9 +4163,13 @@ info_data_object = ad.InfoData()
 treasury_yield = info_data_object.get_treasury_yield(['m3', 'm6', 'y1', 'y2', 'y3', 'y5', 'y7', 'y10', 'y30'])
 
 ```
+
 ## 4. 附录
+
 ## 4.1 字段取值说明
+
 ### 4.1.1 代码类型security_type(沪深北)
+
 | 数据类型 | 枚举值 | 说明 |
 | --- | --- | --- |
 | str | EXTRA_STOCK_A | 上交所A 股、深交所A 股和北交所的股票列表 |
@@ -3831,7 +4194,9 @@ treasury_yield = info_data_object.get_treasury_yield(['m3', 'm6', 'y1', 'y2', 'y
 | str | SH_GLRA | 上交所逆回购 |
 | str | SZ_GLRA | 深交所逆回购 |
 | str | EXTRA_ GLRA | 沪深逆回购 |
+
 ### 4.1.2 代码类型security_type(期货交易所)
+
 | 数据类型 | 枚举值 | 说明 |
 | --- | --- | --- |
 | str | EXTRA_FUTURE | 期货, 包含中金所/上期所/大商所/郑商所/上海<br>国际能源交易中心所 |
@@ -3840,12 +4205,15 @@ treasury_yield = info_data_object.get_treasury_yield(['m3', 'm6', 'y1', 'y2', 'y
 | str | DS_FUTURE | 期货, 包含大商所 |
 | str | ZS_FUTURE | 期货, 包含郑商所 |
 | str | SN_FUTURE | 期货, 包含海国际能源交易中心所 |
+
 ### 4.1.3 代码类型security_type(期权)
+
 | 数据类型 | 枚举值 | 说明 |
 | --- | --- | --- |
 | str | EXTRA_ETF_OP | ETF 期权, 上交所/深交所 |
 | str | SH_OPTION | ETF 期货, 包含上交所 |
 | str | SZ_OPTION | ETF 期货, 包含深交所 |
+
 ### 4.1.4 市场类型market
 
 | 数据类型 | 枚举值 | 说明 |
@@ -3861,7 +4229,9 @@ treasury_yield = info_data_object.get_treasury_yield(['m3', 'm6', 'y1', 'y2', 'y
 | str | SHN | 沪港通 |
 | str | SZN | 深港通 |
 | str | HK | 港交所 |
+
 ### 4.1.5 交易阶段代码trading_phase_code
+
 （1） 上海现货快照交易状态
 该字段为8 位字符数组,左起每位表示特定的含义,无定义则填空格。
 第0 位: ‘S’表示启动(开市前)时段,‘C’表示开盘集合竞价时段,‘T’表示连续交易时段,‘E’表示
@@ -3889,7 +4259,9 @@ treasury_yield = info_data_object.get_treasury_yield(['m3', 'm6', 'y1', 'y2', 'y
 限制买入开仓、卖出开仓， ‘7’表示限制买入开仓、卖出开仓、备兑开仓；
 第 4 位： ‘0’表示此产品在当前时段不接受进行新订单申报，‘1’ 表示此产品在当前时段
 可接受进行新订单申报。
+
 ### 4.1.6 产品状态标志security_status
+
 状态
 标志
 说明
@@ -3943,6 +4315,7 @@ treasury_yield = info_data_object.get_treasury_yield(['m3', 'm6', 'y1', 'y2', 'y
 北交所
 
 ### 4.1.7 数据周期Period
+
 | 数据类型 | 枚举值 | 说明 |
 | --- | --- | --- |
 | int | Period.min1.value | 1 分钟线 |
@@ -3958,7 +4331,9 @@ treasury_yield = info_data_object.get_treasury_yield(['m3', 'm6', 'y1', 'y2', 'y
 | int | Period.month.value | 月线 |
 | int | Period.season.value | 季度线 |
 | int | Period.year.value | 年线 |
+
 ### 4.1.8 报告期名称REPORT_TYPE
+
 报告期类型代码
 报告期月份
 3 月
@@ -3968,6 +4343,7 @@ treasury_yield = info_data_object.get_treasury_yield(['m3', 'm6', 'y1', 'y2', 'y
 12 月
 
 ### 4.1.9 报表类型代码表STATEMENT_TYPE
+
 报表类型代码
 报表类型
 备注
@@ -4154,6 +4530,7 @@ REITS 基金的定期报告中披露的预测的合并报表数据
 年)
 
 ### 4.1.10 股票分红进度代码表DIV_PROGRESS
+
 分红进度描述
 进度代码
 董事会预案
@@ -4165,7 +4542,9 @@ REITS 基金的定期报告中披露的预测的合并报表数据
 股东提议
 董事会预案预披露
  分红实施进程：股东提议--董事会预案--股东大会--实施
+
 ### 4.1.11 股票配股进度代码表PROGRESS
+
 配股进度描述
 进度代码
 董事会预案
@@ -4194,8 +4573,11 @@ REITS 基金的定期报告中披露的预测的合并报表数据
 证监会恢复审核
 预发行
 提交注册
+
 ## 4.2 数据结构说明
+
 ### 4.2.1 Level-1 快照Snapshot
+
 数据类型
 字段名称
 说明
@@ -4258,13 +4640,13 @@ int
 ask _volume1
 卖1 档量
 int
-ask _volume2
+ask_volume2
 卖2 档量
 int
 ask _volume3
 卖3 档量
 int
-ask _volume4
+ask_volume4
 卖4 档量
 int
 ask _volume5
@@ -4288,13 +4670,13 @@ int
 bid _volume1
 买1 档量
 int
-bid _volume2
+bid_volume2
 买2 档量
 int
 bid _volume3
 买3 档量
 int
-bid _volume4
+bid_volume4
 买4 档量
 int
 bid _volume5
@@ -4305,7 +4687,9 @@ iopv
 str
 trading_phase_code
 交易阶段代码
+
 ### 4.2.2 ETF 期权快照SnapshotOption
+
 数据类型
 字段名称
 说明
@@ -4380,19 +4764,19 @@ float
 ask_price5
 卖5 档价格
 int
-ask _volume1
+ask_volume1
 卖1 档量
 int
 ask _volume2
 卖2 档量
 int
-ask _volume3
+ask_volume3
 卖3 档量
 int
 ask _volume4
 卖4 档量
 int
-ask _volume5
+ask_volume5
 卖5 档量
 float
 bid_price1
@@ -4410,19 +4794,19 @@ float
 bid_price5
 买5 档价格
 int
-bid _volume1
+bid_volume1
 买1 档量
 int
 bid _volume2
 买2 档量
 int
-bid _volume3
+bid_volume3
 买3 档量
 int
 bid _volume4
 买4 档量
 int
-bid _volume5
+bid_volume5
 买5 档量
 str
 contract_type
@@ -4437,8 +4821,8 @@ float
 exercise_price
 行权价
 
-
 ### 4.2.3 期货快照SnapshotFuture
+
 数据类型
 字段名称
 说明
@@ -4509,19 +4893,19 @@ float
 ask_price5
 卖5 档价格
 int
-ask _volume1
+ask_volume1
 卖1 档量
 int
 ask _volume2
 卖2 档量
 int
-ask _volume3
+ask_volume3
 卖3 档量
 int
 ask _volume4
 卖4 档量
 int
-ask _volume5
+ask_volume5
 卖5 档量
 float
 bid_price1
@@ -4539,19 +4923,19 @@ float
 bid_price5
 买5 档价格
 int
-bid _volume1
+bid_volume1
 买1 档量
 int
 bid _volume2
 买2 档量
 int
-bid _volume3
+bid_volume3
 买3 档量
 int
 bid _volume4
 买4 档量
 int
-bid _volume5
+bid_volume5
 买5 档量
 float
 average_price
@@ -4560,8 +4944,8 @@ float
 settle
 本次结算价
 
-
 ### 4.2.4 指数快照SnapshotIndex
+
 数据类型
 字段名称
 说明
@@ -4595,7 +4979,9 @@ volume
 float
 amount
 成交总金额
+
 ### 4.2.5 港股通快照 SnapshotHKT
+
 数据类型
 字段名称
 说明
@@ -4663,20 +5049,20 @@ float
 ask_price5
 卖5 档价格
 int
-ask _volume1
+ask_volume1
 卖1 档量
 
 int
 ask _volume2
 卖2 档量
 int
-ask _volume3
+ask_volume3
 卖3 档量
 int
 ask _volume4
 卖4 档量
 int
-ask _volume5
+ask_volume5
 卖5 档量
 float
 bid_price1
@@ -4694,26 +5080,26 @@ float
 bid_price5
 买5 档价格
 int
-bid _volume1
+bid_volume1
 买1 档量
 int
 bid _volume2
 买2 档量
 int
-bid _volume3
+bid_volume3
 买3 档量
 int
 bid _volume4
 买4 档量
 int
-bid _volume5
+bid_volume5
 买5 档量
 str
 trading_phase_code
 交易阶段代码
 
-
 ### 4.2.6 K 线Kline
+
 数据类型
 字段名称
 说明
@@ -4741,8 +5127,11 @@ volume
 float
 amount
 成交总金额
+
 ## 4.3 相关算法说明
+
 ### 4.3.1 商品期货查询算法
+
 当查询非中金所（大商所、郑商所、上期所、上期能源）的商品期货快照时，因涉及夜
 盘快照，需根据查询时间参数做相应区分，查询上以 20:00 作为夜盘的分割时间点，处理
 逻辑见下表。
@@ -4784,14 +5173,18 @@ TGW 上送日
 开始时间归属T 日，结束时间归属T-1 日，
 为无效查询，无数据返回，并需弹出相应
 告警
+
 ### 4.3.2 K 线算法说明
+
 （1） 集合竞价的处理
 对于分钟K 线，开盘集合竞价数据的成交量包含在当日第一根K 线，收盘集合竞
 价数据的成交量包含在当日最后一根K 线。
 （2） 前推算法
 9:30 的1 分钟K 线，计算的是9:30:00.000~9:30:59.999 期间的K 线。
 9:35 的5 分钟K 线，计算的是9:35:00.000~9:39:59.999 期间的K 线。
+
 ## 4.4 本地数据缓存方案说明
+
 应用场景：
 （1） 接口取全量历史时间区间的数据
 查询接口包含local_path 和is_local 两个参数的接口，这两个参数必须同时配对使用，支持
@@ -4803,6 +5196,7 @@ TGW 上送日
 服务器获取数据，不本地缓存数据，速度较慢，且无增量更新机制。
 
 ### 4.4.1 函数入参说明
+
 local_path 和is_local 为参数组1，begin_date 和end_date 为参数组2；
 一个参数组内的参数必须同时使用；
 两个参数组需独立使用，即使用参数组1 时，参数组2 无效；使用参数组2 时，参数组1
@@ -4816,12 +5210,15 @@ True:
 本地local_path 无数据的情况下，从互联网取数据，并更新本地local_path 的数据
 False:从互联网取数据，并更新本地local_path 的数据
 
-
 （3） begin_date, end_date
 开始日期、结束日期，在不同的接口中代表交易日、公告期等不同含义，具体见接口说明；
 即按照日期从服务端取数据，不从本地取数据（即local_path 和is_local 两个参数无效）。
+
 ### 4.4.2 本地存储文件说明
+
 文件格式为hdf5 格式
+
 ### 4.4.3 本地存储空间说明
+
 本地存储空间，不同的数据类型和标的范围，所需空间不同。
 建议本地存储空间在500GB 以上。

@@ -15,17 +15,10 @@ from datetime import datetime
 from typing import Any, Iterable, List, Optional
 
 from core.application.services.unified_data import get_unified_feed
-from core.infrastructure.providers.binder import (
-    AllProvidersFailedError,
-    FallbackStrategy,
-)
+from core.infrastructure.providers.binder import AllProvidersFailedError, FallbackStrategy
 from core.infrastructure.providers.capability_router import NoProviderAvailableError
 from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest
-from core.ports.data.routing_result import (
-    FallbackReasonCode,
-    RouteAttempt,
-    RoutedResponseMeta,
-)
+from core.ports.data.routing_result import FallbackReasonCode, RouteAttempt, RoutedResponseMeta
 from core.ports.data.semantic_types import AdjustType, AssetSpec, LatencyHint, Timeframe, TimeRange
 from core.ports.data_sources import DataSourceType
 from core.utils.data_sources import get_data_source_manager
@@ -162,7 +155,18 @@ def _build_data_http_error(
 
 def _is_intraday_period(period: str) -> bool:
     normalized = str(period or "").lower()
-    return normalized in {"1m", "5m", "15m", "30m", "60m", "1min", "5min", "15min", "30min", "60min"}
+    return normalized in {
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "60m",
+        "1min",
+        "5min",
+        "15min",
+        "30min",
+        "60min",
+    }
 
 
 def _normalize_date_digits(value: Any) -> str | None:
@@ -376,10 +380,7 @@ async def _run_capability_call(
 
     if capability == "sector_stocks":
         sector_name = str(
-            params.get("sector")
-            or params.get("sector_name")
-            or params.get("code")
-            or ""
+            params.get("sector") or params.get("sector_name") or params.get("code") or ""
         )
         if not sector_name:
             return [], "missing_sector"
@@ -427,7 +428,9 @@ async def _run_capability_call(
         if symbols:
             payload = await _invoke_method(provider, "get_long_hu_bang", symbols)
             if payload is None:
-                payload = await _invoke_method(provider, "get_dragon_tiger", symbols=symbols, date=date)
+                payload = await _invoke_method(
+                    provider, "get_dragon_tiger", symbols=symbols, date=date
+                )
         if payload is None:
             payload = await _invoke_method(provider, "get_dragon_tiger", date=date)
         return _coerce_rows(payload), None
@@ -500,7 +503,8 @@ async def _run_capability_call(
             filtered = [
                 row
                 for row in rows
-                if str(row.get("symbol") or row.get("code") or row.get("SECURITY_CODE") or "") in symbol_set
+                if str(row.get("symbol") or row.get("code") or row.get("SECURITY_CODE") or "")
+                in symbol_set
             ]
             if filtered:
                 return filtered, None
@@ -511,7 +515,9 @@ async def _run_capability_call(
             return [], "missing_symbol"
         payload = await _invoke_method(provider, "get_income", symbols)
         if payload is None:
-            payload = await _invoke_method(provider, "get_financial_data", symbols=symbols, tables=["Income"])
+            payload = await _invoke_method(
+                provider, "get_financial_data", symbols=symbols, tables=["Income"]
+            )
         return _coerce_rows(payload), None
 
     if capability == "balance_sheet":
@@ -519,7 +525,9 @@ async def _run_capability_call(
             return [], "missing_symbol"
         payload = await _invoke_method(provider, "get_balance_sheet", symbols)
         if payload is None:
-            payload = await _invoke_method(provider, "get_financial_data", symbols=symbols, tables=["Balance"])
+            payload = await _invoke_method(
+                provider, "get_financial_data", symbols=symbols, tables=["Balance"]
+            )
         return _coerce_rows(payload), None
 
     if capability == "cash_flow":
@@ -527,7 +535,9 @@ async def _run_capability_call(
             return [], "missing_symbol"
         payload = await _invoke_method(provider, "get_cash_flow", symbols)
         if payload is None:
-            payload = await _invoke_method(provider, "get_financial_data", symbols=symbols, tables=["CashFlow"])
+            payload = await _invoke_method(
+                provider, "get_financial_data", symbols=symbols, tables=["CashFlow"]
+            )
         return _coerce_rows(payload), None
 
     if capability == "shareholder_num":
@@ -535,7 +545,9 @@ async def _run_capability_call(
             return [], "missing_symbol"
         payload = await _invoke_method(provider, "get_holder_num", symbols)
         if payload is None:
-            payload = await _invoke_method(provider, "get_financial_data", symbols=symbols, tables=["Holdernum"])
+            payload = await _invoke_method(
+                provider, "get_financial_data", symbols=symbols, tables=["Holdernum"]
+            )
         return _coerce_rows(payload), None
 
     if capability == "top_holders":
@@ -543,7 +555,9 @@ async def _run_capability_call(
             return [], "missing_symbol"
         payload = await _invoke_method(provider, "get_share_holder", symbols)
         if payload is None:
-            payload = await _invoke_method(provider, "get_financial_data", symbols=symbols, tables=["Top10holder"])
+            payload = await _invoke_method(
+                provider, "get_financial_data", symbols=symbols, tables=["Top10holder"]
+            )
         return _coerce_rows(payload), None
 
     if capability == "stock_basic":
@@ -555,7 +569,9 @@ async def _run_capability_call(
         return _coerce_rows(payload), None
 
     if capability == "index_constituent":
-        index_code = str(params.get("index_code") or params.get("index") or params.get("code") or "")
+        index_code = str(
+            params.get("index_code") or params.get("index") or params.get("code") or ""
+        )
         if not index_code:
             return [], "missing_index_code"
         payload = await _invoke_method(provider, "get_index_constituent", index_code=index_code)
@@ -654,9 +670,11 @@ async def _query_capability_with_fallback(
                 RouteAttempt(
                     provider=source.value,
                     success=False,
-                    reason_code=FallbackReasonCode.CAPABILITY_NOT_SUPPORTED
-                    if problem == "capability_not_supported"
-                    else FallbackReasonCode.PROVIDER_ERROR,
+                    reason_code=(
+                        FallbackReasonCode.CAPABILITY_NOT_SUPPORTED
+                        if problem == "capability_not_supported"
+                        else FallbackReasonCode.PROVIDER_ERROR
+                    ),
                     reason_detail=problem or "empty_result",
                     latency_ms=latency_ms,
                 )

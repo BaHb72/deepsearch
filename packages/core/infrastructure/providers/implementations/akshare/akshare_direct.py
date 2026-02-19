@@ -1783,6 +1783,7 @@ class AkShareProvider(ILifecycleProvider):
         """绕过 akshare 排序逻辑，直接请求东财接口并做稳健解析。"""
         try:
             import math
+
             import requests
         except Exception as import_error:
             logger.error(f"加载 fallback 依赖失败: {import_error}")
@@ -1834,7 +1835,9 @@ class AkShareProvider(ILifecycleProvider):
         mapping = indicator_fields.get(indicator)
         sector_tag = sector_type_map.get(sector_type)
         if mapping is None or sector_tag is None:
-            logger.error(f"不支持的板块资金流参数: indicator={indicator}, sector_type={sector_type}")
+            logger.error(
+                f"不支持的板块资金流参数: indicator={indicator}, sector_type={sector_type}"
+            )
             return []
 
         url = "https://push2.eastmoney.com/api/qt/clist/get"

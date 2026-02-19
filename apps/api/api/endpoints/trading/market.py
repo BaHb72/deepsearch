@@ -3,7 +3,7 @@
 提供市场概览、板块行情、异动监控等接口
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger

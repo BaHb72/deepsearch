@@ -297,7 +297,9 @@ def _normalize_concept_period(period: str | None) -> str:
     return resolved
 
 
-def _normalize_realtime_flow_items(items: list[dict[str, Any]], data_source: str) -> list[dict[str, Any]]:
+def _normalize_realtime_flow_items(
+    items: list[dict[str, Any]], data_source: str
+) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for idx, item in enumerate(items):
         concept_name = str(item.get("name") or item.get("concept_name") or item.get("board") or "")
@@ -355,7 +357,9 @@ def _normalize_akshare_flow_items(
 
     for idx, item in enumerate(items):
         concept_name = str(item.get("name") or item.get("名称") or item.get("board") or "")
-        concept_code = str(item.get("code") or item.get("板块代码") or item.get("concept_code") or f"AK-{idx}")
+        concept_code = str(
+            item.get("code") or item.get("板块代码") or item.get("concept_code") or f"AK-{idx}"
+        )
         if not concept_name and not concept_code:
             continue
 
@@ -411,7 +415,9 @@ def _normalize_akshare_flow_items(
     return normalized
 
 
-async def _fetch_concept_flow_from_akshare(limit: int, indicator_label: str) -> list[dict[str, Any]]:
+async def _fetch_concept_flow_from_akshare(
+    limit: int, indicator_label: str
+) -> list[dict[str, Any]]:
     from core.infrastructure.providers.integration.compat import get_provider_compat
 
     provider = await get_provider_compat("akshare")
@@ -434,7 +440,9 @@ async def _fetch_concept_flow_from_akshare(limit: int, indicator_label: str) -> 
         indicator_label=indicator_label,
         data_source="akshare",
     )
-    has_primary_inflow = any(abs((item.get("main_net_inflow") or 0.0)) > 0.0 for item in primary_items)
+    has_primary_inflow = any(
+        abs((item.get("main_net_inflow") or 0.0)) > 0.0 for item in primary_items
+    )
     if primary_items and has_primary_inflow:
         return primary_items[:limit]
 
@@ -1088,7 +1096,9 @@ async def get_concept_flow(
             if result.get("success"):
                 records = _extract_records(result)
                 items = _normalize_realtime_flow_items(records, data_source="amazingdata")
-                has_realtime_inflow = any(abs((item.get("main_net_inflow") or 0.0)) > 0.0 for item in items)
+                has_realtime_inflow = any(
+                    abs((item.get("main_net_inflow") or 0.0)) > 0.0 for item in items
+                )
                 if items and has_realtime_inflow:
                     return JSONResponse(
                         {
@@ -1111,7 +1121,9 @@ async def get_concept_flow(
                 "reason": str(primary_error),
             }
             try:
-                fallback_items = await _fetch_concept_flow_from_akshare(limit=limit, indicator_label="今日")
+                fallback_items = await _fetch_concept_flow_from_akshare(
+                    limit=limit, indicator_label="今日"
+                )
                 if fallback_items:
                     return JSONResponse(
                         {
@@ -1148,7 +1160,9 @@ async def get_concept_flow(
     try:
         items = await _fetch_concept_flow_from_akshare(limit=limit, indicator_label=indicator_label)
         if not items and period_value == "week":
-            fallback_items = await _fetch_concept_flow_from_akshare(limit=limit, indicator_label="今日")
+            fallback_items = await _fetch_concept_flow_from_akshare(
+                limit=limit, indicator_label="今日"
+            )
             if fallback_items:
                 return JSONResponse(
                     {
@@ -1193,7 +1207,9 @@ async def get_concept_flow(
         logger.warning(f"获取概念资金流失败(period={period_value}): {e}")
         if period_value == "week":
             try:
-                fallback_items = await _fetch_concept_flow_from_akshare(limit=limit, indicator_label="今日")
+                fallback_items = await _fetch_concept_flow_from_akshare(
+                    limit=limit, indicator_label="今日"
+                )
                 if fallback_items:
                     return JSONResponse(
                         {
@@ -1222,6 +1238,10 @@ async def get_concept_flow(
                 "retrieved_at": _iso_now(),
                 "data_source": data_source,
                 "stale": True,
-                "detail": {"code": "DATA_SOURCE_OFFLINE", "message": "获取数据失败", "reason": str(e)},
+                "detail": {
+                    "code": "DATA_SOURCE_OFFLINE",
+                    "message": "获取数据失败",
+                    "reason": str(e),
+                },
             }
         )

@@ -1,7 +1,7 @@
 # AmazingData 运行时契约加固与问题留痕
 
-> 日期: 2026-02-17  
-> 模块: amazingdata / dask / cli-checker  
+> 日期: 2026-02-17
+> 模块: amazingdata / dask / cli-checker
 > 类型: bugfix / hardening
 
 ---
@@ -12,8 +12,8 @@
 
 复现到的主问题：
 
-1. `provider.get_stock_list(limit=10)` 在 DaskAdapter 报参数不兼容。  
-2. Actor 登录链路仍绕过 `_sdk_loader`，导致 SDK 导入失败行为不一致。  
+1. `provider.get_stock_list(limit=10)` 在 DaskAdapter 报参数不兼容。
+2. Actor 登录链路仍绕过 `_sdk_loader`，导致 SDK 导入失败行为不一致。
 3. `check-amazingdata` 在异常路径触发未初始化变量，输出二次错误。
 
 ---
@@ -74,13 +74,13 @@
 
 ## 验证命令与结果
 
-1. `uv pip check`  
+1. `uv pip check`
    - 结果：依赖兼容通过。
-2. `uv run --python ./.venv/Scripts/python.exe pytest tests/unit/api/test_amazingdata_provider_resolution.py tests/unit/infrastructure/providers/test_fastapi_integration.py tests/unit/infrastructure/providers/implementations/test_amazingdata_dask_adapter.py tests/unit/cli/test_check_amazingdata_command.py -q`  
+2. `uv run --python ./.venv/Scripts/python.exe pytest tests/unit/api/test_amazingdata_provider_resolution.py tests/unit/infrastructure/providers/test_fastapi_integration.py tests/unit/infrastructure/providers/implementations/test_amazingdata_dask_adapter.py tests/unit/cli/test_check_amazingdata_command.py -q`
    - 结果：`38 passed`。
-3. `uv run --python ./.venv/Scripts/python.exe pytest tests/integration/amazingdata -vv -rs --maxfail=1`  
+3. `uv run --python ./.venv/Scripts/python.exe pytest tests/integration/amazingdata -vv -rs --maxfail=1`
    - 结果：`11 passed, 5 skipped`。
-4. `uv run --python ./.venv/Scripts/python.exe deepsearch check-amazingdata dev --timeout 2`  
+4. `uv run --python ./.venv/Scripts/python.exe deepsearch check-amazingdata dev --timeout 2`
    - 结果：修复后不再出现 `suggestion` 未定义异常；当前失败为真实拓扑问题（Scheduler 无法回连 loopback Worker）。
 
 ---

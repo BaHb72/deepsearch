@@ -802,9 +802,7 @@ class AmazingDataExtended(AmazingDataProvider):
             logger.error(f"获取期权代码列表失败: {e}")
             return None
 
-    async def get_future_code_info(
-        self, security_type: str = "EXTRA_FUTURE"
-    ) -> pd.DataFrame:
+    async def get_future_code_info(self, security_type: str = "EXTRA_FUTURE") -> pd.DataFrame:
         """
         获取期货代码信息（SDK 扩展接口）。
 
@@ -2057,9 +2055,7 @@ class AmazingDataExtended(AmazingDataProvider):
                 # 兼容旧 SDK 命名
                 method = getattr(self._info_data, "get_option_mon_ctr_spcon", None)
             if not callable(method):
-                raise AttributeError(
-                    "SDK 缺少 get_option_mon_ctr_specs/get_option_mon_ctr_spcon"
-                )
+                raise AttributeError("SDK 缺少 get_option_mon_ctr_specs/get_option_mon_ctr_spcon")
 
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, lambda: method(code_list))
@@ -2126,9 +2122,7 @@ class AmazingDataExtended(AmazingDataProvider):
     async def get_kzz_conv_change(
         self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
     ) -> pd.DataFrame:
-        return await self._get_kzz_dataframe(
-            "get_kzz_conv_change", code_list, local_path, is_local
-        )
+        return await self._get_kzz_dataframe("get_kzz_conv_change", code_list, local_path, is_local)
 
     async def get_kzz_corr(
         self, code_list: List[str], local_path: Optional[str] = None, is_local: bool = True
@@ -2745,9 +2739,7 @@ def _load_sdk():
             if has_login or has_login_legacy:
                 __sdk_mod = mod
                 return __sdk_mod
-            import_errors.append(
-                f"{name}: missing callable login/Login, available={dir(mod)[:8]}"
-            )
+            import_errors.append(f"{name}: missing callable login/Login, available={dir(mod)[:8]}")
         except Exception as e:  # pragma: no cover - import errors are environment-specific
             import_errors.append(f"{name}: {e!r}")
             continue
@@ -2782,7 +2774,9 @@ def __getattr__(name: str) -> Any:
     try:
         sdk = _load_sdk()
     except Exception as exc:
-        raise AttributeError(f"SDK is unavailable while resolving attribute '{name}': {exc}") from exc
+        raise AttributeError(
+            f"SDK is unavailable while resolving attribute '{name}': {exc}"
+        ) from exc
 
     if hasattr(sdk, name):
         return getattr(sdk, name)

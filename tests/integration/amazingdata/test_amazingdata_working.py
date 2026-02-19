@@ -152,9 +152,10 @@ def test_amazingdata():
     except ImportError:
         pytest.skip("AmazingData SDK 未安装，跳过真实功能测试")
 
-    if not os.getenv("AMAZINGDATA_USERNAME", "").strip() or not os.getenv(
-        "AMAZINGDATA_PASSWORD", ""
-    ).strip():
+    if (
+        not os.getenv("AMAZINGDATA_USERNAME", "").strip()
+        or not os.getenv("AMAZINGDATA_PASSWORD", "").strip()
+    ):
         pytest.skip("未提供 AMAZINGDATA_USERNAME / AMAZINGDATA_PASSWORD，跳过真实登录测试")
 
     assert run_amazingdata_working_test() is True

@@ -9,8 +9,8 @@
 
 在真实链路回归中暴露出 3 个高优先问题：
 
-1. `AmazingDataDaskAdapter.get_stock_list()` 未兼容 `limit` 参数，调用 `provider.get_stock_list(limit=10)` 直接触发 `TypeError`。  
-2. `AmazingDataActor` 仍直接 `import AmazingData`，绕过 `_sdk_loader`，在 SDK 依赖缺失时出现不一致导入行为和误导错误。  
+1. `AmazingDataDaskAdapter.get_stock_list()` 未兼容 `limit` 参数，调用 `provider.get_stock_list(limit=10)` 直接触发 `TypeError`。
+2. `AmazingDataActor` 仍直接 `import AmazingData`，绕过 `_sdk_loader`，在 SDK 依赖缺失时出现不一致导入行为和误导错误。
 3. `deepsearch check-amazingdata` 的 distributed 分支中，`suggestion` 在特定路径未初始化即被引用，导致二次异常覆盖原始诊断信息。
 
 ## 关键证据
@@ -24,8 +24,8 @@
 
 ## 影响
 
-1. AmazingData 真实集成用例在首个业务调用处失败，阻断真实链路验证。  
-2. SDK 导入路径存在多套标准，导致 `Cannot import AmazingData SDK` 的根因不透明。  
+1. AmazingData 真实集成用例在首个业务调用处失败，阻断真实链路验证。
+2. SDK 导入路径存在多套标准，导致 `Cannot import AmazingData SDK` 的根因不透明。
 3. 巡检命令输出失真，运维侧拿不到真实失败原因。
 
 ## 解决记录
@@ -51,49 +51,49 @@
 
 ## 验证结果
 
-1. `uv run --python ./.venv/Scripts/python.exe pytest tests/unit/infrastructure/providers/implementations/test_amazingdata_dask_adapter.py -q`  
+1. `uv run --python ./.venv/Scripts/python.exe pytest tests/unit/infrastructure/providers/implementations/test_amazingdata_dask_adapter.py -q`
    - 结果：通过（含新增兼容测试）。
-2. `uv run --python ./.venv/Scripts/python.exe pytest tests/integration/amazingdata -vv -rs --maxfail=1`  
+2. `uv run --python ./.venv/Scripts/python.exe pytest tests/integration/amazingdata -vv -rs --maxfail=1`
    - 结果：`11 passed, 5 skipped`。
-3. `uv run --python ./.venv/Scripts/python.exe deepsearch check-amazingdata dev --timeout 2`  
+3. `uv run --python ./.venv/Scripts/python.exe deepsearch check-amazingdata dev --timeout 2`
    - 结果：不再出现 `cannot access local variable 'suggestion'` 二次异常；当前失败点回归为真实网络/拓扑问题（Scheduler 回连 Worker 地址不兼容）。
 
-4. `docker exec deepsearch-dask-scheduler python -c "import dask, distributed; print(dask.__version__); print(distributed.__version__)"`  
+4. `docker exec deepsearch-dask-scheduler python -c "import dask, distributed; print(dask.__version__); print(distributed.__version__)"`
    - 结果：确认容器内旧版本根因为镜像依赖钉死，升级后为 `2026.1.2/2026.1.2`。
 
-5. `./.venv/Scripts/deepsearch.exe check-amazingdata dev --timeout 2`  
+5. `./.venv/Scripts/deepsearch.exe check-amazingdata dev --timeout 2`
    - 结果：`status=ok`，`Dask 版本一致性=ok`，`Scheduler 到 Worker 回连=ok`。
 
 ## 补充修复（最新版对齐）
 
-- **发现时间**: 2026-02-17 17:13（本地）  
-- **问题现象**: 用户要求保持最新版，但巡检仍提示 `client=2026.1.2, scheduler=2026.1.1`。  
-- **根因**: `docker/pyproject.worker.toml` 将 `dask/distributed` 固定为 `2026.1.1`，导致 `deepsearch-dask-scheduler` 容器始终运行旧版。  
+- **发现时间**: 2026-02-17 17:13（本地）
+- **问题现象**: 用户要求保持最新版，但巡检仍提示 `client=2026.1.2, scheduler=2026.1.1`。
+- **根因**: `docker/pyproject.worker.toml` 将 `dask/distributed` 固定为 `2026.1.1`，导致 `deepsearch-dask-scheduler` 容器始终运行旧版。
 - **修复动作**:
   - 将 `docker/pyproject.worker.toml` 中 `dask/distributed` 升级为 `2026.1.2`；
   - 执行 `docker compose build dask-scheduler` 重建镜像；
   - 执行 `docker compose up -d dask-scheduler` 重建并拉起容器；
-  - 复跑 `deepsearch check-amazingdata dev --timeout 2` 完成闭环验证。  
+  - 复跑 `deepsearch check-amazingdata dev --timeout 2` 完成闭环验证。
 - **结果**: 版本一致性告警消失，AmazingData 链路巡检整体恢复 `ok`。
 
 ## 补充修复（集成测试进程保护）
 
-- **发现时间**: 2026-02-17 17:25（本地）  
-- **问题现象**: `pytest tests/integration/amazingdata/test_amazingdata_data_size.py` 在测试收集阶段触发 `Windows fatal exception: access violation`，导致整个 pytest 进程崩溃。  
-- **根因**: 用例在模块导入期直接执行真实 SDK 登录与 `get_code_info`，命中 `tgw` 原生调用异常时无法被 pytest 捕获。  
+- **发现时间**: 2026-02-17 17:25（本地）
+- **问题现象**: `pytest tests/integration/amazingdata/test_amazingdata_data_size.py` 在测试收集阶段触发 `Windows fatal exception: access violation`，导致整个 pytest 进程崩溃。
+- **根因**: 用例在模块导入期直接执行真实 SDK 登录与 `get_code_info`，命中 `tgw` 原生调用异常时无法被 pytest 捕获。
 - **修复动作**:
   - 将 `tests/integration/amazingdata/test_amazingdata_data_size.py` 改造为标准 pytest 测试函数；
   - 移除模块级副作用（登录、查询、`input()` 阻塞、`sys.exit()`）；
   - 真实 SDK 调用放入子进程执行，通过返回码与标准输出回传结果，隔离原生崩溃风险；
-  - 增加显式环境变量守卫（`RUN_MANUAL_TESTS`、`AMAZINGDATA_USERNAME`、`AMAZINGDATA_PASSWORD`）。  
+  - 增加显式环境变量守卫（`RUN_MANUAL_TESTS`、`AMAZINGDATA_USERNAME`、`AMAZINGDATA_PASSWORD`）。
 - **验证结果**:
   - `uv run --python ./.venv/Scripts/python.exe pytest tests/integration/amazingdata/test_amazingdata_data_size.py -q --maxfail=1`
   - 结果：`1 skipped`（按手动测试守卫跳过），不再出现进程级崩溃。
 
 ## 补充修复（SDK hard-exit 崩溃感知链路）
 
-- **发现时间**: 2026-02-17 17:30（本地）  
-- **背景**: 既定方案是“SDK 运行在 Dask Worker 进程中，崩溃不拖垮主系统”；补齐点是“系统需明确感知崩溃已发生”。  
+- **发现时间**: 2026-02-17 17:30（本地）
+- **背景**: 既定方案是“SDK 运行在 Dask Worker 进程中，崩溃不拖垮主系统”；补齐点是“系统需明确感知崩溃已发生”。
 - **问题**:
   - 旧实现 `dask_actor_ready:amazingdata` 为一次性标记，Worker 崩溃后主系统可能在较长窗口内无法快速识别；
   - Adapter 超时路径只能报 `timeout`，无法区分“慢调用”与“Worker 进程已退出”。

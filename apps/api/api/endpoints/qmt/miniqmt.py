@@ -16,6 +16,7 @@ from core.infrastructure.providers.interfaces.capabilities import DataCapability
 from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
 from pydantic import BaseModel
+
 from apps.api.api.endpoints.data.unified_query import query_capability_bridge
 from apps.api.api.provider_deps import resolve_provider
 
@@ -385,7 +386,8 @@ async def _get_amazingdata_provider_optional_compat(request: Request | None = No
         arity = sum(
             1
             for param in signature.parameters.values()
-            if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            if param.kind
+            in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
         )
     except (TypeError, ValueError):
         arity = 0
@@ -411,7 +413,11 @@ async def _fetch_quote_from_amazingdata(
         ("get_realtime_quote", (symbol_list,), {}),
         ("get_realtime_quotes", (symbol_list,), {}),
         ("query_snapshot", (), {"code_list": symbol_list, "date": current_date}),
-        ("query_snapshot", (), {"code_list": symbol_list, "begin_date": current_date, "end_date": current_date}),
+        (
+            "query_snapshot",
+            (),
+            {"code_list": symbol_list, "begin_date": current_date, "end_date": current_date},
+        ),
     ]
 
     payload: Any = None
@@ -500,7 +506,12 @@ async def _fetch_kline_from_amazingdata(
         (
             "query_kline",
             (),
-            {"code_list": [symbol], "begin_date": begin_date, "end_date": end_date, "period": period},
+            {
+                "code_list": [symbol],
+                "begin_date": begin_date,
+                "end_date": end_date,
+                "period": period,
+            },
         ),
         (
             "get_kline_data",
@@ -1318,7 +1329,9 @@ async def get_xtdata_kline(
         return legacy_payload
     except HTTPException as exc:
         logger.warning(f"统一查询桥接失败，退回旧 AmazingData 回退逻辑: {exc}")
-        fallback_klines, fallback_reason = await _fetch_kline_from_amazingdata(symbol, period, count)
+        fallback_klines, fallback_reason = await _fetch_kline_from_amazingdata(
+            symbol, period, count
+        )
         if fallback_klines:
             return {
                 "success": True,

@@ -728,21 +728,15 @@ class AmazingDataDaskAdapter:
         result = await self._call_actor("get_code_list", security_type=security_type)
         return result
 
-    async def get_future_code_list(
-        self, security_type: str = "EXTRA_FUTURE"
-    ) -> list[str] | None:
+    async def get_future_code_list(self, security_type: str = "EXTRA_FUTURE") -> list[str] | None:
         """3.5.2.3 每日最新代码表（期货交易所）"""
         return await self._call_actor("get_future_code_list", security_type=security_type)
 
-    async def get_option_code_list(
-        self, security_type: str = "EXTRA_ETF_OP"
-    ) -> list[str] | None:
+    async def get_option_code_list(self, security_type: str = "EXTRA_ETF_OP") -> list[str] | None:
         """3.5.2.4 每日最新代码表（期权）"""
         return await self._call_actor("get_option_code_list", security_type=security_type)
 
-    async def get_future_code_info(
-        self, security_type: str = "EXTRA_FUTURE"
-    ) -> pd.DataFrame:
+    async def get_future_code_info(self, security_type: str = "EXTRA_FUTURE") -> pd.DataFrame:
         """期货代码信息（SDK 扩展接口）"""
         result = await self._call_actor("get_future_code_info", security_type=security_type)
         return pd.DataFrame(result) if result else pd.DataFrame()

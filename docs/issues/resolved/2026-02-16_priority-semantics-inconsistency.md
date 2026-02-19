@@ -38,4 +38,3 @@ P1
     - `RealtimeAdapterSpec.priority` 标注为“仅 realtime adapters 选择语义”
   - 在 `packages/core/infrastructure/providers/registry.py:get_providers_by_priority()` 补充 legacy 说明：旧注册表链路沿用“值越大越优先”
   - 本次不改变 legacy 运行行为，避免影响旧链路稳定性；后续在双路径收敛阶段统一行为语义
-

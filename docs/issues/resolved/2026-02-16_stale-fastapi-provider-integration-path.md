@@ -7,7 +7,7 @@
 
 ## 问题描述
 
-`packages/core/infrastructure/providers/integration/fastapi.py` 使用 `config.data_sources.items()` 与 `ds_config.get(...)` 的 dict 风格访问。  
+`packages/core/infrastructure/providers/integration/fastapi.py` 使用 `config.data_sources.items()` 与 `ds_config.get(...)` 的 dict 风格访问。
 但 `data_sources` 当前为 `DataSourcesConfig` 模型，不提供该访问方式。
 
 ## 关键证据
@@ -40,4 +40,3 @@ P1
   - 新增 `_iter_enabled_provider_configs()`，统一从 `data_sources.providers` 读取并过滤启用项
   - 去除对 `config.data_sources.items()` 与 `ds_config.get()` 的错误依赖
   - 新增测试 `tests/unit/infrastructure/providers/test_fastapi_integration.py`
-

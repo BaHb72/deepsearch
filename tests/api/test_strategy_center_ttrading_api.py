@@ -6,7 +6,9 @@ from apps.api.api.endpoints.strategy_center import ttrading
 
 
 @pytest.mark.asyncio
-async def test_datasource_status_returns_mock_when_miniqmt_unavailable(monkeypatch: pytest.MonkeyPatch):
+async def test_datasource_status_returns_mock_when_miniqmt_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+):
     """MiniQMT 不可用时应直接返回 mock 状态。"""
 
     async def _probe_should_not_run() -> bool:
@@ -75,7 +77,9 @@ async def test_datasource_status_returns_mock_when_all_providers_unavailable(
 
 
 @pytest.mark.asyncio
-async def test_datasource_status_returns_miniqmt_when_probe_success(monkeypatch: pytest.MonkeyPatch):
+async def test_datasource_status_returns_miniqmt_when_probe_success(
+    monkeypatch: pytest.MonkeyPatch,
+):
     """探活成功时应标记为已连接。"""
 
     async def _probe_true() -> bool:

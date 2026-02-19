@@ -216,34 +216,34 @@
 
 ## 7. 复用性检索留痕（按规范）
 
-检索时间：2026-02-19  
+检索时间：2026-02-19
 检索目标：请求去重、预热、分段耗时、运行时初始化
 
 候选能力与取舍：
 
-1. 项目内请求去重能力  
-候选：`apps/api/api/middleware/deduplication.py`  
+1. 项目内请求去重能力
+候选：`apps/api/api/middleware/deduplication.py`
 取舍：优先复用；先在概念接口场景复用，再评估是否抽公共 helper。
 
-2. 项目内运行时初始化与预热能力  
-候选：`apps/api/services/market_data_runtime.py`、`packages/core/config/models/market_data.py`  
+2. 项目内运行时初始化与预热能力
+候选：`apps/api/services/market_data_runtime.py`、`packages/core/config/models/market_data.py`
 取舍：优先在现有 runtime 生命周期内扩展，不新建并行调度器。
 
-3. 项目内 provider 生命周期管理能力  
-候选：`apps/api/api/providers.py`、`packages/core/infrastructure/providers/integration/*`  
+3. 项目内 provider 生命周期管理能力
+候选：`apps/api/api/providers.py`、`packages/core/infrastructure/providers/integration/*`
 取舍：先修请求期重复初始化路径，保持现有 ports/adapters 边界，不引入新 provider 抽象。
 
-4. 观测能力  
-候选：现有日志与耗时输出模式（如 `market_data_runtime.py` 的耗时日志）  
+4. 观测能力
+候选：现有日志与耗时输出模式（如 `market_data_runtime.py` 的耗时日志）
 取舍：先做轻量分段日志与响应字段，不新增独立埋点系统。
 
 ---
 
 ## 8. 实施顺序（建议）
 
-1. Batch A（观测）  
-2. Batch C（前端体验）  
-3. Batch B（后端降本）  
+1. Batch A（观测）
+2. Batch C（前端体验）
+3. Batch B（后端降本）
 4. Batch D（共性治理）
 
 说明：先做 A 是为了防止“优化方向错位”；C 可快速改善体感；B/D 再逐步压实冷链路成本。

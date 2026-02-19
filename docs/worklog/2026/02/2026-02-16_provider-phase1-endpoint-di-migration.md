@@ -41,7 +41,7 @@
 
 - Provider 一定有 `name/display_name/worker_urls/_cache_ttl`
 
-在容器化路径下不成立，导致 `/api/data-source/config` 抛出属性错误。  
+在容器化路径下不成立，导致 `/api/data-source/config` 抛出属性错误。
 已通过“字段兜底 + 能力探测”修复，保证在不同 Provider 形态下稳定响应。
 
 ---

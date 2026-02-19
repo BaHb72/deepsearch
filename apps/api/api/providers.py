@@ -443,7 +443,9 @@ class DataProviderFactory:
 
                 # 验证登录状态
                 logger.info("[ACTOR_CREATE] 验证 Actor 连接...")
-                status = await asyncio.wait_for(actor.get_status(), timeout=_remaining_timeout(10.0))
+                status = await asyncio.wait_for(
+                    actor.get_status(), timeout=_remaining_timeout(10.0)
+                )
                 if not status.get("logged_in"):
                     raise RuntimeError("Actor 连接状态验证失败")
 
@@ -626,7 +628,9 @@ class DataProviderFactory:
                     await asyncio.sleep(delay)
                 else:
                     detail = f"（最近错误: {last_error_text}）" if last_error_text else ""
-                    raise RuntimeError(f"AmazingData Actor 创建超时，已达最大重试次数{detail}") from e
+                    raise RuntimeError(
+                        f"AmazingData Actor 创建超时，已达最大重试次数{detail}"
+                    ) from e
 
             except Exception as e:
                 elapsed = time.time() - start_time

@@ -7,7 +7,7 @@
 
 ## 问题描述
 
-`check-amazingdata` 在 distributed 模式下只检查了 TCP 连通性，没有验证 Dask Worker 是否可用。  
+`check-amazingdata` 在 distributed 模式下只检查了 TCP 连通性，没有验证 Dask Worker 是否可用。
 结果是：即使没有可用 Worker，命令仍可能给出 `ok/warning`，与真实调用能力不一致。
 
 ## 关键证据
@@ -44,4 +44,3 @@ P0
   - 修复后实测：
     - `python -m core.cli.main check-amazingdata dev --timeout 2`
     - 输出 `Dask Worker 可用性=failed`，顶层 `status=failed`，退出码为 1
-

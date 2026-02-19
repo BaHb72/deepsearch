@@ -42,4 +42,3 @@ P1
 1. 从 `apps/api/api/providers.py` 抽离“获取 provider 入口”到独立兼容模块
 2. 从 `data_source_manager.py` 抽离配置归一化与 fallback 同步逻辑为独立组件
 3. 每次抽离都配套最小回归测试
-

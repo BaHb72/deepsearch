@@ -39,4 +39,3 @@ P1
   - 重写 `scripts/start_windows_dask.ps1`（ASCII-only）
   - 保留原功能：自动检测 HostAddress、连通性检查、启动 Worker
   - 验证：`powershell -File scripts/start_windows_dask.ps1 -SchedulerAddress localhost:1 ...` 可正常执行到连通性失败分支
-

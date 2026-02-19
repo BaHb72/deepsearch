@@ -335,9 +335,7 @@ def main() -> int:
     print(f"Report: {output_path}")
 
     if args.strict and (
-        summary["failed_runs"] > 0
-        or summary["parse_failed_runs"] > 0
-        or not gate["passed"]
+        summary["failed_runs"] > 0 or summary["parse_failed_runs"] > 0 or not gate["passed"]
     ):
         return 2
     return 0

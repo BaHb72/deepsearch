@@ -48,9 +48,13 @@ def _load_sdk() -> tuple[Optional[ModuleType], bool, Optional[Exception]]:
                 logger.debug(f"[SDK加载] 候选 {name} 不兼容: {last_exc}")
                 continue
 
-            missing_attrs = [attr for attr in _REQUIRED_SDK_ATTRS if not callable(getattr(_ad, attr, None))]
+            missing_attrs = [
+                attr for attr in _REQUIRED_SDK_ATTRS if not callable(getattr(_ad, attr, None))
+            ]
             if missing_attrs:
-                last_exc = RuntimeError(f"{name} missing required SDK APIs: {', '.join(missing_attrs)}")
+                last_exc = RuntimeError(
+                    f"{name} missing required SDK APIs: {', '.join(missing_attrs)}"
+                )
                 logger.debug(f"[SDK加载] 候选 {name} 不兼容: {last_exc}")
                 continue
 

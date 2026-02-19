@@ -50,4 +50,3 @@ P0
   - 重启 Windows Worker 并验证：
     - `check-amazingdata dev` 显示 `Dask Worker 可用性=ok`
     - 非 mock smoke：`get_amazingdata_provider()` 返回 `ActorWrapper`，`get_calendar()` 成功返回 8585 条
-

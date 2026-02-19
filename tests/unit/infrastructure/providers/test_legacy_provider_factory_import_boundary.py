@@ -1,7 +1,6 @@
 import ast
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ALLOWED_IMPORTERS = {
     "packages/core/infrastructure/providers/integration/compat.py",
@@ -40,7 +39,6 @@ def test_legacy_provider_factory_import_only_exists_in_compat_boundary() -> None
             if _imports_legacy_provider_module(source_file):
                 violations.append(relative_path)
 
-    assert not violations, (
-        "检测到非兼容边界文件仍直接 import apps.api.api.providers: "
-        + ", ".join(sorted(violations))
+    assert not violations, "检测到非兼容边界文件仍直接 import apps.api.api.providers: " + ", ".join(
+        sorted(violations)
     )

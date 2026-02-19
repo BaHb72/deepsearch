@@ -25,11 +25,7 @@ from core.ports.data.responses import (
     StockListResponse,
     TickResponse,
 )
-from core.ports.data.routing_result import (
-    FallbackReasonCode,
-    RouteAttempt,
-    RoutedResponseMeta,
-)
+from core.ports.data.routing_result import FallbackReasonCode, RouteAttempt, RoutedResponseMeta
 from loguru import logger
 
 from .adapters.base import (

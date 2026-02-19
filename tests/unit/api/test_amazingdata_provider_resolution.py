@@ -65,7 +65,9 @@ async def test_login_uses_manual_session_without_polluting_factory_cache(monkeyp
     monkeypatch.setattr(amazingdata_api, "AmazingDataExtended", _FakeProvider)
     monkeypatch.setattr(amazingdata_api, "_manual_login_provider", None)
     monkeypatch.setattr(amazingdata_api.DataProviderFactory, "_instances", {})
-    monkeypatch.setattr(amazingdata_api.DataProviderFactory, "get_provider_async", get_provider_mock)
+    monkeypatch.setattr(
+        amazingdata_api.DataProviderFactory, "get_provider_async", get_provider_mock
+    )
 
     request = amazingdata_api.LoginRequest(
         username="u",
@@ -76,7 +78,10 @@ async def test_login_uses_manual_session_without_polluting_factory_cache(monkeyp
 
     response = await amazingdata_api.login(request)
     assert response["status"] == "success"
-    assert amazingdata_api.DataSourceType.AMAZINGDATA.value not in amazingdata_api.DataProviderFactory._instances
+    assert (
+        amazingdata_api.DataSourceType.AMAZINGDATA.value
+        not in amazingdata_api.DataProviderFactory._instances
+    )
 
     provider = await amazingdata_api.get_amazingdata_provider()
     assert provider is amazingdata_api._manual_login_provider

@@ -27,10 +27,7 @@ from core.infrastructure.providers.interfaces.base import (
 from core.infrastructure.providers.interfaces.capabilities import DataCapability
 
 # New Protocol imports for Phase 2
-from core.infrastructure.providers.protocols.lifecycle import (
-    HealthCheckResult,
-    HealthStatus,
-)
+from core.infrastructure.providers.protocols.lifecycle import HealthCheckResult, HealthStatus
 from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest
 from core.ports.data.responses import KlineResponse, RealtimeQuoteResponse
 from loguru import logger
@@ -822,9 +819,7 @@ class MiniQMTProvider(DataProvider):
 
             # 尝试从 AkShare 获取龙虎榜数据
             try:
-                from core.infrastructure.providers.integration.compat import (
-                    get_provider_compat,
-                )
+                from core.infrastructure.providers.integration.compat import get_provider_compat
 
                 akshare_provider = await get_provider_compat("akshare")
 

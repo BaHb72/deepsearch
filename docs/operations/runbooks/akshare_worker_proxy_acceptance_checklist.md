@@ -12,6 +12,7 @@
    - `prefer_ipv4_fallback`
 
 通过标准：
+
 - `uv pip check` 无冲突。
 - 配置文件可被系统正常加载（启动日志无配置解析错误）。
 
@@ -23,6 +24,7 @@
    - `netsh winhttp show proxy`
 
 通过标准：
+
 - 若网络要求代理，至少有一种系统代理来源可用（Internet Settings 或 WinHTTP）。
 - 若网络不要求代理，确认已关闭系统代理并在配置中评估是否关闭 `use_system_proxy`。
 
@@ -34,6 +36,7 @@
    - `Invoke-WebRequest 'https://<your-worker>.workers.dev/proxy?url=https%3A%2F%2Fquote.eastmoney.com%2Fcenter%2Fgridlist.html%23hs_a_board' -UseBasicParsing`
 
 通过标准：
+
 - `/health` 返回 `200`，且 `status=healthy`。
 - `/proxy` 返回 `200`，并包含目标站点正文。
 
@@ -69,6 +72,7 @@ asyncio.run(main())
 ```
 
 通过标准：
+
 - `ProxyClient` 请求状态码为 `200`，`session.proxies` 非空（在需要代理的网络中）。
 - `AkShareProvider` 输出 `access_mode=worker`，且 `error` 为空。
 
@@ -80,5 +84,6 @@ asyncio.run(main())
 2. 重启服务后复验接口可用性。
 
 通过标准：
+
 - 回滚后系统可恢复稳定响应，不阻塞主流程。
 - 在问题未解决前保留 Worker 配置，不删除历史参数，便于后续对比排障。

@@ -9,8 +9,8 @@
 
 本轮评审发现 3 个会在常规部署路径触发的 P1 问题：
 
-1. `apps/api/api/endpoints/amazingdata/amazingdata_api.py` 的 `/login` 将 `AmazingDataExtended` 写入 `DataProviderFactory._instances["amazingdata"]`，与工厂路径中 `check_health()` 契约不兼容。  
-2. `packages/core/infrastructure/providers/integration/fastapi.py` 的 `_iter_enabled_provider_configs()` 扁平化了 `provider["config"]`，导致 `AkShareFactory` 在预加载时读不到嵌套配置。  
+1. `apps/api/api/endpoints/amazingdata/amazingdata_api.py` 的 `/login` 将 `AmazingDataExtended` 写入 `DataProviderFactory._instances["amazingdata"]`，与工厂路径中 `check_health()` 契约不兼容。
+2. `packages/core/infrastructure/providers/integration/fastapi.py` 的 `_iter_enabled_provider_configs()` 扁平化了 `provider["config"]`，导致 `AkShareFactory` 在预加载时读不到嵌套配置。
 3. `Dockerfile.dask` 通过 `COPY packages/core/config/ ./core/config/` 把完整配置目录打进镜像层，包含 `settings.prod.yaml`、`data_sources.yaml` 等敏感配置载体。
 
 ## 关键证据
@@ -24,14 +24,14 @@
 
 ## 影响
 
-1. AmazingData 登录态无法稳定复用，首次业务请求可能触发健康检查异常并重建 Actor。  
-2. FastAPI 启动期预加载 `akshare` 时配置回退默认值，可能绕过代理设置。  
+1. AmazingData 登录态无法稳定复用，首次业务请求可能触发健康检查异常并重建 Actor。
+2. FastAPI 启动期预加载 `akshare` 时配置回退默认值，可能绕过代理设置。
 3. Dask 镜像分发和仓库存储路径扩大敏感信息暴露面，存在凭据泄露风险。
 
 ## 建议修复
 
-1. 登录会话与 Actor 缓存解耦，禁止把本地登录实例写入 `DataProviderFactory` 的 `amazingdata` 键。  
-2. 预加载路径保持 provider 外层结构，`config` 子字段原样保留给工厂层解析。  
+1. 登录会话与 Actor 缓存解耦，禁止把本地登录实例写入 `DataProviderFactory` 的 `amazingdata` 键。
+2. 预加载路径保持 provider 外层结构，`config` 子字段原样保留给工厂层解析。
 3. Dask 镜像仅白名单复制配置代码和脱敏模板，避免复制真实 `settings*.yaml` / `data_sources.yaml`。
 
 ## 解决记录

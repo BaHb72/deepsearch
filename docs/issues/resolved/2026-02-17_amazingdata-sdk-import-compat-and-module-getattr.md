@@ -1,9 +1,9 @@
 # AmazingData SDK 导入兼容与模块级 __getattr__ 导入期误触发
 
-- **发现日期**: 2026-02-17
-- **严重程度**: 高
-- **类型**: runtime / compatibility
-- **状态**: resolved
+- __发现日期__: 2026-02-17
+- __严重程度__: 高
+- __类型__: runtime / compatibility
+- __状态__: resolved
 
 ## 问题描述
 
@@ -13,7 +13,7 @@
 
 实际并非单纯“SDK 不存在”，而是两个问题叠加：
 
-1. `tgw` 可导入但仅暴露 `Login`（大写），代码路径要求 `login`（小写）。  
+1. `tgw` 可导入但仅暴露 `Login`（大写），代码路径要求 `login`（小写）。
 2. `amazingdata_extended.py` 的模块级 `__getattr__` 在导入阶段会被动触发 `_load_sdk()`，导致导入链路提前失败。
 
 ## 关键证据
@@ -25,14 +25,14 @@
 
 ## 影响
 
-1. 单测与应用导入链路可能在模块加载阶段中断。  
-2. 错误文案“Cannot import”会掩盖真实兼容问题，导致误判为缺包。  
+1. 单测与应用导入链路可能在模块加载阶段中断。
+2. 错误文案“Cannot import”会掩盖真实兼容问题，导致误判为缺包。
 3. `tgw` 可用场景下仍可能在 `sdk.login()` 处崩溃。
 
 ## 解决记录
 
-- **解决日期**: 2026-02-17
-- **解决方式**:
+- __解决日期__: 2026-02-17
+- __解决方式__:
   - `packages/core/infrastructure/providers/implementations/amazingdata/__init__.py`
     - `StockListRecord` 改为从 `core.domain.market_data` 直接导入，避免触发扩展模块 `__getattr__` 回退路径。
   - `packages/core/infrastructure/providers/implementations/amazingdata/amazingdata_extended.py`

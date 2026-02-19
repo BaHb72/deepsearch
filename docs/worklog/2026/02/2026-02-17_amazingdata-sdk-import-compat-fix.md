@@ -16,7 +16,7 @@
 
 根因并非单一缺包，而是：
 
-1. `tgw` 只暴露 `Login`，上层调用契约是 `login`。  
+1. `tgw` 只暴露 `Login`，上层调用契约是 `login`。
 2. 模块级 `__getattr__` 在导入期会触发 SDK 懒加载，把可恢复兼容问题放大为导入失败。
 
 ### 现有方案的问题
@@ -29,10 +29,10 @@
 
 ### 选择: 统一兼容入口 + 限制导入期动态回退
 
-**原因**:
+__原因__:
 
-1. 优先恢复“模块可导入”这一底线能力。  
-2. 将 `tgw` 与 `AmazingData` 的入口差异在加载边界统一消化。  
+1. 优先恢复“模块可导入”这一底线能力。
+2. 将 `tgw` 与 `AmazingData` 的入口差异在加载边界统一消化。
 3. 避免 `__getattr__` 影响 import machinery 的特殊属性访问。
 
 ### 关键改动
@@ -50,10 +50,10 @@
 
 ## 验证
 
-1. 导入验证  
-   - `import core.infrastructure.providers.implementations.amazingdata.amazingdata_extended` 成功。  
-2. 目标回归  
-   - `pytest tests/unit/api/test_amazingdata_provider_resolution.py tests/unit/infrastructure/providers/test_fastapi_integration.py tests/unit/infrastructure/test_dockerfile_dask_security.py -q`  
+1. 导入验证
+   - `import core.infrastructure.providers.implementations.amazingdata.amazingdata_extended` 成功。
+2. 目标回归
+   - `pytest tests/unit/api/test_amazingdata_provider_resolution.py tests/unit/infrastructure/providers/test_fastapi_integration.py tests/unit/infrastructure/test_dockerfile_dask_security.py -q`
    - 结果：`7 passed`。
 
 ---

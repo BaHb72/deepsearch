@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from core.compute.dask_worker_manager import DaskConfig, DaskWorkerManager
 
 
@@ -18,7 +17,9 @@ async def test_resolve_worker_contact_host_prefers_explicit_config() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_worker_contact_host_prefers_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_resolve_worker_contact_host_prefers_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     manager = DaskWorkerManager(config=DaskConfig())
     manager._parsed_host = "localhost"
     manager._parsed_port = 8786

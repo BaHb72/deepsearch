@@ -1,6 +1,6 @@
+import asyncio
 import json
 import sys
-import asyncio
 from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -404,7 +404,9 @@ def test_check_amazingdata_probe_skipped_when_no_win_worker(monkeypatch, tmp_pat
 
     monkeypatch.setitem(sys.modules, "distributed", SimpleNamespace(Client=_FakeDaskClient))
     get_provider_mock = AsyncMock(return_value=object())
-    monkeypatch.setattr("apps.api.api.providers.DataProviderFactory.get_provider_async", get_provider_mock)
+    monkeypatch.setattr(
+        "apps.api.api.providers.DataProviderFactory.get_provider_async", get_provider_mock
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -466,7 +468,9 @@ def test_check_amazingdata_probe_skipped_when_scheduler_unreachable(monkeypatch,
 
     monkeypatch.setitem(sys.modules, "distributed", SimpleNamespace(Client=_BrokenDaskClient))
     get_provider_mock = AsyncMock(return_value=object())
-    monkeypatch.setattr("apps.api.api.providers.DataProviderFactory.get_provider_async", get_provider_mock)
+    monkeypatch.setattr(
+        "apps.api.api.providers.DataProviderFactory.get_provider_async", get_provider_mock
+    )
 
     runner = CliRunner()
     result = runner.invoke(

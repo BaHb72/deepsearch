@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import pytest
+from core.infrastructure.providers.interfaces.capabilities import DataCapability
 from fastapi import HTTPException
 
 from apps.api.api.endpoints.qmt import miniqmt
-from core.infrastructure.providers.interfaces.capabilities import DataCapability
 
 
 class _AmazingDataQuoteProvider:

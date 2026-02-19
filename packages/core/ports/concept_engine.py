@@ -36,4 +36,3 @@ __all__ = [
     "SnapshotCallback",
     "SnapshotPayload",
 ]
-

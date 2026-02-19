@@ -36,4 +36,3 @@ async def test_refresh_workers_returns_skipped_when_provider_no_health_method() 
     assert result["message"] == "当前 Provider 不支持 Worker 刷新，已跳过"
     assert result["healthy_count"] == 0
     assert result["total_count"] == 0
-

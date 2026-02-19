@@ -9,7 +9,6 @@ import textwrap
 
 import pytest
 
-
 pytestmark = pytest.mark.manual(reason="需要手动环境和凭证")
 
 if importlib.util.find_spec("AmazingData") is None:

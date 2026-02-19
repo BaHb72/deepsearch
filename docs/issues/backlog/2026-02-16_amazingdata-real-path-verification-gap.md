@@ -9,7 +9,7 @@
 
 当前 AmazingData 的“可达性证明”已从纯网络层升级，但在独立 CLI 进程下的真实调用稳定性仍存在盲区：
 
-1. 过去 `check-amazingdata` 只覆盖配置/TCP/Worker，无法证明业务方法可调用  
+1. 过去 `check-amazingdata` 只覆盖配置/TCP/Worker，无法证明业务方法可调用
 2. 新增真实 `get_calendar` 探测后，暴露出独立进程下 Actor 链路偶发失败（超时/Worker 不可达）
 
 ## 关键证据

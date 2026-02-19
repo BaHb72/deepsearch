@@ -1,6 +1,6 @@
 # DeepSearch 系统架构现状（门外汉版）
 
-> 更新日期：2026-02-17  
+> 更新日期：2026-02-17
 > 这份文档不是“理想架构图”，而是基于当前代码与配置的“真实运行现状”。
 
 ## 1. 先说结论（1 分钟版）
@@ -166,27 +166,27 @@ DeepSearch 现在可以理解为一个“交易数据中台”：
 
 ## 7. 本文依据（关键文件）
 
-- 启动与运行：  
-  `packages/core/main.py`  
-  `packages/core/cli/main.py`  
-  `packages/core/core/runtime/engine.py`  
+- 启动与运行：
+  `packages/core/main.py`
+  `packages/core/cli/main.py`
+  `packages/core/core/runtime/engine.py`
   `apps/api/server.py`
 
-- 配置：  
-  `packages/core/config/loader.py`  
-  `packages/core/config/settings.dev.yaml`  
-  `packages/core/config/settings.prod.yaml`  
+- 配置：
+  `packages/core/config/loader.py`
+  `packages/core/config/settings.dev.yaml`
+  `packages/core/config/settings.prod.yaml`
   `packages/core/config/data_sources.yaml`
 
-- 数据源与实时链路：  
-  `packages/core/infrastructure/providers/container.py`  
-  `packages/core/infrastructure/providers/managers/data_source_manager.py`  
-  `apps/api/api/providers.py`  
-  `apps/api/api/provider_deps.py`  
-  `packages/core/application/market_data/orchestrator.py`  
+- 数据源与实时链路：
+  `packages/core/infrastructure/providers/container.py`
+  `packages/core/infrastructure/providers/managers/data_source_manager.py`
+  `apps/api/api/providers.py`
+  `apps/api/api/provider_deps.py`
+  `packages/core/application/market_data/orchestrator.py`
   `apps/api/api/endpoints/market_data/live_api.py`
 
-- 已知问题台账：  
-  `docs/issues/README.md`  
-  `docs/issues/backlog/2026-02-16_provider-dual-path-not-converged.md`  
+- 已知问题台账：
+  `docs/issues/README.md`
+  `docs/issues/backlog/2026-02-16_provider-dual-path-not-converged.md`
   `docs/issues/backlog/2026-02-16_provider-modules-overloaded-responsibility.md`

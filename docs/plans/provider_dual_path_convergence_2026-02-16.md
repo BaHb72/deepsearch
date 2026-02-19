@@ -43,4 +43,3 @@
 1. `rg "from apps\\.api\\.api\\.providers"` 仅剩兼容层或测试文件
 2. 统一由容器负责创建、健康检查、关闭
 3. `apps/api/api/providers.py` 不再承担主路径职责
-

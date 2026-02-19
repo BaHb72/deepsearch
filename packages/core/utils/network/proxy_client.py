@@ -54,7 +54,9 @@ class ProxyClient:
         # 获取配置对象（用于读取 worker URL 与网络选项）
         config = get_config()
         workers_cfg = (
-            getattr(config, "cloudflare_workers", None) if config and hasattr(config, "cloudflare_workers") else None
+            getattr(config, "cloudflare_workers", None)
+            if config and hasattr(config, "cloudflare_workers")
+            else None
         )
 
         # 获取 Worker URL

@@ -57,9 +57,7 @@ class MiniQMTIntradayDataProvider(IntradayDataProvider):
         """
         获取分时K线数据 - 使用MiniQMT真实数据
         """
-        from core.adapters.market_data.miniqmt_polling_adapter import (
-            get_shared_miniqmt_collector,
-        )
+        from core.adapters.market_data.miniqmt_polling_adapter import get_shared_miniqmt_collector
 
         try:
             # 复用全局 collector，避免每次请求创建定时器线程

@@ -1,7 +1,7 @@
 # T-Trading 止血：多数据源回退与运行时守护
 
-> 日期: 2026-02-17  
-> 模块: strategy-center / ttrading / provider-factory  
+> 日期: 2026-02-17
+> 模块: strategy-center / ttrading / provider-factory
 > 类型: bugfix / stability
 
 ---

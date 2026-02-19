@@ -6,7 +6,6 @@ from typing import Any
 
 import pandas as pd
 import pytest
-
 from core.strategies.ttrading import providers as ttrading_providers
 
 

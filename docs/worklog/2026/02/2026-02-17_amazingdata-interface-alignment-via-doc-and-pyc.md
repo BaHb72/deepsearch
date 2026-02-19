@@ -12,14 +12,14 @@
 
 “接口文档、SDK 实现、项目代码”三者之间出现偏差：
 
-1. 文档定义 `get_option_mon_ctr_specs`，代码实际调用 `get_option_mon_ctr_spcon`。  
-2. `AmazingDataExtended` 没有完整暴露 SDK 1.0.28 的方法集合。  
+1. 文档定义 `get_option_mon_ctr_specs`，代码实际调用 `get_option_mon_ctr_spcon`。
+2. `AmazingDataExtended` 没有完整暴露 SDK 1.0.28 的方法集合。
 3. API 层缺少部分基础接口路由，和文档不一致。
 
 ### 诊断路径
 
-1. 读取最新文档：`docs/datasources/amazingdata/amazingdata_developer_manual.md`。  
-2. 反编译 `.venv` 中 `AmazingData` 的 `base_data.pyc/info_data.pyc/market_data.pyc`，提取类方法列表。  
+1. 读取最新文档：`docs/datasources/amazingdata/amazingdata_developer_manual.md`。
+2. 反编译 `.venv` 中 `AmazingData` 的 `base_data.pyc/info_data.pyc/market_data.pyc`，提取类方法列表。
 3. 用 AST 对比 `AmazingDataExtended` 方法集合，定位缺口。
 
 ---
@@ -30,8 +30,8 @@
 
 **原因**:
 
-1. 运行时契约应以依赖包实际能力为准。  
-2. 对外接口应与文档一致，同时避免破坏旧调用方。  
+1. 运行时契约应以依赖包实际能力为准。
+2. 对外接口应与文档一致，同时避免破坏旧调用方。
 3. Actor/Dask 路径和直连路径需要同一命名语义。
 
 ### 关键改动
@@ -55,8 +55,8 @@
 
 ## 验证
 
-1. `ruff check`（本轮修改文件）通过。  
-2. `pytest --noconftest tests/unit/api/test_amazingdata_interface_alignment.py -q` 通过（4 passed）。  
+1. `ruff check`（本轮修改文件）通过。
+2. `pytest --noconftest tests/unit/api/test_amazingdata_interface_alignment.py -q` 通过（4 passed）。
 3. 反编译对齐复核：`AmazingDataExtended` 相比 SDK 方法缺口从 17 降为 0。
 
 ---

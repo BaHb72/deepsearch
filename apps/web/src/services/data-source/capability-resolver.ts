@@ -127,4 +127,3 @@ export async function getSwitchCandidates(args: SwitchCandidatesArgs): Promise<D
     }
     return supportedSources.filter((source) => source !== current)
 }
-

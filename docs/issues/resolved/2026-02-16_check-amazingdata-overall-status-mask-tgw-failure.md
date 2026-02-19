@@ -38,4 +38,3 @@ P1
   - 修正最终退出码：顶层状态为 `failed` 时返回非零退出码
   - 新增测试 `tests/unit/cli/test_check_amazingdata_command.py::test_check_amazingdata_marks_overall_failed_when_tgw_path_missing`
   - 实测 `uv run deepsearch check-amazingdata prod --timeout 1`，当 TGW 路径不存在时顶层状态正确为 `failed`
-

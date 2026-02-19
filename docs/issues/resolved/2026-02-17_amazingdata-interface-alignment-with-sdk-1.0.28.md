@@ -9,8 +9,8 @@
 
 基于最新文档 `docs/datasources/amazingdata/amazingdata_developer_manual.md` 与本地依赖 `AmazingData 1.0.28` 的 `.pyc` 反编译结果，发现接口实现存在下列不一致：
 
-1. `get_option_mon_ctr_specs` 在代码中误写为 `get_option_mon_ctr_spcon`。  
-2. `AmazingDataExtended` 缺失多个 SDK 公开方法（基础数据与可转债相关）。  
+1. `get_option_mon_ctr_specs` 在代码中误写为 `get_option_mon_ctr_spcon`。
+2. `AmazingDataExtended` 缺失多个 SDK 公开方法（基础数据与可转债相关）。
 3. API 路由缺失文档中已声明的基础接口（如 `future-code-list`、`option-code-list`、`adj-factor`、`stock-basic`）。
 
 ## 关键证据
@@ -28,8 +28,8 @@
 
 ## 影响
 
-1. 期权月合约接口在部分路径上会调用错误方法名导致运行失败。  
-2. 业务层无法使用 SDK 已提供的部分能力。  
+1. 期权月合约接口在部分路径上会调用错误方法名导致运行失败。
+2. 业务层无法使用 SDK 已提供的部分能力。
 3. 接口文档、SDK 实现与 API 暴露面不一致，增加联调与运维排障成本。
 
 ## 解决记录

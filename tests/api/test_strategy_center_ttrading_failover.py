@@ -91,7 +91,9 @@ async def test_start_engine_uses_fallback_provider_when_available(monkeypatch: p
     fake_engine = _FakeEngine()
 
     monkeypatch.setattr(ttrading, "_FailoverIntradayDataProvider", _FallbackProvider)
-    monkeypatch.setattr(ttrading, "get_ttrading_engine", lambda _symbol, _provider=None: fake_engine)
+    monkeypatch.setattr(
+        ttrading, "get_ttrading_engine", lambda _symbol, _provider=None: fake_engine
+    )
 
     request = ttrading.EngineStartRequest(use_real_data=True)
     result = await ttrading.start_engine("000001.SZ", request)

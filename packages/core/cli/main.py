@@ -6,8 +6,8 @@ DeepSearch 命令行接口
 
 import asyncio
 import contextlib
-import io
 import inspect
+import io
 import json
 import os
 import socket
@@ -343,7 +343,9 @@ def check_amazingdata(
         if not isinstance(checks, list):
             return "failed"
 
-        statuses = {str(item.get("status", "")).lower() for item in checks if isinstance(item, dict)}
+        statuses = {
+            str(item.get("status", "")).lower() for item in checks if isinstance(item, dict)
+        }
         if "failed" in statuses:
             return "failed"
         if "warning" in statuses:
@@ -426,9 +428,7 @@ def check_amazingdata(
         if not provider_entry:
             return None, None
 
-        from core.config.models.amazingdata import (
-            AmazingDataConfig as SettingsAmazingDataConfig,
-        )
+        from core.config.models.amazingdata import AmazingDataConfig as SettingsAmazingDataConfig
 
         provider_config = _to_dict(provider_entry.get("config"))
         for key in (
@@ -571,7 +571,9 @@ def check_amazingdata(
         scheduler_packages = (
             scheduler_section.get("packages", {}) if isinstance(scheduler_section, dict) else {}
         )
-        client_packages = client_section.get("packages", {}) if isinstance(client_section, dict) else {}
+        client_packages = (
+            client_section.get("packages", {}) if isinstance(client_section, dict) else {}
+        )
         if not isinstance(scheduler_packages, dict) or not isinstance(client_packages, dict):
             return []
 
@@ -580,9 +582,7 @@ def check_amazingdata(
             scheduler_ver = scheduler_packages.get(package_name)
             client_ver = client_packages.get(package_name)
             if scheduler_ver and client_ver and str(scheduler_ver) != str(client_ver):
-                mismatches.append(
-                    f"{package_name}: client={client_ver}, scheduler={scheduler_ver}"
-                )
+                mismatches.append(f"{package_name}: client={client_ver}, scheduler={scheduler_ver}")
         return mismatches
 
     def _extract_endpoint_host(endpoint: str) -> str:
@@ -751,9 +751,9 @@ def check_amazingdata(
     probe_skip_reason: str | None = None
     probe_skip_suggestion: str | None = None
     worker_bootstrap_command = (
-        "`uv run --python ./.venv/Scripts/python.exe python -c \"import asyncio; "
+        '`uv run --python ./.venv/Scripts/python.exe python -c "import asyncio; '
         "from core.compute.dask_worker_manager import ensure_windows_workers; "
-        "print(asyncio.run(ensure_windows_workers()))\"`"
+        'print(asyncio.run(ensure_windows_workers()))"`'
     )
 
     if mode == "distributed":
@@ -785,8 +785,7 @@ def check_amazingdata(
                         add_check(
                             "Dask 版本一致性",
                             "warning",
-                            "检测到 client/scheduler 版本不一致: "
-                            + "; ".join(version_mismatches),
+                            "检测到 client/scheduler 版本不一致: " + "; ".join(version_mismatches),
                             "建议对齐 dask/distributed 版本后重启 Scheduler 和 Worker",
                         )
                     else:
@@ -821,9 +820,7 @@ def check_amazingdata(
                             if _windows_worker_autostart_enabled(settings):
                                 suggestion += f"（也可执行 {worker_bootstrap_command}）"
                             probe_skip_reason = "Scheduler 在线但无可用 Worker"
-                            probe_skip_suggestion = (
-                                f"{suggestion}；修复后重试 `deepsearch check-amazingdata dev --probe-calendar`"
-                            )
+                            probe_skip_suggestion = f"{suggestion}；修复后重试 `deepsearch check-amazingdata dev --probe-calendar`"
                             add_check(
                                 "Dask Worker 可用性",
                                 "failed",
@@ -900,7 +897,9 @@ def check_amazingdata(
                                     unreachable_workers = [
                                         addr
                                         for addr, info in backconnect.items()
-                                        if not (isinstance(info, dict) and bool(info.get("reachable")))
+                                        if not (
+                                            isinstance(info, dict) and bool(info.get("reachable"))
+                                        )
                                     ]
 
                                     if not reachable_workers:
@@ -970,9 +969,7 @@ def check_amazingdata(
             )
         else:
             try:
-                from core.infrastructure.providers.integration.compat import (
-                    get_provider_compat,
-                )
+                from core.infrastructure.providers.integration.compat import get_provider_compat
 
                 async def _run_calendar_probe(provider_obj: object) -> object:
                     calendar_method = getattr(provider_obj, "get_calendar", None)
@@ -1004,7 +1001,9 @@ def check_amazingdata(
                     actor_call = getattr(actor_obj, "call", None)
                     if callable(actor_call):
                         actor_result = await asyncio.wait_for(
-                            actor_call("get_calendar", data_type=probe_data_type, market=probe_market),
+                            actor_call(
+                                "get_calendar", data_type=probe_data_type, market=probe_market
+                            ),
                             timeout=_resolve_effective_timeout(),
                         )
                         if actor_result is None:
@@ -1070,8 +1069,9 @@ def check_amazingdata(
                             pass
 
                 if suppress_third_party_output:
-                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                        io.StringIO()
+                    with (
+                        contextlib.redirect_stdout(io.StringIO()),
+                        contextlib.redirect_stderr(io.StringIO()),
                     ):
                         calendar_result = asyncio.run(_run_probe_flow())
                 else:
