@@ -1,5 +1,6 @@
 """市场实时行情 API 基本连通性与缓存回退测试"""
 
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -48,7 +49,9 @@ async def test_market_strength_returns_cached_when_provider_offline(monkeypatch)
         def __init__(self):
             self.result = DummyResult()
 
-        async def fetch_strength(self, windows, *, boards=None, limit=None):
+        async def fetch_strength(
+            self, windows, *, boards=None, limit=None, module=None, source=None
+        ):
             return self.result
 
     async def fake_ensure_runtime(app_state, settings):
@@ -115,7 +118,7 @@ async def test_order_imbalance_returns_offline_payload_when_cache_empty(monkeypa
         def __init__(self):
             self.result = EmptyResult()
 
-        async def fetch_order_imbalance(self, window, *, limit=None):
+        async def fetch_order_imbalance(self, window, *, limit=None, module=None, source=None):
             return self.result
 
     async def fake_ensure_runtime(app_state, settings):
@@ -218,3 +221,65 @@ async def test_data_source_status_endpoint(monkeypatch):
     assert payload["adapters"]["akshare"]["status"] == "healthy"
     assert payload["detail"]["sources"]["akshare"]["status"] == "healthy"
     assert payload["timestamp"]
+
+
+@pytest.mark.asyncio
+async def test_concept_flow_realtime_singleflight(monkeypatch):
+    """相同参数并发请求应复用同一次上游调用。"""
+
+    from apps.api.api.endpoints.amazingdata import concept as concept_endpoint
+
+    calls = {"count": 0}
+    live_api._CONCEPT_FLOW_SINGLEFLIGHT.clear()
+
+    async def fake_get_concept_velocity(limit: int):
+        calls["count"] += 1
+        await asyncio.sleep(0.05)
+        return {
+            "success": True,
+            "data": [
+                {
+                    "name": "人工智能",
+                    "code": "BK001",
+                    "main_net_inflow": 12345.0,
+                    "velocity": 12345.0,
+                    "lead_stock": "000001",
+                    "change_pct": 1.5,
+                }
+            ],
+        }
+
+    monkeypatch.setattr(concept_endpoint, "get_concept_velocity", fake_get_concept_velocity)
+
+    app = Starlette()
+    app.state.app_state = SimpleNamespace()
+    app.state.settings = SimpleNamespace()
+
+    async def empty_receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    scope = {
+        "type": "http",
+        "app": app,
+        "method": "GET",
+        "path": "/api/market/live/concept-flow",
+        "headers": [],
+        "query_string": b"period=realtime&limit=10",
+    }
+
+    req_a = Request(scope, empty_receive)
+    req_b = Request(scope, empty_receive)
+
+    response_a, response_b = await asyncio.gather(
+        live_api.get_concept_flow(req_a, period="realtime", limit=10, source=None),
+        live_api.get_concept_flow(req_b, period="realtime", limit=10, source=None),
+    )
+
+    payload_a = json.loads(response_a.body.decode("utf-8"))
+    payload_b = json.loads(response_b.body.decode("utf-8"))
+
+    assert response_a.status_code == 200
+    assert response_b.status_code == 200
+    assert calls["count"] == 1
+    assert payload_a["count"] == 1
+    assert payload_b["count"] == 1

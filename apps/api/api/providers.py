@@ -1108,6 +1108,40 @@ class DataProviderFactory:
         }
 
 
+_fallback_akshare_direct_provider: Any | None = None
+_fallback_akshare_direct_provider_lock: asyncio.Lock | None = None
+
+
+def _get_fallback_akshare_direct_provider_lock() -> asyncio.Lock:
+    global _fallback_akshare_direct_provider_lock
+    if _fallback_akshare_direct_provider_lock is None:
+        _fallback_akshare_direct_provider_lock = asyncio.Lock()
+    return _fallback_akshare_direct_provider_lock
+
+
+async def _get_fallback_akshare_direct_provider() -> Any:
+    global _fallback_akshare_direct_provider
+
+    if _fallback_akshare_direct_provider is not None:
+        return _fallback_akshare_direct_provider
+
+    async with _get_fallback_akshare_direct_provider_lock():
+        if _fallback_akshare_direct_provider is not None:
+            return _fallback_akshare_direct_provider
+
+        from core.infrastructure.providers.implementations.akshare.akshare_direct import (
+            AKShareDirectProvider,
+        )
+
+        provider = AKShareDirectProvider()
+        initialized = await provider.initialize()
+        if initialized is False:
+            raise RuntimeError("AKShareDirectProvider initialize returned False")
+        _fallback_akshare_direct_provider = provider
+        logger.info("Initialized fallback AKShareDirectProvider singleton for zt_pool")
+        return _fallback_akshare_direct_provider
+
+
 # Dependency injection helpers for FastAPI
 async def get_akshare_provider():
     """FastAPI dependency for AkShare provider."""
@@ -1170,16 +1204,11 @@ async def get_market_service():
             """获取涨停股池"""
             from datetime import datetime as dt
 
-            from core.infrastructure.providers.implementations.akshare.akshare_direct import (
-                AKShareDirectProvider,
-            )
-
             if date is None:
                 date = dt.now().strftime("%Y%m%d")
 
             try:
-                provider = AKShareDirectProvider()
-                await provider.initialize()
+                provider = await _get_fallback_akshare_direct_provider()
                 result = await provider.get_limit_up_pool(date)
 
                 if result:

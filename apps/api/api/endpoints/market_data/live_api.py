@@ -6,7 +6,8 @@ import asyncio
 from datetime import datetime
 from datetime import time as time_type
 from datetime import timezone
-from typing import Any, Iterable, Sequence
+from time import perf_counter
+from typing import Any, Awaitable, Callable, Iterable, Sequence
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -15,6 +16,7 @@ from loguru import logger
 from pydantic import BaseModel
 from starlette.status import HTTP_200_OK
 
+from apps.api.api.middleware.deduplication import RequestDeduplicator
 from apps.api.services.market_data_runtime import (
     bind_market_data_handle,
     ensure_market_data_runtime,
@@ -29,6 +31,7 @@ MODULE_STORAGE_MAP: dict[str, str] = {
     "order_imbalance": "order_imbalance",
     "auction_quality": "auction_quality",
 }
+_CONCEPT_FLOW_SINGLEFLIGHT = RequestDeduplicator(ttl_seconds=1)
 
 
 class SwitchDataSourceRequest(BaseModel):
@@ -208,6 +211,50 @@ def _enabled_adapter_names(settings: Any | None) -> list[str]:
     if normalized:
         return _unique(normalized)
     return ["amazingdata", "miniqmt", "akshare"]
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return round((perf_counter() - started_at) * 1000, 2)
+
+
+def _new_stage_timings() -> dict[str, float]:
+    return {
+        "provider_ms": 0.0,
+        "upstream_ms": 0.0,
+        "normalize_ms": 0.0,
+        "cache_ms": 0.0,
+        "fallback_ms": 0.0,
+        "total_ms": 0.0,
+    }
+
+
+def _is_truthy(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _should_include_stage_timings(request: Request) -> bool:
+    return _is_truthy(request.query_params.get("debug_timings")) or _is_truthy(
+        request.headers.get("x-debug-timings")
+    )
+
+
+def _finalize_stage_timings(
+    request: Request,
+    *,
+    route: str,
+    request_started_at: float,
+    stage_timings: dict[str, float],
+    detail: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    stage_timings["total_ms"] = _elapsed_ms(request_started_at)
+    logger.debug("{} stage_timings_ms={}", route, stage_timings)
+    if not _should_include_stage_timings(request):
+        return detail
+    target = detail or {}
+    target["stage_timings_ms"] = stage_timings
+    return target
 
 
 def _ensure_runtime_components(
@@ -462,6 +509,54 @@ async def _fetch_concept_flow_from_akshare(
     return primary_items[:limit]
 
 
+async def _deduplicate_concept_flow_call(
+    *,
+    source: str,
+    indicator: str,
+    limit: int,
+    fetcher: Callable[[], Awaitable[Any]],
+) -> Any:
+    key = _CONCEPT_FLOW_SINGLEFLIGHT.get_request_key(
+        endpoint="/api/market/live/concept-flow",
+        params={"source": source, "indicator": indicator, "limit": limit},
+    )
+    return await _CONCEPT_FLOW_SINGLEFLIGHT.deduplicate(key, fetcher)
+
+
+async def _fetch_realtime_concept_flow(limit: int) -> dict[str, Any]:
+    from apps.api.api.endpoints.amazingdata.concept import get_concept_velocity
+
+    async def _fetch_velocity() -> dict[str, Any]:
+        return await get_concept_velocity(limit=limit)
+
+    result = await _deduplicate_concept_flow_call(
+        source="amazingdata",
+        indicator="realtime",
+        limit=limit,
+        fetcher=_fetch_velocity,
+    )
+    if isinstance(result, dict):
+        return result
+    raise RuntimeError("realtime concept flow returned invalid payload")
+
+
+async def _fetch_concept_flow_from_akshare_singleflight(
+    limit: int, indicator_label: str
+) -> list[dict[str, Any]]:
+    async def _fetch() -> list[dict[str, Any]]:
+        return await _fetch_concept_flow_from_akshare(limit=limit, indicator_label=indicator_label)
+
+    result = await _deduplicate_concept_flow_call(
+        source="akshare",
+        indicator=indicator_label,
+        limit=limit,
+        fetcher=_fetch,
+    )
+    if isinstance(result, list):
+        return result
+    return []
+
+
 @router.get("/strength")
 async def get_market_strength(
     request: Request,
@@ -472,11 +567,16 @@ async def get_market_strength(
 ) -> JSONResponse:
     """�ʱ�����ǿ�Ȱ񵥡�"""
 
+    request_started_at = perf_counter()
+    stage_timings = _new_stage_timings()
+
+    provider_started_at = perf_counter()
     settings = getattr(request.app.state, "settings", None)
     await ensure_market_data_runtime(request.app.state.app_state, settings)
     app_state, reader, pipeline = _ensure_runtime_components(request)
     provider_ready = _is_provider_ready(app_state)
     service = getattr(app_state, "market_data_service")
+    stage_timings["provider_ms"] += _elapsed_ms(provider_started_at)
 
     window_candidates: Sequence[str]
     if windows:
@@ -506,45 +606,63 @@ async def get_market_strength(
             source=current_source,
         )
 
-    strength_result = await _fetch(effective_source)
+    async def _fetch_with_timing(current_source: str | None):
+        upstream_started_at = perf_counter()
+        result = await _fetch(current_source)
+        stage_timings["upstream_ms"] += _elapsed_ms(upstream_started_at)
+        return result
+
+    strength_result = await _fetch_with_timing(effective_source)
 
     if not strength_result.items:
         if requested_source:
+            fallback_started_at = perf_counter()
             try:
                 fallback_detail = await asyncio.wait_for(
                     _ensure_fallback_data(app_state, "strength", requested_source), timeout=10.0
                 )
-                strength_result = await _fetch(requested_source)
+                strength_result = await _fetch_with_timing(requested_source)
                 effective_source = requested_source
             except asyncio.TimeoutError:
                 logger.warning("strength fallback 超时（5秒），返回空结果")
+            finally:
+                stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
         else:
             auto_source = _auto_fallback_source(
                 settings, "strength", error_code=None if provider_ready else "DATA_SOURCE_OFFLINE"
             )
             if auto_source:
+                fallback_started_at = perf_counter()
                 try:
                     fallback_detail = await asyncio.wait_for(
                         _ensure_fallback_data(app_state, "strength", auto_source), timeout=10.0
                     )
-                    strength_result = await _fetch(auto_source)
+                    strength_result = await _fetch_with_timing(auto_source)
                     effective_source = auto_source
                 except asyncio.TimeoutError:
                     logger.warning("strength fallback 超时（5秒），跳过 {} fallback", auto_source)
+                finally:
+                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
             elif provider_ready:
+                fallback_started_at = perf_counter()
                 try:
                     await asyncio.wait_for(refresh_market_data_once(app_state), timeout=10.0)
-                    strength_result = await _fetch(None)
+                    strength_result = await _fetch_with_timing(None)
                     effective_source = None
                 except asyncio.TimeoutError:
                     logger.warning("strength refresh 超时（5秒），返回空结果")
+                finally:
+                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
 
+    cache_started_at = perf_counter()
     cache_info = {
         "cachedAt": strength_result.cached_at,
         "expiresAt": strength_result.expires_at,
     }
     cache_info = {k: v for k, v in cache_info.items() if v}
+    stage_timings["cache_ms"] += _elapsed_ms(cache_started_at)
 
+    normalize_started_at = perf_counter()
     is_trading = _is_trading_hours()
     payload = {
         "windows": list(window_candidates),
@@ -557,10 +675,21 @@ async def get_market_strength(
         "mode": "realtime" if is_trading else "summary",
         "is_trading_hours": is_trading,
     }
+    stage_timings["normalize_ms"] += _elapsed_ms(normalize_started_at)
     if cache_info:
         payload["cache"] = cache_info
+    detail: dict[str, Any] = {}
     if fallback_detail:
-        payload.setdefault("detail", {})["fallback"] = fallback_detail
+        detail["fallback"] = fallback_detail
+    finalized_detail = _finalize_stage_timings(
+        request,
+        route="/api/market/live/strength",
+        request_started_at=request_started_at,
+        stage_timings=stage_timings,
+        detail=detail or None,
+    )
+    if finalized_detail:
+        payload["detail"] = finalized_detail
 
     if not strength_result.items:
         payload["stale"] = True
@@ -644,11 +773,16 @@ async def get_board_overview(
 ) -> JSONResponse:
     """����/��ҵ���ʵʱ������"""
 
+    request_started_at = perf_counter()
+    stage_timings = _new_stage_timings()
+
+    provider_started_at = perf_counter()
     settings = getattr(request.app.state, "settings", None)
     await ensure_market_data_runtime(request.app.state.app_state, settings)
     app_state, reader, pipeline = _ensure_runtime_components(request)
     provider_ready = _is_provider_ready(app_state)
     service = getattr(app_state, "market_data_service")
+    stage_timings["provider_ms"] += _elapsed_ms(provider_started_at)
 
     if window:
         window_candidates: Sequence[str] = [_unique([window])[0]]
@@ -672,18 +806,27 @@ async def get_board_overview(
             [window_name], boards=None, limit=None, module=cache_module, source=current_source
         )
 
-    strength_result = await _fetch(requested_source)
+    async def _fetch_with_timing(current_source: str | None):
+        upstream_started_at = perf_counter()
+        result = await _fetch(current_source)
+        stage_timings["upstream_ms"] += _elapsed_ms(upstream_started_at)
+        return result
+
+    strength_result = await _fetch_with_timing(requested_source)
 
     if not strength_result.items:
         if requested_source:
+            fallback_started_at = perf_counter()
             try:
                 fallback_detail = await asyncio.wait_for(
                     _ensure_fallback_data(app_state, "board_overview", requested_source),
                     timeout=10.0,
                 )
-                strength_result = await _fetch(requested_source)
+                strength_result = await _fetch_with_timing(requested_source)
             except asyncio.TimeoutError:
                 logger.warning("board_overview fallback 超时（5秒），返回空结果")
+            finally:
+                stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
         else:
             auto_source = _auto_fallback_source(
                 settings,
@@ -691,23 +834,33 @@ async def get_board_overview(
                 error_code=None if provider_ready else "DATA_SOURCE_OFFLINE",
             )
             if auto_source:
+                fallback_started_at = perf_counter()
                 try:
                     fallback_detail = await asyncio.wait_for(
                         _ensure_fallback_data(app_state, "board_overview", auto_source),
                         timeout=10.0,
                     )
-                    strength_result = await _fetch(auto_source)
+                    strength_result = await _fetch_with_timing(auto_source)
                     requested_source = auto_source
                 except asyncio.TimeoutError:
                     logger.warning(
                         "board_overview fallback 超时（5秒），跳过 {} fallback", auto_source
                     )
+                finally:
+                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
             elif provider_ready:
-                await refresh_market_data_once(app_state)
-                strength_result = await _fetch(None)
+                fallback_started_at = perf_counter()
+                try:
+                    await refresh_market_data_once(app_state)
+                    strength_result = await _fetch_with_timing(None)
+                finally:
+                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
 
+    cache_started_at = perf_counter()
     board_snapshot, _ = await reader.fetch_board_universe()
+    stage_timings["cache_ms"] += _elapsed_ms(cache_started_at)
 
+    normalize_started_at = perf_counter()
     overview_items: list[dict[str, Any]] = []
     seen: set[str] = set()
     for entry in strength_result.items:
@@ -747,12 +900,15 @@ async def get_board_overview(
     overview_items.sort(key=lambda item: item.get("inflow_speed") or 0.0, reverse=True)
     if limit and len(overview_items) > limit:
         overview_items = overview_items[:limit]
+    stage_timings["normalize_ms"] += _elapsed_ms(normalize_started_at)
 
+    cache_started_at = perf_counter()
     cache_info = {
         "cachedAt": strength_result.cached_at,
         "expiresAt": strength_result.expires_at,
     }
     cache_info = {k: v for k, v in cache_info.items() if v}
+    stage_timings["cache_ms"] += _elapsed_ms(cache_started_at)
 
     orchestrator_info = _orchestrator_detail(app_state)
 
@@ -770,21 +926,31 @@ async def get_board_overview(
     }
     if cache_info:
         payload["cache"] = cache_info
+    detail: dict[str, Any] = {}
     if fallback_detail:
-        payload.setdefault("detail", {})["fallback"] = fallback_detail
+        detail["fallback"] = fallback_detail
     if not overview_items:
-        payload.setdefault("detail", {})["code"] = "DATA_SOURCE_EMPTY"
+        detail["code"] = "DATA_SOURCE_EMPTY"
     if orchestrator_info:
-        detail = payload.setdefault("detail", {})
+        route_detail = detail
         active_source = orchestrator_info.get("active")
         if active_source:
-            detail["source"] = active_source
+            route_detail["source"] = active_source
             adapter_health = orchestrator_info.get("adapters", {}).get(active_source)
             if adapter_health:
-                detail["health"] = adapter_health
+                route_detail["health"] = adapter_health
         adapters_snapshot = orchestrator_info.get("adapters")
         if adapters_snapshot:
-            detail["adapters"] = adapters_snapshot
+            route_detail["adapters"] = adapters_snapshot
+    finalized_detail = _finalize_stage_timings(
+        request,
+        route="/api/market/live/board-overview",
+        request_started_at=request_started_at,
+        stage_timings=stage_timings,
+        detail=detail or None,
+    )
+    if finalized_detail:
+        payload["detail"] = finalized_detail
     return JSONResponse(payload)
 
 
@@ -900,11 +1066,16 @@ async def get_order_imbalance(
 ) -> JSONResponse:
     """ί��������������񵥡�"""
 
+    request_started_at = perf_counter()
+    stage_timings = _new_stage_timings()
+
+    provider_started_at = perf_counter()
     settings = getattr(request.app.state, "settings", None)
     await ensure_market_data_runtime(request.app.state.app_state, settings)
     app_state, reader, _ = _ensure_runtime_components(request)
     provider_ready = _is_provider_ready(app_state)
     service = getattr(app_state, "market_data_service")
+    stage_timings["provider_ms"] += _elapsed_ms(provider_started_at)
 
     default_window = getattr(getattr(service, "default_order_window", None), "name", None)
     window_name = (window or default_window or "").strip()
@@ -920,18 +1091,27 @@ async def get_order_imbalance(
             window_name, limit=limit, module=cache_module, source=current_source
         )
 
-    imbalance_result = await _fetch(requested_source)
+    async def _fetch_with_timing(current_source: str | None):
+        upstream_started_at = perf_counter()
+        result = await _fetch(current_source)
+        stage_timings["upstream_ms"] += _elapsed_ms(upstream_started_at)
+        return result
+
+    imbalance_result = await _fetch_with_timing(requested_source)
 
     if not imbalance_result.items:
         if requested_source:
+            fallback_started_at = perf_counter()
             try:
                 fallback_detail = await asyncio.wait_for(
                     _ensure_fallback_data(app_state, "order_imbalance", requested_source),
                     timeout=10.0,
                 )
-                imbalance_result = await _fetch(requested_source)
+                imbalance_result = await _fetch_with_timing(requested_source)
             except asyncio.TimeoutError:
                 logger.warning("order_imbalance fallback 超时（5秒），返回空结果")
+            finally:
+                stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
         else:
             auto_source = _auto_fallback_source(
                 settings,
@@ -939,30 +1119,39 @@ async def get_order_imbalance(
                 error_code=None if provider_ready else "DATA_SOURCE_OFFLINE",
             )
             if auto_source:
+                fallback_started_at = perf_counter()
                 try:
                     fallback_detail = await asyncio.wait_for(
                         _ensure_fallback_data(app_state, "order_imbalance", auto_source),
                         timeout=10.0,
                     )
-                    imbalance_result = await _fetch(auto_source)
+                    imbalance_result = await _fetch_with_timing(auto_source)
                     requested_source = auto_source
                 except asyncio.TimeoutError:
                     logger.warning(
                         "order_imbalance fallback 超时（5秒），跳过 {} fallback", auto_source
                     )
+                finally:
+                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
             elif provider_ready:
+                fallback_started_at = perf_counter()
                 try:
                     await asyncio.wait_for(refresh_market_data_once(app_state), timeout=10.0)
-                    imbalance_result = await _fetch(None)
+                    imbalance_result = await _fetch_with_timing(None)
                 except asyncio.TimeoutError:
                     logger.warning("order_imbalance refresh 超时（5秒），返回空结果")
+                finally:
+                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
 
+    cache_started_at = perf_counter()
     cache_info = {
         "cachedAt": imbalance_result.cached_at,
         "expiresAt": imbalance_result.expires_at,
     }
     cache_info = {k: v for k, v in cache_info.items() if v}
+    stage_timings["cache_ms"] += _elapsed_ms(cache_started_at)
 
+    normalize_started_at = perf_counter()
     payload = {
         "window": window_name,
         "items": imbalance_result.items,
@@ -971,10 +1160,21 @@ async def get_order_imbalance(
         "retrieved_at": _iso_now(),
         "data_source": requested_source or _resolve_data_source_name(app_state),
     }
+    stage_timings["normalize_ms"] += _elapsed_ms(normalize_started_at)
     if cache_info:
         payload["cache"] = cache_info
+    detail: dict[str, Any] = {}
     if fallback_detail:
-        payload.setdefault("detail", {})["fallback"] = fallback_detail
+        detail["fallback"] = fallback_detail
+    finalized_detail = _finalize_stage_timings(
+        request,
+        route="/api/market/live/order-imbalance",
+        request_started_at=request_started_at,
+        stage_timings=stage_timings,
+        detail=detail or None,
+    )
+    if finalized_detail:
+        payload["detail"] = finalized_detail
 
     if not imbalance_result.items:
         payload["items"] = []
@@ -991,11 +1191,16 @@ async def get_auction_quality(
 ) -> JSONResponse:
     """���Ͼ�������ָ�ꡣ"""
 
+    request_started_at = perf_counter()
+    stage_timings = _new_stage_timings()
+
+    provider_started_at = perf_counter()
     settings = getattr(request.app.state, "settings", None)
     await ensure_market_data_runtime(request.app.state.app_state, settings)
     app_state, reader, pipeline = _ensure_runtime_components(request)
     provider_ready = _is_provider_ready(app_state)
     service = getattr(app_state, "market_data_service")
+    stage_timings["provider_ms"] += _elapsed_ms(provider_started_at)
 
     board_list = _unique(_parse_csv(boards))
     if not board_list:
@@ -1020,14 +1225,24 @@ async def get_auction_quality(
             board_list, module=cache_module, source=current_source
         )
 
-    auction_result = await _fetch(requested_source)
+    async def _fetch_with_timing(current_source: str | None):
+        upstream_started_at = perf_counter()
+        result = await _fetch(current_source)
+        stage_timings["upstream_ms"] += _elapsed_ms(upstream_started_at)
+        return result
+
+    auction_result = await _fetch_with_timing(requested_source)
 
     if not auction_result.items:
         if requested_source:
-            fallback_detail = await _ensure_fallback_data(
-                app_state, "auction_quality", requested_source
-            )
-            auction_result = await _fetch(requested_source)
+            fallback_started_at = perf_counter()
+            try:
+                fallback_detail = await _ensure_fallback_data(
+                    app_state, "auction_quality", requested_source
+                )
+                auction_result = await _fetch_with_timing(requested_source)
+            finally:
+                stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
         else:
             auto_source = _auto_fallback_source(
                 settings,
@@ -1035,21 +1250,32 @@ async def get_auction_quality(
                 error_code=None if provider_ready else "DATA_SOURCE_OFFLINE",
             )
             if auto_source:
-                fallback_detail = await _ensure_fallback_data(
-                    app_state, "auction_quality", auto_source
-                )
-                auction_result = await _fetch(auto_source)
-                requested_source = auto_source
+                fallback_started_at = perf_counter()
+                try:
+                    fallback_detail = await _ensure_fallback_data(
+                        app_state, "auction_quality", auto_source
+                    )
+                    auction_result = await _fetch_with_timing(auto_source)
+                    requested_source = auto_source
+                finally:
+                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
             elif provider_ready:
-                await refresh_market_data_once(app_state)
-                auction_result = await _fetch(None)
+                fallback_started_at = perf_counter()
+                try:
+                    await refresh_market_data_once(app_state)
+                    auction_result = await _fetch_with_timing(None)
+                finally:
+                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
 
+    cache_started_at = perf_counter()
     cache_info = {
         "cachedAt": auction_result.cached_at,
         "expiresAt": auction_result.expires_at,
     }
     cache_info = {k: v for k, v in cache_info.items() if v}
+    stage_timings["cache_ms"] += _elapsed_ms(cache_started_at)
 
+    normalize_started_at = perf_counter()
     payload = {
         "boards": board_list,
         "items": auction_result.items,
@@ -1058,10 +1284,21 @@ async def get_auction_quality(
         "retrieved_at": _iso_now(),
         "data_source": requested_source or _resolve_data_source_name(app_state),
     }
+    stage_timings["normalize_ms"] += _elapsed_ms(normalize_started_at)
     if cache_info:
         payload["cache"] = cache_info
+    detail: dict[str, Any] = {}
     if fallback_detail:
-        payload.setdefault("detail", {})["fallback"] = fallback_detail
+        detail["fallback"] = fallback_detail
+    finalized_detail = _finalize_stage_timings(
+        request,
+        route="/api/market/live/auction-quality",
+        request_started_at=request_started_at,
+        stage_timings=stage_timings,
+        detail=detail or None,
+    )
+    if finalized_detail:
+        payload["detail"] = finalized_detail
 
     if not auction_result.items:
         payload["items"] = []
@@ -1081,26 +1318,47 @@ async def get_concept_flow(
     source: str | None = Query(None, description="指定数据源，默认 amazingdata"),
 ) -> JSONResponse:
     """获取概念板块资金流向排行（替代订单失衡）。"""
+    request_started_at = perf_counter()
+    stage_timings = _new_stage_timings()
+
+    provider_started_at = perf_counter()
     period_value = _normalize_concept_period(period)
     requested_source = _normalize_source_param(source) or (
         "amazingdata" if period_value == "realtime" else "akshare"
     )
     detail: dict[str, Any] = {}
     data_source = requested_source
+    stage_timings["provider_ms"] += _elapsed_ms(provider_started_at)
+
+    def _respond(payload: dict[str, Any]) -> JSONResponse:
+        existing_detail = payload.get("detail")
+        detail_payload = existing_detail if isinstance(existing_detail, dict) else None
+        finalized_detail = _finalize_stage_timings(
+            request,
+            route="/api/market/live/concept-flow",
+            request_started_at=request_started_at,
+            stage_timings=stage_timings,
+            detail=detail_payload,
+        )
+        if finalized_detail:
+            payload["detail"] = finalized_detail
+        return JSONResponse(payload)
 
     if period_value == "realtime":
         try:
-            from apps.api.api.endpoints.amazingdata.concept import get_concept_velocity
-
-            result = await get_concept_velocity(limit=limit)
+            upstream_started_at = perf_counter()
+            result = await _fetch_realtime_concept_flow(limit=limit)
+            stage_timings["upstream_ms"] += _elapsed_ms(upstream_started_at)
             if result.get("success"):
+                normalize_started_at = perf_counter()
                 records = _extract_records(result)
                 items = _normalize_realtime_flow_items(records, data_source="amazingdata")
+                stage_timings["normalize_ms"] += _elapsed_ms(normalize_started_at)
                 has_realtime_inflow = any(
                     abs((item.get("main_net_inflow") or 0.0)) > 0.0 for item in items
                 )
                 if items and has_realtime_inflow:
-                    return JSONResponse(
+                    return _respond(
                         {
                             "period": period_value,
                             "items": items,
@@ -1120,12 +1378,15 @@ async def get_concept_flow(
                 "to": "akshare.today",
                 "reason": str(primary_error),
             }
+            fallback_started_at = perf_counter()
             try:
-                fallback_items = await _fetch_concept_flow_from_akshare(
+                upstream_started_at = perf_counter()
+                fallback_items = await _fetch_concept_flow_from_akshare_singleflight(
                     limit=limit, indicator_label="今日"
                 )
+                stage_timings["upstream_ms"] += _elapsed_ms(upstream_started_at)
                 if fallback_items:
-                    return JSONResponse(
+                    return _respond(
                         {
                             "period": period_value,
                             "items": fallback_items,
@@ -1139,8 +1400,10 @@ async def get_concept_flow(
             except Exception as fallback_error:
                 logger.warning(f"概念资金流 fallback 失败: {fallback_error}")
                 detail["fallback_error"] = str(fallback_error)
+            finally:
+                stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
 
-            return JSONResponse(
+            return _respond(
                 {
                     "period": period_value,
                     "items": [],
@@ -1158,31 +1421,41 @@ async def get_concept_flow(
 
     indicator_label = "今日" if period_value == "today" else "5日"
     try:
-        items = await _fetch_concept_flow_from_akshare(limit=limit, indicator_label=indicator_label)
+        upstream_started_at = perf_counter()
+        items = await _fetch_concept_flow_from_akshare_singleflight(
+            limit=limit, indicator_label=indicator_label
+        )
+        stage_timings["upstream_ms"] += _elapsed_ms(upstream_started_at)
         if not items and period_value == "week":
-            fallback_items = await _fetch_concept_flow_from_akshare(
-                limit=limit, indicator_label="今日"
-            )
-            if fallback_items:
-                return JSONResponse(
-                    {
-                        "period": period_value,
-                        "items": fallback_items,
-                        "count": len(fallback_items),
-                        "retrieved_at": _iso_now(),
-                        "data_source": "akshare",
-                        "stale": False,
-                        "detail": {
-                            "fallback": {
-                                "from": "akshare.5日",
-                                "to": "akshare.今日",
-                                "reason": "5日口径暂不可用，已回退今日口径",
-                            }
-                        },
-                    }
+            fallback_started_at = perf_counter()
+            try:
+                upstream_started_at = perf_counter()
+                fallback_items = await _fetch_concept_flow_from_akshare_singleflight(
+                    limit=limit, indicator_label="今日"
                 )
+                stage_timings["upstream_ms"] += _elapsed_ms(upstream_started_at)
+                if fallback_items:
+                    return _respond(
+                        {
+                            "period": period_value,
+                            "items": fallback_items,
+                            "count": len(fallback_items),
+                            "retrieved_at": _iso_now(),
+                            "data_source": "akshare",
+                            "stale": False,
+                            "detail": {
+                                "fallback": {
+                                    "from": "akshare.5日",
+                                    "to": "akshare.今日",
+                                    "reason": "5日口径暂不可用，已回退今日口径",
+                                }
+                            },
+                        }
+                    )
+            finally:
+                stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
         if not items:
-            return JSONResponse(
+            return _respond(
                 {
                     "period": period_value,
                     "items": [],
@@ -1193,7 +1466,7 @@ async def get_concept_flow(
                     "detail": {"code": "DATA_SOURCE_EMPTY", "message": "暂无概念资金流数据"},
                 }
             )
-        return JSONResponse(
+        return _respond(
             {
                 "period": period_value,
                 "items": items,
@@ -1206,12 +1479,15 @@ async def get_concept_flow(
     except Exception as e:
         logger.warning(f"获取概念资金流失败(period={period_value}): {e}")
         if period_value == "week":
+            fallback_started_at = perf_counter()
             try:
-                fallback_items = await _fetch_concept_flow_from_akshare(
+                upstream_started_at = perf_counter()
+                fallback_items = await _fetch_concept_flow_from_akshare_singleflight(
                     limit=limit, indicator_label="今日"
                 )
+                stage_timings["upstream_ms"] += _elapsed_ms(upstream_started_at)
                 if fallback_items:
-                    return JSONResponse(
+                    return _respond(
                         {
                             "period": period_value,
                             "items": fallback_items,
@@ -1230,7 +1506,9 @@ async def get_concept_flow(
                     )
             except Exception:
                 pass
-        return JSONResponse(
+            finally:
+                stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
+        return _respond(
             {
                 "period": period_value,
                 "items": [],
