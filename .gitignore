@@ -46,6 +46,8 @@ pytest-coverage.log
 logs/
 diagnostic_*.json
 diagnostic_log.json
+mypy_*.txt
+.codex_tmp/
 test_data_sources.log
 tmp_test.log
 data_source_test_report.txt
