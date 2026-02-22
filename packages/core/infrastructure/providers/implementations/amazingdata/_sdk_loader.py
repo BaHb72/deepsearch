@@ -31,7 +31,7 @@ def _load_sdk() -> tuple[Optional[ModuleType], bool, Optional[Exception]]:
     # AmazingData.login(username, password, host, port) -> 使用关键字参数
     # tgw.Login 有不同的签名
     sdk_candidates = ("AmazingData", "amazingdata", "tgw", "amazingdata_sdk")
-    last_exc = None
+    last_exc: Exception | None = None
     for name in sdk_candidates:
         try:
             _ad = __import__(name)

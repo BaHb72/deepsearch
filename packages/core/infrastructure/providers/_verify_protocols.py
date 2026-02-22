@@ -6,10 +6,10 @@
 2. Protocol 没有混用 @abstractmethod
 """
 
-from factory.akshare_factory import AkShareFactory
-from factory.amazingdata_factory import AmazingDataFactory
-from factory.base import ProviderFactoryStrategy
-from factory.miniqmt_factory import MiniQMTFactory
+from .factory.akshare_factory import AkShareFactory
+from .factory.amazingdata_factory import AmazingDataFactory
+from .factory.base import ProviderFactoryStrategy
+from .factory.miniqmt_factory import MiniQMTFactory
 
 
 def verify_protocols():

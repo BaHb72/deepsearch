@@ -7,6 +7,8 @@
 import os
 import sys
 
+import pytest
+
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -14,6 +16,9 @@ from helpers import fetch_code_list
 
 
 def test_servers():
+    if not os.getenv("RUN_AMAZINGDATA_DIAGNOSTIC_TESTS"):
+        pytest.skip("多服务器诊断测试默认关闭，设置 RUN_AMAZINGDATA_DIAGNOSTIC_TESTS=1 后执行。")
+
     print("\n" + "=" * 60)
     print("AmazingData 多服务器连接测试")
     print("=" * 60)
@@ -27,8 +32,10 @@ def test_servers():
         return
 
     # 测试账号
-    username = "212200038719"
-    password = "212200038719@2025"
+    username = os.getenv("AMAZINGDATA_USERNAME", "").strip()
+    password = os.getenv("AMAZINGDATA_PASSWORD", "").strip()
+    if not username or not password:
+        pytest.skip("缺少 AMAZINGDATA_USERNAME/AMAZINGDATA_PASSWORD，跳过服务器诊断测试。")
 
     # 多个服务器地址
     servers = [
@@ -69,6 +76,9 @@ def test_servers():
             else:
                 print(f"[FAIL] {name} 登录失败，返回值: {result}")
 
+        except SystemExit as exc:
+            print(f"[WARNING] {name} 登录触发 SystemExit({exc})，按失败继续")
+            continue
         except Exception as e:
             print(f"[ERROR] {name} 连接异常: {e}")
 

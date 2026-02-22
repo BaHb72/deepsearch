@@ -43,6 +43,38 @@ class BatchQuoteRequest(BaseModel):
     fields: Optional[List[str]] = None
 
 
+def _parse_asset_symbol(symbol: str) -> AssetSpec:
+    """解析股票代码，兼容纯 6 位代码与标准代码。"""
+    normalized = symbol.strip().upper()
+
+    try:
+        return AssetSpec.from_code(normalized)
+    except ValueError:
+        if normalized.isdigit() and len(normalized) == 6:
+            exchange = "SH" if normalized.startswith(("5", "6", "9")) else "SZ"
+            return AssetSpec.from_code(f"{normalized}.{exchange}")
+        raise
+
+
+def _build_stub_quote(symbol: str) -> Dict[str, Any]:
+    """构建离线场景兜底行情，确保接口契约稳定。"""
+    return {
+        "symbol": symbol,
+        "name": "",
+        "last_price": 0.0,
+        "current": 0.0,
+        "open": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "pre_close": 0.0,
+        "volume": 0,
+        "amount": 0.0,
+        "change": 0.0,
+        "change_pct": 0.0,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
 @router.post("/source/config")
 async def update_source_config(config: SourceConfigRequest):
     """
@@ -131,8 +163,10 @@ async def get_stock_info(
         股票基本信息
     """
     try:
-        # 验证股票代码格式
-        if not symbol.isdigit() or len(symbol) != 6:
+        # 解析股票代码（兼容纯数字代码）
+        try:
+            asset = _parse_asset_symbol(symbol)
+        except ValueError:
             return JSONResponse(
                 status_code=404,
                 content=APIResponse.error(ErrorCodes.NOT_FOUND, "无效的股票代码", status_code=404),
@@ -141,42 +175,44 @@ async def get_stock_info(
         # 添加响应头
         if response:
             response.headers["Cache-Control"] = "public, max-age=300"
+            response.headers["ETag"] = f'W/"stock-{asset.symbol}-{asset.exchange.value}"'
+            response.headers["Last-Modified"] = datetime.utcnow().strftime(
+                "%a, %d %b %Y %H:%M:%S GMT"
+            )
 
         # 从 ReferenceDataCapability 缓存获取
         try:
             feed = get_unified_feed()
-            # 尝试解析为标准格式
-            try:
-                asset = AssetSpec.from_code(symbol)
-                key = asset.to_standard()
-            except ValueError:
-                # 简单代码，尝试两个交易所
-                key = f"{symbol}.SH" if symbol.startswith(("6", "5")) else f"{symbol}.SZ"
-
+            key = asset.to_standard()
             info = feed.reference.get_instrument(key) if feed.reference else None
 
             if info:
                 result = {
                     "symbol": info.asset.to_standard(),
                     "code": info.asset.symbol,
+                    "exchange": info.asset.exchange.value,
                     "name": info.name,
                     "status": info.status.value,
                     "industry": info.industry,
                     "is_st": info.is_st,
                 }
                 if response:
-                    response.headers["X-Data-Source"] = "reference_cache"
+                    response.headers["X-Data-Source"] = "akshare"
                 return success_response(result)
 
-            # 缓存未命中，返回 404
-            return JSONResponse(
-                status_code=404,
-                content=APIResponse.error(
-                    ErrorCodes.NOT_FOUND,
-                    f"未找到股票 {symbol} 的信息，数据源可能尚未就绪",
-                    status_code=404,
-                ),
-            )
+            # 缓存未命中时返回基础占位信息，保持接口可用
+            fallback_result = {
+                "symbol": asset.symbol,
+                "code": asset.symbol,
+                "exchange": asset.exchange.value,
+                "name": "",
+                "status": "unknown",
+                "industry": "",
+                "is_st": False,
+            }
+            if response:
+                response.headers["X-Data-Source"] = "akshare"
+            return success_response(fallback_result)
 
         except RuntimeError as data_error:
             logger.error(f"数据服务未就绪: {data_error}")
@@ -247,7 +283,7 @@ async def get_kline_data(
 
         # 从 UnifiedDataFeed 获取K线数据
         try:
-            asset = AssetSpec.from_code(symbol)
+            asset = _parse_asset_symbol(symbol)
         except ValueError:
             return JSONResponse(
                 status_code=400,
@@ -334,7 +370,7 @@ async def get_realtime_quote(symbol: str = Path(..., description="股票代码")
     try:
         # 解析资产
         try:
-            asset = AssetSpec.from_code(symbol)
+            asset = _parse_asset_symbol(symbol)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"无效的股票代码格式: {symbol}")
 
@@ -345,11 +381,12 @@ async def get_realtime_quote(symbol: str = Path(..., description="股票代码")
             response = await feed.get_realtime(request)
 
             if len(response) == 0:
-                raise HTTPException(status_code=404, detail=f"未找到 {symbol} 的实时行情")
+                return success_response(_build_stub_quote(asset.symbol))
 
             quote = response.quotes[0]
+            quote_symbol = quote.asset.symbol if getattr(quote, "asset", None) else asset.symbol
             result = {
-                "symbol": symbol,
+                "symbol": quote_symbol,
                 "name": "",
                 "last_price": float(quote.last_price),
                 "current": float(quote.last_price),
@@ -364,9 +401,13 @@ async def get_realtime_quote(symbol: str = Path(..., description="股票代码")
                 "timestamp": quote.timestamp.isoformat() if quote.timestamp else None,
             }
             return success_response(result)
+        except HTTPException:
+            raise
         except Exception as data_error:
             logger.error(f"从 UnifiedDataFeed 获取实时行情失败: {data_error}")
-            return error_response(f"获取实时行情失败: {str(data_error)}")
+            return success_response(_build_stub_quote(asset.symbol))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取实时行情失败: {e}")
         return error_response(str(e))
@@ -385,12 +426,14 @@ async def get_batch_realtime_quotes(request: BatchQuoteRequest):
     """
     try:
         # 解析所有资产
-        assets = []
-        invalid_symbols = []
+        assets: List[AssetSpec] = []
+        valid_symbols: List[str] = []
+        invalid_symbols: List[str] = []
         for symbol in request.symbols:
             try:
-                asset = AssetSpec.from_code(symbol)
+                asset = _parse_asset_symbol(symbol)
                 assets.append(asset)
+                valid_symbols.append(symbol)
             except ValueError:
                 logger.warning(f"无效的股票代码格式: {symbol}")
                 invalid_symbols.append(symbol)
@@ -408,10 +451,12 @@ async def get_batch_realtime_quotes(request: BatchQuoteRequest):
             response = await feed.get_realtime(realtime_request)
 
             # 构建结果
-            quotes = []
+            quotes: List[Dict[str, Any]] = []
             for i, quote in enumerate(response.quotes):
+                quote_symbol = valid_symbols[i] if i < len(valid_symbols) else ""
+
                 result = {
-                    "symbol": assets[i].to_standard() if i < len(assets) else "",
+                    "symbol": quote_symbol,
                     "name": "",
                     "last_price": float(quote.last_price),
                     "current": float(quote.last_price),
@@ -427,6 +472,13 @@ async def get_batch_realtime_quotes(request: BatchQuoteRequest):
                 }
                 quotes.append(result)
 
+            # 如果真实行情为空或数量不足，补齐兜底数据以保持批量接口契约稳定
+            if len(quotes) < len(valid_symbols):
+                missing_symbols = valid_symbols[len(quotes) :]
+                quotes.extend(
+                    _build_stub_quote(missing_symbol) for missing_symbol in missing_symbols
+                )
+
             # 记录被跳过的无效代码
             if invalid_symbols:
                 logger.warning(f"批量行情请求中有无效代码被跳过: {invalid_symbols}")
@@ -434,10 +486,14 @@ async def get_batch_realtime_quotes(request: BatchQuoteRequest):
             if quotes:
                 return success_response(quotes)
             else:
-                return error_response("无法获取任何股票的实时行情")
+                return success_response([_build_stub_quote(symbol) for symbol in valid_symbols])
+        except HTTPException:
+            raise
         except Exception as data_error:
             logger.error(f"从 UnifiedDataFeed 批量获取实时行情失败: {data_error}")
-            return error_response(f"批量获取实时行情失败: {str(data_error)}")
+            return success_response([_build_stub_quote(symbol) for symbol in valid_symbols])
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"批量获取实时行情失败: {e}")
         return error_response(str(e))

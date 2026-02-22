@@ -82,7 +82,8 @@ class AkShareDataFeed(IDataFeed):
         )
 
     async def get_realtime(self, symbols: List[str]) -> Dict[str, Any]:
-        return await self.provider.get_realtime_data(symbols)
+        quotes = await self.provider.get_realtime_quotes(symbols)
+        return {"data": quotes or []}
 
     def normalize_bars(self, data: List[Dict[str, Any]]) -> "pd.DataFrame | List[Dict[str, Any]]":
         normalized_data = self.normalizer.normalize(data)

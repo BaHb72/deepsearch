@@ -18,6 +18,7 @@ from core.application.services.unified_data import get_unified_feed
 from core.infrastructure.providers.binder import AllProvidersFailedError, FallbackStrategy
 from core.infrastructure.providers.capability_router import NoProviderAvailableError
 from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest
+from core.ports.data.responses import KlineResponse, RealtimeQuoteResponse
 from core.ports.data.routing_result import FallbackReasonCode, RouteAttempt, RoutedResponseMeta
 from core.ports.data.semantic_types import AdjustType, AssetSpec, LatencyHint, Timeframe, TimeRange
 from core.ports.data_sources import DataSourceType
@@ -277,12 +278,12 @@ def _coerce_rows(payload: Any) -> list[dict[str, Any]]:
         if isinstance(payload.get("data"), list):
             return _coerce_rows(payload["data"])
         if payload and all(isinstance(value, dict) for value in payload.values()):
-            rows: list[dict[str, Any]] = []
+            mapped_rows: list[dict[str, Any]] = []
             for symbol, value in payload.items():
                 row = dict(value)
                 row.setdefault("symbol", str(symbol))
-                rows.append(row)
-            return rows
+                mapped_rows.append(row)
+            return mapped_rows
         return [dict(payload)]
     return []
 
@@ -359,9 +360,9 @@ async def _run_capability_call(
         rows = _coerce_rows(payload)
         if not rows and isinstance(payload, dict) and isinstance(payload.get("records"), list):
             rows = _coerce_rows(payload.get("records"))
-        limit = params.get("limit")
-        if isinstance(limit, int) and limit > 0:
-            rows = rows[:limit]
+        limit_param = params.get("limit")
+        if isinstance(limit_param, int) and limit_param > 0:
+            rows = rows[:limit_param]
         return rows, None
 
     if capability == "sector_list":
@@ -369,14 +370,14 @@ async def _run_capability_call(
         if payload is None:
             payload = await _invoke_method(provider, "get_sector_list")
         rows = _coerce_rows(payload)
-        normalized_rows: list[dict[str, Any]] = []
+        sector_rows: list[dict[str, Any]] = []
         for row in rows:
             if "name" in row and "code" in row:
-                normalized_rows.append(row)
+                sector_rows.append(row)
             elif "value" in row:
                 val = str(row["value"])
-                normalized_rows.append({"name": val, "code": val})
-        return normalized_rows, None
+                sector_rows.append({"name": val, "code": val})
+        return sector_rows, None
 
     if capability == "sector_stocks":
         sector_name = str(
@@ -389,13 +390,13 @@ async def _run_capability_call(
             provider, "get_sector_stocks", sector_name, sector_type=sector_type
         )
         rows = _coerce_rows(payload)
-        normalized_rows: list[dict[str, Any]] = []
+        stock_rows: list[dict[str, Any]] = []
         for row in rows:
             if "symbol" in row:
-                normalized_rows.append(row)
+                stock_rows.append(row)
             elif "value" in row:
-                normalized_rows.append({"symbol": str(row["value"])})
-        return normalized_rows, None
+                stock_rows.append({"symbol": str(row["value"])})
+        return stock_rows, None
 
     if capability == "sector_capital_flow":
         indicator = str(params.get("indicator", "今日"))
@@ -755,6 +756,14 @@ async def _query_kline_with_feed(request: KlineQueryRequest) -> dict[str, Any]:
         request=kline_request,
         strategy=FallbackStrategy.SEQUENTIAL,
     )
+    if not isinstance(response, KlineResponse):
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "INVALID_RESPONSE_TYPE",
+                "message": "Unified feed 返回的 Kline 响应类型不正确",
+            },
+        )
     bars = [
         {
             "timestamp": bar.timestamp.isoformat(),
@@ -786,6 +795,14 @@ async def _query_realtime_with_feed(request: RealtimeQueryRequest) -> dict[str, 
         request=realtime_request,
         strategy=FallbackStrategy.SEQUENTIAL,
     )
+    if not isinstance(response, RealtimeQuoteResponse):
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "INVALID_RESPONSE_TYPE",
+                "message": "Unified feed 返回的 Realtime 响应类型不正确",
+            },
+        )
     quotes = [
         {
             "asset": quote.asset.to_standard(),

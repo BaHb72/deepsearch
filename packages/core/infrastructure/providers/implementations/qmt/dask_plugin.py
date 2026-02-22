@@ -28,7 +28,7 @@ Usage:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from core.compute.plugins.base_plugin import BaseWorkerPlugin
 from core.compute.plugins.config import MiniQMTPluginConfig
@@ -103,10 +103,11 @@ class MiniQMTWorkerPlugin(BaseWorkerPlugin):
         data_sources = getattr(app_config, "data_sources", None)
 
         # 构建 Actor 配置
+        plugin_config = cast(MiniQMTPluginConfig, self.config)
         actor_config: dict[str, Any] = {
-            "cache_ttl": self.config.cache_ttl,
-            "failure_threshold": self.config.failure_threshold,
-            "recovery_timeout": self.config.recovery_timeout,
+            "cache_ttl": plugin_config.cache_ttl,
+            "failure_threshold": plugin_config.failure_threshold,
+            "recovery_timeout": plugin_config.recovery_timeout,
         }
 
         # 提取 MiniQMT 配置

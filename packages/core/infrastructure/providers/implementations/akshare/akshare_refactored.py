@@ -24,6 +24,8 @@
 
 import asyncio
 import time
+from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional, cast
 
 import pandas as pd
@@ -38,12 +40,10 @@ from core.infrastructure.providers.interfaces.base import (
 from core.infrastructure.providers.interfaces.capabilities import DataCapability
 
 # New Protocol imports for Phase 2
-from core.infrastructure.providers.protocols.lifecycle import (
-    HealthCheckResult,
-    HealthStatus,
-)
+from core.infrastructure.providers.protocols.lifecycle import HealthCheckResult, HealthStatus
 from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest
-from core.ports.data.responses import KlineResponse, RealtimeQuoteResponse
+from core.ports.data.responses import KlineBar, KlineResponse, Quote, RealtimeQuoteResponse
+from core.ports.data_sources import DataSourceType as PortDataSourceType
 from core.utils.network.akshare_proxy import patch_akshare
 from loguru import logger
 
@@ -354,14 +354,16 @@ class AkShareProxyProvider:
                 "1m": "monthly",
                 "1mo": "monthly",
             }
-            period = period_map.get(request.timeframe, "daily")
+            period = period_map.get(request.timeframe.value, "daily")
+            start_date = request.range.start.strftime("%Y-%m-%d") if request.range.start else None
+            end_date = request.range.end.strftime("%Y-%m-%d") if request.range.end else None
 
             result = await self.get_history_data(
-                symbol=self._normalize_symbol(request.asset),
-                start_date=request.start_date,
-                end_date=request.end_date,
+                symbol=self._normalize_symbol(request.asset.to_standard()),
+                start_date=start_date,
+                end_date=end_date,
                 period=period,
-                adjust=request.adjust or "",
+                adjust=request.adjust.value if request.adjust else "",
             )
 
             if result is None or result.empty:
@@ -372,17 +374,40 @@ class AkShareProxyProvider:
                     message=f"查询K线失败: {request.asset}",
                 )
 
-            # 将 DataFrame 转换为字典列表
-            data_list = result.reset_index().to_dict("records")
+            bars: list[KlineBar] = []
+            for _, row in result.reset_index().iterrows():
+                raw_ts = row.get("date") or row.get("日期") or row.get("datetime")
+                ts: datetime
+                if isinstance(raw_ts, datetime):
+                    ts = raw_ts
+                elif isinstance(raw_ts, str) and raw_ts:
+                    try:
+                        ts = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
+                    except ValueError:
+                        try:
+                            ts = datetime.strptime(raw_ts, "%Y-%m-%d")
+                        except ValueError:
+                            ts = datetime.now()
+                else:
+                    ts = datetime.now()
+
+                bars.append(
+                    KlineBar(
+                        timestamp=ts,
+                        open=Decimal(str(row.get("open", row.get("开盘", 0)) or 0)),
+                        high=Decimal(str(row.get("high", row.get("最高", 0)) or 0)),
+                        low=Decimal(str(row.get("low", row.get("最低", 0)) or 0)),
+                        close=Decimal(str(row.get("close", row.get("收盘", 0)) or 0)),
+                        volume=int(float(row.get("volume", row.get("成交量", 0)) or 0)),
+                        amount=Decimal(str(row.get("amount", row.get("成交额", 0)) or 0)),
+                    )
+                )
 
             return KlineResponse(
-                success=True,
-                data=data_list,
-                metadata={
-                    "source": "akshare",
-                    "symbol": request.asset,
-                    "timeframe": request.timeframe,
-                },
+                asset=request.asset,
+                timeframe=request.timeframe,
+                bars=bars,
+                source=PortDataSourceType.AKSHARE,
             )
 
         except Exception as e:
@@ -408,7 +433,8 @@ class AkShareProxyProvider:
             ProviderDataError: 查询失败时抛出
         """
         try:
-            result = await self.get_realtime_data(symbols=request.assets)
+            symbols = [asset.symbol for asset in request.assets]
+            result = await self.get_realtime_data(symbols=symbols)
 
             if not result:
                 from core.infrastructure.providers.exceptions import ProviderDataError
@@ -418,24 +444,46 @@ class AkShareProxyProvider:
                     message=f"查询实时行情失败: {request.assets}",
                 )
 
-            # 提取数据部分
             data = result.get("data") if isinstance(result, dict) else result
-
-            # 将数据标准化为列表
             if isinstance(data, dict):
-                data_list = list(data.values())
+                rows = list(data.values())
             elif isinstance(data, list):
-                data_list = data
+                rows = data
             else:
-                data_list = []
+                rows = []
+
+            asset_by_symbol = {asset.symbol: asset for asset in request.assets}
+            quotes: list[Quote] = []
+            for item in rows:
+                if not isinstance(item, dict):
+                    continue
+                symbol = str(
+                    item.get("symbol")
+                    or item.get("代码")
+                    or item.get("code")
+                    or item.get("证券代码")
+                    or ""
+                )
+                asset = asset_by_symbol.get(symbol)
+                if asset is None:
+                    continue
+                quotes.append(
+                    Quote(
+                        asset=asset,
+                        timestamp=datetime.now(),
+                        last_price=Decimal(str(item.get("price", item.get("最新价", 0)) or 0)),
+                        open=Decimal(str(item.get("open", item.get("今开", 0)) or 0)),
+                        high=Decimal(str(item.get("high", item.get("最高", 0)) or 0)),
+                        low=Decimal(str(item.get("low", item.get("最低", 0)) or 0)),
+                        pre_close=Decimal(str(item.get("pre_close", item.get("昨收", 0)) or 0)),
+                        volume=int(float(item.get("volume", item.get("成交量", 0)) or 0)),
+                        amount=Decimal(str(item.get("amount", item.get("成交额", 0)) or 0)),
+                    )
+                )
 
             return RealtimeQuoteResponse(
-                success=True,
-                data=data_list,
-                metadata={
-                    "source": "akshare",
-                    "symbols": request.assets,
-                },
+                quotes=quotes,
+                source=PortDataSourceType.AKSHARE,
             )
 
         except Exception as e:

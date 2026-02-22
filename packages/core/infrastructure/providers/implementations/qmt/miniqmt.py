@@ -10,6 +10,8 @@ import json
 import socket
 import struct
 import time
+from datetime import datetime
+from decimal import Decimal
 from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 import pandas as pd
@@ -29,7 +31,8 @@ from core.infrastructure.providers.interfaces.capabilities import DataCapability
 # New Protocol imports for Phase 2
 from core.infrastructure.providers.protocols.lifecycle import HealthCheckResult, HealthStatus
 from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest
-from core.ports.data.responses import KlineResponse, RealtimeQuoteResponse
+from core.ports.data.responses import KlineBar, KlineResponse, Quote, RealtimeQuoteResponse
+from core.ports.data_sources import DataSourceType as PortDataSourceType
 from loguru import logger
 
 # 模块级别导入 xtquant，避免在每个函数中重复导入（会导致重复的连接消息）
@@ -367,11 +370,13 @@ class MiniQMTProvider(DataProvider):
             ProviderDataError: 查询失败时抛出
         """
         try:
+            start_date = request.range.start.strftime("%Y%m%d") if request.range.start else None
+            end_date = request.range.end.strftime("%Y%m%d") if request.range.end else None
             result = await self.get_kline_data(
-                symbol=request.asset,
-                period=request.timeframe,
-                start_date=request.start_date,
-                end_date=request.end_date,
+                symbol=request.asset.symbol,
+                period=request.timeframe.value,
+                start_date=start_date,
+                end_date=end_date,
                 limit=0,  # 不限制数量
             )
 
@@ -383,14 +388,40 @@ class MiniQMTProvider(DataProvider):
                     message=f"查询K线失败: {request.asset}",
                 )
 
+            bars: list[KlineBar] = []
+            for item in result:
+                raw_ts = item.get("datetime") or item.get("date") or item.get("time")
+                ts: datetime
+                if isinstance(raw_ts, datetime):
+                    ts = raw_ts
+                elif isinstance(raw_ts, str) and raw_ts:
+                    try:
+                        ts = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
+                    except ValueError:
+                        try:
+                            ts = datetime.strptime(raw_ts, "%Y%m%d")
+                        except ValueError:
+                            ts = datetime.now()
+                else:
+                    ts = datetime.now()
+
+                bars.append(
+                    KlineBar(
+                        timestamp=ts,
+                        open=Decimal(str(item.get("open", 0) or 0)),
+                        high=Decimal(str(item.get("high", 0) or 0)),
+                        low=Decimal(str(item.get("low", 0) or 0)),
+                        close=Decimal(str(item.get("close", 0) or 0)),
+                        volume=int(float(item.get("volume", 0) or 0)),
+                        amount=Decimal(str(item.get("amount", 0) or 0)),
+                    )
+                )
+
             return KlineResponse(
-                success=True,
-                data=result,
-                metadata={
-                    "source": "miniqmt",
-                    "symbol": request.asset,
-                    "timeframe": request.timeframe,
-                },
+                asset=request.asset,
+                timeframe=request.timeframe,
+                bars=bars,
+                source=PortDataSourceType.MINIQMT,
             )
 
         except Exception as e:
@@ -416,7 +447,8 @@ class MiniQMTProvider(DataProvider):
             ProviderDataError: 查询失败时抛出
         """
         try:
-            result = await self.get_realtime_quotes(symbols=request.assets)
+            symbols = [asset.symbol for asset in request.assets]
+            result = await self.get_realtime_quotes(symbols=symbols)
 
             if result is None:
                 from core.infrastructure.providers.exceptions import ProviderDataError
@@ -426,13 +458,30 @@ class MiniQMTProvider(DataProvider):
                     message=f"查询实时行情失败: {request.assets}",
                 )
 
+            asset_by_symbol = {asset.symbol: asset for asset in request.assets}
+            quotes: list[Quote] = []
+            for item in result:
+                symbol = str(item.get("symbol", "") or "")
+                asset = asset_by_symbol.get(symbol)
+                if asset is None:
+                    continue
+                quotes.append(
+                    Quote(
+                        asset=asset,
+                        timestamp=datetime.now(),
+                        last_price=Decimal(str(item.get("price", 0) or 0)),
+                        open=Decimal(str(item.get("open", 0) or 0)),
+                        high=Decimal(str(item.get("high", 0) or 0)),
+                        low=Decimal(str(item.get("low", 0) or 0)),
+                        pre_close=Decimal(str(item.get("prev_close", 0) or 0)),
+                        volume=int(float(item.get("volume", 0) or 0)),
+                        amount=Decimal(str(item.get("amount", 0) or 0)),
+                    )
+                )
+
             return RealtimeQuoteResponse(
-                success=True,
-                data=result,
-                metadata={
-                    "source": "miniqmt",
-                    "symbols": request.assets,
-                },
+                quotes=quotes,
+                source=PortDataSourceType.MINIQMT,
             )
 
         except Exception as e:

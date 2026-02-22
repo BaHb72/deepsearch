@@ -135,8 +135,8 @@ def _register_default_adapters(
         miniqmt_provider = registry.get_provider_instance("miniqmt")
         if miniqmt_provider:
             capabilities = config.capabilities.get("miniqmt")
-            adapter = MiniQMTAdapter(miniqmt_provider, capabilities)
-            router.register_adapter("miniqmt", adapter)
+            miniqmt_adapter: BaseProviderAdapter = MiniQMTAdapter(miniqmt_provider, capabilities)
+            router.register_adapter("miniqmt", miniqmt_adapter)
             logger.info("已注册 MiniQMT 适配器")
     except Exception as e:
         logger.warning(f"注册 MiniQMT 适配器失败: {e}")
@@ -148,8 +148,8 @@ def _register_default_adapters(
         akshare_provider = registry.get_provider_instance("akshare")
         if akshare_provider:
             capabilities = config.capabilities.get("akshare")
-            adapter = AKShareAdapter(akshare_provider, capabilities)
-            router.register_adapter("akshare", adapter)
+            akshare_adapter: BaseProviderAdapter = AKShareAdapter(akshare_provider, capabilities)
+            router.register_adapter("akshare", akshare_adapter)
             logger.info("已注册 AkShare 适配器")
     except Exception as e:
         logger.warning(f"注册 AkShare 适配器失败: {e}")
@@ -161,8 +161,10 @@ def _register_default_adapters(
         amazingdata_provider = registry.get_provider_instance("amazingdata")
         if amazingdata_provider:
             capabilities = config.capabilities.get("amazingdata")
-            adapter = AmazingDataAdapter(amazingdata_provider, capabilities)
-            router.register_adapter("amazingdata", adapter)
+            amazingdata_adapter: BaseProviderAdapter = AmazingDataAdapter(
+                amazingdata_provider, capabilities
+            )
+            router.register_adapter("amazingdata", amazingdata_adapter)
             logger.info("已注册 AmazingData 适配器")
     except Exception as e:
         logger.warning(f"注册 AmazingData 适配器失败: {e}")

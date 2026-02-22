@@ -101,6 +101,7 @@ async def get_concept_velocity(
                 for i, item in enumerate(data[:limit])
             ]
             return format_response(success=True, data=result)
+        raise HTTPException(status_code=503, detail="AKShare 返回空结果")
     except asyncio.TimeoutError:
         logger.error("AKShare 获取数据超时(30s)")
         raise HTTPException(

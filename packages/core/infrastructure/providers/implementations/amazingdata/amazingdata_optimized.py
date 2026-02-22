@@ -19,6 +19,7 @@ import weakref
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, cast
 
@@ -29,12 +30,10 @@ from core.infrastructure.cache import ArrowCacheManager
 from core.infrastructure.providers.interfaces.base import DataProvider, DataProviderError
 
 # Protocol interfaces
-from core.infrastructure.providers.protocols.lifecycle import (
-    HealthCheckResult,
-    HealthStatus,
-)
+from core.infrastructure.providers.protocols.lifecycle import HealthCheckResult, HealthStatus
 from core.ports.data.requests import KlineRequest, RealtimeQuoteRequest
-from core.ports.data.responses import KlineResponse, RealtimeQuoteResponse
+from core.ports.data.responses import KlineBar, KlineResponse, RealtimeQuoteResponse
+from core.ports.data_sources import DataSourceType as PortDataSourceType
 
 # AmazingData SDK
 from ._sdk_loader import HAS_AMAZINGDATA, ad
@@ -767,7 +766,7 @@ class OptimizedAmazingDataProvider(DataProvider):
 
     # ============ ILifecycleProvider 实现 ============
 
-    async def initialize(self) -> None:
+    async def initialize(self) -> bool:
         """初始化 Provider
 
         内部调用现有的初始化逻辑。
@@ -778,7 +777,7 @@ class OptimizedAmazingDataProvider(DataProvider):
             # 如果已经连接，跳过
             if self._connected:
                 logger.info("Provider 已初始化，跳过")
-                return
+                return True
 
             # 执行登录（内部会初始化 SDK）
             # 注意：不启动心跳，由 start() 方法启动
@@ -789,6 +788,7 @@ class OptimizedAmazingDataProvider(DataProvider):
                 raise ProviderInitializationError(provider="amazingdata", message="登录失败")
 
             logger.info("OptimizedAmazingDataProvider 初始化成功")
+            return True
 
         except Exception as e:
             logger.error(f"OptimizedAmazingDataProvider 初始化失败: {e}")
@@ -898,23 +898,51 @@ class OptimizedAmazingDataProvider(DataProvider):
         """
         try:
             # 调用现有方法
+            start_date = request.range.start.strftime("%Y%m%d") if request.range.start else None
+            end_date = request.range.end.strftime("%Y%m%d") if request.range.end else None
             result = await self.get_kline_data(
-                symbol=request.asset,
-                period=request.timeframe,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                adjust=request.adjust,
+                symbol=request.asset.symbol,
+                period=request.timeframe.value,
+                start_date=start_date,
+                end_date=end_date,
+                adjust=request.adjust.value if request.adjust else None,
             )
 
             # 转换为标准响应
+            bars: list[KlineBar] = []
+            for item in result or []:
+                raw_ts = item.get("datetime") or item.get("date") or item.get("time")
+                ts: datetime
+                if isinstance(raw_ts, datetime):
+                    ts = raw_ts
+                elif isinstance(raw_ts, str) and raw_ts:
+                    try:
+                        ts = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
+                    except ValueError:
+                        try:
+                            ts = datetime.strptime(raw_ts, "%Y-%m-%d %H:%M:%S")
+                        except ValueError:
+                            ts = datetime.now()
+                else:
+                    ts = datetime.now()
+
+                bars.append(
+                    KlineBar(
+                        timestamp=ts,
+                        open=Decimal(str(item.get("open", 0) or 0)),
+                        high=Decimal(str(item.get("high", 0) or 0)),
+                        low=Decimal(str(item.get("low", 0) or 0)),
+                        close=Decimal(str(item.get("close", 0) or 0)),
+                        volume=int(float(item.get("volume", 0) or 0)),
+                        amount=Decimal(str(item.get("amount", 0) or 0)),
+                    )
+                )
+
             return KlineResponse(
-                success=True,
-                data=result,
-                metadata={
-                    "source": "amazingdata",
-                    "symbol": request.asset,
-                    "timeframe": request.timeframe,
-                },
+                asset=request.asset,
+                timeframe=request.timeframe,
+                bars=bars,
+                source=PortDataSourceType.AMAZINGDATA,
             )
 
         except Exception as e:
@@ -1178,10 +1206,6 @@ class OptimizedAmazingDataProvider(DataProvider):
     def is_connected(self) -> bool:
         """检查连接状态"""
         return self._connected
-
-    async def initialize(self) -> bool:
-        """初始化数据源 - 实现抽象方法"""
-        return await self.connect()
 
     async def get_calendar(self, data_type: str = "int", market: str = "SH") -> list[int]:
         """

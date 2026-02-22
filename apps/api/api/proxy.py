@@ -289,9 +289,10 @@ async def list_workers() -> dict[str, Any]:
         provider = AkShareProxyProvider()
 
         workers: list[WorkerDetail] = []
-        stats_snapshot = provider.worker_stats
-        health_flags = provider.worker_health
-        for url in provider.worker_urls:
+        stats_snapshot = getattr(provider, "worker_stats", {}) or {}
+        health_flags = getattr(provider, "worker_health", {}) or {}
+        worker_urls = list(getattr(provider, "worker_urls", []) or [])
+        for url in worker_urls:
             stats_raw = stats_snapshot.get(url, {})
             total_requests = int(stats_raw.get("total_requests", 0))
             success_count = int(stats_raw.get("success_count", 0))
@@ -342,12 +343,16 @@ async def test_worker(worker_id: str) -> WorkerTestResponse:
 
         # 将ID转换回URL
         worker_url = "https://" + worker_id.replace("_", "/")
+        worker_urls = list(getattr(provider, "worker_urls", []) or [])
 
-        if worker_url not in provider.worker_urls:
+        if worker_url not in worker_urls:
             raise HTTPException(status_code=404, detail="Worker not found")
 
         # 执行健康检查
-        result = await provider._check_worker_health(worker_url)
+        checker = getattr(provider, "_check_worker_health", None)
+        if not callable(checker):
+            raise HTTPException(status_code=501, detail="Worker health check not supported")
+        result = await checker(worker_url)
 
         return {
             "success": True,
@@ -377,12 +382,16 @@ async def reset_worker(worker_id: str) -> MessageResponse:
 
         # 将ID转换回URL
         worker_url = "https://" + worker_id.replace("_", "/")
+        worker_urls = list(getattr(provider, "worker_urls", []) or [])
 
-        if worker_url not in provider.worker_urls:
+        if worker_url not in worker_urls:
             raise HTTPException(status_code=404, detail="Worker not found")
 
         # 重置状态
-        provider.reset_worker(worker_url)
+        resetter = getattr(provider, "reset_worker", None)
+        if not callable(resetter):
+            raise HTTPException(status_code=501, detail="Worker reset not supported")
+        resetter(worker_url)
 
         return {"success": True, "message": f"Worker {worker_url} has been reset to suspect state"}
     except HTTPException:
@@ -406,8 +415,10 @@ async def get_strategy():
             "success": True,
             "data": {
                 "strategy": provider.strategy,
-                "worker_count": len(provider.worker_urls),
-                "healthy_count": sum(1 for h in provider.worker_health.values() if h),
+                "worker_count": len(getattr(provider, "worker_urls", []) or []),
+                "healthy_count": sum(
+                    1 for h in (getattr(provider, "worker_health", {}) or {}).values() if h
+                ),
             },
         }
     except Exception as e:

@@ -15,12 +15,16 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 from loguru import logger
 
 # 延迟导入以避免循环依赖
 __version__ = "0.1.0"
+
+if TYPE_CHECKING:
+    from core.config.models.amazingdata import AmazingDataConfig
 
 
 @click.group()
@@ -413,10 +417,14 @@ def check_amazingdata(
                 pass
             break
 
-    def _resolve_amazingdata_config(settings_obj: object) -> tuple[object | None, str | None]:
+    def _resolve_amazingdata_config(
+        settings_obj: object,
+    ) -> tuple["AmazingDataConfig | None", str | None]:
+        from core.config.models.amazingdata import AmazingDataConfig
+
         # 兼容旧配置：settings.amazingdata
         direct_config = getattr(settings_obj, "amazingdata", None)
-        if direct_config:
+        if isinstance(direct_config, AmazingDataConfig):
             return direct_config, "settings.amazingdata"
 
         # 兼容新配置：settings.data_sources.providers.amazingdata
@@ -466,10 +474,8 @@ def check_amazingdata(
             if connection_payload:
                 provider_config["connection"] = connection_payload
 
-        return (
-            SettingsAmazingDataConfig.model_validate(provider_config),
-            "settings.data_sources.providers.amazingdata",
-        )
+        resolved = SettingsAmazingDataConfig.model_validate(provider_config)
+        return (resolved, "settings.data_sources.providers.amazingdata")
 
     def _check_worker_backconnect_from_scheduler(
         dask_client: object,

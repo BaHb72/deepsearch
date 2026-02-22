@@ -3,7 +3,6 @@ Provider 异常定义
 """
 
 
-
 class ProviderError(Exception):
     """Provider 基础异常"""
 

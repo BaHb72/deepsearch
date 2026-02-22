@@ -2,7 +2,7 @@
 Cloudflare Workers 配置模型
 """
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class CloudflareWorkersConfig(BaseModel):
@@ -12,11 +12,7 @@ class CloudflareWorkersConfig(BaseModel):
     url: str = Field(default="", description="Worker URL，例如: your-worker.workers.dev")
 
     # 认证配置
-    api_key: str = Field(
-        default="",
-        validation_alias=AliasChoices("api_key", "auth_key"),
-        description="API 密钥，用于 Worker 认证（兼容 auth_key）",
-    )
+    api_key: str = Field(default="", description="API 密钥，用于 Worker 认证（兼容 auth_key）")
 
     # 故障转移配置
     fallback_to_direct: bool = Field(default=True, description="Worker 不可用时是否回退到直连模式")
@@ -56,6 +52,16 @@ class CloudflareWorkersConfig(BaseModel):
             ]
         }
     }
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_auth_key_alias(cls, values: object) -> object:
+        """兼容旧字段名 auth_key。"""
+        if isinstance(values, dict) and "api_key" not in values and "auth_key" in values:
+            merged = dict(values)
+            merged["api_key"] = merged.get("auth_key", "")
+            return merged
+        return values
 
     def is_configured(self) -> bool:
         """检查是否已配置 Worker"""

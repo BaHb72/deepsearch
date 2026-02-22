@@ -1391,6 +1391,7 @@ class DaskWorkerManager:
 
             # 根据名称导入并注册对应的 Plugin
             async with Client(scheduler_address, asynchronous=True, timeout="60s") as client:
+                plugin: Any
                 if name == "amazingdata":
                     from core.compute.plugins.config import AmazingDataPluginConfig
                     from core.infrastructure.providers.implementations.amazingdata.dask_plugin import (

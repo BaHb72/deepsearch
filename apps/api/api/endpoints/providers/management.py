@@ -153,23 +153,22 @@ async def reload_provider(
 
         config = get_config()
 
-        if not hasattr(config, "data_sources"):
+        data_sources = getattr(config, "data_sources", None)
+        if data_sources is None:
             raise HTTPException(status_code=500, detail="配置中缺少 data_sources")
 
-        ds_config = config.data_sources.get(name)
+        ds_config = data_sources.get_provider(name)
 
         if not ds_config:
             raise HTTPException(status_code=400, detail=f"配置中未找到 Provider '{name}'")
 
         # 转换配置
-        if isinstance(ds_config, dict):
-            provider_config = ds_config
-        elif hasattr(ds_config, "model_dump"):
+        if hasattr(ds_config, "model_dump"):
             provider_config = ds_config.model_dump()
         elif hasattr(ds_config, "dict"):
             provider_config = ds_config.dict()
         else:
-            provider_config = dict(ds_config)
+            provider_config = {"config": {}}
 
         # 4. 重新创建 Provider
         await container.create_and_register(name, provider_config)

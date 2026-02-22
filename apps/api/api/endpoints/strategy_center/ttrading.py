@@ -27,6 +27,7 @@ from core.strategies.ttrading import (
     get_ttrading_engine,
     run_quick_analysis,
 )
+from core.strategies.ttrading.interfaces import IntradayDataProvider
 from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -224,7 +225,7 @@ async def _probe_miniqmt_actor_connection_compat(request: Optional[Request]) -> 
 async def _get_provider_with_soft_fail_compat(
     request: Optional[Request], provider_name: str
 ) -> Any:
-    getter = _get_provider_with_soft_fail
+    getter: Any = _get_provider_with_soft_fail
     arity = _get_positional_arity(getter)
     if arity <= 1:
         return await getter(provider_name)
@@ -545,7 +546,7 @@ async def quick_analyze(request: QuickAnalyzeRequest):
         result = await run_quick_analysis(
             request.symbol,
             request.config,
-            data_provider,
+            cast(IntradayDataProvider, data_provider),
         )
 
         # 构建响应
@@ -611,7 +612,7 @@ async def quick_analyze(request: QuickAnalyzeRequest):
 async def start_engine(
     symbol: str,
     payload: EngineStartRequest,
-    request: Request = None,
+    request: Request = cast(Request, None),
 ):
     """启动做T引擎"""
     global _miniqmt_provider
@@ -636,7 +637,7 @@ async def start_engine(
                 )
             data_source = data_provider.active_source or "fallback"
 
-        engine = get_ttrading_engine(symbol, data_provider)
+        engine = get_ttrading_engine(symbol, cast(Optional[IntradayDataProvider], data_provider))
 
         if engine.is_running:
             return {
@@ -658,7 +659,7 @@ async def start_engine(
             grid_levels=payload.grid_levels,
         )
 
-        await engine.start(config, data_provider)
+        await engine.start(config, cast(Optional[IntradayDataProvider], data_provider))
 
         logger.info(f"T-Trading engine started for {symbol} with {data_source} data")
 
@@ -785,7 +786,7 @@ async def get_engine_snapshot(symbol: str):
 
 
 @router.get("/datasource/status")
-async def get_datasource_status(request: Request = None):
+async def get_datasource_status(request: Request = cast(Request, None)):
     """获取数据源状态"""
     status = {
         "miniqmt_available": MINIQMT_AVAILABLE,
@@ -856,7 +857,7 @@ class IntradayDataResponse(BaseModel):
 @router.get("/intraday/{symbol}", response_model=IntradayDataResponse)
 async def get_intraday_data(
     symbol: str,
-    request: Request = None,
+    request: Request,
     minutes: int = Query(60, ge=15, le=240, description="分钟数"),
 ):
     """
@@ -937,7 +938,7 @@ class KLineDataResponse(BaseModel):
 @router.get("/kline/{symbol}", response_model=KLineDataResponse)
 async def get_kline_data(
     symbol: str,
-    request: Request = None,
+    request: Request = cast(Request, None),
     period: str = Query("1d", description="周期: 1m, 5m, 15m, 30m, 60m, 1d, 1w, 1M"),
     from_ts: Optional[int] = Query(None, description="开始时间戳(毫秒), 参数名: from"),
     to_ts: Optional[int] = Query(None, description="结束时间戳(毫秒), 参数名: to"),
@@ -1037,12 +1038,16 @@ async def get_kline_data(
 
                 try:
                     # 处理不同类型的时间值
-                    if hasattr(time_val, "timestamp"):
+                    if time_val is not None and hasattr(time_val, "timestamp"):
                         # pandas Timestamp 或 datetime 对象
-                        ts = int(time_val.timestamp() * 1000)
+                        ts_callable = getattr(time_val, "timestamp", None)
+                        if not callable(ts_callable):
+                            raise TypeError("timestamp is not callable")
+                        ts = int(ts_callable() * 1000)
                         # 转换为 datetime
-                        if hasattr(time_val, "to_pydatetime"):
-                            dt = time_val.to_pydatetime()
+                        to_py = getattr(time_val, "to_pydatetime", None)
+                        if callable(to_py):
+                            dt = to_py()
                         else:
                             dt = time_val
                         # 转换为北京时间

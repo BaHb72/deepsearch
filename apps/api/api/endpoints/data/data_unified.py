@@ -357,11 +357,11 @@ async def get_stock_list_legacy(
     # 回退到旧实现
     service = data_module.get_data_service()
     stocks = await service.get_stock_list(limit=None)
-    if hasattr(stocks, "mismatch") and stocks.mismatch:
+    if stocks is not None and hasattr(stocks, "mismatch") and stocks.mismatch:
         logger.warning(
             "股票列表双写内部差异 source=%s mismatch=%d",
             getattr(stocks, "source", "unknown"),
-            stocks.mismatch,
+            getattr(stocks, "mismatch", 0),
         )
     records, legacy_list = _normalize_stock_records(stocks)
     if legacy_list:

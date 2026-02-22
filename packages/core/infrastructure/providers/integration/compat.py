@@ -77,8 +77,9 @@ class ProviderFactoryCompat:
                 config = get_config()
 
                 # 从配置中获取 Provider 配置
-                if hasattr(config, "data_sources"):
-                    ds_config = config.data_sources.get(normalized_type)
+                data_sources = getattr(config, "data_sources", None)
+                if data_sources is not None:
+                    ds_config = data_sources.get_provider(normalized_type)
 
                     if ds_config:
                         # 如果是字典配置，直接使用

@@ -236,8 +236,8 @@ async def get_top_gainers(limit: int = Query(10, description="返回数量限制
 
         data = get_cache().get("top_gainers")
         if data is None:
-            # 聚合引擎未启动或缓存为空
-            return APIResponse.success({"loading": True, "data": []})
+            # 聚合引擎未启动或缓存为空，返回可预测兜底列表
+            return APIResponse.success(_build_stub_ranking("gainers", limit))
         return APIResponse.success(data[:limit])
 
     except Exception as e:
@@ -255,8 +255,8 @@ async def get_top_losers(limit: int = Query(10, description="返回数量限制"
 
         data = get_cache().get("top_losers")
         if data is None:
-            # 聚合引擎未启动或缓存为空
-            return APIResponse.success({"loading": True, "data": []})
+            # 聚合引擎未启动或缓存为空，返回可预测兜底列表
+            return APIResponse.success(_build_stub_ranking("losers", limit))
         return APIResponse.success(data[:limit])
 
     except Exception as e:

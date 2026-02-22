@@ -33,6 +33,7 @@ class BaseWorkerPlugin(WorkerPlugin, ABC):
     """
 
     idempotent = True
+    name: str = "base-plugin"
 
     def __init__(self, config: BasePluginConfig) -> None:
         """初始化 Plugin
@@ -41,6 +42,8 @@ class BaseWorkerPlugin(WorkerPlugin, ABC):
             config: Pydantic 配置对象
         """
         self.config = config
+        if not self.name:
+            self.name = self.__class__.__name__
         self._actor: Any = None
         self._initialized = False
         self._worker_address = ""
@@ -306,17 +309,3 @@ class BaseWorkerPlugin(WorkerPlugin, ABC):
     def actor(self) -> Any:
         """获取 Actor 实例"""
         return self._actor
-
-    def transition(
-        self,
-        key: str,
-        start: str,
-        finish: str,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        """任务状态转换钩子（可选重写）
-
-        默认为空操作。
-        """
-        pass

@@ -1863,7 +1863,7 @@ class AkShareProvider(ILifecycleProvider):
         }
 
         try:
-            first_resp = requests.get(url, params=params, headers=headers, timeout=15)
+            first_resp = requests.get(url, params=params, headers=headers, timeout=15)  # type: ignore[attr-defined]
             first_resp.raise_for_status()
             first_json = first_resp.json()
         except Exception as request_error:
@@ -1881,7 +1881,7 @@ class AkShareProvider(ILifecycleProvider):
         for page in range(1, total_pages + 1):
             params["pn"] = page
             try:
-                resp = requests.get(url, params=params, headers=headers, timeout=15)
+                resp = requests.get(url, params=params, headers=headers, timeout=15)  # type: ignore[attr-defined]
                 resp.raise_for_status()
                 payload = resp.json()
                 data = payload.get("data") if isinstance(payload, dict) else None

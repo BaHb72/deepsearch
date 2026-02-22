@@ -296,7 +296,7 @@ class CircuitBreakerRouter:
         except asyncio.CancelledError:
             logger.info("后台刷新任务被取消")
 
-    def get_statistics(self) -> Dict[str, Dict[str, float]]:
+    def get_statistics(self) -> Dict[str, Dict[str, float | int | str]]:
         """
         获取统计数据。
 

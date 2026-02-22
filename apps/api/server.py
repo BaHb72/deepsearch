@@ -829,9 +829,9 @@ async def lifespan(app: FastAPI):
             logger.info("Dask 后台初始化任务已取消")
 
     # 关闭 Dask 初始化状态管理器
-    dask_init_manager = getattr(app.state, "dask_init_manager", None)
-    if dask_init_manager is not None:
-        await dask_init_manager.shutdown()
+    dask_init_manager_state: Any = getattr(app.state, "dask_init_manager", None)
+    if dask_init_manager_state is not None:
+        await dask_init_manager_state.shutdown()
 
     # 停止定时 GC 任务
     try:
@@ -877,10 +877,10 @@ async def lifespan(app: FastAPI):
         logger.warning(f"关闭通知推送服务失败: {e}")
 
     # 关闭 AI 客户端
-    ai_client = getattr(app.state, "ai_client", None)
-    if ai_client is not None:
+    ai_client_state: Any = getattr(app.state, "ai_client", None)
+    if ai_client_state is not None:
         try:
-            await ai_client.close()
+            await ai_client_state.close()
             logger.info("AI 客户端已关闭")
         except Exception as e:
             logger.warning(f"关闭 AI 客户端失败: {e}")

@@ -16,6 +16,7 @@ import requests
 from core.config import get_config
 from loguru import logger
 from requests.adapters import HTTPAdapter
+from requests.exceptions import ConnectTimeout
 from urllib3.util.retry import Retry
 
 # 保存原始的 Session 类，确保不受任何 monkey patch 影响
@@ -282,7 +283,7 @@ class ProxyClient:
         """
         try:
             return self.session.request(method, request_url, **kwargs)
-        except requests.exceptions.ConnectTimeout as exc:
+        except ConnectTimeout as exc:
             if not self.prefer_ipv4_fallback:
                 raise
             if not self.worker_url or ".workers.dev" not in self.worker_url:

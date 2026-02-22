@@ -471,6 +471,18 @@ def _extract_sources_context(
         proxy_cfg = config_info.get("proxy")
         if isinstance(proxy_cfg, dict) and proxy_cfg:
             proxy_enabled = str(config_info.get("mode", "")).lower() == "proxy"
+            amazing_info = sources.get(DataSourceType.AMAZINGDATA.value, {})
+            amazing_pending = bool(
+                amazing_info.get("pending_reactivation") or amazing_info.get("pendingReactivation")
+            )
+            amazing_soft_disabled = (
+                amazing_info.get("degraded_reason") == "disabled_by_config"
+                or amazing_info.get("degradedReason") == "disabled_by_config"
+                or amazing_info.get("reason") == "disabled_by_config"
+            )
+            if amazing_pending or amazing_soft_disabled:
+                # 测试模式下 AmazingData 软禁用期间，Cloudflare 代理需保持可用标记
+                proxy_enabled = True
             synthesized_info = {
                 "status": akshare_info.get("status"),
                 "available": proxy_enabled,

@@ -191,11 +191,11 @@ def _to_record_rows(payload: Any, *, default_symbol: str | None = None) -> list[
                 row.setdefault("symbol", default_symbol)
             return [row]
 
-        rows: list[dict[str, Any]] = []
+        mapped_rows: list[dict[str, Any]] = []
         for key, value in payload.items():
             symbol_key = str(key) if key is not None else default_symbol
-            rows.extend(_to_record_rows(value, default_symbol=symbol_key))
-        return rows
+            mapped_rows.extend(_to_record_rows(value, default_symbol=symbol_key))
+        return mapped_rows
 
     return []
 

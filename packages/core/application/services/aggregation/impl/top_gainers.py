@@ -87,12 +87,12 @@ class TopGainersAggregation(BaseAggregation):
             )
             response = await feed.list_instruments(request)
 
-            if not response or not response.instruments:
+            if not response or not response.stocks:
                 logger.warning("股票列表为空")
                 return []
 
             # 提取股票代码（格式：000001.SZ）
-            symbols = [inst.code for inst in response.instruments]
+            symbols = [stock.asset.to_standard() for stock in response.stocks]
             logger.info(f"缓存全市场股票列表: {len(symbols)} 只")
             return symbols
 

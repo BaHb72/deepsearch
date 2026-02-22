@@ -203,7 +203,7 @@ async def test_real_lifecycle_management():
         logger.exception(e)
         try:
             await container.shutdown()
-        except:
+        except Exception:
             pass
         return False
 
@@ -276,7 +276,7 @@ async def test_real_akshare_integration():
         logger.exception(e)
         try:
             await container.shutdown()
-        except:
+        except Exception:
             pass
         return False
 
@@ -340,7 +340,7 @@ async def test_real_multi_provider():
         logger.exception(e)
         try:
             await container.shutdown()
-        except:
+        except Exception:
             pass
         return False
 

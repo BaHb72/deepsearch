@@ -189,7 +189,7 @@ def _normalize_date_records(records: Iterable[MutableMapping[str, object]]) -> L
 
 
 def _normalize_indicator_records(
-    records: Iterable[MutableMapping[str, object]]
+    records: Iterable[MutableMapping[str, object]],
 ) -> List[Dict[str, Any]]:
     normalized: List[Dict[str, Any]] = []
     for record in records:

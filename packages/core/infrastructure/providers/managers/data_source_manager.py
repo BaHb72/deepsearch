@@ -33,13 +33,20 @@ from loguru import logger
 
 
 # Lazy import to avoid requiring amazingdata SDK when disabled
-def get_global_pool():
+def get_global_pool() -> Any | None:
     """Lazy import of get_global_pool from amazingdata_process_pool."""
-    from core.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
-        get_global_pool as _get_global_pool,
-    )
+    try:
+        import importlib
 
-    return _get_global_pool()
+        module = importlib.import_module(
+            "core.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool"
+        )
+    except ImportError:
+        return None
+    getter = getattr(module, "get_global_pool", None)
+    if not callable(getter):
+        return None
+    return getter()
 
 
 from core.infrastructure.providers.interfaces.base import IDataSource
@@ -1513,7 +1520,8 @@ class DataSourceManager:
 
         sources_report: Dict[str, Dict[str, Any]] = {}
         try:
-            pool_status = get_global_pool().get_status()
+            pool = get_global_pool()
+            pool_status = pool.get_status() if pool is not None else None
         except Exception as exc:  # pragma: no cover - diagnostics only
             logger.debug(f"Failed to fetch AmazingData process pool status: {exc}")
             pool_status = None

@@ -40,6 +40,7 @@ class TestRunner:
         self.args = args
         self.results = {}
         self.start_time = None
+        self.suite_failures = 0
         self.test_stats = {"total": 0, "passed": 0, "failed": 0, "skipped": 0, "errors": 0}
         self.xdist_available = self._is_xdist_available()
         self.parallel_warning_emitted = False
@@ -95,9 +96,8 @@ class TestRunner:
     def _check_dependencies(self) -> Tuple[bool, str]:
         """检查项目依赖"""
         try:
-
-            if importlib.util.find_spec("deepsearch") is None:
-                raise ImportError("deepsearch 未安装")
+            if importlib.util.find_spec("core") is None:
+                raise ImportError("core 未安装")
 
             return True, "所有依赖已安装"
         except ImportError as e:
@@ -135,7 +135,7 @@ class TestRunner:
             "tests/unit",
             "-v" if self.args.verbose else "-q",
             "--tb=short",
-            "--cov=deepsearch",
+            "--cov=core",
             "--cov-report=term-missing:skip-covered",
             "--cov-report=html:htmlcov",
             "--cov-report=xml",
@@ -193,7 +193,7 @@ class TestRunner:
         print(f"\n{Colors.OKBLUE}[安全] 运行安全扫描...{Colors.ENDC}")
 
         # 运行bandit安全扫描
-        cmd = ["bandit", "-r", "deepsearch", "-f", "json", "-o", "security_report.json"]
+        cmd = ["bandit", "-r", "packages/core", "-f", "json", "-o", "security_report.json"]
 
         subprocess.run(cmd, capture_output=True, text=True, check=False)
 
@@ -288,14 +288,20 @@ class TestRunner:
         print(f"\n{Colors.OKBLUE}[LINT] 运行代码质量检查...{Colors.ENDC}")
 
         linters = [
-            ("Black格式化", ["black", "--check", "deepsearch"]),
-            ("isort导入排序", ["isort", "--check-only", "deepsearch"]),
-            ("Ruff检查", ["ruff", "check", "deepsearch"]),
+            ("Black格式化", ["black", "--check", "packages/core", "apps"]),
+            ("isort导入排序", ["isort", "--check-only", "packages/core", "apps"]),
+            ("Ruff检查", ["ruff", "check", "packages/core", "apps"]),
         ]
 
         all_passed = True
         for name, cmd in linters:
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True)
+            except FileNotFoundError:
+                print(f"  [FAIL] {name}失败: 工具未安装 ({cmd[0]})")
+                all_passed = False
+                continue
+
             if result.returncode == 0:
                 print(f"  [PASS] {name}通过")
             else:
@@ -309,7 +315,10 @@ class TestRunner:
                         fix_cmd.remove("--check-only")
                     if "ruff" in fix_cmd:
                         fix_cmd.append("--fix")
-                    subprocess.run(fix_cmd)
+                    try:
+                        subprocess.run(fix_cmd)
+                    except FileNotFoundError:
+                        print(f"     自动修复失败: 工具未安装 ({fix_cmd[0]})")
                 all_passed = False
 
         return all_passed
@@ -381,7 +390,7 @@ class TestRunner:
             print(f"  {status} {name}")
 
         # 最终结论
-        all_passed = all(r["passed"] for r in self.results.values())
+        all_passed = self.suite_failures == 0
         if all_passed:
             print(f"\n{Colors.OKGREEN}{Colors.BOLD}[PASS] 所有测试通过！{Colors.ENDC}")
         else:
@@ -415,9 +424,18 @@ class TestRunner:
             if self.args.only and name not in self.args.only:
                 continue
 
-            test_func()
+            suite_passed = bool(test_func())
+            if name not in self.results:
+                self.results[name] = {"passed": suite_passed}
+            else:
+                self.results[name]["passed"] = (
+                    bool(self.results[name].get("passed", False)) and suite_passed
+                )
 
-            if self.args.fail_fast and self.test_stats["failed"] > 0:
+            if not suite_passed:
+                self.suite_failures += 1
+
+            if self.args.fail_fast and self.suite_failures > 0:
                 print(f"\n{Colors.FAIL}快速失败模式：检测到失败，停止执行{Colors.ENDC}")
                 break
 
@@ -428,7 +446,7 @@ class TestRunner:
         self.print_summary()
 
         # 返回退出码
-        return 0 if self.test_stats["failed"] == 0 else 1
+        return 0 if self.suite_failures == 0 else 1
 
 
 def main():
