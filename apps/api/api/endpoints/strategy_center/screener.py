@@ -6,7 +6,7 @@ Endpoints for intelligent stock screening using strategies:
 - Screen stocks with individual strategies
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from core.strategies.interfaces.models import ScreeningRequest, ScreeningResponse
 from core.strategies.services.screening_service import get_screening_service
@@ -30,7 +30,7 @@ class QuickScreenRequest(BaseModel):
     strategy_id: str
     stock_pool: List[str] = Field(default_factory=list)
     limit: int = Field(ge=1, le=100, default=20)
-    params: Optional[Dict[str, Any]] = None
+    params: Optional[Dict[str, bool | int | float | str]] = None
 
 
 class BatchScreenRequest(BaseModel):
@@ -98,6 +98,7 @@ async def quick_screen(request: QuickScreenRequest):
     screening_request = ScreeningRequest(
         strategy_ids=[request.strategy_id],
         stock_pool=request.stock_pool,
+        params=request.params or {},
         limit=request.limit,
     )
     return await screen_stocks(screening_request)
@@ -110,6 +111,7 @@ async def batch_screen(request: BatchScreenRequest):
     screening_request = ScreeningRequest(
         strategy_ids=request.strategy_ids,
         stock_pool=request.stock_pool,
+        signal_threshold=request.signal_threshold,
         limit=request.limit,
     )
 

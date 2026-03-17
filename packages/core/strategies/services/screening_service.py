@@ -119,11 +119,21 @@ class ScreeningService:
         # 并行处理股票
         results: List[ScreeningResult] = []
         batch_size = 10  # 每批处理10只股票
+        signal_threshold = max(0.0, min(1.0, request.signal_threshold))
 
         for i in range(0, len(stock_pool), batch_size):
             batch = stock_pool[i : i + batch_size]
             batch_results = await asyncio.gather(
-                *[self._screen_single_stock(symbol, strategy_ids, weights) for symbol in batch],
+                *[
+                    self._screen_single_stock(
+                        symbol=symbol,
+                        strategy_ids=strategy_ids,
+                        weights=weights,
+                        params=request.params,
+                        signal_threshold=signal_threshold,
+                    )
+                    for symbol in batch
+                ],
                 return_exceptions=True,
             )
 
@@ -210,6 +220,8 @@ class ScreeningService:
         symbol: str,
         strategy_ids: List[str],
         weights: Dict[str, float],
+        params: Optional[Dict[str, bool | int | float | str]] = None,
+        signal_threshold: float = 0.3,
     ) -> ScreeningResult:
         """
         对单只股票进行选股分析
@@ -237,7 +249,12 @@ class ScreeningService:
 
         for strategy_id in strategy_ids:
             try:
-                signal = await self._calculate_strategy_signal(strategy_id, symbol, kline_data)
+                signal = await self._calculate_strategy_signal(
+                    strategy_id=strategy_id,
+                    symbol=symbol,
+                    kline_data=kline_data,
+                    params=params,
+                )
                 signals[strategy_id] = signal
             except Exception as e:
                 logger.debug(f"策略 {strategy_id} 计算失败: {e}")
@@ -253,7 +270,7 @@ class ScreeningService:
         )
 
         # 确定方向
-        threshold = 0.3
+        threshold = max(0.0, min(1.0, signal_threshold))
         if score > threshold:
             direction = SignalDirection.BUY
         elif score < -threshold:
@@ -317,6 +334,7 @@ class ScreeningService:
         strategy_id: str,
         symbol: str,
         kline_data: pd.DataFrame,
+        params: Optional[Dict[str, bool | int | float | str]] = None,
     ) -> float:
         """
         计算策略信号
@@ -348,19 +366,71 @@ class ScreeningService:
                     return max(-1.0, min(1.0, float(signal)))
 
             # 如果没有，使用简化的技术分析
-            return self._simple_technical_signal(kline_data)
+            return self._simple_technical_signal(kline_data, params)
 
         except Exception as e:
             logger.debug(f"策略 {strategy_id} 信号计算异常: {e}")
-            return 0.0
+            return self._simple_technical_signal(kline_data, params)
 
-    def _simple_technical_signal(self, df: pd.DataFrame) -> float:
+    def _simple_technical_signal(
+        self,
+        df: pd.DataFrame,
+        params: Optional[Dict[str, bool | int | float | str]] = None,
+    ) -> float:
         """
         简化技术分析信号
 
-        基于均线和RSI的简单信号
+        基于均线和价格偏离的简单信号，可由 params 调整窗口与权重。
         """
-        if df is None or len(df) < 20:
+        runtime_params = params or {}
+
+        short_period_raw = runtime_params.get(
+            "short_period", runtime_params.get("ma_short_period", 5)
+        )
+        long_period_raw = runtime_params.get(
+            "long_period", runtime_params.get("ma_long_period", 20)
+        )
+        ma_signal_strength_raw = runtime_params.get("ma_signal_strength", 0.5)
+        deviation_scale_raw = runtime_params.get("deviation_scale", 5.0)
+        ma_weight_raw = runtime_params.get("ma_weight", 0.5)
+        deviation_weight_raw = runtime_params.get("deviation_weight", 0.5)
+
+        try:
+            short_period = max(2, int(float(short_period_raw)))
+        except (TypeError, ValueError):
+            short_period = 5
+        try:
+            long_period = max(short_period + 1, int(float(long_period_raw)))
+        except (TypeError, ValueError):
+            long_period = max(short_period + 1, 20)
+        try:
+            ma_signal_strength = max(0.0, min(1.0, float(ma_signal_strength_raw)))
+        except (TypeError, ValueError):
+            ma_signal_strength = 0.5
+        try:
+            deviation_scale = max(0.1, min(20.0, float(deviation_scale_raw)))
+        except (TypeError, ValueError):
+            deviation_scale = 5.0
+        try:
+            ma_weight = max(0.0, min(1.0, float(ma_weight_raw)))
+        except (TypeError, ValueError):
+            ma_weight = 0.5
+        try:
+            deviation_weight = max(0.0, min(1.0, float(deviation_weight_raw)))
+        except (TypeError, ValueError):
+            deviation_weight = 0.5
+
+        # 当 entry_threshold 提供时，优先用于归一化偏离强度。
+        entry_threshold_raw = runtime_params.get("entry_threshold")
+        if entry_threshold_raw is not None:
+            try:
+                entry_threshold = float(entry_threshold_raw)
+                if entry_threshold > 0:
+                    deviation_scale = max(0.1, min(20.0, 0.5 / entry_threshold))
+            except (TypeError, ValueError):
+                pass
+
+        if df is None or len(df) < long_period:
             return 0.0
 
         try:
@@ -377,23 +447,28 @@ class ScreeningService:
             closes = df[close_col].astype(float).values
 
             # 计算均线
-            ma5 = closes[-5:].mean()
-            ma20 = closes[-20:].mean()
+            ma_short = closes[-short_period:].mean()
+            ma_long = closes[-long_period:].mean()
             current = closes[-1]
 
             # 均线信号
             ma_signal = 0.0
-            if current > ma5 > ma20:
-                ma_signal = 0.5  # 多头排列
-            elif current < ma5 < ma20:
-                ma_signal = -0.5  # 空头排列
+            if current > ma_short > ma_long:
+                ma_signal = ma_signal_strength  # 多头排列
+            elif current < ma_short < ma_long:
+                ma_signal = -ma_signal_strength  # 空头排列
 
             # 价格偏离
-            deviation = (current - ma20) / ma20
-            dev_signal = max(-0.5, min(0.5, deviation * 5))
+            if ma_long == 0:
+                return 0.0
+            deviation = (current - ma_long) / ma_long
+            dev_signal = max(-0.5, min(0.5, deviation * deviation_scale))
 
             # 综合信号
-            return float((ma_signal + dev_signal) / 2)
+            total_weight = ma_weight + deviation_weight
+            if total_weight <= 0:
+                return float((ma_signal + dev_signal) / 2)
+            return float((ma_signal * ma_weight + dev_signal * deviation_weight) / total_weight)
 
         except Exception:
             return 0.0

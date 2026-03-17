@@ -172,6 +172,10 @@ class ScreeningRequest(BaseModel):
     composite_id: Optional[str] = None  # 使用组合策略
     strategy_ids: List[str] = Field(default_factory=list)  # 或指定策略列表
     stock_pool: List[str] = Field(default_factory=list)  # 股票池 (空=全市场)
+    params: Dict[str, bool | int | float | str] = Field(
+        default_factory=dict
+    )  # 运行参数覆盖（单策略快速选股优先）
+    signal_threshold: float = Field(ge=0.0, le=1.0, default=0.3)  # 信号阈值（绝对值）
     limit: int = Field(ge=1, le=500, default=50)
 
 
