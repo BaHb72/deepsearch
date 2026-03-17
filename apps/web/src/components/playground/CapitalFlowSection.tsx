@@ -8,27 +8,28 @@ import { Button, Space, Table, Alert } from 'antd'
 import { ReloadOutlined, FundOutlined } from '@ant-design/icons'
 import { ProCard } from '@ant-design/pro-components'
 import type { ColumnsType } from 'antd/es/table'
-import type { DataSourceType } from '@/services/data-source'
-import { useRichDataSource } from '@/services/data-source'
+import { useRichDataSource, type DataSourceType } from '@/services/data-source'
 import { DataSourceBadge } from '@/components/common/DataSourceBadge'
 import { ExtendedFieldsPanel } from '@/components/common/ExtendedFieldsPanel'
 
 export interface CapitalFlowSectionProps {
+    stockCode?: string
     preferredSource?: DataSourceType
     onSuggestSourceSwitch?: (source: DataSourceType) => void
     /** 是否显示扩展字段面板 */
     showExtended?: boolean
 }
 
-/** 资金流向数据类型 */
+/** 资金流向（大宗交易替代口径）数据类型 */
 interface CapitalFlowData {
+    code?: string
     name?: string
-    changePct?: number
-    mainNetInflow?: number
-    superLargeNetInflow?: number
-    largeNetInflow?: number
-    mediumNetInflow?: number
-    smallNetInflow?: number
+    tradeDate?: string
+    price?: number
+    volume?: number
+    amount?: number
+    buyerName?: string
+    sellerName?: string
     [key: string]: unknown  // index signature for CoreData compatibility
 }
 
@@ -41,74 +42,86 @@ const formatAmount = (val: number | undefined): string => {
     return val.toFixed(2)
 }
 
-/** 资金流向列配置 */
+const formatDateYYYYMMDD = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}${month}${day}`
+}
+
+const getRecentDateRange = (days: number = 30): { startDate: string; endDate: string } => {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - days)
+    return {
+        startDate: formatDateYYYYMMDD(start),
+        endDate: formatDateYYYYMMDD(end),
+    }
+}
+
+/** 资金流向列配置（当前使用大宗交易口径） */
 const capitalFlowColumns: ColumnsType<CapitalFlowData & { _key: number }> = [
-    { title: '板块名称', dataIndex: 'name', key: 'name', width: 150, ellipsis: true },
     {
-        title: '涨跌幅',
-        dataIndex: 'changePct',
-        key: 'changePct',
-        width: 100,
-        render: (val) => (
-            <span style={{ color: val > 0 ? '#f5222d' : val < 0 ? '#52c41a' : undefined }}>
-                {val?.toFixed(2)}%
-            </span>
-        ),
-        sorter: (a, b) => (a.changePct || 0) - (b.changePct || 0),
+        title: '股票',
+        dataIndex: 'name',
+        key: 'name',
+        width: 160,
+        ellipsis: true,
+        render: (_val, row) => `${row.name || '--'} (${row.code || '--'})`,
+    },
+    { title: '交易日', dataIndex: 'tradeDate', key: 'tradeDate', width: 120 },
+    { title: '成交价', dataIndex: 'price', key: 'price', width: 100 },
+    {
+        title: '成交量',
+        dataIndex: 'volume',
+        key: 'volume',
+        width: 120,
+        render: (val) => formatAmount(val),
     },
     {
-        title: '主力净流入',
-        dataIndex: 'mainNetInflow',
-        key: 'mainNetInflow',
+        title: '成交额',
+        dataIndex: 'amount',
+        key: 'amount',
         width: 120,
-        render: (val) => (
-            <span style={{ color: val > 0 ? '#f5222d' : val < 0 ? '#52c41a' : undefined }}>
-                {formatAmount(val)}
-            </span>
-        ),
-        sorter: (a, b) => (a.mainNetInflow || 0) - (b.mainNetInflow || 0),
+        render: (val) => <span style={{ color: '#cf1322' }}>{formatAmount(val)}</span>,
+        sorter: (a, b) => (a.amount || 0) - (b.amount || 0),
         defaultSortOrder: 'descend',
     },
     {
-        title: '超大单净流入',
-        dataIndex: 'superLargeNetInflow',
-        key: 'superLargeNetInflow',
-        width: 120,
-        render: (val) => formatAmount(val),
+        title: '买方营业部',
+        dataIndex: 'buyerName',
+        key: 'buyerName',
+        width: 220,
+        ellipsis: true,
     },
     {
-        title: '大单净流入',
-        dataIndex: 'largeNetInflow',
-        key: 'largeNetInflow',
-        width: 120,
-        render: (val) => formatAmount(val),
-    },
-    {
-        title: '中单净流入',
-        dataIndex: 'mediumNetInflow',
-        key: 'mediumNetInflow',
-        width: 120,
-        render: (val) => formatAmount(val),
-    },
-    {
-        title: '小单净流入',
-        dataIndex: 'smallNetInflow',
-        key: 'smallNetInflow',
-        width: 120,
-        render: (val) => formatAmount(val),
+        title: '卖方营业部',
+        dataIndex: 'sellerName',
+        key: 'sellerName',
+        width: 220,
+        ellipsis: true,
     },
 ]
 
 export const CapitalFlowSection: React.FC<CapitalFlowSectionProps> = ({
+    stockCode,
     preferredSource,
     onSuggestSourceSwitch,
     showExtended = true,
 }) => {
+    const dateRange = getRecentDateRange(30)
+    const targetCode = typeof stockCode === 'string' ? stockCode.trim() : ''
+
     // 注意：capital_flow 能力需要后端支持
     // 暂时使用 block_trading 作为示例，实际使用时需要替换
     const { data, extended, meta, loading, error, refresh } = useRichDataSource<CapitalFlowData>({
-        capability: 'block_trading' as any, // TODO: 替换为 capital_flow
-        params: { limit: 50 },
+        capability: 'block_trading',
+        params: {
+            code: targetCode || undefined,
+            startDate: dateRange.startDate,
+            endDate: dateRange.endDate,
+            limit: 50,
+        },
         preferredSource,
         autoFetch: true,
         monitor: {
@@ -125,7 +138,7 @@ export const CapitalFlowSection: React.FC<CapitalFlowSectionProps> = ({
             title={
                 <Space>
                     <FundOutlined />
-                    <span>板块资金流向</span>
+                    <span>资金流向（大宗交易替代）</span>
                     <DataSourceBadge
                         source={meta?.source}
                         latency={meta?.latency}

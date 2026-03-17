@@ -90,6 +90,7 @@ const DataPlayground: React.FC = () => {
             ),
             children: (
                 <CapitalFlowSection
+                    stockCode={stockCode}
                     preferredSource={resolvePreferredSource('flow')}
                     onSuggestSourceSwitch={(source) => setModuleSource('flow', source)}
                 />

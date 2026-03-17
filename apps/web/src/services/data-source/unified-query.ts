@@ -135,11 +135,34 @@ export function extractRequestErrorMessage(error: unknown): string {
         }
         if (detail && typeof detail === 'object') {
             const detailObj = detail as Record<string, unknown>
+            const attempts = Array.isArray(detailObj.attempts)
+                ? detailObj.attempts
+                    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+                    .map((item) => {
+                        const provider = typeof item.provider === 'string' ? item.provider : 'unknown'
+                        const reasonCode =
+                            typeof item.reason_code === 'string' && item.reason_code
+                                ? item.reason_code
+                                : 'provider_error'
+                        const reasonDetail =
+                            typeof item.reason_detail === 'string' && item.reason_detail
+                                ? item.reason_detail
+                                : ''
+                        return reasonDetail
+                            ? `${provider}:${reasonCode}(${reasonDetail})`
+                            : `${provider}:${reasonCode}`
+                    })
+                : []
+
             if (typeof detailObj.message === 'string' && detailObj.message) {
-                return detailObj.message
+                return attempts.length > 0
+                    ? `${detailObj.message}（${attempts.join(' | ')}）`
+                    : detailObj.message
             }
             if (typeof detailObj.code === 'string' && detailObj.code) {
-                return detailObj.code
+                return attempts.length > 0
+                    ? `${detailObj.code}（${attempts.join(' | ')}）`
+                    : detailObj.code
             }
         }
         if (typeof payload.message === 'string' && payload.message) {

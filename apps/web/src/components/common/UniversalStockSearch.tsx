@@ -5,19 +5,14 @@
  */
 import React, { useState, useEffect, useCallback } from 'react'
 import { Select, Spin, Button, Space, Typography } from 'antd'
-import request from '@/api/request'
+import { loadStockOptions, type StockListSource, type StockOption } from '@/api/stock-search'
 
 const { Option } = Select
 const { Text } = Typography
 
 // ============= 类型定义 =============
 
-/** 股票选项数据结构 */
-export interface StockOption {
-    symbol: string
-    name: string
-    pinyin?: string
-}
+export type { StockOption } from '@/api/stock-search'
 
 /** 数据源类型 */
 export type DataSourceType = 'miniqmt' | 'amazingdata'
@@ -28,27 +23,12 @@ interface StockDataAdapter {
     fetchStockList: () => Promise<{
         data: StockOption[]
         refreshing?: boolean
+        source?: StockListSource
     }>
     /** 数据源显示名称 */
     displayName: string
     /** 占位符文本 */
     placeholder: string
-}
-
-// ============= 常用股票预设映射（用于 options 加载前显示） =============
-const PRESET_STOCK_MAP: Record<string, string> = {
-    '600519.SH': '贵州茅台',
-    '000001.SZ': '平安银行',
-    '300750.SZ': '宁德时代',
-    '000858.SZ': '五粮液',
-    '601318.SH': '中国平安',
-    '510050.SH': '50ETF',
-    '510300.SH': '沪深300ETF',
-    '510500.SH': '500ETF',
-    '159919.SZ': '300ETF',
-    '159915.SZ': '创业板ETF',
-    '588000.SH': '科创50ETF',
-    '588080.SH': '科创板50ETF',
 }
 
 // ============= 数据源适配器实现 =============
@@ -58,16 +38,11 @@ const dataSourceAdapters: Record<DataSourceType, StockDataAdapter> = {
         displayName: 'MiniQMT',
         placeholder: '输入代码或搜索股票 (MiniQMT)',
         fetchStockList: async () => {
-            const res = await request.get<{
-                success: boolean
-                data?: StockOption[]
-                refreshing?: boolean
-            }>('/miniqmt/xtdata/stock-list', {
-                skipBackendCheck: true,
-            } as any)
+            const result = await loadStockOptions()
             return {
-                data: (res as any).data || [],
-                refreshing: (res as any).refreshing,
+                data: result.options,
+                refreshing: result.refreshing,
+                source: result.source,
             }
         },
     },
@@ -75,18 +50,11 @@ const dataSourceAdapters: Record<DataSourceType, StockDataAdapter> = {
         displayName: 'AmazingData',
         placeholder: '输入代码或搜索股票 (AmazingData)',
         fetchStockList: async () => {
-            // AmazingData 暂时使用 MiniQMT 的股票列表，后续可扩展
-            // TODO: 替换为 AmazingData 专用 API
-            const res = await request.get<{
-                success: boolean
-                data?: StockOption[]
-                refreshing?: boolean
-            }>('/miniqmt/xtdata/stock-list', {
-                skipBackendCheck: true,
-            } as any)
+            const result = await loadStockOptions()
             return {
-                data: (res as any).data || [],
-                refreshing: (res as any).refreshing,
+                data: result.options,
+                refreshing: result.refreshing,
+                source: result.source,
             }
         },
     },
@@ -123,6 +91,7 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
     const [loading, setLoading] = useState(false)
     const [searchValue, setSearchValue] = useState('')
     const [refreshing, setRefreshing] = useState(false)
+    const [isFallbackSource, setIsFallbackSource] = useState(false)
 
     // 获取当前数据源适配器 (默认使用 miniqmt)
     const actualSource = dataSource || 'miniqmt'
@@ -135,13 +104,18 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
             const result = await adapter.fetchStockList()
             if (result.refreshing) {
                 setRefreshing(true)
+                setIsFallbackSource(false)
                 setTimeout(fetchStockList, 3000) // 缓存初始化中，3秒后重试
-            } else if (result.data.length > 0) {
+            } else {
                 setOptions(result.data)
                 setRefreshing(false)
+                setIsFallbackSource((result.source ?? 'none') !== 'miniqmt')
             }
         } catch (err) {
             console.warn(`[${adapter.displayName}] 加载股票列表失败`, err)
+            setOptions([])
+            setRefreshing(false)
+            setIsFallbackSource(true)
         } finally {
             setLoading(false)
         }
@@ -150,6 +124,7 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
     // 数据源变化时重新加载
     useEffect(() => {
         setOptions([]) // 清空旧数据
+        setIsFallbackSource(false)
         fetchStockList()
     }, [actualSource, fetchStockList])
 
@@ -168,7 +143,7 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
     const handleSelect = (val: string) => {
         // 查找对应的股票名称
         const matched = options.find((opt) => opt.symbol === val)
-        const name = matched?.name || PRESET_STOCK_MAP[val] || undefined
+        const name = matched?.name || undefined
         onChange(val, name)
         setSearchValue('')
     }
@@ -180,15 +155,11 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
         if (matched) {
             return { value: matched.symbol, label: `${matched.name} (${matched.symbol})` }
         }
-        // 尝试从预设映射获取名称
-        const presetName = PRESET_STOCK_MAP[value]
-        if (presetName) {
-            return { value, label: `${presetName} (${value})` }
-        }
         return { value, label: value }
     }
 
-    const currentPlaceholder = placeholder || adapter.placeholder
+    const currentPlaceholder =
+        placeholder || (isFallbackSource ? '数据源未就绪，支持直接输入股票代码' : adapter.placeholder)
 
     return (
         <Space>
